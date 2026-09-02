@@ -148,6 +148,7 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(helper, /v_qr_token_hashes:=array_append/i);
   assert.match(helper, /v_current_qr_token_hash=any\(v_qr_token_hashes\)/i);
   assert.match(helper, /receipt_qr_token_hash_count/i);
+  assert.doesNotMatch(helper, /\bv_qr_token_hash text;/i);
   assert.doesNotMatch(helper, /MULTIPLE_QR_TOKEN_HASHES/);
   assert.match(helper, /v_qr_source\.contract_id is distinct from v_workflow\.contract_id/i);
   assert.match(helper, /current_source\.booking_id=v_qr_source\.booking_id/i);
