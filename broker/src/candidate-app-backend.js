@@ -5234,6 +5234,8 @@ async function handleCandidateMileageFormAction(env, workflow, access, body, dbA
     status: 'QUEUED',
     reference: `candidate-mileage-form:${workflow.id}:${workflow.generation}`,
     recipient_kind: 'CANDIDATE',
+    recipient_id: workflow.candidate_id,
+    recipient_display_name: artifact.candidate_name || 'Candidate',
     context_kind: 'CANDIDATE_WORKFLOW',
     context_id: workflow.id,
     email_type: 'CANDIDATE_APP_TRANSACTIONAL',
@@ -5326,6 +5328,8 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
       status: 'QUEUED',
       reference: `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`,
       recipient_kind: 'CANDIDATE',
+      recipient_id: workflow.candidate_id,
+      recipient_display_name: candidateName,
       context_kind: 'timesheets',
       context_id: sourceTimesheetId,
       email_type: 'CANDIDATE_APP_TRANSACTIONAL',
@@ -5333,7 +5337,7 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
       next_attempt_at_utc: now,
       deterministic_outbox_key: deterministicKey,
       payment_scope_json: {
-        candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
         candidate_workflow_id: workflow.id,
         candidate_workflow_generation: Number(workflow.generation),
         paper_return_manifest_sha256: manifestSha256,
@@ -6299,7 +6303,8 @@ async function readyPaperPackReceipt(env, workflow, timesheet, version) {
 function candidateCompletePackAttachmentMatchesScope(row) {
   const scope = parseJson(row?.payment_scope_json, {}) || {};
   const attachments = parseJson(row?.attachments, []) || [];
-  if (scope.candidate_paper_pack_ready !== true
+  if (upper(scope.candidate_mail_authority) !== 'CANDIDATE_PAPER_V1'
+      || scope.candidate_paper_pack_ready !== true
       || scope.mail_held_until_pdf_rendered !== false
       || text(scope.mail_hold_reason)) return false;
   if (attachments.length !== 1) return false;
