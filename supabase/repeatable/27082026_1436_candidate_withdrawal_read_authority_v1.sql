@@ -34,3 +34,8 @@
 -- latest empty-carrier presentation authority so an Office-created blank
 -- expense carrier remains "Add Expenses" until it contains a genuine draft.
 \ir 31082026_0557_candidate_empty_expense_carrier_action_v1.sql
+
+-- The later submitted-hours presentation authority is the current final owner
+-- of the primary action helper.  Keep it last so replaying this dependency
+-- closure during an UPGRADE cannot restore the older 31 August definition.
+\ir 02092026_1918_candidate_finalised_hours_primary_action_v1.sql
