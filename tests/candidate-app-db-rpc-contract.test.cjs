@@ -35,6 +35,25 @@ const refusedCardRecovery = read(
   'supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql'
 );
 
+test('Candidate runtime gate finishes with every current 2 September authority', () => {
+  const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
+  assert.ok(installBlock, 'Candidate runtime install_files block is missing');
+  const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
+  assert.deepEqual(installPaths.slice(-3), [
+    'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
+    'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
+    'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
+  ]);
+
+  const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
+  assert.ok(suitesBlock, 'Candidate runtime suites block is missing');
+  const suitePaths = [...suitesBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
+  assert.deepEqual(suitePaths.slice(-2), [
+    'supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql',
+    'supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql',
+  ]);
+});
+
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
 const generatedOther = read('supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql');
 const replacements = {
