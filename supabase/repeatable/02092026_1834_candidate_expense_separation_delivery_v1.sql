@@ -696,7 +696,7 @@ from policy_hashed p
 order by p.request_key nulls first,p.invoice_id nulls first,p.request_no;
 $function$;
 
-create function private._invoice_issue_validate_batch(
+create or replace function private._invoice_issue_validate_batch(
   p_requests jsonb,
   p_evaluation_date date
 ) returns table(

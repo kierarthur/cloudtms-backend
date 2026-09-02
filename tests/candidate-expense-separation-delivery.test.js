@@ -16,6 +16,8 @@ test('protected worked records can only anchor a new expense carrier', () => {
 });
 
 test('expense invoice delivery is not suppressed by self-bill hours', () => {
+  assert.doesNotMatch(repeatable, /^create function private\._invoice_issue_validate_batch/m);
+  assert.match(repeatable, /^create or replace function private\._invoice_issue_validate_batch/m);
   assert.match(repeatable, /invoice_stream='EXPENSE' then 'EXPENSE_INVOICE_EMAIL'/);
   assert.match(repeatable, /invoice_stream<>'EXPENSE' and f\.invoice_self_bill[\s\S]*self_bill_no_invoices_sent/);
   assert.match(repeatable, /EXPENSE_INVOICE_EMAIL_REQUIRED/);

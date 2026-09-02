@@ -4379,7 +4379,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "358af799e2daa5e902008659dd5a297e2d12a0255c0664c970940f317048d28c"
+      "definition_sha256": "b6e03cf48a35f377deda6ca13763188a55520ff6d3296c4bd2de7c60d2c82bfa"
     },
     {
       "acl": [
@@ -4645,7 +4645,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "40e9512976fa6e2b10e66131d9a107a178c6ff6ea16f997a1652f21233749dab"
+      "definition_sha256": "1646252f66135636e5933c1c3d7a4df11bcdd93df06e4e5090be5abc1f089447"
     },
     {
       "acl": [
@@ -5698,7 +5698,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "425a56ae0c3850a9404ccbe517c80ea8849ac81f9aff022e0eedc6e7fd70f550"
+      "definition_sha256": "503f46c6dca9ea9489719a40fbacfcf8918c8bf07ef587d69bfa26c7380d14ad"
     },
     {
       "acl": [
@@ -5866,7 +5866,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "efea24e016fd6d1b2c1ef0229b37f2c5d6c55147ff2165f1d744e26bceee83ba"
+      "definition_sha256": "7abbdd4f5f65f68cf91886d1ae270597d14198af93ef5a489270465a984fc214"
     },
     {
       "acl": [
@@ -6010,7 +6010,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a71f83722498a88e49e93bc4d94057cfac6feaa55993db7872ecac0f57c3fa54"
+      "definition_sha256": "d5f19b122a575b4abfee98d2e60452e2949d52b6c120a2cd6d3076c31d0a7cef"
     },
     {
       "acl": [
@@ -27571,6 +27571,11 @@
     },
     {
       "acl": [
+        {
+          "grantee": "authenticated",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
         {
           "grantee": "postgres",
           "grantable": false,
@@ -80949,7 +80954,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_created_by_user_id_fkey",
@@ -80957,7 +80962,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_direction_chk",
@@ -103874,6 +103879,43 @@
         {
           "grantee": "postgres",
           "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "kind": "S",
+      "owner": "postgres",
+      "schema": "public"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
           "privilege": "EXECUTE"
         },
         {
@@ -103883,6 +103925,110 @@
         }
       ],
       "kind": "f",
+      "owner": "postgres",
+      "schema": "public"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "kind": "f",
+      "owner": "postgres",
+      "schema": "public"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "kind": "r",
       "owner": "postgres",
       "schema": "public"
     },
