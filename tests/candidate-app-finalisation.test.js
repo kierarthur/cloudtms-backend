@@ -18,6 +18,7 @@ test('editable printed-document Timesheets retain adaptive break entry', () => {
     import.meta.url
   ), 'utf8');
   assert.match(sql, /\\ir 28082026_2002_candidate_daily_detail_projection_v1\.sql/);
+  assert.match(sql, /\\ir 30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1\.sql/);
   assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER'\)/);
   assert.match(sql, /not coalesce\(\(p_capabilities->>'import_authoritative'\)::boolean,false\)/);
   assert.match(sql, /not in \('ELECTRONIC','PAPER'\)\s+then 'NON_ELECTRONIC_ROUTE'/);

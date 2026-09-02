@@ -6,6 +6,7 @@
 \set ON_ERROR_STOP on
 
 \ir 28082026_2002_candidate_daily_detail_projection_v1.sql
+\ir 30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql
 
 begin;
 
