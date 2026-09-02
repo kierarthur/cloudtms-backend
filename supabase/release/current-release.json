@@ -95,7 +95,8 @@
     "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
     "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
     "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
-    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql"
+    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+    "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -155,6 +156,7 @@
     "supabase/verification/01092026_1500_candidate_no_work_factual_guard_verification.sql",
     "supabase/verification/01092026_1510_banking_pay_signed_recovery_draft_verification.sql",
     "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
-    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql"
+    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+    "supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql"
   ]
 }

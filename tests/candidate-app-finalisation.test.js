@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildTsq1Payload, buildTsq1String, verifyTsq1String } from '../broker/src/timesheet-qr-payload.js';
 import { candidateAppBackendInternals as candidateAppInternals } from '../broker/src/candidate-app-backend.js';
 import { candidateBrokerInternals } from '../candidate-broker/src/candidate-broker.js';
@@ -9,6 +10,16 @@ const context = Object.freeze({
   mode: 'DURATION_MINUTES',
   context_version: 'CANDIDATE_BREAK_ENTRY_V1',
   context_token: 'a'.repeat(64)
+});
+
+test('editable printed-document Timesheets retain adaptive break entry', () => {
+  const sql = readFileSync(new URL(
+    '../supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER'\)/);
+  assert.match(sql, /not coalesce\(\(p_capabilities->>'import_authoritative'\)::boolean,false\)/);
+  assert.match(sql, /not in \('ELECTRONIC','PAPER'\) then 'NON_ELECTRONIC_ROUTE'/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {
