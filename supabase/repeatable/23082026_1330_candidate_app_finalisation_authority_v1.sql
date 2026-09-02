@@ -185,7 +185,7 @@ begin
   );
   v_applicable:=coalesce((p_capabilities->>'can_edit_hours')::boolean,false)
     and not coalesce((p_capabilities->>'import_authoritative')::boolean,false)
-    and coalesce(p_capabilities->>'route_family','') in ('ELECTRONIC','PAPER')
+    and coalesce(p_capabilities->>'route_family','')='ELECTRONIC'
     and not coalesce((v_resolution->>'is_nhsp')::boolean,false)
     and not coalesce((v_resolution->>'no_timesheet_required')::boolean,false);
   v_reason:=case
@@ -195,7 +195,7 @@ begin
     when coalesce((v_resolution->>'is_nhsp')::boolean,false) then 'NHSP'
     when coalesce((v_resolution->>'no_timesheet_required')::boolean,false)
       then 'NO_TIMESHEET_REQUIRED'
-    when coalesce(p_capabilities->>'route_family','') not in ('ELECTRONIC','PAPER') then 'NON_ELECTRONIC_ROUTE'
+    when coalesce(p_capabilities->>'route_family','')<>'ELECTRONIC' then 'NON_ELECTRONIC_ROUTE'
     else 'NOT_CANDIDATE_EDITABLE'
   end;
   v_context_identity:=concat_ws('|',

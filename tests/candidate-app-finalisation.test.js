@@ -14,12 +14,13 @@ const context = Object.freeze({
 
 test('editable printed-document Timesheets retain adaptive break entry', () => {
   const sql = readFileSync(new URL(
-    '../supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
+    '../supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
     import.meta.url
   ), 'utf8');
+  assert.match(sql, /\\ir 28082026_2002_candidate_daily_detail_projection_v1\.sql/);
   assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER'\)/);
   assert.match(sql, /not coalesce\(\(p_capabilities->>'import_authoritative'\)::boolean,false\)/);
-  assert.match(sql, /not in \('ELECTRONIC','PAPER'\) then 'NON_ELECTRONIC_ROUTE'/);
+  assert.match(sql, /not in \('ELECTRONIC','PAPER'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {
