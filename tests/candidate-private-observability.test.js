@@ -72,6 +72,36 @@ test('Candidate transport diagnostics retain safe gateway status without respons
   assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
 });
 
+test('TEST exposes only the closed transport diagnostic needed to isolate Candidate failures', () => {
+  const diagnostic = {
+    error_code: 'CANDIDATE_WORKFLOW_CANCEL_ATOMIC_V2',
+    transport_function: 'candidate_workflow_cancel_atomic_v2',
+    transport_status: 400,
+    database_sqlstate: '42883',
+    database_error_code: null,
+    database_error_class: 'UNDEFINED_OPERATOR',
+    database_object: null,
+    local_error_code: null,
+    local_error_class: null,
+    local_error_property: null,
+    source_location: null
+  };
+  assert.deepEqual(
+    candidateAppBackendInternals.testTransportDiagnosticDetails(
+      { CANDIDATE_APP_ENVIRONMENT: 'TEST' },
+      diagnostic
+    ),
+    diagnostic
+  );
+  assert.equal(
+    candidateAppBackendInternals.testTransportDiagnosticDetails(
+      { CANDIDATE_APP_ENVIRONMENT: 'LIVE' },
+      diagnostic
+    ),
+    null
+  );
+});
+
 test('federated Candidate readiness requires identity-projection authority', () => {
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
@@ -115,3 +145,4 @@ test('manager routing does not require Candidate identity-projection authority',
     CANDIDATE_FEDERATED_IDENTITY_SECRET: 'test-only-candidate-projection-secret'
   }), true);
 });
+

@@ -773,7 +773,7 @@ function officeErrorCode(error) {
   return OFFICE_ERROR_ALIASES[source] || source;
 }
 
-function errorResponse(error, correlationId, office = false) {
+function errorResponse(error, correlationId, office = false, safeDiagnosticDetails = null) {
   const code = office ? officeErrorCode(error) : knownErrorCode(error);
   let status = error instanceof CandidateHttpError ? error.status : 400;
   if (AUTH_ERROR_CODES.has(code)) status = 401;
@@ -830,6 +830,12 @@ function errorResponse(error, correlationId, office = false) {
       // The warning remains fail-closed when a provider omits malformed detail.
     }
   }
+  if (isObject(safeDiagnosticDetails)) {
+    body.details = {
+      ...(isObject(body.details) ? body.details : {}),
+      transport_diagnostic: safeDiagnosticDetails
+    };
+  }
   const headers = {};
   const retryAfterSeconds = Number(error instanceof CandidateHttpError
     ? error.details?.retry_after_seconds : 0);
@@ -837,6 +843,16 @@ function errorResponse(error, correlationId, office = false) {
     headers['retry-after'] = String(retryAfterSeconds);
   }
   return jsonResponse(status, body, headers);
+}
+
+function testTransportDiagnosticDetails(env, diagnostic) {
+  if (environmentName(env) !== 'TEST' || !isObject(diagnostic)) return null;
+  if (diagnostic.error_code !== 'CANDIDATE_REQUEST_FAILED'
+      && !diagnostic.database_sqlstate
+      && !(diagnostic.transport_function && Number(diagnostic.transport_status) >= 400)) {
+    return null;
+  }
+  return diagnostic;
 }
 
 async function createAccessToken(env, session) {
@@ -8291,12 +8307,18 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
         || (diagnostic.transport_function && Number(diagnostic.transport_status) >= 400)) {
       console.error('[candidate-app] safe transport failure', diagnostic);
     }
-    return errorResponse(error, correlationId, routeAudience === 'OFFICE');
+    return errorResponse(
+      error,
+      correlationId,
+      routeAudience === 'OFFICE',
+      testTransportDiagnosticDetails(env, diagnostic)
+    );
   }
 }
 
 export const candidateAppBackendInternals = Object.freeze({
   safeCandidateTransportDiagnostic,
+  testTransportDiagnosticDetails,
   derivePasswordVerifier,
   passwordVerificationProof,
   deterministicOpaqueToken,
@@ -8364,3 +8386,4 @@ export const candidateAppBackendInternals = Object.freeze({
   managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
 });
+
