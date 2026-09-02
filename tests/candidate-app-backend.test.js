@@ -3384,6 +3384,7 @@ test('Candidate paper email replays only an already claimable completed-pack row
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
   let returnBrokenExisting = false;
+  let durableSelect = '';
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     const target = new URL(String(url));
@@ -3406,6 +3407,7 @@ test('Candidate paper email replays only an already claimable completed-pack row
     }
     if (target.pathname.endsWith('/mail_outbox') && method === 'POST') return Response.json([]);
     if (target.pathname.endsWith('/mail_outbox') && method === 'GET') {
+      durableSelect = target.searchParams.get('select') || '';
       return Response.json([returnBrokenExisting ? {
         ...durable,
         payment_scope_json: {
@@ -3423,6 +3425,8 @@ test('Candidate paper email replays only an already claimable completed-pack row
     }, context);
     assert.equal(replay.idempotent_replay, true);
     assert.equal(replay.mail_outbox_id, durable.id);
+    assert.match(durableSelect, /(?:^|,)context_kind(?:,|$)/);
+    assert.match(durableSelect, /(?:^|,)context_id(?:,|$)/);
 
     returnBrokenExisting = true;
     await assert.rejects(

@@ -220,6 +220,21 @@ begin
     raise exception 'second expense claim did not open after authorisation: %',v_response;
   end if;
 
+  -- An invoiced/paid hours record stays immutable, but it remains a truthful
+  -- worked-week anchor for a later, separate expense-only carrier.
+  update public.contract_weeks set status='INVOICED' where id=v_week;
+  update public.timesheets_financials set paid_at_utc=now()
+  where timesheet_id=v_timesheet and is_current=true;
+  v_placement:=public.expense_placement_resolve_v1(
+    v_candidate,'TEST',v_timesheet,v_week,'{}'::jsonb,now());
+  if v_placement->>'placement'<>'CREATE_CARRIER'
+     or coalesce((v_placement#>>'{capabilities,protected}')::boolean,false)=false
+     or coalesce((v_placement#>>'{capabilities,candidate_expenses_allowed}')::boolean,false)=false
+     or coalesce((v_placement#>>'{capabilities,can_edit_expenses}')::boolean,false)=false
+     or coalesce((v_placement#>>'{capabilities,requires_carrier}')::boolean,false)=false then
+    raise exception 'protected import hours did not remain a separate-expense anchor: %',v_placement;
+  end if;
+
   begin
     insert into public.candidate_submission_components(
       workflow_id,workflow_generation,component_no,component_kind,expense_category,

@@ -136,10 +136,17 @@ test('the detail route loads immutable facts through the signed-in Candidate and
     const body = await response.json();
     assert.equal(body.hours.total_hours, 12);
     assert.equal(body.expenses.accommodation_pay_ex_vat, 20);
-    assert.equal(reads.length, 1);
-    assert.match(reads[0], new RegExp(`candidate_id=eq\\.${candidateId}`));
-    assert.match(reads[0], /generation=eq\.2/);
-    assert.match(reads[0], /state=eq\.READY_FOR_MANAGER_APPROVAL/);
+    assert.equal(body.expense_claims.length, 1);
+    assert.equal(body.expense_claims[0].workflow_id, workflowId);
+    assert.equal(reads.length, 2);
+    const submittedFactsRead = reads.find((url) => url.includes('generation=eq.2'));
+    const claimSummaryRead = reads.find((url) => url.includes('id=in.('));
+    assert.ok(submittedFactsRead);
+    assert.ok(claimSummaryRead);
+    assert.match(submittedFactsRead, new RegExp(`candidate_id=eq\\.${candidateId}`));
+    assert.match(submittedFactsRead, /state=eq\.READY_FOR_MANAGER_APPROVAL/);
+    assert.match(claimSummaryRead, new RegExp(`candidate_id=eq\\.${candidateId}`));
+    assert.match(claimSummaryRead, /environment=eq\.TEST/);
   } finally {
     globalThis.fetch = originalFetch;
   }

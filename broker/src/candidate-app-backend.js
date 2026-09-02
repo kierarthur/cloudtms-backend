@@ -3584,6 +3584,81 @@ const SUBMITTED_EXPENSE_CARD_STATES = new Set([
   'AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED'
 ]);
 
+function nonNegativeCandidateAmount(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return 0;
+}
+
+function submittedExpenseTotals(workflow, financial = null) {
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const mileageUnits = nonNegativeCandidateAmount(
+    claim.mileage_units, expenseSubmission.mileage_units,
+    expenseSubmission.total_mileage, financial?.mileage_units
+  );
+  const mileagePay = nonNegativeCandidateAmount(
+    claim.mileage_pay_ex_vat, expenseSubmission.mileage_pay_ex_vat,
+    financial?.mileage_pay_ex_vat
+  );
+  const travel = nonNegativeCandidateAmount(
+    claim.travel_pay_ex_vat, expenseSubmission.travel_amount,
+    financial?.travel_pay_ex_vat
+  );
+  const accommodation = nonNegativeCandidateAmount(
+    claim.accommodation_pay_ex_vat, expenseSubmission.accommodation_amount,
+    financial?.accommodation_pay_ex_vat
+  );
+  const other = nonNegativeCandidateAmount(
+    claim.other_pay_ex_vat, expenseSubmission.other_amount,
+    financial?.other_pay_ex_vat
+  );
+  return {
+    expenses_pay_ex_vat: travel + accommodation + other,
+    expenses_description: text(
+      claim.expenses_description ?? expenseSubmission.description
+        ?? financial?.expenses_description
+    ) || null,
+    mileage_units: mileageUnits,
+    mileage_pay_ex_vat: mileagePay,
+    travel_pay_ex_vat: travel,
+    accommodation_pay_ex_vat: accommodation,
+    other_pay_ex_vat: other
+  };
+}
+
+function addSubmittedExpenseTotals(left, right) {
+  return {
+    expenses_pay_ex_vat: nonNegativeCandidateAmount(left?.expenses_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.expenses_pay_ex_vat),
+    expenses_description: null,
+    mileage_units: nonNegativeCandidateAmount(left?.mileage_units)
+      + nonNegativeCandidateAmount(right?.mileage_units),
+    mileage_pay_ex_vat: nonNegativeCandidateAmount(left?.mileage_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.mileage_pay_ex_vat),
+    travel_pay_ex_vat: nonNegativeCandidateAmount(left?.travel_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.travel_pay_ex_vat),
+    accommodation_pay_ex_vat: nonNegativeCandidateAmount(left?.accommodation_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.accommodation_pay_ex_vat),
+    other_pay_ex_vat: nonNegativeCandidateAmount(left?.other_pay_ex_vat)
+      + nonNegativeCandidateAmount(right?.other_pay_ex_vat)
+  };
+}
+
+function emptySubmittedExpenseTotals() {
+  return {
+    expenses_pay_ex_vat: 0,
+    expenses_description: null,
+    mileage_units: 0,
+    mileage_pay_ex_vat: 0,
+    travel_pay_ex_vat: 0,
+    accommodation_pay_ex_vat: 0,
+    other_pay_ex_vat: 0
+  };
+}
+
 function immutableMileageUnits(workflow) {
   const immutable = parseJson(workflow?.immutable_submission_json, {}) || {};
   const submission = parseJson(immutable.expense_submission, {}) || {};
@@ -3629,10 +3704,10 @@ async function enrichCandidatePageExpenseSummaries(env, access, page) {
   for (const card of cards) {
     const selected = (Array.isArray(card?.workflows) ? card.workflows : [])
       .map((workflow) => submittedById.get(text(workflow?.workflow_id)))
-      .find(Boolean);
-    if (!selected) continue;
+      .filter(Boolean);
+    if (!selected.length) continue;
     selectedByCard.set(card, selected);
-    selectedIds.add(text(selected.id));
+    for (const workflow of selected) selectedIds.add(text(workflow.id));
   }
   const components = selectedIds.size ? await restRows(env, 'candidate_submission_components', [
     `workflow_id=in.(${[...selectedIds].join(',')})`,
@@ -3655,21 +3730,141 @@ async function enrichCandidatePageExpenseSummaries(env, access, page) {
   return {
     ...page,
     items: cards.map((card) => {
-      const workflow = selectedByCard.get(card);
-      if (!workflow) return cardWithExpenseEvidenceFacts(card);
-      const evidence = componentsByWorkflowGeneration.get(
-        `${text(workflow.id)}:${Number(workflow.generation)}`
-      ) || [];
+      const workflowsForCard = selectedByCard.get(card);
+      if (!workflowsForCard?.length) return cardWithExpenseEvidenceFacts(card);
+      let totals = emptySubmittedExpenseTotals();
+      const evidence = [];
+      for (const workflow of workflowsForCard) {
+        totals = addSubmittedExpenseTotals(totals, submittedExpenseTotals(workflow));
+        const displayGeneration = upper(workflow.state) === 'FINALISED'
+          ? Math.max(Number(workflow.generation) - 1, 1) : Number(workflow.generation);
+        evidence.push(...(componentsByWorkflowGeneration.get(
+          `${text(workflow.id)}:${displayGeneration}`
+        ) || []));
+      }
       const categories = [...new Set(evidence.map((component) => (
         upper(component?.component_kind) === 'MILEAGE_FORM'
           ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'
       )).filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))];
-      return cardWithExpenseEvidenceFacts(card, {
-        mileage_units: immutableMileageUnits(workflow),
+      return {
+        ...cardWithExpenseEvidenceFacts(card, {
+        ...totals,
         supporting_evidence_count: evidence.length,
         supporting_evidence_categories: categories
-      });
+        }),
+        expenses: {
+          ...totals,
+          supporting_evidence_count: evidence.length,
+          supporting_evidence_categories: categories
+        }
+      };
     })
+  };
+}
+
+async function enrichCandidateSubmittedExpenseClaims(env, access, detail) {
+  if (!isObject(detail)) return detail;
+  const projected = (Array.isArray(detail.workflows) ? detail.workflows : []).filter((workflow) => (
+    UUID_RE.test(text(workflow?.workflow_id))
+    && ['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(upper(workflow?.workflow_kind))
+    && SUBMITTED_EXPENSE_CARD_STATES.has(upper(workflow?.state))
+  ));
+  if (!projected.length) {
+    return {
+      ...detail,
+      submitted_expense_totals: emptySubmittedExpenseTotals(),
+      expense_claims: []
+    };
+  }
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const workflowIds = [...new Set(projected.map((workflow) => text(workflow.workflow_id)))];
+  const targetIds = [...new Set(projected.map((workflow) => text(workflow.target_timesheet_id))
+    .filter((id) => UUID_RE.test(id)))];
+  const [workflowRows, financialRows, timesheetRows] = await Promise.all([
+    restRows(env, 'candidate_submission_workflows', [
+      `id=in.(${workflowIds.join(',')})`,
+      `candidate_id=eq.${encodeURIComponent(candidateId)}`,
+      `environment=eq.${encodeURIComponent(environmentName(env))}`,
+      'select=id,generation,workflow_kind,state,target_timesheet_id,immutable_submission_json,worker_submitted_at_utc,updated_at_utc'
+    ].join('&')),
+    targetIds.length ? restRows(env, 'timesheets_financials', [
+      `timesheet_id=in.(${targetIds.join(',')})`, 'is_current=eq.true',
+      'select=timesheet_id,expenses_description,mileage_units,mileage_pay_ex_vat,travel_pay_ex_vat,accommodation_pay_ex_vat,other_pay_ex_vat,authorised_at_utc,paid_at_utc,locked_by_invoice_id,processing_status'
+    ].join('&')) : Promise.resolve([]),
+    targetIds.length ? restRows(env, 'timesheets', [
+      `timesheet_id=in.(${targetIds.join(',')})`, 'is_current=eq.true',
+      'select=timesheet_id,status'
+    ].join('&')) : Promise.resolve([])
+  ]);
+  const projectedById = new Map(projected.map((workflow) => [text(workflow.workflow_id), workflow]));
+  const financialByTimesheet = new Map(financialRows.map((row) => [text(row.timesheet_id), row]));
+  const statusByTimesheet = new Map(timesheetRows.map((row) => [text(row.timesheet_id), upper(row.status)]));
+  const cancelActions = new Set((Array.isArray(detail.available_actions) ? detail.available_actions : [])
+    .filter((action) => ['CANCEL_ENTIRE_CLAIM_AND_START_AGAIN', 'DISCARD_EXPENSE_CLAIM'].includes(upper(action?.code)))
+    .map((action) => text(action?.workflow_id))
+    .filter(Boolean));
+  const claims = workflowRows.flatMap((workflow) => {
+    const projection = projectedById.get(text(workflow.id));
+    if (!projection || Number(workflow.generation) !== Number(projection.generation)
+        || upper(workflow.state) !== upper(projection.state)) return [];
+    const targetTimesheetId = text(projection.target_timesheet_id || workflow.target_timesheet_id) || null;
+    const financial = targetTimesheetId ? financialByTimesheet.get(targetTimesheetId) : null;
+    const timesheetStatus = targetTimesheetId ? statusByTimesheet.get(targetTimesheetId) : '';
+    const protectedClaim = Boolean(
+      financial?.authorised_at_utc || financial?.paid_at_utc || financial?.locked_by_invoice_id
+      || ['AUTHORISED', 'AUTHORIZED', 'INVOICED', 'PAID'].includes(timesheetStatus)
+    );
+    const statusCode = financial?.paid_at_utc || timesheetStatus === 'PAID' ? 'PAID'
+      : financial?.locked_by_invoice_id || timesheetStatus === 'INVOICED' ? 'INVOICED'
+        : financial?.authorised_at_utc || ['AUTHORISED', 'AUTHORIZED'].includes(timesheetStatus)
+          ? 'OFFICE_AUTHORISED'
+          : ['MANAGER_APPROVED', 'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE', 'FINALISED', 'RECEIVED'].includes(upper(workflow.state))
+            ? 'MANAGER_APPROVED'
+            : upper(workflow.state) === 'AWAITING_PAPER_RETURN' ? 'AWAITING_SIGNED_DOCUMENTS'
+              : ['READY_FOR_MANAGER_APPROVAL', 'AWAITING_MANAGER_APPROVAL'].includes(upper(workflow.state))
+                ? 'MANAGER_APPROVAL_REQUIRED' : 'SUBMITTED';
+    const displayGeneration = upper(workflow.state) === 'FINALISED'
+      ? Math.max(Number(workflow.generation) - 1, 1) : Number(workflow.generation);
+    const supporting = (Array.isArray(detail.components) ? detail.components : []).filter((component) => (
+      text(component?.workflow_id) === text(workflow.id)
+      && Number(component?.workflow_generation) === displayGeneration
+      && upper(component?.state) !== 'SUPERSEDED'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(upper(component?.component_kind))
+    ));
+    const categories = [...new Set(supporting.map((component) => (
+      upper(component?.component_kind) === 'MILEAGE_FORM'
+        ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'
+    )).filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))];
+    return [{
+      workflow_id: text(workflow.id),
+      generation: Number(workflow.generation),
+      document_generation: displayGeneration,
+      state: upper(workflow.state),
+      status_code: statusCode,
+      manager_approval_state: upper(projection.manager_approval_state || workflow.state),
+      target_timesheet_id: targetTimesheetId,
+      submitted_at_utc: workflow.worker_submitted_at_utc || null,
+      updated_at_utc: workflow.updated_at_utc,
+      protected: protectedClaim,
+      can_withdraw: !protectedClaim && cancelActions.has(text(workflow.id)),
+      totals: submittedExpenseTotals(workflow, financial),
+      supporting_evidence_count: supporting.length,
+      supporting_evidence_categories: categories
+    }];
+  }).sort((left, right) => (
+    text(left.submitted_at_utc || left.updated_at_utc)
+      .localeCompare(text(right.submitted_at_utc || right.updated_at_utc))
+      || left.workflow_id.localeCompare(right.workflow_id)
+  ));
+  const aggregate = claims.reduce(
+    (totals, claim) => addSubmittedExpenseTotals(totals, claim.totals),
+    emptySubmittedExpenseTotals()
+  );
+  return {
+    ...detail,
+    expenses: claims.length ? aggregate : detail.expenses,
+    submitted_expense_totals: aggregate,
+    expense_claims: claims
   };
 }
 
@@ -4818,7 +5013,10 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
         : (url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null)
     }));
     const enrichedDetail = await enrichCandidateComponentLineage(env, detail);
-    return jsonResponse(200, await projectCurrentSubmittedFacts(env, access, enrichedDetail));
+    const submittedFacts = await projectCurrentSubmittedFacts(env, access, enrichedDetail);
+    return jsonResponse(200, await enrichCandidateSubmittedExpenseClaims(
+      env, access, submittedFacts
+    ));
   }
   if (kind === 'missing-options') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
@@ -5151,7 +5349,7 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
     }, 'resolution=ignore-duplicates,return=representation');
   const durable = outbox || await restOne(env, 'mail_outbox',
     `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}`
-    + '&select=id,status,deterministic_outbox_key,attachments,payment_scope_json');
+    + '&select=id,status,deterministic_outbox_key,attachments,payment_scope_json,context_kind,context_id');
   if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
   }

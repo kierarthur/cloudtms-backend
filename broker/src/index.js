@@ -393,7 +393,8 @@ const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
   'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
   'nhsp_import_auto_authorise', 'reversal_complete_financials_date',
   'reversal_replacement_financials_date', 'timesheet_break_entry_mode',
-  'candidate_paper_submission_enabled'
+  'candidate_paper_submission_enabled',
+  'candidate_expenses_require_separate_timesheet', 'candidate_expense_invoice_email'
 ]);
 
 async function createClientWithSettingsAtomic(env, user, data) {
@@ -7378,6 +7379,16 @@ function toYmd(d) {
 function ymdCompact(ymd) { return (ymd || '').replace(/-/g, ''); }
 function clampBool(v, def=false){ return v === true || v === 'true' ? true : v === false || v === 'false' ? false : def; }
 
+function normalizeCandidateExpenseInvoiceEmail(value) {
+  if (value == null) return null;
+  const email = String(value).trim();
+  if (!email) return null;
+  if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('candidate_expense_invoice_email must be a valid email address');
+  }
+  return email;
+}
+
 function normalizeTimesheetBreakEntryMode(value, { nullable = true } = {}) {
   if (value == null || String(value).trim() === '' || String(value).trim().toUpperCase() === 'INHERIT') {
     if (nullable) return null;
@@ -7513,6 +7524,20 @@ async function handleContractsCreate(env, req) {
           ? null
           : clampBool(body.candidate_paper_submission_enabled_override, false))
       : null;
+  const candidate_expenses_require_separate_timesheet_override =
+    Object.prototype.hasOwnProperty.call(body, 'candidate_expenses_require_separate_timesheet_override')
+      ? (body.candidate_expenses_require_separate_timesheet_override == null
+          ? null
+          : clampBool(body.candidate_expenses_require_separate_timesheet_override, false))
+      : null;
+  let candidate_expense_invoice_email_override;
+  try {
+    candidate_expense_invoice_email_override = normalizeCandidateExpenseInvoiceEmail(
+      body.candidate_expense_invoice_email_override
+    );
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid Candidate expense invoice email'));
+  }
 
   // ✅ NEW: contract.is_ad_hoc (default false)
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
@@ -7591,7 +7616,8 @@ async function handleContractsCreate(env, req) {
             'group_nightsat_sunbh',
             'auto_invoice_default',
             'hr_attach_to_invoice',
-            'ts_attach_to_invoice'
+            'ts_attach_to_invoice',
+            'candidate_expense_invoice_email'
           ].join(',') +
         `&order=effective_from.desc,created_at.desc&limit=1`
     );
@@ -7817,6 +7843,8 @@ async function handleContractsCreate(env, req) {
       // ✅ NEW: persist overrideclientsettings
       overrideclientsettings,
       candidate_paper_submission_enabled_override,
+      candidate_expenses_require_separate_timesheet_override,
+      candidate_expense_invoice_email_override,
 
       // ✅ NEW: persist is_ad_hoc
       is_ad_hoc,
@@ -10983,6 +11011,18 @@ async function handleContractsUpdate(env, req, contractId) {
       return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
     }
   }
+  if ('candidate_expenses_require_separate_timesheet_override' in body) {
+    patch.candidate_expenses_require_separate_timesheet_override =
+      boolOrNull(body.candidate_expenses_require_separate_timesheet_override, false);
+  }
+  if ('candidate_expense_invoice_email_override' in body) {
+    try {
+      patch.candidate_expense_invoice_email_override =
+        normalizeCandidateExpenseInvoiceEmail(body.candidate_expense_invoice_email_override);
+    } catch (error) {
+      return withCORS(env, req, badRequest(error?.message || 'Invalid Candidate expense invoice email'));
+    }
+  }
 
   const eff_is_nhsp = Object.prototype.hasOwnProperty.call(patch, 'is_nhsp') ? patch.is_nhsp : current.is_nhsp;
   const eff_autoprocess_hr = Object.prototype.hasOwnProperty.call(patch, 'autoprocess_hr') ? patch.autoprocess_hr : current.autoprocess_hr;
@@ -11793,6 +11833,14 @@ async function handleContractsReplace(env, req, contractId) {
   } catch (error) {
     return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
   }
+  let replacementCandidateExpenseEmail;
+  try {
+    replacementCandidateExpenseEmail = Object.prototype.hasOwnProperty.call(body, 'candidate_expense_invoice_email_override')
+      ? normalizeCandidateExpenseInvoiceEmail(body.candidate_expense_invoice_email_override)
+      : (current.candidate_expense_invoice_email_override ?? null);
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid Candidate expense invoice email'));
+  }
 
   const patch = {
     candidate_id: ('candidate_id' in body ? body.candidate_id : current.candidate_id),
@@ -11818,6 +11866,11 @@ async function handleContractsReplace(env, req, contractId) {
     hr_attach_to_invoice:  ('hr_attach_to_invoice' in body)  ? boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice) : (current.hr_attach_to_invoice ?? null),
     ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
     timesheet_break_entry_mode: replacementBreakEntryMode,
+    candidate_expenses_require_separate_timesheet_override:
+      Object.prototype.hasOwnProperty.call(body, 'candidate_expenses_require_separate_timesheet_override')
+        ? boolOrNull(body.candidate_expenses_require_separate_timesheet_override, false)
+        : (current.candidate_expenses_require_separate_timesheet_override ?? null),
+    candidate_expense_invoice_email_override: replacementCandidateExpenseEmail,
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
 
@@ -12240,6 +12293,12 @@ async function handleContractsDuplicate(env, req, contractId) {
       // NEW: contract override flag + governed nullable booleans
       overrideclientsettings: !!src.overrideclientsettings,
       candidate_paper_submission_enabled_override: copyBoolOrNull(src.candidate_paper_submission_enabled_override),
+      candidate_expenses_require_separate_timesheet_override:
+        copyBoolOrNull(src.candidate_expenses_require_separate_timesheet_override),
+      candidate_expense_invoice_email_override:
+        (src.candidate_expense_invoice_email_override == null)
+          ? null
+          : String(src.candidate_expense_invoice_email_override).trim() || null,
 
       is_nhsp: copyBoolOrNull(src.is_nhsp),
       autoprocess_hr: copyBoolOrNull(src.autoprocess_hr),
@@ -138988,6 +139047,10 @@ async function handleGetClient(env, req, clientId) {
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
 
+          // Candidate expense separation and expense-invoice delivery
+          'candidate_expenses_require_separate_timesheet',
+          'candidate_expense_invoice_email',
+
           // Import-authoritative correction financial-date policy overrides
           'reversal_complete_financials_date',
           'reversal_replacement_financials_date',
@@ -139450,6 +139513,10 @@ async function handleUpdateClient(env, req, clientId) {
           'send_manual_invoices_to_different_email',
           'manual_invoices_alt_email_address',
 
+          // Candidate expense separation and expense-invoice delivery
+          'candidate_expenses_require_separate_timesheet',
+          'candidate_expense_invoice_email',
+
           // ✅ NEW: invoice settings
           'invoice_consolidation_mode',
           'reference_number_required_to_issue_invoice',
@@ -139532,6 +139599,14 @@ async function handleUpdateClient(env, req, clientId) {
       csInput.manual_invoices_alt_email_address =
         normEmail(csInput.manual_invoices_alt_email_address ?? data.manual_invoices_alt_email_address);
     }
+    if ('candidate_expenses_require_separate_timesheet' in data || 'candidate_expenses_require_separate_timesheet' in csInput) {
+      csInput.candidate_expenses_require_separate_timesheet =
+        asBool(csInput.candidate_expenses_require_separate_timesheet ?? data.candidate_expenses_require_separate_timesheet);
+    }
+    if ('candidate_expense_invoice_email' in data || 'candidate_expense_invoice_email' in csInput) {
+      csInput.candidate_expense_invoice_email =
+        normEmail(csInput.candidate_expense_invoice_email ?? data.candidate_expense_invoice_email);
+    }
 
     // ✅ NEW: client comms opt-ins (DB-backed) — only apply when provided
     if ('opt_in_email' in data || 'opt_in_email' in csInput) {
@@ -139602,6 +139677,8 @@ async function handleUpdateClient(env, req, clientId) {
       // ensure these never fall into clients table patch
       send_manual_invoices_to_different_email,
       manual_invoices_alt_email_address,
+      candidate_expenses_require_separate_timesheet,
+      candidate_expense_invoice_email,
 
       // ensure these never fall into clients table patch
       invoice_consolidation_mode,
@@ -139705,6 +139782,9 @@ async function handleUpdateClient(env, req, clientId) {
 
       if (canon.send_manual_invoices_to_different_email && !canon.manual_invoices_alt_email_address) {
         return withCORS(env, req, badRequest('manual_invoices_alt_email_address is required when send_manual_invoices_to_different_email is true'));
+      }
+      if (canon.candidate_expenses_require_separate_timesheet && !canon.candidate_expense_invoice_email) {
+        return withCORS(env, req, badRequest('candidate_expense_invoice_email is required when Candidate expenses use a separate Timesheet'));
       }
 
       for (const k of TIME_KEYS) {
@@ -158903,6 +158983,7 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     'hr_attach_to_invoice',
     'ts_attach_to_invoice',
     'send_manual_invoices_to_different_email',
+    'candidate_expenses_require_separate_timesheet',
 
     // ✅ NEW: ref-to-issue
     'reference_number_required_to_issue_invoice'
@@ -158929,6 +159010,15 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     out.manual_invoices_alt_email_address = normEmail(in0.manual_invoices_alt_email_address);
   } else if (Object.prototype.hasOwnProperty.call(before, 'manual_invoices_alt_email_address')) {
     out.manual_invoices_alt_email_address = normEmail(before.manual_invoices_alt_email_address);
+  }
+
+  // Candidate expense invoice routing is independent of the legacy manual/QR
+  // adjustment route. Keep the address when separation is off because an
+  // import-authoritative Contract can still mandate a separate expense invoice.
+  if (Object.prototype.hasOwnProperty.call(in0, 'candidate_expense_invoice_email')) {
+    out.candidate_expense_invoice_email = normEmail(in0.candidate_expense_invoice_email);
+  } else if (Object.prototype.hasOwnProperty.call(before, 'candidate_expense_invoice_email')) {
+    out.candidate_expense_invoice_email = normEmail(before.candidate_expense_invoice_email);
   }
 
   // week_ending_weekday
