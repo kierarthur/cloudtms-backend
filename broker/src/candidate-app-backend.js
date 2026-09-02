@@ -6189,9 +6189,29 @@ function candidatePaperCompleteReceipt(env, workflow, deliveryGeneration, row) {
   const scope = parseJson(receiptRow?.payment_scope_json, {}) || {};
   if (!candidateCompletePackAttachmentMatchesScope(receiptRow)) return null;
   const manifestHash = text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
-  const baseHash = text(scope.base_document_sha256).replace(/^\\x/i, '').toLowerCase();
-  const brandingHash = text(scope.branding_contract_sha256).replace(/^\\x/i, '').toLowerCase();
-  const rendererVersion = text(scope.renderer_contract_version);
+  const canonicalBaseHash = text(scope.candidate_complete_pack_base_document_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const compatibilityBaseHash = text(scope.base_document_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const canonicalBrandingHash = text(scope.candidate_complete_pack_branding_contract_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const compatibilityBrandingHash = text(scope.branding_contract_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  const canonicalRendererVersion = text(scope.candidate_complete_pack_renderer_contract_version);
+  const compatibilityRendererVersion = text(scope.renderer_contract_version);
+  if ((canonicalBaseHash && compatibilityBaseHash && canonicalBaseHash !== compatibilityBaseHash)
+      || (canonicalBrandingHash && compatibilityBrandingHash
+        && canonicalBrandingHash !== compatibilityBrandingHash)
+      || (canonicalRendererVersion && compatibilityRendererVersion
+        && canonicalRendererVersion !== compatibilityRendererVersion)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  // PAPER_PACK_RELEASE records the immutable completed-pack identity using the
+  // candidate_complete_pack_* keys. The unprefixed keys are retained only for
+  // compatibility with deliveries created before that receipt contract.
+  const baseHash = canonicalBaseHash || compatibilityBaseHash;
+  const brandingHash = canonicalBrandingHash || compatibilityBrandingHash;
+  const rendererVersion = canonicalRendererVersion || compatibilityRendererVersion;
   const key = text(scope.candidate_complete_pack_storage_key).replace(/^\/+/, '');
   const sha256 = text(scope.candidate_complete_pack_sha256).toLowerCase();
   const byteSize = Number(scope.candidate_complete_pack_size_bytes);

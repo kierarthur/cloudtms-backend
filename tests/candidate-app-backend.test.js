@@ -3968,6 +3968,79 @@ test('released Paper pack remains authoritative after an expected generic docume
   assert.equal(receipt.page_count, 3);
 });
 
+test('released Paper pack reads the canonical completed-pack identity written by the database', () => {
+  const workflowId = '00000000-0000-4000-8000-00000000032a';
+  const manifestHash = 'a'.repeat(64);
+  const baseHash = 'b'.repeat(64);
+  const brandingHash = 'c'.repeat(64);
+  const packHash = 'd'.repeat(64);
+  const complete = {
+    key: `candidate-app/test/${workflowId}/2/paper-pack/`
+      + `${manifestHash}-${baseHash}-${brandingHash}-CANDIDATE_REVIEW_DOCUMENTS_V1.pdf`,
+    sha256: packHash,
+    byte_size: 654,
+    page_count: 3
+  };
+  const workflow = {
+    id: workflowId,
+    generation: 2,
+    state: 'AWAITING_PAPER_RETURN',
+    paper_return_manifest_sha256: manifestHash
+  };
+  const outbox = {
+    status: 'SENT',
+    payment_scope_json: {
+      ...readyPaperScope(workflowId, 2, manifestHash, complete),
+      candidate_complete_pack_base_document_sha256: baseHash,
+      candidate_complete_pack_branding_contract_sha256: brandingHash,
+      candidate_complete_pack_renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1'
+    },
+    attachments: [readyPaperAttachment(workflowId, 2, manifestHash, complete)]
+  };
+
+  const receipt = candidatePaperCompleteReceipt(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, workflow, 2, outbox
+  );
+  assert.equal(receipt.ready, true);
+  assert.equal(receipt.key, complete.key);
+  assert.equal(receipt.renderer_contract_version, 'CANDIDATE_REVIEW_DOCUMENTS_V1');
+});
+
+test('released Paper pack rejects conflicting canonical and compatibility identities', () => {
+  const workflowId = '00000000-0000-4000-8000-00000000032b';
+  const manifestHash = 'a'.repeat(64);
+  const baseHash = 'b'.repeat(64);
+  const brandingHash = 'c'.repeat(64);
+  const complete = {
+    key: `candidate-app/test/${workflowId}/2/paper-pack/`
+      + `${manifestHash}-${baseHash}-${brandingHash}-CANDIDATE_REVIEW_DOCUMENTS_V1.pdf`,
+    sha256: 'd'.repeat(64),
+    byte_size: 654,
+    page_count: 3
+  };
+  const workflow = {
+    id: workflowId,
+    generation: 2,
+    state: 'AWAITING_PAPER_RETURN',
+    paper_return_manifest_sha256: manifestHash
+  };
+  const outbox = {
+    status: 'SENT',
+    payment_scope_json: {
+      ...readyPaperScope(workflowId, 2, manifestHash, complete),
+      candidate_complete_pack_base_document_sha256: baseHash,
+      base_document_sha256: 'e'.repeat(64),
+      candidate_complete_pack_branding_contract_sha256: brandingHash,
+      candidate_complete_pack_renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1'
+    },
+    attachments: [readyPaperAttachment(workflowId, 2, manifestHash, complete)]
+  };
+
+  assert.throws(() => candidatePaperCompleteReceipt(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, workflow, 2, outbox
+  ), error => error?.code === 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+});
+
 test('Paper status polling never requeues after the exact released pack is complete', async () => {
   const sessionId = '00000000-0000-4000-8000-000000000036';
   const accountId = '00000000-0000-4000-8000-000000000037';
