@@ -3281,8 +3281,13 @@ test('Candidate paper email queues the exact ready pack to the active registered
       return Response.json([{ agency_name: 'Configured Agency', agency_logo: null }]);
     }
     if (target.pathname.endsWith('/mail_outbox') && method === 'POST') {
-      writes.push(JSON.parse(String(init.body)));
-      return Response.json([{ id: '00000000-0000-4000-8000-0000000000b5', status: 'QUEUED' }]);
+      const body = JSON.parse(String(init.body));
+      writes.push(body);
+      return Response.json([{
+        ...body,
+        id: '00000000-0000-4000-8000-0000000000b5',
+        status: 'QUEUED'
+      }]);
     }
     throw new Error(`Unexpected TEST request ${method} ${target.pathname}`);
   };
@@ -3308,8 +3313,121 @@ test('Candidate paper email queues the exact ready pack to the active registered
     });
     assert.equal(writes[0].payment_scope_json.candidate_mail_authority,
       'CANDIDATE_PAPER_PACK_EMAIL_V1');
+    assert.equal(writes[0].payment_scope_json.candidate_paper_pack_ready, true);
+    assert.equal(writes[0].payment_scope_json.mail_held_until_pdf_rendered, false);
+    assert.equal(writes[0].payment_scope_json.mail_hold_reason, null);
+    assert.equal(writes[0].payment_scope_json.candidate_complete_pack_media_type,
+      'application/pdf');
     assert.match(writes[0].deterministic_outbox_key,
       /CANDIDATE_PAPER_PACK_EMAIL:.*00000000-0000-4000-8000-0000000000b6$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate paper email replays only an already claimable completed-pack row', async () => {
+  const workflow = {
+    id: '00000000-0000-4000-8000-0000000000c1',
+    account_id: '00000000-0000-4000-8000-0000000000c2',
+    candidate_id: '00000000-0000-4000-8000-0000000000c3',
+    target_timesheet_id: '00000000-0000-4000-8000-0000000000c4',
+    environment: 'TEST', generation: 3, state: 'AWAITING_PAPER_RETURN',
+    workflow_kind: 'CONTRACT_COMBINED', scope: 'WEEKLY', route: 'PAPER',
+    week_ending_date: '2026-08-30', contract_id: null,
+    paper_return_manifest_sha256: 'c'.repeat(64)
+  };
+  const access = { account_id: workflow.account_id, selected_candidate_id: workflow.candidate_id };
+  const context = {
+    ready: true, workflow,
+    complete: {
+      ready: true, key: 'candidate-app/test/replay-pack.pdf', sha256: 'd'.repeat(64),
+      byte_size: 654321, page_count: 3
+    }
+  };
+  const idempotencyKey = '00000000-0000-4000-8000-0000000000c6';
+  const attachment = {
+    r2_key: context.complete.key,
+    filename: 'Official_Documents_2026-08-30.pdf',
+    content_type: 'application/pdf',
+    sha256: context.complete.sha256,
+    size_bytes: context.complete.byte_size,
+    page_count: context.complete.page_count,
+    candidate_workflow_id: workflow.id,
+    candidate_workflow_generation: workflow.generation,
+    paper_return_manifest_sha256: workflow.paper_return_manifest_sha256
+  };
+  const durable = {
+    id: '00000000-0000-4000-8000-0000000000c5', status: 'QUEUED',
+    deterministic_outbox_key: `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${idempotencyKey}`,
+    attachments: [attachment],
+    payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+      candidate_workflow_id: workflow.id,
+      candidate_workflow_generation: workflow.generation,
+      paper_return_manifest_sha256: workflow.paper_return_manifest_sha256,
+      candidate_paper_pack_ready: true,
+      mail_held_until_pdf_rendered: false,
+      mail_hold_reason: null,
+      candidate_complete_pack_storage_key: context.complete.key,
+      candidate_complete_pack_sha256: context.complete.sha256,
+      candidate_complete_pack_size_bytes: context.complete.byte_size,
+      candidate_complete_pack_page_count: context.complete.page_count,
+      candidate_complete_pack_media_type: 'application/pdf'
+    }
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  let returnBrokenExisting = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = new URL(String(url));
+    const method = String(init.method || 'GET').toUpperCase();
+    if (target.pathname.endsWith('/candidate_app_accounts')) {
+      return Response.json([{ id: workflow.account_id, email_normalized: 'candidate@example.test' }]);
+    }
+    if (target.pathname.endsWith('/timesheets')) {
+      return Response.json([{
+        timesheet_id: workflow.target_timesheet_id, sheet_scope: 'WEEKLY',
+        hospital_norm: 'Test Hospital', ward_norm: 'Test Ward', job_title_norm: 'Nurse', band: '6'
+      }]);
+    }
+    if (target.pathname.endsWith('/timesheets_financials')) return Response.json([]);
+    if (target.pathname.endsWith('/candidates')) {
+      return Response.json([{ id: workflow.candidate_id, first_name: 'Test', last_name: 'Worker' }]);
+    }
+    if (target.pathname.endsWith('/settings_defaults')) {
+      return Response.json([{ agency_name: 'Configured Agency', agency_logo: null }]);
+    }
+    if (target.pathname.endsWith('/mail_outbox') && method === 'POST') return Response.json([]);
+    if (target.pathname.endsWith('/mail_outbox') && method === 'GET') {
+      return Response.json([returnBrokenExisting ? {
+        ...durable,
+        payment_scope_json: {
+          ...durable.payment_scope_json,
+          candidate_paper_pack_ready: false,
+          mail_held_until_pdf_rendered: true
+        }
+      } : durable]);
+    }
+    throw new Error(`Unexpected TEST request ${method} ${target.pathname}`);
+  };
+  try {
+    const replay = await queueCandidatePaperPackEmail(env, workflow, access, {
+      generation: workflow.generation, idempotency_key: idempotencyKey
+    }, context);
+    assert.equal(replay.idempotent_replay, true);
+    assert.equal(replay.mail_outbox_id, durable.id);
+
+    returnBrokenExisting = true;
+    await assert.rejects(
+      () => queueCandidatePaperPackEmail(env, workflow, access, {
+        generation: workflow.generation, idempotency_key: idempotencyKey
+      }, context),
+      error => error?.code === 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT'
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

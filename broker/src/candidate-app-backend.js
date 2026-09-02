@@ -5135,16 +5135,24 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
         candidate_workflow_id: workflow.id,
         candidate_workflow_generation: Number(workflow.generation),
         paper_return_manifest_sha256: manifestSha256,
+        candidate_paper_pack_ready: true,
+        mail_held_until_pdf_rendered: false,
+        mail_hold_reason: null,
         candidate_complete_pack_storage_key: context.complete.key,
         candidate_complete_pack_sha256: context.complete.sha256,
         candidate_complete_pack_size_bytes: Number(context.complete.byte_size),
-        candidate_complete_pack_page_count: Number(context.complete.page_count)
+        candidate_complete_pack_page_count: Number(context.complete.page_count),
+        candidate_complete_pack_media_type: 'application/pdf'
       }
     }, 'resolution=ignore-duplicates,return=representation');
   const durable = outbox || await restOne(env, 'mail_outbox',
-    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}&select=id,status`);
+    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}`
+    + '&select=id,status,deterministic_outbox_key,attachments,payment_scope_json');
   if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
+  }
+  if (!candidateCompletePackAttachmentMatchesScope(durable)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT');
   }
   return {
     ok: true,
