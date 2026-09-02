@@ -1532,3 +1532,42 @@ test('public broker logs only a closed private failure code while preserving pub
     console.error = originalError;
   }
 });
+
+test('public broker exposes only closed transport diagnostics in TEST', async () => {
+  const privateFailure = () => Response.json({
+    ok: false,
+    error_code: 'CANDIDATE_WORKFLOW_CANCEL_ATOMIC_V2',
+    details: {
+      transport_diagnostic: {
+        error_code: 'CANDIDATE_WORKFLOW_CANCEL_ATOMIC_V2',
+        transport_function: 'candidate_workflow_cancel_atomic_v2',
+        transport_status: 400,
+        database_sqlstate: '42883',
+        database_error_class: 'UNDEFINED_FUNCTION',
+        unsafe_message: 'must-not-be-exposed'
+      },
+      unsafe_private_detail: 'must-not-be-exposed'
+    }
+  }, { status: 400 });
+
+  const testResponse = await candidateBrokerInternals.publicSafePrivateResponse(
+    privateFailure(),
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }
+  );
+  assert.deepEqual((await testResponse.json()).details, {
+    transport_diagnostic: {
+      error_code: 'CANDIDATE_WORKFLOW_CANCEL_ATOMIC_V2',
+      transport_function: 'candidate_workflow_cancel_atomic_v2',
+      transport_status: 400,
+      database_sqlstate: '42883',
+      database_error_class: 'UNDEFINED_FUNCTION'
+    }
+  });
+
+  const liveResponse = await candidateBrokerInternals.publicSafePrivateResponse(
+    privateFailure(),
+    { CANDIDATE_APP_ENVIRONMENT: 'LIVE' }
+  );
+  assert.equal((await liveResponse.json()).details, undefined);
+});
+

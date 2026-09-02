@@ -1072,7 +1072,27 @@ async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
   }
 }
 
-async function publicSafePrivateResponse(response) {
+function publicTestTransportDiagnostic(env, source) {
+  if (!env || upper(env.CANDIDATE_APP_ENVIRONMENT) !== 'TEST' || !isObject(source)) return null;
+  const diagnostic = source.details?.transport_diagnostic;
+  if (!isObject(diagnostic)) return null;
+  const safe = {};
+  for (const key of [
+    'error_code', 'transport_function', 'database_sqlstate', 'database_error_code',
+    'database_error_class', 'database_object', 'local_error_code', 'local_error_class',
+    'local_error_property', 'source_location'
+  ]) {
+    const value = text(diagnostic[key]);
+    if (value && /^[A-Za-z0-9_.:-]{1,160}$/.test(value)) safe[key] = value;
+  }
+  const transportStatus = Number(diagnostic.transport_status);
+  if (Number.isSafeInteger(transportStatus) && transportStatus >= 400 && transportStatus <= 599) {
+    safe.transport_status = transportStatus;
+  }
+  return Object.keys(safe).length > 0 ? safe : null;
+}
+
+async function publicSafePrivateResponse(response, env = null) {
   if (response.status < 400) {
     const headers = new Headers();
     for (const name of [
@@ -1113,6 +1133,8 @@ async function publicSafePrivateResponse(response) {
     error_code: errorCode,
     request_id: text(source.request_id) || undefined
   };
+  const transportDiagnostic = publicTestTransportDiagnostic(env, source);
+  if (transportDiagnostic) body.details = { transport_diagnostic: transportDiagnostic };
   if (['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 'CANDIDATE_CHALLENGE_RESEND_LIMIT'].includes(errorCode)
       && isObject(source.details)) {
     const retryAfterSeconds = Number(source.details.retry_after_seconds || 0);
@@ -3264,7 +3286,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
         response, dailyCorrelationId, CANDIDATE_DAILY_BOOTSTRAP_ROUTE
       ), origin);
     }
-    return withCors(await publicSafePrivateResponse(response), origin);
+    return withCors(await publicSafePrivateResponse(response, env), origin);
   } catch (error) {
     if (dailyCandidateRoute || dailyBootstrap) {
       return withCors(dailyBrokerError(error, dailyCorrelationId, {
@@ -3308,8 +3330,10 @@ export const candidateBrokerInternals = Object.freeze({
   forwardPrivateSystem,
   candidateDailySystemRateKeys,
   publicSafePrivateResponse,
+  publicTestTransportDiagnostic,
   publicSafeDailyResponse,
   validateCandidateFinalisationBody,
   validateCandidateDailyTransport,
   wrapPrivateSession
 });
+
