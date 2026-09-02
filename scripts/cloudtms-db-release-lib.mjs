@@ -353,7 +353,13 @@ export function contractDifferenceDetails(expected, actual, changedSections = co
     if (!actualByKey.has(key)) return [`missing installed relation ${key}`];
     if (!expectedByKey.has(key)) return [`unexpected installed relation ${key}`];
     if (JSON.stringify(expectedByKey.get(key)) !== JSON.stringify(actualByKey.get(key))) {
-      return [`changed installed relation ${key}`];
+      const expectedRelation = expectedByKey.get(key);
+      const actualRelation = actualByKey.get(key);
+      const changedFields = [...new Set([
+        ...Object.keys(expectedRelation),
+        ...Object.keys(actualRelation),
+      ])].sort().filter(field => JSON.stringify(expectedRelation[field]) !== JSON.stringify(actualRelation[field]));
+      return [`changed installed relation ${key} fields=${changedFields.join(',')}`];
     }
     return [];
   });

@@ -243,7 +243,7 @@ test('contract drift diagnostics name relation additions, removals, and changed 
 
   assert.deepEqual(contractDifferenceDetails(base, installed, ['relations']), [
     'unexpected installed relation private.unexpected:r',
-    'changed installed relation public.alpha:r',
+    'changed installed relation public.alpha:r fields=columns',
     'missing installed relation public.removed:v',
   ]);
   assert.deepEqual(contractDifferenceDetails(base, installed, ['routines']), []);
