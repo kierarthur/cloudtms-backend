@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { adaptCatalogLogicalOwnerForRehearsal } from './catalog_logical_owner_adapter.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -69,7 +70,13 @@ for (const sourceFile of pending) {
   if (/^\s*(?:BEGIN|COMMIT|ROLLBACK)\s*;/im.test(sourceSql)) {
     throw new Error(`Catalog-owned repeatable contains transaction control and cannot be rehearsed safely: ${sourceFile}`);
   }
-  statements.push(`\\i '${psqlPath(absoluteSource)}'`);
+  const adaptedOwner = adaptCatalogLogicalOwnerForRehearsal(sourceSql);
+  if (adaptedOwner.mode !== 'UNCHANGED') {
+    statements.push(`-- Catalog-owned repeatable inlined after exact logical-owner validation: ${sourceFile}`);
+    statements.push(adaptedOwner.sourceSql);
+  } else {
+    statements.push(`\\i '${psqlPath(absoluteSource)}'`);
+  }
 }
 
 for (const fn of functionsByIdentity.values()) {
