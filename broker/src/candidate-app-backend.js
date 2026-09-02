@@ -3638,21 +3638,28 @@ async function enrichCandidatePageExpenseSummaries(env, access, page) {
     `workflow_id=in.(${[...selectedIds].join(',')})`,
     'superseded_at_utc=is.null',
     'component_kind=in.(MILEAGE_FORM,EXPENSE_EVIDENCE)',
-    'select=id,workflow_id,component_kind,expense_category'
+    'select=id,workflow_id,workflow_generation,component_kind,expense_category'
   ].join('&')) : [];
-  const componentsByWorkflow = new Map();
+  const componentsByWorkflowGeneration = new Map();
   for (const component of components) {
     const workflowId = text(component?.workflow_id);
-    const list = componentsByWorkflow.get(workflowId) || [];
+    const workflowGeneration = Number(component?.workflow_generation);
+    const componentKind = upper(component?.component_kind);
+    if (!workflowId || !Number.isSafeInteger(workflowGeneration) || workflowGeneration < 1
+        || !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) continue;
+    const workflowGenerationKey = `${workflowId}:${workflowGeneration}`;
+    const list = componentsByWorkflowGeneration.get(workflowGenerationKey) || [];
     list.push(component);
-    componentsByWorkflow.set(workflowId, list);
+    componentsByWorkflowGeneration.set(workflowGenerationKey, list);
   }
   return {
     ...page,
     items: cards.map((card) => {
       const workflow = selectedByCard.get(card);
       if (!workflow) return cardWithExpenseEvidenceFacts(card);
-      const evidence = componentsByWorkflow.get(text(workflow.id)) || [];
+      const evidence = componentsByWorkflowGeneration.get(
+        `${text(workflow.id)}:${Number(workflow.generation)}`
+      ) || [];
       const categories = [...new Set(evidence.map((component) => (
         upper(component?.component_kind) === 'MILEAGE_FORM'
           ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'

@@ -814,8 +814,10 @@ test('timesheet page adds mileage units and current supporting-evidence facts wi
       updated_at_utc: '2026-08-31T10:00:00.000Z'
     }]);
     if (url.pathname.endsWith('/candidate_submission_components')) return Response.json([
-      { id: '00000000-0000-4000-8000-000000000095', workflow_id: workflowId, component_kind: 'MILEAGE_FORM', expense_category: null },
-      { id: '00000000-0000-4000-8000-000000000096', workflow_id: workflowId, component_kind: 'EXPENSE_EVIDENCE', expense_category: 'ACCOMMODATION' }
+      { id: '00000000-0000-4000-8000-000000000095', workflow_id: workflowId, workflow_generation: 2, component_kind: 'MILEAGE_FORM', expense_category: null },
+      { id: '00000000-0000-4000-8000-000000000096', workflow_id: workflowId, workflow_generation: 2, component_kind: 'EXPENSE_EVIDENCE', expense_category: 'ACCOMMODATION' },
+      { id: '00000000-0000-4000-8000-000000000097', workflow_id: workflowId, workflow_generation: 1, component_kind: 'EXPENSE_EVIDENCE', expense_category: 'TRAVEL' },
+      { id: '00000000-0000-4000-8000-000000000098', workflow_id: workflowId, workflow_generation: 2, component_kind: 'EXPENSE_SUMMARY', expense_category: 'OTHER' }
     ]);
     throw new Error(`unexpected fetch ${url.href}`);
   };
@@ -838,7 +840,9 @@ test('timesheet page adds mileage units and current supporting-evidence facts wi
     assert.equal(body.items[0].expenses.supporting_evidence_count, 2);
     assert.deepEqual(body.items[0].expenses.supporting_evidence_categories, ['MILEAGE', 'ACCOMMODATION']);
     assert.match(reads.find((url) => url.includes('/candidate_submission_workflows?')), new RegExp(`candidate_id=eq.${candidateId}`));
-    assert.match(reads.find((url) => url.includes('/candidate_submission_components?')), /component_kind=in\.\(MILEAGE_FORM%2CEXPENSE_EVIDENCE\)|component_kind=in\.\(MILEAGE_FORM,EXPENSE_EVIDENCE\)/);
+    const componentRead = reads.find((url) => url.includes('/candidate_submission_components?'));
+    assert.match(componentRead, /component_kind=in\.\(MILEAGE_FORM%2CEXPENSE_EVIDENCE\)|component_kind=in\.\(MILEAGE_FORM,EXPENSE_EVIDENCE\)/);
+    assert.match(componentRead, /workflow_generation/);
   } finally {
     globalThis.fetch = originalFetch;
   }
