@@ -14,9 +14,11 @@ const release = JSON.parse(read('supabase/release/current-release.json'));
 
 test('empty expense-only carriers add to the existing workflow while genuine drafts continue', () => {
   assert.match(repeatable, /component_kind in \([\s\S]*'MILEAGE_FORM','EXPENSE_EVIDENCE'[\s\S]*and not v_draft_has_content then 'ADD_EXPENSES'/i);
+  assert.match(repeatable, /not v_draft_has_content[\s\S]*can_edit_hours[\s\S]*v_workflow\s*:=\s*null/i);
   assert.match(repeatable, /v_code='ADD_EXPENSES' and nullif\(p_action->>'workflow_id',''\) is not null[\s\S]*'destination'[\s\S]*'EXPENSE_CLAIM_EDITOR'/i);
   assert.doesNotMatch(repeatable, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(verifier, /'WORKER_DRAFT'[\s\S]*'ADD_EXPENSES'[\s\S]*'CLIENT_DESTINATION'[\s\S]*'EXPENSE_CLAIM_EDITOR'/i);
+  assert.match(verifier, /can_edit_hours',true[\s\S]*'ENTER_TIMESHEET'/i);
   assert.match(verifier, /insert into public\.candidate_submission_components[\s\S]*'CONTINUE_EXPENSE_CLAIM'/i);
   assert.match(verifier, /count\(\*\)[\s\S]*candidate_submission_workflows[\s\S]*<>1/i);
 });

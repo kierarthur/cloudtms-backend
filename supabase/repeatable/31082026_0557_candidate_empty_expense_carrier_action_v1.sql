@@ -81,6 +81,17 @@ begin
           )
       ) into v_draft_has_content;
     end if;
+    -- An empty Office-created expense shell is not a Candidate draft and must
+    -- not replace the hours journey on a FLEXIBLE Contract Week.  Expense-only
+    -- carriers still reuse their one existing workflow below.
+    if v_workflow->>'workflow_kind'='CONTRACT_EXPENSE'
+       and v_workflow->>'state' in ('CREATED','WORKER_DRAFT')
+       and not v_draft_has_content
+       and coalesce((p_capabilities->>'can_edit_hours')::boolean,false) then
+      v_workflow:=null;
+    end if;
+  end if;
+  if v_workflow is not null then
     v_action:=case
       when v_workflow->>'state'='REFUSED' then 'REVIEW_AND_RESUBMIT'
       when v_workflow->>'workflow_kind'='CONTRACT_EXPENSE'

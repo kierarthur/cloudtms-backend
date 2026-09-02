@@ -23,6 +23,7 @@ begin
     'private._candidate_timesheet_primary_action_v1(text,jsonb,jsonb,uuid,uuid)'
   ))) into v_definition;
   if position('and not v_draft_has_content then ''add_expenses''' in v_definition)=0
+     or position('v_workflow:=null' in replace(v_definition,' ',''))=0
      or v_definition~'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Empty expense-carrier primary-action authority is not installed safely';
   end if;
@@ -92,6 +93,18 @@ begin
      or v_invocation ? 'method' and v_invocation->>'method' is not null
      or v_invocation ? 'path' and v_invocation->>'path' is not null then
     raise exception 'Empty expense carrier did not reuse its existing editor workflow: %',v_invocation;
+  end if;
+
+  v_action:=private._candidate_timesheet_primary_action_v1(
+    'WORKER_DRAFT',v_workflows,
+    jsonb_build_object('can_edit_hours',true,'can_edit_expenses',true),
+    null,v_week
+  );
+  if v_action->>'code'<>'ENTER_TIMESHEET'
+     or v_action->>'label'<>'Enter Timesheet'
+     or (v_action->>'contract_week_id')::uuid is distinct from v_week
+     or v_action ? 'workflow_id' then
+    raise exception 'Empty expense shell hid the FLEXIBLE hours journey: %',v_action;
   end if;
 
   insert into public.candidate_submission_components(
