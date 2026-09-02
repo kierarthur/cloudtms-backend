@@ -5097,6 +5097,10 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
   if (!SHA256_RE.test(manifestSha256)) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
   }
+  const sourceTimesheetId = requireUuid(
+    workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+    'CANDIDATE_PAPER_PACK_NOT_FOUND'
+  );
   const deterministicKey = `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${body.idempotency_key}`;
   const now = new Date().toISOString();
   const outbox = await restWrite(env, 'mail_outbox', 'POST',
@@ -5124,8 +5128,8 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
       status: 'QUEUED',
       reference: `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`,
       recipient_kind: 'CANDIDATE',
-      context_kind: 'CANDIDATE_WORKFLOW',
-      context_id: workflow.id,
+      context_kind: 'timesheets',
+      context_id: sourceTimesheetId,
       email_type: 'CANDIDATE_APP_TRANSACTIONAL',
       scheduled_for_utc: now,
       next_attempt_at_utc: now,
@@ -5151,7 +5155,9 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
   if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
   }
-  if (!candidateCompletePackAttachmentMatchesScope(durable)) {
+  if (!candidateCompletePackAttachmentMatchesScope(durable)
+      || upper(durable.context_kind) !== 'TIMESHEETS'
+      || text(durable.context_id) !== sourceTimesheetId) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT');
   }
   return {

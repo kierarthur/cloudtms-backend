@@ -3318,6 +3318,8 @@ test('Candidate paper email queues the exact ready pack to the active registered
     assert.equal(writes[0].payment_scope_json.mail_hold_reason, null);
     assert.equal(writes[0].payment_scope_json.candidate_complete_pack_media_type,
       'application/pdf');
+    assert.equal(writes[0].context_kind, 'timesheets');
+    assert.equal(writes[0].context_id, workflow.target_timesheet_id);
     assert.match(writes[0].deterministic_outbox_key,
       /CANDIDATE_PAPER_PACK_EMAIL:.*00000000-0000-4000-8000-0000000000b6$/);
   } finally {
@@ -3358,6 +3360,7 @@ test('Candidate paper email replays only an already claimable completed-pack row
   };
   const durable = {
     id: '00000000-0000-4000-8000-0000000000c5', status: 'QUEUED',
+    context_kind: 'timesheets', context_id: workflow.target_timesheet_id,
     deterministic_outbox_key: `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${idempotencyKey}`,
     attachments: [attachment],
     payment_scope_json: {
@@ -3422,6 +3425,16 @@ test('Candidate paper email replays only an already claimable completed-pack row
     assert.equal(replay.mail_outbox_id, durable.id);
 
     returnBrokenExisting = true;
+    await assert.rejects(
+      () => queueCandidatePaperPackEmail(env, workflow, access, {
+        generation: workflow.generation, idempotency_key: idempotencyKey
+      }, context),
+      error => error?.code === 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT'
+    );
+
+    returnBrokenExisting = false;
+    durable.context_kind = 'CANDIDATE_WORKFLOW';
+    durable.context_id = workflow.id;
     await assert.rejects(
       () => queueCandidatePaperPackEmail(env, workflow, access, {
         generation: workflow.generation, idempotency_key: idempotencyKey
