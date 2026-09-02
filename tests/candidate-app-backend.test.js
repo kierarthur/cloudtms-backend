@@ -3228,7 +3228,7 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     assert.equal(outboxWrites.length, 1);
     assert.equal(outboxWrites[0].to, 'candidate@example.test');
     assert.equal(outboxWrites[0].recipient_id, workflow.candidate_id);
-    assert.equal(outboxWrites[0].recipient_display_name, 'Test Worker');
+    assert.equal(Object.hasOwn(outboxWrites[0], 'recipient_display_name'), false);
     assert.equal(outboxWrites[0].attachments.length, 1);
     assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
     assert.match(outboxWrites[0].attachments[0].r2_key, /\/mileage-form\/[0-9a-f]{64}\.pdf$/);
@@ -3302,7 +3302,7 @@ test('Candidate paper email queues the exact ready pack to the active registered
     assert.equal(writes.length, 1);
     assert.equal(writes[0].to, 'candidate@example.test');
     assert.equal(writes[0].recipient_id, workflow.candidate_id);
-    assert.equal(writes[0].recipient_display_name, 'Test Worker');
+    assert.equal(Object.hasOwn(writes[0], 'recipient_display_name'), false);
     assert.equal(writes[0].attachments.length, 1);
     assert.deepEqual(writes[0].attachments[0], {
       r2_key: context.complete.key,
