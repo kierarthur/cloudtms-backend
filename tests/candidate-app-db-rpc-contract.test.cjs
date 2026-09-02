@@ -46,12 +46,31 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
   const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
+  const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
   const breakAuthority = 'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql';
   const migrationIndex = installPaths.indexOf(breakModeMigration);
+  const helperIndex = installPaths.indexOf(breakHelperOwner);
   const firstRepeatableIndex = installPaths.findIndex(entry => entry.startsWith('supabase/repeatable/'));
   assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
+  assert.ok(helperIndex >= 0, 'break-entry precedence helper owner is missing');
   assert.ok(migrationIndex < firstRepeatableIndex, 'break-entry schema must be installed before every repeatable');
-  assert.ok(migrationIndex < installPaths.indexOf(breakAuthority), 'break-entry schema must precede its Candidate authority');
+  assert.ok(migrationIndex < helperIndex, 'break-entry schema must precede its helper owner');
+  assert.ok(helperIndex < installPaths.indexOf(breakAuthority), 'break-entry helper must precede its Candidate consumer');
+  assert.ok(
+    helperIndex < installPaths.indexOf('supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'),
+    'break-entry helper must precede the current weekly final owner'
+  );
+
+  const definingFiles = fs.readdirSync(path.join(root, 'supabase'), { recursive: true })
+    .filter(entry => entry.endsWith('.sql'))
+    .filter(entry => (
+      read(path.join('supabase', entry)).match(
+        /create\s+or\s+replace\s+function\s+private\._timesheet_break_entry_precedence_v1\s*\(/gi
+      ) || []
+    ).length > 0);
+  assert.deepEqual(definingFiles.map(entry => entry.replaceAll('\\', '/')), [
+    'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
+  ]);
   assert.deepEqual(installPaths.slice(-4), [
     'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
     breakAuthority,

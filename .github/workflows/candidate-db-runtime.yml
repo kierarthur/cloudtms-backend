@@ -49,6 +49,7 @@ on:
       - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
       - 'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql'
       - 'supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql'
+      - 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql'
       - 'supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql'
       - 'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql'
       - 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql'
@@ -168,6 +169,7 @@ jobs:
             supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql
             supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql
             supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql
+            supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql
             supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql
             supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql
             supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql
