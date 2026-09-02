@@ -275,7 +275,7 @@ begin
     immutable_at_utc,required,paper_return_page_key,
     review_render_state,final_signed_render_state
   ) values(v_component,v_workflow,1,1,v_timesheet,'SIGNED_RETURN','SIGNED_RETURN',
-    'IMMUTABLE','candidate-app/test/provider/return.pdf','application/pdf',100,
+    'IMMUTABLE','candidate-app/test/provider/return-'||lower(p_mail_authority)||'.pdf','application/pdf',100,
     extensions.digest(convert_to('provider-return-'||p_mail_authority,'UTF8'),'sha256'),v_now,false,
     'HOURS_TIMESHEET','NOT_REQUIRED','NOT_REQUIRED');
   insert into public.mail_outbox(
