@@ -286,7 +286,7 @@ jobs:
                   replace(
                     regexp_replace(
                       pg_get_functiondef(
-                        'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,bigint,jsonb,text,timestamptz)'::regprocedure
+                        'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'::regprocedure
                       ),
                       E'\\n SET \"plpgsql_check\\.[^\"]+\" TO ''[^'']*''',
                       '',

@@ -5,7 +5,7 @@ declare
   v_definition text;
 begin
   select pg_get_functiondef(
-    'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,bigint,jsonb,text,timestamptz)'::regprocedure
+    'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'::regprocedure
   ) into v_definition;
 
   if v_definition !~* 'candidate_mail_authority[^\n]+CANDIDATE_PAPER_V1[^\n]+CANDIDATE_PAPER_PACK_EMAIL_V1'
