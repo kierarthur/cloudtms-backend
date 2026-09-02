@@ -17,8 +17,11 @@ test('editable printed-document Timesheets retain adaptive break entry', () => {
     '../supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
     import.meta.url
   ), 'utf8');
-  assert.match(sql, /\\ir 28082026_2002_candidate_daily_detail_projection_v1\.sql/);
   assert.match(sql, /\\ir 30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1\.sql/);
+  assert.match(sql, /create or replace function public\.candidate_app_timesheet_detail_v2/);
+  assert.match(sql, /if v_result#>>'\{timesheet,sheet_scope\}'='DAILY' then/);
+  assert.match(sql, /create or replace function public\.candidate_break_entry_context_get_v1/);
+  assert.match(sql, /if v_workflow\.workflow_kind='DAILY' then/);
   assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER'\)/);
   assert.match(sql, /not coalesce\(\(p_capabilities->>'import_authoritative'\)::boolean,false\)/);
   assert.match(sql, /not in \('ELECTRONIC','PAPER'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
