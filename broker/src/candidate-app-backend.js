@@ -6285,7 +6285,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     if (error instanceof CandidateHttpError) throw error;
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
   }
-  const byId = candidatePaperPackComponentIndex(components);
+  const byKindAndId = candidatePaperPackComponentIndex(components);
   const combined = await PDFDocument.create({ updateMetadata: false });
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
@@ -6308,7 +6308,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
         expense_category: 'OTHER', review_ordinal: index + 1
       };
     } else {
-      component = byId.get(text(expected.source_component_id));
+      component = byKindAndId.get(kind)?.get(text(expected.source_component_id));
     }
     if (!component || upper(component.component_kind) !== kind) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
@@ -6343,8 +6343,15 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
 }
 
 function candidatePaperPackComponentIndex(components) {
-  const byId = new Map();
+  const byKindAndId = new Map();
   for (const component of components) {
+    const kind = upper(component.component_kind);
+    if (!kind) continue;
+    let byId = byKindAndId.get(kind);
+    if (!byId) {
+      byId = new Map();
+      byKindAndId.set(kind, byId);
+    }
     const aliases = new Set([text(component.id), text(component.source_component_id)].filter(Boolean));
     for (const alias of aliases) {
       const existing = byId.get(alias);
@@ -6354,7 +6361,7 @@ function candidatePaperPackComponentIndex(components) {
       byId.set(alias, component);
     }
   }
-  return byId;
+  return byKindAndId;
 }
 
 async function candidatePaperPackContext(request, env, deps, timesheetId) {

@@ -3509,19 +3509,40 @@ test('paper pack component lookup accepts the exact current-generation clone und
     component_kind: 'EXPENSE_EVIDENCE'
   };
   const index = candidatePaperPackComponentIndex([clone]);
-  assert.equal(index.get(clone.id), clone);
-  assert.equal(index.get(originalId), clone);
+  assert.equal(index.get('EXPENSE_EVIDENCE').get(clone.id), clone);
+  assert.equal(index.get('EXPENSE_EVIDENCE').get(originalId), clone);
 });
 
 test('paper pack component lookup fails closed when two current-generation rows claim one durable source identity', () => {
   const sourceId = '00000000-0000-4000-8000-000000000511';
   assert.throws(
     () => candidatePaperPackComponentIndex([
-      { id: '00000000-0000-4000-8000-000000000512', source_component_id: sourceId },
-      { id: '00000000-0000-4000-8000-000000000513', source_component_id: sourceId }
+      {
+        id: '00000000-0000-4000-8000-000000000512', source_component_id: sourceId,
+        component_kind: 'EXPENSE_EVIDENCE'
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000513', source_component_id: sourceId,
+        component_kind: 'EXPENSE_EVIDENCE'
+      }
     ]),
     error => error?.code === 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT'
   );
+});
+
+test('paper pack component lookup scopes durable source identities to the manifest page kind', () => {
+  const sourceId = '00000000-0000-4000-8000-000000000514';
+  const evidence = {
+    id: '00000000-0000-4000-8000-000000000515', source_component_id: sourceId,
+    component_kind: 'EXPENSE_EVIDENCE'
+  };
+  const mileage = {
+    id: '00000000-0000-4000-8000-000000000516', source_component_id: sourceId,
+    component_kind: 'MILEAGE_FORM'
+  };
+  const index = candidatePaperPackComponentIndex([evidence, mileage]);
+  assert.equal(index.get('EXPENSE_EVIDENCE').get(sourceId), evidence);
+  assert.equal(index.get('MILEAGE_FORM').get(sourceId), mileage);
 });
 
 test('complete paper pack assembles cloned expense evidence referenced by its durable source identity', async () => {
@@ -3548,6 +3569,12 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
     storage_key: 'evidence.pdf',
     media_type: 'application/pdf',
     source_content_sha256: evidenceHash
+  };
+  const unrelatedKindWithSameDurableIdentity = {
+    ...clone,
+    id: '00000000-0000-4000-8000-000000000525',
+    component_kind: 'MILEAGE_FORM',
+    expense_category: 'MILEAGE'
   };
   const workflow = {
     id: clone.workflow_id,
@@ -3588,7 +3615,9 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async url => {
     const target = new URL(String(url));
-    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([clone]);
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      return Response.json([clone, unrelatedKindWithSameDurableIdentity]);
+    }
     return Response.json([]);
   };
   try {
