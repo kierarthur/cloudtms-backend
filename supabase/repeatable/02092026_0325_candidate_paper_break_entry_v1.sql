@@ -6,6 +6,7 @@
 \set ON_ERROR_STOP on
 
 \ir 30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1.sql
+\ir 31082026_0557_candidate_empty_expense_carrier_action_v1.sql
 
 begin;
 

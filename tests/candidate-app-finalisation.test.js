@@ -18,6 +18,7 @@ test('editable printed-document Timesheets retain adaptive break entry', () => {
     import.meta.url
   ), 'utf8');
   assert.match(sql, /\\ir 30082026_1531_candidate_paper_return_proof_transaction_boundary_reassert_v1\.sql/);
+  assert.match(sql, /\\ir 31082026_0557_candidate_empty_expense_carrier_action_v1\.sql/);
   assert.match(sql, /create or replace function public\.candidate_app_timesheet_detail_v2/);
   assert.match(sql, /if v_result#>>'\{timesheet,sheet_scope\}'='DAILY' then/);
   assert.match(sql, /create or replace function public\.candidate_break_entry_context_get_v1/);
