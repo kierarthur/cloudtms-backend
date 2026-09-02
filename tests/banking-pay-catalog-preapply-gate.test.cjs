@@ -21,6 +21,7 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
       'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql',
       'supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql',
       'supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql',
+      'supabase/repeatable/08082026_0313_pay_workbench_fail_job_authority.sql',
     ], { cwd: root, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
 
@@ -29,6 +30,8 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
     assert.match(sql, /07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1\.sql/);
     assert.match(sql, /13082026_1912_pay_workbench_sealed_rate_component_projection_v1\.sql/);
     assert.match(sql, /04082026_1219_pay_workbench_fail_job\.sql/);
+    assert.match(sql, /08082026_0313_pay_workbench_fail_job_authority\.sql/);
+    assert.match(sql, /BEGIN EXACT EXPANDED RELATIVE INCLUDE supabase\/repeatable\/04082026_1219_pay_workbench_fail_job\.sql/);
     assert.match(sql, /BANKING_PAY_CATALOG_PREAPPLY_DEFINITION_MISMATCH: private\.pay_sync_overpayments_from_workbench_workspace_v1/);
     assert.match(sql, /BANKING_PAY_CATALOG_PREAPPLY_DEFINITION_MISMATCH: private\.pay_workbench_sealed_rate_component_projection_v1/);
     assert.match(sql, /BANKING_PAY_CATALOG_PREAPPLY_DEFINITION_MISMATCH: public\.pay_workbench_fail_job/);
@@ -38,6 +41,7 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
     assert.match(sql, /pg_catalog\.min\(p\.oid::text\)::oid/);
     assert.match(sql, /ALTER FUNCTION public\.pay_workbench_fail_job[\s\S]*OWNER TO CURRENT_USER;/);
     assert.doesNotMatch(sql, /ALTER FUNCTION [^;]+ OWNER TO postgres;/i);
+    assert.doesNotMatch(sql, /^\\i(?:r)?\s+/m);
     assert.match(sql, /ROLLBACK;\n$/);
     assert.doesNotMatch(sql, /COMMIT;/);
   } finally {
@@ -45,8 +49,11 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
   }
 });
 
-test('logical postgres ownership is mapped only in rollback rehearsal SQL', async () => {
-  const { adaptCatalogLogicalOwnerForRehearsal } = await import(pathToFileURL(ownerAdapter).href);
+test('logical postgres ownership and exact relative includes are mapped only in rollback rehearsal SQL', async () => {
+  const {
+    adaptCatalogLogicalOwnerForRehearsal,
+    expandCatalogRepeatableIncludesForRehearsal,
+  } = await import(pathToFileURL(ownerAdapter).href);
   const source = [
     "SELECT 'ALTER FUNCTION public.fake() OWNER TO postgres;';",
     '-- ALTER FUNCTION public.fake() OWNER TO postgres;',
@@ -82,6 +89,36 @@ test('logical postgres ownership is mapped only in rollback rehearsal SQL', asyn
   assert.throws(
     () => adaptCatalogLogicalOwnerForRehearsal('SET ROLE postgres;'),
     /role-changing SQL is not permitted/,
+  );
+
+  const sources = new Map([
+    ['root.sql', '\\ir child.sql\nSELECT 1;'],
+    ['child.sql', 'ALTER FUNCTION public.child() OWNER TO postgres;'],
+  ]);
+  const expanded = expandCatalogRepeatableIncludesForRehearsal({
+    sourceSql: sources.get('root.sql'),
+    sourcePath: 'root.sql',
+    resolveInclude(_current, includeReference) {
+      return { sourcePath: includeReference, sourceSql: sources.get(includeReference) };
+    },
+  });
+  assert.match(expanded.sourceSql, /BEGIN EXACT EXPANDED RELATIVE INCLUDE child\.sql/);
+  assert.doesNotMatch(expanded.sourceSql, /^\\ir\s+/m);
+  assert.throws(
+    () => expandCatalogRepeatableIncludesForRehearsal({
+      sourceSql: '\\i child.sql',
+      sourcePath: 'root.sql',
+      resolveInclude() { return { sourcePath: 'child.sql', sourceSql: 'SELECT 1;' }; },
+    }),
+    /unsupported psql meta-command/,
+  );
+  assert.throws(
+    () => expandCatalogRepeatableIncludesForRehearsal({
+      sourceSql: '\\ir child.sql',
+      sourcePath: 'root.sql',
+      resolveInclude() { return { sourcePath: 'root.sql', sourceSql: '\\ir child.sql' }; },
+    }),
+    /cyclic relative include/,
   );
 });
 

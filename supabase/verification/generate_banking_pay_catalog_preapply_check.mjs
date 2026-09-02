@@ -3,10 +3,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { adaptCatalogLogicalOwnerForRehearsal } from './catalog_logical_owner_adapter.mjs';
+import {
+  adaptCatalogLogicalOwnerForRehearsal,
+  expandCatalogRepeatableIncludesForRehearsal,
+} from './catalog_logical_owner_adapter.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
+const repeatableRoot = path.resolve(repoRoot, 'supabase', 'repeatable');
 const manifestNames = [
   'banking_pay_revision5_catalog_manifest.json',
   'banking_pay_workbench_certified_source_preview_catalog_manifest.json',
@@ -25,6 +29,22 @@ const normalizeRepoPath = (value) => path.relative(repoRoot, path.resolve(repoRo
   .join('/');
 const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const psqlPath = (value) => String(value).replaceAll('\\', '/').replaceAll("'", "''");
+const requireRepeatablePath = (absolutePath, label) => {
+  const relative = path.relative(repeatableRoot, absolutePath);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Catalog rehearsal ${label} is outside the repository repeatable directory: ${absolutePath}`);
+  }
+  return absolutePath;
+};
+const readRepeatableSource = (absolutePath, label) => {
+  requireRepeatablePath(absolutePath, label);
+  if (!fs.existsSync(absolutePath)) throw new Error(`Catalog-owned repeatable is missing: ${absolutePath}`);
+  const sourceSql = fs.readFileSync(absolutePath, 'utf8');
+  if (/^\s*(?:BEGIN|COMMIT|ROLLBACK)\s*;/im.test(sourceSql)) {
+    throw new Error(`Catalog-owned repeatable contains transaction control and cannot be rehearsed safely: ${absolutePath}`);
+  }
+  return sourceSql;
+};
 const pending = pendingArgs.map(normalizeRepoPath);
 for (const pendingPath of pending) {
   if (!pendingPath.startsWith('supabase/repeatable/') || pendingPath.includes('../')) {
@@ -63,20 +83,26 @@ const statements = [
 for (const sourceFile of pending) {
   if (!ownedPending.has(sourceFile)) continue;
   const absoluteSource = path.resolve(repoRoot, sourceFile);
-  if (!fs.existsSync(absoluteSource)) {
-    throw new Error(`Catalog-owned repeatable is missing: ${sourceFile}`);
-  }
-  const sourceSql = fs.readFileSync(absoluteSource, 'utf8');
-  if (/^\s*(?:BEGIN|COMMIT|ROLLBACK)\s*;/im.test(sourceSql)) {
-    throw new Error(`Catalog-owned repeatable contains transaction control and cannot be rehearsed safely: ${sourceFile}`);
-  }
-  const adaptedOwner = adaptCatalogLogicalOwnerForRehearsal(sourceSql);
-  if (adaptedOwner.mode !== 'UNCHANGED') {
-    statements.push(`-- Catalog-owned repeatable inlined after exact logical-owner validation: ${sourceFile}`);
-    statements.push(adaptedOwner.sourceSql);
-  } else {
-    statements.push(`\\i '${psqlPath(absoluteSource)}'`);
-  }
+  const sourceSql = readRepeatableSource(absoluteSource, sourceFile);
+  const expanded = expandCatalogRepeatableIncludesForRehearsal({
+    sourceSql,
+    sourcePath: sourceFile,
+    resolveInclude(currentSourcePath, includeReference) {
+      const currentAbsolute = path.resolve(repoRoot, currentSourcePath);
+      const includedAbsolute = requireRepeatablePath(
+        path.resolve(path.dirname(currentAbsolute), includeReference),
+        `relative include from ${currentSourcePath}`,
+      );
+      const includedPath = normalizeRepoPath(includedAbsolute);
+      return {
+        sourcePath: includedPath,
+        sourceSql: readRepeatableSource(includedAbsolute, includedPath),
+      };
+    },
+  });
+  const adaptedOwner = adaptCatalogLogicalOwnerForRehearsal(expanded.sourceSql);
+  statements.push(`-- Catalog-owned repeatable inlined after exact relative-include and logical-owner validation: ${sourceFile}`);
+  statements.push(adaptedOwner.sourceSql);
 }
 
 for (const fn of functionsByIdentity.values()) {

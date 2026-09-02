@@ -2,7 +2,7 @@ const WORD_START = /[A-Za-z_]/;
 const WORD_CONTINUE = /[A-Za-z0-9_$]/;
 
 const fail = (message) => {
-  throw new Error(`Catalog-owned repeatable logical-owner adaptation is not exact: ${message}`);
+  throw new Error(`Catalog-owned repeatable rehearsal is not exact: ${message}`);
 };
 
 const readQuoted = (source, start, quote, backslashEscapes = false) => {
@@ -133,6 +133,43 @@ const scanTopLevel = (source) => {
 };
 
 const ownerStatement = /^ALTER\s+(FUNCTION|PROCEDURE|ROUTINE)\s+([\s\S]+?)\s+OWNER\s+TO\s+([A-Za-z_][A-Za-z0-9_$]*|"[^"]+")\s*;$/i;
+const relativeIncludeCommand = /^\\ir[ \t]+(?:(['"])([^'"\r\n]+)\1|([A-Za-z0-9_./-]+))[ \t]*$/i;
+
+export function expandCatalogRepeatableIncludesForRehearsal({ sourceSql, sourcePath, resolveInclude }) {
+  if (typeof resolveInclude !== 'function') fail('include resolver is required');
+
+  const expand = (source, currentPath, stack) => {
+    if (stack.includes(currentPath)) {
+      fail(`cyclic relative include: ${[...stack, currentPath].join(' -> ')}`);
+    }
+
+    const { metaCommands } = scanTopLevel(source);
+    let expandedSource = source;
+    const includedPaths = [];
+    for (const command of metaCommands.toReversed()) {
+      const match = relativeIncludeCommand.exec(command.text.trim());
+      if (!match) fail(`unsupported psql meta-command in ${currentPath}: ${command.text.trim()}`);
+      const includeReference = match[2] ?? match[3];
+      const resolved = resolveInclude(currentPath, includeReference);
+      if (!resolved || typeof resolved.sourcePath !== 'string' || typeof resolved.sourceSql !== 'string') {
+        fail(`include resolver returned an invalid result for ${includeReference}`);
+      }
+      const child = expand(resolved.sourceSql, resolved.sourcePath, [...stack, currentPath]);
+      const replacement = [
+        `-- BEGIN EXACT EXPANDED RELATIVE INCLUDE ${resolved.sourcePath}`,
+        child.sourceSql,
+        `-- END EXACT EXPANDED RELATIVE INCLUDE ${resolved.sourcePath}`,
+      ].join('\n');
+      expandedSource = expandedSource.slice(0, command.start)
+        + replacement
+        + expandedSource.slice(command.end);
+      includedPaths.unshift(resolved.sourcePath, ...child.includedPaths);
+    }
+    return { sourceSql: expandedSource, includedPaths };
+  };
+
+  return expand(String(sourceSql), String(sourcePath), []);
+}
 
 export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
   const source = String(sourceSql);
