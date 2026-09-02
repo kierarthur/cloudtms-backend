@@ -29,7 +29,7 @@
     {"path":"supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql","status":"modified_companion_source_reconciliation","sha256":"91b34b8494687ed0baba92b4174b74ac5a1b51ff0651a08d2c2a01907179205e","bytes":173395},
     {"path":"supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql","status":"modified","sha256":"e762c129dabf49696e41773d642298d9f4cbc8ca2a209399f8be20b75d44ffae","bytes":23311},
     {"path":"supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql","status":"modified","sha256":"ba563ca7e01f2b326248c56b5ceb36c4e1eff1c699b793f23d4bb5f70a00ccd9","bytes":27638},
-    {"path":"supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql","status":"new","sha256":"9d4dee66b967d038cf842d0a8dbf05f1401e91d6360104ba66519f97efc43dcc","bytes":34969},
+    {"path":"supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql","status":"new","sha256":"3dae01af0dc970a5540213c0e95e1cfc86986bbd8b831782311939534145e119","bytes":34861},
     {"path":"supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json","status":"modified","sha256":"5ab9d3a7abf7db59149b3da2c0547516daf2a198c3885ae50c73632a5a1d2f99","bytes":28870},
     {"path":"tests/banking-pay-dirty-apply-family-authority-repair.test.cjs","status":"modified","sha256":"bde7b8521fd23f80b35d93fc47e4a2b610c4f56f235db8dda62caa230191d45e","bytes":17626},
     {"path":"tests/banking-pay-legacy-monolith-authority-reassert.test.cjs","status":"modified_companion_source_guard","sha256":"498f18d08adde966869258ad7487f059e5bc2a6ccb481c331ed6c10322ddf794","bytes":8838},
@@ -39,12 +39,12 @@
     {"path":"tests/banking-pay-workbench-fail-job-authority.test.js","status":"modified","sha256":"6eb4576786df92e2adb9aa99eec31a87bbef6419150f75177518ee1409f6985a","bytes":6745},
     {"path":"tests/banking-pay-workbench-source-build-authority.test.js","status":"modified","sha256":"ee47161c3ee50274c240434161de6d9c814187823a2bc6f4dcc1db1f65183917","bytes":9103},
     {"path":"tests/database-release-system.test.mjs","status":"modified","sha256":"0c1b9ffa36c7efa0136022724bfa4f5652c205809f7a4f96cbc9bca80f902f3a","bytes":27417},
-    {"path":"tests/banking-pay-workbench-causal-recovery.test.js","status":"new","sha256":"d57219842a62b807475b02566e015405c187c2f02c6192c1dc122cec47125f58","bytes":38216},
+    {"path":"tests/banking-pay-workbench-causal-recovery.test.js","status":"new","sha256":"a7ece45ecbc6db974f41a7b32d08b7f755cc9b4412b97f52becf041cd154e634","bytes":38602},
     {"path":"tests/banking-pay-workbench-settled-certification-contract.test.js","status":"new","sha256":"638fc39842127890739b0080f1e8ab8be5d93f2dfa3d9b97a883bdcf8e4660f1","bytes":9602},
     {"path":"tests/banking-pay-workbench-shared-baseline-reconciliation.test.js","status":"new","sha256":"02929ea73b198526e30c71d6563a2b6388fff6a7a9dd46734cedd97dbef672f3","bytes":10479},
     {"path":"tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json","status":"new","sha256":"9dfa497003a0344c12f94857138600df897e2141fdc3c5ae4e337ad2e03e4e4e","bytes":6669},
     {"path":"tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json","status":"new","sha256":"b4171f138a2b5ef44a2c8915fe8d59098d37d11aadc42f8c8106827709cb033a","bytes":38928},
-    {"path":"tests/banking-pay-workbench-current-implementation-handover.test.js","status":"new","sha256":"5595eb23b4f41322c72792c8a841b7489208c82439f4c4f01f6b13a656417d20","bytes":9567}
+    {"path":"tests/banking-pay-workbench-current-implementation-handover.test.js","status":"new","sha256":"1695e7486209661bc7756783ae260b75a2aad065b1d0c7e8a895bcfc5fb26ce9","bytes":9567}
   ],
   "excluded_from_implementation": [
     "all Create Draft Worker and database owners",

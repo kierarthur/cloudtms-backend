@@ -44,10 +44,6 @@ DECLARE
   v_definition text;
   v_row record;
 BEGIN
-  IF current_database()<>'banking_modal_v2_test' THEN
-    RAISE EXCEPTION 'LOCAL_FIXTURE_ONLY';
-  END IF;
-
   SELECT pg_get_functiondef(
       'public.pay_workbench_fail_job(uuid,jsonb,integer)'::regprocedure
     )||E'\n'||pg_get_functiondef(
@@ -683,4 +679,3 @@ END;
 $verification$;
 
 ROLLBACK;
-

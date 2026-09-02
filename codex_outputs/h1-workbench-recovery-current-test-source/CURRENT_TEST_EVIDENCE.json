@@ -18,8 +18,8 @@
     },
     "focused_h1": {
       "command": "node --test tests/banking-pay-dirty-apply-family-authority-repair.test.cjs tests/banking-pay-pending-owner-recovery.test.cjs tests/banking-pay-stale-successor-convergence.test.js tests/banking-pay-workbench-fail-job-authority.test.js tests/banking-pay-workbench-source-build-authority.test.js tests/database-release-system.test.mjs tests/banking-pay-workbench-causal-recovery.test.js tests/banking-pay-workbench-settled-certification-contract.test.js tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
-      "tests": 92,
-      "pass": 92,
+      "tests": 93,
+      "pass": 93,
       "fail": 0,
       "skipped": 0,
       "todo": 0
@@ -27,8 +27,8 @@
     "complete_javascript": {
       "command": "npm test",
       "candidate_binding_registry_pass": true,
-      "tests": 1169,
-      "pass": 1169,
+      "tests": 1170,
+      "pass": 1170,
       "fail": 0,
       "skipped": 0,
       "todo": 0
@@ -43,8 +43,8 @@
     },
     "complete_cjs_matrix": {
       "command": "node --test tests/*.test.cjs",
-      "tests": 854,
-      "pass": 757,
+      "tests": 855,
+      "pass": 758,
       "fail": 0,
       "skipped": 97,
       "todo": 0,

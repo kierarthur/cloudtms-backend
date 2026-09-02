@@ -8,17 +8,17 @@
   "artifacts": [
     {
       "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_IMPLEMENTATION_HANDOVER.md",
-      "sha256": "d2d6fd5af4c58d9f469393b3c03f603c94516e45e81744823dee2ccaf2fb3fa3",
-      "bytes": 16612
+      "sha256": "5a99391d18dc96388a1ba29283b3afd11899120cb0517384306c9cb840075e92",
+      "bytes": 17478
     },
     {
       "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_SOURCE_INVENTORY.json",
-      "sha256": "648c8d79cc7d44adacef52ee7dc3f3c028afade37def8f530339dfc02be34aba",
+      "sha256": "b9fae3f4a63b9188b062409514e346faf735fb352da2645b60df517c28d69180",
       "bytes": 6359
     },
     {
       "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_TEST_EVIDENCE.json",
-      "sha256": "194423e09c28f79b5c445e60f3aae5cdcb80108a532b087a73521826b8cff1cd",
+      "sha256": "a5a182626b4fbb0bbfaf4227cbddff7c35f19c9aeb48b05f7355432a8aca8ff3",
       "bytes": 5051
     },
     {

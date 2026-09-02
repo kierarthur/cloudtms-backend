@@ -127,11 +127,11 @@ test('H1 implementation is policy-neutral and independent of Create Draft', () =
 });
 
 test('test evidence keeps green H1 scope separate from open external and environment gates', () => {
-  assert.equal(evidence.results.focused_h1.pass, 92);
+  assert.equal(evidence.results.focused_h1.pass, 93);
   assert.equal(evidence.results.focused_h1.fail, 0);
   assert.equal(evidence.results.current_handover_validator.pass, 8);
   assert.equal(evidence.results.current_handover_validator.fail, 0);
-  assert.equal(evidence.results.complete_javascript.pass, 1169);
+  assert.equal(evidence.results.complete_javascript.pass, 1170);
   assert.equal(evidence.results.complete_javascript.fail, 0);
   assert.equal(evidence.results.complete_cjs_matrix.h1_recovery_failures, 0);
   assert.equal(evidence.results.complete_cjs_matrix.fail, 0);

@@ -270,3 +270,9 @@ Approval requires:
 - explicit treatment of the two unrelated CJS baseline failures.
 
 Even after source approval, a “fault-free Workbench” runtime verdict requires a separately authorised installation, fresh Miget installed-identity proof, real TEST read/browser acceptance, and one complete post-correction audit. This handover deliberately does not claim those unperformed outcomes.
+
+## 10. Binding H2 database/release independence rule
+
+HANDOVER 2 must not hard-code a database name into the settled-certificate or Create Draft implementation. It also must not make certificate consumption, Draft admission or ordinary replay depend on a special active database-release row, release ID, source commit, release mode or contract hash. Those identities are required audit and deployment evidence, but they are not business-runtime gates.
+
+H2 must preserve the real operational protections: authenticated caller authority, exact current Workbench session/certificate binding, constituent and partition integrity, tamper/staleness rejection, idempotent replay, response-loss recovery and fail-closed financial boundaries. None of those protections requires naming the database or proving that a release happens to be active when a user creates a Draft.

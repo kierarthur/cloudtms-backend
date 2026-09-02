@@ -85,6 +85,14 @@ test('rollback verifier proves exact before/after payment-policy parity', () => 
   assertPolicyParityVerifier(causalVerifier);
 });
 
+test('causal verifier is database-name and release-ledger independent', () => {
+  assert.match(causalVerifier, /^BEGIN;$/m);
+  assert.match(causalVerifier, /^ROLLBACK;$/m);
+  assert.doesNotMatch(causalVerifier, /current_database\s*\(/i);
+  assert.doesNotMatch(causalVerifier, /cloudtms_database_(?:identity|releases)/i);
+  assert.doesNotMatch(causalVerifier, /LOCAL_FIXTURE_ONLY/);
+});
+
 test('payment-policy parity source guard kills each bounded weakening mutation', () => {
   const mutations = [
     causalVerifier.replaceAll('selected_preview_policy_facts', 'selected_preview_execution_facts'),
@@ -759,4 +767,3 @@ test('independent handover separates the completed source deliverable from an un
   assert.deepEqual(rollbackSourceManifest.finding_count_model.h1_owned_corrections, coverage.finding_count_model.h1_owned_correction_ids);
   assert.deepEqual(rollbackSourceManifest.finding_count_model.external_h2_owned_blockers, ['F8']);
 });
-
