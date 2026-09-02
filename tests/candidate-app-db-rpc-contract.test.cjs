@@ -76,6 +76,10 @@ test('focused Candidate finalisation owner remains identical to the later Bankin
     exactFunctionDefinition(latestWeeklyFinalisation, qualifiedName),
     exactFunctionDefinition(bankingReleaseAuthority, qualifiedName)
   );
+
+  const serviceOnlyAcl = /revoke all on function public\.contract_week_manual_upsert_atomic\(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb\) from public,\s*anon,\s*authenticated(?:,\s*service_role)?;\s*grant execute on function public\.contract_week_manual_upsert_atomic\(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb\) to service_role;/i;
+  assert.match(latestWeeklyFinalisation, serviceOnlyAcl);
+  assert.match(bankingReleaseAuthority, serviceOnlyAcl);
 });
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');

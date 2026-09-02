@@ -88,7 +88,6 @@ begin
   end if;
 
   foreach v_signature in array array[
-    'contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)',
     'bulk_process_dataset_v1(jsonb)',
     'bulk_authorise_dataset_v1(jsonb)',
     'bulk_timesheet_row_patch_v1(jsonb)',
@@ -103,6 +102,18 @@ begin
       raise exception 'existing authenticated/service ACL mismatch: %',v_signature;
     end if;
   end loop;
+
+  if has_function_privilege('anon',
+       'contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)',
+       'EXECUTE')
+     or has_function_privilege('authenticated',
+       'contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)',
+       'EXECUTE')
+     or not has_function_privilege('service_role',
+       'contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)',
+       'EXECUTE') then
+    raise exception 'weekly finalisation owner ACL is not service-only';
+  end if;
 
   if not has_function_privilege('anon',
        'timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamp with time zone,text)',
