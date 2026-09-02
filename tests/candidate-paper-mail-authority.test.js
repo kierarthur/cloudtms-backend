@@ -40,6 +40,9 @@ const backendSource = read('broker/src/candidate-app-backend.js');
 const normalBackendSource = read('broker/src/index.js');
 const providerAuthoritySource = read('broker/src/candidate-paper-provider-authority.js');
 const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
+const cancellationIndexSource = read(
+  'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
+);
 
 test('PAPER preparation atomically composes the canonical held-mail authority', () => {
   const sql = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
@@ -233,6 +236,18 @@ test('legacy one-page cancellation adapter opens only for the exact orphaned-tok
   assert.doesNotMatch(backendSource, /candidate_workflow_cancel_atomic_v2[\s\S]{0,300}p_action/);
   assert.match(legacyOrphanSource, /revoke all on function private\._candidate_legacy_paper_orphan_prepare_v1\([\s\S]*service_role/i);
   assert.match(legacyOrphanSource, /grant execute on function public\.candidate_workflow_cancel_atomic_v2\([\s\S]*to service_role/i);
+});
+
+test('PAPER cancellation has bounded workflow, token and current-source lookups', () => {
+  assert.match(cancellationIndexSource, /idx_mail_outbox_candidate_paper_workflow_v1/i);
+  assert.match(cancellationIndexSource, /payment_scope_json->>'candidate_workflow_id'/i);
+  assert.match(cancellationIndexSource, /payment_scope_json->>'candidate_workflow_generation'/i);
+  assert.match(cancellationIndexSource, /idx_mail_outbox_candidate_paper_token_v1/i);
+  assert.match(cancellationIndexSource, /lower\(coalesce\(payment_scope_json->>'qr_token_hash',''\)\)/i);
+  assert.match(cancellationIndexSource, /idx_timesheets_candidate_paper_source_v1/i);
+  assert.match(cancellationIndexSource, /booking_id,contract_id,week_ending_date,timesheet_id/i);
+  assert.match(cancellationIndexSource, /where type='TIMESHEET_QR'[\s\S]*context_kind='timesheets'/i);
+  assert.doesNotMatch(cancellationIndexSource, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
 test('provider handoff obtains an atomic submit permit before external submission', () => {
