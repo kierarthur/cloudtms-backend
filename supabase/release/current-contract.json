@@ -71900,6 +71900,14 @@
       ],
       "indexes": [
         {
+          "name": "idx_mail_outbox_candidate_paper_token_v1",
+          "definition": "CREATE INDEX idx_mail_outbox_candidate_paper_token_v1 ON public.mail_outbox USING btree (lower(COALESCE((payment_scope_json ->> 'qr_token_hash'::text), ''::text)), ((payment_scope_json ->> 'candidate_workflow_id'::text)), ((payment_scope_json ->> 'candidate_workflow_generation'::text)), context_id) WHERE ((type = 'TIMESHEET_QR'::text) AND (context_kind = 'timesheets'::text))"
+        },
+        {
+          "name": "idx_mail_outbox_candidate_paper_workflow_v1",
+          "definition": "CREATE INDEX idx_mail_outbox_candidate_paper_workflow_v1 ON public.mail_outbox USING btree (((payment_scope_json ->> 'candidate_workflow_id'::text)), ((payment_scope_json ->> 'candidate_workflow_generation'::text)), id) INCLUDE (context_id, status, attempt_lease_token, attempt_lease_expires_at_utc) WHERE ((type = 'TIMESHEET_QR'::text) AND (context_kind = 'timesheets'::text))"
+        },
+        {
           "name": "idx_mail_outbox_context",
           "definition": "CREATE INDEX idx_mail_outbox_context ON public.mail_outbox USING btree (context_kind, context_id, created_at_utc DESC)"
         },
@@ -91530,6 +91538,10 @@
         {
           "name": "idx_timesheets_booking_id",
           "definition": "CREATE INDEX idx_timesheets_booking_id ON public.timesheets USING btree (booking_id)"
+        },
+        {
+          "name": "idx_timesheets_candidate_paper_source_v1",
+          "definition": "CREATE INDEX idx_timesheets_candidate_paper_source_v1 ON public.timesheets USING btree (booking_id, contract_id, week_ending_date, timesheet_id) WHERE ((is_current = true) AND (archived_at_utc IS NULL))"
         },
         {
           "name": "idx_timesheets_contract",
