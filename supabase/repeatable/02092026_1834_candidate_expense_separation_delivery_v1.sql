@@ -3449,16 +3449,12 @@ begin
 end;
 $function$;
 
-revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) from public,anon,authenticated;
-grant execute on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) to authenticated,service_role;
-revoke all on function public.client_update_with_settings_v1(uuid,bigint,timestamptz,jsonb,jsonb,uuid,text) from public,anon,authenticated;
-grant execute on function public.client_update_with_settings_v1(uuid,bigint,timestamptz,jsonb,jsonb,uuid,text) to service_role;
-revoke all on function public.client_create_with_settings_v1(uuid,jsonb,uuid,jsonb,timestamptz) from public,anon,authenticated;
-grant execute on function public.client_create_with_settings_v1(uuid,jsonb,uuid,jsonb,timestamptz) to service_role;
-revoke all on function private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz) from public,anon,authenticated;
-grant execute on function private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz) to service_role;
 revoke all on function private._invoice_delivery_routes_batch(jsonb,date) from public,anon,authenticated;
 grant execute on function private._invoice_delivery_routes_batch(jsonb,date) to service_role;
+revoke all on function private._invoice_issue_validate_batch(jsonb,date) from public,anon,authenticated;
+grant execute on function private._invoice_issue_validate_batch(jsonb,date) to service_role;
+revoke all on function private._invoice_generation_advance_core_v8(jsonb,timestamptz) from public,anon,authenticated;
+grant execute on function private._invoice_generation_advance_core_v8(jsonb,timestamptz) to service_role;
 
 notify pgrst, 'reload schema';
 

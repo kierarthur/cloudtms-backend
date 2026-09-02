@@ -27572,11 +27572,6 @@
     {
       "acl": [
         {
-          "grantee": "authenticated",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
