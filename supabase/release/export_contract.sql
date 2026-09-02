@@ -4,6 +4,12 @@
 
 -- Canonical schema/security contract. It deliberately contains no table rows,
 -- sequence values, credentials, Vault values, or other business data.
+-- pg_get_constraintdef() shortens referenced relation names according to the
+-- caller's search_path.  Pin one provider-neutral path before catalog reads so
+-- the same physical foreign key exports identically from a clean database and
+-- a managed database whose login role has a different default search_path.
+set search_path = pg_catalog, public;
+
 with
 app_namespaces as (
   select oid, nspname, nspowner, nspacl

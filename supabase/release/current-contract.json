@@ -80949,7 +80949,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_created_by_user_id_fkey",
@@ -80957,7 +80957,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_direction_chk",

@@ -12,9 +12,19 @@ concurrency:
 
 jobs:
   export:
-    name: Export data-free TEST catalogue contract
+    name: Export TEST contract (${{ matrix.name }})
     runs-on: ubuntu-latest
     environment: database-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pg-catalog-first
+            pgoptions: -c search_path=pg_catalog,public,pg_temp
+          - name: public-auth-first
+            pgoptions: -c search_path=public,auth,pg_catalog,pg_temp
+          - name: auth-private-first
+            pgoptions: -c search_path=auth,private,pg_catalog,public,pg_temp
     env:
       CLOUDTMS_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_TEST }}
       CLOUDTMS_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_TEST }}
@@ -50,12 +60,69 @@ jobs:
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
           npm run db:plan -- --environment=TEST --mode=UPGRADE
-      - name: Export data-free catalogue contract
-        run: npm run db:contract:export
-      - name: Upload exact contract artifact
+      - name: Preserve repository contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .contract-proof
+          cp supabase/release/current-contract.json .contract-proof/repository-current-contract.json
+      - name: Export and compare data-free catalogue contract
+        id: compare
+        shell: bash
+        env:
+          PGOPTIONS: ${{ matrix.pgoptions }}
+          CONTRACT_PROOF_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          npm run db:contract:export
+          cp supabase/release/current-contract.json ".contract-proof/${CONTRACT_PROOF_NAME}-current-contract.json"
+          expected_hash="$(sha256sum .contract-proof/repository-current-contract.json | cut -d' ' -f1)"
+          actual_hash="$(sha256sum ".contract-proof/${CONTRACT_PROOF_NAME}-current-contract.json" | cut -d' ' -f1)"
+          field_diff_count="$(node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const expected = JSON.parse(fs.readFileSync('.contract-proof/repository-current-contract.json', 'utf8'));
+          const proofName = process.env.CONTRACT_PROOF_NAME;
+          const actual = JSON.parse(fs.readFileSync(`.contract-proof/${proofName}-current-contract.json`, 'utf8'));
+
+          const countDifferences = (left, right) => {
+            if (Object.is(left, right)) return 0;
+            if (Array.isArray(left) || Array.isArray(right)) {
+              if (!Array.isArray(left) || !Array.isArray(right)) return 1;
+              let count = left.length === right.length ? 0 : 1;
+              for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+                if (index >= left.length || index >= right.length) count += 1;
+                else count += countDifferences(left[index], right[index]);
+              }
+              return count;
+            }
+            if (left && right && typeof left === 'object' && typeof right === 'object') {
+              const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+              let count = 0;
+              for (const key of keys) {
+                if (!(key in left) || !(key in right)) count += 1;
+                else count += countDifferences(left[key], right[key]);
+              }
+              return count;
+            }
+            return 1;
+          };
+
+          process.stdout.write(String(countDifferences(expected, actual)));
+          NODE
+          )"
+          echo "EXPECTED_SHA256=${expected_hash}"
+          echo "ACTUAL_SHA256=${actual_hash}"
+          echo "FIELD_DIFF_COUNT=${field_diff_count}"
+          test "${field_diff_count}" = "0"
+          cmp --silent .contract-proof/repository-current-contract.json ".contract-proof/${CONTRACT_PROOF_NAME}-current-contract.json"
+      - name: Upload exact data-free contract proof
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cloudtms-test-database-contract-${{ github.sha }}
-          path: supabase/release/current-contract.json
+          name: cloudtms-test-database-contract-${{ github.sha }}-${{ matrix.name }}
+          path: |
+            .contract-proof/repository-current-contract.json
+            .contract-proof/${{ matrix.name }}-current-contract.json
           if-no-files-found: error
           retention-days: 7

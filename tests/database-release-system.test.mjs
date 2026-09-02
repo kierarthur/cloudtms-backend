@@ -68,6 +68,25 @@ test('normal push workflow cannot mutate a database', () => {
   assert.doesNotMatch(workflow, /marking existing migrations as applied|__BOOTSTRAPPED__/);
 });
 
+test('TEST contract proof is dispatch-only, read-only, and search-path invariant', () => {
+  const workflow = read('.github/workflows/database-contract-export.yml');
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\npush:/);
+  assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
+  assert.match(workflow, /secrets\.MIGET_DATABASE_URL_TEST/);
+  assert.match(workflow, /db:plan -- --environment=TEST --mode=UPGRADE/);
+  assert.doesNotMatch(workflow, /db:apply|wrangler\s+deploy|email.*drain/i);
+  for (const callerPath of [
+    'pg_catalog,public,pg_temp',
+    'public,auth,pg_catalog,pg_temp',
+    'auth,private,pg_catalog,public,pg_temp',
+  ]) assert.match(workflow, new RegExp(`pgoptions: -c search_path=${callerPath}`));
+  assert.match(workflow, /PGOPTIONS:\s*\$\{\{ matrix\.pgoptions \}\}/);
+  assert.match(workflow, /FIELD_DIFF_COUNT=/);
+  assert.match(workflow, /cmp --silent/);
+  assert.match(workflow, /if:\s*always\(\)[\s\S]*actions\/upload-artifact@v4/);
+});
+
 test('manual release is dispatch-only, environment-protected, and two phase', () => {
   const workflow = read('.github/workflows/database-release.yml');
   assert.match(workflow, /workflow_dispatch:/);
@@ -331,6 +350,20 @@ test('contract export normalises null ACLs to one-dimensional effective defaults
 
 test('contract export is provider and upgrade-history neutral without weakening security fields', () => {
   const source = read('supabase/release/export_contract.sql');
+  const requirePinnedExporterPath = candidate => {
+    assert.match(candidate, /set search_path = pg_catalog, public;\s*\n\s*with/i);
+    assert.equal((candidate.match(/set search_path = pg_catalog, public;/gi) || []).length, 1);
+    assert.doesNotMatch(
+      candidate.match(/set search_path\s*=\s*[^;]+;/i)?.[0] ?? '',
+      /\bauth\b/i,
+    );
+  };
+  requirePinnedExporterPath(source);
+  for (const unsafeMutation of [
+    source.replace('set search_path = pg_catalog, public;\n', ''),
+    source.replace('set search_path = pg_catalog, public;', 'set search_path = public, pg_catalog;'),
+    source.replace('set search_path = pg_catalog, public;', 'set search_path = pg_catalog, auth, public;'),
+  ]) assert.throws(() => requirePinnedExporterPath(unsafeMutation));
   assert.doesNotMatch(source, /'position',\s*a\.attnum/);
   assert.match(source, /order by a\.attname collate "C"/);
   assert.match(source, /config_value !~ '\^plpgsql_check\[\.\]'/);
@@ -341,6 +374,24 @@ test('contract export is provider and upgrade-history neutral without weakening 
   assert.match(source, /'definition_sha256'/);
   assert.match(source, /jsonb_agg\([\s\S]*case when role_name::text=current_user then 'postgres'[\s\S]*order by \(case when role_name::text=current_user then 'postgres'[\s\S]*collate "C"/);
   assert.doesNotMatch(source, /jsonb_agg\([\s\S]*role_name::text[\s\S]*order by ordinality/);
+});
+
+test('contract export keeps cross-schema auth foreign keys explicitly qualified', () => {
+  const contract = JSON.parse(read('supabase/release/current-contract.json'));
+  const relation = contract.relations.find(item =>
+    item.schema === 'public' && item.name === 'pay_manual_adjustment_carry_forwards');
+  assert.ok(relation, 'pay manual-adjustment carry-forward relation is absent');
+  const constraints = new Map(relation.constraints.map(item => [item.name, item.definition]));
+  for (const name of [
+    'pay_manual_adjustment_carry_forwards_created_by_fkey',
+    'pay_manual_adjustment_carry_forwards_created_by_user_id_fkey',
+  ]) {
+    assert.equal(
+      constraints.get(name),
+      'FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)',
+      `${name} must retain its exact cross-schema auth.users target`,
+    );
+  }
 });
 
 test('contract export normalises only the exact PostgreSQL 18 ordinary relation NOT NULL duplicate', () => {
@@ -391,6 +442,84 @@ assert.equal(
 );
 
 if (portabilityPg17Url && portabilityPg18Url) {
+  test('full contract export is invariant to caller search_path on PostgreSQL 17 and 18', () => {
+    const psql = process.env.PSQL_BIN || 'psql';
+    const exporterPath = path.join(repoRoot, 'supabase/release/export_contract.sql').replaceAll('\\', '/');
+    const expectedCanonical = JSON.stringify(readJson('supabase/release/current-contract.json'));
+    const callerPaths = [
+      'pg_catalog, public, pg_temp',
+      'public, auth, pg_catalog, pg_temp',
+      'auth, private, pg_catalog, public, pg_temp',
+    ];
+    const exportFullContract = (databaseUrl, callerPath) => {
+      const connection = new URL(databaseUrl);
+      assert.ok(['postgres:', 'postgresql:'].includes(connection.protocol));
+      assert.ok(['127.0.0.1', 'localhost'].includes(connection.hostname),
+        'search_path runtime proof is restricted to a task-owned local PostgreSQL database');
+      const childEnv = {
+        ...process.env,
+        PGHOST: connection.hostname,
+        PGPORT: connection.port || '5432',
+        PGUSER: decodeURIComponent(connection.username || ''),
+        PGDATABASE: decodeURIComponent(connection.pathname.replace(/^\//, '')),
+      };
+      if (connection.password) childEnv.PGPASSWORD = decodeURIComponent(connection.password);
+      const output = execFileSync(psql, ['-X', '-q', '-w', '-v', 'ON_ERROR_STOP=1'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: childEnv,
+        input: `\\pset tuples_only on
+\\pset format unaligned
+select 'SERVER_MAJOR=' || current_setting('server_version_num');
+set search_path = ${callerPath};
+\\ir '${exporterPath}'
+`,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const serverLine = lines.find(line => line.startsWith('SERVER_MAJOR='));
+      const contractLine = lines.find(line => line.startsWith('{') && line.includes('"contract_version"'));
+      assert.ok(serverLine, 'server version was not emitted');
+      assert.ok(contractLine, 'contract JSON was not emitted');
+      const contract = JSON.parse(contractLine);
+      const carryForwards = contract.relations.find(item =>
+        item.schema === 'public' && item.name === 'pay_manual_adjustment_carry_forwards');
+      assert.ok(carryForwards, 'pay manual-adjustment carry-forward relation is absent');
+      const constraints = new Map(carryForwards.constraints.map(item => [item.name, item.definition]));
+      for (const name of [
+        'pay_manual_adjustment_carry_forwards_created_by_fkey',
+        'pay_manual_adjustment_carry_forwards_created_by_user_id_fkey',
+      ]) assert.equal(
+        constraints.get(name),
+        'FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)',
+      );
+      const canonical = JSON.stringify(contract);
+      return {
+        serverVersionNum: serverLine.split('=')[1],
+        canonical,
+        hash: sha256(canonical),
+      };
+    };
+
+    const resultsByMajor = new Map();
+    for (const [expectedMajor, databaseUrl] of [
+      ['17', portabilityPg17Url],
+      ['18', portabilityPg18Url],
+    ]) {
+      const results = callerPaths.map(callerPath => exportFullContract(databaseUrl, callerPath));
+      for (const result of results) {
+        assert.equal(result.serverVersionNum.slice(0, 2), expectedMajor);
+        assert.equal(result.canonical, expectedCanonical);
+        assert.equal(result.hash, sha256(expectedCanonical));
+      }
+      assert.equal(new Set(results.map(result => result.canonical)).size, 1);
+      assert.equal(new Set(results.map(result => result.hash)).size, 1);
+      resultsByMajor.set(expectedMajor, results[0]);
+    }
+    assert.equal(resultsByMajor.get('17').canonical, resultsByMajor.get('18').canonical);
+    assert.equal(resultsByMajor.get('17').hash, resultsByMajor.get('18').hash);
+  });
+
   test('PostgreSQL 17 and 18 export one identical portable relation contract with all non-NOT-NULL constraints retained', () => {
     const psql = process.env.PSQL_BIN || 'psql';
     const exporterPath = path.join(repoRoot, 'supabase/release/export_contract.sql').replaceAll('\\', '/');
