@@ -199,7 +199,7 @@ select pg_temp.verify_received_cancel_or_supersede('SUPERSEDE','QUEUED',false);
 select pg_temp.verify_received_cancel_or_supersede('SUPERSEDE','QUEUED',true);
 select pg_temp.verify_received_cancel_or_supersede('SUPERSEDE','SENT',false);
 
-create or replace function pg_temp.verify_provider_submit_permit_barrier()
+create or replace function pg_temp.verify_provider_submit_permit_barrier(p_mail_authority text)
 returns void
 language plpgsql
 as $function$
@@ -291,7 +291,7 @@ begin
     'QUEUED',v_now,'timesheets',v_timesheet,v_now,v_now,
     'provider-permit-mail:'||v_workflow::text,
     jsonb_build_object(
-      'candidate_mail_authority','CANDIDATE_PAPER_V1',
+      'candidate_mail_authority',p_mail_authority,
       'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
       'paper_return_manifest_sha256',v_manifest_hash,
       'candidate_paper_pack_ready',true,'mail_held_until_pdf_rendered',false,
@@ -352,7 +352,8 @@ begin
 end;
 $function$;
 
-select pg_temp.verify_provider_submit_permit_barrier();
+select pg_temp.verify_provider_submit_permit_barrier('CANDIDATE_PAPER_V1');
+select pg_temp.verify_provider_submit_permit_barrier('CANDIDATE_PAPER_PACK_EMAIL_V1');
 
 create or replace function pg_temp.verify_signed_paper_route_conversion(
   p_workflow_state text,

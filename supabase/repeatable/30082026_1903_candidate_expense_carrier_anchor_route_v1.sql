@@ -3259,7 +3259,9 @@ begin
       )
       and candidate_mail.attempt_lease_token=v_provider_lease_token
       and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
-      and candidate_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and candidate_mail.payment_scope_json->>'candidate_mail_authority' in (
+        'CANDIDATE_PAPER_V1','CANDIDATE_PAPER_PACK_EMAIL_V1'
+      )
       and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
       and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))

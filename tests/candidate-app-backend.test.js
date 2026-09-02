@@ -3316,7 +3316,7 @@ test('Candidate paper email queues the exact ready pack to the active registered
       paper_return_manifest_sha256: workflow.paper_return_manifest_sha256
     });
     assert.equal(writes[0].payment_scope_json.candidate_mail_authority,
-      'CANDIDATE_PAPER_V1');
+      'CANDIDATE_PAPER_PACK_EMAIL_V1');
     assert.equal(writes[0].payment_scope_json.candidate_paper_pack_ready, true);
     assert.equal(writes[0].payment_scope_json.mail_held_until_pdf_rendered, false);
     assert.equal(writes[0].payment_scope_json.mail_hold_reason, null);
@@ -3368,7 +3368,7 @@ test('Candidate paper email replays only an already claimable completed-pack row
     deterministic_outbox_key: `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${idempotencyKey}`,
     attachments: [attachment],
     payment_scope_json: {
-      candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+      candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
       candidate_workflow_id: workflow.id,
       candidate_workflow_generation: workflow.generation,
       paper_return_manifest_sha256: workflow.paper_return_manifest_sha256,
@@ -3432,14 +3432,14 @@ test('Candidate paper email replays only an already claimable completed-pack row
     assert.match(durableSelect, /(?:^|,)context_kind(?:,|$)/);
     assert.match(durableSelect, /(?:^|,)context_id(?:,|$)/);
 
-    durable.payment_scope_json.candidate_mail_authority = 'CANDIDATE_PAPER_PACK_EMAIL_V1';
+    durable.payment_scope_json.candidate_mail_authority = 'CANDIDATE_PAPER_V1';
     await assert.rejects(
       () => queueCandidatePaperPackEmail(env, workflow, access, {
         generation: workflow.generation, idempotency_key: idempotencyKey
       }, context),
       error => error?.code === 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT'
     );
-    durable.payment_scope_json.candidate_mail_authority = 'CANDIDATE_PAPER_V1';
+    durable.payment_scope_json.candidate_mail_authority = 'CANDIDATE_PAPER_PACK_EMAIL_V1';
 
     returnBrokenExisting = true;
     await assert.rejects(

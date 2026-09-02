@@ -5335,7 +5335,7 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
       next_attempt_at_utc: now,
       deterministic_outbox_key: deterministicKey,
       payment_scope_json: {
-        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+        candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
         candidate_workflow_id: workflow.id,
         candidate_workflow_generation: Number(workflow.generation),
         paper_return_manifest_sha256: manifestSha256,
@@ -5355,7 +5355,7 @@ async function queueCandidatePaperPackEmail(env, workflow, access, body, context
   if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
   }
-  if (!candidateCompletePackAttachmentMatchesScope(durable)
+  if (!candidateCompletePackAttachmentMatchesScope(durable, 'CANDIDATE_PAPER_PACK_EMAIL_V1')
       || upper(durable.context_kind) !== 'TIMESHEETS'
       || text(durable.context_id) !== sourceTimesheetId) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_OUTBOX_CONFLICT');
@@ -6298,10 +6298,10 @@ async function readyPaperPackReceipt(env, workflow, timesheet, version) {
   };
 }
 
-function candidateCompletePackAttachmentMatchesScope(row) {
+function candidateCompletePackAttachmentMatchesScope(row, expectedAuthority = 'CANDIDATE_PAPER_V1') {
   const scope = parseJson(row?.payment_scope_json, {}) || {};
   const attachments = parseJson(row?.attachments, []) || [];
-  if (upper(scope.candidate_mail_authority) !== 'CANDIDATE_PAPER_V1'
+  if (upper(scope.candidate_mail_authority) !== upper(expectedAuthority)
       || scope.candidate_paper_pack_ready !== true
       || scope.mail_held_until_pdf_rendered !== false
       || text(scope.mail_hold_reason)) return false;

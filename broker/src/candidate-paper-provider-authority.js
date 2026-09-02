@@ -30,7 +30,7 @@ export async function candidatePaperProviderAuthorityCurrent({
   const authority = text(claimedScope.candidate_mail_authority).toUpperCase();
   const outboxId = text(claimedRow && claimedRow.id);
   const leaseToken = text(currentLeaseToken);
-  if (authority !== 'CANDIDATE_PAPER_V1'
+  if (!['CANDIDATE_PAPER_V1', 'CANDIDATE_PAPER_PACK_EMAIL_V1'].includes(authority)
       || !env || !text(env.SUPABASE_URL) || !outboxId
       || !leaseToken
       || !Number.isSafeInteger(generation) || generation < 1

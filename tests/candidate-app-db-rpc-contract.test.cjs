@@ -27,6 +27,9 @@ const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
 const latestExpenseApply = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
+const latestExpenseCarrierAnchor = read(
+  'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
+);
 const latestWeeklyFinalisation = read(
   'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'
 );
@@ -815,6 +818,11 @@ test('PAPER rejection retires a shared QR source as one locked set before record
 
   assert.match(transition, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED'\)[\s\S]*_candidate_paper_delivery_retire_set_v1/i);
   assert.match(transition, /v_action='PAPER_PROVIDER_SUBMIT_PERMIT'[\s\S]*from public\.mail_outbox[\s\S]*for update[\s\S]*attempt_lease_expires_at_utc=v_provider_permit_expires_at/i);
+  const currentTransition = definition(
+    latestExpenseCarrierAnchor,
+    'candidate_workflow_transition_atomic_v1'
+  );
+  assert.match(currentTransition, /candidate_mail_authority' in \(\s*'CANDIDATE_PAPER_V1'\s*,\s*'CANDIDATE_PAPER_PACK_EMAIL_V1'\s*\)/i);
   assert.match(transition, /v_action='PAPER_RETURN'[\s\S]*from public\.mail_outbox[\s\S]*for update[\s\S]*CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
 });
 

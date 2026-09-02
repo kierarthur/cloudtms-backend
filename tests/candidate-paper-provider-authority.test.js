@@ -88,6 +88,14 @@ test('provider handoff obtains one atomic database submit permit', async () => {
   });
 });
 
+test('provider handoff accepts the separate completed-pack email authority', async () => {
+  const { result, calls } = await check({
+    claimed: claimedRow({ candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1' })
+  });
+  assert.deepEqual(result, { candidate_bound: true, authorised: true, reason: null });
+  assert.equal(calls.length, 2);
+});
+
 test('provider handoff fails closed when the atomic permit is refused or stale', async () => {
   for (const fixture of [
     { rpcOk: false, rpcResult: { message: 'stale' } },
@@ -137,6 +145,12 @@ test('provider handoff fails before the permit RPC for invalid binding or enviro
   });
   assert.equal(missingAuthority.result.authorised, false);
   assert.equal(missingAuthority.calls.length, 0);
+
+  const unknownAuthority = await check({
+    claimed: claimedRow({ candidate_mail_authority: 'CANDIDATE_PAPER_UNKNOWN_V1' })
+  });
+  assert.equal(unknownAuthority.result.authorised, false);
+  assert.equal(unknownAuthority.calls.length, 0);
 
   const badEnvironment = await check({ fixture: { environment: 'UNKNOWN' } });
   assert.equal(badEnvironment.result.authorised, false);

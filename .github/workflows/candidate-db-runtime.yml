@@ -19,6 +19,7 @@ on:
       - 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql'
       - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
+      - 'supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
@@ -44,6 +45,7 @@ on:
       - 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
       - 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql'
       - 'supabase/verification/02092026_1106_candidate_paper_cancel_lookup_indexes_verification.sql'
+      - 'supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql'
       - 'supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql'
       - 'supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql'
       - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
@@ -154,6 +156,7 @@ jobs:
             supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql
             supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
             supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql
+            supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
@@ -199,6 +202,8 @@ jobs:
             supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
+
+          apply_sql supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql
 
           suites=(
             tests/07082026_2155_candidate_app_local_runtime_verification.sql
@@ -274,5 +279,29 @@ jobs:
           CANDIDATE_DAILY_POSTGRES_CHAIN=1 \
             node --test tests/candidate-daily-r17-authority-transition-source-identity-concurrency.integration.js
 
+          workflow_definition_sha256="$(psql -X -tA -c "
+            select encode(
+              extensions.digest(
+                convert_to(
+                  replace(
+                    regexp_replace(
+                      pg_get_functiondef(
+                        'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,bigint,jsonb,text,timestamptz)'::regprocedure
+                      ),
+                      E'\\n SET \"plpgsql_check\\.[^\"]+\" TO ''[^'']*''',
+                      '',
+                      'g'
+                    ),
+                    E'\\r\\n',
+                    E'\\n'
+                  ),
+                  'UTF8'
+                ),
+                'sha256'
+              ),
+              'hex'
+            )
+          ")"
           version="$(psql -X -tA -c 'show server_version')"
-          printf 'PostgreSQL=%s CandidateSuites=%s Result=PASS\n' "$version" "${#suites[@]}"
+          printf 'PostgreSQL=%s CandidateSuites=%s CandidateWorkflowDefinitionSha256=%s Result=PASS\n' \
+            "$version" "${#suites[@]}" "$workflow_definition_sha256"
