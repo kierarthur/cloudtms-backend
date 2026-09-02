@@ -36,6 +36,7 @@ const {
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
+  candidatePaperTimesheetPageBytes,
   candidatePaperPackComponentForPage,
   renderAndRegister,
   candidateDocumentBranding,
@@ -3572,6 +3573,93 @@ test('complete paper pack retry reuses the same deterministic object and digest'
     assert.equal(first.sha256, replay.sha256);
     assert.equal(first.key, replay.key);
     assert.equal(putCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Paper Timesheet page renders from the exact submitted workflow when no electronic hours component exists', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000527';
+  const signatureId = '00000000-0000-4000-8000-000000000529';
+  const signatureBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3M6lWQAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const signatureSha256 = createHash('sha256').update(signatureBytes).digest('hex');
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000526',
+    generation: 2,
+    scope: 'WEEKLY',
+    route: 'PAPER',
+    candidate_id: '00000000-0000-4000-8000-000000000528',
+    target_timesheet_id: timesheetId,
+    anchor_timesheet_id: timesheetId,
+    contract_id: null,
+    week_ending_date: '2026-07-26',
+    candidate_signature_component_id: signatureId,
+    candidate_signed_at_utc: '2026-07-26T17:00:00.000Z',
+    immutable_submission_json: {
+      official_presentation: {
+        branding: noLogoBranding(),
+        worker: { first_name: 'Test', surname: 'Worker', job_profile_title: 'Nurse' },
+        client: { name: 'Test Client', hospital: 'Test Hospital', site_ward: 'Ward A' }
+      },
+      hours_submission: {
+        actual_schedule_json: [{
+          date: '2026-07-20', start: '17:00', end: '18:00',
+          break_minutes: 0, no_break_declared: true
+        }]
+      }
+    }
+  };
+  const timesheet = {
+    timesheet_id: timesheetId,
+    version: 1,
+    sheet_scope: 'WEEKLY'
+  };
+  const env = {
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) {
+        if (key !== 'candidate-signature.png') return null;
+        return {
+          httpMetadata: { contentType: 'image/png' },
+          async arrayBuffer() {
+            return signatureBytes.buffer.slice(
+              signatureBytes.byteOffset,
+              signatureBytes.byteOffset + signatureBytes.byteLength
+            );
+          }
+        };
+      }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith('/timesheets_financials')) return Response.json([]);
+    if (path.endsWith('/candidates')) {
+      return Response.json([{ id: workflow.candidate_id, first_name: 'Test', last_name: 'Worker' }]);
+    }
+    if (path.endsWith('/candidate_submission_components')) {
+      return Response.json([{
+        id: signatureId,
+        storage_key: 'candidate-signature.png',
+        media_type: 'image/png',
+        byte_size: signatureBytes.byteLength,
+        source_content_sha256: `\\x${signatureSha256}`
+      }]);
+    }
+    return Response.json([]);
+  };
+  try {
+    const bytes = await candidatePaperTimesheetPageBytes(
+      env, workflow, timesheet, [], 'TSQ2.diagnostic-paper-timesheet'
+    );
+    const rendered = await PDFDocument.load(bytes);
+    assert.equal(rendered.getPageCount(), 1);
+    assert.ok(bytes.byteLength > 1_000);
   } finally {
     globalThis.fetch = originalFetch;
   }

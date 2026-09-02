@@ -5825,19 +5825,56 @@ async function candidatePaperPageQrText(env, workflow, timesheet, page) {
   return buildCandidatePaperPageQrViaAdapter(env, payload);
 }
 
+async function candidatePaperTimesheetRenderState(env, workflow, timesheet) {
+  const timesheetId = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+  if (!UUID_RE.test(timesheetId) || timesheetId !== text(timesheet?.timesheet_id)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const [financials, contractRow, candidate] = await Promise.all([
+    restOne(env, 'timesheets_financials',
+      `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true`
+      + '&select=client_id,candidate_id,worked_start_iso,worked_end_iso'),
+    workflow.contract_id
+      ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=*`)
+      : Promise.resolve(null),
+    restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=*`)
+  ]);
+  const clientId = contractRow?.client_id || financials?.client_id || timesheet?.client_id;
+  const client = clientId
+    ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=*`)
+    : null;
+  return {
+    workflow,
+    component: null,
+    timesheet,
+    financials,
+    contract: contractRow,
+    candidate,
+    client
+  };
+}
+
 async function candidatePaperTimesheetPageBytes(env, workflow, timesheet, components, qrText) {
   if (!text(qrText).startsWith('TSQ2.')) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
   }
   const hours = components.filter((component) => upper(component.component_kind) === 'HOURS_TIMESHEET');
-  if (hours.length !== 1) {
+  if (hours.length > 1) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
   }
-  const state = await loadRenderState(env, {
-    workflow_id: workflow.id,
-    workflow_generation: Number(workflow.generation),
-    component_id: hours[0].id
-  });
+  // PAPER submissions intentionally use the existing current Timesheet as
+  // their factual source.  Unlike the electronic manager-review route, they
+  // do not require a synthetic HOURS_TIMESHEET component merely to render the
+  // page-specific return QR.  Prefer the exact component when one exists, but
+  // reconstruct the same read-only render state from the locked workflow and
+  // current Timesheet when it does not.
+  const state = hours.length === 1
+    ? await loadRenderState(env, {
+      workflow_id: workflow.id,
+      workflow_generation: Number(workflow.generation),
+      component_id: hours[0].id
+    })
+    : await candidatePaperTimesheetRenderState(env, workflow, timesheet);
   if (state.workflow?.id !== workflow.id
       || Number(state.workflow?.generation) !== Number(workflow.generation)
       || state.timesheet?.timesheet_id !== timesheet.timesheet_id) {
@@ -6555,6 +6592,12 @@ async function resumeCandidatePaperPackFromStatus(env, deps, context) {
   } catch (error) {
     const observedErrorCode = knownErrorCode(error);
     const failureCode = canonicalPaperPackFailureCode(error);
+    console.error('[candidate-app] Paper pack status continuation failed', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      ...safeCandidateTransportDiagnostic(error),
+      canonical_failure_code: failureCode
+    });
     let failureRecorded = false;
     if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
       'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
@@ -6876,6 +6919,12 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
     } catch (error) {
       const observedErrorCode = knownErrorCode(error);
       const failureCode = canonicalPaperPackFailureCode(error);
+      console.error('[candidate-app] scheduled Paper pack assembly failed', {
+        workflow_id: workflow.id,
+        generation: Number(workflow.generation),
+        ...safeCandidateTransportDiagnostic(error),
+        canonical_failure_code: failureCode
+      });
       let failureReceipt = null;
       let failureReceiptError = null;
       if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
@@ -7967,7 +8016,15 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
       idempotent_replay: atomicReceipt.idempotent_replay === true
     });
   } catch (error) {
+    const observedErrorCode = knownErrorCode(error);
     const failureCode = canonicalPaperPackFailureCode(error);
+    console.error('[candidate-app] Office Paper pack retry failed', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      ...safeCandidateTransportDiagnostic(error),
+      observed_error_code: observedErrorCode,
+      canonical_failure_code: failureCode
+    });
     let failureReceipt = null;
     try {
       failureReceipt = await recordCandidatePaperPackFailure(
@@ -8233,6 +8290,7 @@ export const candidateAppBackendInternals = Object.freeze({
   requireCandidatePaperOutbox,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
+  candidatePaperTimesheetPageBytes,
   candidatePaperPackComponentForPage,
   renderAndRegister,
   candidateDocumentBranding,
