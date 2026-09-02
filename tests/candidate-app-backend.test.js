@@ -29,6 +29,7 @@ const {
   passwordVerificationProof,
   candidatePaperDeliveryGeneration,
   candidatePaperCompleteReceipt,
+  readyPaperPackReceiptFromOutbox,
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
   restartCandidatePaperSourceDocumentFromStatus,
@@ -3879,9 +3880,8 @@ test('paper pack readiness uses the durable receipt and advances only the exact 
   const readEnd = source.indexOf('async function resumeCandidatePaperPackFromStatus', readStart);
   const readPath = source.slice(readStart, readEnd);
   assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
-  assert.match(readPath, /readyPaperPackReceipt/);
-  assert.match(readPath, /if \(version\?\.r2_key\)[\s\S]*const verifiedPack = await readyPaperPackReceipt[\s\S]*verifiedPack\?\.ready === true/);
-  assert.doesNotMatch(readPath, /if \(outbox && candidateCompletePackAttachmentMatchesScope\(outbox\) && version\?\.r2_key\)/);
+  assert.match(readPath, /readyPaperPackReceiptFromOutbox/);
+  assert.match(readPath, /if \(outbox\)[\s\S]*readyPaperPackReceiptFromOutbox[\s\S]*if \(!complete && version\?\.r2_key\)/);
   assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
   const statusStart = source.indexOf('async function handlePaperPackStatus', readEnd);
   const statusEnd = source.indexOf('async function handlePaperPackDownload', statusStart);
@@ -3901,6 +3901,177 @@ test('paper pack readiness uses the durable receipt and advances only the exact 
   assert.match(statusPath, /deferBackground\(ctx, work, 'paper-pack-status-nudge'/);
   assert.match(statusPath, /resumeCandidatePaperPackFromStatus\(env, deps, context\)/);
   assert.doesNotMatch(statusPath, /timesheet_qr_send_enqueue_v1|immutablePut/);
+});
+
+test('released Paper pack remains authoritative after an expected generic document invalidation', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000034';
+  const timesheetId = '00000000-0000-4000-8000-000000000035';
+  const manifestHash = 'a'.repeat(64);
+  const baseHash = 'b'.repeat(64);
+  const brandingHash = 'c'.repeat(64);
+  const packHash = 'd'.repeat(64);
+  const complete = {
+    key: `candidate-app/test/${workflowId}/2/paper-pack/`
+      + `${manifestHash}-${baseHash}-${brandingHash}-CANDIDATE_REVIEW_DOCUMENTS_V1.pdf`,
+    sha256: packHash,
+    byte_size: 654,
+    page_count: 3
+  };
+  const workflow = {
+    id: workflowId,
+    generation: 2,
+    state: 'AWAITING_PAPER_RETURN',
+    paper_return_manifest_sha256: manifestHash
+  };
+  const timesheet = {
+    timesheet_id: timesheetId,
+    document_state: 'STALE',
+    current_document_version_id: null
+  };
+  const outbox = {
+    status: 'SENT',
+    payment_scope_json: {
+      ...readyPaperScope(workflowId, 2, manifestHash, complete),
+      base_document_sha256: baseHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1'
+    },
+    attachments: [readyPaperAttachment(workflowId, 2, manifestHash, complete)]
+  };
+  const receipt = await readyPaperPackReceiptFromOutbox({
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    R2: {
+      async head(key) {
+        assert.equal(key, complete.key);
+        return {
+          size: complete.byte_size,
+          customMetadata: {
+            purpose: 'candidate-complete-paper-pack',
+            workflow_id: workflowId,
+            workflow_generation: '2',
+            timesheet_id: timesheetId,
+            manifest_sha256: manifestHash,
+            base_document_sha256: baseHash,
+            branding_contract_sha256: brandingHash,
+            renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+            media_type: 'application/pdf',
+            sha256: packHash,
+            byte_size: String(complete.byte_size),
+            page_count: String(complete.page_count)
+          }
+        };
+      }
+    }
+  }, workflow, timesheet, outbox);
+  assert.equal(receipt.ready, true);
+  assert.equal(receipt.key, complete.key);
+  assert.equal(receipt.page_count, 3);
+});
+
+test('Paper status polling never requeues after the exact released pack is complete', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000036';
+  const accountId = '00000000-0000-4000-8000-000000000037';
+  const candidateId = '00000000-0000-4000-8000-000000000038';
+  const workflowId = '00000000-0000-4000-8000-000000000039';
+  const timesheetId = '00000000-0000-4000-8000-00000000003a';
+  const manifestHash = 'a'.repeat(64);
+  const baseHash = 'b'.repeat(64);
+  const brandingHash = 'c'.repeat(64);
+  const packHash = 'd'.repeat(64);
+  const complete = {
+    key: `candidate-app/test/${workflowId}/2/paper-pack/`
+      + `${manifestHash}-${baseHash}-${brandingHash}-CANDIDATE_REVIEW_DOCUMENTS_V1.pdf`,
+    sha256: packHash,
+    byte_size: 654,
+    page_count: 3
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async head() {
+        return {
+          size: complete.byte_size,
+          customMetadata: {
+            purpose: 'candidate-complete-paper-pack', workflow_id: workflowId,
+            workflow_generation: '2', timesheet_id: timesheetId,
+            manifest_sha256: manifestHash, base_document_sha256: baseHash,
+            branding_contract_sha256: brandingHash,
+            renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+            media_type: 'application/pdf', sha256: packHash,
+            byte_size: String(complete.byte_size), page_count: '3'
+          }
+        };
+      }
+    }
+  };
+  const session = {
+    id: sessionId, session_id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflow = {
+    id: workflowId, account_id: accountId, candidate_id: candidateId,
+    generation: 2, environment: 'TEST', route: 'PAPER', state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: timesheetId, anchor_timesheet_id: timesheetId,
+    paper_return_manifest_sha256: manifestHash,
+    paper_return_manifest_json: { pages: [
+      { page_key: 'hours', component_kind: 'HOURS_TIMESHEET' },
+      { page_key: 'summary', component_kind: 'EXPENSE_SUMMARY' },
+      { page_key: 'other', component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER' }
+    ] }
+  };
+  const outbox = {
+    id: '00000000-0000-4000-8000-00000000003b', status: 'SENT',
+    attempt_lease_token: null, attempt_lease_expires_at_utc: null,
+    payment_scope_json: {
+      ...readyPaperScope(workflowId, 2, manifestHash, complete),
+      base_document_sha256: baseHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1'
+    },
+    attachments: [readyPaperAttachment(workflowId, 2, manifestHash, complete)]
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let enqueueCalls = 0;
+  globalThis.fetch = async input => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (path.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (path.endsWith('/timesheets')) return Response.json([{
+      timesheet_id: timesheetId, version: 8, sheet_scope: 'WEEKLY',
+      submission_mode: 'MANUAL', qr_status: 'SENT', qr_token: 'paper-token',
+      document_revision: 10, document_state: 'STALE',
+      current_document_version_id: null, active_document_operation_id: null
+    }]);
+    if (path.endsWith('/mail_outbox')) return Response.json([outbox]);
+    throw new Error(`unexpected fetch ${path}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/timesheets/${timesheetId}/paper-pack/status`,
+      { headers: { authorization: `Bearer ${token}` } }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name) {
+        assert.equal(name, 'candidate_app_timesheet_detail_v1');
+        return { ok: true };
+      },
+      async enqueueQrPack() { enqueueCalls += 1; }
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.paper_pack_state, 'READY');
+    assert.equal(body.download_available, true);
+    assert.equal(body.page_count, 3);
+    assert.equal(enqueueCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('paper pack receipt rejects malformed hashes, generation and page-count metadata', async () => {

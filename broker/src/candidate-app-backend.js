@@ -6203,6 +6203,46 @@ function candidatePaperCompleteReceipt(env, workflow, deliveryGeneration, row) {
   };
 }
 
+async function readyPaperPackReceiptFromOutbox(env, workflow, timesheet, row) {
+  const deliveryGeneration = candidatePaperDeliveryGeneration(workflow);
+  const receipt = candidatePaperCompleteReceipt(
+    env, workflow, deliveryGeneration, row
+  );
+  if (!receipt?.ready) return null;
+
+  let object;
+  try {
+    object = await env.R2?.head(receipt.key);
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  }
+  if (!object) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+
+  const metadata = object.customMetadata || {};
+  const metadataByteSize = Number(metadata.byte_size);
+  const metadataPageCount = Number(metadata.page_count);
+  const valid = metadata.purpose === 'candidate-complete-paper-pack'
+    && metadata.workflow_id === workflow.id
+    && Number(metadata.workflow_generation) === deliveryGeneration
+    && metadata.timesheet_id === timesheet.timesheet_id
+    && text(metadata.manifest_sha256).toLowerCase() === receipt.manifest_hash
+    && text(metadata.base_document_sha256).toLowerCase() === receipt.base_hash
+    && text(metadata.branding_contract_sha256).toLowerCase() === receipt.branding_hash
+    && text(metadata.renderer_contract_version) === receipt.renderer_contract_version
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && text(metadata.sha256).toLowerCase() === receipt.sha256
+    && metadataByteSize === receipt.byte_size
+    && metadataByteSize === Number(object.size)
+    && metadataPageCount === receipt.page_count;
+  if (!valid) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  return receipt;
+}
+
 async function officeCandidatePaperDelivery(env, workflow) {
   const deliveryGeneration = candidatePaperDeliveryGeneration(workflow);
   const manifestHash = text(workflow?.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
@@ -6542,7 +6582,16 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
     outboxError = code;
   }
   let complete = null;
-  if (version?.r2_key) {
+  // Once released, the immutable complete-pack receipt is the authority for
+  // this exact workflow generation and manifest. Expected QR delivery-state
+  // updates can invalidate the generic Timesheet document pointer; they must
+  // not make status polling manufacture a second pack for the same submission.
+  if (outbox) {
+    complete = await readyPaperPackReceiptFromOutbox(
+      env, workflows[0], timesheet, outbox
+    );
+  }
+  if (!complete && version?.r2_key) {
     const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
     if (verifiedPack?.ready === true) complete = verifiedPack;
   }
@@ -8290,6 +8339,7 @@ export const candidateAppBackendInternals = Object.freeze({
   paperPackIdentity,
   candidatePaperDeliveryGeneration,
   candidatePaperCompleteReceipt,
+  readyPaperPackReceiptFromOutbox,
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
   restartCandidatePaperSourceDocumentFromStatus,
