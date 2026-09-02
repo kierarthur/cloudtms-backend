@@ -207,6 +207,7 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /mode === 'ADOPT'/);
   assert.match(source, /Installed migration hash mismatch/);
   assert.match(source, /Database contract differs in/);
+  assert.match(source, /contractDifferenceDetails/);
   assert.match(source, /LEGACY_UPGRADE is restricted to LIVE/);
   assert.match(source, /refuses a database already carrying managed identity/);
   assert.match(source, /adoptLegacyInventoryAtomically/);
@@ -223,6 +224,29 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.ok(release.verificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
   assert.ok(!release.newVerificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
   assert.ok(release.newVerificationFiles.includes('supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql'));
+});
+
+test('contract drift diagnostics name relation additions, removals, and changed definitions without row data', async () => {
+  const { contractDifferenceDetails } = await import('../scripts/cloudtms-db-release-lib.mjs');
+  const base = {
+    relations: [
+      { schema: 'public', name: 'alpha', kind: 'r', columns: [{ name: 'id', type: 'uuid' }] },
+      { schema: 'public', name: 'removed', kind: 'v', columns: [] },
+    ],
+  };
+  const installed = {
+    relations: [
+      { schema: 'public', name: 'alpha', kind: 'r', columns: [{ name: 'id', type: 'text' }] },
+      { schema: 'private', name: 'unexpected', kind: 'r', columns: [] },
+    ],
+  };
+
+  assert.deepEqual(contractDifferenceDetails(base, installed, ['relations']), [
+    'unexpected installed relation private.unexpected:r',
+    'changed installed relation public.alpha:r',
+    'missing installed relation public.removed:v',
+  ]);
+  assert.deepEqual(contractDifferenceDetails(base, installed, ['routines']), []);
 });
 
 test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {

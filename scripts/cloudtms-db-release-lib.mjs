@@ -341,6 +341,24 @@ export function contractDifference(expected, actual) {
   return changed;
 }
 
+export function contractDifferenceDetails(expected, actual, changedSections = contractDifference(expected, actual)) {
+  if (!changedSections.includes('relations')) return [];
+
+  const relationKey = relation => `${relation.schema}.${relation.name}:${relation.kind}`;
+  const expectedByKey = new Map((expected.relations ?? []).map(relation => [relationKey(relation), relation]));
+  const actualByKey = new Map((actual.relations ?? []).map(relation => [relationKey(relation), relation]));
+  const keys = [...new Set([...expectedByKey.keys(), ...actualByKey.keys()])].sort();
+
+  return keys.flatMap(key => {
+    if (!actualByKey.has(key)) return [`missing installed relation ${key}`];
+    if (!expectedByKey.has(key)) return [`unexpected installed relation ${key}`];
+    if (JSON.stringify(expectedByKey.get(key)) !== JSON.stringify(actualByKey.get(key))) {
+      return [`changed installed relation ${key}`];
+    }
+    return [];
+  });
+}
+
 export function shellGitHead() {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   if (result.status !== 0) throw new Error('Cannot determine Git commit');

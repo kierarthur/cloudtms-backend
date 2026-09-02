@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  canonicalContractHash, contractDifference, databaseUrl, exportContract, inventory,
+  canonicalContractHash, contractDifference, contractDifferenceDetails, databaseUrl, exportContract, inventory,
   formatPlanSection, legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
@@ -72,7 +72,10 @@ function compareExpected(expectedPath) {
   const expected = readJson(expectedPath);
   const actual = exportContract();
   const changed = contractDifference(expected, actual);
-  if (changed.length) throw new Error(`Database contract differs in: ${changed.join(', ')}`);
+  if (changed.length) {
+    const details = contractDifferenceDetails(expected, actual, changed);
+    throw new Error(`Database contract differs in: ${changed.join(', ')}${details.length ? ` (${details.join('; ')})` : ''}`);
+  }
   return { actual, sha256: canonicalContractHash(actual) };
 }
 
