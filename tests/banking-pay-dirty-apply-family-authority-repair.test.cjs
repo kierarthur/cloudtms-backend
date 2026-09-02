@@ -168,6 +168,9 @@ test('repair targets only the two proved terminal dirty-apply failures and retai
     assert.ok(verification.includes(config));
   }
   assert.match(verification, /actual_acl IS DISTINCT FROM pg_catalog\.jsonb_build_array/);
+  assert.match(verification, /SELECT DISTINCT[\s\S]*function_acl\.grantee=proc\.proowner[\s\S]*pg_catalog\.pg_get_userbyid\(function_acl\.grantee\)='postgres'[\s\S]*THEN 'OWNER'/i);
+  assert.match(verification, /normalised_acl\.grantee COLLATE "C"[\s\S]*normalised_acl\.privilege COLLATE "C"/i);
+  assert.doesNotMatch(verification, /'grantee','postgres'/i);
   assert.match(verification, /BANKING_PAY_FINAL_AUTHORITY_CLOSURE_MISMATCH/);
 });
 

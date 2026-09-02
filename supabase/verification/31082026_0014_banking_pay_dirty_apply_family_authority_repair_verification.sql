@@ -93,24 +93,28 @@ BEGIN
       proc.proconfig AS actual_config,
       COALESCE((
         SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-          'grantee',CASE
-            WHEN function_acl.grantee=proc.proowner THEN 'OWNER'
-            WHEN function_acl.grantee=0 THEN 'PUBLIC'
-            ELSE pg_catalog.pg_get_userbyid(function_acl.grantee)
-          END,
-          'privilege',function_acl.privilege_type,
-          'grantable',function_acl.is_grantable
+          'grantee',normalised_acl.grantee,
+          'privilege',normalised_acl.privilege,
+          'grantable',normalised_acl.grantable
         ) ORDER BY
-          CASE
-            WHEN function_acl.grantee=proc.proowner THEN 'OWNER'
-            WHEN function_acl.grantee=0 THEN 'PUBLIC'
-            ELSE pg_catalog.pg_get_userbyid(function_acl.grantee)
-          END COLLATE "C",
-          function_acl.privilege_type COLLATE "C",
-          function_acl.is_grantable)
-        FROM pg_catalog.aclexplode(COALESCE(
-          proc.proacl,pg_catalog.acldefault('f'::"char",proc.proowner)
-        )) AS function_acl
+          normalised_acl.grantee COLLATE "C",
+          normalised_acl.privilege COLLATE "C",
+          normalised_acl.grantable)
+        FROM (
+          SELECT DISTINCT
+            CASE
+              WHEN function_acl.grantee=proc.proowner
+                OR pg_catalog.pg_get_userbyid(function_acl.grantee)='postgres'
+                THEN 'OWNER'
+              WHEN function_acl.grantee=0 THEN 'PUBLIC'
+              ELSE pg_catalog.pg_get_userbyid(function_acl.grantee)
+            END AS grantee,
+            function_acl.privilege_type AS privilege,
+            function_acl.is_grantable AS grantable
+          FROM pg_catalog.aclexplode(COALESCE(
+            proc.proacl,pg_catalog.acldefault('f'::"char",proc.proowner)
+          )) AS function_acl
+        ) AS normalised_acl
       ),'[]'::jsonb) AS actual_acl,
       pg_catalog.has_function_privilege('service_role',expected.identity::oid,'EXECUTE') AS service_execute,
       pg_catalog.has_function_privilege('anon',expected.identity::oid,'EXECUTE') AS anon_execute,
