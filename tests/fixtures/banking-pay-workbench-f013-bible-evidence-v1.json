@@ -1,0 +1,21 @@
+{
+  "schema_version": "BANKING_PAY_WORKBENCH_F013_BIBLE_EVIDENCE_V1",
+  "fixture_status": "EVIDENCE_ONLY_NOT_CANONICAL_BIBLE",
+  "source": {
+    "repository": "TEST-Frontend",
+    "canonical_path": "BANKING_PAY_BIBLE.md",
+    "base_commit": "e58e567f66ed8108a40e3c3e8388dbe33e0b0361",
+    "external_candidate_sha256": "6a59922da5bab141f88c06dd5ead352c1be64c88fc26e397020d54cb844bd750",
+    "external_candidate_bytes": 165162,
+    "tracked_binary_diff_sha256": "074c1cd58723d0fc267252b0ae175149eb207cd96c766f127c5eb1b3e27b6052",
+    "status": "EXTERNAL_UNCOMMITTED_UNPUBLISHED_NOT_RUNTIME_AUTHORITY"
+  },
+  "exact_markers_in_source_order": [
+    "It separately proves current Draft execution defects",
+    "F-013 evidence-scope correction:",
+    "explicitly supersedes the active defect-status claim",
+    "Final proved defect rows are zero",
+    "No H2 runtime correction is authorised"
+  ],
+  "scope_note": "This checked-in fixture preserves only the exact marker strings and ordering asserted by the backend test. It does not replace or publish the canonical frontend Bible, and it grants no Banking runtime or policy authority. The full external candidate requires separate review and publication."
+}

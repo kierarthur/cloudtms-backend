@@ -39,11 +39,12 @@
     {"path":"tests/banking-pay-workbench-fail-job-authority.test.js","status":"modified","sha256":"6eb4576786df92e2adb9aa99eec31a87bbef6419150f75177518ee1409f6985a","bytes":6745},
     {"path":"tests/banking-pay-workbench-source-build-authority.test.js","status":"modified","sha256":"ee47161c3ee50274c240434161de6d9c814187823a2bc6f4dcc1db1f65183917","bytes":9103},
     {"path":"tests/database-release-system.test.mjs","status":"modified","sha256":"0c1b9ffa36c7efa0136022724bfa4f5652c205809f7a4f96cbc9bca80f902f3a","bytes":27417},
-    {"path":"tests/banking-pay-workbench-causal-recovery.test.js","status":"new","sha256":"a7ece45ecbc6db974f41a7b32d08b7f755cc9b4412b97f52becf041cd154e634","bytes":38602},
+    {"path":"tests/banking-pay-workbench-causal-recovery.test.js","status":"new","sha256":"25de94480c5902e6ae46072e26999ae2a8209d1cbbfeacfb8c55694ddbb358ae","bytes":40483},
     {"path":"tests/banking-pay-workbench-settled-certification-contract.test.js","status":"new","sha256":"638fc39842127890739b0080f1e8ab8be5d93f2dfa3d9b97a883bdcf8e4660f1","bytes":9602},
     {"path":"tests/banking-pay-workbench-shared-baseline-reconciliation.test.js","status":"new","sha256":"02929ea73b198526e30c71d6563a2b6388fff6a7a9dd46734cedd97dbef672f3","bytes":10479},
     {"path":"tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json","status":"new","sha256":"9dfa497003a0344c12f94857138600df897e2141fdc3c5ae4e337ad2e03e4e4e","bytes":6669},
     {"path":"tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json","status":"new","sha256":"b4171f138a2b5ef44a2c8915fe8d59098d37d11aadc42f8c8106827709cb033a","bytes":38928},
+    {"path":"tests/fixtures/banking-pay-workbench-f013-bible-evidence-v1.json","status":"new","sha256":"bce928e2e557accb6e05d01da88c035b5a5cbbd7f7edefe9cbe0acb9402cc9e0","bytes":1204},
     {"path":"tests/banking-pay-workbench-current-implementation-handover.test.js","status":"new","sha256":"1695e7486209661bc7756783ae260b75a2aad065b1d0c7e8a895bcfc5fb26ce9","bytes":9567}
   ],
   "excluded_from_implementation": [

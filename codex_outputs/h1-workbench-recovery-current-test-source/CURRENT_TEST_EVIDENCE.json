@@ -70,6 +70,20 @@
     "git_diff_check": {
       "pass": true
     },
+    "backend_test_portability_successor": {
+      "scope": "self-contained F-013 Bible evidence fixture and causal test path only",
+      "canonical_frontend_bible_status": "EXTERNAL_NOT_REPLACED_NOT_PUBLISHED_BY_BACKEND_SUCCESSOR",
+      "runtime_or_policy_change": false,
+      "focused_causal_test": "16_PASS_0_FAIL",
+      "focused_causal_and_handover_package": "24_PASS_0_FAIL",
+      "full_npm_test": "1173_PASS_0_FAIL",
+      "optional_exact_external_bible_validation": {
+        "result": "24_PASS_0_FAIL",
+        "evidence_source": "INDEPENDENT_ROOT_REVIEW",
+        "external_candidate_sha256": "6a59922da5bab141f88c06dd5ead352c1be64c88fc26e397020d54cb844bd750",
+        "external_candidate_bytes": 165162
+      }
+    },
     "miget_read_only_preflight": {
       "pass": true,
       "database": "cloudtms_test_clone",

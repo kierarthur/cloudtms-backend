@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -31,7 +32,10 @@ const checksumManifest = JSON.parse(read(
 const rollbackSourceManifest = JSON.parse(read(
   'codex_outputs/h1-workbench-recovery-causal-v1/ROLLBACK_SOURCE_MANIFEST_14dd89af.json',
 ));
-const bankingPayBible = read('../h1-workbench-recovery-frontend/BANKING_PAY_BIBLE.md');
+const bankingPayBibleEvidence = JSON.parse(read(
+  'tests/fixtures/banking-pay-workbench-f013-bible-evidence-v1.json',
+));
+const bankingPayBible = bankingPayBibleEvidence.exact_markers_in_source_order.join('\n');
 
 const deterministicStageCodes = [
   'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED',
@@ -696,6 +700,39 @@ test('independent handover separates the completed source deliverable from an un
   assert.match(rollbackPack, /PROVISIONAL_PROVED_INTERFACE_DIVERGENCE/);
   assert.match(rollbackPack, /No runtime correction is authorised/);
   assert.doesNotMatch(rollbackPack, /proves five distinct execution defects/);
+  assert.deepEqual(bankingPayBibleEvidence.source, {
+    repository: 'TEST-Frontend',
+    canonical_path: 'BANKING_PAY_BIBLE.md',
+    base_commit: 'e58e567f66ed8108a40e3c3e8388dbe33e0b0361',
+    external_candidate_sha256: '6a59922da5bab141f88c06dd5ead352c1be64c88fc26e397020d54cb844bd750',
+    external_candidate_bytes: 165162,
+    tracked_binary_diff_sha256: '074c1cd58723d0fc267252b0ae175149eb207cd96c766f127c5eb1b3e27b6052',
+    status: 'EXTERNAL_UNCOMMITTED_UNPUBLISHED_NOT_RUNTIME_AUTHORITY',
+  });
+  assert.equal(bankingPayBibleEvidence.fixture_status, 'EVIDENCE_ONLY_NOT_CANONICAL_BIBLE');
+  assert.deepEqual(bankingPayBibleEvidence.exact_markers_in_source_order, [
+    'It separately proves current Draft execution defects',
+    'F-013 evidence-scope correction:',
+    'explicitly supersedes the active defect-status claim',
+    'Final proved defect rows are zero',
+    'No H2 runtime correction is authorised',
+  ]);
+  const suppliedBiblePath = process.env.BANKING_PAY_BIBLE_PATH;
+  if (suppliedBiblePath) {
+    const suppliedBytes = readFileSync(suppliedBiblePath);
+    assert.equal(suppliedBytes.length, bankingPayBibleEvidence.source.external_candidate_bytes);
+    assert.equal(
+      createHash('sha256').update(suppliedBytes).digest('hex'),
+      bankingPayBibleEvidence.source.external_candidate_sha256,
+    );
+    const suppliedBible = suppliedBytes.toString('utf8').replace(/\r\n/g, '\n');
+    let previousIndex = -1;
+    for (const marker of bankingPayBibleEvidence.exact_markers_in_source_order) {
+      const markerIndex = suppliedBible.indexOf(marker);
+      assert.ok(markerIndex > previousIndex, `external Bible marker out of order: ${marker}`);
+      previousIndex = markerIndex;
+    }
+  }
   const supersededBibleClaim = bankingPayBible.indexOf('It separately proves current Draft execution defects');
   const bibleCorrection = bankingPayBible.indexOf('F-013 evidence-scope correction:');
   assert.notEqual(supersededBibleClaim, -1, 'historical overclaim must remain as append-only audit evidence');

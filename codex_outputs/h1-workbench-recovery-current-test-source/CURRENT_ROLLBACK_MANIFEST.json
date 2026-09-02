@@ -30,6 +30,7 @@
     "tests/banking-pay-workbench-settled-certification-contract.test.js",
     "tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
     "tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json",
+    "tests/fixtures/banking-pay-workbench-f013-bible-evidence-v1.json",
     "tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json",
     "codex_outputs/h1-workbench-recovery-current-test-source"
   ],
