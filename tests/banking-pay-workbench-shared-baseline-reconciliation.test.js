@@ -23,6 +23,10 @@ const rollbackManifestPath = path.join(
   'codex_outputs/h1-workbench-recovery-causal-v1/ROLLBACK_SOURCE_MANIFEST_14dd89af.json'
 );
 const rollbackManifest = JSON.parse(fs.readFileSync(rollbackManifestPath, 'utf8'));
+const candidateManagerEmailWorkflow = fs.readFileSync(
+  path.join(repositoryRoot, '.github/workflows/candidate-manager-email-verify.yml'),
+  'utf8'
+);
 
 function git(args, encoding = 'utf8') {
   return execFileSync('git', args, {
@@ -39,6 +43,13 @@ function contractAt(commit) {
 function releaseAt(commit) {
   return JSON.parse(git(['show', `${commit}:supabase/release/current-release.json`]));
 }
+
+test('Candidate source verification fetches the historical commits required by this proof', () => {
+  assert.match(
+    candidateManagerEmailWorkflow,
+    /uses:\s*actions\/checkout@v6\s*\n\s*with:\s*\n\s*fetch-depth:\s*0\b/
+  );
+});
 
 test('shared successor has the exact proved ancestry and tree', () => {
   const format = git([
@@ -192,4 +203,3 @@ test('reconciliation is ready for source review while runtime conclusions remain
   assert.match(evidence.future_combined_candidate_rule, /exact 14dd89af/i);
   assert.ok(evidence.open_gates.includes('independent H1 source/local verifier verdict'));
 });
-

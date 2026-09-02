@@ -27,6 +27,12 @@ const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
 const latestExpenseApply = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
+const latestWeeklyFinalisation = read(
+  'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'
+);
+const bankingReleaseAuthority = read(
+  'supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql'
+);
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 const managerRefusalResubmission = read(
   'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'
@@ -39,7 +45,8 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
-  assert.deepEqual(installPaths.slice(-3), [
+  assert.deepEqual(installPaths.slice(-4), [
+    'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
     'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
     'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
     'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
@@ -52,6 +59,23 @@ test('Candidate runtime gate finishes with every current 2 September authority',
     'supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql',
     'supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql',
   ]);
+});
+
+function exactFunctionDefinition(source, qualifiedName) {
+  const escapedName = qualifiedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = source.replace(/\r\n/g, '\n').match(
+    new RegExp(`CREATE OR REPLACE FUNCTION ${escapedName}\\([\\s\\S]*?\\n\\$function\\$;`, 'i')
+  );
+  assert.ok(match, `${qualifiedName} definition must exist`);
+  return match[0];
+}
+
+test('focused Candidate finalisation owner remains identical to the later Banking composite owner', () => {
+  const qualifiedName = 'public.contract_week_manual_upsert_atomic';
+  assert.equal(
+    exactFunctionDefinition(latestWeeklyFinalisation, qualifiedName),
+    exactFunctionDefinition(bankingReleaseAuthority, qualifiedName)
+  );
 });
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
