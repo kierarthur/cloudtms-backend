@@ -3342,8 +3342,17 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
   lines.sort((a, b) => a.date.localeCompare(b.date) || a.display_start_local.localeCompare(b.display_start_local) || a.segment_id.localeCompare(b.segment_id));
   const period = officialPeriodWithShiftLines(endDate, lines);
   const paidMinutes = lines.reduce((sum, line) => sum + Number(line.paid_minutes || 0), 0);
-  const candidateSignatureId = workflow.candidate_signature_component_id;
-  const candidateSignature = await signatureAsset(env, candidateSignatureId);
+  const paperReturnQrText = text(options.paper_return_qr_text);
+  if (paperReturnQrText && !paperReturnQrText.startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  // A V2 printed-return page is deliberately unsigned when it leaves the
+  // system. Both signatures are added to the physical page and returned as
+  // one verified pack, so an earlier electronic Candidate signature must not
+  // be required or embedded in this rendering.
+  const candidateSignature = paperReturnQrText
+    ? { identity: {}, data: null }
+    : await signatureAsset(env, workflow.candidate_signature_component_id);
   const managerSignature = phase === 'FINAL'
     ? await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256)
     : { identity: {}, data: null };
@@ -3351,11 +3360,9 @@ async function buildOfficialCandidateModel(env, contract, state, phase, options 
   const worker = isObject(frozenPresentation.worker)
     ? frozenPresentation.worker
     : candidateNameParts(candidate);
-  const formVariant = phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW';
-  const paperReturnQrText = text(options.paper_return_qr_text);
-  if (paperReturnQrText && !paperReturnQrText.startsWith('TSQ2.')) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
-  }
+  const formVariant = paperReturnQrText
+    ? 'ELECTRONIC_UNSIGNED'
+    : (phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW');
   const signedDate = londonCalendarDate(workflow.candidate_signed_at_utc);
   const managerDate = londonCalendarDate(
     workflow.manager_approved_at_utc || contract.manager?.approval_date_utc

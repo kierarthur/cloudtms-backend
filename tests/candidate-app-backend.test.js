@@ -3578,14 +3578,8 @@ test('complete paper pack retry reuses the same deterministic object and digest'
   }
 });
 
-test('Paper Timesheet page renders from the exact submitted workflow when no electronic hours component exists', async () => {
+test('Paper Timesheet page renders unsigned from the exact submitted workflow without electronic hours or signature components', async () => {
   const timesheetId = '00000000-0000-4000-8000-000000000527';
-  const signatureId = '00000000-0000-4000-8000-000000000529';
-  const signatureBytes = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3M6lWQAAAABJRU5ErkJggg==',
-    'base64'
-  );
-  const signatureSha256 = createHash('sha256').update(signatureBytes).digest('hex');
   const workflow = {
     id: '00000000-0000-4000-8000-000000000526',
     generation: 2,
@@ -3596,8 +3590,8 @@ test('Paper Timesheet page renders from the exact submitted workflow when no ele
     anchor_timesheet_id: timesheetId,
     contract_id: null,
     week_ending_date: '2026-07-26',
-    candidate_signature_component_id: signatureId,
-    candidate_signed_at_utc: '2026-07-26T17:00:00.000Z',
+    candidate_signature_component_id: null,
+    candidate_signed_at_utc: null,
     immutable_submission_json: {
       official_presentation: {
         branding: noLogoBranding(),
@@ -3620,20 +3614,7 @@ test('Paper Timesheet page renders from the exact submitted workflow when no ele
   const env = {
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
-    R2: {
-      async get(key) {
-        if (key !== 'candidate-signature.png') return null;
-        return {
-          httpMetadata: { contentType: 'image/png' },
-          async arrayBuffer() {
-            return signatureBytes.buffer.slice(
-              signatureBytes.byteOffset,
-              signatureBytes.byteOffset + signatureBytes.byteLength
-            );
-          }
-        };
-      }
-    }
+    R2: { async get() { throw new Error('unsigned PAPER rendering must not read a signature asset'); } }
   };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async url => {
@@ -3643,13 +3624,7 @@ test('Paper Timesheet page renders from the exact submitted workflow when no ele
       return Response.json([{ id: workflow.candidate_id, first_name: 'Test', last_name: 'Worker' }]);
     }
     if (path.endsWith('/candidate_submission_components')) {
-      return Response.json([{
-        id: signatureId,
-        storage_key: 'candidate-signature.png',
-        media_type: 'image/png',
-        byte_size: signatureBytes.byteLength,
-        source_content_sha256: `\\x${signatureSha256}`
-      }]);
+      throw new Error('unsigned PAPER rendering must not query a signature component');
     }
     return Response.json([]);
   };
