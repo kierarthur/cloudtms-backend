@@ -3463,4 +3463,3 @@ grant execute on function private._invoice_delivery_routes_batch(jsonb,date) to 
 notify pgrst, 'reload schema';
 
 commit;
-
