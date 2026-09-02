@@ -316,8 +316,11 @@ schema_contract as (
   ) as value
   from app_namespaces n
 ),
-default_acl_contract as (
-  select jsonb_agg(
+default_acl_rows as (
+  select
+    owner_role.logical_name as owner_name,
+    n.nspname as schema_name,
+    d.defaclobjtype as object_kind,
     jsonb_build_object(
       'owner', owner_role.logical_name,
       'schema', n.nspname,
@@ -343,13 +346,25 @@ default_acl_contract as (
           )) a
         ) expanded_acl
       ), '[]'::jsonb)
-    ) order by owner_role.logical_name collate "C",
-               n.nspname collate "C", d.defaclobjtype
-  ) as value
+    ) as contract_row
   from pg_catalog.pg_default_acl d
   join app_namespaces n on n.oid = d.defaclnamespace
   join contract_role_names owner_role on owner_role.oid=d.defaclrole
   where owner_role.logical_name = 'postgres'
+),
+default_acl_contract as (
+  -- A restored logical `postgres` owner and the provider's generated owner can
+  -- both normalise to the same portable contract identity.  Preserve any
+  -- genuinely different ACL posture, but collapse byte-identical logical rows
+  -- so NEW and UPGRADE contracts do not differ merely by provider history.
+  select jsonb_agg(
+    contract_row order by owner_name collate "C",
+                          schema_name collate "C", object_kind
+  ) as value
+  from (
+    select distinct owner_name, schema_name, object_kind, contract_row
+    from default_acl_rows
+  ) canonical_default_acl_rows
 )
 select jsonb_build_object(
   'contract_version', 1,

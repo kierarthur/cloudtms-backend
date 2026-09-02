@@ -301,6 +301,8 @@ test('contract export normalises null ACLs to one-dimensional effective defaults
   assert.equal((source.match(/\) expanded_acl/g) || []).length, 4);
   assert.match(source, /when rolname=current_user then 'postgres'/);
   assert.match(source, /owner_role\.logical_name = 'postgres'/);
+  assert.match(source, /default_acl_rows as \(/);
+  assert.match(source, /select distinct owner_name, schema_name, object_kind, contract_row/);
 });
 
 test('contract export is provider and upgrade-history neutral without weakening security fields', () => {
