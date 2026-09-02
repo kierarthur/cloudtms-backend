@@ -35,6 +35,7 @@ declare
   v_session uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
   v_mail uuid:=gen_random_uuid();
+  v_second_mail uuid:=gen_random_uuid();
   v_manifest jsonb;
   v_manifest_hash text;
   v_source_token text:='legacy-orphan-current-'||gen_random_uuid()::text;
@@ -180,6 +181,40 @@ begin
     )
   );
 
+  -- Modern manifest V2 may be delivered again without changing its immutable
+  -- workflow generation. The newest delivery has a different legacy source
+  -- token receipt; cancellation must retire the whole generation while proving
+  -- the current source token belongs to one of the exact receipts.
+  if p_manifest_version='2' and p_matching_receipt_token then
+    insert into public.mail_outbox(
+      id,type,"to",subject,body_text,attachments,status,created_at_utc,
+      sent_at,context_kind,context_id,scheduled_for_utc,next_attempt_at_utc,
+      deterministic_outbox_key,payment_scope_json
+    ) values(
+      v_second_mail,'TIMESHEET_QR','legacy-orphan@example.test','Redelivered signed pack',
+      'Modern page-manifest redelivery',
+      jsonb_build_array(jsonb_build_object(
+        'r2_key','candidate-app/test/legacy-orphan/pack-redelivery.pdf'
+      )),
+      'SENT',v_now+interval '1 second',v_now+interval '1 second',
+      'timesheets',v_timesheet,v_now,v_now,
+      'legacy-orphan-mail-redelivery:'||v_workflow::text,
+      jsonb_build_object(
+        'candidate_mail_authority','CANDIDATE_PAPER_V1',
+        'candidate_workflow_id',v_workflow,
+        'candidate_workflow_generation',1,
+        'paper_return_manifest_sha256',v_manifest_hash,
+        'candidate_paper_manifest_version',2,
+        'candidate_paper_pack_ready',true,
+        'mail_held_until_pdf_rendered',false,
+        'candidate_paper_generation_retired',false,
+        'qr_token_hash',encode(extensions.digest(
+          convert_to('modern-redelivery-'||v_second_mail::text,'UTF8'),'sha256'
+        ),'hex')
+      )
+    );
+  end if;
+
   begin
     v_result:=public.candidate_workflow_cancel_atomic_v2(
       v_session,'TEST',v_workflow,1,
@@ -201,6 +236,8 @@ begin
        or (select qr_token from public.timesheets
            where timesheet_id=v_timesheet) is not null
        or (select status from public.mail_outbox where id=v_mail)<>'SENT'
+       or (p_manifest_version='2' and p_matching_receipt_token
+           and (select status from public.mail_outbox where id=v_second_mail)<>'SENT')
        or coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
                     from public.mail_outbox where id=v_mail),false) then
       raise exception 'Exact legacy one-page orphan cancellation failed: result=%, failure=%',

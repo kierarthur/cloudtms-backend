@@ -286,7 +286,8 @@ declare
   v_delivery_generation integer;
   v_source_key text;
   v_reason text:=upper(btrim(coalesce(p_reason_code,'')));
-  v_qr_token_hash text;
+  v_qr_token_hashes text[]:='{}'::text[];
+  v_current_qr_token_hash text;
   v_mail_count integer:=0;
   v_qr_token_hash_missing_count integer:=0;
   v_mail_retired_count integer:=0;
@@ -386,17 +387,15 @@ begin
           'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
           'reason','QR_TOKEN_HASH_INVALID'
         )::text;
-    else
-      if v_qr_token_hash is null then
-        v_qr_token_hash:=lower(v_mail.payment_scope_json->>'qr_token_hash');
-      elsif v_qr_token_hash<>lower(v_mail.payment_scope_json->>'qr_token_hash') then
-        raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
-          using errcode='40001',detail=jsonb_build_object(
-            'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
-            'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
-            'reason','MULTIPLE_QR_TOKEN_HASHES'
-          )::text;
-      end if;
+    elsif not (lower(v_mail.payment_scope_json->>'qr_token_hash')=any(v_qr_token_hashes)) then
+      -- A current V2 manifest can be delivered more than once without changing
+      -- its immutable workflow generation. Each delivery rotates the legacy
+      -- source token while every TSQ2 page remains bound to the same manifest.
+      -- Retain the complete receipt set and prove the current source token is
+      -- owned by one of those exact receipts below.
+      v_qr_token_hashes:=array_append(
+        v_qr_token_hashes,lower(v_mail.payment_scope_json->>'qr_token_hash')
+      );
     end if;
   end loop;
 
@@ -541,7 +540,7 @@ begin
   -- makes the old printable document non-current.
   if nullif(btrim(coalesce(v_qr_current.qr_token,'')),'') is null then
     v_qr_already_invalidated:=true;
-  elsif v_qr_token_hash is null or v_qr_token_hash_missing_count>0 then
+  elsif cardinality(v_qr_token_hashes)<1 or v_qr_token_hash_missing_count>0 then
     raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
       using errcode='40001',detail=jsonb_build_object(
         'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
@@ -549,17 +548,19 @@ begin
         'reason','QR_TOKEN_HASH_MISSING',
         'qr_source_timesheet_id',v_qr_current.timesheet_id
       )::text;
-  elsif encode(extensions.digest(
-      convert_to(v_qr_current.qr_token,'UTF8'),'sha256'
-    ),'hex')<>v_qr_token_hash then
-    raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
-      using errcode='40001',detail=jsonb_build_object(
-        'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
-        'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
-        'reason','CURRENT_QR_TOKEN_HASH_MISMATCH',
-        'qr_source_timesheet_id',v_qr_current.timesheet_id
-      )::text;
   else
+    v_current_qr_token_hash:=encode(extensions.digest(
+      convert_to(v_qr_current.qr_token,'UTF8'),'sha256'
+    ),'hex');
+    if not (v_current_qr_token_hash=any(v_qr_token_hashes)) then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','CURRENT_QR_TOKEN_HASH_MISMATCH',
+          'qr_source_timesheet_id',v_qr_current.timesheet_id
+        )::text;
+    end if;
     update public.timesheets timesheet_row
     set qr_token=null,
         qr_payload_json='{}'::jsonb,
@@ -577,7 +578,7 @@ begin
       and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
       and encode(extensions.digest(
         convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
-      ),'hex')=v_qr_token_hash;
+      ),'hex')=v_current_qr_token_hash;
     v_qr_invalidated:=found;
     if not v_qr_invalidated then
       raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
@@ -597,6 +598,7 @@ begin
     jsonb_build_object(
       'delivery_generation',v_delivery_generation,
       'reason_code',v_reason,'mail_count',v_mail_count,
+      'receipt_qr_token_hash_count',cardinality(v_qr_token_hashes),
       'mail_retired_count',v_mail_retired_count,
       'notification_retired_count',v_notification_count,
       'qr_source_timesheet_id',v_qr_current.timesheet_id,
@@ -613,6 +615,7 @@ begin
     'retired',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
     'delivery_generation',v_delivery_generation,
     'reason_code',v_reason,'mail_count',v_mail_count,
+    'receipt_qr_token_hash_count',cardinality(v_qr_token_hashes),
     'mail_retired_count',v_mail_retired_count,
     'notification_retired_count',v_notification_count,
     'qr_source_timesheet_id',v_qr_current.timesheet_id,

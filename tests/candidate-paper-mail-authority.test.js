@@ -145,7 +145,10 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(helper, /candidate_workflow_generation'=v_delivery_generation::text/i);
   assert.match(helper, /v_qr_source_timesheet_id:=v_mail\.context_id/i);
   assert.match(helper, /MULTIPLE_MAIL_CONTEXTS/);
-  assert.match(helper, /MULTIPLE_QR_TOKEN_HASHES/);
+  assert.match(helper, /v_qr_token_hashes:=array_append/i);
+  assert.match(helper, /v_current_qr_token_hash=any\(v_qr_token_hashes\)/i);
+  assert.match(helper, /receipt_qr_token_hash_count/i);
+  assert.doesNotMatch(helper, /MULTIPLE_QR_TOKEN_HASHES/);
   assert.match(helper, /v_qr_source\.contract_id is distinct from v_workflow\.contract_id/i);
   assert.match(helper, /current_source\.booking_id=v_qr_source\.booking_id/i);
   assert.match(helper, /CURRENT_QR_TOKEN_HASH_MISMATCH/);
