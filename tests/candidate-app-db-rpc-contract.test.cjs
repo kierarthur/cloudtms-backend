@@ -45,9 +45,16 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
+  const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
+  const breakAuthority = 'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql';
+  const migrationIndex = installPaths.indexOf(breakModeMigration);
+  const firstRepeatableIndex = installPaths.findIndex(entry => entry.startsWith('supabase/repeatable/'));
+  assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
+  assert.ok(migrationIndex < firstRepeatableIndex, 'break-entry schema must be installed before every repeatable');
+  assert.ok(migrationIndex < installPaths.indexOf(breakAuthority), 'break-entry schema must precede its Candidate authority');
   assert.deepEqual(installPaths.slice(-4), [
     'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
-    'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
+    breakAuthority,
     'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
     'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
   ]);
@@ -55,6 +62,10 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(suitesBlock, 'Candidate runtime suites block is missing');
   const suitePaths = [...suitesBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
+  assert.ok(
+    suitePaths.includes('supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql'),
+    'break-entry verifier must run after the migration and authority install phase'
+  );
   assert.deepEqual(suitePaths.slice(-2), [
     'supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql',
     'supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql',
