@@ -1858,6 +1858,62 @@ async function reusableCandidateExpenseSource(
   return source;
 }
 
+async function currentCandidateExpenseComponentReplay(
+  env, workflowId, generation, expected, reusableSource
+) {
+  if (!reusableSource
+      || !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(expected.component_kind)) return null;
+  const digest = encodeURIComponent(`\\x${expected.source_content_sha256}`);
+  const sourceId = encodeURIComponent(reusableSource.id);
+  const categoryFilter = expected.expense_category == null
+    ? '&expense_category=is.null'
+    : `&expense_category=eq.${encodeURIComponent(expected.expense_category)}`;
+  const matches = await restRows(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&workflow_generation=eq.${generation}`
+      + `&component_kind=eq.${encodeURIComponent(expected.component_kind)}`
+      + `&document_role=eq.${encodeURIComponent(expected.document_role)}`
+      + categoryFilter
+      + `&media_type=eq.${encodeURIComponent(expected.media_type)}`
+      + `&byte_size=eq.${expected.byte_size}`
+      + `&source_content_sha256=eq.${digest}`
+      + `&or=(id.eq.${sourceId},source_component_id.eq.${sourceId})`
+      + '&state=eq.IMMUTABLE'
+      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
+      + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
+      + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
+      + 'expected_source_content_sha256,source_content_sha256,source_component_id&limit=2'
+  );
+  if (!matches.length) return null;
+  if (matches.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_AMBIGUOUS');
+  }
+  const component = matches[0];
+  if (!candidateComponentPrepareMatches(component, workflowId, generation, expected)
+      || text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
+        !== expected.source_content_sha256
+      || (component.id !== reusableSource.id
+        && component.source_component_id !== reusableSource.id)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  return {
+    ok: true,
+    component_id: component.id,
+    workflow_generation: Number(component.workflow_generation),
+    storage_key: component.storage_key,
+    media_type: component.media_type,
+    byte_size: Number(component.byte_size),
+    component_kind: component.component_kind,
+    document_role: component.document_role,
+    expense_category: component.expense_category,
+    paper_return_page_key: component.paper_return_page_key,
+    state: component.state,
+    idempotent_replay: true
+  };
+}
+
 function candidateComponentPrepareMatches(component, workflowId, generation, expected) {
   return component
     && component.workflow_id === workflowId
@@ -2520,17 +2576,22 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     source_component_id: reusableSource?.id ?? null,
     source_content_sha256: reusableSource ? sourceContentSha256 : null
   };
+  const currentExpenseReplay = owner === 'candidate'
+    ? await currentCandidateExpenseComponentReplay(
+      env, workflowId, generation, expected, reusableSource
+    )
+    : null;
   const effectiveIdempotencyKey = owner === 'candidate'
     ? await repairInterruptedCandidateExpensePrepare(
       env, deps, candidateAccess, workflowId, generation,
       idempotencyKey, expected, reusableSource
     )
     : idempotencyKey;
-  const preparedReplay = owner === 'candidate'
+  const preparedReplay = currentExpenseReplay || (owner === 'candidate'
     ? await preparedCandidateComponentReplay(
       env, candidateAccess, workflowId, generation, effectiveIdempotencyKey, expected
     )
-    : null;
+    : null);
   const result = preparedReplay || await rpcCall(
     deps,
     owner === 'candidate'
@@ -6351,12 +6412,16 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
 
 function candidatePaperPackComponentForPage(components, expected) {
   const kind = upper(expected?.component_kind);
+  const expenseCategory = expected?.expense_category == null
+    ? null : upper(expected.expense_category);
   const sourceComponentId = text(expected?.source_component_id);
   const sourceContentSha256 = text(expected?.source_content_sha256)
     .replace(/^\\x/i, '').toLowerCase();
   if (!kind || !sourceComponentId) return null;
   const matches = (Array.isArray(components) ? components : []).filter((component) => {
     if (upper(component.component_kind) !== kind) return false;
+    if ((component.expense_category == null ? null : upper(component.expense_category))
+        !== expenseCategory) return false;
     if (text(component.id) !== sourceComponentId
         && text(component.source_component_id) !== sourceComponentId) return false;
     if (!sourceContentSha256) return true;
@@ -6364,7 +6429,26 @@ function candidatePaperPackComponentForPage(components, expected) {
       === sourceContentSha256;
   });
   if (matches.length > 1) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+    const pageIdentity = (component) => JSON.stringify({
+      component_kind: upper(component.component_kind),
+      expense_category: component.expense_category == null
+        ? null : upper(component.expense_category),
+      document_role: upper(component.document_role),
+      storage_key: text(component.storage_key),
+      media_type: normaliseMediaType(component.media_type),
+      byte_size: Number(component.byte_size),
+      source_component_id: text(component.source_component_id || component.id),
+      source_content_sha256: text(component.source_content_sha256)
+        .replace(/^\\x/i, '').toLowerCase()
+    });
+    const identities = new Set(matches.map(pageIdentity));
+    if (identities.size !== 1) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+    }
+    matches.sort((left, right) => {
+      const componentOrder = Number(left.component_no || 0) - Number(right.component_no || 0);
+      return componentOrder || text(left.id).localeCompare(text(right.id));
+    });
   }
   return matches[0] || null;
 }
@@ -8132,6 +8216,7 @@ export const candidateAppBackendInternals = Object.freeze({
   immutablePut,
   preparedUploadContract,
   preparedCandidateComponentReplay,
+  currentCandidateExpenseComponentReplay,
   expenseSummaryDisplayLines,
   currentSubmittedDisplayWorkflow,
   candidateSubmittedFactsProjection,

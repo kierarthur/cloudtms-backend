@@ -1375,14 +1375,27 @@ begin
     where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');
     v_component_no:=0;
     for v_source_component in
-      select source_component.*
-      from public.candidate_submission_components source_component
-      where source_component.workflow_id=v_workflow.id
-        and source_component.workflow_generation=v_workflow.generation
-        and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
-        and source_component.state='IMMUTABLE'
-        and source_component.source_content_sha256 is not null
-      order by source_component.component_no,source_component.id
+      select canonical_source.*
+      from (
+        select distinct on (
+          source_component.component_kind,source_component.expense_category,
+          source_component.document_role,
+          coalesce(source_component.source_component_id,source_component.id),
+          source_component.source_content_sha256
+        ) source_component.*
+        from public.candidate_submission_components source_component
+        where source_component.workflow_id=v_workflow.id
+          and source_component.workflow_generation=v_workflow.generation
+          and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+          and source_component.state='IMMUTABLE'
+          and source_component.source_content_sha256 is not null
+        order by source_component.component_kind,source_component.expense_category,
+          source_component.document_role,
+          coalesce(source_component.source_component_id,source_component.id),
+          source_component.source_content_sha256,
+          source_component.component_no,source_component.id
+      ) canonical_source
+      order by canonical_source.component_no,canonical_source.id
     loop
       v_component_no:=v_component_no+1;
       insert into public.candidate_submission_components(
@@ -2065,18 +2078,31 @@ begin
         );
 
         for v_source_component in
-          select source_component.*
-          from public.candidate_submission_components source_component
-          where source_component.workflow_id=v_workflow.id
-            and source_component.workflow_generation=v_workflow.generation
-            and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
-            and source_component.state='IMMUTABLE'
-            and source_component.source_content_sha256 is not null
-          order by case source_component.component_kind when 'MILEAGE_FORM' then 0 else 1 end,
-            case source_component.expense_category
+          select canonical_source.*
+          from (
+            select distinct on (
+              source_component.component_kind,source_component.expense_category,
+              source_component.document_role,
+              coalesce(source_component.source_component_id,source_component.id),
+              source_component.source_content_sha256
+            ) source_component.*
+            from public.candidate_submission_components source_component
+            where source_component.workflow_id=v_workflow.id
+              and source_component.workflow_generation=v_workflow.generation
+              and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+              and source_component.state='IMMUTABLE'
+              and source_component.source_content_sha256 is not null
+            order by source_component.component_kind,source_component.expense_category,
+              source_component.document_role,
+              coalesce(source_component.source_component_id,source_component.id),
+              source_component.source_content_sha256,
+              source_component.component_no,source_component.id
+          ) canonical_source
+          order by case canonical_source.component_kind when 'MILEAGE_FORM' then 0 else 1 end,
+            case canonical_source.expense_category
               when 'ACCOMMODATION' then 1 when 'TRAVEL' then 2 when 'MILEAGE' then 3
               when 'OTHER' then 4 else 5 end,
-            source_component.component_no,source_component.id
+            canonical_source.component_no,canonical_source.id
         loop
           v_component_no:=v_component_no+1;
           v_review_ordinal:=v_review_ordinal+1;
@@ -2155,15 +2181,28 @@ begin
           using errcode='22023',detail=jsonb_build_object('category','MILEAGE')::text; end if;
 
         for v_source_component in
-          select source_component.*
-          from public.candidate_submission_components source_component
-          where source_component.workflow_id=v_workflow.id
-            and source_component.workflow_generation=v_workflow.generation
-            and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
-            and source_component.state='IMMUTABLE'
-            and source_component.source_content_sha256 is not null
-          order by case source_component.component_kind when 'MILEAGE_FORM' then 0 else 1 end,
-            source_component.component_no,source_component.id
+          select canonical_source.*
+          from (
+            select distinct on (
+              source_component.component_kind,source_component.expense_category,
+              source_component.document_role,
+              coalesce(source_component.source_component_id,source_component.id),
+              source_component.source_content_sha256
+            ) source_component.*
+            from public.candidate_submission_components source_component
+            where source_component.workflow_id=v_workflow.id
+              and source_component.workflow_generation=v_workflow.generation
+              and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+              and source_component.state='IMMUTABLE'
+              and source_component.source_content_sha256 is not null
+            order by source_component.component_kind,source_component.expense_category,
+              source_component.document_role,
+              coalesce(source_component.source_component_id,source_component.id),
+              source_component.source_content_sha256,
+              source_component.component_no,source_component.id
+          ) canonical_source
+          order by case canonical_source.component_kind when 'MILEAGE_FORM' then 0 else 1 end,
+            canonical_source.component_no,canonical_source.id
         loop
           v_component_no:=v_component_no+1;
           insert into public.candidate_submission_components(
@@ -3438,12 +3477,21 @@ begin
       'source_content_sha256',encode(source_component.source_content_sha256,'hex')
     ) order by source_component.component_no,source_component.id),'[]'::jsonb)
     into v_paper_source_pages
-    from public.candidate_submission_components source_component
-    where source_component.workflow_id=v_workflow.id
-      and source_component.workflow_generation=v_workflow.generation
-      and source_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
-      and source_component.state='IMMUTABLE'
-      and source_component.source_content_sha256 is not null;
+    from (
+      select distinct on (
+        component.component_kind,component.expense_category,component.document_role,
+        coalesce(component.source_component_id,component.id),component.source_content_sha256
+      ) component.*
+      from public.candidate_submission_components component
+      where component.workflow_id=v_workflow.id
+        and component.workflow_generation=v_workflow.generation
+        and component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+        and component.state='IMMUTABLE'
+        and component.source_content_sha256 is not null
+      order by component.component_kind,component.expense_category,component.document_role,
+        coalesce(component.source_component_id,component.id),component.source_content_sha256,
+        component.component_no,component.id
+    ) source_component;
 
     v_paper_manifest:=jsonb_build_object(
       'workflow_id',v_workflow.id,

@@ -21,6 +21,7 @@ const {
   immutablePut,
   preparedUploadContract,
   preparedCandidateComponentReplay,
+  currentCandidateExpenseComponentReplay,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
   officialPeriodWithShiftLines,
@@ -2680,6 +2681,10 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
       }]);
     }
     if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('workflow_id') === `eq.${workflowId}`
+          && target.searchParams.get('source_content_sha256')?.startsWith('eq.')) {
+        return Response.json([]);
+      }
       if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
         id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
@@ -2774,6 +2779,10 @@ test('interrupted duplicate expense prepare preserves completed components and r
       }]);
     }
     if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('workflow_id') === `eq.${workflowId}`
+          && target.searchParams.get('source_content_sha256')?.startsWith('eq.')) {
+        return Response.json([]);
+      }
       if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
         id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
@@ -2834,6 +2843,49 @@ test('interrupted duplicate expense prepare preserves completed components and r
     assert.equal(calls.length, 2);
     assert.equal(calls[1].args.p_payload.source_component_id, sourceComponentId);
     assert.match(calls[1].args.p_idempotency_key, /^lineage:[0-9a-f]{64}$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('expense prepare reuses the exact carried component in the current generation', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000471';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000472';
+  const carriedComponentId = '00000000-0000-4000-8000-000000000473';
+  const digest = 'a'.repeat(64);
+  const expected = {
+    media_type: 'image/jpeg', byte_size: 5,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'OTHER', paper_return_page_key: null,
+    workflow_generation: 4, source_component_id: sourceComponentId,
+    source_content_sha256: digest
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    assert.equal(target.pathname.endsWith('/candidate_submission_components'), true);
+    assert.equal(target.searchParams.get('workflow_id'), `eq.${workflowId}`);
+    assert.equal(target.searchParams.get('workflow_generation'), 'eq.4');
+    assert.equal(target.searchParams.get('source_content_sha256'), `eq.\\x${digest}`);
+    return Response.json([{
+      id: carriedComponentId, workflow_id: workflowId, workflow_generation: 4,
+      component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+      expense_category: 'OTHER', paper_return_page_key: null,
+      storage_key: 'candidate-app/test/carried/expense.jpg',
+      media_type: 'image/jpeg', byte_size: 5, state: 'IMMUTABLE',
+      source_component_id: sourceComponentId, source_content_sha256: `\\x${digest}`,
+      approval_request_id: null, manager_signature_capture_method: null,
+      expected_source_content_sha256: null
+    }]);
+  };
+  try {
+    const replay = await currentCandidateExpenseComponentReplay(
+      { SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder' },
+      workflowId, 4, expected, { id: sourceComponentId }
+    );
+    assert.equal(replay.component_id, carriedComponentId);
+    assert.equal(replay.idempotent_replay, true);
+    assert.equal(replay.storage_key, 'candidate-app/test/carried/expense.jpg');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3543,21 +3595,58 @@ test('paper pack component lookup accepts the exact current-generation clone und
   }), clone);
 });
 
-test('paper pack component lookup fails closed when two current-generation rows claim one exact frozen page', () => {
+test('paper evidence carry and manifest canonicalise one page per durable source identity', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  const canonicalSelectors = sql.match(/select distinct on \([\s\S]{0,360}?coalesce\([\s\S]{0,120}?source_component_id[\s\S]{0,120}?[.]id\)[\s\S]{0,180}?source_content_sha256/gi) || [];
+  assert.equal(canonicalSelectors.length >= 4, true, `canonical selectors=${canonicalSelectors.length}`);
+  assert.match(sql, /elsif v_action='PAPER_PREPARE'[\s\S]*?from \(\s*select distinct on \([\s\S]*?\) source_component;/i);
+});
+
+test('paper pack component lookup canonicalises equivalent carried rows for one frozen page', () => {
   const sourceId = '00000000-0000-4000-8000-000000000511';
   const sourceHash = 'b'.repeat(64);
+  const common = {
+    source_component_id: sourceId,
+    component_kind: 'EXPENSE_EVIDENCE',
+    expense_category: 'OTHER',
+    document_role: 'EXPENSE_EVIDENCE',
+    storage_key: 'candidate/evidence/one.png',
+    media_type: 'image/png',
+    byte_size: 123,
+    source_content_sha256: sourceHash
+  };
+  const chosen = candidatePaperPackComponentForPage([
+    { ...common, id: '00000000-0000-4000-8000-000000000513', component_no: 9 },
+    { ...common, id: '00000000-0000-4000-8000-000000000512', component_no: 4 }
+  ], {
+    component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER',
+    source_component_id: sourceId, source_content_sha256: sourceHash
+  });
+  assert.equal(chosen.id, '00000000-0000-4000-8000-000000000512');
+});
+
+test('paper pack component lookup fails closed when duplicate rows disagree on page identity', () => {
+  const sourceId = '00000000-0000-4000-8000-000000000521';
+  const sourceHash = 'e'.repeat(64);
   assert.throws(
     () => candidatePaperPackComponentForPage([
       {
-        id: '00000000-0000-4000-8000-000000000512', source_component_id: sourceId,
-        component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: sourceHash
+        id: '00000000-0000-4000-8000-000000000522', source_component_id: sourceId,
+        component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER',
+        document_role: 'EXPENSE_EVIDENCE', storage_key: 'candidate/evidence/one.png',
+        media_type: 'image/png', byte_size: 123, source_content_sha256: sourceHash
       },
       {
-        id: '00000000-0000-4000-8000-000000000513', source_component_id: sourceId,
-        component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: sourceHash
+        id: '00000000-0000-4000-8000-000000000523', source_component_id: sourceId,
+        component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER',
+        document_role: 'EXPENSE_EVIDENCE', storage_key: 'candidate/evidence/two.png',
+        media_type: 'image/png', byte_size: 123, source_content_sha256: sourceHash
       }
     ], {
-      component_kind: 'EXPENSE_EVIDENCE', source_component_id: sourceId,
+      component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER', source_component_id: sourceId,
       source_content_sha256: sourceHash
     }),
     error => error?.code === 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT'
@@ -3633,7 +3722,8 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
       { page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' },
       {
         page_key: 'EXPENSE_EVIDENCE:1', component_kind: 'EXPENSE_EVIDENCE',
-        source_component_id: originalId, source_content_sha256: evidenceHash
+        expense_category: 'ACCOMMODATION', source_component_id: originalId,
+        source_content_sha256: evidenceHash
       }
     ] },
     immutable_submission_json: { official_presentation: { branding } }

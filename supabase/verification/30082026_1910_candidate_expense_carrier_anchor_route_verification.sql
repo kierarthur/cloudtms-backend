@@ -50,10 +50,12 @@ declare
   v_qr_before_financial jsonb;
   v_qr_after_financial jsonb;
   v_definition text;
+  v_compact_definition text;
 begin
   select lower(pg_get_functiondef(to_regprocedure(
     'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'
   ))) into v_definition;
+  v_compact_definition:=regexp_replace(v_definition,'\s+','','g');
   if position(
        'case when v_workflow_kind=''contract_expense'' then v_anchor_week.timesheet_id else v_week.timesheet_id end'
        in v_definition
@@ -70,6 +72,25 @@ begin
   end if;
   if v_definition~'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Candidate workflow transition contains illegal qualified conditional syntax';
+  end if;
+  if (select count(*) from regexp_matches(v_compact_definition,'selectdistincton\(','g'))<4
+     or position(
+       'coalesce(source_component.source_component_id,source_component.id)'
+       in v_compact_definition
+     )=0
+     or position(
+       'coalesce(component.source_component_id,component.id)'
+       in v_compact_definition
+     )=0
+     or position(
+       'source_component.source_content_sha256'
+       in v_compact_definition
+     )=0
+     or position(
+       'component.source_content_sha256'
+       in v_compact_definition
+     )=0 then
+    raise exception 'Candidate expense carry/printed manifest no longer canonicalises one page per durable source identity';
   end if;
 
   insert into public.clients(id,name) values(v_client,'Carrier Route Verification Client');
