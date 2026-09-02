@@ -2,6 +2,7 @@
   "schema_version": "H1_CURRENT_TEST_SOURCE_INVENTORY_V1",
   "status": "LOCAL_TEST_RELEASE_CANDIDATE_REBASED_NOT_PUSHED_NOT_INSTALLED_NOT_DEPLOYED",
   "base_commit": "21548a8781549c3ef35e33e3ee526e95d2ac5b78",
+  "candidate_commit": "cc3b645dd2f25fabe76e7f26e3bf4e825b6687a7",
   "base_tree": "cef75d6e2192733285e370111dd6de785992f45e",
   "base_parent": "3e4de7ac5be84f1a63d765916d0763b0cbfca6d2",
   "candidate_contract_file_sha256": "92d97b6256bb7dd6c69609240b5ea474731d755e14122f5bd1fc9bf7e41d5a87",

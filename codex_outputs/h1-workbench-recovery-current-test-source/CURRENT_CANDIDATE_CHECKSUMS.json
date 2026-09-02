@@ -13,8 +13,8 @@
     },
     {
       "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_SOURCE_INVENTORY.json",
-      "sha256": "8f8eef5f5b5bc53860fc08e85804cc1636af77478633a8e4ba1133e73793ea3f",
-      "bytes": 6544
+      "sha256": "f20916540b7db3425218dfd4df55691f12668e9545c9d136d4b0528d2c1bbd9b",
+      "bytes": 6610
     },
     {
       "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_TEST_EVIDENCE.json",

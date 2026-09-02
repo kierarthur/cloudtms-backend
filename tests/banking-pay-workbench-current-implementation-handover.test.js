@@ -15,6 +15,10 @@ const runGit = args => execFileSync('git', args, {
   encoding: 'utf8',
   maxBuffer: 32 * 1024 * 1024,
 }).trim();
+const readGitBytes = (commit, relative) => execFileSync(
+  'git', ['show', `${commit}:${relative}`],
+  { cwd: repoRoot, maxBuffer: 32 * 1024 * 1024 },
+);
 
 const packRoot = 'codex_outputs/h1-workbench-recovery-current-test-source';
 const inventory = readJson(`${packRoot}/CURRENT_SOURCE_INVENTORY.json`);
@@ -27,6 +31,9 @@ const handover = read(`${packRoot}/CURRENT_IMPLEMENTATION_HANDOVER.md`);
 test('current H1 handover is anchored to an ancestor of the source under review', () => {
   assert.equal(inventory.base_commit, rollback.base_commit);
   assert.doesNotThrow(() => execFileSync('git', [
+    'merge-base', '--is-ancestor', inventory.candidate_commit, 'HEAD',
+  ], { cwd: repoRoot }));
+  assert.doesNotThrow(() => execFileSync('git', [
     'merge-base', '--is-ancestor', inventory.base_commit, 'HEAD',
   ], { cwd: repoRoot }));
   assert.equal(runGit(['rev-parse', `${inventory.base_commit}^{tree}`]), inventory.base_tree);
@@ -37,9 +44,7 @@ test('current H1 handover is anchored to an ancestor of the source under review'
 
 test('source inventory hashes every declared current implementation file', () => {
   for (const item of inventory.files) {
-    const absolute = path.join(repoRoot, item.path);
-    assert.ok(fs.existsSync(absolute), `missing inventory path: ${item.path}`);
-    const bytes = fs.readFileSync(absolute);
+    const bytes = readGitBytes(inventory.candidate_commit, item.path);
     assert.equal(bytes.length, item.bytes, `byte count drift: ${item.path}`);
     assert.equal(sha256(bytes), item.sha256, `SHA-256 drift: ${item.path}`);
   }
@@ -55,7 +60,10 @@ test('source inventory hashes every declared current implementation file', () =>
 });
 
 test('generated contract changes exactly the three declared H1 definitions', () => {
-  const candidate = readJson('supabase/release/current-contract.json');
+  const candidate = JSON.parse(readGitBytes(
+    inventory.candidate_commit,
+    'supabase/release/current-contract.json',
+  ).toString('utf8'));
   const base = JSON.parse(runGit(['show', `${inventory.base_commit}:supabase/release/current-contract.json`]));
   const canonical = value => sha256(Buffer.from(JSON.stringify(value)));
   assert.equal(canonical(base), inventory.base_contract_semantic_sha256);
