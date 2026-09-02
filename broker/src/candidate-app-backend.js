@@ -4198,10 +4198,11 @@ function normaliseCandidateWorkflowCreatePayload(value) {
   };
 }
 
-function safePaperReturnPages(value) {
+function safePaperReturnPages(value, options = {}) {
   const source = isObject(value) ? value : {};
   const pages = Array.isArray(source.pages) ? source.pages : [];
   const manifestVersion = Number(source.manifest_version || 1);
+  const includeSourceContentSha256 = options?.includeSourceContentSha256 === true;
   if (![1, 2].includes(manifestVersion)
       || (manifestVersion === 2 && source.qr_contract_version !== PAPER_PAGE_QR_V2)) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
@@ -4214,6 +4215,8 @@ function safePaperReturnPages(value) {
     const pageKey = text(page.page_key).trim();
     const sourceComponentId = page.source_component_id == null
       ? null : requireUuid(page.source_component_id, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    const sourceContentSha256 = page.source_content_sha256 == null
+      ? null : text(page.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
     const storageCategory = componentKind === 'EXPENSE_SUMMARY'
       ? 'OTHER'
       : (page.expense_category == null ? null : upper(page.expense_category));
@@ -4225,7 +4228,9 @@ function safePaperReturnPages(value) {
           || !/^[0-9a-f]{16}$/i.test(text(page.page_key_sha256_16))
           || !Number.isSafeInteger(Number(page.category_occurrence))
           || Number(page.category_occurrence) < 1
-          || page.qr_required !== true) {
+          || page.qr_required !== true
+          || (['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+            && (!sourceComponentId || !SHA256_RE.test(sourceContentSha256)))) {
         throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
       }
     }
@@ -4246,7 +4251,10 @@ function safePaperReturnPages(value) {
         page_kind_code: text(page.page_kind_code),
         category_code: text(page.category_code),
         page_key_sha256_16: text(page.page_key_sha256_16).toLowerCase()
-      } : {})
+      } : {}),
+      ...(includeSourceContentSha256 && sourceContentSha256
+        ? { source_content_sha256: sourceContentSha256 }
+        : {})
     };
   });
 }
@@ -6264,7 +6272,7 @@ async function releaseCandidatePaperPack(
 
 async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
-  const pages = safePaperReturnPages(manifest);
+  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
   if (!pages.length || !workflow.paper_return_manifest_sha256) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
   }
@@ -6285,7 +6293,6 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     if (error instanceof CandidateHttpError) throw error;
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
   }
-  const byKindAndId = candidatePaperPackComponentIndex(components);
   const combined = await PDFDocument.create({ updateMetadata: false });
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
@@ -6308,7 +6315,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
         expense_category: 'OTHER', review_ordinal: index + 1
       };
     } else {
-      component = byKindAndId.get(kind)?.get(text(expected.source_component_id));
+      component = candidatePaperPackComponentForPage(components, expected);
     }
     if (!component || upper(component.component_kind) !== kind) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
@@ -6342,26 +6349,24 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   return complete;
 }
 
-function candidatePaperPackComponentIndex(components) {
-  const byKindAndId = new Map();
-  for (const component of components) {
-    const kind = upper(component.component_kind);
-    if (!kind) continue;
-    let byId = byKindAndId.get(kind);
-    if (!byId) {
-      byId = new Map();
-      byKindAndId.set(kind, byId);
-    }
-    const aliases = new Set([text(component.id), text(component.source_component_id)].filter(Boolean));
-    for (const alias of aliases) {
-      const existing = byId.get(alias);
-      if (existing && existing !== component) {
-        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
-      }
-      byId.set(alias, component);
-    }
+function candidatePaperPackComponentForPage(components, expected) {
+  const kind = upper(expected?.component_kind);
+  const sourceComponentId = text(expected?.source_component_id);
+  const sourceContentSha256 = text(expected?.source_content_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!kind || !sourceComponentId) return null;
+  const matches = (Array.isArray(components) ? components : []).filter((component) => {
+    if (upper(component.component_kind) !== kind) return false;
+    if (text(component.id) !== sourceComponentId
+        && text(component.source_component_id) !== sourceComponentId) return false;
+    if (!sourceContentSha256) return true;
+    return text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
+      === sourceContentSha256;
+  });
+  if (matches.length > 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
   }
-  return byKindAndId;
+  return matches[0] || null;
 }
 
 async function candidatePaperPackContext(request, env, deps, timesheetId) {
@@ -8143,7 +8148,7 @@ export const candidateAppBackendInternals = Object.freeze({
   requireCandidatePaperOutbox,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
-  candidatePaperPackComponentIndex,
+  candidatePaperPackComponentForPage,
   renderAndRegister,
   candidateDocumentBranding,
   candidateAppAgencyBranding,

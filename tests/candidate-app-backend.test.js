@@ -35,7 +35,7 @@ const {
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
-  candidatePaperPackComponentIndex,
+  candidatePaperPackComponentForPage,
   renderAndRegister,
   candidateDocumentBranding,
   candidateAppAgencyBranding,
@@ -2367,6 +2367,33 @@ test('paper return pages expose the frozen order and QR requirement without sour
   assert.equal('source_content_sha256' in safe[1], false);
 });
 
+test('paper return V2 keeps frozen evidence digests private while assembly can match them internally', () => {
+  const sourceComponentId = '00000000-0000-4000-8000-000000000012';
+  const sourceHash = 'b'.repeat(64);
+  const manifest = {
+    manifest_version: 2,
+    qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+    pages: [{
+      ordinal: 1,
+      page_key: `EXPENSE_EVIDENCE:${sourceComponentId}`,
+      component_kind: 'EXPENSE_EVIDENCE',
+      expense_category: 'ACCOMMODATION',
+      source_component_id: sourceComponentId,
+      source_content_sha256: sourceHash,
+      display_name: 'Accommodation 1',
+      category_occurrence: 1,
+      page_kind_code: 'E',
+      category_code: 'A',
+      page_key_sha256_16: 'c'.repeat(16),
+      qr_required: true
+    }]
+  };
+  const publicPages = safePaperReturnPages(manifest);
+  const internalPages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
+  assert.equal('source_content_sha256' in publicPages[0], false);
+  assert.equal(internalPages[0].source_content_sha256, sourceHash);
+});
+
 test('paper return page projection fails closed for malformed manifest members', () => {
   assert.throws(
     () => safePaperReturnPages({ pages: [{ page_key: 'HOURS_TIMESHEET' }] }),
@@ -3498,51 +3525,67 @@ test('complete paper pack retry reuses the same deterministic object and digest'
   }
 });
 
-test('paper pack component lookup accepts the exact current-generation clone under its durable source identity', () => {
+test('paper pack component lookup accepts the exact current-generation clone under its frozen page identity', () => {
   const originalId = '00000000-0000-4000-8000-000000000501';
+  const sourceHash = 'a'.repeat(64);
   const clone = {
     id: '00000000-0000-4000-8000-000000000502',
     source_component_id: originalId,
     workflow_id: '00000000-0000-4000-8000-000000000503',
     workflow_generation: 4,
     state: 'IMMUTABLE',
-    component_kind: 'EXPENSE_EVIDENCE'
+    component_kind: 'EXPENSE_EVIDENCE',
+    source_content_sha256: `\\x${sourceHash}`
   };
-  const index = candidatePaperPackComponentIndex([clone]);
-  assert.equal(index.get('EXPENSE_EVIDENCE').get(clone.id), clone);
-  assert.equal(index.get('EXPENSE_EVIDENCE').get(originalId), clone);
+  assert.equal(candidatePaperPackComponentForPage([clone], {
+    component_kind: 'EXPENSE_EVIDENCE', source_component_id: originalId,
+    source_content_sha256: sourceHash
+  }), clone);
 });
 
-test('paper pack component lookup fails closed when two current-generation rows claim one durable source identity', () => {
+test('paper pack component lookup fails closed when two current-generation rows claim one exact frozen page', () => {
   const sourceId = '00000000-0000-4000-8000-000000000511';
+  const sourceHash = 'b'.repeat(64);
   assert.throws(
-    () => candidatePaperPackComponentIndex([
+    () => candidatePaperPackComponentForPage([
       {
         id: '00000000-0000-4000-8000-000000000512', source_component_id: sourceId,
-        component_kind: 'EXPENSE_EVIDENCE'
+        component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: sourceHash
       },
       {
         id: '00000000-0000-4000-8000-000000000513', source_component_id: sourceId,
-        component_kind: 'EXPENSE_EVIDENCE'
+        component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: sourceHash
       }
-    ]),
+    ], {
+      component_kind: 'EXPENSE_EVIDENCE', source_component_id: sourceId,
+      source_content_sha256: sourceHash
+    }),
     error => error?.code === 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT'
   );
 });
 
-test('paper pack component lookup scopes durable source identities to the manifest page kind', () => {
+test('paper pack component lookup ignores same-id rows outside the exact frozen page identity', () => {
   const sourceId = '00000000-0000-4000-8000-000000000514';
+  const sourceHash = 'c'.repeat(64);
   const evidence = {
     id: '00000000-0000-4000-8000-000000000515', source_component_id: sourceId,
-    component_kind: 'EXPENSE_EVIDENCE'
+    component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: sourceHash
   };
   const mileage = {
     id: '00000000-0000-4000-8000-000000000516', source_component_id: sourceId,
-    component_kind: 'MILEAGE_FORM'
+    component_kind: 'MILEAGE_FORM', source_content_sha256: sourceHash
   };
-  const index = candidatePaperPackComponentIndex([evidence, mileage]);
-  assert.equal(index.get('EXPENSE_EVIDENCE').get(sourceId), evidence);
-  assert.equal(index.get('MILEAGE_FORM').get(sourceId), mileage);
+  const unrelatedSameKind = {
+    id: '00000000-0000-4000-8000-000000000517', source_component_id: sourceId,
+    component_kind: 'EXPENSE_EVIDENCE', source_content_sha256: 'd'.repeat(64)
+  };
+  assert.equal(candidatePaperPackComponentForPage(
+    [evidence, mileage, unrelatedSameKind],
+    {
+      component_kind: 'EXPENSE_EVIDENCE', source_component_id: sourceId,
+      source_content_sha256: sourceHash
+    }
+  ), evidence);
 });
 
 test('complete paper pack assembles cloned expense evidence referenced by its durable source identity', async () => {
@@ -3576,6 +3619,11 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
     component_kind: 'MILEAGE_FORM',
     expense_category: 'MILEAGE'
   };
+  const unrelatedSameKindWithDifferentContent = {
+    ...clone,
+    id: '00000000-0000-4000-8000-000000000526',
+    source_content_sha256: 'e'.repeat(64)
+  };
   const workflow = {
     id: clone.workflow_id,
     generation: 2,
@@ -3583,7 +3631,10 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
     paper_return_manifest_sha256: 'd'.repeat(64),
     paper_return_manifest_json: { pages: [
       { page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' },
-      { page_key: 'EXPENSE_EVIDENCE:1', component_kind: 'EXPENSE_EVIDENCE', source_component_id: originalId }
+      {
+        page_key: 'EXPENSE_EVIDENCE:1', component_kind: 'EXPENSE_EVIDENCE',
+        source_component_id: originalId, source_content_sha256: evidenceHash
+      }
     ] },
     immutable_submission_json: { official_presentation: { branding } }
   };
@@ -3616,7 +3667,9 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
   globalThis.fetch = async url => {
     const target = new URL(String(url));
     if (target.pathname.endsWith('/candidate_submission_components')) {
-      return Response.json([clone, unrelatedKindWithSameDurableIdentity]);
+      return Response.json([
+        clone, unrelatedKindWithSameDurableIdentity, unrelatedSameKindWithDifferentContent
+      ]);
     }
     return Response.json([]);
   };
