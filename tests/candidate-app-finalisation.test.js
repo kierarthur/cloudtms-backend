@@ -23,9 +23,9 @@ test('editable printed-document Timesheets retain adaptive break entry', () => {
   assert.match(sql, /if v_result#>>'\{timesheet,sheet_scope\}'='DAILY' then/);
   assert.match(sql, /create or replace function public\.candidate_break_entry_context_get_v1/);
   assert.match(sql, /if v_workflow\.workflow_kind='DAILY' then/);
-  assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER'\)/);
+  assert.match(sql, /route_family',''\) in \('ELECTRONIC','PAPER','QR'\)/);
   assert.match(sql, /not coalesce\(\(p_capabilities->>'import_authoritative'\)::boolean,false\)/);
-  assert.match(sql, /not in \('ELECTRONIC','PAPER'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
+  assert.match(sql, /not in \('ELECTRONIC','PAPER','QR'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {

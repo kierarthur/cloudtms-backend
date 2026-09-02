@@ -66,6 +66,20 @@ begin
     jsonb_build_object(
       'can_edit_hours',true,
       'import_authoritative',false,
+      'route_family','QR'
+    )
+  );
+  if v_result#>>'{applicable}' is distinct from 'true'
+     or v_result#>>'{mode}' is distinct from 'DURATION_MINUTES'
+     or v_result#>>'{source}' is distinct from 'CLIENT_SETTINGS' then
+    raise exception 'CANDIDATE_QR_BREAK_ENTRY_NOT_EXPOSED:%',v_result;
+  end if;
+
+  v_result:=private._candidate_break_entry_context_core_v1(
+    null,v_week,v_as_of,
+    jsonb_build_object(
+      'can_edit_hours',true,
+      'import_authoritative',false,
       'route_family','ELECTRONIC'
     )
   );
