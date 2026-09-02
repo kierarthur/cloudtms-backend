@@ -34,6 +34,7 @@ const bankingReleaseAuthority = read(
   'supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql'
 );
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
+const candidateRuntimeFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 const managerRefusalResubmission = read(
   'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'
 );
@@ -42,6 +43,23 @@ const refusedCardRecovery = read(
 );
 
 test('Candidate runtime gate finishes with every current 2 September authority', () => {
+  const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
+  assert.ok(
+    candidateRuntimeWorkflow.indexOf(`apply_sql ${fixturePath}`) < candidateRuntimeWorkflow.indexOf('install_files=('),
+    'Candidate compile fixture must be installed before every Candidate authority'
+  );
+  const fixtureContracts = candidateRuntimeFixture.match(
+    /create\s+table\s+public\.contracts\s*\(([\s\S]*?)\n\);/i
+  )?.[1];
+  assert.ok(fixtureContracts, 'Candidate compile fixture contracts table is missing');
+  for (const column of ['no_timesheet_required', 'is_nhsp', 'autoprocess_hr']) {
+    assert.match(
+      fixtureContracts,
+      new RegExp(`\\b${column}\\s+boolean(?:\\s|,|$)`, 'i'),
+      `Candidate compile fixture contracts table is missing ${column}`
+    );
+  }
+
   const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
