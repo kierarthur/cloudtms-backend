@@ -39,6 +39,7 @@ const PASSWORD_SCHEME = 'PBKDF2-HMAC-SHA256';
 const PASSWORD_SCHEME_VERSION = 1;
 const RENDERER_CONTRACT_VERSION = 'CANDIDATE_REVIEW_DOCUMENTS_V1';
 const DOCUMENT_BRANDING_CONTRACT_VERSION = 'CANDIDATE_DOCUMENT_BRANDING_V1';
+const CANDIDATE_APP_AGENCY_BRANDING_CONTRACT_VERSION = 'CANDIDATE_APP_AGENCY_BRANDING_V1';
 const MANAGER_ACTION_METHODS = Object.freeze({
   start: 'GET',
   progress: 'POST',
@@ -4276,6 +4277,36 @@ async function candidateAppAgencyBranding(env) {
   }
 }
 
+async function candidateAppAgencyDocumentBranding(env) {
+  const settings = await restOne(
+    env,
+    'settings_defaults',
+    'id=eq.1&select=agency_name,candidate_app_logo_asset_key'
+  );
+  const contract = {
+    contract_version: CANDIDATE_APP_AGENCY_BRANDING_CONTRACT_VERSION,
+    agency_name: text(settings?.agency_name) || 'CloudTMS agency',
+    logo_key: text(settings?.candidate_app_logo_asset_key) || null,
+    logo_sha256: null,
+    logo_media_type: null
+  };
+  let logo = null;
+  if (contract.logo_key) {
+    const keyMatch = /^candidate-app\/branding\/([0-9a-f]{64})\.png$/.exec(contract.logo_key);
+    if (!keyMatch) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    logo = await r2Bytes(env, contract.logo_key, keyMatch[1]);
+    if (logo.media_type !== 'image/png' || logo.bytes.byteLength > 512 * 1024) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    contract.logo_sha256 = keyMatch[1];
+    contract.logo_media_type = logo.media_type;
+  }
+  contract.branding_contract_sha256 = await brandingContractSha256(contract);
+  return { ...contract, logo };
+}
+
 async function drawCandidateBranding(pdf, page, branding, {
   x = 34, y = 800, maxWidth = 140, maxHeight = 32, align = 'left'
 } = {}) {
@@ -5460,7 +5491,10 @@ async function assertCandidateMileageFormsMatchSubmission(env, workflow, immutab
 async function candidateMileageFormArtifact(env, workflow, suppliedMileageUnits) {
   const identity = await candidateMileageFormQrIdentity(workflow, suppliedMileageUnits);
   const qrText = await buildCandidatePaperPageQrViaAdapter(env, identity.qr_payload);
-  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const [presentation, agencyBranding] = await Promise.all([
+    buildOfficialPresentationSnapshot(env, workflow),
+    candidateAppAgencyDocumentBranding(env)
+  ]);
   const formWorkflow = {
     ...workflow,
     immutable_submission_json: {
@@ -5474,14 +5508,14 @@ async function candidateMileageFormArtifact(env, workflow, suppliedMileageUnits)
   const bytes = await mileageClaimFormBytes(
     env,
     formWorkflow,
-    null,
+    agencyBranding,
     presentation,
     qrText,
     `Mileage Form — ${identity.mileage_units} miles`,
     { compactSigningFooter: false }
   );
   const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}`
-    + `/mileage-form/${identity.semantic_sha256}.pdf`;
+    + `/mileage-form/${identity.semantic_sha256}-${agencyBranding.branding_contract_sha256}.pdf`;
   const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
     purpose: 'candidate-mileage-claim-form',
     workflow_id: workflow.id,
@@ -5489,6 +5523,8 @@ async function candidateMileageFormArtifact(env, workflow, suppliedMileageUnits)
     timesheet_id: identity.timesheet_id,
     mileage_units: String(identity.mileage_units),
     semantic_sha256: identity.semantic_sha256,
+    agency_branding_sha256: agencyBranding.branding_contract_sha256,
+    agency_logo_sha256: agencyBranding.logo_sha256 || 'none',
     qr_payload_sha256: identity.qr_payload_sha256,
     page_count: '1'
   });
@@ -6573,7 +6609,8 @@ async function mileageClaimFormBytes(
 
 async function paperExpensePageBytes(env, workflow, component, ordinal, pageQrText, displayName) {
   if (upper(component.component_kind) === 'MILEAGE_FORM') {
-    return mileageClaimFormBytes(env, workflow, null, null, pageQrText, displayName);
+    const agencyBranding = await candidateAppAgencyDocumentBranding(env);
+    return mileageClaimFormBytes(env, workflow, agencyBranding, null, pageQrText, displayName);
   }
   const rendered = await renderExpensePage(env, {
     review_ordinal: ordinal,
@@ -8985,6 +9022,7 @@ export const candidateAppBackendInternals = Object.freeze({
   renderAndRegister,
   candidateDocumentBranding,
   candidateAppAgencyBranding,
+  candidateAppAgencyDocumentBranding,
   candidateMileageFormQrIdentity,
   candidateMileageFormArtifact,
   validateCandidateMileageFormProof,

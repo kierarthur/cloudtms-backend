@@ -43,6 +43,7 @@ const {
   renderAndRegister,
   candidateDocumentBranding,
   candidateAppAgencyBranding,
+  candidateAppAgencyDocumentBranding,
   createAccessToken,
   candidateMileageFormQrIdentity,
   validateCandidateMileageFormProof,
@@ -3345,6 +3346,12 @@ test('Mileage Claim Form provides sixteen writable journey rows', () => {
 });
 
 test('Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment', async () => {
+  const agencyLogoBytes = new Uint8Array(Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZP8sAAAAASUVORK5CYII=',
+    'base64'
+  ));
+  const agencyLogoDigest = createHash('sha256').update(agencyLogoBytes).digest('hex');
+  const agencyLogoKey = `candidate-app/branding/${agencyLogoDigest}.png`;
   const session = {
     id: '00000000-0000-4000-8000-000000000091',
     session_id: '00000000-0000-4000-8000-000000000091',
@@ -3371,6 +3378,18 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
     R2: {
+      async get(key) {
+        assert.equal(key, agencyLogoKey);
+        return {
+          httpMetadata: { contentType: 'image/png' },
+          async arrayBuffer() {
+            return agencyLogoBytes.buffer.slice(
+              agencyLogoBytes.byteOffset,
+              agencyLogoBytes.byteOffset + agencyLogoBytes.byteLength
+            );
+          }
+        };
+      },
       async put() { return { etag: 'created' }; },
       async head() { return null; }
     }
@@ -3394,7 +3413,11 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
       return Response.json([{ id: session.selected_candidate_id, first_name: 'Test', last_name: 'Worker' }]);
     }
     if (target.pathname.endsWith('/settings_defaults')) {
-      return Response.json([{ agency_name: 'Configured Agency', agency_logo: null }]);
+      return Response.json([{
+        agency_name: 'Configured Agency',
+        agency_logo: null,
+        candidate_app_logo_asset_key: agencyLogoKey
+      }]);
     }
     if (target.pathname.endsWith('/candidate_app_accounts')) {
       return Response.json([{ id: session.account_id, email_normalized: 'candidate@example.test' }]);
@@ -3457,7 +3480,10 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     assert.equal(Object.hasOwn(outboxWrites[0], 'recipient_display_name'), false);
     assert.equal(outboxWrites[0].attachments.length, 1);
     assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
-    assert.match(outboxWrites[0].attachments[0].r2_key, /\/mileage-form\/[0-9a-f]{64}\.pdf$/);
+    assert.match(
+      outboxWrites[0].attachments[0].r2_key,
+      /\/mileage-form\/[0-9a-f]{64}-[0-9a-f]{64}\.pdf$/
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3886,6 +3912,48 @@ test('Candidate app branding uses its dedicated logo pointer and leaves document
     assert.equal(branding.logo_media_type, 'image/png');
     assert.equal(branding.logo_sha256, logoDigest);
     assert.equal(branding.logo_data_url.startsWith('data:image/png;base64,'), true);
+    assert.match(settingsQuery, /select=agency_name,candidate_app_logo_asset_key/);
+    assert.equal(settingsQuery.includes('agency_logo'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate mileage documents use the agency app logo rather than CloudTMS document branding', async () => {
+  const originalFetch = globalThis.fetch;
+  const logoBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 5, 4, 3, 2]);
+  const logoDigest = createHash('sha256').update(logoBytes).digest('hex');
+  const logoKey = `candidate-app/branding/${logoDigest}.png`;
+  let settingsQuery = '';
+  const env = {
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) {
+        assert.equal(key, logoKey);
+        return {
+          httpMetadata: { contentType: 'image/png' },
+          async arrayBuffer() { return logoBytes.buffer.slice(0); }
+        };
+      }
+    }
+  };
+  globalThis.fetch = async url => {
+    settingsQuery = String(url);
+    return Response.json([{
+      agency_name: 'Arthur Rai Medical Services',
+      agency_logo: 'Assets/CLOUDTMS-DOCUMENT-LOGO.png',
+      candidate_app_logo_asset_key: logoKey
+    }]);
+  };
+  try {
+    const branding = await candidateAppAgencyDocumentBranding(env);
+    assert.equal(branding.agency_name, 'Arthur Rai Medical Services');
+    assert.equal(branding.logo_key, logoKey);
+    assert.equal(branding.logo_sha256, logoDigest);
+    assert.equal(branding.logo_media_type, 'image/png');
+    assert.deepEqual(branding.logo.bytes, logoBytes);
+    assert.match(branding.branding_contract_sha256, /^[0-9a-f]{64}$/);
     assert.match(settingsQuery, /select=agency_name,candidate_app_logo_asset_key/);
     assert.equal(settingsQuery.includes('agency_logo'), false);
   } finally {
