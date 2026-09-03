@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import test from 'node:test';
 import jpeg from 'jpeg-js';
@@ -9,6 +10,10 @@ import {
   buildTsq2String,
   verifyTsq2String
 } from '../broker/src/timesheet-qr-payload.js';
+import {
+  candidateAppBackendInternals,
+  handleCandidateAppRequest
+} from '../broker/src/candidate-app-backend.js';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -129,6 +134,112 @@ test('server never treats a photographed page containing two QRs as one valid pa
   }), env);
   const result = decodeCandidatePaperQrTextsFromJpeg(jpegWithCodes([first, second]));
   assert.notEqual(result.qr_texts.length, 1);
+});
+
+test('Candidate mileage upload independently reads the exact QR from JPEG bytes and records its identity', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000201',
+    session_id: '00000000-0000-4000-8000-000000000201',
+    account_id: '00000000-0000-4000-8000-000000000202',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000203',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000204',
+    account_id: session.account_id, candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 2, state: 'WORKER_DRAFT',
+    week_ending_date: '2026-08-30',
+    target_timesheet_id: '00000000-0000-4000-8000-000000000205',
+    anchor_timesheet_id: '00000000-0000-4000-8000-000000000205'
+  };
+  const componentId = '00000000-0000-4000-8000-000000000206';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    QR_SIGNING_SECRET: 'test-only-qr-signing-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const identity = await candidateAppBackendInternals.candidateMileageFormQrIdentity(workflow, 27.5);
+  const qrText = await buildTsq2String(identity.qr_payload, env);
+  const jpegBytes = jpegWithCodes([qrText]);
+  const sourceSha256 = createHash('sha256').update(jpegBytes).digest('hex');
+  let storedOptions;
+  env.R2 = {
+    async put(_key, _bytes, options) { storedOptions = options; return { etag: 'created' }; },
+    async head() { return null; }
+  };
+  const token = await candidateAppBackendInternals.createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  const deps = {
+    async rpc(name) {
+      if (name === 'candidate_component_prepare_atomic_v1') {
+        return {
+          ok: true, component_id: componentId, workflow_generation: 2,
+          storage_key: `candidate-app/test/${workflow.id}/2/mileage.jpg`,
+          media_type: 'image/jpeg', byte_size: jpegBytes.byteLength,
+          component_kind: 'MILEAGE_FORM', document_role: 'MILEAGE_CLAIM_FORM',
+          expense_category: 'MILEAGE', paper_return_page_key: null, state: 'PENDING'
+        };
+      }
+      if (name === 'candidate_workflow_transition_atomic_v1') {
+        return { ok: true, state: 'IMMUTABLE' };
+      }
+      throw new Error(`Unexpected TEST RPC ${name}`);
+    }
+  };
+  try {
+    const prepared = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflow.id}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2,
+          component_kind: 'MILEAGE_FORM',
+          document_role: 'MILEAGE_CLAIM_FORM',
+          expense_category: 'MILEAGE',
+          media_type: 'image/jpeg',
+          byte_size: jpegBytes.byteLength,
+          source_content_sha256: sourceSha256,
+          idempotency_key: '00000000-0000-4000-8000-000000000207',
+          mileage_form_proof: {
+            proof_contract_version: identity.proof_contract_version,
+            mileage_form_semantic_sha256: identity.semantic_sha256,
+            mileage_units: identity.mileage_units,
+            qr_text: qrText
+          }
+        })
+      }
+    ), env, {}, { routeAudience: 'PRIVATE', ...deps });
+    const preparedBody = await prepared.json();
+    assert.equal(prepared.status, 201, JSON.stringify(preparedBody));
+    const uploaded = await handleCandidateAppRequest(new Request(
+      `https://private.test${preparedBody.upload.url}`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'image/jpeg' },
+        body: jpegBytes
+      }
+    ), env, {}, { routeAudience: 'PRIVATE', ...deps });
+    const uploadedBody = await uploaded.json();
+    assert.equal(uploaded.status, 200, JSON.stringify(uploadedBody));
+    assert.equal(uploadedBody.state, 'IMMUTABLE');
+    assert.equal(storedOptions.customMetadata.mileage_form_qr_verified, 'true');
+    assert.equal(storedOptions.customMetadata.mileage_form_semantic_sha256, identity.semantic_sha256);
+    assert.equal(storedOptions.customMetadata.mileage_form_mileage_units, '27.5');
+    assert.equal(storedOptions.customMetadata.mileage_form_qr_payload_sha256, identity.qr_payload_sha256);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('whole-pack database adapter accepts only the exact complete manifest in one transaction', () => {

@@ -44,6 +44,9 @@ const {
   candidateDocumentBranding,
   candidateAppAgencyBranding,
   createAccessToken,
+  candidateMileageFormQrIdentity,
+  validateCandidateMileageFormProof,
+  assertCandidateMileageFormsMatchSubmission,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
   candidatePaperEmailDeliveryMatches,
@@ -3323,7 +3326,7 @@ test('paper mileage form preserves the approved labels and UK week-ending format
     total: '£110.00'
   });
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
-  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage', 'Manager signature']) {
+  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage claimed across all submitted pages', 'Manager signature']) {
     assert.equal(source.includes(label), true);
   }
 });
@@ -3345,11 +3348,13 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     environment: 'TEST', generation: 1, state: 'WORKER_DRAFT',
     workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'ELECTRONIC',
     week_ending_date: '2026-08-30', contract_id: null,
-    target_timesheet_id: null, anchor_timesheet_id: null
+    target_timesheet_id: '00000000-0000-4000-8000-000000000098',
+    anchor_timesheet_id: '00000000-0000-4000-8000-000000000098'
   };
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    QR_SIGNING_SECRET: 'test-only-qr-signing-secret',
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
     R2: {
@@ -3365,6 +3370,13 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     const method = String(init.method || 'GET').toUpperCase();
     if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
     if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/timesheets_financials')) return Response.json([{ client_id: null }]);
+    if (target.pathname.endsWith('/timesheets')) {
+      return Response.json([{
+        timesheet_id: workflow.target_timesheet_id, sheet_scope: 'WEEKLY',
+        hospital_norm: null, ward_norm: null, job_title_norm: 'Nurse', band: '6'
+      }]);
+    }
     if (target.pathname.endsWith('/candidates')) {
       return Response.json([{ id: session.selected_candidate_id, first_name: 'Test', last_name: 'Worker' }]);
     }
@@ -3394,10 +3406,26 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
       request('mileage-form-prepare', '00000000-0000-4000-8000-000000000096'),
       env, {}, { routeAudience: 'PRIVATE' }
     );
-    assert.equal(prepared.status, 200);
     const preparedBody = await prepared.json();
+    assert.equal(prepared.status, 200, JSON.stringify(preparedBody));
     assert.equal(preparedBody.mileage_form_state, 'PREPARED');
     assert.match(preparedBody.mileage_form_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(preparedBody.mileage_form_qr_proof_contract_version, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_V1');
+    assert.equal(preparedBody.mileage_form_timesheet_id, workflow.target_timesheet_id);
+    assert.equal(preparedBody.mileage_form_mileage_units, 100);
+    assert.match(preparedBody.mileage_form_semantic_sha256, /^[0-9a-f]{64}$/);
+    assert.match(preparedBody.mileage_form_qr_text, /^TSQ2\./);
+    const expectedIdentity = await candidateMileageFormQrIdentity(workflow, 100);
+    assert.equal(preparedBody.mileage_form_semantic_sha256, expectedIdentity.semantic_sha256);
+    const validated = await validateCandidateMileageFormProof(env, workflow, {
+      mileage_form_proof: {
+        proof_contract_version: preparedBody.mileage_form_qr_proof_contract_version,
+        mileage_form_semantic_sha256: preparedBody.mileage_form_semantic_sha256,
+        mileage_units: preparedBody.mileage_form_mileage_units,
+        qr_text: preparedBody.mileage_form_qr_text
+      }
+    });
+    assert.equal(validated.semantic_sha256, expectedIdentity.semantic_sha256);
     const preparedPdf = await PDFDocument.load(Buffer.from(preparedBody.mileage_form_content_base64, 'base64'));
     assert.equal(preparedPdf.getPageCount(), 1);
     assert.equal(outboxWrites.length, 0);
@@ -3407,7 +3435,9 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
       env, {}, { routeAudience: 'PRIVATE' }
     );
     assert.equal(emailed.status, 202);
-    assert.equal((await emailed.json()).mileage_form_state, 'EMAIL_QUEUED');
+    const emailedBody = await emailed.json();
+    assert.equal(emailedBody.mileage_form_state, 'EMAIL_QUEUED');
+    assert.equal(emailedBody.mileage_form_qr_text, preparedBody.mileage_form_qr_text);
     assert.equal(outboxWrites.length, 1);
     assert.equal(outboxWrites[0].to, 'candidate@example.test');
     assert.equal(outboxWrites[0].recipient_id, workflow.candidate_id);
@@ -3415,6 +3445,59 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     assert.equal(outboxWrites[0].attachments.length, 1);
     assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
     assert.match(outboxWrites[0].attachments[0].r2_key, /\/mileage-form\/[0-9a-f]{64}\.pdf$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('final mileage submission accepts multiple current verified form pages and rejects stale metadata', async () => {
+  const workflow = {
+    id: '00000000-0000-4000-8000-0000000000a1', generation: 4,
+    target_timesheet_id: '00000000-0000-4000-8000-0000000000a2',
+    week_ending_date: '2026-08-30'
+  };
+  const identity = await candidateMileageFormQrIdentity(workflow, 35);
+  const components = [1, 2].map((number) => ({
+    id: `00000000-0000-4000-8000-0000000000a${number + 2}`,
+    storage_key: `candidate-app/test/${workflow.id}/4/mileage-${number}.jpg`
+  }));
+  const env = {
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async head(key) {
+        const component = components.find((item) => item.storage_key === key);
+        return { customMetadata: {
+          mileage_form_qr_verified: 'true',
+          workflow_id: workflow.id,
+          component_id: component?.id,
+          mileage_form_semantic_sha256: identity.semantic_sha256,
+          mileage_form_mileage_units: '35',
+          mileage_form_qr_payload_sha256: identity.qr_payload_sha256
+        } };
+      }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json(components);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    await assertCandidateMileageFormsMatchSubmission(env, workflow, { expense_claim: { mileage_units: 35 } });
+    env.R2.head = async (key) => ({ customMetadata: {
+      mileage_form_qr_verified: 'true',
+      workflow_id: workflow.id,
+      component_id: components.find((item) => item.storage_key === key)?.id,
+      mileage_form_semantic_sha256: 'f'.repeat(64),
+      mileage_form_mileage_units: '35',
+      mileage_form_qr_payload_sha256: identity.qr_payload_sha256
+    } });
+    await assert.rejects(
+      assertCandidateMileageFormsMatchSubmission(env, workflow, { expense_claim: { mileage_units: 35 } }),
+      error => error?.code === 'CANDIDATE_MILEAGE_FORM_QR_STALE'
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
