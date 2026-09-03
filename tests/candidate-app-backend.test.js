@@ -3388,10 +3388,7 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
       return Response.json([{ id: session.account_id, email_normalized: 'candidate@example.test' }]);
     }
     if (target.pathname.endsWith('/candidates')) {
-      return Response.json([{
-        id: session.selected_candidate_id, display_name: 'Test Worker',
-        first_name: 'Test', last_name: 'Worker'
-      }]);
+      throw new Error('Outbox display names are derived by the unified reader from recipient_id');
     }
     if (target.pathname.endsWith('/mail_outbox') && method === 'POST') {
       const body = JSON.parse(String(init.body));
@@ -3442,7 +3439,7 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     assert.equal(outboxWrites[0].recipient_id, session.selected_candidate_id);
     assert.equal(outboxWrites[0].context_kind, 'CANDIDATE_ACCOUNT');
     assert.equal(outboxWrites[0].context_id, session.account_id);
-    assert.equal(outboxWrites[0].recipient_display_name, 'Test Worker');
+    assert.equal(Object.hasOwn(outboxWrites[0], 'recipient_display_name'), false);
     assert.equal(outboxWrites[0].attachments.length, 1);
     assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
     assert.match(

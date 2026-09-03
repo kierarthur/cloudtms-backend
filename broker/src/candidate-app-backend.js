@@ -5406,11 +5406,6 @@ async function handleCandidateMileageFormAction(env, access, body, dbAction) {
   if (!text(account?.email_normalized)) {
     throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
   }
-  const candidate = await restOne(env, 'candidates',
-    `id=eq.${encodeURIComponent(access.selected_candidate_id)}`
-    + '&select=id,display_name,first_name,last_name');
-  const candidateName = text(candidate?.display_name
-    || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`).trim();
   const email = normaliseEmail(account?.email_normalized);
   const safeAgency = escapeCandidateMailHtml(artifact.agency_name);
   const bodyText = `${artifact.agency_name} has prepared the attached blank Mileage Claim Form.\n\n`
@@ -5434,7 +5429,6 @@ async function handleCandidateMileageFormAction(env, access, body, dbAction) {
     reference: `candidate-generic-mileage-form:${access.account_id}`,
     recipient_kind: 'CANDIDATE',
     recipient_id: access.selected_candidate_id,
-    ...(candidateName ? { recipient_display_name: candidateName.slice(0, 200) } : {}),
     context_kind: 'CANDIDATE_ACCOUNT',
     context_id: access.account_id,
     email_type: 'CANDIDATE_APP_TRANSACTIONAL',
