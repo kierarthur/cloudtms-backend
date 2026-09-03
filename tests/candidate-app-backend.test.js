@@ -45,6 +45,7 @@ const {
   candidateAppAgencyDocumentBranding,
   createAccessToken,
   candidateGenericMileageFormArtifact,
+  submittedMileageUnits,
   assertCandidateMileageEvidenceMatchesSubmission,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
@@ -3782,6 +3783,24 @@ test('persisted expense and mileage PDFs are byte-deterministic across wall-cloc
   const digest = bytes => createHash('sha256').update(bytes).digest('hex');
   assert.equal(digest(firstMileage), digest(secondMileage));
   assert.equal(digest(firstExpense), digest(secondExpense));
+});
+
+test('printed Mileage pages use the frozen canonical claim total', () => {
+  assert.equal(submittedMileageUnits({
+    expense_submission: {
+      mileage_units: 0,
+      canonical_tsfin_snapshot: {
+        mileage_units: 25,
+        expenses_pay_ex_vat: 0
+      }
+    }
+  }), 25);
+  assert.equal(submittedMileageUnits({
+    expense_claim: {
+      mileage_units: 12.5,
+      mileage_total_confirmed: true
+    }
+  }), 12.5);
 });
 
 test('expense summary rendering fails closed without the frozen canonical display total', () => {

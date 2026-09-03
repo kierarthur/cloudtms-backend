@@ -5299,13 +5299,21 @@ function normaliseMileageFormUnits(value) {
 }
 
 function submittedMileageUnits(immutableSubmission) {
-  const claim = isObject(immutableSubmission?.expense_claim)
-    ? immutableSubmission.expense_claim
-    : isObject(immutableSubmission?.expense_submission)
-      ? immutableSubmission.expense_submission
-      : null;
-  if (!claim) return 0;
-  const supplied = claim.mileage_units ?? claim.total_mileage;
+  const expenseSubmission = parseJson(
+    immutableSubmission?.expense_submission
+      || immutableSubmission?.expense_claim
+      || immutableSubmission?.expenses
+      || immutableSubmission,
+    {}
+  ) || {};
+  const claim = parseJson(
+    expenseSubmission.canonical_tsfin_snapshot,
+    expenseSubmission
+  ) || expenseSubmission;
+  const supplied = claim.mileage_units
+    ?? expenseSubmission.mileage_units
+    ?? claim.total_mileage
+    ?? expenseSubmission.total_mileage;
   if (supplied == null || supplied === '') return 0;
   return normaliseMileageFormUnits(supplied);
 }
@@ -8813,6 +8821,7 @@ export const candidateAppBackendInternals = Object.freeze({
   candidateAppAgencyBranding,
   candidateAppAgencyDocumentBranding,
   candidateGenericMileageFormArtifact,
+  submittedMileageUnits,
   assertCandidateMileageEvidenceMatchesSubmission,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
