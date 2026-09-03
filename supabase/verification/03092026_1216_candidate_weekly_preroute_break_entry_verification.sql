@@ -1,8 +1,9 @@
 \set ON_ERROR_STOP on
 
--- Rollback-contained proof that Weekly break entry is visible before route
--- selection, retains the identical context after Electronic/Paper/QR selection,
--- and remains closed for import-authoritative or unrelated routes.
+-- Rollback-contained proof that Weekly break entry is visible for both
+-- pre-route capability shapes (omitted and MANUAL_NON_QR), retains the
+-- identical context after Electronic/Paper/QR selection, and remains closed
+-- for import-authoritative or unrelated routes.
 begin;
 
 do $candidate_weekly_preroute_break_entry_verification$
@@ -13,6 +14,7 @@ declare
   v_contract uuid:=gen_random_uuid();
   v_week uuid:=gen_random_uuid();
   v_pre_route jsonb;
+  v_projected_pre_route jsonb;
   v_selected jsonb;
   v_result jsonb;
   v_route text;
@@ -57,6 +59,26 @@ begin
      or v_pre_route#>>'{reason}' is distinct from 'CANDIDATE_EDITABLE_ELECTRONIC'
      or v_pre_route#>>'{context_token}' !~ '^[a-f0-9]{64}$' then
     raise exception 'CANDIDATE_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED:%',v_pre_route;
+  end if;
+
+  -- candidate_app_timesheet_detail_v1 currently projects the editable,
+  -- not-yet-selected Weekly route as MANUAL_NON_QR. This exact shape must be
+  -- covered because it is what the physical app receives.
+  v_projected_pre_route:=private._candidate_break_entry_context_core_v1(
+    null,v_week,v_as_of,
+    jsonb_build_object(
+      'can_edit_hours',true,
+      'import_authoritative',false,
+      'route_family','MANUAL_NON_QR'
+    )
+  );
+  if v_projected_pre_route#>>'{applicable}' is distinct from 'true'
+     or v_projected_pre_route#>>'{mode}' is distinct from 'DURATION_MINUTES'
+     or v_projected_pre_route#>>'{source}' is distinct from 'CLIENT_SETTINGS'
+     or v_projected_pre_route#>>'{reason}' is distinct from 'CANDIDATE_EDITABLE_ELECTRONIC'
+     or v_projected_pre_route#>>'{context_token}' is distinct from v_pre_route#>>'{context_token}' then
+    raise exception 'CANDIDATE_PROJECTED_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED:%',
+      v_projected_pre_route;
   end if;
 
   foreach v_route in array array['ELECTRONIC','PAPER','QR']

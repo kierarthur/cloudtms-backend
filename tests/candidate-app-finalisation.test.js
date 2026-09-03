@@ -33,14 +33,16 @@ test('editable Weekly Timesheets expose stable break authority before route sele
     '../supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql',
     import.meta.url
   ), 'utf8');
-  assert.match(sql, /route_family',''\) in \('','ELECTRONIC','PAPER','QR'\)/);
-  assert.match(sql, /not in \('','ELECTRONIC','PAPER','QR'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
+  assert.match(sql, /route_family',''\) in \('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR'\)/);
+  assert.match(sql, /not in \('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
   assert.match(sql, /revoke all on function private\._candidate_break_entry_context_core_v1\(uuid,uuid,date,jsonb\)\s+from public,anon,authenticated,service_role/);
   const verification = readFileSync(new URL(
     '../supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql',
     import.meta.url
   ), 'utf8');
   assert.match(verification, /CANDIDATE_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
+  assert.match(verification, /CANDIDATE_PROJECTED_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
+  assert.match(verification, /'route_family','MANUAL_NON_QR'/);
   assert.match(verification, /CANDIDATE_SELECTED_ROUTE_BREAK_ENTRY_DRIFT/);
   assert.match(verification, /CANDIDATE_IMPORT_BREAK_ENTRY_BROADENED/);
   assert.match(verification, /CANDIDATE_UNRELATED_ROUTE_BREAK_ENTRY_BROADENED/);
