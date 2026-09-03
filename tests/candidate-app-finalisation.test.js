@@ -35,6 +35,7 @@ test('editable Weekly Timesheets expose stable break authority before route sele
   ), 'utf8');
   assert.match(sql, /route_family',''\) in \('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR'\)/);
   assert.match(sql, /not in \('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR'\)\s+then 'NON_ELECTRONIC_ROUTE'/);
+  assert.doesNotMatch(sql, /and not coalesce\(\(v_resolution->>'is_nhsp'\)::boolean,false\)/);
   assert.match(sql, /revoke all on function private\._candidate_break_entry_context_core_v1\(uuid,uuid,date,jsonb\)\s+from public,anon,authenticated,service_role/);
   const verification = readFileSync(new URL(
     '../supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql',
@@ -42,10 +43,12 @@ test('editable Weekly Timesheets expose stable break authority before route sele
   ), 'utf8');
   assert.match(verification, /CANDIDATE_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
   assert.match(verification, /CANDIDATE_PROJECTED_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
+  assert.match(verification, /CANDIDATE_EDITABLE_NHSP_WEEKLY_BREAK_ENTRY_HIDDEN/);
   assert.match(verification, /'route_family','MANUAL_NON_QR'/);
   assert.match(verification, /CANDIDATE_SELECTED_ROUTE_BREAK_ENTRY_DRIFT/);
   assert.match(verification, /CANDIDATE_IMPORT_BREAK_ENTRY_BROADENED/);
   assert.match(verification, /CANDIDATE_UNRELATED_ROUTE_BREAK_ENTRY_BROADENED/);
+  assert.match(verification, /CANDIDATE_NO_TIMESHEET_BREAK_ENTRY_BROADENED/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {
