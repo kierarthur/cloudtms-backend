@@ -3680,6 +3680,98 @@ function cardWithExpenseEvidenceFacts(card, facts = {}) {
   };
 }
 
+function candidatePaperEmailDeliveryMatches(row, workflow) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  const manifestHash = text(workflow?.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  return ['QUEUED', 'CLAIMED', 'SENT'].includes(upper(row?.status))
+    && text(row?.reference) === `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`
+    && upper(scope.candidate_mail_authority) === 'CANDIDATE_PAPER_PACK_EMAIL_V1'
+    && scope.candidate_workflow_id === workflow.id
+    && Number(scope.candidate_workflow_generation) === Number(workflow.generation)
+    && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === manifestHash;
+}
+
+async function candidatePaperEmailDeliveryByWorkflow(env, workflows) {
+  const eligible = workflows.filter((workflow) => (
+    UUID_RE.test(text(workflow?.id))
+    && UUID_RE.test(text(workflow?.candidate_id))
+    && Number.isSafeInteger(Number(workflow?.generation))
+    && Number(workflow.generation) >= 1
+    && upper(workflow?.route) === 'PAPER'
+    && upper(workflow?.state) === 'AWAITING_PAPER_RETURN'
+    && SHA256_RE.test(text(workflow?.paper_return_manifest_sha256)
+      .replace(/^\\x/i, '').toLowerCase())
+  ));
+  if (!eligible.length) return new Map();
+  const references = eligible.map((workflow) => (
+    `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`
+  ));
+  const candidateIds = [...new Set(eligible.map((workflow) => text(workflow.candidate_id)))];
+  const rows = await restRows(env, 'mail_outbox', [
+    'type=eq.TIMESHEET_QR',
+    'recipient_kind=eq.CANDIDATE',
+    `recipient_id=in.(${candidateIds.map(encodeURIComponent).join(',')})`,
+    `reference=in.(${references.map(encodeURIComponent).join(',')})`,
+    'select=status,reference,payment_scope_json,created_at_utc',
+    'order=created_at_utc.desc',
+    `limit=${Math.min(eligible.length * 10, 500)}`
+  ].join('&'));
+  const deliveryByWorkflow = new Map();
+  for (const workflow of eligible) {
+    const reference = `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`;
+    const exact = rows.filter((row) => text(row?.reference) === reference
+      && candidatePaperEmailDeliveryMatches(row, workflow));
+    if (!exact.length) continue;
+    const obtainedAtUtc = exact.map((row) => text(row?.created_at_utc))
+      .filter((value) => Number.isFinite(Date.parse(value)))
+      .sort((left, right) => right.localeCompare(left))[0] || null;
+    deliveryByWorkflow.set(workflow.id, {
+      paper_pack_obtained: true,
+      paper_pack_delivery_methods: ['EMAIL'],
+      paper_pack_obtained_at_utc: obtainedAtUtc
+    });
+  }
+  return deliveryByWorkflow;
+}
+
+async function enrichCandidatePaperDeliveryState(env, response) {
+  if (!isObject(response)) return response;
+  const projected = Array.isArray(response.items)
+    ? response.items.flatMap((item) => Array.isArray(item?.workflows) ? item.workflows : [])
+    : Array.isArray(response.workflows) ? response.workflows : [];
+  const workflowIds = [...new Set(projected
+    .filter((workflow) => upper(workflow?.route) === 'PAPER'
+      && upper(workflow?.state) === 'AWAITING_PAPER_RETURN')
+    .map((workflow) => text(workflow?.workflow_id))
+    .filter((id) => UUID_RE.test(id)))];
+  if (!workflowIds.length) return response;
+  const workflows = await restRows(env, 'candidate_submission_workflows', [
+    `id=in.(${workflowIds.map(encodeURIComponent).join(',')})`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    'select=id,candidate_id,generation,route,state,paper_return_manifest_sha256'
+  ].join('&'));
+  const deliveryByWorkflow = await candidatePaperEmailDeliveryByWorkflow(env, workflows);
+  if (!deliveryByWorkflow.size) return response;
+  const enrichWorkflow = (workflow) => ({
+    ...workflow,
+    ...(deliveryByWorkflow.get(text(workflow?.workflow_id)) || {})
+  });
+  if (Array.isArray(response.items)) {
+    return {
+      ...response,
+      items: response.items.map((item) => ({
+        ...item,
+        workflows: Array.isArray(item?.workflows) ? item.workflows.map(enrichWorkflow) : []
+      }))
+    };
+  }
+  return {
+    ...response,
+    workflows: Array.isArray(response.workflows) ? response.workflows.map(enrichWorkflow) : []
+  };
+}
+
 async function enrichCandidatePageExpenseSummaries(env, access, page) {
   if (!isObject(page) || !Array.isArray(page.items) || !page.items.length) return page;
   const cards = page.items;
@@ -5002,7 +5094,8 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
       p_cursor: cursor,
       p_limit: rawLimit
     }));
-    return jsonResponse(200, await enrichCandidatePageExpenseSummaries(env, access, page));
+    const enriched = await enrichCandidatePageExpenseSummaries(env, access, page);
+    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, enriched));
   }
   if (kind === 'detail') {
     const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
@@ -5014,9 +5107,10 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     }));
     const enrichedDetail = await enrichCandidateComponentLineage(env, detail);
     const submittedFacts = await projectCurrentSubmittedFacts(env, access, enrichedDetail);
-    return jsonResponse(200, await enrichCandidateSubmittedExpenseClaims(
+    const expenseClaims = await enrichCandidateSubmittedExpenseClaims(
       env, access, submittedFacts
-    ));
+    );
+    return jsonResponse(200, await enrichCandidatePaperDeliveryState(env, expenseClaims));
   }
   if (kind === 'missing-options') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
@@ -7043,6 +7137,13 @@ async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null
   if (!paperReturnPages.length || !SHA256_RE.test(manifestSha256)) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
   }
+  const paperDelivery = (await candidatePaperEmailDeliveryByWorkflow(
+    env, [context.workflow]
+  )).get(context.workflow.id) || {
+    paper_pack_obtained: false,
+    paper_pack_delivery_methods: [],
+    paper_pack_obtained_at_utc: null
+  };
   return jsonResponse(200, {
     ok: true,
     workflow_id: context.workflow.id,
@@ -7059,7 +7160,8 @@ async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null
     next_retry_at_utc: context.execution.next_retry_at_utc,
     retry_in_progress: context.execution.retry_in_progress,
     download_available: context.ready,
-    page_count: paperReturnPages.length
+    page_count: paperReturnPages.length,
+    ...paperDelivery
   });
 }
 
@@ -8625,6 +8727,9 @@ export const candidateAppBackendInternals = Object.freeze({
   candidateAppAgencyBranding,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
+  candidatePaperEmailDeliveryMatches,
+  candidatePaperEmailDeliveryByWorkflow,
+  enrichCandidatePaperDeliveryState,
   renderExpensePage,
   validateComponentBytes,
   renderContracts,

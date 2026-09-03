@@ -46,6 +46,9 @@ const {
   createAccessToken,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
+  candidatePaperEmailDeliveryMatches,
+  candidatePaperEmailDeliveryByWorkflow,
+  enrichCandidatePaperDeliveryState,
   londonCalendarDate,
   knownErrorCode,
   officeErrorCode,
@@ -69,6 +72,130 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('current paper-pack email delivery restores the photograph stage only for the exact workflow generation and manifest', async () => {
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000091',
+    candidate_id: '00000000-0000-4000-8000-000000000092',
+    generation: 3,
+    route: 'PAPER',
+    state: 'AWAITING_PAPER_RETURN',
+    paper_return_manifest_sha256: 'a'.repeat(64)
+  };
+  const delivery = {
+    status: 'SENT',
+    reference: `candidate-paper-pack-email:${workflow.id}:3`,
+    created_at_utc: '2026-09-03T08:30:00.000Z',
+    payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+      candidate_workflow_id: workflow.id,
+      candidate_workflow_generation: 3,
+      paper_return_manifest_sha256: 'a'.repeat(64)
+    }
+  };
+  assert.equal(candidatePaperEmailDeliveryMatches(delivery, workflow), true);
+  assert.equal(candidatePaperEmailDeliveryMatches({
+    ...delivery,
+    payment_scope_json: { ...delivery.payment_scope_json, candidate_workflow_generation: 2 }
+  }, workflow), false);
+  assert.equal(candidatePaperEmailDeliveryMatches({
+    ...delivery,
+    payment_scope_json: { ...delivery.payment_scope_json, paper_return_manifest_sha256: 'b'.repeat(64) }
+  }, workflow), false);
+  assert.equal(candidatePaperEmailDeliveryMatches({ ...delivery, reference: 'candidate-paper-pack-email:wrong:3' }, workflow), false);
+  assert.equal(candidatePaperEmailDeliveryMatches({ ...delivery, status: 'FAILED' }, workflow), false);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    assert.ok(url.pathname.endsWith('/mail_outbox'));
+    assert.equal(url.searchParams.get('type'), 'eq.TIMESHEET_QR');
+    assert.equal(url.searchParams.get('recipient_kind'), 'eq.CANDIDATE');
+    return Response.json([
+      delivery,
+      { ...delivery, status: 'QUEUED', created_at_utc: '2026-09-03T08:25:00.000Z' },
+      { ...delivery, status: 'FAILED', created_at_utc: '2026-09-03T08:35:00.000Z' }
+    ]);
+  };
+  try {
+    const result = await candidatePaperEmailDeliveryByWorkflow({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, [workflow]);
+    assert.deepEqual(result.get(workflow.id), {
+      paper_pack_obtained: true,
+      paper_pack_delivery_methods: ['EMAIL'],
+      paper_pack_obtained_at_utc: '2026-09-03T08:30:00.000Z'
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper delivery enrichment changes only the matching current workflow presentation', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000093';
+  const candidateId = '00000000-0000-4000-8000-000000000094';
+  const manifest = 'c'.repeat(64);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/candidate_submission_workflows')) return Response.json([{
+      id: workflowId, candidate_id: candidateId, generation: 4, route: 'PAPER',
+      state: 'AWAITING_PAPER_RETURN', paper_return_manifest_sha256: manifest
+    }]);
+    if (url.pathname.endsWith('/mail_outbox')) return Response.json([{
+      status: 'QUEUED', reference: `candidate-paper-pack-email:${workflowId}:4`,
+      created_at_utc: '2026-09-03T08:45:00.000Z',
+      payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+        candidate_workflow_id: workflowId,
+        candidate_workflow_generation: 4,
+        paper_return_manifest_sha256: manifest
+      }
+    }]);
+    throw new Error(`unexpected fetch ${url.pathname}`);
+  };
+  try {
+    const response = await enrichCandidatePaperDeliveryState({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      ok: true,
+      workflows: [
+        { workflow_id: workflowId, generation: 4, route: 'PAPER', state: 'AWAITING_PAPER_RETURN' },
+        { workflow_id: '00000000-0000-4000-8000-000000000095', generation: 1, route: 'PHONE', state: 'RECEIVED' }
+      ]
+    });
+    assert.equal(response.workflows[0].paper_pack_obtained, true);
+    assert.equal(response.workflows[0].paper_pack_obtained_at_utc, '2026-09-03T08:45:00.000Z');
+    assert.equal('paper_pack_obtained' in response.workflows[1], false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper delivery enrichment performs no extra reads when no signed-paper return is current', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    throw new Error(`unexpected fetch ${String(input)}`);
+  };
+  const response = {
+    ok: true,
+    items: [{
+      workflows: [
+        { workflow_id: '00000000-0000-4000-8000-000000000096', state: 'FINALISED', route: 'PHONE' },
+        { workflow_id: '00000000-0000-4000-8000-000000000097', state: 'AWAITING_MANAGER_APPROVAL', route: 'EMAIL' }
+      ]
+    }]
+  };
+  try {
+    assert.equal(await enrichCandidatePaperDeliveryState({}, response), response);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('verified current paper pack supersedes an older workflow outbox-conflict receipt', () => {
   const state = candidatePaperExecutionState({
@@ -4347,6 +4474,9 @@ test('Paper status polling never requeues after the exact released pack is compl
     assert.equal(body.paper_pack_state, 'READY');
     assert.equal(body.download_available, true);
     assert.equal(body.page_count, 3);
+    assert.equal(body.paper_pack_obtained, false);
+    assert.deepEqual(body.paper_pack_delivery_methods, []);
+    assert.equal(body.paper_pack_obtained_at_utc, null);
     assert.equal(enqueueCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;

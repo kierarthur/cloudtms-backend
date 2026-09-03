@@ -140,9 +140,11 @@ test('the detail route loads immutable facts through the signed-in Candidate and
     assert.equal(body.expense_claims[0].workflow_id, workflowId);
     assert.equal(reads.length, 2);
     const submittedFactsRead = reads.find((url) => url.includes('generation=eq.2'));
-    const claimSummaryRead = reads.find((url) => url.includes('id=in.('));
+    const claimSummaryRead = reads.find((url) => url.includes('select=id,generation,workflow_kind'));
+    const paperDeliveryRead = reads.find((url) => url.includes('paper_return_manifest_sha256'));
     assert.ok(submittedFactsRead);
     assert.ok(claimSummaryRead);
+    assert.equal(paperDeliveryRead, undefined);
     assert.match(submittedFactsRead, new RegExp(`candidate_id=eq\\.${candidateId}`));
     assert.match(submittedFactsRead, /state=eq\.READY_FOR_MANAGER_APPROVAL/);
     assert.match(claimSummaryRead, new RegExp(`candidate_id=eq\\.${candidateId}`));
