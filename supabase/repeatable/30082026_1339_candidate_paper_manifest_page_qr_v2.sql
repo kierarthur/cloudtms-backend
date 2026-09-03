@@ -87,7 +87,10 @@ begin
       count(*) over (
         partition by coalesce(page->>'component_kind',''),coalesce(page->>'expense_category','')
         order by ordinality rows between unbounded preceding and current row
-      )::integer as category_occurrence
+      )::integer as category_occurrence,
+      count(*) over (
+        partition by coalesce(page->>'component_kind',''),coalesce(page->>'expense_category','')
+      )::integer as category_count
     from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages')
       with ordinality source(page,ordinality)
   )
@@ -97,7 +100,8 @@ begin
       'display_name',case page->>'component_kind'
         when 'HOURS_TIMESHEET' then 'Timesheet'
         when 'EXPENSE_SUMMARY' then 'Expense summary'
-        when 'MILEAGE_FORM' then 'Mileage form'
+        when 'MILEAGE_FORM' then 'Mileage form'||case
+          when category_count>1 then ' '||category_occurrence::text else '' end
         when 'EXPENSE_EVIDENCE' then initcap(lower(page->>'expense_category'))||' '||category_occurrence
         else 'Document '||ordinal end,
       'expense_category',case
@@ -219,8 +223,10 @@ declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_timesheet public.timesheets%rowtype;
   v_page jsonb;
+  v_source_component public.candidate_submission_components%rowtype;
   v_manifest_hex text;
   v_proof_identity text;
+  v_source_mileage_qr boolean:=false;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_writes');
   if p_expected_generation is null or p_expected_generation<1
@@ -229,7 +235,13 @@ begin
      or jsonb_typeof(p_qr_payload)<>'object'
      or (select array_agg(payload_key order by payload_key)
          from jsonb_object_keys(p_qr_payload) as payload_keys(payload_key))
-       is distinct from array['c','g','k','m','n','o','p','t','v','w']::text[] then
+       is distinct from array['c','g','k','m','n','o','p','t','v','w']::text[]
+     or coalesce(p_qr_payload->>'v','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'g','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'o','')!~'^[0-9]+$'
+     or coalesce(p_qr_payload->>'n','')!~'^[0-9]+$'
+     or lower(coalesce(p_qr_payload->>'m',''))!~'^[0-9a-f]{64}$'
+     or lower(coalesce(p_qr_payload->>'p',''))!~'^[0-9a-f]{16}$' then
     raise exception 'CANDIDATE_PAPER_QR_PROOF_INVALID' using errcode='22023';
   end if;
   v_session:=private._candidate_session_context_v1(
@@ -268,16 +280,49 @@ begin
     and is_current=true and archived_at_utc is null;
   if not found then raise exception 'CANDIDATE_TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
 
-  if (p_qr_payload->>'v')::integer<>2
-     or lower(p_qr_payload->>'w')<>v_workflow.id::text
-     or lower(p_qr_payload->>'t')<>v_timesheet.timesheet_id::text
-     or (p_qr_payload->>'g')::integer<>v_workflow.generation
-     or lower(p_qr_payload->>'m')<>v_manifest_hex
-     or (p_qr_payload->>'o')::integer<>(v_page->>'ordinal')::integer
-     or lower(p_qr_payload->>'p')<>lower(v_page->>'page_key_sha256_16')
-     or p_qr_payload->>'k'<>v_page->>'page_kind_code'
-     or coalesce(p_qr_payload->>'c','')<>coalesce(v_page->>'category_code','')
-     or (p_qr_payload->>'n')::integer<>(v_page->>'category_occurrence')::integer then
+  if (p_qr_payload->>'v')::integer=2
+     and lower(p_qr_payload->>'w')=v_workflow.id::text
+     and lower(p_qr_payload->>'t')=v_timesheet.timesheet_id::text
+     and (p_qr_payload->>'g')::integer=v_workflow.generation
+     and lower(p_qr_payload->>'m')=v_manifest_hex
+     and (p_qr_payload->>'o')::integer=(v_page->>'ordinal')::integer
+     and lower(p_qr_payload->>'p')=lower(v_page->>'page_key_sha256_16')
+     and p_qr_payload->>'k'=v_page->>'page_kind_code'
+     and coalesce(p_qr_payload->>'c','')=coalesce(v_page->>'category_code','')
+     and (p_qr_payload->>'n')::integer=(v_page->>'category_occurrence')::integer then
+    v_source_mileage_qr:=false;
+  elsif v_page->>'component_kind'='MILEAGE_FORM'
+     and v_page->>'expense_category'='MILEAGE'
+     and (p_qr_payload->>'v')::integer=2
+     and lower(p_qr_payload->>'w')=v_workflow.id::text
+     and lower(p_qr_payload->>'t')=v_timesheet.timesheet_id::text
+     and p_qr_payload->>'k'='M'
+     and p_qr_payload->>'c'='M'
+     and (p_qr_payload->>'o')::integer=1
+     and (p_qr_payload->>'n')::integer=1
+     and lower(p_qr_payload->>'m')=lower(v_page->>'source_content_sha256')
+     and lower(p_qr_payload->>'p')=substring(encode(
+       extensions.digest('MILEAGE_FORM:'||lower(p_qr_payload->>'m'),'sha256'),'hex'
+     ) from 1 for 16) then
+    select source_component.* into v_source_component
+    from public.candidate_submission_components source_component
+    where source_component.id=(v_page->>'source_component_id')::uuid
+      and source_component.workflow_id=v_workflow.id
+      and source_component.workflow_generation=(p_qr_payload->>'g')::integer
+      and source_component.workflow_generation<v_workflow.generation
+      and source_component.component_kind='MILEAGE_FORM'
+      and source_component.expense_category='MILEAGE'
+      and source_component.document_role='MILEAGE_CLAIM_FORM'
+      and source_component.state in ('IMMUTABLE','SUPERSEDED')
+      and source_component.source_component_id is null
+      and source_component.source_content_sha256 is not null
+      and encode(source_component.source_content_sha256,'hex')
+        =lower(v_page->>'source_content_sha256');
+    if not found then
+      raise exception 'CANDIDATE_PAPER_QR_PROOF_MISMATCH' using errcode='28000';
+    end if;
+    v_source_mileage_qr:=true;
+  else
     raise exception 'CANDIDATE_PAPER_QR_PROOF_MISMATCH' using errcode='28000';
   end if;
   v_proof_identity:=concat_ws('|',
@@ -293,6 +338,7 @@ begin
     'paper_return_manifest_sha256',v_manifest_hex,
     'paper_return_page_key',p_page_key,
     'page_component_kind',v_page->>'component_kind',
+    'qr_identity_kind',case when v_source_mileage_qr then 'SOURCE_MILEAGE_FORM' else 'PACK_PAGE' end,
     'qr_required',true,
     'qr_payload_sha256',encode(extensions.digest(p_qr_payload::text,'sha256'),'hex'),
     'proof_receipt_sha256',encode(extensions.digest(v_proof_identity,'sha256'),'hex')
@@ -326,7 +372,7 @@ comment on function public.candidate_paper_manifest_v2_promote_v1(
 ) is 'Promotes a held current Weekly PAPER manifest to page-specific QR V2 before the pack email is released.';
 comment on function public.candidate_paper_return_proof_validate_v2(
   uuid,text,uuid,integer,text,text,jsonb,timestamptz
-) is 'Validates a signed TSQ2 page identity against the exact current Candidate PAPER manifest. Service-only; raw QR text is not retained.';
+) is 'Validates a signed TSQ2 page identity against the exact current Candidate PAPER manifest. Mileage pages may retain their previously verified source-form TSQ2 identity; other pages require the current pack-page identity. Service-only; raw QR text is not retained.';
 
 notify pgrst, 'reload schema';
 

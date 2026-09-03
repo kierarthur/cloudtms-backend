@@ -356,13 +356,20 @@ default_acl_rows as (
   from pg_catalog.pg_default_acl d
   join app_namespaces n on n.oid = d.defaclnamespace
   join contract_role_names owner_role on owner_role.oid=d.defaclrole
-  where owner_role.logical_name = 'postgres'
+  -- Default privileges are installation authority only for the exact role
+  -- running this release.  A provider image can also contain a physical role
+  -- literally named `postgres`; when CURRENT_USER is the generated service
+  -- owner, importing that bootstrap role's defaults would merge two different
+  -- security postures under one logical owner.
+  where d.defaclrole = (
+    select role_row.oid
+    from pg_catalog.pg_roles role_row
+    where role_row.rolname = current_user
+  )
 ),
 default_acl_contract as (
-  -- A restored logical `postgres` owner and the provider's generated owner can
-  -- both normalise to the same portable contract identity.  Preserve any
-  -- genuinely different ACL posture, but collapse byte-identical logical rows
-  -- so NEW and UPGRADE contracts do not differ merely by provider history.
+  -- Collapse byte-identical rows defensively while preserving every distinct
+  -- default privilege owned by the exact installation role above.
   select jsonb_agg(
     contract_row order by owner_name collate "C",
                           schema_name collate "C", object_kind

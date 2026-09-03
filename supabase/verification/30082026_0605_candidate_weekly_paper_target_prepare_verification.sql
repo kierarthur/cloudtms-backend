@@ -47,6 +47,19 @@ declare
   v_bad_pack_key uuid := gen_random_uuid();
   v_content_hash text;
   v_bad_proof_failed boolean := false;
+  v_mileage_source_component uuid := gen_random_uuid();
+  v_mileage_component_no integer;
+  v_mileage_source_hash text;
+  v_mileage_manifest jsonb;
+  v_mileage_manifest_hex text;
+  v_mileage_page jsonb;
+  v_hours_page jsonb;
+  v_mileage_qr jsonb;
+  v_pack_qr jsonb;
+  v_mileage_proof jsonb;
+  v_pack_proof jsonb;
+  v_wrong_mileage_failed boolean := false;
+  v_mileage_on_hours_failed boolean := false;
   v_plan_chunk uuid;
   v_plan_document_version uuid;
   v_plan_result jsonb;
@@ -447,6 +460,149 @@ begin
            and object_id_text=v_workflow::text
            and correlation_id=v_pack_key::text)<>1 then
     raise exception 'CANDIDATE_PAPER_PACK_IDEMPOTENT_REPLAY_FAILED: %',v_pack_replay;
+  end if;
+
+  -- A Mileage Form is verified before the worker chooses PAPER and therefore
+  -- carries the QR from that earlier workflow generation into the frozen pack.
+  -- Prove that exact source-form QR is accepted for its linked Mileage page,
+  -- remains invalid for every other page, and does not weaken the ordinary
+  -- current-pack QR contract.
+  v_mileage_source_hash:=encode(extensions.digest(
+    'candidate-paper-mileage-source-first-use','sha256'
+  ),'hex');
+  select coalesce(max(component_no),0)+1 into v_mileage_component_no
+  from public.candidate_submission_components
+  where workflow_id=v_workflow and workflow_generation=1;
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,timesheet_id,
+    component_kind,expense_category,document_role,state,required,
+    storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc
+  ) values(
+    v_mileage_source_component,v_workflow,1,v_mileage_component_no,v_timesheet,
+    'MILEAGE_FORM','MILEAGE','MILEAGE_CLAIM_FORM','IMMUTABLE',false,
+    'candidate-paper-mileage-source/verification.jpg','image/jpeg',4096,
+    decode(v_mileage_source_hash,'hex'),v_now+interval '12 seconds'
+  );
+  v_mileage_page:=jsonb_build_object(
+    'ordinal',1,
+    'page_key','paper-v2:2:mileage-source',
+    'page_key_sha256_16',substring(encode(extensions.digest(
+      'paper-v2:2:mileage-source','sha256'
+    ),'hex') from 1 for 16),
+    'page_kind_code','M',
+    'category_code','M',
+    'category_occurrence',1,
+    'component_kind','MILEAGE_FORM',
+    'expense_category','MILEAGE',
+    'source_component_id',v_mileage_source_component,
+    'source_content_sha256',v_mileage_source_hash
+  );
+  v_hours_page:=jsonb_build_object(
+    'ordinal',2,
+    'page_key','paper-v2:2:hours',
+    'page_key_sha256_16',substring(encode(extensions.digest(
+      'paper-v2:2:hours','sha256'
+    ),'hex') from 1 for 16),
+    'page_kind_code','T',
+    'category_code','',
+    'category_occurrence',1,
+    'component_kind','HOURS_TIMESHEET',
+    'expense_category',null
+  );
+  v_mileage_manifest:=jsonb_build_object(
+    'manifest_version',2,
+    'qr_contract_version','CANDIDATE_PAPER_PAGE_QR_V2',
+    'workflow_id',v_workflow,
+    'generation',2,
+    'pages',jsonb_build_array(v_mileage_page,v_hours_page)
+  );
+  v_mileage_manifest_hex:=encode(
+    private._candidate_sha256_jsonb_v1(v_mileage_manifest),'hex'
+  );
+  update public.candidate_submission_workflows
+     set generation=2,
+         route='PAPER',
+         state='AWAITING_PAPER_RETURN',
+         paper_return_manifest_json=v_mileage_manifest,
+         paper_return_manifest_sha256=decode(v_mileage_manifest_hex,'hex')
+   where id=v_workflow;
+
+  v_mileage_qr:=jsonb_build_object(
+    'v',2,
+    'w',v_workflow::text,
+    't',v_timesheet::text,
+    'g',1,
+    'm',v_mileage_source_hash,
+    'o',1,
+    'p',substring(encode(extensions.digest(
+      'MILEAGE_FORM:'||v_mileage_source_hash,'sha256'
+    ),'hex') from 1 for 16),
+    'k','M',
+    'c','M',
+    'n',1
+  );
+  v_mileage_proof:=public.candidate_paper_return_proof_validate_v2(
+    v_session,'TEST',v_workflow,2,v_mileage_manifest_hex,
+    v_mileage_page->>'page_key',v_mileage_qr,v_now+interval '13 seconds'
+  );
+  if v_mileage_proof->>'ok' is distinct from 'true'
+     or v_mileage_proof->>'qr_identity_kind' is distinct from 'SOURCE_MILEAGE_FORM'
+     or v_mileage_proof->>'page_component_kind' is distinct from 'MILEAGE_FORM' then
+    raise exception 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_FIRST_USE_FAILED: %',
+      v_mileage_proof;
+  end if;
+
+  begin
+    perform public.candidate_paper_return_proof_validate_v2(
+      v_session,'TEST',v_workflow,2,v_mileage_manifest_hex,
+      v_mileage_page->>'page_key',
+      jsonb_set(
+        jsonb_set(v_mileage_qr,'{m}',to_jsonb(repeat('f',64)),false),
+        '{p}',to_jsonb(substring(encode(extensions.digest(
+          'MILEAGE_FORM:'||repeat('f',64),'sha256'
+        ),'hex') from 1 for 16)),false
+      ),
+      v_now+interval '14 seconds'
+    );
+  exception when sqlstate '28000' then
+    v_wrong_mileage_failed:=true;
+  end;
+  if not v_wrong_mileage_failed then
+    raise exception 'CANDIDATE_PAPER_WRONG_MILEAGE_SOURCE_QR_ACCEPTED';
+  end if;
+
+  begin
+    perform public.candidate_paper_return_proof_validate_v2(
+      v_session,'TEST',v_workflow,2,v_mileage_manifest_hex,
+      v_hours_page->>'page_key',v_mileage_qr,v_now+interval '15 seconds'
+    );
+  exception when sqlstate '28000' then
+    v_mileage_on_hours_failed:=true;
+  end;
+  if not v_mileage_on_hours_failed then
+    raise exception 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_ACCEPTED_FOR_HOURS';
+  end if;
+
+  v_pack_qr:=jsonb_build_object(
+    'v',2,
+    'w',v_workflow::text,
+    't',v_timesheet::text,
+    'g',2,
+    'm',v_mileage_manifest_hex,
+    'o',2,
+    'p',v_hours_page->>'page_key_sha256_16',
+    'k','T',
+    'c','',
+    'n',1
+  );
+  v_pack_proof:=public.candidate_paper_return_proof_validate_v2(
+    v_session,'TEST',v_workflow,2,v_mileage_manifest_hex,
+    v_hours_page->>'page_key',v_pack_qr,v_now+interval '16 seconds'
+  );
+  if v_pack_proof->>'ok' is distinct from 'true'
+     or v_pack_proof->>'qr_identity_kind' is distinct from 'PACK_PAGE'
+     or v_pack_proof->>'page_component_kind' is distinct from 'HOURS_TIMESHEET' then
+    raise exception 'CANDIDATE_PAPER_CURRENT_PACK_QR_REGRESSION: %',v_pack_proof;
   end if;
 
   -- Preserve the opposite fail-closed rule: an ordinary MANUAL Timesheet with

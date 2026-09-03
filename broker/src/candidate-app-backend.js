@@ -2315,6 +2315,15 @@ async function validateCandidatePaperReturnProof(env, deps, access, workflowId, 
     p_page_key: text(proof.paper_return_page_key),
     p_now_utc: new Date().toISOString()
   };
+  if (proofVersion === PAPER_RETURN_PROOF_V2) {
+    const workflow = await workflowRow(env, workflowId);
+    await assertCandidatePaperSourceMileageQrIfUsed(
+      env,
+      workflow,
+      text(proof.paper_return_page_key),
+      decodedQr
+    );
+  }
   const result = proofVersion === PAPER_RETURN_PROOF_V2
     ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
       ...commonArgs,
@@ -2360,6 +2369,15 @@ async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId)
     p_page_key: proof.paper_return_page_key,
     p_now_utc: new Date().toISOString()
   };
+  if (proof.proof_contract_version === PAPER_RETURN_PROOF_V2) {
+    const workflow = await workflowRow(env, ticket.workflow_id);
+    await assertCandidatePaperSourceMileageQrIfUsed(
+      env,
+      workflow,
+      proof.paper_return_page_key,
+      proof.qr_payload
+    );
+  }
   const result = proof.proof_contract_version === PAPER_RETURN_PROOF_V2
     ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
       ...commonArgs,
@@ -2436,6 +2454,109 @@ async function revalidateCandidateMileageFormProof(env, ticket) {
     throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_QR_STALE');
   }
   return identity;
+}
+
+async function candidatePaperMileageSourceArtifact(env, workflow, expectedPage) {
+  if (upper(expectedPage?.component_kind) !== 'MILEAGE_FORM'
+      || upper(expectedPage?.expense_category) !== 'MILEAGE'
+      || !UUID_RE.test(text(expectedPage?.source_component_id))
+      || !SHA256_RE.test(text(expectedPage?.source_content_sha256).toLowerCase())) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
+  }
+  const source = await restOne(
+    env,
+    'candidate_submission_components',
+    `id=eq.${encodeURIComponent(expectedPage.source_component_id)}`
+      + '&select=id,workflow_id,workflow_generation,timesheet_id,component_kind,expense_category,'
+      + 'document_role,state,source_component_id,storage_key,media_type,byte_size,source_content_sha256'
+  );
+  const sourceDigest = text(source?.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
+  const sourceGeneration = Number(source?.workflow_generation);
+  if (!source
+      || source.workflow_id !== workflow.id
+      || !Number.isSafeInteger(sourceGeneration) || sourceGeneration < 1
+      || sourceGeneration >= Number(workflow.generation)
+      || upper(source.component_kind) !== 'MILEAGE_FORM'
+      || upper(source.expense_category) !== 'MILEAGE'
+      || upper(source.document_role) !== 'MILEAGE_CLAIM_FORM'
+      || !['IMMUTABLE', 'SUPERSEDED'].includes(upper(source.state))
+      || source.source_component_id != null
+      || !text(source.storage_key)
+      || normaliseMediaType(source.media_type) !== 'image/jpeg'
+      || !Number.isSafeInteger(Number(source.byte_size)) || Number(source.byte_size) < 1
+      || sourceDigest !== text(expectedPage.source_content_sha256).toLowerCase()) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
+  }
+
+  const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
+  if (!(mileageUnits > 0)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
+  }
+  const sourceWorkflow = { ...workflow, generation: sourceGeneration };
+  const identity = await candidateMileageFormQrIdentity(sourceWorkflow, mileageUnits);
+  const stored = await env.R2?.head(text(source.storage_key));
+  const metadata = stored?.customMetadata || {};
+  if (!stored
+      || text(metadata.purpose) !== 'candidate-component'
+      || text(metadata.workflow_id) !== workflow.id
+      || text(metadata.component_id) !== source.id
+      || text(metadata.sha256).toLowerCase() !== sourceDigest
+      || text(metadata.media_type).toLowerCase() !== 'image/jpeg'
+      || Number(metadata.byte_size) !== Number(source.byte_size)
+      || text(metadata.mileage_form_qr_verified) !== 'true'
+      || text(metadata.mileage_form_semantic_sha256).toLowerCase() !== identity.semantic_sha256
+      || Number(metadata.mileage_form_mileage_units) !== identity.mileage_units
+      || text(metadata.mileage_form_qr_payload_sha256).toLowerCase() !== identity.qr_payload_sha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
+  }
+  const artifact = await r2Bytes(env, source.storage_key, sourceDigest);
+  if (artifact.media_type !== 'image/jpeg' || artifact.bytes.byteLength !== Number(source.byte_size)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
+  }
+  let decoded;
+  try {
+    decoded = decodeCandidatePaperQrTextsFromJpeg(artifact.bytes);
+  } catch {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
+  }
+  const pageQrs = decoded.qr_texts.filter((value) => text(value).startsWith('TSQ2.'));
+  if (pageQrs.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
+  }
+  let payload;
+  try {
+    payload = await verifyCandidatePaperQrViaAdapter(env, pageQrs[0]);
+  } catch (error) {
+    const code = text(error?.code || error?.message);
+    if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
+    }
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
+  }
+  if (JSON.stringify(payload) !== JSON.stringify(identity.qr_payload)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
+  }
+  return { source, bytes: artifact.bytes, identity };
+}
+
+async function assertCandidatePaperSourceMileageQrIfUsed(env, workflow, pageKey, payload) {
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
+  const expected = pages.find((page) => page.page_key === pageKey);
+  if (!expected || !SHA256_RE.test(manifestHash)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const usesCurrentPackQr = Number(payload?.g) === Number(workflow.generation)
+    && text(payload?.m).toLowerCase() === manifestHash;
+  if (usesCurrentPackQr) return;
+  if (upper(expected.component_kind) !== 'MILEAGE_FORM') {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH');
+  }
+  const source = await candidatePaperMileageSourceArtifact(env, workflow, expected);
+  if (JSON.stringify(payload) !== JSON.stringify(source.identity.qr_payload)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH');
+  }
 }
 
 async function candidatePaperReturnPackReceipts(env, access, workflowId, generation, receipts) {
@@ -5516,7 +5637,7 @@ async function candidateMileageFormArtifact(env, workflow, suppliedMileageUnits)
     presentation,
     qrText,
     `Mileage Form — ${identity.mileage_units} miles`,
-    { compactSigningFooter: false }
+    { compactSigningFooter: false, includeSigningArea: false }
   );
   const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}`
     + `/mileage-form/${identity.semantic_sha256}-${agencyBranding.branding_contract_sha256}.pdf`;
@@ -5596,16 +5717,16 @@ async function handleCandidateMileageFormAction(env, workflow, access, body, dbA
   const safeAgency = escapeCandidateMailHtml(artifact.agency_name);
   const safeCandidate = escapeCandidateMailHtml(artifact.candidate_name || 'Candidate');
   const bodyText = `${artifact.agency_name} has prepared the attached Mileage Claim Form for ${artifact.candidate_name || 'the Candidate'}.\n\n`
-    + `Week ending: ${ukDate(workflow.week_ending_date)}\nTotal mileage across all submitted pages: ${mileageUnits} miles\n\n`
-    + 'Complete the journey details and obtain the required manager signature before returning the form in MyTMS.';
+    + `Week ending: ${ukDate(workflow.week_ending_date)}\nTotal mileage across all Mileage Form pages: ${mileageUnits} miles\n\n`
+    + 'Complete the journey details, then return every completed page in MyTMS. Your manager signs later through the approval route you choose.';
   const deterministicKey = `CANDIDATE_MILEAGE_FORM:${workflow.id}:${workflow.generation}:${artifact.semantic_sha256}`;
   const outbox = await restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
     type: 'TIMESHEET_GENERAL', to: email,
     subject: `Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`,
     body_html: `<p>${safeAgency} has prepared the attached Mileage Claim Form for ${safeCandidate}.</p>`
       + `<p>Week ending: ${escapeCandidateMailHtml(ukDate(workflow.week_ending_date))}<br>`
-      + `Total mileage across all submitted pages: ${escapeCandidateMailHtml(mileageUnits)} miles</p>`
-      + '<p>Complete the journey details and obtain the required manager signature before returning the form in MyTMS.</p>',
+      + `Total mileage across all Mileage Form pages: ${escapeCandidateMailHtml(mileageUnits)} miles</p>`
+      + '<p>Complete the journey details, then return every completed page in MyTMS. Your manager signs later through the approval route you choose.</p>',
     body_text: bodyText,
     attachments: [{
       r2_key: artifact.storage_key,
@@ -6559,7 +6680,7 @@ function mileageJourneyRows(workflow) {
 async function mileageClaimFormBytes(
   env, workflow, brandingOverride = null, presentationOverride = null,
   paperReturnQrText = null, paperReturnDisplayName = 'Mileage form',
-  { compactSigningFooter = true } = {}
+  { compactSigningFooter = true, includeSigningArea = true } = {}
 ) {
   const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
@@ -6609,10 +6730,13 @@ async function mileageClaimFormBytes(
     });
   });
   const totalMileage = text(expenseSubmission.total_mileage ?? claim.mileage_units ?? expenseSubmission.mileage_units) || '0';
-  page.drawText(`Total mileage claimed across all submitted pages: ${totalMileage} miles`, {
+  page.drawText(`Total mileage claimed across all Mileage Form pages: ${totalMileage} miles`, {
     x: 42, y: 218, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24)
   });
-  if (paperReturnQrText && compactSigningFooter) {
+  if (!includeSigningArea) {
+    // This first form is worker-completed factual evidence. Manager approval
+    // is added only by the subsequently selected approval route.
+  } else if (paperReturnQrText && compactSigningFooter) {
     // QR packs add their one consistent signing footer when the held pack is
     // rendered.  The standalone mileage form below retains its established
     // signing area, so neither route can show two signature/date sections.
@@ -6631,10 +6755,56 @@ async function mileageClaimFormBytes(
   return new Uint8Array(await pdf.save());
 }
 
-async function paperExpensePageBytes(env, workflow, component, ordinal, pageQrText, displayName) {
+async function paperMileageSourcePageBytes(env, workflow, expectedPage) {
+  const source = await candidatePaperMileageSourceArtifact(env, workflow, expectedPage);
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const page = pdf.addPage([595.28, 841.89]);
+  const image = await pdf.embedJpg(source.bytes);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const margin = 12;
+  const signingTop = 116;
+  const contentBottom = signingTop + 12;
+  const scale = Math.min(
+    (page.getWidth() - (margin * 2)) / image.width,
+    (page.getHeight() - contentBottom - margin) / image.height
+  );
+  const width = image.width * scale;
+  const height = image.height * scale;
+  page.drawImage(image, {
+    x: (page.getWidth() - width) / 2,
+    y: contentBottom + ((page.getHeight() - margin - contentBottom - height) / 2),
+    width,
+    height
+  });
+  page.drawRectangle({
+    x: 36, y: 30, width: page.getWidth() - 72, height: 76,
+    borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1
+  });
+  page.drawLine({
+    start: { x: 48, y: 57 }, end: { x: 340, y: 57 },
+    thickness: 0.8, color: rgb(0.35, 0.42, 0.5)
+  });
+  page.drawText('Manager signature', {
+    x: 48, y: 43, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35)
+  });
+  page.drawLine({
+    start: { x: 370, y: 57 }, end: { x: 535, y: 57 },
+    thickness: 0.8, color: rgb(0.35, 0.42, 0.5)
+  });
+  page.drawText('Date', {
+    x: 370, y: 43, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35)
+  });
+  return new Uint8Array(await pdf.save());
+}
+
+async function paperExpensePageBytes(
+  env, workflow, component, expectedPage, ordinal, pageQrText, displayName
+) {
   if (upper(component.component_kind) === 'MILEAGE_FORM') {
-    const agencyBranding = await candidateAppAgencyDocumentBranding(env);
-    return mileageClaimFormBytes(env, workflow, agencyBranding, null, pageQrText, displayName);
+    if (pageQrText) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SECOND_QR_FORBIDDEN');
+    }
+    return paperMileageSourcePageBytes(env, workflow, expectedPage);
   }
   const rendered = await renderExpensePage(env, {
     review_ordinal: ordinal,
@@ -7121,7 +7291,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
     const kind = upper(expected.component_kind);
-    const pageQrText = expected.manifest_version === 2
+    const pageQrText = expected.manifest_version === 2 && kind !== 'MILEAGE_FORM'
       ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
       : null;
     if (kind === 'HOURS_TIMESHEET') {
@@ -7145,7 +7315,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
     }
     await appendPdfBytes(combined, await paperExpensePageBytes(
-      env, workflow, component, index + 1, pageQrText, expected.display_name
+      env, workflow, component, expected, index + 1, pageQrText, expected.display_name
     ));
   }
   if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
@@ -9020,6 +9190,7 @@ export const candidateAppBackendInternals = Object.freeze({
   safeCandidateNotification,
   requireCandidateNotificationPreferences,
   safePaperReturnPages,
+  candidatePaperReturnPackReceipts,
   immutablePut,
   preparedUploadContract,
   preparedCandidateComponentReplay,
@@ -9052,8 +9223,11 @@ export const candidateAppBackendInternals = Object.freeze({
   candidateMileageFormArtifact,
   validateCandidateMileageFormProof,
   revalidateCandidateMileageFormProof,
+  candidatePaperMileageSourceArtifact,
+  assertCandidatePaperSourceMileageQrIfUsed,
   assertCandidateMileageFormsMatchSubmission,
   mileageClaimFormBytes,
+  paperMileageSourcePageBytes,
   queueCandidatePaperPackEmail,
   candidatePaperEmailDeliveryMatches,
   candidatePaperEmailDeliveryByWorkflow,

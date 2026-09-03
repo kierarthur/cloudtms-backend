@@ -3328,9 +3328,11 @@ test('paper mileage form preserves the approved labels and UK week-ending format
     total: '£110.00'
   });
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
-  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage claimed across all submitted pages', 'Manager signature']) {
+  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage claimed across all Mileage Form pages', 'Manager signature']) {
     assert.equal(source.includes(label), true);
   }
+  assert.match(source, /Complete the journey details, then return every completed page in MyTMS\. Your manager signs later through the approval route you choose\./);
+  assert.doesNotMatch(source, /obtain the required manager signature before returning the form in MyTMS/);
 });
 
 test('Mileage Claim Form provides sixteen writable journey rows', () => {
