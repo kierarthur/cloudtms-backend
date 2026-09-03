@@ -3331,6 +3331,19 @@ test('paper mileage form preserves the approved labels and UK week-ending format
   }
 });
 
+test('Mileage Claim Form provides sixteen writable journey rows', () => {
+  const rows = mileageJourneyRows({
+    immutable_submission_json: {
+      expense_claim: {
+        mileage_journeys: [{ post_code_from: 'RG1', post_code_to: 'RG2', number_of_miles: 12 }]
+      }
+    }
+  });
+  assert.equal(rows.length, 16);
+  assert.deepEqual(rows[0], { post_code_from: 'RG1', post_code_to: 'RG2', miles: '12' });
+  assert.deepEqual(rows[15], { post_code_from: '', post_code_to: '', miles: '' });
+});
+
 test('Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000091',

@@ -4276,12 +4276,20 @@ async function candidateAppAgencyBranding(env) {
   }
 }
 
-async function drawCandidateBranding(pdf, page, branding, { x = 34, y = 800, maxWidth = 140, maxHeight = 32 } = {}) {
+async function drawCandidateBranding(pdf, page, branding, {
+  x = 34, y = 800, maxWidth = 140, maxHeight = 32, align = 'left'
+} = {}) {
   if (branding.logo) {
     const image = branding.logo.media_type === 'image/png'
       ? await pdf.embedPng(branding.logo.bytes) : await pdf.embedJpg(branding.logo.bytes);
     const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
-    page.drawImage(image, { x, y, width: image.width * scale, height: image.height * scale });
+    const width = image.width * scale;
+    page.drawImage(image, {
+      x: align === 'right' ? x - width : x,
+      y,
+      width,
+      height: image.height * scale
+    });
   }
 }
 
@@ -6479,12 +6487,12 @@ function mileageJourneyRows(workflow) {
   const { expenseSubmission } = expenseClaim(workflow);
   const source = [expenseSubmission.mileage_journeys, expenseSubmission.journeys, expenseSubmission.mileage_entries]
     .find(Array.isArray) || [];
-  const rows = source.slice(0, 10).map((journey) => ({
+  const rows = source.slice(0, 16).map((journey) => ({
     post_code_from: text(journey?.post_code_from || journey?.postcode_from || journey?.from_postcode),
     post_code_to: text(journey?.post_code_to || journey?.postcode_to || journey?.to_postcode),
     miles: text(journey?.number_of_miles ?? journey?.miles ?? journey?.mileage_units)
   }));
-  while (rows.length < 10) rows.push({ post_code_from: '', post_code_to: '', miles: '' });
+  while (rows.length < 16) rows.push({ post_code_from: '', post_code_to: '', miles: '' });
   return rows;
 }
 
@@ -6499,7 +6507,9 @@ async function mileageClaimFormBytes(
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const branding = brandingOverride || await candidateDocumentBranding(env, workflow);
   page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
-  await drawCandidateBranding(pdf, page, branding, { x: 430, y: 800, maxWidth: 125, maxHeight: 30 });
+  await drawCandidateBranding(pdf, page, branding, {
+    x: 561, y: 797, maxWidth: 125, maxHeight: 38, align: 'right'
+  });
   page.drawText(branding.agency_name.slice(0, 55), { x: 34, y: 817, size: 9, font: bold, color: rgb(0.75, 0.9, 1) });
   page.drawText(`Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`, {
     x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
@@ -6530,7 +6540,7 @@ async function mileageClaimFormBytes(
   }
   const journeys = mileageJourneyRows(workflow);
   journeys.forEach((journey, index) => {
-    const rowHeight = paperReturnQrText ? 31 : 38;
+    const rowHeight = 24;
     const y = headerY - ((index + 1) * rowHeight);
     const values = [journey.post_code_from, journey.post_code_to, journey.miles];
     columns.forEach((column, columnIndex) => {
@@ -6540,7 +6550,7 @@ async function mileageClaimFormBytes(
   });
   const totalMileage = text(expenseSubmission.total_mileage ?? claim.mileage_units ?? expenseSubmission.mileage_units) || '0';
   page.drawText(`Total mileage claimed across all submitted pages: ${totalMileage} miles`, {
-    x: 42, y: paperReturnQrText ? 275 : 278, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24)
+    x: 42, y: 218, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24)
   });
   if (paperReturnQrText && compactSigningFooter) {
     // QR packs add their one consistent signing footer when the held pack is
@@ -6552,11 +6562,11 @@ async function mileageClaimFormBytes(
     page.drawLine({ start: { x: 370, y: 58 }, end: { x: 535, y: 58 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
     page.drawText('Date', { x: 370, y: 46, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
   } else {
-    page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-    page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });
-    page.drawText('Date', { x: 370, y: 205, size: 10, font: bold });
-    page.drawLine({ start: { x: 56, y: 150 }, end: { x: 330, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawLine({ start: { x: 370, y: 150 }, end: { x: 530, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 42, y: 38, width: 511, height: 128, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+    page.drawText('Manager signature', { x: 56, y: 140, size: 10, font: bold });
+    page.drawText('Date', { x: 370, y: 140, size: 10, font: bold });
+    page.drawLine({ start: { x: 56, y: 67 }, end: { x: 330, y: 67 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawLine({ start: { x: 370, y: 67 }, end: { x: 530, y: 67 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   }
   return new Uint8Array(await pdf.save());
 }
