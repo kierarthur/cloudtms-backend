@@ -150,6 +150,12 @@ begin
 
   insert into public.clients(id,name)
   values(v_client,'Paper target verification client');
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,week_ending_weekday
+  ) values(
+    gen_random_uuid(),v_client,v_week_ending_date-30,'ELECTRONIC',
+    extract(dow from v_week_ending_date)::integer
+  );
   insert into public.candidates(id,email,display_name,active,key_norm,opt_in_email)
   values(v_candidate,v_email,'Paper Target Candidate',true,
     'PAPER-TARGET-'||replace(v_candidate::text,'-',''),true);

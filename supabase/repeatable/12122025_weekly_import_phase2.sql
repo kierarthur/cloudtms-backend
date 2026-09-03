@@ -270,13 +270,13 @@ begin
     select
       r.*,
 
-      coalesce(cs.week_ending_weekday, 0)::int as we_dow,
+      coalesce(cs.week_ending_weekday, 0)::int as provisional_we_dow,
 
       (r.work_date
         + (
             (coalesce(cs.week_ending_weekday, 0)::int - extract(dow from r.work_date)::int + 7) % 7
           )
-      )::date as week_ending_date,
+      )::date as provisional_week_ending_date,
 
       lower(trim(coalesce(r.incoming_code_raw,''))) as code_norm
     from resolved_ids r
@@ -284,7 +284,8 @@ begin
       select cs2.week_ending_weekday
       from public.client_settings cs2
       where cs2.client_id = r.client_id
-      order by cs2.effective_from desc, cs2.created_at desc
+        and (cs2.effective_from is null or cs2.effective_from<=r.work_date)
+      order by cs2.effective_from desc nulls last,cs2.updated_at desc,cs2.id desc
       limit 1
     ) cs on true
   ),
@@ -437,6 +438,25 @@ begin
     ) bc on true
   ),
 
+  effective_week as (
+    select
+      w.*,
+      coalesce((authority.value#>>'{values,week_ending_weekday}')::integer,
+        w.provisional_we_dow,0) as we_dow,
+      (w.work_date+pg_catalog.mod(
+        coalesce((authority.value#>>'{values,week_ending_weekday}')::integer,
+          w.provisional_we_dow,0)
+        -extract(dow from w.work_date)::integer+7,7
+      ))::date as week_ending_date
+    from chosen_contract w
+    left join lateral (
+      select private._contract_settings_effective_core_v1(
+        w.client_id,w.contract_id,w.work_date,'IMPORT',null
+      ) as value
+      where w.contract_id is not null
+    ) authority on true
+  ),
+
   matched_shift as (
     select
       w.*,
@@ -450,7 +470,7 @@ begin
 
       s.timesheet_id                   as old_timesheet_id,
       (t.timesheet_id is not null)     as old_timesheet_exists
-    from chosen_contract w
+    from effective_week w
     left join public.nhsp_shifts s
       on s.external_row_key = w.external_row_key
      and s.source_system = v_src
@@ -735,14 +755,16 @@ begin
               + (
                   (coalesce(cs.week_ending_weekday, 0)::int - extract(dow from r.work_date)::int + 7) % 7
                 )
-            )::date as week_ending_date,
+            )::date as provisional_week_ending_date,
+            coalesce(cs.week_ending_weekday,0)::integer as provisional_we_dow,
             lower(trim(coalesce(r.incoming_code_raw,''))) as code_norm
           from resolved_ids r
           left join lateral (
             select cs2.week_ending_weekday
             from public.client_settings cs2
             where cs2.client_id = r.client_id
-            order by cs2.effective_from desc, cs2.created_at desc
+              and (cs2.effective_from is null or cs2.effective_from<=r.work_date)
+            order by cs2.effective_from desc nulls last,cs2.updated_at desc,cs2.id desc
             limit 1
           ) cs on true
         ),
@@ -858,6 +880,24 @@ begin
             limit 1
           ) bc on true
         ),
+        effective_week as (
+          select
+            w.*,
+            coalesce((authority.value#>>'{values,week_ending_weekday}')::integer,
+              w.provisional_we_dow,0) as we_dow,
+            (w.work_date+pg_catalog.mod(
+              coalesce((authority.value#>>'{values,week_ending_weekday}')::integer,
+                w.provisional_we_dow,0)
+              -extract(dow from w.work_date)::integer+7,7
+            ))::date as week_ending_date
+          from chosen_contract w
+          left join lateral (
+            select private._contract_settings_effective_core_v1(
+              w.client_id,w.contract_id,w.work_date,'IMPORT',null
+            ) as value
+            where w.contract_id is not null
+          ) authority on true
+        ),
         matched_shift as (
           select
             w.*,
@@ -868,7 +908,7 @@ begin
             date_trunc('minute', s.start_utc) as old_start_utc,
             date_trunc('minute', s.end_utc) as old_end_utc,
             coalesce(s.break_mins,0)::int as old_break_mins
-          from chosen_contract w
+          from effective_week w
           left join public.nhsp_shifts s
             on s.external_row_key = w.external_row_key
            and s.source_system = v_src

@@ -386,7 +386,7 @@ begin
       coalesce(tf.additional_units_json,
         tf.invoice_breakdown_json#>'{additional,units}',
         '{}'::jsonb) additional_units_json,
-      coalesce(ct.week_ending_weekday_snapshot,cs.week_ending_weekday,0)
+      coalesce((authority.settings_json#>>'{values,week_ending_weekday}')::integer,0)
         configured_week_ending_weekday,
       coalesce(pc.require_reference_to_invoice,false)
         or coalesce(pc.reference_number_required_to_issue_invoice,false)
@@ -434,16 +434,10 @@ begin
         tf0.updated_at desc nulls last,tf0.id desc
       limit 1
     ) tf on true
-    left join lateral (
-      select cs0.week_ending_weekday
-      from public.client_settings cs0
-      where cs0.client_id=coalesce(vs.client_id,tf.client_id,ct.client_id)
-        and cs0.effective_from<=coalesce(
-          (t.worked_start_iso at time zone 'Europe/London')::date,
-          t.week_ending_date,v_now::date)
-      order by cs0.effective_from desc
-      limit 1
-    ) cs on true
+    cross join lateral (
+      select private._timesheet_settings_authority_frozen_v1(t.timesheet_id)
+        as settings_json
+    ) authority
     cross join public.settings_defaults sd
     where sd.id=1
   ),
@@ -795,8 +789,7 @@ begin
           'start_weekday_name',trim(to_char(b.resolved_week_ending_date-6,'Day')),
           'source',case when b.week_ending_date is not null
             then 'TIMESHEET_WEEK_ENDING_DATE'
-            when b.contract_id is not null then 'CONTRACT_WEEK_ENDING_WEEKDAY_SNAPSHOT'
-            else 'CLIENT_SETTING' end,
+            else 'TIMESHEET_SETTINGS_AUTHORITY' end,
           'configured_week_ending_weekday',b.configured_week_ending_weekday,
           'days',(select jsonb_agg(jsonb_build_object(
             'row_key','day:'||d.day_date::text,

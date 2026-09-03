@@ -23,24 +23,15 @@ with anchor as materialized (
 ),
 eligible as materialized (
   select distinct tf.timesheet_id,
-    case when con.id is not null then 'CONTRACT' else 'CLIENT_DEFAULT' end policy_origin
+    case when authority.settings_json#>>'{sources,contract_governed_settings}'='CONTRACT_OVERRIDE'
+      then 'CONTRACT' else 'CLIENT_DEFAULT' end policy_origin
   from public.timesheets_financials tf
   join public.timesheets ts
     on ts.timesheet_id=tf.timesheet_id and ts.is_current and ts.revoked_at is null
-  left join lateral (
-    select w.contract_id from public.contract_weeks w
-    where w.timesheet_id=tf.timesheet_id
-    order by w.updated_at desc nulls last,w.id desc limit 1
-  ) cw on true
-  left join public.contracts con on con.id=coalesce(ts.contract_id,cw.contract_id)
-  left join lateral (
-    select s.* from public.client_settings s cross join anchor a
-    where s.client_id=tf.client_id
-      and(s.effective_from is null or s.effective_from<=a.today)
-    order by s.effective_from desc nulls last,s.updated_at desc nulls last,
-      s.created_at desc nulls last,s.id desc
-    limit 1
-  ) cs on true
+  cross join lateral (
+    select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
+      as settings_json
+  ) authority
   cross join anchor a
   where tf.is_current and tf.processing_status='READY_FOR_INVOICE'
     and not tf.is_stale and tf.locked_by_invoice_id is null
@@ -87,9 +78,7 @@ eligible as materialized (
       where e.timesheet_id=tf.timesheet_id
         and asset.status in(
           'UNSUPPORTED','CORRUPT','MISSING','FAILED','SUPERSEDED'))
-    and case when con.id is not null
-      then coalesce(con.auto_invoice,cs.auto_invoice_default,false)
-      else coalesce(cs.auto_invoice_default,false) end
+    and coalesce((authority.settings_json#>>'{values,auto_invoice}')::boolean,false)
     and exists(
       select 1
       from lateral (

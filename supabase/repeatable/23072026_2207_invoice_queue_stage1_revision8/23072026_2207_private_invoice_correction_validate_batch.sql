@@ -158,7 +158,9 @@ classified as materialized (
         (a.envelope-'envelope_fingerprint')::text,'UTF8'),
         'sha256'),'hex')
     end recomputed_fingerprint,
-    cs.is_nhsp,cs.autoprocess_hr,cs.no_timesheet_required,
+    coalesce((authority.settings_json#>>'{values,is_nhsp}')::boolean,false) is_nhsp,
+    coalesce((authority.settings_json#>>'{values,autoprocess_hr}')::boolean,false) autoprocess_hr,
+    coalesce((authority.settings_json#>>'{values,no_timesheet_required}')::boolean,false) no_timesheet_required,
     (a.adjustment_origin in(
         'IMPORT_CORRECTION','IMPORT_CANCELLATION',
         'HEALTHROSTER_CHANGED_HOURS','NHSP_CHANGED_HOURS',
@@ -198,16 +200,10 @@ classified as materialized (
           and a.envelope#>>'{operation,correction_action}'='CANCELLATION')),
       false) authoritative
   from all_current a
-  left join lateral (
-    select s.is_nhsp,s.autoprocess_hr,s.no_timesheet_required
-    from public.client_settings s
-    where s.client_id=a.client_id
-      and(s.effective_from is null
-        or s.effective_from<=p_evaluation_date)
-    order by s.effective_from desc nulls last,s.updated_at desc nulls last,
-      s.created_at desc nulls last,s.id desc
-    limit 1
-  ) cs on true
+  cross join lateral (
+    select private._timesheet_settings_authority_frozen_v1(a.timesheet_id)
+      as settings_json
+  ) authority
 ),
 policy_checked as materialized (
   select c.*,

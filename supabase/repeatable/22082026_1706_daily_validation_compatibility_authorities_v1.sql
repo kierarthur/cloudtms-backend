@@ -508,9 +508,9 @@ begin
           and coalesce(c.import_authoritative,false)
           and c.resolved_client_id is not null
           and c.resolved_contract_id is not null
-        then public.import_auto_authorise_policy_resolve_v1(
+        then public.import_auto_authorise_policy_resolve_v2(
           case when upper(c.source_system)='NHSP' then 'NHSP'::public.hr_source_enum else 'HEALTHROSTER'::public.hr_source_enum end,
-          c.resolved_client_id,c.resolved_contract_id,false
+          c.resolved_client_id,c.resolved_contract_id,source_timesheet.timesheet_id,c.date_local,false
         )
         else null::jsonb
       end as value

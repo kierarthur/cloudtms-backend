@@ -194,10 +194,7 @@ v_ref_seg_cur_ref text;
   ts record;
   pc record;
   contract_id uuid;
-  v_client_daily_calc boolean := false;
-  v_contract_override boolean := false;
-  v_contract_daily_calc boolean;
-  v_contract_bucket_labels jsonb;
+  v_settings_authority jsonb;
   c_daily_calc boolean := false;
   c_bucket_labels jsonb := null;
   c_role text := null;
@@ -389,19 +386,6 @@ if v_invoice_debug then
     )
   );
 end if;
-
-  -- Load effective client setting daily_calc_of_invoices (used when contract.overrideclientsettings=false)
-  begin
-    select coalesce(cs0.daily_calc_of_invoices,false)
-    into v_client_daily_calc
-    from public.client_settings cs0
-    where cs0.client_id = v_inv.client_id
-      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
-    order by cs0.effective_from desc nulls last
-    limit 1;
-  exception when others then
-    v_client_daily_calc := false;
-  end;
 
   -- VAT settings from invoice snapshot
   if jsonb_typeof(v_inv.header_snapshot_json->'vat_chargeable') = 'boolean' then
@@ -2210,19 +2194,24 @@ if v_has_seg_ops then
 
       if contract_id is not null then
         select
-          coalesce(overrideclientsettings,false),
-          daily_calc_of_invoices,
-          bucket_labels_json,
           nullif(btrim(coalesce(display_site,'')), '')
         into
-          v_contract_override, v_contract_daily_calc, v_contract_bucket_labels, c_display_site
+          c_display_site
         from public.contracts
         where id = contract_id
         limit 1;
-
-        c_daily_calc := case when v_contract_override then coalesce(v_contract_daily_calc,false) else v_client_daily_calc end;
-        c_bucket_labels := case when v_contract_override then v_contract_bucket_labels else null end;
       end if;
+
+      v_settings_authority := private._timesheet_settings_authority_frozen_v1(tsid);
+      c_daily_calc := coalesce(
+        (v_settings_authority#>>'{values,daily_calc_of_invoices}')::boolean,
+        false
+      );
+      c_bucket_labels := case
+        when coalesce((v_settings_authority->>'override_client_settings')::boolean,false)
+          then v_settings_authority#>'{values,bucket_labels_json}'
+        else null
+      end;
 
       if c_bucket_labels is null then
         c_bucket_labels := jsonb_build_object('day','Day','night','Night','sat','Sat','sun','Sun','bh','BH');
@@ -2571,21 +2560,26 @@ end if;
 
       if contract_id is not null then
         select
-          coalesce(overrideclientsettings,false),
-          daily_calc_of_invoices,
-          bucket_labels_json,
           nullif(btrim(coalesce(role,'')), ''),
           nullif(btrim(coalesce(display_site,'')), ''),
           nullif(btrim(coalesce(ward_hint,'')), '')
         into
-          v_contract_override, v_contract_daily_calc, v_contract_bucket_labels, c_role, c_display_site, c_ward_hint
+          c_role, c_display_site, c_ward_hint
         from public.contracts
         where id = contract_id
         limit 1;
-
-        c_daily_calc := case when v_contract_override then coalesce(v_contract_daily_calc,false) else v_client_daily_calc end;
-        c_bucket_labels := case when v_contract_override then v_contract_bucket_labels else null end;
       end if;
+
+      v_settings_authority := private._timesheet_settings_authority_frozen_v1(tsid);
+      c_daily_calc := coalesce(
+        (v_settings_authority#>>'{values,daily_calc_of_invoices}')::boolean,
+        false
+      );
+      c_bucket_labels := case
+        when coalesce((v_settings_authority->>'override_client_settings')::boolean,false)
+          then v_settings_authority#>'{values,bucket_labels_json}'
+        else null
+      end;
 
       if c_bucket_labels is null then
         c_bucket_labels := jsonb_build_object('day','Day','night','Night','sat','Sat','sun','Sun','bh','BH');

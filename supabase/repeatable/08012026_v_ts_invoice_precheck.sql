@@ -6,7 +6,7 @@
 -- IMPORTANT:
 --  - Keeps existing column order for the first 7 columns
 --  - Appends the 3 "effective_*" columns and 1 debug column at the end
---  - Uses London anchor date for selecting the latest effective client_settings row
+--  - Uses the immutable settings authority frozen on each real Timesheet
 --  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
 --
 -- UPDATED:
@@ -31,7 +31,7 @@
 -- IMPORTANT:
 --  - Keeps existing column order for the first 7 columns
 --  - Appends the 3 "effective_*" columns and 1 debug column at the end
---  - Uses London anchor date for selecting the latest effective client_settings row
+--  - Uses the immutable settings authority frozen on each real Timesheet
 --  - Derives client_id + claim fields from current TSFIN (timesheets has no client_id)
 --
 -- UPDATED:
@@ -47,10 +47,8 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE VIEW
 -- C6.1: Refs required to ISSUE (not INVOICE)
 -- New columns appended at end: reference_number_required_to_issue_invoice, issue_missing_reference, issue_missing_reference_count
-create or replace view public.v_ts_invoice_precheck as
-with anchor as (
-  select (now() at time zone 'Europe/London')::date as anchor_ymd
-)
+create or replace view public.v_ts_invoice_precheck
+with (security_invoker=true) as
 select
   ts.timesheet_id,
   ts.week_ending_date,
@@ -58,12 +56,8 @@ select
   ts.manual_pdf_r2_key,
   ts.reference_number,
 
-  -- ✅ overrideclientsettings applied: contract policy only when overrideclientsettings=true
-  coalesce(
-    case when c.overrideclientsettings then c.require_reference_to_invoice end,
-    cs.invoice_reference_required,
-    false
-  ) as require_reference_to_invoice,
+  coalesce((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,false)
+    as require_reference_to_invoice,
 
   case
     -- ✅ UPDATED: QR unsigned gating (block invoicing until signed QR uploaded)
@@ -76,13 +70,8 @@ select
      and ts.qr_scanned_at is null
       then 'BLOCK_QR_UNSIGNED'::text
 
-    -- PDF gating (client-led) — ✅ overrideclientsettings applied for ts_attach_to_invoice
-    when coalesce(
-           case when c.overrideclientsettings then c.ts_attach_to_invoice end,
-           cs.ts_attach_to_invoice,
-           sd.ts_attach_to_invoice,
-           true
-         ) = true
+    -- PDF gating uses the immutable authority frozen on the real Timesheet.
+    when coalesce((authority.settings_json#>>'{values,ts_attach_to_invoice}')::boolean,true) = true
      and (
        (
          ts.submission_mode = 'MANUAL'::submission_mode_enum
@@ -111,11 +100,7 @@ select
     -- ✅ Uses effective require_reference_to_invoice (overrideclientsettings-aware)
     -- ✅ Only HOURS require refs; additional/expenses/mileage-only never require refs
     -- ✅ Net non-positive hours (<= 0) never block
-    when coalesce(
-           case when c.overrideclientsettings then c.require_reference_to_invoice end,
-           cs.invoice_reference_required,
-           false
-         ) = true
+    when coalesce((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,false) = true
      and coalesce(tf.total_hours, 0) > 0
      and coalesce(refchk.missing_raw, false) = true
       then 'BLOCK_NO_REFERENCE'::text
@@ -171,36 +156,26 @@ select
     else 'OK'::text
   end as precheck_status,
 
-  -- existing appended columns (unchanged order) — ✅ overrideclientsettings applied for attach flags
-  coalesce(
-    case when c.overrideclientsettings then c.ts_attach_to_invoice end,
-    cs.ts_attach_to_invoice,
-    sd.ts_attach_to_invoice,
-    true
-  ) as effective_ts_attach_to_invoice,
+  -- Existing column order is preserved; only the authority source changes.
+  coalesce((authority.settings_json#>>'{values,ts_attach_to_invoice}')::boolean,true)
+    as effective_ts_attach_to_invoice,
 
-  coalesce(
-    case when c.overrideclientsettings then c.hr_attach_to_invoice end,
-    cs.hr_attach_to_invoice,
-    sd.hr_attach_to_invoice,
-    true
-  ) as effective_hr_attach_to_invoice,
+  coalesce((authority.settings_json#>>'{values,hr_attach_to_invoice}')::boolean,true)
+    as effective_hr_attach_to_invoice,
 
-  coalesce(cs.auto_invoice_default, false) as effective_auto_invoice_default,
+  coalesce((authority.settings_json#>>'{values,auto_invoice}')::boolean,false)
+    as effective_auto_invoice_default,
   coalesce(tepdf.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
 
   -- C6.1 appended columns (must be at the end)
-  -- ✅ overrideclientsettings applied: contract ref-to-issue only when overrideclientsettings=true, else client_settings
   coalesce(
-    case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
-    cs.reference_number_required_to_issue_invoice,
+    (authority.settings_json#>>'{values,reference_number_required_to_issue_invoice}')::boolean,
     false
   ) as reference_number_required_to_issue_invoice,
 
   (
     coalesce(
-      case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
-      cs.reference_number_required_to_issue_invoice,
+      (authority.settings_json#>>'{values,reference_number_required_to_issue_invoice}')::boolean,
       false
     ) = true
     and coalesce(tf.total_hours, 0) > 0
@@ -211,8 +186,7 @@ select
     case
       when coalesce(tf.total_hours, 0) <= 0 then 0
       when coalesce(
-             case when c.overrideclientsettings then c.reference_number_required_to_issue_invoice end,
-             cs.reference_number_required_to_issue_invoice,
+             (authority.settings_json#>>'{values,reference_number_required_to_issue_invoice}')::boolean,
              false
            ) = true
         then coalesce(refchk.issue_missing_count, 0)
@@ -221,13 +195,6 @@ select
   )::int as issue_missing_reference_count
 
 from public.timesheets ts
-left join public.contract_weeks cw
-  on cw.timesheet_id = ts.timesheet_id
-left join public.contracts c
-  on c.id = coalesce(ts.contract_id, cw.contract_id)
-
-left join public.settings_defaults sd
-  on sd.id = 1
 
 -- derive client_id + claim fields from the current TSFIN snapshot
 left join lateral (
@@ -262,6 +229,20 @@ left join lateral (
   limit 1
 ) tf on true
 
+cross join lateral (
+  select private._contract_settings_effective_core_v1(
+    tf.client_id,
+    ts.contract_id,
+    coalesce(
+      (ts.worked_start_iso at time zone 'Europe/London')::date,
+      (ts.scheduled_start_iso at time zone 'Europe/London')::date,
+      ts.week_ending_date
+    ),
+    case when ts.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'INVOICE' end,
+    ts.timesheet_id
+  ) as settings_json
+) authority
+
 -- timesheet evidence PDF presence (kind = TIMESHEET)
 left join lateral (
   select exists(
@@ -271,23 +252,6 @@ left join lateral (
       and upper(te.kind) = 'TIMESHEET'
   ) as has_timesheet_evidence_pdf
 ) tepdf on true
-
--- choose client_settings row by London "anchor" date
-left join lateral (
-  select
-    cs0.client_id,
-    cs0.auto_invoice_default,
-    cs0.hr_attach_to_invoice,
-    cs0.ts_attach_to_invoice,
-    cs0.reference_number_required_to_issue_invoice,
-    cs0.invoice_reference_required
-  from public.client_settings cs0
-  cross join anchor a
-  where cs0.client_id = tf.client_id
-    and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
-  order by cs0.effective_from desc nulls last
-  limit 1
-) cs on true
 
 -- compute missing reference boolean + count (independent of require-to-invoice / require-to-issue gates)
 left join lateral (
@@ -518,3 +482,7 @@ left join lateral (
 
 ) refchk on true;
 
+-- Reassert the existing service-only security contract after replacement.
+alter view public.v_ts_invoice_precheck set (security_invoker=true);
+revoke all on public.v_ts_invoice_precheck from public,anon,authenticated;
+grant select on public.v_ts_invoice_precheck to service_role;

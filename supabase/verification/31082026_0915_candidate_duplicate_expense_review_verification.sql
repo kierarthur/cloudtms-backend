@@ -129,6 +129,9 @@ begin
     values(v_actor,'duplicate-expense-actor-'||v_actor::text||'@example.test',true);
   end if;
   insert into public.clients(id,name) values(v_client,'Duplicate Expense Verification Client');
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,week_ending_weekday
+  ) values(gen_random_uuid(),v_client,v_week-30,'ELECTRONIC',0);
   insert into public.candidates(id,email,active,key_norm)
   values(v_candidate,'duplicate-expense-'||v_candidate::text||'@example.test',true,
     'GCK-DUPLICATE-'||replace(v_candidate::text,'-',''));

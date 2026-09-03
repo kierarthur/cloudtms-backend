@@ -3402,8 +3402,10 @@ test('HealthRoster invoice support obeys effective attachment policy and renders
   );
   assert.match(
     precheck,
-    /case when c\.overrideclientsettings then c\.hr_attach_to_invoice end[\s\S]*cs\.hr_attach_to_invoice[\s\S]*sd\.hr_attach_to_invoice[\s\S]*as effective_hr_attach_to_invoice/i,
+    /authority\.settings_json#>>'\{values,hr_attach_to_invoice\}'\)::boolean,true\)[\s\S]*as effective_hr_attach_to_invoice/i,
   );
+  assert.match(precheck, /private\._contract_settings_effective_core_v1/i);
+  assert.doesNotMatch(precheck, /from\s+public\.client_settings|join\s+public\.client_settings/i);
   assert.match(
     sourceCollector,
     /v_hr_allowed := coalesce\(v_requires_hr,false\) = true[\s\S]*coalesce\(v_hr_attach_to_invoice,false\) = true/i,

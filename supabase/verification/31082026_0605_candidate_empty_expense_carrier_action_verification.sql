@@ -42,6 +42,12 @@ begin
 
   insert into public.clients(id,name)
   values(v_client,'Empty Expense Carrier Verification Client');
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,week_ending_weekday
+  ) values(
+    gen_random_uuid(),v_client,current_date-7,'ELECTRONIC',
+    extract(dow from current_date)::integer
+  );
   insert into public.candidates(id,email,active)
   values(v_candidate,'empty-expense-'||v_candidate::text||'@example.test',true);
   insert into public.contracts(

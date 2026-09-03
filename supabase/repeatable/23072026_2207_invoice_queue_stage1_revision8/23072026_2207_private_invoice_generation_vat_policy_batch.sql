@@ -57,12 +57,18 @@ source_rows as materialized (
   select s.*,t.correction_kind,t.adjustment_origin,t.week_ending_date,
     s.supplied_effective_date resolved_effective_date,
     coalesce(s.supplied_ordinary_rate,
-      case when coalesce(cl.vat_chargeable,true) then
-        coalesce(cs.vat_rate_pct,sf.vat_rate_pct) else 0 end)
+      case when coalesce(
+        (a.authority_json#>>'{values,client_vat_chargeable}')::boolean,true
+      ) then (a.authority_json#>>'{values,vat_rate_pct}')::numeric else 0 end)
       ordinary_rate,
-    cl.vat_chargeable client_vat_chargeable,
-    cs.client_settings_id,cs.client_settings_effective_from,
-    sf.finance_settings_id,sf.finance_settings_date_from,
+    coalesce((a.authority_json#>>'{values,client_vat_chargeable}')::boolean,true)
+      client_vat_chargeable,
+    nullif(a.authority_json->>'client_settings_id','')::uuid client_settings_id,
+    nullif(a.authority_json->>'client_settings_effective_from','')::date
+      client_settings_effective_from,
+    nullif(a.authority_json->>'finance_settings_id','')::uuid finance_settings_id,
+    nullif(a.authority_json->>'finance_settings_date_from','')::date
+      finance_settings_date_from,
     coalesce(
       t.candidate_hint_text->'correction_financials_policy_envelope',
       f.policy_snapshot_json->'correction_financials_policy_envelope',
@@ -72,30 +78,11 @@ source_rows as materialized (
     on t.timesheet_id=s.timesheet_id and t.is_current
   left join public.timesheets_financials f
     on f.timesheet_id=s.timesheet_id and f.is_current
-  left join public.clients cl on cl.id=f.client_id
   left join lateral (
-    select x.id client_settings_id,x.effective_from client_settings_effective_from,
-      x.vat_rate_pct
-    from public.client_settings x
-    where x.client_id=f.client_id
-      and(x.effective_from is null
-        or x.effective_from<=s.supplied_effective_date)
-      and s.supplied_effective_date is not null
-    order by x.effective_from desc nulls last,x.updated_at desc nulls last,
-      x.created_at desc nulls last,x.id desc
-    limit 1
-  ) cs on true
-  left join lateral (
-    select x.id finance_settings_id,x.date_from finance_settings_date_from,
-      x.vat_rate_pct
-    from public.settings_finance_windows x
-    where s.supplied_effective_date is not null
-      and(x.date_from is null or x.date_from<=s.supplied_effective_date)
-      and(x.date_to is null or x.date_to>=s.supplied_effective_date)
-    order by x.date_from desc nulls last,x.updated_at desc nulls last,
-      x.created_at desc nulls last,x.id desc
-    limit 1
-  ) sf on true
+    select private._timesheet_settings_authority_frozen_v1(t.timesheet_id)
+      authority_json
+    where t.timesheet_id is not null
+  ) a on true
 ),
 classified as materialized (
   select s.*,

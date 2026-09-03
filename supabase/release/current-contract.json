@@ -2844,7 +2844,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e9188df0947023ec6a6b8332e26d47d1719057ed320fd560b73d2de11c3141a5"
+      "definition_sha256": "44bac6aec4c19215c6cee149e9ca7cce15ef23046596a72bd2b5b62fc7c9ed4a"
     },
     {
       "acl": [
@@ -3697,14 +3697,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
       "identity": "_candidate_import_authoritative_v1(p_client_id uuid, p_contract_id uuid, p_timesheet_id uuid, p_snapshot_json jsonb, p_evaluation_date date)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8f59acddb2be02ca907ef25c3036765bf2a5d3707adb9eb9b0fe305ba38cb78b"
+      "definition_sha256": "afed8822188c1e7c0112ad4647f335a19ca39eb3f918db57d00504a5823c8ccf"
     },
     {
       "acl": [
@@ -4306,23 +4306,18 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "service_role",
-          "grantable": false,
-          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
       "config": [
-        "search_path=\"\""
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
       "identity": "_candidate_policy_resolve_v1(p_client_id uuid, p_contract_id uuid, p_evaluation_date date)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "82902c3474b649bc5be19aa0164ae239d69887b948dd86bb062fcabe7be6bd19"
+      "definition_sha256": "b2474822bd43e2b2a46141b8f42ca03ffdf85bf2ea13b2fb023bfe862f398225"
     },
     {
       "acl": [
@@ -4600,14 +4595,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
       "identity": "_candidate_submission_mode_v1(p_client_id uuid, p_contract_id uuid, p_as_of_date date)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "53723abd51dbb3fcfd5bb6e3ad2e70fd821d697b11d9ba97c339b22876917479"
+      "definition_sha256": "02d87f167df61d455b0faa834794dd60c47ef310ef42485d457f0a2ad22c94e7"
     },
     {
       "acl": [
@@ -4917,6 +4912,221 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "0b760f91253cbca4b4d918fa1325bf96131b573d73e042fc2e57e84fd4d23861"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_after_client_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7edc130233b81e93a5906adb453a6b8514e1aa53929171c29f9f6406b4b99408"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_after_contract_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4bbab4418c749195d75dd1bd2aea2e59c2ad994de06ce752f049a02ee9ee671b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_after_global_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5d25c6608c1c3018a02446a63f3a8ba931fd13efa5efe37e5b61b1059979133b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_apply_week_snapshot_v1(p_week_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "bbc9198d89f3b5993cd11304335f1cf004e3049ce1bb8ad632c3783b661bd45b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_effective_core_v1(p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "fa886c9d59f8444304e42e9f51c7b006b1d202e70d2feecb8585c45da2e7c457"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_refresh_all_planned_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "12922b3c96b59c3a1a52a1f2a6b61fefa8e9f797441bb73d133d10f0f11883a7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_refresh_planned_for_client_v1(p_client_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "01183bae52a44e0ab70dbc7a89bc839848f181c9b77c80d512051c4b499b7b8c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_settings_refresh_planned_for_contract_v1(p_contract_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b6ee70d5574bc0b283bfa42f0648a57cf848ff480fbcb274cbffefbb2d730a32"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_week_settings_authority_before_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d29f615f3135fa3a7f7aa9bc57fb6d8818f33bd711f0305b69caf4343f89e6d1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_daily_timesheet_settings_authority_after_fin_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4288b19383fd55b2c451be096bbbfc040262c134ce1baba6b83b59f8439e9996"
     },
     {
       "acl": [
@@ -5602,7 +5812,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7b4c416699852d3bc8cb96e63000069ee16fcb0dae9dbb44b55badd5e4108dd6"
+      "definition_sha256": "be3e9b0c7f1d3a8a7c62065d8e073656270573eb7964b4f0f1341dc95ef5db59"
     },
     {
       "acl": [
@@ -5698,7 +5908,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "503f46c6dca9ea9489719a40fbacfcf8918c8bf07ef587d69bfa26c7380d14ad"
+      "definition_sha256": "4bd2131916187f4d3727c2ed95f653a96bec31f32e15fd34766a0c4a861528e6"
     },
     {
       "acl": [
@@ -5866,7 +6076,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7abbdd4f5f65f68cf91886d1ae270597d14198af93ef5a489270465a984fc214"
+      "definition_sha256": "3663557a48be8eabcdff1cfcc6852d2e2ed60f7744d269d698a2c58bffa251da"
     },
     {
       "acl": [
@@ -5890,7 +6100,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7ab19989a9420364898710898f599aa2afe18854d6870714b379ad707f9040d0"
+      "definition_sha256": "e8f9722a12e7d6dbc4ab90860a0f6ea82e20c9c7226a1d24143ada80170a1d37"
     },
     {
       "acl": [
@@ -5914,7 +6124,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "88197f5f5a40f7fc351413c80320c7ab8f77b54108d3a9d6e2e07c6247e3d72c"
+      "definition_sha256": "d215d7bcd53bf6ec9f912c0c59f980376bd9782704560c4354c700fc8ff7c140"
     },
     {
       "acl": [
@@ -6226,7 +6436,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "76583c6f9fdab7968aae7954af3612ef6e79e720467cbc84e1190ff5417a7a3e"
+      "definition_sha256": "b713e96b9cc0f2b71f5f7d3220e8c01470acecc3218a5ec67b5728c9f2a55d49"
     },
     {
       "acl": [
@@ -6396,14 +6606,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
       "identity": "_timesheet_break_entry_precedence_v1(p_client_id uuid, p_contract_id uuid, p_as_of_date date)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6118b0c8e612ebfb852bd011f820720b669fb55a6193dd709e4e648c50d2c1ac"
+      "definition_sha256": "0a4246fab681a5ba7a37082bd1c4a4ddcfed5589233b9a007fd0daae2d69f3d7"
     },
     {
       "acl": [
@@ -6575,6 +6785,49 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "e8929496098efefd859093e9f7da1a68144b389c621b74271232172c0b8f0eae"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_settings_authority_before_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f34a881807b201186d417a8192ea6d4f949191b745a2677497f4726050ac9ea0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_settings_authority_frozen_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7198d8db47cc192ed8c82bdf80f435d055c2cc21d4e58401c788009f3c2b7726"
     },
     {
       "acl": [
@@ -9757,7 +10010,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "84185b1ebb916eeef0d0932f701e1e7d82bcd51725c190bbca9ad63d9571c064"
+      "definition_sha256": "72cce39011b9742b2c863f796aeafa8044af55809deb6d9b738d301257f324f9"
     },
     {
       "acl": [
@@ -9852,7 +10105,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e5ccf7fea46d88f9e6d54e9aade3b06612858263d96092c1e540da61e56b4de5"
+      "definition_sha256": "8a819b53c339fe9ce837a50a48783fcf62ad0c11ecb9801241cf6ddc86995ed1"
     },
     {
       "acl": [
@@ -9902,14 +10155,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public, pg_temp"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
       "identity": "_import_review_effective_authority_core_v1(p_source_route text, p_contract_id uuid, p_client_id uuid, p_evidence_date date)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "364804b75ba2547345698a421c4ea3cb7749fc3b5e820dfbac8a4422d263d6fb"
+      "definition_sha256": "658e7fcaf356339170497dbc17074512b627f704c8cfdc6e0127a2907e285bda"
     },
     {
       "acl": [
@@ -13675,7 +13928,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4a68c6576e5c35674b9c7693dd2759d96f374ffca142e29497cd68d08f036ae3"
+      "definition_sha256": "30695496461e61bfc0ad9b61a1850690388cc32284a1a5ad420521a9ef86af7d"
     },
     {
       "acl": [
@@ -16105,6 +16358,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_settings_effective_get_v1(p_client_id uuid, p_contract_id uuid, p_relevant_date date, p_workflow text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "891e2b42d22a1e947565a817b4465627afb69134a2c515b7a314dfcaa9f4e84a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, pg_temp"
       ],
       "schema": "public",
@@ -17299,14 +17576,38 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public, extensions, pg_temp"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
       "identity": "import_auto_authorise_policy_resolve_v1(p_source_system hr_source_enum, p_client_id uuid, p_contract_id uuid, p_validation_context boolean)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "94071a9eee813d587f94092fcd5fac837dbeb221f786c1041064b3186ba12c7c"
+      "definition_sha256": "d72289969d0ad2b8f83544a893ffd331389b01841e540b709a9ba8bc591a6b2b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "import_auto_authorise_policy_resolve_v2(p_source_system hr_source_enum, p_client_id uuid, p_contract_id uuid, p_timesheet_id uuid, p_relevant_date date, p_validation_context boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "5b8c5060794f7f4ba87d39a8969c8794d682fd6a441ee4ae2efc41736afda5c1"
     },
     {
       "acl": [
@@ -17752,7 +18053,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f663e4a99b60e41e833a36dde74da4e153d9b03d82bf93c97202ff2759ceeca5"
+      "definition_sha256": "4337ce44f6ff2bbaff06159cf3cb006e4bd2a29b30c15c79d3ec68155c321e77"
     },
     {
       "acl": [
@@ -17800,7 +18101,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "64c4027304ad8d07930fca649b67be9e8bdb8a41119d12e48bb32f6077c5af6b"
+      "definition_sha256": "d22589356fbae813c808ee4241c5b66331ced7ae0d6ebbe0ee0a012576af5d1f"
     },
     {
       "acl": [
@@ -22912,7 +23213,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "acb174e93144e3a32a86a2c13bc4e5788aaf6e0a085d0f196518788d1ea748c1"
+      "definition_sha256": "419da6ee19a588eb2fec591b888a923443678717270cf7a67702a72b3d08eaf3"
     },
     {
       "acl": [
@@ -23562,7 +23863,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6f4c4b171263e71c0bc3607165bb4524d7213d868855088aac8d3e16e8a1f99f"
+      "definition_sha256": "81dea9abf0b9268cf765302a70d1797298247503274559e7d2f750bc7cd66b5a"
     },
     {
       "acl": [
@@ -26607,6 +26908,78 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "settings_bank_holiday_feed_refresh_claim_v1(p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7baf1a7b484e3b409538f8088427afd5a7611a2a28039165463a96ba04e36bd7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "settings_bank_holiday_feed_refresh_complete_v1(p_claim_token uuid, p_dates jsonb, p_content_sha256 text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "135712de968a92b90a4be437228f4793b71ac71ed7fed4a11d73cf5d798b70d2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "settings_bank_holiday_feed_refresh_fail_v1(p_claim_token uuid, p_error_code text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6076b3d6e6824760811f88559283a7775ba0ab95464a28da6995400a61f5bdee"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -27996,7 +28369,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "9ba25997ffdfb11bdcf962b62969791b975b179df34640df29cc8a68c3ec7d16"
+      "definition_sha256": "aff5e8bfbd7393880c082949ef8d5ecb78e9a686a51071bda3e2b65a63ad5e6b"
     },
     {
       "acl": [
@@ -28945,7 +29318,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "9553ea67eee14e23c46c49601510973dbc3e0590d3c22f2c5bcde3749aa5fa52"
+      "definition_sha256": "f84d6893cbe6f8568dcd601811debbb4a1a1fe470674730ff738eca690f8a6ea"
     },
     {
       "acl": [
@@ -29625,7 +29998,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8afd858e9b481b0122ea40e4ab1d8982723dfd4c875f8120aa51a3ec94d89459"
+      "definition_sha256": "ea258f77fa3b14772956561041d8d6899f943b992d1fe31d785997be3a86ba6f"
     }
   ],
   "triggers": [
@@ -29952,6 +30325,13 @@
       "definition": "CREATE TRIGGER trg_tsfin_client_hospitals_wakeup_aiu AFTER INSERT OR UPDATE OF hospital_name_norm, client_id ON client_hospitals FOR EACH ROW EXECUTE FUNCTION trg_tsfin_client_hospitals_wakeup()"
     },
     {
+      "name": "contract_settings_authority_after_client_v1",
+      "table": "client_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_client_v1 AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_client_v1()"
+    },
+    {
       "name": "trg_invoice_candidate_revision_v2_client_settings_d",
       "table": "client_settings",
       "schema": "public",
@@ -30050,6 +30430,13 @@
       "definition": "CREATE TRIGGER trg_cc_clients_tombstones AFTER INSERT OR DELETE OR UPDATE ON clients_tombstones FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
     },
     {
+      "name": "contract_week_settings_authority_before_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_week_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, timesheet_id, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private._contract_week_settings_authority_before_v1()"
+    },
+    {
       "name": "trg_cc_contract_weeks",
       "table": "contract_weeks",
       "schema": "public",
@@ -30083,6 +30470,20 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_u AFTER UPDATE ON contract_weeks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_insert_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_insert_v1 AFTER INSERT ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
+    },
+    {
+      "name": "contract_settings_authority_after_contract_update_v1",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_contract_update_v1 AFTER UPDATE OF client_id, start_date, overrideclientsettings, no_timesheet_required, daily_calc_of_invoices, group_nightsat_sunbh, is_nhsp, autoprocess_hr, requires_hr, hr_attach_to_invoice, ts_attach_to_invoice, reference_number_required_to_issue_invoice, send_manual_invoices_to_different_email, manual_invoices_alt_email_address, default_submission_mode, timesheet_break_entry_mode, auto_invoice, require_reference_to_pay, require_reference_to_invoice, self_bill, healthroster_import_auto_authorise_override, nhsp_import_auto_authorise_override, candidate_electronic_auto_authorise_override, candidate_expenses_require_separate_timesheet_override, candidate_paper_submission_enabled_override, candidate_expense_invoice_email_override, candidate_manager_approval_policy_json, rates_json, additional_rates_json, mileage_pay_rate, mileage_charge_rate ON contracts FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_contract_v1()"
     },
     {
       "name": "trg_cc_contracts",
@@ -31016,6 +31417,13 @@
       "definition": "CREATE TRIGGER trg_report_presets_set_updated_at BEFORE UPDATE ON report_presets FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
     },
     {
+      "name": "contract_settings_authority_after_global_defaults_v1",
+      "table": "settings_defaults",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_global_defaults_v1 AFTER UPDATE OF timezone_id, day_start, day_end, night_start, night_end, sat_start, sat_end, sun_start, sun_end, bh_start, bh_end, bh_list, bh_feed_list, hr_attach_to_invoice, ts_attach_to_invoice, ts_reference_required ON settings_defaults FOR EACH ROW EXECUTE FUNCTION private._contract_settings_after_global_v1()"
+    },
+    {
       "name": "trg_invoice_candidate_revision_v2_settings_defaults_d",
       "table": "settings_defaults",
       "schema": "public",
@@ -31035,6 +31443,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_u AFTER UPDATE ON settings_defaults REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
+    },
+    {
+      "name": "contract_settings_authority_after_finance_window_v1",
+      "table": "settings_finance_windows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER contract_settings_authority_after_finance_window_v1 AFTER INSERT OR DELETE OR UPDATE ON settings_finance_windows FOR EACH STATEMENT EXECUTE FUNCTION private._contract_settings_after_global_v1()"
     },
     {
       "name": "set_updated_at_settings_finance_windows",
@@ -31261,6 +31676,13 @@
       "definition": "CREATE TRIGGER trg_tsfin_timesheet_validations_wakeup AFTER INSERT OR UPDATE ON timesheet_validations FOR EACH ROW EXECUTE FUNCTION trg_tsfin_timesheet_validations_wakeup()"
     },
     {
+      "name": "timesheet_settings_authority_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheet_settings_authority_before_v1 BEFORE INSERT OR UPDATE OF contract_id, week_ending_date, sheet_scope, settings_authority_json, settings_authority_version, settings_authority_fingerprint, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_settings_authority_before_v1()"
+    },
+    {
       "name": "timesheets_candidate_qr_pack_ready_notification_trg",
       "table": "timesheets",
       "schema": "public",
@@ -31328,7 +31750,7 @@
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change AFTER UPDATE OF worked_start_iso, worked_end_iso, break_start_iso, break_end_iso, break_minutes, reference_number, day_references_json, actual_schedule_json, additional_units_week, additional_units_per_day ON timesheets FOR EACH ROW WHEN (COALESCE(new.is_current, false) = true AND COALESCE(old.is_current, false) = true) EXECUTE FUNCTION timesheets_invalidate_prevalidation_on_change()"
+      "definition": "CREATE TRIGGER trg_timesheets_invalidate_prevalidation_on_change AFTER UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheets_invalidate_prevalidation_on_change()"
     },
     {
       "name": "trg_timesheets_updated_at",
@@ -31357,6 +31779,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_tsfin_au AFTER UPDATE OF is_current, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_update()"
+    },
+    {
+      "name": "daily_timesheet_settings_authority_after_fin_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER daily_timesheet_settings_authority_after_fin_v1 AFTER INSERT OR UPDATE OF processed_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private._daily_timesheet_settings_authority_after_fin_v1()"
     },
     {
       "name": "trg_cc_timesheets_financials",
@@ -60864,6 +61293,38 @@
           "generated": ""
         },
         {
+          "name": "settings_authority_fingerprint",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_resolved_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_version",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "split_boundary_date",
           "type": "date",
           "default": null,
@@ -60958,6 +61419,10 @@
           "definition": "CREATE INDEX idx_contract_weeks_contract ON public.contract_weeks USING btree (contract_id)"
         },
         {
+          "name": "idx_contract_weeks_planned_settings_authority_v1",
+          "definition": "CREATE INDEX idx_contract_weeks_planned_settings_authority_v1 ON public.contract_weeks USING btree (contract_id, week_ending_date, id) WHERE (timesheet_id IS NULL)"
+        },
+        {
           "name": "idx_cw_contract_we",
           "definition": "CREATE INDEX idx_cw_contract_we ON public.contract_weeks USING btree (contract_id, week_ending_date)"
         },
@@ -61000,6 +61465,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "contract_weeks_settings_authority_identity_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (settings_authority_json = '{}'::jsonb AND settings_authority_version IS NULL AND settings_authority_fingerprint IS NULL AND settings_authority_resolved_at IS NULL OR settings_authority_json <> '{}'::jsonb AND settings_authority_version = 'CONTRACT_SETTINGS_AUTHORITY_V1'::text AND settings_authority_fingerprint ~ '^[0-9a-f]{64}$'::text AND settings_authority_resolved_at IS NOT NULL)"
+        },
+        {
+          "name": "contract_weeks_settings_authority_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(settings_authority_json) = 'object'::text)"
         },
         {
           "name": "contract_weeks_timesheet_id_fkey",
@@ -86156,6 +86637,70 @@
           "generated": ""
         },
         {
+          "name": "bh_feed_claim_token",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_claimed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_content_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_last_checked_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_last_error_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_last_success_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_list",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bh_feed_next_refresh_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "bh_feed_url",
           "type": "text",
           "default": null,
@@ -86932,6 +87477,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (banking_system = ANY (ARRAY['REVOLUT_API'::text, 'MONZO_CSV'::text, 'REVOLUT_CSV'::text]))"
+        },
+        {
+          "name": "settings_defaults_bh_feed_hash_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bh_feed_content_sha256 IS NULL OR bh_feed_content_sha256 ~ '^[0-9a-f]{64}$'::text)"
+        },
+        {
+          "name": "settings_defaults_bh_feed_list_array_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(bh_feed_list) = 'array'::text)"
         },
         {
           "name": "settings_defaults_bh_source_check",
@@ -91444,6 +92005,38 @@
           "generated": ""
         },
         {
+          "name": "settings_authority_fingerprint",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_resolved_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "settings_authority_version",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "sheet_scope",
           "type": "timesheet_scope_enum",
           "default": "'DAILY'::timesheet_scope_enum",
@@ -91836,6 +92429,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (timesheet_id)"
+        },
+        {
+          "name": "timesheets_settings_authority_identity_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (settings_authority_json = '{}'::jsonb AND settings_authority_version IS NULL AND settings_authority_fingerprint IS NULL AND settings_authority_resolved_at IS NULL OR settings_authority_json <> '{}'::jsonb AND settings_authority_version = 'CONTRACT_SETTINGS_AUTHORITY_V1'::text AND settings_authority_fingerprint ~ '^[0-9a-f]{64}$'::text AND settings_authority_resolved_at IS NOT NULL)"
+        },
+        {
+          "name": "timesheets_settings_authority_object_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(settings_authority_json) = 'object'::text)"
         }
       ],
       "view_definition_sha256": null
@@ -103302,7 +103911,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "cc5298aca044db19c8b7b01d1e65a5febc2eb7bac6c9e22729dc599a41492a2d"
+      "view_definition_sha256": "7495e30eac31c6bcc7701094a4130a683e8f6b661e1d1d448358e02f28bb57d1"
     },
     {
       "acl": [
@@ -103512,7 +104121,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "bf3d456d351ac69fc994c9200ec17a6d6223fad3c1466583f1f7c857bad5632d"
+      "view_definition_sha256": "0cb0fd4630d553adbdfc28d89d46a7c6b3438984eaa2446e8a964981454c59ce"
     },
     {
       "acl": [

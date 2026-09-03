@@ -47,22 +47,6 @@ t_eff as (
   join public.timesheets te
     on te.timesheet_id = e.effective_timesheet_id
 ),
--- settings_defaults is NON-FINANCE ONLY now (explicit select list; no select *)
-def as (
-  select
-    timezone_id,
-    day_start, day_end,
-    night_start, night_end,
-    sat_start, sat_end,
-    sun_start, sun_end,
-    bh_start, bh_end,
-    bh_list,
-    hr_attach_to_invoice,
-    ts_attach_to_invoice
-  from public.settings_defaults
-  where id = 1
-  limit 1
-),
 base as (
   select
     te.effective_timesheet_id,
@@ -113,6 +97,7 @@ base as (
     to_jsonb(u)  as out_umbrella,
 
     cid.client_id as out_client_id,
+    authority.settings_authority_json as settings_authority,
 
     -- ✅ Expand “effective flags” for weekly consumers (still source-of-truth = v_timesheets_summary)
     jsonb_build_object(
@@ -123,18 +108,18 @@ base as (
       'contract_week_ending_date',     v.contract_week_ending_date,
       'basis',                         v.basis,
 
-      'client_requires_hr',            v.client_requires_hr,
-      'client_autoprocess_hr',         v.client_autoprocess_hr,
-      'client_no_timesheet_required',  v.client_no_timesheet_required,
-      'client_is_nhsp',                v.client_is_nhsp,
+      'client_requires_hr',            (authority.settings_authority_json#>>'{values,requires_hr}')::boolean,
+      'client_autoprocess_hr',         (authority.settings_authority_json#>>'{values,autoprocess_hr}')::boolean,
+      'client_no_timesheet_required',  (authority.settings_authority_json#>>'{values,no_timesheet_required}')::boolean,
+      'client_is_nhsp',                (authority.settings_authority_json#>>'{values,is_nhsp}')::boolean,
 
-      'require_reference_to_pay',      v.require_reference_to_pay,
-      'require_reference_to_invoice',  v.require_reference_to_invoice,
+      'require_reference_to_pay',      (authority.settings_authority_json#>>'{values,require_reference_to_pay}')::boolean,
+      'require_reference_to_invoice',  (authority.settings_authority_json#>>'{values,require_reference_to_invoice}')::boolean,
 
-      'client_hr_validation_required', v.client_hr_validation_required,
-      'client_ts_reference_required',  v.client_ts_reference_required,
-      'client_pay_reference_required', v.client_pay_reference_required,
-      'client_invoice_reference_required', v.client_invoice_reference_required,
+      'client_hr_validation_required', (authority.settings_authority_json#>>'{values,hr_validation_required}')::boolean,
+      'client_ts_reference_required',  (authority.settings_authority_json#>>'{values,ts_reference_required}')::boolean,
+      'client_pay_reference_required', (authority.settings_authority_json#>>'{values,require_reference_to_pay}')::boolean,
+      'client_invoice_reference_required', (authority.settings_authority_json#>>'{values,require_reference_to_invoice}')::boolean,
 
       'pay_method',                    v.pay_method,
       'processing_status',             v.processing_status,
@@ -144,20 +129,15 @@ base as (
       'hr_validation_required_for_invoice',
         (
           v.timesheet_id is not null
-          and coalesce(v.client_hr_validation_required, false) = true
-          and coalesce(v.client_no_timesheet_required, false) = false
+          and coalesce((authority.settings_authority_json#>>'{values,hr_validation_required}')::boolean, false) = true
+          and coalesce((authority.settings_authority_json#>>'{values,no_timesheet_required}')::boolean, false) = false
           and coalesce(v.total_hours, tf.total_hours, 0::numeric) > 0::numeric
         ),
 
       -- ✅ NEW: pass through validation status for TSFIN recompute gating
       'validation_status', v.validation_status
-    ) as out_effective_flags,
-
-    cs as cs_row,
-    def as def_row,
-    ct as ct_row
+    ) as out_effective_flags
   from t_eff te
-  cross join def
 
   left join lateral (
     select
@@ -249,9 +229,6 @@ base as (
   left join public.v_timesheets_summary v
     on v.timesheet_id = te.effective_timesheet_id
 
-  left join public.contracts ct
-    on ct.id = te.contract_id
-
   left join lateral (
     select ch.client_id
     from public.client_hospitals ch
@@ -265,33 +242,19 @@ base as (
     select coalesce(v.client_id, tf.client_id, ch.client_id) as client_id
   ) cid on true
 
-  -- client_settings chosen by TIME anchor (work date / week ending)
   left join lateral (
-    select cs1.*
-    from public.client_settings cs1
-    where cid.client_id is not null
-      and cs1.client_id = cid.client_id
-    order by
-      case
-        when (coalesce(
-          case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
-          te.week_ending_date::date
-        )) is null then 0
-
-        when cs1.effective_from is not null
-         and cs1.effective_from <= coalesce(
-           case when te.worked_start_iso is not null then (te.worked_start_iso at time zone 'Europe/London')::date end,
-           te.week_ending_date::date
-         ) then 0
-
-        when cs1.effective_from is null then 1
-
-        else 2
-      end,
-      cs1.effective_from desc nulls last,
-      cs1.created_at desc
-    limit 1
-  ) cs on true
+    select private._contract_settings_effective_core_v1(
+      cid.client_id,
+      te.contract_id,
+      coalesce(
+        (te.worked_start_iso at time zone 'Europe/London')::date,
+        (te.scheduled_start_iso at time zone 'Europe/London')::date,
+        te.week_ending_date::date
+      ),
+      case when te.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'FINANCE' end,
+      te.effective_timesheet_id
+    ) as settings_authority_json
+  ) authority on true
 ),
 ctx as (
   select
@@ -304,28 +267,28 @@ ctx as (
     b.out_client_id,
     b.out_effective_flags,
 
-    -- Finance window row in-scope for FINANCE anchor date (authorised date else today)
+    -- Every policy input comes from the Timesheet authority snapshot.  The
+    -- correction envelope keeps its existing explicit overrides.
     jsonb_build_object(
-      'timezone_id', coalesce((b.cs_row).timezone_id, (b.def_row).timezone_id, 'Europe/London'),
-
-      'day_start',   coalesce(to_char((b.cs_row).day_start,   'HH24:MI:SS'), to_char((b.def_row).day_start,   'HH24:MI:SS'), '06:00:00'),
-      'day_end',     coalesce(to_char((b.cs_row).day_end,     'HH24:MI:SS'), to_char((b.def_row).day_end,     'HH24:MI:SS'), '20:00:00'),
-      'night_start', coalesce(to_char((b.cs_row).night_start, 'HH24:MI:SS'), to_char((b.def_row).night_start, 'HH24:MI:SS'), '20:00:00'),
-      'night_end',   coalesce(to_char((b.cs_row).night_end,   'HH24:MI:SS'), to_char((b.def_row).night_end,   'HH24:MI:SS'), '06:00:00'),
-
-      'sat_start',   coalesce(to_char((b.cs_row).sat_start, 'HH24:MI:SS'), to_char((b.def_row).sat_start, 'HH24:MI:SS'), '00:00:00'),
-      'sat_end',     coalesce(to_char((b.cs_row).sat_end,   'HH24:MI:SS'), to_char((b.def_row).sat_end,   'HH24:MI:SS'), '00:00:00'),
-      'sun_start',   coalesce(to_char((b.cs_row).sun_start, 'HH24:MI:SS'), to_char((b.def_row).sun_start, 'HH24:MI:SS'), '00:00:00'),
-      'sun_end',     coalesce(to_char((b.cs_row).sun_end,   'HH24:MI:SS'), to_char((b.def_row).sun_end,   'HH24:MI:SS'), '00:00:00'),
-
-      'bh_start',    coalesce(to_char((b.cs_row).bh_start, 'HH24:MI:SS'), to_char((b.def_row).bh_start, 'HH24:MI:SS'), '00:00:00'),
-      'bh_end',      coalesce(to_char((b.cs_row).bh_end,   'HH24:MI:SS'), to_char((b.def_row).bh_end,   'HH24:MI:SS'), '00:00:00'),
+      'timezone_id', coalesce(b.settings_authority#>>'{values,timezone_id}','Europe/London'),
+      'day_start',   coalesce(b.settings_authority#>>'{values,day_start}','06:00:00'),
+      'day_end',     coalesce(b.settings_authority#>>'{values,day_end}','20:00:00'),
+      'night_start', coalesce(b.settings_authority#>>'{values,night_start}','20:00:00'),
+      'night_end',   coalesce(b.settings_authority#>>'{values,night_end}','06:00:00'),
+      'sat_start',   coalesce(b.settings_authority#>>'{values,sat_start}','00:00:00'),
+      'sat_end',     coalesce(b.settings_authority#>>'{values,sat_end}','00:00:00'),
+      'sun_start',   coalesce(b.settings_authority#>>'{values,sun_start}','00:00:00'),
+      'sun_end',     coalesce(b.settings_authority#>>'{values,sun_end}','00:00:00'),
+      'bh_start',    coalesce(b.settings_authority#>>'{values,bh_start}','00:00:00'),
+      'bh_end',      coalesce(b.settings_authority#>>'{values,bh_end}','00:00:00'),
 
       'vat_rate_pct',
-      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric, (b.cs_row).vat_rate_pct, fin.vat_rate_pct, 20::numeric),
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,vat_rate_pct}','')::numeric,20::numeric),
 
       'pay_vat_rate_pct',
-      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric, (b.cs_row).vat_rate_pct, fin.vat_rate_pct, 20::numeric),
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,applied_pay_vat_rate_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,vat_rate_pct}','')::numeric,20::numeric),
 
       'correction_financials_policy_envelope', b.correction_policy_envelope,
       'correction_financials_policy_envelope_fingerprint', b.correction_policy_leg ->> 'envelope_fingerprint',
@@ -339,98 +302,41 @@ ctx as (
       'correction_invoice_policy_date', b.correction_policy_leg #>> '{invoice_policy,invoice_policy_date}',
 
       'holiday_pay_pct',
-      coalesce((b.cs_row).holiday_pay_pct, fin.holiday_pay_pct, 12.07::numeric),
+      coalesce(nullif(b.settings_authority#>>'{values,holiday_pay_pct}','')::numeric,12.07::numeric),
 
       'erni_pct',
-      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,erni_pct}', '')::numeric, fin.erni_pct, 13.8::numeric),
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,erni_pct}', '')::numeric,
+        nullif(b.settings_authority#>>'{values,erni_pct}','')::numeric,13.8::numeric),
 
       'mileage_pay_defaults',
-      fin.mileage_pay_defaults,
+      b.settings_authority#>'{values,mileage_pay_defaults}',
 
       'mileage_charge_defaults',
-      fin.mileage_charge_defaults,
+      b.settings_authority#>'{values,mileage_charge_defaults}',
 
       'apply_holiday_to',
-      coalesce((b.cs_row).apply_holiday_to, fin.apply_holiday_to, 'PAYE_ONLY'),
+      coalesce(b.settings_authority#>>'{values,apply_holiday_to}','PAYE_ONLY'),
 
       'apply_erni_to',
-      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,apply_erni_to}', ''), (b.cs_row).apply_erni_to, fin.apply_erni_to, 'PAYE_ONLY'),
+      coalesce(nullif(b.correction_policy_leg #>> '{tsfin_policy,apply_erni_to}', ''),
+        b.settings_authority#>>'{values,apply_erni_to}','PAYE_ONLY'),
 
       'margin_includes',
-      jsonb_build_object(
-        'expenses',
-        coalesce(
-          nullif((
-            case
-              when (b.cs_row).margin_includes is null then null
-              when jsonb_typeof((b.cs_row).margin_includes) = 'object' then (b.cs_row).margin_includes
-              when jsonb_typeof((b.cs_row).margin_includes) = 'string'
-                   and ((b.cs_row).margin_includes #>> '{}') ~ '^\s*\{'
-                then ((b.cs_row).margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'expenses', '')::boolean,
-
-          nullif((
-            case
-              when fin.margin_includes is null then null
-              when jsonb_typeof(fin.margin_includes) = 'object' then fin.margin_includes
-              when jsonb_typeof(fin.margin_includes) = 'string'
-                   and (fin.margin_includes #>> '{}') ~ '^\s*\{'
-                then (fin.margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'expenses', '')::boolean,
-
-          false
-        ),
-
-        'mileage',
-        coalesce(
-          nullif((
-            case
-              when (b.cs_row).margin_includes is null then null
-              when jsonb_typeof((b.cs_row).margin_includes) = 'object' then (b.cs_row).margin_includes
-              when jsonb_typeof((b.cs_row).margin_includes) = 'string'
-                   and ((b.cs_row).margin_includes #>> '{}') ~ '^\s*\{'
-                then ((b.cs_row).margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'mileage', '')::boolean,
-
-          nullif((
-            case
-              when fin.margin_includes is null then null
-              when jsonb_typeof(fin.margin_includes) = 'object' then fin.margin_includes
-              when jsonb_typeof(fin.margin_includes) = 'string'
-                   and (fin.margin_includes #>> '{}') ~ '^\s*\{'
-                then (fin.margin_includes #>> '{}')::jsonb
-              else null
-            end
-          ) ->> 'mileage', '')::boolean,
-
-          false
-        )
-      ),
+      coalesce(b.settings_authority#>'{values,margin_includes}',
+        jsonb_build_object('expenses',false,'mileage',false)),
 
       'bh_list',
-      case
-        when (b.def_row).bh_list is null then '[]'::jsonb
-        when jsonb_typeof((b.def_row).bh_list) = 'array' then (b.def_row).bh_list
-        when jsonb_typeof((b.def_row).bh_list) = 'string'
-             and ((b.def_row).bh_list #>> '{}') ~ '^\s*\['
-          then ((b.def_row).bh_list #>> '{}')::jsonb
-        else '[]'::jsonb
-      end,
+      coalesce(b.settings_authority#>'{values,bh_list}','[]'::jsonb),
 
-      'hr_attach_to_invoice', coalesce((b.ct_row).hr_attach_to_invoice, (b.cs_row).hr_attach_to_invoice, (b.def_row).hr_attach_to_invoice, true),
-      'ts_attach_to_invoice', coalesce((b.ct_row).ts_attach_to_invoice, (b.cs_row).ts_attach_to_invoice, (b.def_row).ts_attach_to_invoice, true),
+      'hr_attach_to_invoice', coalesce((b.settings_authority#>>'{values,hr_attach_to_invoice}')::boolean,true),
+      'ts_attach_to_invoice', coalesce((b.settings_authority#>>'{values,ts_attach_to_invoice}')::boolean,true),
 
-      'week_ending_weekday',     coalesce((b.cs_row).week_ending_weekday, 0),
-      'default_submission_mode', coalesce((b.cs_row).default_submission_mode, 'ELECTRONIC')
+      'week_ending_weekday', coalesce((b.settings_authority#>>'{values,week_ending_weekday}')::integer,0),
+      'default_submission_mode', coalesce(b.settings_authority#>>'{values,default_submission_mode}','ELECTRONIC'),
+      'settings_authority_version',b.settings_authority->>'authority_version',
+      'settings_authority_fingerprint',b.settings_authority->>'authority_fingerprint'
     ) as out_policy
   from base b
-  left join lateral public.settings_finance_pick(p_date => b.finance_anchor_date) fin on true
 )
 select
   effective_timesheet_id,

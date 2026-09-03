@@ -4,7 +4,8 @@
 -- pre-route capability shapes (omitted and MANUAL_NON_QR), retains the
 -- identical context after Electronic/Paper/QR selection, and remains closed
 -- for import-authoritative or unrelated routes. It also reproduces the live
--- editable NHSP Weekly shape and proves that NHSP alone does not hide breaks.
+-- stale editable NHSP Weekly shape and proves the resolver still suppresses
+-- the hours/break editor because Dedicated NHSP Weekly is authoritative.
 begin;
 
 do $candidate_weekly_preroute_break_entry_verification$
@@ -110,12 +111,16 @@ begin
       'route_family','ELECTRONIC'
     )
   );
-  if v_result#>>'{applicable}' is distinct from 'true'
-     or v_result#>>'{mode}' is distinct from 'DURATION_MINUTES'
-     or v_result#>>'{source}' is distinct from 'CLIENT_SETTINGS'
-     or v_result#>>'{reason}' is distinct from 'CANDIDATE_EDITABLE_ELECTRONIC' then
-    raise exception 'CANDIDATE_EDITABLE_NHSP_WEEKLY_BREAK_ENTRY_HIDDEN:%',v_result;
+  if v_result#>>'{applicable}' is distinct from 'false'
+     or v_result#>'{mode}' is distinct from 'null'::jsonb
+     or v_result#>>'{source}' is distinct from 'NOT_APPLICABLE'
+     or v_result#>>'{reason}' is distinct from 'IMPORT_AUTHORITATIVE' then
+    raise exception 'CANDIDATE_DEDICATED_NHSP_WEEKLY_BREAK_ENTRY_EXPOSED:%',v_result;
   end if;
+
+  update public.client_settings
+  set is_nhsp=false
+  where client_id=v_client;
 
   v_result:=private._candidate_break_entry_context_core_v1(
     null,v_week,v_as_of,
@@ -144,7 +149,7 @@ begin
   end if;
 
   update public.client_settings
-  set no_timesheet_required=true
+  set autoprocess_hr=true,requires_hr=false,no_timesheet_required=true
   where client_id=v_client;
   v_result:=private._candidate_break_entry_context_core_v1(
     null,v_week,v_as_of,
@@ -155,8 +160,8 @@ begin
     )
   );
   if v_result#>>'{applicable}' is distinct from 'false'
-     or v_result#>>'{reason}' is distinct from 'NO_TIMESHEET_REQUIRED' then
-    raise exception 'CANDIDATE_NO_TIMESHEET_BREAK_ENTRY_BROADENED:%',v_result;
+     or v_result#>>'{reason}' is distinct from 'IMPORT_AUTHORITATIVE' then
+    raise exception 'CANDIDATE_AUTHORITATIVE_ROSTER_BREAK_ENTRY_BROADENED:%',v_result;
   end if;
 end
 $candidate_weekly_preroute_break_entry_verification$;

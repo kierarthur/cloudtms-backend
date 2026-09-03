@@ -3,9 +3,9 @@
 -- detail projection labels that pre-route state MANUAL_NON_QR, while a bare
 -- core caller can omit the route. Both pre-route shapes and the selected
 -- Electronic/Paper/QR routes retain the same context identity and every
--- protected/import-authoritative/unrelated route remains inapplicable. An
--- editable manual NHSP Weekly Timesheet still needs its configured break
--- control; NHSP alone is not import authority and must not suppress it.
+-- protected/import-authoritative/unrelated route remains inapplicable.
+-- Dedicated NHSP Weekly is import-authoritative and therefore cannot expose a
+-- Candidate hours/break editor even if a stale caller capability says editable.
 
 \set ON_ERROR_STOP on
 
@@ -57,11 +57,13 @@ begin
   );
   v_applicable:=coalesce((p_capabilities->>'can_edit_hours')::boolean,false)
     and not coalesce((p_capabilities->>'import_authoritative')::boolean,false)
+    and not coalesce((v_resolution->>'import_authoritative')::boolean,false)
     and coalesce(p_capabilities->>'route_family','') in ('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR')
     and not coalesce((v_resolution->>'no_timesheet_required')::boolean,false);
   v_reason:=case
     when v_applicable then 'CANDIDATE_EDITABLE_ELECTRONIC'
     when coalesce((p_capabilities->>'import_authoritative')::boolean,false)
+      or coalesce((v_resolution->>'import_authoritative')::boolean,false)
       then 'IMPORT_AUTHORITATIVE'
     when coalesce((v_resolution->>'no_timesheet_required')::boolean,false)
       then 'NO_TIMESHEET_REQUIRED'

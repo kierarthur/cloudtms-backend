@@ -52,13 +52,15 @@ test('Batch Issue applies only the effective reference-to-issue policy', () => {
   assert.doesNotMatch(referenceChecks, /ref\.is_required|require_reference_to_invoice|require_reference_to_pay/i);
 });
 
-test('the canonical precheck retains contract-over-client policy resolution for each independent stage', () => {
+test('the canonical precheck retains frozen contract-over-client authority for each independent stage', () => {
   assert.match(
     precheck,
-    /case when c\.overrideclientsettings then c\.require_reference_to_invoice end,[\s\S]*cs\.invoice_reference_required,[\s\S]*false[\s\S]*as require_reference_to_invoice/i,
+    /authority\.settings_json#>>'\{values,require_reference_to_invoice\}'\)::boolean,false\)[\s\S]*as require_reference_to_invoice/i,
   );
   assert.match(
     precheck,
-    /case when c\.overrideclientsettings then c\.reference_number_required_to_issue_invoice end,[\s\S]*cs\.reference_number_required_to_issue_invoice,[\s\S]*false[\s\S]*as reference_number_required_to_issue_invoice/i,
+    /authority\.settings_json#>>'\{values,reference_number_required_to_issue_invoice\}'\)::boolean,[\s\S]*false[\s\S]*as reference_number_required_to_issue_invoice/i,
   );
+  assert.match(precheck, /private\._contract_settings_effective_core_v1/i);
+  assert.doesNotMatch(precheck, /from\s+public\.client_settings|join\s+public\.client_settings/i);
 });

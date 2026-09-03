@@ -41,9 +41,12 @@ begin
   insert into public.clients(id,name)
   values(v_client,'Mileage line type verification client');
   insert into public.client_settings(
-    id,client_id,effective_from,default_submission_mode,
+    id,client_id,effective_from,default_submission_mode,week_ending_weekday,
     candidate_expenses_require_separate_timesheet
-  ) values(gen_random_uuid(),v_client,current_date-30,'ELECTRONIC',true);
+  ) values(
+    gen_random_uuid(),v_client,current_date-30,'ELECTRONIC',
+    extract(dow from current_date)::integer,true
+  );
   insert into public.candidates(id,email,active)
   values(v_candidate,'mileage-line-type-'||replace(v_candidate::text,'-','')||'@example.test',true);
   insert into public.contracts(

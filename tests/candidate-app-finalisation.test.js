@@ -43,12 +43,12 @@ test('editable Weekly Timesheets expose stable break authority before route sele
   ), 'utf8');
   assert.match(verification, /CANDIDATE_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
   assert.match(verification, /CANDIDATE_PROJECTED_PRE_ROUTE_BREAK_ENTRY_NOT_EXPOSED/);
-  assert.match(verification, /CANDIDATE_EDITABLE_NHSP_WEEKLY_BREAK_ENTRY_HIDDEN/);
+  assert.match(verification, /CANDIDATE_DEDICATED_NHSP_WEEKLY_BREAK_ENTRY_EXPOSED/);
   assert.match(verification, /'route_family','MANUAL_NON_QR'/);
   assert.match(verification, /CANDIDATE_SELECTED_ROUTE_BREAK_ENTRY_DRIFT/);
   assert.match(verification, /CANDIDATE_IMPORT_BREAK_ENTRY_BROADENED/);
   assert.match(verification, /CANDIDATE_UNRELATED_ROUTE_BREAK_ENTRY_BROADENED/);
-  assert.match(verification, /CANDIDATE_NO_TIMESHEET_BREAK_ENTRY_BROADENED/);
+  assert.match(verification, /CANDIDATE_AUTHORITATIVE_ROSTER_BREAK_ENTRY_BROADENED/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {

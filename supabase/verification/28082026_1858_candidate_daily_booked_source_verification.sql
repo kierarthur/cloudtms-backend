@@ -744,6 +744,12 @@ begin
         from public.timesheet_evidence e where e.timesheet_id=t.timesheet_id))
       into v_documents_before from public.timesheets t where t.timesheet_id=v_replayed;
     insert into public.clients(id,name) values(v_resolution_client,'Disposable Daily resolution proof');
+    insert into public.client_settings(
+      id,client_id,effective_from,default_submission_mode,week_ending_weekday
+    ) values(
+      gen_random_uuid(),v_resolution_client,v_today-30,'ELECTRONIC',
+      extract(dow from v_today)::integer
+    );
     insert into public.client_hospitals(client_id,hospital_name_norm)
       select v_resolution_client,jsonb_build_array(t.hospital_norm)
       from public.timesheets t where t.timesheet_id=v_replayed;

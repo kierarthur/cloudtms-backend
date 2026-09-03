@@ -1466,11 +1466,11 @@ base_sources as materialized (
     ) correction_envelope,
     coalesce(ts.contract_id,cw.contract_id) contract_id,
     coalesce(parent_ts.contract_id,parent_cw.contract_id) parent_contract_id,
-    coalesce(parent_contract.self_bill,contract.self_bill,false) self_bill,
+    coalesce((a.authority_json#>>'{values,self_bill}')::boolean,false) self_bill,
     nullif(btrim(coalesce(
-      parent_contract.candidate_expense_invoice_email_override,
-      contract.candidate_expense_invoice_email_override,'')),'')
+      a.authority_json#>>'{values,candidate_expense_invoice_email}','')),'')
       contract_expense_invoice_email,
+    a.authority_json settings_authority_json,
     case
       when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
       and (
@@ -1497,7 +1497,7 @@ base_sources as materialized (
         'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL',
         'HEALTHROSTER_ADJUSTMENT'
       ) then 'SELF_BILL'
-      when coalesce(parent_contract.self_bill,contract.self_bill,false)
+      when coalesce((a.authority_json#>>'{values,self_bill}')::boolean,false)
         then 'SELF_BILL'
       else 'NORMAL'
     end invoice_stream,
@@ -1531,6 +1531,11 @@ base_sources as materialized (
     end resolved_source_type
   from resolved_ids r
   left join public.timesheets ts on ts.timesheet_id=r.timesheet_id
+  left join lateral (
+    select private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
+      authority_json
+    where ts.timesheet_id is not null
+  ) a on true
   left join public.timesheets_financials tf
     on tf.timesheet_id=r.timesheet_id and tf.is_current
   left join lateral (
@@ -1538,7 +1543,6 @@ base_sources as materialized (
     where w.timesheet_id=r.timesheet_id
     order by w.updated_at desc nulls last,w.created_at desc nulls last,w.id desc limit 1
   ) cw on true
-  left join public.contracts contract on contract.id=coalesce(ts.contract_id,cw.contract_id)
   left join public.timesheets parent_ts
     on parent_ts.timesheet_id=ts.parent_timesheet_id and parent_ts.is_current
   left join lateral (
@@ -1546,8 +1550,6 @@ base_sources as materialized (
     where w.timesheet_id=parent_ts.timesheet_id
     order by w.updated_at desc nulls last,w.created_at desc nulls last,w.id desc limit 1
   ) parent_cw on true
-  left join public.contracts parent_contract
-    on parent_contract.id=coalesce(parent_ts.contract_id,parent_cw.contract_id)
 ),
 expanded_sources as materialized (
   select b.*,
@@ -1649,25 +1651,15 @@ expanded_sources as materialized (
 settings_resolved as materialized (
   select e.*,
     upper(coalesce(nullif(e.command_json->>'consolidation_mode',''),
-      cs.invoice_consolidation_mode::text,'NONE')) consolidation_mode,
+      e.settings_authority_json#>>'{values,invoice_consolidation_mode}','NONE'))
+      consolidation_mode,
     case when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
       and e.invoice_stream='EXPENSE' then lower(nullif(btrim(coalesce(
-      e.contract_expense_invoice_email,cs.candidate_expense_invoice_email,'')),''))
+      e.contract_expense_invoice_email,'')),''))
       else null::text end expense_delivery_identity,
     coalesce(e.economic_target_week,e.natural_week_start,
       (p_effective_at_utc at time zone 'Europe/London')::date) settings_date
   from expanded_sources e
-  left join lateral (
-    select s.invoice_consolidation_mode,s.candidate_expense_invoice_email
-    from public.client_settings s
-    where s.client_id=e.client_id
-      and(s.effective_from is null
-        or s.effective_from<=coalesce(e.economic_target_week,e.natural_week_start,
-          (p_effective_at_utc at time zone 'Europe/London')::date))
-    order by s.effective_from desc nulls last,s.updated_at desc nulls last,
-      s.created_at desc nulls last,s.id desc
-    limit 1
-  ) cs on true
 ),
 source_rows_base as materialized (
   select s.*,

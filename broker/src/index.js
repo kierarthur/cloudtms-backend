@@ -380,9 +380,9 @@ const CLIENT_CREATE_FIELDS = new Set([
 ]);
 
 const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
-  'timezone_id', 'day_start', 'day_end', 'night_start', 'night_end', 'bh_source', 'bh_list',
-  'bh_feed_url', 'vat_rate_pct', 'holiday_pay_pct', 'erni_pct', 'apply_holiday_to',
-  'apply_erni_to', 'margin_includes', 'effective_from', 'hr_validation_required',
+  'timezone_id', 'day_start', 'day_end', 'night_start', 'night_end',
+  'vat_rate_pct', 'holiday_pay_pct', 'apply_holiday_to',
+  'margin_includes', 'effective_from', 'hr_validation_required',
   'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'pay_reference_required',
   'invoice_reference_required', 'default_submission_mode', 'sat_start', 'sat_end', 'sun_start',
   'sun_end', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices',
@@ -391,8 +391,7 @@ const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
   'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address',
   'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'opt_in_email',
   'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
-  'nhsp_import_auto_authorise', 'reversal_complete_financials_date',
-  'reversal_replacement_financials_date', 'timesheet_break_entry_mode',
+  'nhsp_import_auto_authorise', 'timesheet_break_entry_mode',
   'candidate_paper_submission_enabled',
   'candidate_expenses_require_separate_timesheet', 'candidate_expense_invoice_email'
 ]);
@@ -3392,23 +3391,11 @@ async function handleSettingsFinanceWindows(env, req, windowId = null) {
 
 
 
-// Load client windows & BH list (fallback to defaults if missing)
-async function loadClientTimePolicy(env, clientId) {
-  const enc = encodeURIComponent;
-
-  const cs = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(
-      clientId
-    )}&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_start,bh_end,bh_list`
-  );
-
-  const defaults = await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=day_start,day_end,night_start,night_end,sat_start,sat_end,sun_start,sun_end,bh_start,bh_end,bh_list`
-  );
-
-  const src = { ...(defaults || {}), ...(cs || {}) };
+// Load dated time windows and the global England/Wales bank-holiday set from
+// the single Contract-settings authority. Real Timesheets are returned from
+// their frozen snapshot by loadPolicy; planned work is resolved for its week.
+async function loadClientTimePolicy(env, clientId, relevantDateYmd, context = {}) {
+  const src = await loadPolicy(env, clientId, relevantDateYmd, context);
 
   // Normalise "HH:MM:SS" → "HH:MM" before parseHHMM
   const toHHMM = (val, fallback) => {
@@ -3430,27 +3417,12 @@ async function loadClientTimePolicy(env, clientId) {
   const sunStart   = parseHHMM(toHHMM(src.sun_start,   "00:00"));
   const sunEnd     = parseHHMM(toHHMM(src.sun_end,     "00:00"));
 
-  // ✅ BH window (00:00–00:00 = full BH day). Prefer client override, else global.
-  const bhStart = parseHHMM(
-    toHHMM(
-      (cs && cs.bh_start) ||
-        (defaults && defaults.bh_start) ||
-        "00:00",
-      "00:00"
-    )
-  );
-  const bhEnd = parseHHMM(
-    toHHMM(
-      (cs && cs.bh_end) ||
-        (defaults && defaults.bh_end) ||
-        "00:00",
-      "00:00"
-    )
-  );
+  // 00:00–00:00 means the full bank-holiday day. The resolver has already
+  // applied Client-then-Global hours and Global-only holiday dates.
+  const bhStart = parseHHMM(toHHMM(src.bh_start, "00:00"));
+  const bhEnd = parseHHMM(toHHMM(src.bh_end, "00:00"));
 
-  // ✅ BH LIST IS GLOBAL-ONLY (ignore client_settings.bh_list entirely)
-  // Normalise BH list (array or JSON string → array → Set)
-  const rawBhList = (defaults && defaults.bh_list) ?? [];
+  const rawBhList = src.bh_list ?? [];
 
   let bhListArr = [];
   if (Array.isArray(rawBhList)) {
@@ -3952,7 +3924,7 @@ async function resolveSummarySelection(section, filters, selectionMode, included
 
 
 // Resolve hours (minutes) by bucket from an actual_schedule_json array
-async function resolveBucketsFromSchedule(env, contract, actualDays /* array */, policyOverride = null) {
+async function resolveBucketsFromSchedule(env, contract, actualDays /* array */, policyOverride = null, authorityContext = null) {
   const toIso = (v) => {
     const s0 = String(v ?? '').trim();
     if (!s0) return '';
@@ -4234,9 +4206,24 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
     };
   };
 
-  const policy = policyOverride
-    ? (typeof policyOverride?.dayStart === 'number' ? policyOverride : toNumericPolicyFromSql(policyOverride))
-    : await loadClientTimePolicy(env, contract.client_id);
+  let policy = null;
+  if (policyOverride) {
+    policy = typeof policyOverride?.dayStart === 'number'
+      ? policyOverride
+      : toNumericPolicyFromSql(policyOverride);
+  } else {
+    const relevantDate = String(
+      authorityContext?.relevant_date || authorityContext?.week_ending_date || ''
+    ).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(relevantDate)) {
+      throw new Error('CONTRACT_SETTINGS_RELEVANT_DATE_REQUIRED');
+    }
+    policy = await loadClientTimePolicy(env, contract.client_id, relevantDate, {
+      contract_id: authorityContext?.contract_id || contract?.id || null,
+      timesheet_id: authorityContext?.timesheet_id || null,
+      workflow: authorityContext?.workflow || 'WEEKLY'
+    });
+  }
 
   const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
 
@@ -7593,52 +7580,22 @@ async function handleContractsCreate(env, req) {
   }
   const std_hours_json = (derived_hours || body.std_hours_json || null);
 
-  // Pre-fetch latest client_settings to use for week-ending snapshot and ref/submission defaults
-  // ✅ NEW: also fetch attachments defaults
+  // Resolve the Client canvas for the Contract start date through the single
+  // authority. The unsaved Contract has no id yet, so explicit override values
+  // below are still taken from the request while every inherited value comes
+  // from this dated Client/Global result.
   let clientSettings = null;
   try {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(body.client_id)}` +
-        `&select=` +
-          [
-            'week_ending_weekday',
-            'pay_reference_required',
-            'invoice_reference_required',
-            'default_submission_mode',
-            'is_nhsp',
-            'autoprocess_hr',
-            'requires_hr',
-            'no_timesheet_required',
-            'self_bill_no_invoices_sent',
-            'daily_calc_of_invoices',
-            'group_nightsat_sunbh',
-            'auto_invoice_default',
-            'hr_attach_to_invoice',
-            'ts_attach_to_invoice',
-            'candidate_expense_invoice_email'
-          ].join(',') +
-        `&order=effective_from.desc,created_at.desc&limit=1`
-    );
-    clientSettings = (csRows && csRows[0]) || null;
-  } catch {
-    // Safety fallback to old select set if schema not yet migrated (non-fatal)
-    try {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(body.client_id)}` +
-          `&select=week_ending_weekday,pay_reference_required,invoice_reference_required,default_submission_mode` +
-          `&order=effective_from.desc,created_at.desc&limit=1`
-      );
-      clientSettings = (csRows && csRows[0]) || null;
-    } catch {
-      clientSettings = null;
-    }
+    clientSettings = await loadPolicy(env, body.client_id, body.start_date, {
+      workflow: 'WEEKLY'
+    });
+  } catch (error) {
+    return withCORS(env, req, badRequest(
+      `Unable to resolve Client settings for the Contract start date: ${error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'}`
+    ));
   }
 
-  // Derive week_ending_weekday_snapshot from body or client_settings (fallback 0)
+  // Derive week_ending_weekday_snapshot from the dated Client authority when absent.
   let weekEndingSnapshot = null;
   if (
     Number.isInteger(Number(body.week_ending_weekday_snapshot)) &&
@@ -7651,10 +7608,10 @@ async function handleContractsCreate(env, req) {
     weekEndingSnapshot = (Number.isInteger(we) && we >= 0 && we <= 6) ? we : 0;
   }
 
-  // Derive reference flags + default submission mode from client_settings if missing from body
+  // Derive reference flags + default submission mode from the dated Client authority if absent.
   if (!hasRequireRefToPay || !hasRequireRefToInvoice || !hasDefaultSubmission) {
-    const payRefDefault  = !!(clientSettings && clientSettings.pay_reference_required);
-    const invRefDefault  = !!(clientSettings && clientSettings.invoice_reference_required);
+    const payRefDefault  = clientSettings?.require_reference_to_pay === true;
+    const invRefDefault  = clientSettings?.require_reference_to_invoice === true;
     const dsmRaw         = String(clientSettings?.default_submission_mode || '').toUpperCase();
     const dsmFromClient  = ['ELECTRONIC','MANUAL'].includes(dsmRaw) ? dsmRaw : 'ELECTRONIC';
 
@@ -7675,7 +7632,7 @@ async function handleContractsCreate(env, req) {
   // ✅ IMPORTANT: do NOT persist contracts.default_submission_mode unless overrideclientsettings=true
   const default_submission_mode_to_store = overrideclientsettings ? defaultSubmissionMode : null;
 
-  // NEW: derive contract route/calc defaults from client_settings when not supplied
+  // Derive Contract route/calc defaults from the dated Client authority when not supplied.
   const is_nhsp = hasIsNhsp
     ? clampBool(body.is_nhsp, false)
     : clampBool(clientSettings?.is_nhsp, false);
@@ -7702,14 +7659,14 @@ async function handleContractsCreate(env, req) {
 
   const self_bill = hasSelfBill
     ? clampBool(body.self_bill, false)
-    : clampBool(clientSettings?.self_bill_no_invoices_sent, false);
+    : clampBool(clientSettings?.self_bill, false);
 
-  // NEW: derive contract auto_invoice from client_settings auto_invoice_default if not explicitly supplied
+  // Derive Contract auto_invoice from the dated Client authority when not explicitly supplied.
   const auto_invoice = hasAutoInvoice
     ? clampBool(body.auto_invoice, false)
-    : clampBool(clientSettings?.auto_invoice_default, false);
+    : clampBool(clientSettings?.auto_invoice, false);
 
-  // ✅ NEW: derive attachments from body or client_settings (fallback false)
+  // Derive attachments from the request or the dated Client authority.
   let hr_attach_to_invoice = hasHrAttachToInvoice
     ? clampBool(body.hr_attach_to_invoice, false)
     : clampBool(clientSettings?.hr_attach_to_invoice, false);
@@ -11182,34 +11139,34 @@ async function handleContractsUpdate(env, req, contractId) {
       if (!Number.isInteger(we) || we < 0 || we > 6) {
         try {
           const targetClientId = ('client_id' in patch ? patch.client_id : current.client_id);
-          const { rows: csRows } = await sbFetch(
+          const authority = await loadPolicy(
             env,
-            `${env.SUPABASE_URL}/rest/v1/client_settings` +
-              `?client_id=eq.${enc(targetClientId)}` +
-              `&select=week_ending_weekday` +
-              `&order=effective_from.desc,created_at.desc&limit=1`
+            targetClientId,
+            toYmd(body.start_date) || current.start_date,
+            { workflow: 'WEEKLY' }
           );
-          const cs = (csRows && csRows[0]) || null;
-          const derived = Number(cs?.week_ending_weekday);
+          const derived = Number(authority?.week_ending_weekday);
           we = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
-        } catch { we = 0; }
+        } catch (error) {
+          return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
+        }
       }
       patch.week_ending_weekday_snapshot = we;
     }
   } else {
     if (!hasSubmitted && !hasWeeks && ('client_id' in patch) && patch.client_id && patch.client_id !== current.client_id) {
       try {
-        const { rows: csRows } = await sbFetch(
+        const authority = await loadPolicy(
           env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-            `?client_id=eq.${enc(patch.client_id)}` +
-            `&select=week_ending_weekday` +
-            `&order=effective_from.desc,created_at.desc&limit=1`
+          patch.client_id,
+          toYmd(body.start_date) || current.start_date,
+          { workflow: 'WEEKLY' }
         );
-        const cs = (csRows && csRows[0]) || null;
-        const derived = Number(cs?.week_ending_weekday);
+        const derived = Number(authority?.week_ending_weekday);
         patch.week_ending_weekday_snapshot = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
-      } catch { patch.week_ending_weekday_snapshot = 0; }
+      } catch (error) {
+        return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
+      }
     }
   }
 
@@ -11755,31 +11712,31 @@ async function handleContractsReplace(env, req, contractId) {
       } else {
         try {
           const targetClientId = body.client_id || current.client_id;
-          const { rows: csRows } = await sbFetch(
+          const authority = await loadPolicy(
             env,
-            `${env.SUPABASE_URL}/rest/v1/client_settings` +
-              `?client_id=eq.${enc(targetClientId)}` +
-              `&select=week_ending_weekday` +
-              `&order=effective_from.desc,created_at.desc&limit=1`
+            targetClientId,
+            toYmd(body.start_date) || current.start_date,
+            { workflow: 'WEEKLY' }
           );
-          const cs = (csRows && csRows[0]) || null;
-          const derived = Number(cs?.week_ending_weekday);
+          const derived = Number(authority?.week_ending_weekday);
           wew = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
-        } catch { wew = 0; }
+        } catch (error) {
+          return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
+        }
       }
     } else if (body.client_id && body.client_id !== current.client_id) {
       try {
-        const { rows: csRows } = await sbFetch(
+        const authority = await loadPolicy(
           env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-            `?client_id=eq.${enc(body.client_id)}` +
-            `&select=week_ending_weekday` +
-            `&order=effective_from.desc,created_at.desc&limit=1`
+          body.client_id,
+          toYmd(body.start_date) || current.start_date,
+          { workflow: 'WEEKLY' }
         );
-        const cs = (csRows && csRows[0]) || null;
-        const derived = Number(cs?.week_ending_weekday);
+        const derived = Number(authority?.week_ending_weekday);
         wew = (Number.isInteger(derived) && derived >= 0 && derived <= 6) ? derived : 0;
-      } catch { wew = 0; }
+      } catch (error) {
+        return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
+      }
     } else {
       wew = Number(current.week_ending_weekday_snapshot ?? 0);
     }
@@ -12420,45 +12377,6 @@ async function generateContractWeeksInternal(env, contractId, opts = {}) {
   );
   if (!c) throw new Error('Contract not found');
 
-  const asBool = (v) => {
-    if (v === true) return true;
-    if (v === false || v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
-  };
-
-  const normalizeSubmissionMode = (v) => {
-    const s = String(v || '').trim().toUpperCase();
-    if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
-    return null;
-  };
-
-  let clientSettingsRow = null;
-  try {
-    if (c.client_id) {
-      clientSettingsRow = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(c.client_id)}` +
-          `&select=default_submission_mode,effective_from,created_at` +
-          `&order=effective_from.desc,created_at.desc` +
-          `&limit=1`
-      );
-    }
-  } catch {
-    clientSettingsRow = null;
-  }
-
-  const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
-
-  let submissionModeSnapshot = null;
-  if (asBool(c.overrideclientsettings)) {
-    submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
-  } else {
-    submissionModeSnapshot = clientDefaultMode;
-  }
-  if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
-
   const wew = Number(c.week_ending_weekday_snapshot || 0);
   const endWE = computeWeekEndingInclusive(c.end_date, wew);
   const allWE = enumerateWeekEndings(c.start_date, endWE, wew);
@@ -12509,7 +12427,9 @@ async function generateContractWeeksInternal(env, contractId, opts = {}) {
       week_ending_date: we,
       additional_seq: 0,
       status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
-      submission_mode_snapshot: submissionModeSnapshot,
+      // Required insert placeholder. The database trigger replaces this with
+      // the dated Client/Contract authority for this exact planned week.
+      submission_mode_snapshot: 'ELECTRONIC',
       timesheet_id: null,
       planned_schedule_json,
       created_at: nowIso(),
@@ -12843,49 +12763,6 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
   );
   if (!c) return withCORS(env, req, notFound('Contract not found'));
 
-  // ✅ Resolve submission_mode_snapshot:
-  // - If overrideclientsettings=true → use contracts.default_submission_mode (if valid), else fallback to client_settings.default_submission_mode
-  // - Else → use client_settings.default_submission_mode
-  // - Final fallback: ELECTRONIC (to satisfy NOT NULL on contract_weeks.submission_mode_snapshot)
-  const asBool = (v) => {
-    if (v === true) return true;
-    if (v === false || v == null) return false;
-    const s = String(v).trim().toLowerCase();
-    return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
-  };
-
-  const normalizeSubmissionMode = (v) => {
-    const s = String(v || '').trim().toUpperCase();
-    if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
-    return null;
-  };
-
-  let clientSettingsRow = null;
-  try {
-    if (c.client_id) {
-      clientSettingsRow = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(c.client_id)}` +
-          `&select=default_submission_mode,effective_from,created_at` +
-          `&order=effective_from.desc,created_at.desc` +
-          `&limit=1`
-      );
-    }
-  } catch {
-    clientSettingsRow = null;
-  }
-
-  const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
-
-  let submissionModeSnapshot = null;
-  if (asBool(c.overrideclientsettings)) {
-    submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
-  } else {
-    submissionModeSnapshot = clientDefaultMode;
-  }
-  if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
-
   const wew = Number(c.week_ending_weekday_snapshot || 0);
   const endWE = computeWeekEndingInclusive(c.end_date, wew);
   const allWE = enumerateWeekEndings(c.start_date, endWE, wew);
@@ -12935,7 +12812,9 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
       additional_seq: 0,
       status: (we <= todayYmd ? 'OPEN' : 'PLANNED'),
 
-      submission_mode_snapshot: submissionModeSnapshot,
+      // Required insert placeholder. The database trigger replaces this with
+      // the dated Client/Contract authority for this exact planned week.
+      submission_mode_snapshot: 'ELECTRONIC',
 
       timesheet_id: null,
       planned_schedule_json,
@@ -57034,7 +56913,11 @@ async function handleContractWeekManualUpsert(env, req, weekId) {
    const getManualUpsertBucketPolicy = async () => {
      if (manualUpsertBucketPolicyLoaded) return manualUpsertBucketPolicy;
      manualUpsertBucketPolicyLoaded = true;
-     manualUpsertBucketPolicy = await loadClientTimePolicy(env, contract.client_id);
+     manualUpsertBucketPolicy = await loadClientTimePolicy(env, contract.client_id, cw.week_ending_date, {
+       contract_id: contract.id,
+       timesheet_id: cw.timesheet_id || null,
+       workflow: 'WEEKLY'
+     });
      return manualUpsertBucketPolicy;
    };
 
@@ -58406,11 +58289,15 @@ const expenseEvidenceKindCategories = {
  
    let bhSet = new Set();
    try {
-     const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+     const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date, {
+       contract_id: contract.id, timesheet_id: cw.timesheet_id || null, workflow: 'WEEKLY'
+     });
      const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
      bhSet = new Set(bhList.map(String));
-   } catch {
-     bhSet = new Set();
+   } catch (error) {
+     return withCORS(env, req, badRequest(
+       error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'
+     ));
    }
  
    const isBH = (ymd) => bhSet.has(ymd);
@@ -58844,10 +58731,14 @@ const expenseEvidenceKindCategories = {
  
    let policySnapshot = {};
    try {
-     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+     policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date, {
+       contract_id: contract.id, timesheet_id: cw.timesheet_id || null, workflow: 'WEEKLY'
+     });
      if (!policySnapshot || typeof policySnapshot !== 'object') policySnapshot = {};
-   } catch {
-     policySnapshot = {};
+   } catch (error) {
+     return withCORS(env, req, badRequest(
+       error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'
+     ));
    }
  
    const pay_wtr_rate_pct_snapshot =
@@ -72567,20 +72458,6 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
     };
   };
 
-  const pickEffectiveClientSettingsRow = (rows, ymd) => {
-    if (!Array.isArray(rows) || !rows.length) return null;
-    const w = asYmd(ymd);
-    if (!w) return rows[0] || null;
-
-    for (const row of rows) {
-      if (!row) continue;
-      const ef = asYmd(row.effective_from);
-      if (ef == null) return row;
-      if (ef <= w) return row;
-    }
-    return rows[0] || null;
-  };
-
   try {
     wlog('start', { actor_user_id: user?.id || null });
 
@@ -72639,30 +72516,11 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
       return withCORS(env, req, notFound('Contract not found'));
     }
 
-    let clientSettingsRows = [];
-    try {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(contract.client_id)}` +
-          `&select=effective_from,created_at,requires_hr,autoprocess_hr,no_timesheet_required,is_nhsp,pay_reference_required,invoice_reference_required,hr_validation_required,ts_reference_required,hr_attach_to_invoice,ts_attach_to_invoice` +
-          `&order=effective_from.desc.nullslast,created_at.desc` +
-          `&limit=250`
-      );
-      clientSettingsRows = Array.isArray(rows) ? rows : [];
-    } catch {
-      clientSettingsRows = [];
-    }
-
-    const cs = pickEffectiveClientSettingsRow(clientSettingsRows, cw.week_ending_date);
-
-    let policy = null;
-    try {
-      policy = await loadPolicy(env, contract.client_id || null, cw.week_ending_date || null);
-    } catch {
-      policy = null;
-    }
-    if (!policy || typeof policy !== 'object') policy = {};
+    const policy = await loadPolicy(env, contract.client_id || null, cw.week_ending_date || null, {
+      contract_id: contract.id,
+      timesheet_id: cw.timesheet_id || null,
+      workflow: 'WEEKLY'
+    });
 
     const bhList = Array.isArray(policy.bh_list)
       ? policy.bh_list
@@ -72703,42 +72561,21 @@ async function handleContractWeekManualDraftDetails(env, req, weekId) {
         ? cw.planned_schedule_json
         : null;
 
-    const clientRequiresHr = contract.overrideclientsettings
-      ? !!contract.requires_hr
-      : !!(cs && cs.requires_hr === true);
-
-    const clientAutoprocessHr = contract.overrideclientsettings
-      ? !!contract.autoprocess_hr
-      : !!(cs && cs.autoprocess_hr === true);
-
-    const clientNoTimesheetRequired = contract.overrideclientsettings
-      ? !!contract.no_timesheet_required
-      : !!(cs && cs.no_timesheet_required === true);
-
-    const clientIsNhsp = contract.overrideclientsettings
-      ? !!contract.is_nhsp
-      : !!(cs && cs.is_nhsp === true);
-
-    const requireReferenceToPay = contract.overrideclientsettings
-      ? !!contract.require_reference_to_pay
-      : !!(cs && cs.pay_reference_required === true);
-
-    const requireReferenceToInvoice = contract.overrideclientsettings
-      ? !!contract.require_reference_to_invoice
-      : !!(cs && cs.invoice_reference_required === true);
+    const clientRequiresHr = policy.requires_hr === true;
+    const clientAutoprocessHr = policy.autoprocess_hr === true;
+    const clientNoTimesheetRequired = policy.no_timesheet_required === true;
+    const clientIsNhsp = policy.is_nhsp === true;
+    const requireReferenceToPay = policy.require_reference_to_pay === true;
+    const requireReferenceToInvoice = policy.require_reference_to_invoice === true;
 
     const isAdjustment = !!(cw.is_adjustment === true || Number(cw.additional_seq || 0) > 0);
     const isElectronic = (submissionModeSnapshot === 'ELECTRONIC');
 
-    let resolvedImportAuthoritative = null;
-    try {
-      resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
-        contract_week_id: cw.id,
-        contract_id: contract.id || cw.contract_id || null
-      });
-    } catch {
-      resolvedImportAuthoritative = null;
-    }
+    const resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
+      contract_week_id: cw.id,
+      contract_id: contract.id || cw.contract_id || null,
+      relevant_date: cw.week_ending_date
+    });
 
     const resolvedRouteType = String(resolvedImportAuthoritative?.route_type || '').trim().toUpperCase();
     const resolvedImportAuthoritativeFlag = !!(resolvedImportAuthoritative && resolvedImportAuthoritative.is_import_authoritative === true);
@@ -79042,22 +78879,20 @@ async function handleTimesheetsPresignWeekly(env, req) {
     }
   };
 
-  // Authoritative: client_settings.default_submission_mode must be ELECTRONIC for electronic presign
+  // Candidate electronic entry is decided by the dated/frozen authority.
+  // Import-authoritative families never accept Candidate-entered hours.
   let supportsElectronic = false;
   try {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(clientId)}` +
-        `&select=default_submission_mode,updated_at,created_at` +
-        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-        `&limit=1`
-    );
-    const cs = csRows?.[0] || null;
-    const dsm = String(cs?.default_submission_mode || '').toUpperCase();
-    supportsElectronic = (dsm === 'ELECTRONIC');
-  } catch {
-    supportsElectronic = false;
+    const authority = await loadPolicy(env, clientId, cw.week_ending_date, {
+      contract_id: contract.id,
+      timesheet_id: cw.timesheet_id || null,
+      workflow: 'WEEKLY'
+    });
+    const dsm = String(authority?.default_submission_mode || '').toUpperCase();
+    supportsElectronic = dsm === 'ELECTRONIC'
+      && authority?.settings_authority_applicability?.import_authoritative !== true;
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
   }
 
   if (!supportsElectronic) {
@@ -79224,29 +79059,21 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
     );
   }
 
-  // Batch: client_settings (authoritative electronic capability)
-  const clientIds = [...new Set(list.map(r => r.client_id).filter(Boolean))];
-  const clientSupportsElectronic = {};
-  if (clientIds.length) {
+  const rowSupportsElectronic = {};
+  for (const row of list) {
+    const rowKey = String(row?.id || row?.contract_week_id || '');
+    if (!rowKey || !row?.client_id || !row?.week_ending_date) continue;
     try {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=in.(${clientIds.map(enc).join(',')})` +
-          `&select=client_id,default_submission_mode,updated_at,created_at` +
-          `&order=client_id.asc,updated_at.desc.nullslast,created_at.desc.nullslast`
-      );
-
-      // take first row per client_id (because sorted desc within each client_id)
-      for (const row of (csRows || [])) {
-        const cid = row?.client_id;
-        if (!cid) continue;
-        if (Object.prototype.hasOwnProperty.call(clientSupportsElectronic, cid)) continue;
-        const dsm = String(row?.default_submission_mode || '').toUpperCase();
-        clientSupportsElectronic[cid] = (dsm === 'ELECTRONIC');
-      }
+      const authority = await loadPolicy(env, row.client_id, row.week_ending_date, {
+        contract_id: row.contract_id || null,
+        timesheet_id: row.timesheet_id || null,
+        workflow: 'WEEKLY'
+      });
+      rowSupportsElectronic[rowKey] =
+        String(authority?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC'
+        && authority?.settings_authority_applicability?.import_authoritative !== true;
     } catch {
-      // default: false if missing
+      rowSupportsElectronic[rowKey] = false;
     }
   }
 
@@ -79305,8 +79132,8 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
   };
 
   const withLabels = list.map(r => {
-    const clientId = r.client_id || null;
-    const supportsElectronic = !!(clientId && clientSupportsElectronic[clientId] === true);
+    const rowKey = String(r?.id || r?.contract_week_id || '');
+    const supportsElectronic = rowSupportsElectronic[rowKey] === true;
 
     const tsid = r.timesheet_id || null;
     const tsCur = tsid ? (mapTsCurrent[tsid] || null) : null;
@@ -83019,11 +82846,13 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
     let bhSet = new Set();
     try {
       const ymd = ts.week_ending_date || null;
-      const pol = await loadPolicy(env, contract.client_id, ymd);
+      const pol = await loadPolicy(env, contract.client_id, ymd, {
+        contract_id: contract.id, timesheet_id: ts.timesheet_id, workflow: String(ts.sheet_scope || 'WEEKLY')
+      });
       const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
       bhSet = new Set(bhList.map(String));
-    } catch {
-      bhSet = new Set();
+    } catch (error) {
+      throw new Error(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE');
     }
     const isBH = (ymd) => bhSet.has(String(ymd));
 
@@ -83159,12 +82988,11 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
   // Ensure policy_snapshot_json is NOT NULL (DB constraint)
   let policySnap = fin.policy_snapshot_json;
   if (!policySnap || typeof policySnap !== 'object') {
-    try {
-      const ymd = ts.week_ending_date || null;
-      policySnap = ymd ? await loadPolicy(env, contract.client_id, ymd) : {};
-    } catch {
-      policySnap = {};
-    }
+    const ymd = ts.week_ending_date || null;
+    if (!ymd) throw new Error('CONTRACT_SETTINGS_RELEVANT_DATE_REQUIRED');
+    policySnap = await loadPolicy(env, contract.client_id, ymd, {
+      contract_id: contract.id, timesheet_id: ts.timesheet_id, workflow: String(ts.sheet_scope || 'WEEKLY')
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -83201,7 +83029,9 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
     const getPolicyCached = async (client_id, ymd) => {
       const key = `${String(client_id || '')}|${String(ymd || '')}`;
       if (policyCache.has(key)) return policyCache.get(key);
-      const pol = await loadPolicy(env, client_id, ymd);
+      const pol = await loadPolicy(env, client_id, ymd, {
+        contract_id: contract.id, timesheet_id: ts.timesheet_id, workflow: String(ts.sheet_scope || 'WEEKLY')
+      });
       policyCache.set(key, pol);
       return pol;
     };
@@ -83404,7 +83234,12 @@ async function rebuildWeeklyTsfinForTimesheet(env, timesheetId, contract) {
 
     for (let i = 0; i < ts.actual_schedule_json.length; i++) {
       const seg = ts.actual_schedule_json[i] || {};
-      const mins = await resolveBucketsFromSchedule(env, contract, [seg]);
+      const mins = await resolveBucketsFromSchedule(env, contract, [seg], null, {
+        relevant_date: ts.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: ts.timesheet_id,
+        workflow: String(ts.sheet_scope || 'WEEKLY')
+      });
 
       const hDay   = +(asNumberLocal(mins.day)   / 60).toFixed(2);
       const hNight = +(asNumberLocal(mins.night) / 60).toFixed(2);
@@ -94918,24 +94753,19 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     }
   }
 
-  // Client submission-mode capability: client_settings.default_submission_mode
-  // - ELECTRONIC => electronic allowed (and QR allowed)
-  // - MANUAL     => electronic NOT allowed, QR allowed
+  // Dated/frozen authority controls Candidate hour-entry capability.
   let supportsElectronic = false;
   try {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(contract.client_id)}` +
-        `&select=default_submission_mode,updated_at,created_at` +
-        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-        `&limit=1`
-    );
-    const cs = csRows?.[0] || null;
-    const dsm = String(cs?.default_submission_mode || '').toUpperCase();
-    supportsElectronic = (dsm === 'ELECTRONIC');
-  } catch {
-    supportsElectronic = false;
+    const authority = await loadPolicy(env, contract.client_id, cw.week_ending_date, {
+      contract_id: contract.id,
+      timesheet_id: cw.timesheet_id || null,
+      workflow: 'WEEKLY'
+    });
+    const dsm = String(authority?.default_submission_mode || '').toUpperCase();
+    supportsElectronic = dsm === 'ELECTRONIC'
+      && authority?.settings_authority_applicability?.import_authoritative !== true;
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
   }
 
   if (!wantsQR && !supportsElectronic) {
@@ -95008,7 +94838,12 @@ async function handleTimesheetsSubmitWeekly(env, req) {
     }
 
     try {
-      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json, null, {
+        relevant_date: cw.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: existingTimesheetId || null,
+        workflow: 'WEEKLY'
+      });
       hours = {
         day:   +(mins.day   / 60).toFixed(2),
         night: +(mins.night / 60).toFixed(2),
@@ -95072,7 +94907,11 @@ async function handleTimesheetsSubmitWeekly(env, req) {
 
   let bhSet = new Set();
   try {
-    const policy = await loadClientTimePolicy(env, contract.client_id);
+    const policy = await loadClientTimePolicy(env, contract.client_id, cw.week_ending_date, {
+      contract_id: contract.id,
+      timesheet_id: existingTimesheetId || null,
+      workflow: 'WEEKLY'
+    });
     if (policy && policy.bhList) {
       if (policy.bhList instanceof Set) {
         bhSet = policy.bhList;
@@ -95080,8 +94919,10 @@ async function handleTimesheetsSubmitWeekly(env, req) {
         bhSet = new Set(policy.bhList);
       }
     }
-  } catch {
-    bhSet = new Set();
+  } catch (error) {
+    return withCORS(env, req, badRequest(
+      error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'
+    ));
   }
 
   const isBH = (ymd) => bhSet.has(ymd);
@@ -102426,18 +102267,15 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
 
   let supportsElectronic = false;
   try {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(clientId)}` +
-        `&select=default_submission_mode,updated_at,created_at` +
-        `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-        `&limit=1`
-    );
-    const cs = csRows?.[0] || null;
-    supportsElectronic = (String(cs?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC');
-  } catch {
-    supportsElectronic = false;
+    const authority = await loadPolicy(env, clientId, ts.week_ending_date, {
+      contract_id: ts.contract_id || null,
+      timesheet_id: currentTimesheetId,
+      workflow: String(ts.sheet_scope || 'WEEKLY')
+    });
+    supportsElectronic = String(authority?.default_submission_mode || '').toUpperCase() === 'ELECTRONIC'
+      && authority?.settings_authority_applicability?.import_authoritative !== true;
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
   }
 
   if (!supportsElectronic) {
@@ -104741,11 +104579,10 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   }));
 }
 // ────────────────────────────────────────────────────────────────
-// 3.5 Helper: resolve “import-authoritative” route using best source
-// Priority:
-//   1) v_timesheets_summary (route_type + client_no_timesheet_required)
-//   2) contracts override booleans (is_nhsp/autoprocess_hr/no_timesheet_required)
-// Fallback is fail-open (returns is_import_authoritative:false) if it can’t resolve.
+// 3.5 Helper: resolve “import-authoritative” route.
+// Configuration authority comes from the one dated SQL resolver. Existing
+// Timesheet route/import evidence remains additive factual proof, and manual
+// additional adjustments retain their established editable exception.
 // ────────────────────────────────────────────────────────────────
 
 async function resolveImportAuthoritative(env, input = {}) {
@@ -104767,6 +104604,23 @@ async function resolveImportAuthoritative(env, input = {}) {
   };
 
   const toUpper = (v) => String(v == null ? '' : v).trim().toUpperCase();
+
+  const resolveCentralAuthority = async ({ resolvedContractId = null } = {}) => {
+    const relevantDate = String(
+      input.relevant_date || input.evaluation_date ||
+      timesheetFacts?.week_ending_date || contractWeekFacts?.week_ending_date || ''
+    ).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(relevantDate)) return null;
+    const workflow = toUpper(timesheetFacts?.sheet_scope) === 'DAILY' ? 'DAILY' : 'WEEKLY';
+    const raw = await sbRpc(env, 'contract_settings_effective_get_v1', {
+      p_client_id: input.client_id || null,
+      p_contract_id: resolvedContractId || contract_id || null,
+      p_relevant_date: relevantDate,
+      p_workflow: workflow,
+      p_timesheet_id: timesheet_id || null
+    });
+    return unwrapRpcJsonb(raw, 'contract_settings_effective_get_v1');
+  };
 
   const isImportAuthoritativeFromSummary = (routeType, clientNoTsRequired) => {
     const rt = toUpper(routeType);
@@ -104793,7 +104647,7 @@ async function resolveImportAuthoritative(env, input = {}) {
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
           `?id=eq.${enc(weekId)}` +
-          `&select=id,contract_id,additional_seq,is_adjustment,submission_mode_snapshot,timesheet_id` +
+          `&select=id,contract_id,week_ending_date,additional_seq,is_adjustment,submission_mode_snapshot,timesheet_id` +
           `&limit=1`
       );
       return (rows && rows[0]) || null;
@@ -104810,7 +104664,7 @@ async function resolveImportAuthoritative(env, input = {}) {
         env,
         `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
           `?timesheet_id=eq.${enc(tsId)}` +
-          `&select=id,contract_id,additional_seq,is_adjustment,submission_mode_snapshot,timesheet_id` +
+          `&select=id,contract_id,week_ending_date,additional_seq,is_adjustment,submission_mode_snapshot,timesheet_id` +
           `&limit=1`
       );
       return (rows && rows[0]) || null;
@@ -104827,7 +104681,7 @@ async function resolveImportAuthoritative(env, input = {}) {
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
           `?timesheet_id=eq.${enc(tsId)}` +
-          `&select=timesheet_id,contract_id,submission_mode,is_adjustment,parent_timesheet_id,adjustment_origin,correction_id,correction_kind` +
+          `&select=timesheet_id,contract_id,week_ending_date,sheet_scope,submission_mode,is_adjustment,parent_timesheet_id,adjustment_origin,correction_id,correction_kind` +
           `&limit=1`
       );
       return (rows && rows[0]) || null;
@@ -104993,10 +104847,22 @@ async function resolveImportAuthoritative(env, input = {}) {
         const safeRouteType = manual_adjustment_editable
           ? manualAdjustmentInfo.route_type
           : route_type;
+        let centralAuthority = null;
+        try {
+          centralAuthority = await resolveCentralAuthority({ resolvedContractId });
+        } catch (error) {
+          console.error('Contract settings authority resolution failed', {
+            contract_id: resolvedContractId,
+            timesheet_id: resolvedTimesheetId,
+            error: String(error?.message || error)
+          });
+        }
+        const configuredImport = toBool(centralAuthority?.applicability?.import_authoritative);
+        const factualImport = isImportAuthoritativeFromSummary(route_type, client_no_timesheet_required);
 
         return {
           ok: true,
-          source: 'v_timesheets_summary',
+          source: centralAuthority ? 'contract_settings_effective_get_v1+v_timesheets_summary' : 'v_timesheets_summary_fail_closed',
           route_type: safeRouteType,
           raw_route_type: route_type,
           client_no_timesheet_required,
@@ -105006,9 +104872,11 @@ async function resolveImportAuthoritative(env, input = {}) {
           manual_adjustment_editable,
           is_manual_additional_adjustment: manual_adjustment_editable,
           manual_adjustment_route_type: manualAdjustmentInfo.route_type || null,
+          authority_version: centralAuthority?.authority_version || null,
+          authority_fingerprint: centralAuthority?.authority_fingerprint || null,
           is_import_authoritative: manual_adjustment_editable
             ? false
-            : isImportAuthoritativeFromSummary(route_type, client_no_timesheet_required)
+            : (centralAuthority ? (configuredImport || factualImport) : true)
         };
       }
     }
@@ -105043,16 +104911,25 @@ async function resolveImportAuthoritative(env, input = {}) {
         });
         const manual_adjustment_editable = manualAdjustmentInfo.manual_adjustment_editable === true;
 
+        let centralAuthority = null;
+        try {
+          centralAuthority = await resolveCentralAuthority({ resolvedContractId: c.id });
+        } catch (error) {
+          console.error('Contract settings authority fallback resolution failed', {
+            contract_id: c.id,
+            timesheet_id,
+            error: String(error?.message || error)
+          });
+        }
         const is_import_authoritative = manual_adjustment_editable
           ? false
-          : (
-              (is_nhsp === true) ||
-              (autoprocess_hr === true && no_timesheet_required === true)
-            );
+          : (centralAuthority
+              ? toBool(centralAuthority?.applicability?.import_authoritative)
+              : true);
 
         return {
           ok: true,
-          source: 'contracts',
+          source: centralAuthority ? 'contract_settings_effective_get_v1' : 'contract_settings_resolver_fail_closed',
           route_type: manual_adjustment_editable ? manualAdjustmentInfo.route_type : null,
           client_no_timesheet_required: null,
           contract_id: c.id,
@@ -105061,6 +104938,8 @@ async function resolveImportAuthoritative(env, input = {}) {
           manual_adjustment_editable,
           is_manual_additional_adjustment: manual_adjustment_editable,
           manual_adjustment_route_type: manualAdjustmentInfo.route_type || null,
+          authority_version: centralAuthority?.authority_version || null,
+          authority_fingerprint: centralAuthority?.authority_fingerprint || null,
           is_import_authoritative
         };
       }
@@ -105078,7 +104957,8 @@ async function resolveImportAuthoritative(env, input = {}) {
     contract_week_id: contract_week_id || contractWeekFacts?.id || null,
     timesheet_id: timesheet_id || timesheetFacts?.timesheet_id || null,
     manual_adjustment_editable: false,
-    is_import_authoritative: false
+    resolution_error: true,
+    is_import_authoritative: true
   };
 }
 
@@ -106948,27 +106828,19 @@ function deriveUmbrellaVatSnapshots(rowEx, hintRatePct, umbrellaVatChargeable) {
   return { rate, vat, inc };
 }
 async function getClientHolidayPctMap(env, clientIds, asOfYmd = null) {
-  const enc = encodeURIComponent;
   if (!clientIds?.length) return {};
 
-  // Determine as-of date (YYYY-MM-DD). If missing/invalid, use today (UTC->YMD)
-  let ymd = (typeof asOfYmd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOfYmd)) ? asOfYmd : null;
-  if (!ymd) ymd = new Date().toISOString().slice(0, 10);
-
-  const url = `${env.SUPABASE_URL}/rest/v1/client_settings` +
-    `?select=client_id,holiday_pay_pct,apply_holiday_to,effective_from` +
-    `&client_id=in.(${clientIds.map(enc).join(',')})` +
-    `&effective_from=lte.${enc(ymd)}` +
-    `&order=client_id.asc,effective_from.desc`;
-
-  const { rows } = await sbFetch(env, url);
+  const ymd = (typeof asOfYmd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOfYmd))
+    ? asOfYmd
+    : null;
+  if (!ymd) throw new Error('CONTRACT_SETTINGS_RELEVANT_DATE_REQUIRED');
 
   const map = {};
-  for (const r of rows || []) {
-    if (map[r.client_id]) continue; // first (latest in-scope) only
-    map[r.client_id] = {
-      pct: (r.holiday_pay_pct == null ? null : Number(r.holiday_pay_pct)),
-      applyTo: (r.apply_holiday_to || '').toUpperCase(), // PAYE_ONLY | ALL | NONE
+  for (const clientId of [...new Set(clientIds.filter(Boolean).map(String))]) {
+    const authority = await loadPolicy(env, clientId, ymd, { workflow: 'FINANCE' });
+    map[clientId] = {
+      pct: authority.holiday_pay_pct == null ? null : Number(authority.holiday_pay_pct),
+      applyTo: String(authority.apply_holiday_to || '').toUpperCase()
     };
   }
   return map;
@@ -110046,21 +109918,33 @@ async function currentHealthRosterEligibility(env, clientId) {
   if (!id) return { exists: false, eligible: false, currentSetting: null, activeOverrideCount: 0 };
   const today = importReviewLondonTodayYmd();
   const enc = encodeURIComponent;
-  const [{ rows: clients }, { rows: settings }, { rows: overrides }] = await Promise.all([
+  const [{ rows: clients }, { rows: overrideContracts }] = await Promise.all([
     sbFetch(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(id)}&select=id&limit=1`),
-    sbFetch(env, `${env.SUPABASE_URL}/rest/v1/client_settings?client_id=eq.${enc(id)}` +
-      `&or=(effective_from.is.null,effective_from.lte.${enc(today)})` +
-      '&select=id,effective_from,autoprocess_hr,updated_at' +
-      '&order=effective_from.desc.nullslast,updated_at.desc.nullslast,id.desc&limit=1'),
     sbFetch(env, `${env.SUPABASE_URL}/rest/v1/contracts?client_id=eq.${enc(id)}` +
-      '&overrideclientsettings=eq.true&autoprocess_hr=eq.true' +
+      '&overrideclientsettings=eq.true' +
       `&start_date=lte.${enc(today)}&or=(end_date.is.null,end_date.gte.${enc(today)})` +
-      '&select=id&limit=2')
+      '&select=id&limit=250')
   ]);
-  const currentSetting = Array.isArray(settings) ? (settings[0] || null) : null;
-  const activeOverrideCount = Array.isArray(overrides) ? overrides.length : 0;
+  if (!Array.isArray(clients) || clients.length === 0) {
+    return { exists: false, eligible: false, currentSetting: null, activeOverrideCount: 0 };
+  }
+  const clientAuthority = await loadPolicy(env, id, today, { workflow: 'DAILY' });
+  let activeOverrideCount = 0;
+  for (const contract of (overrideContracts || [])) {
+    const authority = await loadPolicy(env, id, today, {
+      contract_id: contract.id,
+      workflow: 'DAILY'
+    });
+    if (authority.autoprocess_hr === true) activeOverrideCount += 1;
+  }
+  const currentSetting = {
+    autoprocess_hr: clientAuthority.autoprocess_hr === true,
+    requires_hr: clientAuthority.requires_hr === true,
+    no_timesheet_required: clientAuthority.no_timesheet_required === true,
+    settings_authority_fingerprint: clientAuthority.settings_authority_fingerprint
+  };
   return {
-    exists: Array.isArray(clients) && clients.length > 0,
+    exists: true,
     eligible: currentSetting?.autoprocess_hr === true || activeOverrideCount > 0,
     currentSetting,
     activeOverrideCount,
@@ -116873,17 +116757,6 @@ async function handleHrAutoprocessPreview(env, req, importId) {
     }
   };
 
-  const pickEffectiveClientSettingsRow = (rows, targetYmd) => {
-    const ymd = asYmd(targetYmd);
-    const arr = Array.isArray(rows) ? rows : [];
-    for (const r of arr) {
-      const ef = asYmd(r?.effective_from);
-      if (!ef) return r;
-      if (ymd && ef <= ymd) return r;
-    }
-    return arr[0] || null;
-  };
-
   const unwrapRpcJsonb = (raw, fnName) => {
     const j = raw;
     if (Array.isArray(j)) {
@@ -117098,69 +116971,21 @@ async function handleHrAutoprocessPreview(env, req, importId) {
       p2 = [];
     }
 
-    // 3) Load client_settings history for precedence evaluation
-    let clientSettingsRows = [];
-    try {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(imp.client_id)}` +
-          `&select=client_id,effective_from,no_timesheet_required,autoprocess_hr,requires_hr,updated_at` +
-          `&order=effective_from.desc.nullslast,updated_at.desc.nullslast`
-      );
-      clientSettingsRows = Array.isArray(csRows) ? csRows : [];
-    } catch {
-      clientSettingsRows = [];
-    }
-
-    // 4) Load involved contracts (override fields exist and are enforced in DB)
-    const contractIds = uniq(p2.map(r => r?.contract_id ? String(r.contract_id) : null).filter(Boolean));
-    const contractById = new Map();
-    for (const idChunk of chunk(contractIds, 150)) {
-      try {
-        const { rows: cRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/contracts` +
-            `?id=in.(${idChunk.map(enc).join(',')})` +
-            `&select=id,overrideclientsettings,no_timesheet_required,autoprocess_hr,requires_hr`
-        );
-        for (const c of (cRows || [])) {
-          if (c && c.id) contractById.set(String(c.id), c);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const evalEffectiveHrRouteFlags = (contract_id, weekEndingYmd) => {
-      const cs = pickEffectiveClientSettingsRow(clientSettingsRows, weekEndingYmd) || {};
-      const csNoTs = boolish(cs?.no_timesheet_required);
-      const csAuto = boolish(cs?.autoprocess_hr);
-      const csReq = boolish(cs?.requires_hr);
-
-      const c = contract_id ? (contractById.get(String(contract_id)) || null) : null;
-      const hasOverride = (c && c.overrideclientsettings === true);
-
-      const effNoTs =
-        (hasOverride && c.no_timesheet_required != null)
-          ? boolish(c.no_timesheet_required)
-          : csNoTs;
-
-      const effAuto =
-        (hasOverride && c.autoprocess_hr != null)
-          ? boolish(c.autoprocess_hr)
-          : csAuto;
-
-      const effReq =
-        (hasOverride && c.requires_hr != null)
-          ? boolish(c.requires_hr)
-          : csReq;
-
-      return { effNoTs, effAuto, effReq };
+    // 3) Resolve every route from the dated Client/Contract authority.
+    const evalEffectiveHrRouteFlags = async (contract_id, weekEndingYmd) => {
+      const authority = await loadPolicy(env, imp.client_id, weekEndingYmd, {
+        contract_id: contract_id || null,
+        workflow: 'IMPORT'
+      });
+      return {
+        effNoTs: authority.no_timesheet_required === true,
+        effAuto: authority.autoprocess_hr === true,
+        effReq: authority.requires_hr === true
+      };
     };
 
-    const evalGroupMode = (contract_id, weekEndingYmd) => {
-      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(contract_id, weekEndingYmd);
+    const evalGroupMode = async (contract_id, weekEndingYmd) => {
+      const { effNoTs, effAuto, effReq } = await evalEffectiveHrRouteFlags(contract_id, weekEndingYmd);
       if (effNoTs === true) return 'MODE_B';
       if (effAuto === true && effReq === true && effNoTs === false) return 'MODE_A';
       return 'OTHER';
@@ -117183,7 +117008,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
 
     const modeByGroupId = new Map(); // gid -> 'MODE_A'|'MODE_B'|'OTHER'
     for (const [gid, gi] of groupInfoById.entries()) {
-      const mode = evalGroupMode(gi.contract_id, gi.week_ending_date);
+      const mode = await evalGroupMode(gi.contract_id, gi.week_ending_date);
       modeByGroupId.set(gid, mode);
     }
 
@@ -117265,7 +117090,7 @@ async function handleHrAutoprocessPreview(env, req, importId) {
         continue;
       }
 
-      const { effNoTs, effAuto, effReq } = evalEffectiveHrRouteFlags(co, we);
+      const { effNoTs, effAuto, effReq } = await evalEffectiveHrRouteFlags(co, we);
       const isModeA = (effAuto === true && effReq === true && effNoTs === false);
 
       // ✅ include any validation row that falls under Mode-A HR weekly verify
@@ -118485,143 +118310,28 @@ async function handleHrAutoprocessClients(env, req) {
     }
   })();
 
-  const pickEffectiveSettingsRow = (rows, asOfYmd) => {
-    const list = Array.isArray(rows) ? rows : [];
-    if (!list.length) return null;
-
-    // Prefer the most recent row whose effective_from <= asOfYmd. Future-only
-    // settings must never enable an import route early.
-    let bestEligible = null;
-    for (const r of list) {
-      if (!r || typeof r !== 'object') continue;
-
-      const efRaw = r.effective_from != null ? String(r.effective_from).slice(0, 10) : '';
-      const ef = /^\d{4}-\d{2}-\d{2}$/.test(efRaw) ? efRaw : '';
-
-      if (ef && ef > asOfYmd) continue; // future row
-
-      if (!bestEligible) {
-        bestEligible = r;
-        continue;
-      }
-
-      const bestEfRaw = bestEligible.effective_from != null ? String(bestEligible.effective_from).slice(0, 10) : '';
-      const bestEf = /^\d{4}-\d{2}-\d{2}$/.test(bestEfRaw) ? bestEfRaw : '';
-
-      // Higher effective_from wins
-      if (ef && (!bestEf || ef > bestEf)) {
-        bestEligible = r;
-        continue;
-      }
-
-      if (ef === bestEf) {
-        const ua = r.updated_at != null ? String(r.updated_at) : '';
-        const ub = bestEligible.updated_at != null ? String(bestEligible.updated_at) : '';
-        if (ua && (!ub || ua > ub)) bestEligible = r;
-      }
-    }
-
-    return bestEligible;
-  };
-
   try {
-    // ─────────────────────────────────────────────────────────────
-    // Source A: Contract-level overrides (ONLY when overrideclientsettings=true)
-    // A client is eligible if ANY contract has overrideclientsettings=true AND autoprocess_hr=true.
-    // ─────────────────────────────────────────────────────────────
-    let overrideClientIds = [];
-    try {
-      const { rows: conRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?overrideclientsettings=eq.true` +
-          `&autoprocess_hr=eq.true` +
-          `&client_id=not.is.null` +
-          `&start_date=lte.${enc(todayYmd)}` +
-          `&or=(end_date.is.null,end_date.gte.${enc(todayYmd)})` +
-          `&select=client_id` +
-          `&limit=10000`
-      );
-      overrideClientIds = Array.from(
-        new Set((conRows || []).map(r => (r && r.client_id) ? String(r.client_id) : '').filter(Boolean))
-      );
-    } catch (e) {
-      // non-fatal; we can still return client_settings driven list
-      console.warn('[HR_AUTOPROC_CLIENTS] override contract scan failed', e?.message || e);
-      overrideClientIds = [];
+    const [{ rows: allClients }, { rows: activeOverrides }] = await Promise.all([
+      sbFetch(env, `${env.SUPABASE_URL}/rest/v1/clients?select=id,name&order=name.asc&limit=10000`),
+      sbFetch(env, `${env.SUPABASE_URL}/rest/v1/contracts` +
+        `?overrideclientsettings=eq.true&client_id=not.is.null` +
+        `&start_date=lte.${enc(todayYmd)}&or=(end_date.is.null,end_date.gte.${enc(todayYmd)})` +
+        `&select=id,client_id&limit=10000`)
+    ]);
+
+    const eligibleClientIdsSet = new Set();
+    for (const client of (allClients || [])) {
+      const authority = await loadPolicy(env, client.id, todayYmd, { workflow: 'DAILY' });
+      if (authority.autoprocess_hr === true) eligibleClientIdsSet.add(String(client.id));
     }
-
-    // ─────────────────────────────────────────────────────────────
-    // Source B: Client settings (current/effective row per client)
-    // We must avoid historical "true" rows incorrectly enabling a client.
-    // Strategy:
-    //   1) Find candidate clients that have EVER had autoprocess_hr=true (cheap).
-    //   2) For those candidates, load their settings history and evaluate effective row as-of today.
-    // ─────────────────────────────────────────────────────────────
-    let candidateFromSettings = [];
-    try {
-      const { rows: csTrueRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?autoprocess_hr=eq.true` +
-          `&client_id=not.is.null` +
-          `&select=client_id` +
-          `&limit=20000`
-      );
-      candidateFromSettings = Array.from(
-        new Set((csTrueRows || []).map(r => (r && r.client_id) ? String(r.client_id) : '').filter(Boolean))
-      );
-    } catch (e) {
-      console.warn('[HR_AUTOPROC_CLIENTS] client_settings candidate scan failed', e?.message || e);
-      candidateFromSettings = [];
+    for (const contract of (activeOverrides || [])) {
+      const authority = await loadPolicy(env, contract.client_id, todayYmd, {
+        contract_id: contract.id,
+        workflow: 'DAILY'
+      });
+      if (authority.autoprocess_hr === true) eligibleClientIdsSet.add(String(contract.client_id));
     }
-
-    const candidateClientIds = Array.from(new Set([...(overrideClientIds || []), ...(candidateFromSettings || [])]));
-    if (!candidateClientIds.length) {
-      return respond(ok({ items: [] }));
-    }
-
-    // Load client_settings history for candidate clients
-    const settingsByClient = new Map();
-    try {
-      const chunkSize = 150;
-      for (let i = 0; i < candidateClientIds.length; i += chunkSize) {
-        const chunk = candidateClientIds.slice(i, i + chunkSize);
-        const inList = chunk.map(enc).join(',');
-
-        const { rows: csRows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/client_settings` +
-            `?client_id=in.(${inList})` +
-            `&select=client_id,effective_from,autoprocess_hr,updated_at` +
-            `&order=client_id.asc,effective_from.desc.nullslast,updated_at.desc.nullslast` +
-            `&limit=20000`
-        );
-
-        for (const r of (csRows || [])) {
-          const cid = r?.client_id != null ? String(r.client_id) : '';
-          if (!cid) continue;
-          if (!settingsByClient.has(cid)) settingsByClient.set(cid, []);
-          settingsByClient.get(cid).push(r);
-        }
-      }
-    } catch (e) {
-      console.warn('[HR_AUTOPROC_CLIENTS] client_settings history load failed', e?.message || e);
-      // If we fail to load settings history, we can still allow override-enabled clients.
-    }
-
-    const enabledViaClientSettings = new Set();
-    try {
-      for (const [cid, rows] of settingsByClient.entries()) {
-        const eff = pickEffectiveSettingsRow(rows, todayYmd);
-        if (eff && eff.autoprocess_hr === true) enabledViaClientSettings.add(String(cid));
-      }
-    } catch {}
-
-    // Final eligible client set:
-    // - always include override-enabled clients
-    // - include client-settings-enabled clients (effective as-of today)
-    const eligibleClientIds = Array.from(new Set([...(overrideClientIds || []), ...Array.from(enabledViaClientSettings)]));
+    const eligibleClientIds = Array.from(eligibleClientIdsSet);
 
     if (!eligibleClientIds.length) {
       return respond(ok({ items: [] }));
@@ -120550,7 +120260,6 @@ async function buildWeeklyImportContext(env, importId, sourceSystem) {
     clientByTrust: new Map(),        // trust_norm -> {client_id,name}|null
     clientById: new Map(),           // client_id -> row
     contractsByCandClient: new Map(),// `${cand_id}__${client_id}` -> [contracts]
-    clientSettingsByClient: new Map(),// client_id -> client_settings row
     timesheetsById: new Map(),
     tsfinById: new Map()
   };
@@ -121049,21 +120758,6 @@ async function handleTimesheetCreateManualNhspShift(env, req) {
     const client = cliRows?.[0] || null;
     if (!client) return withCORS(env, req, notFound('Client not found'));
 
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(clientId)}&select=is_nhsp,week_ending_weekday` +
-        `&order=effective_from.desc&limit=1`
-    );
-    const cs = csRows?.[0] || null;
-    if (!cs || cs.is_nhsp !== true) {
-      return withCORS(env, req, badRequest('Client is not marked as NHSP in client_settings'));
-    }
-
-    const weekEndingWeekday = Number.isInteger(Number(cs.week_ending_weekday))
-      ? Number(cs.week_ending_weekday)
-      : 0; // default Sunday
-
     // 3) Find contract covering this date
     const { rows: contractRows } = await sbFetch(
       env,
@@ -121097,6 +120791,24 @@ async function handleTimesheetCreateManualNhspShift(env, req) {
     }
 
     const contract = chosen;
+
+    const authority = await loadPolicy(env, clientId, workDate, {
+      contract_id: contract.id,
+      workflow: 'IMPORT'
+    });
+    if (authority.is_nhsp !== true) {
+      return withCORS(env, req, badRequest('The applicable Contract settings are not Dedicated NHSP Weekly'));
+    }
+    if (authority?.settings_authority_applicability?.import_authoritative === true) {
+      return withCORS(env, req, badRequest(
+        'Dedicated NHSP Weekly hours must be created through the NHSP import. Manual Candidate hours are not allowed.'
+      ));
+    }
+
+    const weekEndingWeekday = Number(authority.week_ending_weekday);
+    if (!Number.isInteger(weekEndingWeekday) || weekEndingWeekday < 0 || weekEndingWeekday > 6) {
+      return withCORS(env, req, badRequest('The applicable week-ending day is invalid'));
+    }
 
     // 4) Compute week_ending_date based on client week_ending_weekday
     const d = new Date(dateObj);
@@ -122152,10 +121864,10 @@ try {
   // 6) Group-level classification (existing)
   // ─────────────────────────────────────────────────────────────
   const policyCache = new Map(); // key=client_id__dateYmd -> policy
-  const getPolicyCached = async (client_id, dateYmd) => {
-    const k = `${client_id}__${dateYmd}`;
+  const getPolicyCached = async (client_id, dateYmd, policyContext = {}) => {
+    const k = `${client_id}__${dateYmd}__${policyContext?.contract_id || ''}__${policyContext?.timesheet_id || ''}`;
     if (policyCache.has(k)) return policyCache.get(k);
-    const p = await loadPolicy(env, client_id, dateYmd);
+    const p = await loadPolicy(env, client_id, dateYmd, { workflow: 'IMPORT', ...policyContext });
     policyCache.set(k, p);
     return p;
   };
@@ -122251,7 +121963,7 @@ try {
     const missingChgBuckets = new Set();
 
     for (const sh of g.shifts) {
-      const policy = await getPolicyCached(client_id, sh.work_date);
+      const policy = await getPolicyCached(client_id, sh.work_date, { contract_id, workflow: 'IMPORT' });
 
       let segs = [[sh.start_utc, sh.end_utc]];
       segs = subtractBreak(segs, null, null, sh.break_mins || 0);
@@ -122716,43 +122428,13 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
   console.log('[WEEKLY_CLASSIFY] loaded hr_rows', { import_id: importId, count: hrRows.length });
 
   // ─────────────────────────────────────────────────────────────
-  // 2) Preload client_settings for week-ending day (per client)
+  // 2) Resolve the dated Client authority for each work date.
   // ─────────────────────────────────────────────────────────────
-  const clientIds = [];
-  if (source_system === 'HEALTHROSTER' && imp.client_id) {
-    clientIds.push(imp.client_id);
-  }
-
-  const clientSettingsMap = new Map();
-  if (clientIds.length) {
-    const { rows: csRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?client_id=in.(${clientIds.map(enc).join(',')})` +
-      `&select=client_id,week_ending_weekday` +
-      `&order=effective_from.desc,created_at.desc`
-    );
-    for (const cs of csRows || []) {
-      if (!clientSettingsMap.has(cs.client_id)) clientSettingsMap.set(cs.client_id, cs);
-    }
-  }
-
   const weekEndingFor = async (client_id, workDateYmd) => {
-    let weDow = 0;
-    if (!clientSettingsMap.has(client_id)) {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-        `?client_id=eq.${enc(client_id)}` +
-        `&select=client_id,week_ending_weekday` +
-        `&order=effective_from.desc,created_at.desc&limit=1`
-      );
-      const cs = csRows?.[0] || null;
-      if (cs) clientSettingsMap.set(client_id, cs);
-    }
-    const cs = clientSettingsMap.get(client_id);
-    if (cs && Number.isInteger(Number(cs.week_ending_weekday))) {
-      weDow = Number(cs.week_ending_weekday);
+    const authority = await loadPolicy(env, client_id, workDateYmd, { workflow: 'IMPORT' });
+    const weDow = Number(authority.week_ending_weekday);
+    if (!Number.isInteger(weDow) || weDow < 0 || weDow > 6) {
+      throw new Error('CONTRACT_SETTINGS_WEEK_ENDING_INVALID');
     }
 
     const d = new Date(`${workDateYmd}T00:00:00Z`);
@@ -123319,7 +123001,9 @@ async function classifyWeeklyImportRowsLegacy(env, importId, { source_system }) 
     let truthChg = 0;
 
     for (const sh of g.shifts) {
-      const policy = await loadPolicy(env, client_id, sh.work_date);
+      const policy = await loadPolicy(env, client_id, sh.work_date, {
+        contract_id, workflow: 'IMPORT'
+      });
       let segs = [[sh.start_utc, sh.end_utc]];
       segs = subtractBreak(segs, null, null, sh.break_mins || 0);
 
@@ -133768,31 +133452,24 @@ async function handlePickerClientsSnapshot(env, req){
   const user = await requireUser(env, req, ['admin']); 
   if (!user) return unauthorized();
 
-  // Pull NHSP / HR autoproc flags from client_settings via nested select
-  const sel = 'id,name,primary_invoice_email,rev,updated_at,client_settings(is_nhsp,autoprocess_hr)';
+  const sel = 'id,name,primary_invoice_email,rev,updated_at';
   const url = `${env.SUPABASE_URL}/rest/v1/clients?select=${encodeURIComponent(sel)}`;
   const { rows } = await sbFetch(env, url);
 
-  const items = (rows || []).map(r => {
-    // client_settings is usually an array from PostgREST when nested
-    const raw = r.client_settings;
-    let cs;
-    if (Array.isArray(raw)) {
-      cs = raw[0] || {};
-    } else {
-      cs = raw || {};
-    }
-
-    return {
+  const items = [];
+  const relevantDate = importReviewLondonTodayYmd();
+  for (const r of (rows || [])) {
+    const authority = await loadPolicy(env, r.id, relevantDate, { workflow: 'OFFICE' });
+    items.push({
       id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp:        !!cs.is_nhsp,
-      autoprocess_hr: !!cs.autoprocess_hr,
+      is_nhsp:        authority.is_nhsp === true,
+      autoprocess_hr: authority.autoprocess_hr === true,
       rev:            (r.rev ?? null),
       updated_at:     r.updated_at || null
-    };
-  });
+    });
+  }
 
   const since = computeSinceFromRows(items);
   return okJSON({ items, since });
@@ -133806,7 +133483,7 @@ async function handlePickerClientsDelta(env, req){
   const sinceRaw = u.searchParams.get('since');
   if (!sinceRaw) return badJSON(400, 'missing since');
 
-  const sel = 'id,name,primary_invoice_email,rev,updated_at,client_settings(is_nhsp,autoprocess_hr)';
+  const sel = 'id,name,primary_invoice_email,rev,updated_at';
   const urlAdd =
     `${env.SUPABASE_URL}/rest/v1/clients` +
     `?select=${encodeURIComponent(sel)}` +
@@ -133815,25 +133492,20 @@ async function handlePickerClientsDelta(env, req){
   let { rows } = await sbFetch(env, urlAdd);
   if (!Array.isArray(rows)) rows = [];
 
-  const items = (rows || []).map(r => {
-    const raw = r.client_settings;
-    let cs;
-    if (Array.isArray(raw)) {
-      cs = raw[0] || {};
-    } else {
-      cs = raw || {};
-    }
-
-    return {
+  const items = [];
+  const relevantDate = importReviewLondonTodayYmd();
+  for (const r of (rows || [])) {
+    const authority = await loadPolicy(env, r.id, relevantDate, { workflow: 'OFFICE' });
+    items.push({
       id:   r.id,
       name: r.name || '',
       primary_invoice_email: r.primary_invoice_email || '',
-      is_nhsp:        !!cs.is_nhsp,
-      autoprocess_hr: !!cs.autoprocess_hr,
+      is_nhsp:        authority.is_nhsp === true,
+      autoprocess_hr: authority.autoprocess_hr === true,
       rev:            (r.rev ?? null),
       updated_at:     r.updated_at || null
-    };
-  });
+    });
+  }
 
   // Hard deletes: optional tombstones
   let removed = [];
@@ -135537,8 +135209,8 @@ async function handleGetSettings(env, req) {
         'sun_start','sun_end',
         'bh_start','bh_end',
 
-        // BH calendar config
-        'bh_source','bh_list','bh_feed_url',
+        // User-owned Global Bank Holiday additions. Feed ownership is internal.
+        'bh_list',
 
         // Global policy flags
         'ts_reference_required',
@@ -135826,7 +135498,7 @@ async function handleUpdateSettings(env, req) {
     'day_start','day_end','night_start','night_end',
     'sat_start','sat_end','sun_start','sun_end',
     'bh_start','bh_end',
-    'bh_source','bh_list','bh_feed_url',
+    'bh_list',
 
     'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
     'ts_reference_required',
@@ -139019,12 +138691,11 @@ async function handleGetClient(env, req, clientId) {
       `&select=` +
         [
           'id','client_id',
-          'vat_rate_pct','holiday_pay_pct','erni_pct',
-          'apply_holiday_to','apply_erni_to','margin_includes',
+          'vat_rate_pct','holiday_pay_pct',
+          'apply_holiday_to','margin_includes',
           'effective_from',
           'timezone_id',
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
-          'bh_source','bh_list','bh_feed_url',
           'hr_validation_required',
           'ts_reference_required','pay_reference_required','invoice_reference_required',
           'default_submission_mode',
@@ -139051,52 +138722,12 @@ async function handleGetClient(env, req, clientId) {
           'candidate_expenses_require_separate_timesheet',
           'candidate_expense_invoice_email',
 
-          // Import-authoritative correction financial-date policy overrides
-          'reversal_complete_financials_date',
-          'reversal_replacement_financials_date',
-
           'created_at','updated_at'
         ].join(',') +
       `&order=effective_from.desc,created_at.desc&limit=1`
     );
 
     const client_settings = csRows?.[0] || null;
-    let import_financial_policy = null;
-    try {
-      const { rows: defaultsRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=reversal_complete_financials_date,reversal_replacement_financials_date,updated_at&limit=1`
-      );
-      const defaults = defaultsRows?.[0] || {};
-      const eligible = client_settings?.is_nhsp === true
-        || (client_settings?.autoprocess_hr === true && client_settings?.no_timesheet_required === true);
-      import_financial_policy = {
-        eligible,
-        client_settings_updated_at: client_settings?.updated_at || null,
-        client_rev: client.rev ?? null,
-        reversal_complete_financials_date: {
-          override: eligible ? (client_settings?.reversal_complete_financials_date ?? null) : null,
-          effective: eligible
-            ? (client_settings?.reversal_complete_financials_date ?? defaults.reversal_complete_financials_date ?? null)
-            : null,
-          source: eligible && client_settings?.reversal_complete_financials_date != null ? 'CLIENT' : (eligible ? 'GLOBAL' : 'NOT_ELIGIBLE')
-        },
-        reversal_replacement_financials_date: {
-          override: eligible ? (client_settings?.reversal_replacement_financials_date ?? null) : null,
-          effective: eligible
-            ? (client_settings?.reversal_replacement_financials_date ?? defaults.reversal_replacement_financials_date ?? null)
-            : null,
-          source: eligible && client_settings?.reversal_replacement_financials_date != null ? 'CLIENT' : (eligible ? 'GLOBAL' : 'NOT_ELIGIBLE')
-        },
-        global_settings_updated_at: defaults.updated_at || null
-      };
-    } catch {
-      import_financial_policy = {
-        eligible: false,
-        configuration_error: 'IMPORT_FINANCIAL_POLICY_UNAVAILABLE'
-      };
-    }
-
     // has_e_history (client-level) for Client modal E-History tab enablement
     let has_e_history = false;
     try {
@@ -139117,7 +138748,7 @@ async function handleGetClient(env, req, clientId) {
       has_e_history = false;
     }
 
-    return withCORS(env, req, ok({ client, client_settings, import_financial_policy, has_e_history }));
+    return withCORS(env, req, ok({ client, client_settings, has_e_history }));
   } catch (e) {
     console.error('handleGetClient failed', {
       client_id: clientId,
@@ -139505,7 +139136,6 @@ async function handleUpdateClient(env, req, clientId) {
 
           'effective_from','timezone_id',
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
-          'bh_source','bh_list','bh_feed_url',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
           'timesheet_break_entry_mode',
 
@@ -139541,6 +139171,13 @@ async function handleUpdateClient(env, req, clientId) {
     delete csInput.hr_weekly_behaviour;
     delete csInput.__from_ui;
     delete csInput.ts_queries_email; // never allow this to be treated as client_settings
+    // These legacy Client columns are retained for schema compatibility only.
+    // Bank Holiday dates and both ERNI fields are Global authorities.
+    delete csInput.bh_source;
+    delete csInput.bh_list;
+    delete csInput.bh_feed_url;
+    delete csInput.erni_pct;
+    delete csInput.apply_erni_to;
 
     if ('hr_validation_required' in data)        csInput.hr_validation_required        = !!data.hr_validation_required;
     if ('ts_reference_required' in data)         csInput.ts_reference_required         = !!data.ts_reference_required;
@@ -139786,6 +139423,18 @@ async function handleUpdateClient(env, req, clientId) {
       if (canon.candidate_expenses_require_separate_timesheet && !canon.candidate_expense_invoice_email) {
         return withCORS(env, req, badRequest('candidate_expense_invoice_email is required when Candidate expenses use a separate Timesheet'));
       }
+      if (canon.is_nhsp && canon.requires_hr) {
+        return withCORS(env, req, badRequest('Choose either Dedicated NHSP Weekly or a Roster workflow, not both.'));
+      }
+      if (canon.requires_hr && canon.no_timesheet_required && !canon.autoprocess_hr) {
+        return withCORS(env, req, badRequest('An import-authoritative Roster workflow must process the import automatically.'));
+      }
+      const importAuthoritativeConfiguration = !!(
+        canon.is_nhsp || (canon.requires_hr && canon.autoprocess_hr && canon.no_timesheet_required)
+      );
+      if (importAuthoritativeConfiguration && !canon.candidate_expenses_require_separate_timesheet) {
+        return withCORS(env, req, badRequest('Import-authoritative workflows require a separate Candidate expense Timesheet.'));
+      }
 
       for (const k of TIME_KEYS) {
         if (Object.prototype.hasOwnProperty.call(canon, k)) {
@@ -139891,50 +139540,10 @@ async function handleUpdateClient(env, req, clientId) {
       );
     }
 
-    const policyChanged =
-      (data.vat_chargeable != null && !!data.vat_chargeable !== !!beforeClient.vat_chargeable) ||
-      (data.payment_terms_days != null && Number(data.payment_terms_days) !== Number(beforeClient.payment_terms_days));
-
-    const mileageChargeChanged =
-      (data.mileage_charge_rate != null && Number(data.mileage_charge_rate) !== Number(beforeClient.mileage_charge_rate));
-
-    if (policyChanged || mileageChargeChanged || csChanged) {
-      await fetch(
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`,
-        {
-          method: "PATCH",
-          headers: { ...sbHeaders(env), "Prefer": "return=minimal" },
-          body: JSON.stringify({
-            is_stale: true,
-            stale_reason: 'CLIENT_SETTINGS_CHANGED',
-            updated_at: new Date().toISOString()
-          })
-        }
-      );
-
-      const { rows: tsfins } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
-          `?select=timesheet_id` +
-          `&client_id=eq.${encodeURIComponent(clientId)}` +
-          `&is_current=eq.true` +
-          `&locked_by_invoice_id=is.null`
-      );
-      const toEnqueue = (tsfins || []).map(r => ({ timesheet_id: r.timesheet_id, reason: 'POLICY_CHANGED' }));
-      if (toEnqueue.length) {
-        await fetch(
-          `${env.SUPABASE_URL}/rest/v1/ts_financials_outbox?on_conflict=timesheet_id,reason`,
-          {
-            method: "POST",
-            headers: { ...sbHeaders(env), "Prefer": "resolution=ignore-duplicates" },
-            body: JSON.stringify(toEnqueue)
-          }
-        );
-      }
-    }
+    // The database trigger refreshes remaining planned Contract weeks in the
+    // same settings transaction. Existing real Timesheets and their financial
+    // snapshots are intentionally never marked stale by an ordinary Client
+    // settings edit.
 
     return withCORS(env, req, ok({
       client,
@@ -145496,9 +145105,6 @@ async function handleClientsGet(env, req, clientId) {
           'sun_end',
           'bh_start',
           'bh_end',
-          'bh_source',
-          'bh_list',
-          'bh_feed_url',
           'week_ending_weekday',
           'created_at',
           'updated_at'
@@ -163195,349 +162801,42 @@ async function loadCandidate(env, key_norm) {
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/candidates?key_norm=eq.${encodeURIComponent(key_norm)}&active=eq.true&select=*`);
   return rows[0] || null;
 }
-async function loadPolicy(env, client_id, workedDateYmd) {
-  // ─────────────────────────────────────────────────────────────
-  // Contract-driven compliance:
-  // This function returns ONLY client-level TIME + FINANCE POLICY.
-  // It MUST NOT return contract-driven route/HR flags such as:
-  //   requires_hr, autoprocess_hr, no_timesheet_required, daily_calc_of_invoices, is_nhsp, etc.
-  //
-  // Helpers are attached onto env to resolve contract/effective flags elsewhere.
-  // ─────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────
-  // Request-scoped cache (reduces subrequests drastically)
-  // - settings_defaults fetched once per request (NON-FINANCE ONLY)
-  // - finance window fetched once per anchor date (via settings_finance_pick)
-  // - client_settings fetched once per client_id per request (all rows)
-  // - resolved policy cached per (client_id|workedDateYmd)
-  // ─────────────────────────────────────────────────────────────
-  env.__POLICY_CACHE = env.__POLICY_CACHE || {
-    defaults: null,              // NON-FINANCE defaults from settings_defaults (time/BH/attach/timezone)
-    financeByDate: new Map(),    // ymd -> finance window row (vat/erni/wtr/apply/margin_includes)
-    csRowsByClient: new Map(),   // client_id -> client_settings rows (ordered)
-    policyByKey: new Map()       // `${client_id}|${workedDateYmd||''}` -> final policy object
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // Helpers (env-scoped) for contract/effective flags (NOT returned by loadPolicy)
-  // ─────────────────────────────────────────────────────────────
-  env.__EFFECTIVE_FLAGS_CACHE = env.__EFFECTIVE_FLAGS_CACHE || {
-    contractById: new Map(),     // contract_id -> contract row (select=*)
-    tsEffById: new Map()         // timesheet_id -> effective flags (from v_timesheets_summary)
-  };
-
-  if (typeof env.__loadContractRow !== 'function') {
-    env.__loadContractRow = async (contract_id) => {
-      const k = String(contract_id || '');
-      if (!k) return null;
-      const c = env.__EFFECTIVE_FLAGS_CACHE.contractById;
-      if (c.has(k)) return c.get(k);
-
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/contracts` +
-          `?id=eq.${encodeURIComponent(k)}` +
-          `&select=*` +
-          `&limit=1`
-      );
-
-      const row = rows?.[0] || null;
-      c.set(k, row);
-      return row;
-    };
+async function loadPolicy(env, client_id, workedDateYmd, context = {}) {
+  const relevantDate = String(workedDateYmd || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(relevantDate)) {
+    throw new Error('CONTRACT_SETTINGS_RELEVANT_DATE_REQUIRED');
   }
-
-  if (typeof env.__loadTimesheetEffectiveFlags !== 'function') {
-    env.__loadTimesheetEffectiveFlags = async (timesheet_id) => {
-      const k = String(timesheet_id || '');
-      if (!k) return null;
-      const c = env.__EFFECTIVE_FLAGS_CACHE.tsEffById;
-      if (c.has(k)) return c.get(k);
-
-      // These columns are known contract-resolved “effective” fields.
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?timesheet_id=eq.${encodeURIComponent(k)}` +
-          `&select=route_type,client_requires_hr,client_autoprocess_hr,client_no_timesheet_required` +
-          `&limit=1`
-      );
-
-      const row = rows?.[0] || null;
-      c.set(k, row);
-      return row;
-    };
+  env.__CONTRACT_SETTINGS_AUTHORITY_CACHE = env.__CONTRACT_SETTINGS_AUTHORITY_CACHE || new Map();
+  const contractId = context?.contract_id || null;
+  const timesheetId = context?.timesheet_id || null;
+  const workflow = String(context?.workflow || 'FINANCE').trim().toUpperCase();
+  const authorityKey = [client_id || '', contractId || '', timesheetId || '', relevantDate, workflow].join('|');
+  if (env.__CONTRACT_SETTINGS_AUTHORITY_CACHE.has(authorityKey)) {
+    return env.__CONTRACT_SETTINGS_AUTHORITY_CACHE.get(authorityKey);
   }
-
-  const cache = env.__POLICY_CACHE;
-  const key = `${String(client_id || '')}|${String(workedDateYmd || '')}`;
-
-  // Cache hit
-  if (cache.policyByKey.has(key)) {
-    return cache.policyByKey.get(key);
+  const rawAuthority = await sbRpc(env, 'contract_settings_effective_get_v1', {
+    p_client_id: client_id || null,
+    p_contract_id: contractId,
+    p_relevant_date: relevantDate,
+    p_workflow: workflow,
+    p_timesheet_id: timesheetId
+  });
+  const authority = unwrapRpcJsonb(rawAuthority, 'contract_settings_effective_get_v1');
+  if (!authority || authority.authority_version !== 'CONTRACT_SETTINGS_AUTHORITY_V1'
+      || !/^[0-9a-f]{64}$/.test(String(authority.authority_fingerprint || ''))
+      || !authority.values || typeof authority.values !== 'object') {
+    throw new Error('CONTRACT_SETTINGS_AUTHORITY_INVALID');
   }
-
-  // Helper: numeric fields
-  const asNumber = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
+  const resolvedPolicy = {
+    ...authority.values,
+    settings_authority_version: authority.authority_version,
+    settings_authority_fingerprint: authority.authority_fingerprint,
+    settings_authority_relevant_date: authority.relevant_date,
+    settings_authority_source: authority.sources || {},
+    settings_authority_applicability: authority.applicability || {}
   };
-
-  const asYmd = (v) => {
-    if (!v) return null;
-    const ss = String(v).slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(ss) ? ss : null;
-  };
-
-  const londonTodayYmd = () => {
-    try {
-      const s = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
-      const [dd, mm, yyyy] = s.split('/');
-      return `${yyyy}-${mm}-${dd}`;
-    } catch {
-      const d = new Date();
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-  };
-
-  const normaliseJsonObj = (v) => {
-    if (!v) return null;
-    if (typeof v === 'object') return v;
-    if (typeof v === 'string') {
-      try {
-        const p = JSON.parse(v);
-        return (p && typeof p === 'object') ? p : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  // Helper: normalise bh_list: can be array or JSON string
-  const normaliseBhList = (val) => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string') {
-      try {
-        const parsed = JSON.parse(val);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  };
-
-  // 1) Load NON-FINANCE settings_defaults once
-  let def = cache.defaults;
-  if (!def) {
-    const { rows: defRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/settings_defaults?id=eq.1&select=` +
-        [
-          // NON-FINANCE defaults used by loadPolicy
-          'timezone_id',
-
-          'day_start','day_end',
-          'night_start','night_end',
-          'sat_start','sat_end',
-          'sun_start','sun_end',
-          'bh_start','bh_end',
-
-          // Global-only BH list
-          'bh_list',
-
-          // fallback defaults (client-level attach toggles)
-          'hr_attach_to_invoice',
-          'ts_attach_to_invoice',
-        ].join(',')
-    );
-    def = defRows?.[0] || {};
-    cache.defaults = def;
-  }
-
-  // 2) Load all client_settings rows once per client_id (ordered newest first)
-  let csRows = null;
-  if (client_id) {
-    const cid = String(client_id);
-    csRows = cache.csRowsByClient.get(cid) || null;
-
-    if (!csRows) {
-      const { rows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${encodeURIComponent(cid)}` +
-          `&select=` + [
-            // ordering/picking
-            'effective_from',
-            'created_at',
-
-            // time policy (overrides)
-            'timezone_id',
-            'day_start','day_end',
-            'night_start','night_end',
-            'sat_start','sat_end',
-            'sun_start','sun_end',
-            'bh_start','bh_end',
-
-            // finance overrides (client-level)
-            'vat_rate_pct',
-            'holiday_pay_pct',
-            'apply_holiday_to',
-            'apply_erni_to',
-            'margin_includes',
-
-            // attach defaults (client-level)
-            'hr_attach_to_invoice',
-            'ts_attach_to_invoice',
-          ].join(',') +
-          `&order=effective_from.desc.nullslast,created_at.desc` +
-          `&limit=250`
-      );
-
-      csRows = Array.isArray(rows) ? rows : [];
-      cache.csRowsByClient.set(cid, csRows);
-    }
-  }
-
-  // 3) Pick the effective client_settings row for this workedDateYmd
-  const pickEffectiveClientSettingsRow = (rows, ymd) => {
-    if (!Array.isArray(rows) || !rows.length) return null;
-    const w = asYmd(ymd);
-
-    // If no date, treat newest row as effective
-    if (!w) return rows[0] || null;
-
-    for (const row of rows) {
-      if (!row) continue;
-
-      const ef = asYmd(row.effective_from); // date or null
-      if (ef == null) {
-        // effective_from IS NULL is allowed as fallback
-        return row;
-      }
-      // Compare as YYYY-MM-DD strings
-      if (ef <= w) return row;
-    }
-    return rows[0] || null;
-  };
-
-  const cs = (client_id && csRows) ? pickEffectiveClientSettingsRow(csRows, workedDateYmd) : null;
-
-  // 4) Finance windows (global) via settings_finance_pick, anchored by workedDateYmd (or today)
-  const anchorYmd = asYmd(workedDateYmd) || londonTodayYmd();
-
-  const pickFinanceForDate = async (ymd) => {
-    const k = String(ymd || '');
-    if (cache.financeByDate.has(k)) return cache.financeByDate.get(k);
-
-    let row = null;
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/settings_finance_pick`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-          body: JSON.stringify({ p_date: k || null })
-        }
-      );
-
-      const txt = await res.text().catch(() => '');
-      if (res.ok) {
-        const j = txt ? JSON.parse(txt) : null;
-        const r0 = Array.isArray(j) ? (j[0] || null) : (j || null);
-
-        // defensive: some PostgREST shapes wrap the row under function name
-        row = (r0 && typeof r0 === 'object' && r0.settings_finance_pick)
-          ? r0.settings_finance_pick
-          : r0;
-      }
-    } catch {
-      row = null;
-    }
-
-    cache.financeByDate.set(k, row);
-    return row;
-  };
-
-  const finance = await pickFinanceForDate(anchorYmd);
-
-  const tz = cs?.timezone_id || def?.timezone_id || 'Europe/London';
-
-  // ✅ BH list is GLOBAL-ONLY (never client-derived)
-  const bh = normaliseBhList(def?.bh_list);
-
-  // Attach-policy flags are client-level (no contract overrides exist here)
-  const hr_attach_to_invoice =
-    cs && Object.prototype.hasOwnProperty.call(cs, 'hr_attach_to_invoice')
-      ? cs.hr_attach_to_invoice !== false
-      : def?.hr_attach_to_invoice !== false; // default true if unset
-
-  const ts_attach_to_invoice =
-    cs && Object.prototype.hasOwnProperty.call(cs, 'ts_attach_to_invoice')
-      ? cs.ts_attach_to_invoice !== false
-      : def?.ts_attach_to_invoice !== false; // default true if unset
-
-  const financeMarginIncludes = normaliseJsonObj(finance?.margin_includes) || {};
-  const csMarginIncludes      = normaliseJsonObj(cs?.margin_includes) || {};
-
-  const out = {
-    timezone_id: tz,
-
-    day_start:   cs?.day_start   || def?.day_start   || '06:00:00',
-    day_end:     cs?.day_end     || def?.day_end     || '20:00:00',
-    night_start: cs?.night_start || def?.night_start || '20:00:00',
-    night_end:   cs?.night_end   || def?.night_end   || '06:00:00',
-    sat_start:   cs?.sat_start   || def?.sat_start   || '00:00:00',
-    sat_end:     cs?.sat_end     || def?.sat_end     || '00:00:00',
-    sun_start:   cs?.sun_start   || def?.sun_start   || '00:00:00',
-    sun_end:     cs?.sun_end     || def?.sun_end     || '00:00:00',
-
-    // BH window (00:00–00:00 means “full BH day”)
-    bh_start:    cs?.bh_start    || def?.bh_start    || '00:00:00',
-    bh_end:      cs?.bh_end      || def?.bh_end      || '00:00:00',
-
-    // Finance:
-    // - VAT & holiday pay can be overridden per client via client_settings
-    // - otherwise use global finance window in-scope for anchorYmd
-    vat_rate_pct: asNumber(cs?.vat_rate_pct ?? finance?.vat_rate_pct ?? 20),
-    holiday_pay_pct: asNumber(cs?.holiday_pay_pct ?? finance?.holiday_pay_pct ?? 12.07),
-
-    // ERNI is global-only (finance windows)
-    erni_pct: asNumber(finance?.erni_pct ?? 13.8),
-
-    // apply flags: prefer client override, else finance window, else fallback
-    apply_holiday_to: cs?.apply_holiday_to || finance?.apply_holiday_to || 'PAYE_ONLY',
-    apply_erni_to:    cs?.apply_erni_to    || finance?.apply_erni_to    || 'PAYE_ONLY',
-
-    // margin_includes: prefer client override object, else finance window object
-    margin_includes: {
-      expenses: !!(csMarginIncludes?.expenses ?? financeMarginIncludes?.expenses ?? false),
-    },
-
-    bh_list: bh,
-
-    // Client-level attach policy (still valid here)
-    hr_attach_to_invoice,
-    ts_attach_to_invoice,
-
-    // Optional: expose anchor date used for finance selection (handy for debugging)
-    // finance_anchor_ymd: anchorYmd
-  };
-
-  // Store in cache and return
-  cache.policyByKey.set(key, out);
-  return out;
+  env.__CONTRACT_SETTINGS_AUTHORITY_CACHE.set(authorityKey, resolvedPolicy);
+  return resolvedPolicy;
 }
 
 // ======================= TSFIN RPC WRAPPERS =======================
@@ -167678,7 +166977,12 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
   let hours = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
   try {
     if (planned_schedule_json.length) {
-      const mins = await resolveBucketsFromSchedule(env, contract, planned_schedule_json);
+      const mins = await resolveBucketsFromSchedule(env, contract, planned_schedule_json, null, {
+        relevant_date: cw.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: null,
+        workflow: 'WEEKLY'
+      });
       hours = {
         day: +(Number(mins?.day || 0) / 60).toFixed(2),
         night: +(Number(mins?.night || 0) / 60).toFixed(2),
@@ -169900,7 +169204,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     try {
       const we = String(ts?.week_ending_date || cw?.week_ending_date || '');
       if (we && contract?.client_id && typeof getPolicyCached === 'function') {
-        policy_snapshot_json = await getPolicyCached(contract.client_id, we);
+        policy_snapshot_json = await getPolicyCached(contract.client_id, we, {
+          contract_id: contract.id, timesheet_id: ts.timesheet_id, workflow: 'WEEKLY'
+        });
       }
       if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
     } catch {
@@ -170097,7 +169403,9 @@ async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin
       const we = String(ts.week_ending_date || cw.week_ending_date || '');
       policy_snapshot_json =
         (contract.client_id && we && typeof getPolicyCached === 'function')
-          ? (await getPolicyCached(contract.client_id, we))
+          ? (await getPolicyCached(contract.client_id, we, {
+              contract_id: contract.id, timesheet_id: ts.timesheet_id, workflow: 'WEEKLY'
+            }))
           : {};
       if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
     } catch {
@@ -171277,102 +170585,37 @@ async function handleFinancePreviewTsfin(env, req) {
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-  // Anchor date for finance defaults: "rate in force when we create/amend the invoice" -> today (Europe/London)
-  const todayIso = (() => {
-    try {
-      const s = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
-      const [dd, mm, yyyy] = s.split('/');
-      return `${yyyy}-${mm}-${dd}`;
-    } catch {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-  })();
-
-  // VAT context per client
-  const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
-  const mapClientVat = {};
-
-  // Defaults from FINANCE WINDOWS (NOT settings_defaults)
-  let defaultVat = 20;
-  let defaultWtr = 0;
-  let defaultApplyHolidayTo = 'PAYE_ONLY';
-
-  // Pull finance window once (VAT + WTR defaults)
-  {
-    try {
-      const res = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/rpc/settings_finance_pick`,
-        {
-          method: 'POST',
-          headers: { ...sbHeaders(env), 'content-type': 'application/json' },
-          body: JSON.stringify({ p_date: todayIso })
-        }
-      );
-
-      const txt = await res.text().catch(() => '');
-      if (res.ok) {
-        const j = txt ? JSON.parse(txt) : null;
-        const row = Array.isArray(j) ? j[0] : j;
-
-        const vVat = Number(row?.vat_rate_pct);
-        if (Number.isFinite(vVat)) defaultVat = vVat;
-
-        const vWtr = Number(row?.holiday_pay_pct);
-        if (Number.isFinite(vWtr)) defaultWtr = vWtr;
-
-        const apply = String(row?.apply_holiday_to || 'PAYE_ONLY').toUpperCase();
-        defaultApplyHolidayTo = apply || 'PAYE_ONLY';
-
-        // If global window says NONE, default WTR must be 0 for fallback logic.
-        if (defaultApplyHolidayTo === 'NONE') defaultWtr = 0;
-      }
-    } catch {
-      // keep safe fallbacks
-      defaultVat = 20;
-      defaultWtr = 0;
-      defaultApplyHolidayTo = 'PAYE_ONLY';
-    }
+  // Finance preview must use each real Timesheet's frozen settings, not today's
+  // Client/Global values. This also permits one preview to contain Timesheets
+  // legitimately frozen under different historical settings.
+  const timesheetFactsById = new Map();
+  const { rows: timesheetFacts } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=in.(${ids.map(encodeURIComponent).join(',')})` +
+      `&is_current=eq.true` +
+      `&select=timesheet_id,contract_id,work_date,week_ending_date,sheet_scope`
+  );
+  for (const fact of (timesheetFacts || [])) {
+    if (fact?.timesheet_id) timesheetFactsById.set(String(fact.timesheet_id), fact);
   }
 
-  if (clientIds.length) {
-    const { rows: cRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/clients?select=id,vat_chargeable&id=in.(${clientIds.map(encodeURIComponent).join(',')})`
-    );
-    const vatChargeableById = Object.fromEntries((cRows || []).map((c) => [c.id, !!c.vat_chargeable]));
-
-    // IMPORTANT: pick the client_settings VAT row IN SCOPE (as-of today) to avoid future-dated rows being applied early.
-    const csUrl =
-      `${env.SUPABASE_URL}/rest/v1/client_settings` +
-      `?select=client_id,vat_rate_pct,effective_from` +
-      `&client_id=in.(${clientIds.map(encodeURIComponent).join(',')})` +
-      `&or=(effective_from.lte.${encodeURIComponent(todayIso)},effective_from.is.null)` +
-      `&order=client_id.asc,effective_from.desc.nullslast`;
-
-    const { rows: cs } = await sbFetch(env, csUrl);
-
-    const latestInScopeVatByClient = new Map();
-    for (const r of cs || []) {
-      const cid = r?.client_id;
-      if (!cid) continue;
-      if (latestInScopeVatByClient.has(cid)) continue; // first row per client after ordering is the in-scope "latest"
-      const v = Number(r.vat_rate_pct);
-      latestInScopeVatByClient.set(cid, Number.isFinite(v) ? v : defaultVat);
+  const authorityByTimesheetId = new Map();
+  for (const row of rows) {
+    const fact = timesheetFactsById.get(String(row.timesheet_id || '')) || null;
+    const relevantDate = String(fact?.work_date || fact?.week_ending_date || '').slice(0, 10);
+    if (!fact || !/^\d{4}-\d{2}-\d{2}$/.test(relevantDate)) {
+      return serverError(`CONTRACT_SETTINGS_TIMESHEET_CONTEXT_MISSING:${row.timesheet_id}`);
     }
-
-    for (const cid of clientIds) {
-      const chargeable = vatChargeableById[cid] ?? true;
-      const rate = chargeable ? (latestInScopeVatByClient.get(cid) ?? defaultVat) : 0;
-      mapClientVat[cid] = { vat_chargeable: chargeable, vat_rate_pct: rate };
+    try {
+      const authority = await loadPolicy(env, row.client_id, relevantDate, {
+        contract_id: fact.contract_id || null,
+        timesheet_id: row.timesheet_id,
+        workflow: 'FINANCE'
+      });
+      authorityByTimesheetId.set(String(row.timesheet_id), authority);
+    } catch (error) {
+      return serverError(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE');
     }
   }
 
@@ -171419,7 +170662,13 @@ async function handleFinancePreviewTsfin(env, req) {
     const expChg = Number(r.expenses_charge_ex_vat || 0);
     const milChg = Number(r.mileage_charge_ex_vat || 0);
 
-    const vatCtx = mapClientVat[r.client_id] || { vat_chargeable: true, vat_rate_pct: defaultVat };
+    const authority = authorityByTimesheetId.get(String(r.timesheet_id || '')) || {};
+    const vatChargeable = authority.client_vat_chargeable !== false;
+    const resolvedVatRate = Number(authority.vat_rate_pct);
+    const vatCtx = {
+      vat_chargeable: vatChargeable,
+      vat_rate_pct: vatChargeable && Number.isFinite(resolvedVatRate) ? resolvedVatRate : 0
+    };
     const lineEx  = round2(chgTotal + expChg + milChg);
     const lineVat = round2(lineEx * (vatCtx.vat_rate_pct / 100));
     const lineInc = round2(lineEx + lineVat);
@@ -171455,8 +170704,11 @@ async function handleFinancePreviewTsfin(env, req) {
         } else {
           // If applyTo missing/unknown, we don't block; just use pct if it exists.
           if (!Number.isFinite(polPct)) {
-            // finance-window fallback (respects NONE by defaultWtr already being 0 in that case)
-            wtrPct = defaultWtr;
+            const authorityHolidayPct = Number(authority.holiday_pay_pct);
+            const authorityApplyHolidayTo = String(authority.apply_holiday_to || '').toUpperCase();
+            wtrPct = authorityApplyHolidayTo === 'NONE'
+              ? 0
+              : (Number.isFinite(authorityHolidayPct) ? authorityHolidayPct : 0);
           } else {
             wtrPct = polPct;
           }
@@ -172598,46 +171850,6 @@ async function handleContractsPlanRanges(env, req, contractId) {
     );
     if (!c) return withCORS(env, req, badRequest('Contract not found'));
 
-    // ✅ Resolve submission_mode_snapshot:
-    // - If overrideclientsettings true → use contract.default_submission_mode (else fallback)
-    // - Else → use latest client_settings.default_submission_mode
-    const asBool = (v) => {
-      if (v === true) return true;
-      if (v === false || v == null) return false;
-      const s = String(v).trim().toLowerCase();
-      return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 'on';
-    };
-
-    const normalizeSubmissionMode = (v) => {
-      const s = String(v || '').trim().toUpperCase();
-      if (s === 'ELECTRONIC' || s === 'MANUAL' || s === 'QR') return s;
-      return null;
-    };
-
-    let clientSettingsRow = null;
-    try {
-      clientSettingsRow = await sbGetOne(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(c.client_id)}` +
-          `&select=default_submission_mode,effective_from,created_at` +
-          `&order=effective_from.desc,created_at.desc` +
-          `&limit=1`
-      );
-    } catch {}
-
-    const clientDefaultMode = normalizeSubmissionMode(clientSettingsRow?.default_submission_mode);
-
-    let submissionModeSnapshot = null;
-
-    if (asBool(c.overrideclientsettings)) {
-      submissionModeSnapshot = normalizeSubmissionMode(c.default_submission_mode) || clientDefaultMode;
-    } else {
-      submissionModeSnapshot = clientDefaultMode;
-    }
-
-    if (!submissionModeSnapshot) submissionModeSnapshot = 'ELECTRONIC';
-
     if (extendWindow) {
       const unionStart = ranges.reduce((m, r) => Math.min(m, Date.parse(toYmd(r.from || r.From || r.start))), Infinity);
       const unionEnd   = ranges.reduce((m, r) => Math.max(m, Date.parse(toYmd(r.to   || r.To   || r.end))),   -Infinity);
@@ -172800,7 +172012,9 @@ async function handleContractsPlanRanges(env, req, contractId) {
         week_ending_date: weYmd,
         additional_seq: Number(additionalSeq || 0),
         status: (weYmd <= today ? 'OPEN' : 'PLANNED'),
-        submission_mode_snapshot: submissionModeSnapshot,
+        // Required insert placeholder. The planned-week authority trigger sets
+        // the dated Client/Contract submission mode before the row is stored.
+        submission_mode_snapshot: 'ELECTRONIC',
         timesheet_id: null,
         planned_schedule_json: [],
         created_at: nowIso(),
@@ -173753,32 +172967,27 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   );
   if (!contract) return withCORS(env, req, notFound('Contract not found'));
 
-  // 1a) QR route allowed?
-  let defaultSubmissionMode = 'ELECTRONIC';
+  // 1a) QR route allowed? Resolve the exact planned/real week authority.
+  let defaultSubmissionMode = null;
   try {
-    if (contract.client_id) {
-      const { rows: csRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/client_settings` +
-          `?client_id=eq.${enc(contract.client_id)}` +
-          `&select=default_submission_mode,updated_at,created_at` +
-          `&order=updated_at.desc.nullslast,created_at.desc.nullslast` +
-          `&limit=1`
-      );
-      const cs = csRows?.[0] || null;
-      if (cs && cs.default_submission_mode) {
-        defaultSubmissionMode = String(cs.default_submission_mode || 'ELECTRONIC').toUpperCase();
-      }
+    const authority = await loadPolicy(env, contract.client_id, cw.week_ending_date, {
+      contract_id: contract.id,
+      timesheet_id: cw.timesheet_id || null,
+      workflow: 'WEEKLY'
+    });
+    defaultSubmissionMode = String(authority?.default_submission_mode || '').toUpperCase();
+    if (authority?.settings_authority_applicability?.import_authoritative === true) {
+      return withCORS(env, req, badRequest('Printed QR Timesheets are not available for import-authoritative work'));
     }
-  } catch {
-    defaultSubmissionMode = 'ELECTRONIC';
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'));
   }
 
   if (defaultSubmissionMode !== 'ELECTRONIC' && defaultSubmissionMode !== 'MANUAL') {
     return withCORS(
       env,
       req,
-      badRequest(`client_settings.default_submission_mode=${defaultSubmissionMode} is not supported`)
+      badRequest(`default_submission_mode=${defaultSubmissionMode} is not supported`)
     );
   }
 
@@ -173799,7 +173008,12 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
     }
 
     try {
-      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json, null, {
+        relevant_date: cw.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: cw.timesheet_id || null,
+        workflow: 'WEEKLY'
+      });
       hours = {
         day:   +(mins.day   / 60).toFixed(2),
         night: +(mins.night / 60).toFixed(2),
@@ -173865,7 +173079,9 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
 
   let bhSet = new Set();
   try {
-    const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    const pol = await loadPolicy(env, contract.client_id || null, cw.week_ending_date, {
+      contract_id: contract.id, timesheet_id: cw.timesheet_id || null, workflow: 'WEEKLY'
+    });
     const bhList = Array.isArray(pol?.bh_list) ? pol.bh_list : [];
     bhSet = new Set(bhList.map(String));
   } catch {
@@ -174061,10 +173277,14 @@ async function handleContractWeekGeneratePrintable(env, req, weekId) {
   // Policy snapshot
   let policySnapshot = {};
   try {
-    policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date);
+    policySnapshot = await loadPolicy(env, contract.client_id || null, cw.week_ending_date, {
+      contract_id: contract.id, timesheet_id: cw.timesheet_id || null, workflow: 'WEEKLY'
+    });
     if (!policySnapshot || typeof policySnapshot !== 'object') policySnapshot = {};
-  } catch {
-    policySnapshot = {};
+  } catch (error) {
+    return withCORS(env, req, badRequest(
+      error?.message || 'CONTRACT_SETTINGS_AUTHORITY_UNAVAILABLE'
+    ));
   }
 
   const pay_wtr_rate_pct_snapshot =
@@ -175372,7 +174592,12 @@ async function handleTimesheetBucketPreview(env, req) {
     }
 
     try {
-      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json, null, {
+        relevant_date: ts?.week_ending_date || cw?.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: ts?.timesheet_id || null,
+        workflow: String(ts?.sheet_scope || 'WEEKLY')
+      });
       hours = {
         day:   +(mins.day   / 60).toFixed(2),
         night: +(mins.night / 60).toFixed(2),
@@ -175393,7 +174618,12 @@ async function handleTimesheetBucketPreview(env, req) {
       bh:    n(body.hours.bh)
     };
   } else if (ts) {
-    const h = await computeWeeklyHours(env, ts, contract);
+    const frozenPolicy = await loadPolicy(env, contract.client_id, ts.week_ending_date || cw?.week_ending_date, {
+      contract_id: contract.id,
+      timesheet_id: ts.timesheet_id,
+      workflow: String(ts.sheet_scope || 'WEEKLY')
+    });
+    const h = await computeWeeklyHours(env, ts, contract, frozenPolicy);
     hours = h;
   } else {
     let sched = cw.planned_schedule_json || cw.std_schedule_json || contract.std_schedule_json || null;
@@ -175427,7 +174657,12 @@ async function handleTimesheetBucketPreview(env, req) {
     }
 
     try {
-      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json);
+      const mins = await resolveBucketsFromSchedule(env, contract, actual_schedule_json, null, {
+        relevant_date: cw.week_ending_date,
+        contract_id: contract.id,
+        timesheet_id: null,
+        workflow: 'WEEKLY'
+      });
       hours = {
         day:   +(mins.day   / 60).toFixed(2),
         night: +(mins.night / 60).toFixed(2),
@@ -195015,7 +194250,9 @@ async function buildNhspWeeklySnapshot(
       const we = (ts && ts.week_ending_date)
         ? String(ts.week_ending_date)
         : (shiftsArr?.[0]?.work_date ? String(shiftsArr[0].work_date) : null);
-      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we)) : {};
+      policy_snapshot_json = (we && client_id) ? (await getPolicyCached(client_id, we, {
+        contract_id: contract?.id || null, timesheet_id: ts?.timesheet_id || null, workflow: 'IMPORT'
+      })) : {};
       if (!policy_snapshot_json || typeof policy_snapshot_json !== 'object') policy_snapshot_json = {};
     } catch {
       policy_snapshot_json = {};
@@ -195064,7 +194301,9 @@ async function buildNhspWeeklySnapshot(
     } else {
       policy = policyByDate.get(workDate);
       if (!policy) {
-        policy = await getPolicyCached(client_id, workDate);
+        policy = await getPolicyCached(client_id, workDate, {
+          contract_id: contract?.id || null, timesheet_id: ts?.timesheet_id || null, workflow: 'IMPORT'
+        });
         policyByDate.set(workDate, policy);
       }
     }
@@ -198926,6 +198165,57 @@ async scheduled(event, env, ctx) {
     return settings && settings.__load_failed !== true ? settings : null;
   };
 
+  const bankHolidayFeedTask = (async () => {
+    let claimToken = null;
+    try {
+      const rawClaim = await sbRpc(env, 'settings_bank_holiday_feed_refresh_claim_v1', {
+        p_now_utc: scheduledStartedAtUtc
+      }, { timeoutMs: 5000 });
+      const claim = unwrapRpcJsonb(rawClaim, 'settings_bank_holiday_feed_refresh_claim_v1');
+      if (!claim?.claimed) return { ok: true, skipped: true, code: 'BANK_HOLIDAY_FEED_NOT_DUE' };
+      claimToken = String(claim.claim_token || '').trim();
+      if (!claimToken || claim.division !== 'england-and-wales'
+          || claim.source_url !== 'https://www.gov.uk/bank-holidays.json') {
+        throw new Error('BANK_HOLIDAY_FEED_CLAIM_INVALID');
+      }
+      const response = await fetch(claim.source_url, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) throw new Error(`BANK_HOLIDAY_FEED_HTTP_${response.status}`);
+      const payload = await response.json();
+      const events = payload?.['england-and-wales']?.events;
+      if (!Array.isArray(events) || !events.length) throw new Error('BANK_HOLIDAY_FEED_SHAPE_INVALID');
+      const dates = [...new Set(events.map((eventRow) => String(eventRow?.date || '').trim()))]
+        .filter((dateValue) => /^\d{4}-\d{2}-\d{2}$/.test(dateValue))
+        .sort();
+      if (!dates.length || dates.length > 512) throw new Error('BANK_HOLIDAY_FEED_DATES_INVALID');
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(dates)));
+      const contentSha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      await sbRpc(env, 'settings_bank_holiday_feed_refresh_complete_v1', {
+        p_claim_token: claimToken,
+        p_dates: dates,
+        p_content_sha256: contentSha256,
+        p_now_utc: new Date().toISOString()
+      }, { timeoutMs: 15000 });
+      return { ok: true, date_count: dates.length };
+    } catch (error) {
+      const code = String(error?.message || error || 'BANK_HOLIDAY_FEED_REFRESH_FAILED')
+        .toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 80) || 'BANK_HOLIDAY_FEED_REFRESH_FAILED';
+      if (claimToken) {
+        try {
+          await sbRpc(env, 'settings_bank_holiday_feed_refresh_fail_v1', {
+            p_claim_token: claimToken,
+            p_error_code: code,
+            p_now_utc: new Date().toISOString()
+          }, { timeoutMs: 5000 });
+        } catch {}
+      }
+      console.warn('[scheduled] Bank Holiday feed refresh failed safely:', code);
+      return { ok: false, code };
+    }
+  })();
+
   const bankingPayWorkbenchTask = (async () => {
     const taskStartedAtMs = Date.now();
     console.log('[scheduled] Banking Pay workbench task started:', {
@@ -199209,6 +198499,7 @@ async scheduled(event, env, ctx) {
   })();
 
   const allScheduledTasks = Promise.allSettled([
+    bankHolidayFeedTask,
     bankingPayWorkbenchTask,
     timesheetR2CleanupTask,
     broaderScheduledTask

@@ -224,22 +224,7 @@ BEGIN
   END;
 
   RETURN QUERY
-  WITH client_hr AS MATERIALIZED (
-    SELECT
-      cs0.client_id,
-      BOOL_OR(cs0.autoprocess_hr) AS autoprocess_hr,
-      BOOL_OR(cs0.requires_hr) AS requires_hr,
-      BOOL_OR(cs0.no_timesheet_required) AS no_timesheet_required,
-      BOOL_OR(cs0.pay_reference_required) AS pay_reference_required,
-      BOOL_OR(cs0.invoice_reference_required) AS invoice_reference_required,
-      BOOL_OR(cs0.reference_number_required_to_issue_invoice) AS reference_number_required_to_issue_invoice,
-      BOOL_OR(cs0.hr_validation_required) AS hr_validation_required,
-      BOOL_OR(cs0.ts_reference_required) AS ts_reference_required,
-      BOOL_OR(cs0.is_nhsp) AS is_nhsp
-    FROM public.client_settings AS cs0
-    GROUP BY cs0.client_id
-  ),
-  timesheet_scope_rows AS MATERIALIZED (
+  WITH timesheet_scope_rows AS MATERIALIZED (
     SELECT
       ts0.timesheet_id,
       cw0.id AS contract_week_id,
@@ -584,34 +569,14 @@ BEGIN
       ts0.qr_scanned_at AS qr_scanned_at,
       ts0.qr_last_sent_hash AS qr_last_sent_hash,
       COALESCE(pa1.pay_adjustment_count, 0) AS pay_adjustment_count,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.autoprocess_hr ELSE NULL::boolean END,
-        ch0.autoprocess_hr,
-        FALSE
-      ) AS client_autoprocess_hr,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
-        ch0.requires_hr,
-        FALSE
-      ) AS client_requires_hr,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.no_timesheet_required ELSE NULL::boolean END,
-        ch0.no_timesheet_required,
-        FALSE
-      ) AS client_no_timesheet_required,
-      COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
-      COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
-        ch0.hr_validation_required,
-        FALSE
-      ) AS client_hr_validation_required,
-      COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
-        ch0.is_nhsp,
-        FALSE
-      ) AS client_is_nhsp,
+      COALESCE((authority.settings_json#>>'{values,autoprocess_hr}')::boolean,FALSE) AS client_autoprocess_hr,
+      COALESCE((authority.settings_json#>>'{values,requires_hr}')::boolean,FALSE) AS client_requires_hr,
+      COALESCE((authority.settings_json#>>'{values,no_timesheet_required}')::boolean,FALSE) AS client_no_timesheet_required,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_pay}')::boolean,FALSE) AS client_pay_reference_required,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,FALSE) AS client_invoice_reference_required,
+      COALESCE((authority.settings_json#>>'{values,hr_validation_required_for_invoice}')::boolean,FALSE) AS client_hr_validation_required,
+      COALESCE((authority.settings_json#>>'{values,ts_reference_required}')::boolean,FALSE) AS client_ts_reference_required,
+      COALESCE((authority.settings_json#>>'{values,is_nhsp}')::boolean,FALSE) AS client_is_nhsp,
       COALESCE(tf2.has_rate_issue, FALSE) AS has_rate_issue,
       COALESCE(tf2.has_pay_channel_issue, FALSE) AS has_pay_channel_issue,
       tf2.hr_crosscheck_status AS hr_crosscheck_status,
@@ -623,16 +588,8 @@ BEGIN
       ts0.r2_nurse_key AS r2_nurse_key,
       ts0.r2_auth_key AS r2_auth_key,
       ts0.manual_pdf_r2_key AS manual_pdf_r2_key,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_pay ELSE NULL::boolean END,
-        ch0.pay_reference_required,
-        FALSE
-      ) AS require_reference_to_pay,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_invoice ELSE NULL::boolean END,
-        ch0.invoice_reference_required,
-        FALSE
-      ) AS require_reference_to_invoice,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_pay}')::boolean,FALSE) AS require_reference_to_pay,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,FALSE) AS require_reference_to_invoice,
       COALESCE(ev1.evidence_count, 0) AS evidence_count,
       COALESCE(ev1.has_timesheet_evidence, FALSE) AS has_timesheet_evidence,
       COALESCE(ev1.has_mileage_evidence, FALSE) AS has_mileage_evidence,
@@ -676,8 +633,19 @@ BEGIN
       ON cand0.id = COALESCE(tf2.candidate_id, ct0.candidate_id)
     LEFT JOIN public.clients AS cli0
       ON cli0.id = COALESCE(tf2.client_id, ct0.client_id)
-    LEFT JOIN client_hr AS ch0
-      ON ch0.client_id = COALESCE(tf2.client_id, ct0.client_id)
+    CROSS JOIN LATERAL (
+      SELECT private._contract_settings_effective_core_v1(
+        COALESCE(tf2.client_id, ct0.client_id),
+        COALESCE(ts0.contract_id, cw0.contract_id),
+        COALESCE(
+          (ts0.worked_start_iso AT TIME ZONE 'Europe/London')::date,
+          (ts0.scheduled_start_iso AT TIME ZONE 'Europe/London')::date,
+          ts0.week_ending_date
+        ),
+        CASE WHEN ts0.sheet_scope='DAILY'::public.timesheet_scope_enum THEN 'DAILY' ELSE 'OFFICE' END,
+        ts0.timesheet_id
+      ) AS settings_json
+    ) authority
   ),
   planned_week_rows AS MATERIALIZED (
     SELECT
@@ -728,34 +696,14 @@ BEGIN
       NULL::timestamp with time zone AS qr_scanned_at,
       NULL::text AS qr_last_sent_hash,
       0::integer AS pay_adjustment_count,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.autoprocess_hr ELSE NULL::boolean END,
-        ch0.autoprocess_hr,
-        FALSE
-      ) AS client_autoprocess_hr,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
-        ch0.requires_hr,
-        FALSE
-      ) AS client_requires_hr,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.no_timesheet_required ELSE NULL::boolean END,
-        ch0.no_timesheet_required,
-        FALSE
-      ) AS client_no_timesheet_required,
-      COALESCE(ch0.pay_reference_required, FALSE) AS client_pay_reference_required,
-      COALESCE(ch0.invoice_reference_required, FALSE) AS client_invoice_reference_required,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.requires_hr ELSE NULL::boolean END,
-        ch0.hr_validation_required,
-        FALSE
-      ) AS client_hr_validation_required,
-      COALESCE(ch0.ts_reference_required, FALSE) AS client_ts_reference_required,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.is_nhsp ELSE NULL::boolean END,
-        ch0.is_nhsp,
-        FALSE
-      ) AS client_is_nhsp,
+      COALESCE((authority.settings_json#>>'{values,autoprocess_hr}')::boolean,FALSE) AS client_autoprocess_hr,
+      COALESCE((authority.settings_json#>>'{values,requires_hr}')::boolean,FALSE) AS client_requires_hr,
+      COALESCE((authority.settings_json#>>'{values,no_timesheet_required}')::boolean,FALSE) AS client_no_timesheet_required,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_pay}')::boolean,FALSE) AS client_pay_reference_required,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,FALSE) AS client_invoice_reference_required,
+      COALESCE((authority.settings_json#>>'{values,hr_validation_required_for_invoice}')::boolean,FALSE) AS client_hr_validation_required,
+      COALESCE((authority.settings_json#>>'{values,ts_reference_required}')::boolean,FALSE) AS client_ts_reference_required,
+      COALESCE((authority.settings_json#>>'{values,is_nhsp}')::boolean,FALSE) AS client_is_nhsp,
       FALSE AS has_rate_issue,
       FALSE AS has_pay_channel_issue,
       NULL::text AS hr_crosscheck_status,
@@ -767,16 +715,8 @@ BEGIN
       NULL::text AS r2_nurse_key,
       NULL::text AS r2_auth_key,
       NULL::text AS manual_pdf_r2_key,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_pay ELSE NULL::boolean END,
-        ch0.pay_reference_required,
-        FALSE
-      ) AS require_reference_to_pay,
-      COALESCE(
-        CASE WHEN ct0.overrideclientsettings THEN ct0.require_reference_to_invoice ELSE NULL::boolean END,
-        ch0.invoice_reference_required,
-        FALSE
-      ) AS require_reference_to_invoice,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_pay}')::boolean,FALSE) AS require_reference_to_pay,
+      COALESCE((authority.settings_json#>>'{values,require_reference_to_invoice}')::boolean,FALSE) AS require_reference_to_invoice,
       0::integer AS evidence_count,
       FALSE AS has_timesheet_evidence,
       FALSE AS has_mileage_evidence,
@@ -807,8 +747,14 @@ BEGIN
       ON cand0.id = ct0.candidate_id
     LEFT JOIN public.clients AS cli0
       ON cli0.id = ct0.client_id
-    LEFT JOIN client_hr AS ch0
-      ON ch0.client_id = ct0.client_id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN cw0.settings_authority_json IS NULL OR cw0.settings_authority_json='{}'::jsonb
+          THEN private._contract_settings_effective_core_v1(
+            ct0.client_id,ct0.id,cw0.week_ending_date,'WEEKLY',NULL::uuid)
+        ELSE cw0.settings_authority_json
+      END AS settings_json
+    ) authority
   ),
   base_union AS MATERIALIZED (
     SELECT

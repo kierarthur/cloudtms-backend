@@ -810,8 +810,9 @@ begin
       select public._import_review_timesheet_protection_core_v1(t.timesheet_id) as value
     ) protection
     cross join lateral (
-      select public.import_auto_authorise_policy_resolve_v1(
-        p_source_system,c.client_id,c.id,coalesce(p_validation_context,false)
+      select public.import_auto_authorise_policy_resolve_v2(
+        p_source_system,c.client_id,c.id,t.timesheet_id,t.week_ending_date,
+        coalesce(p_validation_context,false)
       ) as value
     ) policy
     where t.authorised_at_server is null

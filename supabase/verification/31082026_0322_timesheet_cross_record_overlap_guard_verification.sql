@@ -57,6 +57,11 @@ begin
   insert into public.clients(id,name) values
     (v_client_one,'Overlap guard client one'),
     (v_client_two,'Overlap guard client two');
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,week_ending_weekday
+  ) values
+    (gen_random_uuid(),v_client_one,v_week-30,'ELECTRONIC',0),
+    (gen_random_uuid(),v_client_two,v_week-30,'ELECTRONIC',0);
   insert into public.candidates(id,email,display_name,active,key_norm,opt_in_email)
   values(v_candidate,'overlap-'||replace(v_candidate::text,'-','')||'@example.test',
     'Overlap Guard Candidate',true,v_family,true);

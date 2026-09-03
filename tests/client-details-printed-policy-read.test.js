@@ -62,9 +62,9 @@ for (const enabled of [true, false]) {
     assert.equal(result.body.client_settings.default_submission_mode, 'ELECTRONIC');
     assert.equal(result.body.client_settings.invoice_consolidation_mode, 'BY_WEEK');
     assert.equal(result.body.client_settings.updated_at, '2026-08-28T12:00:00Z');
-    assert.equal(result.body.import_financial_policy.eligible, false);
+    assert.equal(Object.hasOwn(result.body, 'import_financial_policy'), false);
     assert.equal(result.body.has_e_history, false);
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 3);
   });
 }
 
