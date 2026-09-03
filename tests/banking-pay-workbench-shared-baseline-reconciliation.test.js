@@ -27,6 +27,10 @@ const candidateManagerEmailWorkflow = fs.readFileSync(
   path.join(repositoryRoot, '.github/workflows/candidate-manager-email-verify.yml'),
   'utf8'
 );
+const databaseSourceWorkflow = fs.readFileSync(
+  path.join(repositoryRoot, '.github/workflows/supabase-migrate.yml'),
+  'utf8'
+);
 
 function git(args, encoding = 'utf8') {
   return execFileSync('git', args, {
@@ -48,6 +52,13 @@ test('Candidate source verification fetches the historical commits required by t
   assert.match(
     candidateManagerEmailWorkflow,
     /uses:\s*actions\/checkout@v6\s*\n\s*with:\s*\n\s*fetch-depth:\s*0\b/
+  );
+});
+
+test('database source verification fetches the historical commits required by this proof', () => {
+  assert.match(
+    databaseSourceWorkflow,
+    /uses:\s*actions\/checkout@v6\s*\n\s*with:\s*(?:\n\s*#[^\n]*)*\n\s*fetch-depth:\s*0\b/
   );
 });
 

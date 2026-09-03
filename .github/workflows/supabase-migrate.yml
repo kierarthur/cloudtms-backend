@@ -46,6 +46,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # npm test includes sealed ancestry/rollback proofs that read exact
+          # historical Git objects. A shallow checkout makes those proofs fail
+          # before they can validate the current database authority.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
