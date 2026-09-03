@@ -3741,8 +3741,11 @@ async function enrichCandidatePaperDeliveryState(env, response) {
     ? response.items.flatMap((item) => Array.isArray(item?.workflows) ? item.workflows : [])
     : Array.isArray(response.workflows) ? response.workflows : [];
   const workflowIds = [...new Set(projected
-    .filter((workflow) => upper(workflow?.route) === 'PAPER'
-      && upper(workflow?.state) === 'AWAITING_PAPER_RETURN')
+    // The lightweight Timesheet-page workflow overlay intentionally omits
+    // route and generation. AWAITING_PAPER_RETURN is already a paper-only
+    // state; the authoritative workflow read below still proves PAPER,
+    // generation, candidate and manifest before any delivery is projected.
+    .filter((workflow) => upper(workflow?.state) === 'AWAITING_PAPER_RETURN')
     .map((workflow) => text(workflow?.workflow_id))
     .filter((id) => UUID_RE.test(id)))];
   if (!workflowIds.length) return response;

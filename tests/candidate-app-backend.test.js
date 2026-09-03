@@ -164,7 +164,9 @@ test('paper delivery enrichment changes only the matching current workflow prese
     }, {
       ok: true,
       workflows: [
-        { workflow_id: workflowId, generation: 4, route: 'PAPER', state: 'AWAITING_PAPER_RETURN' },
+        // candidate_app_timesheet_page_v1 uses this deliberately lightweight
+        // shape: route and generation are not present on its workflow overlay.
+        { workflow_id: workflowId, state: 'AWAITING_PAPER_RETURN' },
         { workflow_id: '00000000-0000-4000-8000-000000000095', generation: 1, route: 'PHONE', state: 'RECEIVED' }
       ]
     });
