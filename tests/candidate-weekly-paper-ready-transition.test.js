@@ -93,7 +93,7 @@ test('an older mail attachment never projects the current Candidate pack as read
     backend.indexOf('function candidatePaperExecutionState'),
     backend.indexOf('async function candidatePaperPackContext')
   );
-  assert.match(executionState, /if \(complete\?\.ready === true\)/i);
+  assert.match(executionState, /if \(complete\?\.ready === true &&/i);
   assert.doesNotMatch(
     executionState,
     /complete\?\.ready === true\s*\|\|\s*candidateCompletePackAttachmentMatchesScope/i

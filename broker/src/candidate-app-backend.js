@@ -6324,16 +6324,8 @@ function candidateCompletePackAttachmentMatchesScope(row, expectedAuthority = 'C
 
 function candidatePaperExecutionState(workflow, outbox = null, timesheet = null, complete = null) {
   const workflowReceipt = parseJson(workflow?.last_mutation_response_json, {}) || {};
-  if (workflowReceipt.failure_scope === 'WORKFLOW'
-      && workflowReceipt.paper_pack_state === 'FAILED_TERMINAL') {
-    return {
-      state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW', retryable: false,
-      failure_code: text(workflowReceipt.failure_code)
-        || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
-      attempt_count: 0, next_retry_at_utc: null, retry_in_progress: false,
-      operation_id: workflowReceipt.paper_pack_operation_id || null
-    };
-  }
+  const workflowTerminal = workflowReceipt.failure_scope === 'WORKFLOW'
+    && workflowReceipt.paper_pack_state === 'FAILED_TERMINAL';
   const scope = parseJson(outbox?.payment_scope_json, {}) || {};
   const attemptExpiresAt = Date.parse(text(scope.candidate_paper_pack_attempt_expires_at_utc));
   const common = {
@@ -6345,6 +6337,23 @@ function candidatePaperExecutionState(workflow, outbox = null, timesheet = null,
       && Number.isFinite(attemptExpiresAt) && attemptExpiresAt > Date.now(),
     operation_id: scope.candidate_paper_pack_operation_id || null
   };
+  // A workflow-level failure records the result of the attempt that created it;
+  // it is not stronger than a later, independently verified immutable receipt
+  // for this exact workflow generation and manifest. This bounded precedence is
+  // required after historical duplicate outbox rows have been reclassified.
+  if (complete?.ready === true && (!workflowTerminal
+      || text(workflowReceipt.failure_code) === 'CANDIDATE_PAPER_OUTBOX_CONFLICT')) {
+    return { ...common, state: 'READY', retryable: false, failure_code: null };
+  }
+  if (workflowTerminal) {
+    return {
+      state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW', retryable: false,
+      failure_code: text(workflowReceipt.failure_code)
+        || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
+      attempt_count: 0, next_retry_at_utc: null, retry_in_progress: false,
+      operation_id: workflowReceipt.paper_pack_operation_id || null
+    };
+  }
   if (scope.candidate_paper_generation_retired === true) {
     return { ...common, state: 'RETIRED', retryable: false };
   }
@@ -6353,9 +6362,6 @@ function candidatePaperExecutionState(workflow, outbox = null, timesheet = null,
   // Timesheet document revision in R2.  A source revision can legitimately
   // become stale after the mail row was released; never project that older
   // attachment as the current downloadable pack.
-  if (complete?.ready === true) {
-    return { ...common, state: 'READY', retryable: false, failure_code: null };
-  }
   if (scope.candidate_paper_pack_retryable === true
       || upper(scope.candidate_paper_pack_failure_class) === 'RETRYABLE') {
     const due = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
@@ -8602,6 +8608,7 @@ export const candidateAppBackendInternals = Object.freeze({
   officialPeriodWithShiftLines,
   paperPackIdentity,
   candidatePaperDeliveryGeneration,
+  candidatePaperExecutionState,
   candidatePaperCompleteReceipt,
   readyPaperPackReceiptFromOutbox,
   readyPaperPackReceipt,

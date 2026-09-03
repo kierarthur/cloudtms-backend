@@ -28,6 +28,7 @@ const {
   paperPackIdentity,
   passwordVerificationProof,
   candidatePaperDeliveryGeneration,
+  candidatePaperExecutionState,
   candidatePaperCompleteReceipt,
   readyPaperPackReceiptFromOutbox,
   readyPaperPackReceipt,
@@ -68,6 +69,59 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('verified current paper pack supersedes an older workflow outbox-conflict receipt', () => {
+  const state = candidatePaperExecutionState({
+    last_mutation_response_json: {
+      failure_scope: 'WORKFLOW',
+      paper_pack_state: 'FAILED_TERMINAL',
+      failure_code: 'CANDIDATE_PAPER_OUTBOX_CONFLICT'
+    }
+  }, {
+    status: 'SENT',
+    payment_scope_json: {
+      candidate_paper_pack_ready: true,
+      candidate_paper_pack_failure_code: 'CANDIDATE_PAPER_OUTBOX_CONFLICT'
+    }
+  }, {
+    document_state: 'READY'
+  }, {
+    ready: true,
+    key: 'paper-pack/current.pdf',
+    sha256: 'a'.repeat(64)
+  });
+
+  assert.equal(state.state, 'READY');
+  assert.equal(state.retryable, false);
+  assert.equal(state.failure_code, null);
+});
+
+test('workflow terminal failure remains authoritative without a verified current paper pack', () => {
+  const state = candidatePaperExecutionState({
+    last_mutation_response_json: {
+      failure_scope: 'WORKFLOW',
+      paper_pack_state: 'FAILED_TERMINAL',
+      failure_code: 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+    }
+  });
+
+  assert.equal(state.state, 'FAILED_TERMINAL');
+  assert.equal(state.retryable, false);
+  assert.equal(state.failure_scope, 'WORKFLOW');
+});
+
+test('verified pack does not mask an unrelated workflow terminal failure', () => {
+  const state = candidatePaperExecutionState({
+    last_mutation_response_json: {
+      failure_scope: 'WORKFLOW',
+      paper_pack_state: 'FAILED_TERMINAL',
+      failure_code: 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+    }
+  }, null, null, { ready: true });
+
+  assert.equal(state.state, 'FAILED_TERMINAL');
+  assert.equal(state.failure_code, 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED');
+});
 
 test('stale Paper source recovery creates one exact replacement document job', async () => {
   const timesheetId = '00000000-0000-4000-8000-000000000901';
