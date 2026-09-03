@@ -57,6 +57,7 @@ const {
   knownErrorCode,
   officeErrorCode,
   assertManagerRouteApprovalContext,
+  documentStreamSource,
   renderExpensePage,
   routeMatch,
   safeFinalisationResult,
@@ -6402,6 +6403,33 @@ test('manager document reads validate the pending token and immutable manifest w
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('candidate submitted-expense document reads return the original evidence rather than its review rendering', () => {
+  const sourceHash = 'a'.repeat(64);
+  const reviewHash = 'b'.repeat(64);
+  for (const componentKind of ['MILEAGE_FORM', 'EXPENSE_EVIDENCE']) {
+    assert.deepEqual(documentStreamSource('candidate', {
+      component_kind: componentKind,
+      storage_key: `candidate-app/test/source-${componentKind}.jpg`,
+      source_content_sha256: `\\x${sourceHash}`,
+      review_storage_key: `candidate-app/test/review-${componentKind}.pdf`,
+      review_content_sha256: `\\x${reviewHash}`
+    }), {
+      key: `candidate-app/test/source-${componentKind}.jpg`,
+      hash: sourceHash
+    });
+  }
+  assert.deepEqual(documentStreamSource('manager', {
+    component_kind: 'MILEAGE_FORM',
+    storage_key: 'candidate-app/test/source.jpg',
+    source_content_sha256: `\\x${sourceHash}`,
+    review_storage_key: 'candidate-app/test/review.pdf',
+    review_content_sha256: `\\x${reviewHash}`
+  }), {
+    key: 'candidate-app/test/review.pdf',
+    hash: reviewHash
+  });
 });
 
 test('public Candidate workflow actions exclude service finalisation', async () => {

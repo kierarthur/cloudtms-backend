@@ -6308,6 +6308,25 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   return jsonResponse(200, result);
 }
 
+function documentStreamSource(owner, component) {
+  const candidateExpenseEvidence = owner === 'candidate'
+    && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(upper(component?.component_kind))
+    && text(component?.storage_key)
+    && text(component?.source_content_sha256);
+  if (candidateExpenseEvidence) {
+    return {
+      key: component.storage_key,
+      hash: text(component.source_content_sha256).replace(/^\\x/i, '')
+    };
+  }
+  return {
+    key: owner === 'manager' ? component?.review_storage_key
+      : component?.final_signed_storage_key || component?.review_storage_key || component?.storage_key,
+    hash: text(owner === 'manager' ? component?.review_content_sha256
+      : component?.final_signed_content_sha256 || component?.review_content_sha256 || component?.source_content_sha256).replace(/^\\x/i, '')
+  };
+}
+
 async function handleDocumentStream(request, env, deps, owner, workflowId, componentId) {
   let component;
   if (owner === 'candidate') {
@@ -6348,10 +6367,7 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
     throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
   }
   if (!component) throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
-  const key = owner === 'manager' ? component?.review_storage_key
-    : component?.final_signed_storage_key || component?.review_storage_key || component?.storage_key;
-  const hash = text(owner === 'manager' ? component?.review_content_sha256
-    : component?.final_signed_content_sha256 || component?.review_content_sha256 || component?.source_content_sha256).replace(/^\\x/i, '');
+  const { key, hash } = documentStreamSource(owner, component);
   const stored = await r2Bytes(env, key, hash || null);
   return new Response(stored.bytes, {
     status: 200,
@@ -9049,6 +9065,7 @@ export const candidateAppBackendInternals = Object.freeze({
   officeErrorCode,
   knownErrorCode,
   assertManagerRouteApprovalContext,
+  documentStreamSource,
   managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
 });
