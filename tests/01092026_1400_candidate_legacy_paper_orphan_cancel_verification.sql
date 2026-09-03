@@ -18,7 +18,8 @@ create or replace function pg_temp.verify_legacy_orphan_cancel(
   p_manifest_version text,
   p_matching_receipt_token boolean,
   p_expect_success boolean,
-  p_expect_compatibility boolean
+  p_expect_compatibility boolean,
+  p_include_pack_email_copy boolean default false
 )
 returns void
 language plpgsql
@@ -36,6 +37,7 @@ declare
   v_workflow uuid:=gen_random_uuid();
   v_mail uuid:=gen_random_uuid();
   v_second_mail uuid:=gen_random_uuid();
+  v_pack_email_mail uuid:=gen_random_uuid();
   v_manifest jsonb;
   v_manifest_hash text;
   v_source_token text:='legacy-orphan-current-'||gen_random_uuid()::text;
@@ -215,6 +217,47 @@ begin
     );
   end if;
 
+  -- A candidate-requested email sends the already-rendered immutable pack.
+  -- It is not a QR-token owner and therefore has no qr_token_hash.  The exact
+  -- token-owning render receipt above must remain authoritative while this
+  -- convenience delivery copy is retired with the same generation.
+  if p_include_pack_email_copy then
+    insert into public.mail_outbox(
+      id,type,"to",subject,body_text,attachments,status,created_at_utc,
+      sent_at,context_kind,context_id,scheduled_for_utc,next_attempt_at_utc,
+      deterministic_outbox_key,payment_scope_json
+    ) values(
+      v_pack_email_mail,'TIMESHEET_QR','legacy-orphan@example.test',
+      'Candidate requested pack email','Immutable pack delivery copy',
+      jsonb_build_array(jsonb_build_object(
+        'r2_key','candidate-app/test/legacy-orphan/pack.pdf',
+        'sha256',repeat('a',64),'size_bytes',1024,'page_count',1,
+        'candidate_workflow_id',v_workflow,
+        'candidate_workflow_generation',1,
+        'paper_return_manifest_sha256',v_manifest_hash
+      )),
+      'SENT',v_now+interval '2 seconds',v_now+interval '2 seconds',
+      'timesheets',v_timesheet,v_now,v_now,
+      'legacy-orphan-pack-email:'||v_workflow::text,
+      jsonb_build_object(
+        'candidate_mail_authority','CANDIDATE_PAPER_PACK_EMAIL_V1',
+        'candidate_workflow_id',v_workflow,
+        'candidate_workflow_generation',1,
+        'paper_return_manifest_sha256',v_manifest_hash,
+        'candidate_paper_pack_ready',true,
+        'mail_held_until_pdf_rendered',false,
+        'mail_hold_reason',null,
+        'candidate_paper_generation_retired',false,
+        'candidate_complete_pack_storage_key',
+          'candidate-app/test/legacy-orphan/pack.pdf',
+        'candidate_complete_pack_sha256',repeat('a',64),
+        'candidate_complete_pack_size_bytes',1024,
+        'candidate_complete_pack_page_count',1,
+        'candidate_complete_pack_media_type','application/pdf'
+      )
+    );
+  end if;
+
   begin
     v_result:=public.candidate_workflow_cancel_atomic_v2(
       v_session,'TEST',v_workflow,1,
@@ -306,6 +349,11 @@ select pg_temp.verify_legacy_orphan_cancel('2',false,false,false);
 -- A normal modern page-manifest pack with a current receipt cancels through the
 -- unchanged owner and never enters the legacy compatibility branch.
 select pg_temp.verify_legacy_orphan_cancel('2',true,true,false);
+
+-- A sent candidate-requested email is only a delivery copy of the immutable
+-- pack. Its deliberate lack of qr_token_hash cannot prevent the exact
+-- token-owning render receipt from retiring the generation.
+select pg_temp.verify_legacy_orphan_cancel('2',true,true,false,true);
 
 do $verify_acl$
 begin

@@ -147,6 +147,8 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(helper, /MULTIPLE_MAIL_CONTEXTS/);
   assert.match(helper, /v_qr_token_hashes:=array_append/i);
   assert.match(helper, /v_current_qr_token_hash=any\(v_qr_token_hashes\)/i);
+  assert.match(helper, /CANDIDATE_PAPER_PACK_EMAIL_V1[\s\S]*v_qr_token_hash_missing_count/i);
+  assert.match(helper, /at least one valid token-owning[\s\S]*receipt remains mandatory/i);
   assert.match(helper, /receipt_qr_token_hash_count/i);
   assert.doesNotMatch(helper, /\bv_qr_token_hash text;/i);
   assert.doesNotMatch(helper, /MULTIPLE_QR_TOKEN_HASHES/);

@@ -379,7 +379,18 @@ begin
         )::text;
     end if;
     if nullif(btrim(coalesce(v_mail.payment_scope_json->>'qr_token_hash','')),'') is null then
-      v_qr_token_hash_missing_count:=v_qr_token_hash_missing_count+1;
+      -- The render/enqueue receipt (CANDIDATE_PAPER_V1) owns the source QR
+      -- token.  A later candidate-requested email of that already-rendered
+      -- immutable pack is a delivery copy, not another QR-token owner, and
+      -- therefore intentionally has no qr_token_hash.  It is still locked and
+      -- retired with the generation above.  At least one valid token-owning
+      -- receipt remains mandatory below, so this exception cannot weaken QR
+      -- invalidation or permit a delivery-copy row to establish ownership.
+      if upper(btrim(coalesce(
+           v_mail.payment_scope_json->>'candidate_mail_authority',''
+         )))<>'CANDIDATE_PAPER_PACK_EMAIL_V1' then
+        v_qr_token_hash_missing_count:=v_qr_token_hash_missing_count+1;
+      end if;
     elsif lower(v_mail.payment_scope_json->>'qr_token_hash') !~ '^[0-9a-f]{64}$' then
       raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
         using errcode='40001',detail=jsonb_build_object(
