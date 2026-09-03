@@ -3260,6 +3260,10 @@ function normaliseCandidateBreakSubmission(factualSubmission, context) {
   return facts;
 }
 
+function candidateWorkflowRequiresBreakEntry(workflow) {
+  return upper(workflow?.workflow_kind) !== 'CONTRACT_EXPENSE';
+}
+
 function scheduleFromImmutable(workflow, timesheet) {
   const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
   const hoursSubmission = parseJson(immutable.hours_submission, immutable) || immutable;
@@ -5844,11 +5848,15 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       return jsonResponse(200, withoutInternalRenderContracts(replay));
     }
     const workflow = await workflowRow(env, workflowId);
-    const breakContext = await rpcCall(deps, 'candidate_break_entry_context_get_v1',
-      candidateRpcArgs(access, env, { p_workflow_id: workflowId }));
-    const normalisedSubmissionFacts = normaliseCandidateBreakSubmission(
-      submissionFacts, breakContext
-    );
+    let breakContext = null;
+    let normalisedSubmissionFacts = submissionFacts;
+    if (candidateWorkflowRequiresBreakEntry(workflow)) {
+      breakContext = await rpcCall(deps, 'candidate_break_entry_context_get_v1',
+        candidateRpcArgs(access, env, { p_workflow_id: workflowId }));
+      normalisedSubmissionFacts = normaliseCandidateBreakSubmission(
+        submissionFacts, breakContext
+      );
+    }
     await assertCandidateMileageFormsMatchSubmission(
       env,
       workflow,
@@ -5870,7 +5878,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
         env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey
       ),
       submission_request_identity: submissionRequestIdentity,
-      break_entry_context: breakContext,
+      ...(breakContext ? { break_entry_context: breakContext } : {}),
       candidate_signature_component_id: signatureComponentId,
       candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
       approval_route: approvalRoute,
@@ -8976,6 +8984,7 @@ export const candidateAppBackendInternals = Object.freeze({
   explicitNoBreak,
   normaliseAdaptiveBreakEntry,
   normaliseCandidateBreakSubmission,
+  candidateWorkflowRequiresBreakEntry,
   assertCandidateScheduleAliasConsistency,
   deferBackground,
   finaliseReceivedPaperReturn,

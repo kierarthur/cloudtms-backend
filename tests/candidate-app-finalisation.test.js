@@ -80,6 +80,21 @@ test('adaptive duration breaks normalise into the existing financial input witho
   });
 });
 
+test('standalone expense workflows never require an hours break context', () => {
+  assert.equal(candidateAppInternals.candidateWorkflowRequiresBreakEntry({
+    workflow_kind: 'CONTRACT_EXPENSE'
+  }), false);
+  assert.equal(candidateAppInternals.candidateWorkflowRequiresBreakEntry({
+    workflow_kind: 'CONTRACT_COMBINED'
+  }), true);
+  assert.equal(candidateAppInternals.candidateWorkflowRequiresBreakEntry({
+    workflow_kind: 'CONTRACT_HOURS'
+  }), true);
+  assert.equal(candidateAppInternals.candidateWorkflowRequiresBreakEntry({
+    workflow_kind: 'DAILY'
+  }), true);
+});
+
 test('adaptive break input fails closed on stale context or wrong-mode fields', () => {
   assert.throws(() => candidateAppInternals.normaliseCandidateBreakSubmission({
     break_entry_context: {
