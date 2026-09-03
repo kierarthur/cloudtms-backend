@@ -462,11 +462,11 @@ begin
     raise exception 'CANDIDATE_PAPER_PACK_IDEMPOTENT_REPLAY_FAILED: %',v_pack_replay;
   end if;
 
-  -- A Mileage Form is verified before the worker chooses PAPER and therefore
-  -- carries the QR from that earlier workflow generation into the frozen pack.
-  -- Prove that exact source-form QR is accepted for its linked Mileage page,
-  -- remains invalid for every other page, and does not weaken the ordinary
-  -- current-pack QR contract.
+  -- Mileage is photographed as unsigned evidence before the worker chooses a
+  -- manager route.  PAPER then carries each photograph into its own current
+  -- pack page and gives that page the same unique return-QR contract as every
+  -- other page.  Prove the exact Mileage pack-page QR is accepted, a stale
+  -- manifest is rejected, and a Mileage page identity cannot satisfy Hours.
   v_mileage_source_hash:=encode(extensions.digest(
     'candidate-paper-mileage-source-first-use','sha256'
   ),'hex');
@@ -531,12 +531,10 @@ begin
     'v',2,
     'w',v_workflow::text,
     't',v_timesheet::text,
-    'g',1,
-    'm',v_mileage_source_hash,
+    'g',2,
+    'm',v_mileage_manifest_hex,
     'o',1,
-    'p',substring(encode(extensions.digest(
-      'MILEAGE_FORM:'||v_mileage_source_hash,'sha256'
-    ),'hex') from 1 for 16),
+    'p',v_mileage_page->>'page_key_sha256_16',
     'k','M',
     'c','M',
     'n',1
@@ -546,9 +544,9 @@ begin
     v_mileage_page->>'page_key',v_mileage_qr,v_now+interval '13 seconds'
   );
   if v_mileage_proof->>'ok' is distinct from 'true'
-     or v_mileage_proof->>'qr_identity_kind' is distinct from 'SOURCE_MILEAGE_FORM'
+     or v_mileage_proof->>'qr_identity_kind' is distinct from 'PACK_PAGE'
      or v_mileage_proof->>'page_component_kind' is distinct from 'MILEAGE_FORM' then
-    raise exception 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_FIRST_USE_FAILED: %',
+    raise exception 'CANDIDATE_PAPER_MILEAGE_PACK_QR_FIRST_USE_FAILED: %',
       v_mileage_proof;
   end if;
 
@@ -556,19 +554,14 @@ begin
     perform public.candidate_paper_return_proof_validate_v2(
       v_session,'TEST',v_workflow,2,v_mileage_manifest_hex,
       v_mileage_page->>'page_key',
-      jsonb_set(
-        jsonb_set(v_mileage_qr,'{m}',to_jsonb(repeat('f',64)),false),
-        '{p}',to_jsonb(substring(encode(extensions.digest(
-          'MILEAGE_FORM:'||repeat('f',64),'sha256'
-        ),'hex') from 1 for 16)),false
-      ),
+      jsonb_set(v_mileage_qr,'{m}',to_jsonb(repeat('f',64)),false),
       v_now+interval '14 seconds'
     );
   exception when sqlstate '28000' then
     v_wrong_mileage_failed:=true;
   end;
   if not v_wrong_mileage_failed then
-    raise exception 'CANDIDATE_PAPER_WRONG_MILEAGE_SOURCE_QR_ACCEPTED';
+    raise exception 'CANDIDATE_PAPER_STALE_MILEAGE_PACK_QR_ACCEPTED';
   end if;
 
   begin
@@ -580,7 +573,7 @@ begin
     v_mileage_on_hours_failed:=true;
   end;
   if not v_mileage_on_hours_failed then
-    raise exception 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_ACCEPTED_FOR_HOURS';
+    raise exception 'CANDIDATE_PAPER_MILEAGE_PACK_QR_ACCEPTED_FOR_HOURS';
   end if;
 
   v_pack_qr:=jsonb_build_object(

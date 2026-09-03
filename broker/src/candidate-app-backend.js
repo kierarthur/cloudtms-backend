@@ -122,7 +122,7 @@ const COMPONENT_MEDIA_TYPES = Object.freeze({
 const PAPER_RETURN_PROOF_V1 = 'CANDIDATE_PAPER_RETURN_PROOF_V1';
 const PAPER_RETURN_PROOF_V2 = 'CANDIDATE_PAPER_RETURN_PROOF_V2';
 const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
-const MILEAGE_FORM_QR_PROOF_V1 = 'CANDIDATE_MILEAGE_FORM_QR_PROOF_V1';
+const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
@@ -2315,15 +2315,6 @@ async function validateCandidatePaperReturnProof(env, deps, access, workflowId, 
     p_page_key: text(proof.paper_return_page_key),
     p_now_utc: new Date().toISOString()
   };
-  if (proofVersion === PAPER_RETURN_PROOF_V2) {
-    const workflow = await workflowRow(env, workflowId);
-    await assertCandidatePaperSourceMileageQrIfUsed(
-      env,
-      workflow,
-      text(proof.paper_return_page_key),
-      decodedQr
-    );
-  }
   const result = proofVersion === PAPER_RETURN_PROOF_V2
     ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
       ...commonArgs,
@@ -2369,15 +2360,6 @@ async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId)
     p_page_key: proof.paper_return_page_key,
     p_now_utc: new Date().toISOString()
   };
-  if (proof.proof_contract_version === PAPER_RETURN_PROOF_V2) {
-    const workflow = await workflowRow(env, ticket.workflow_id);
-    await assertCandidatePaperSourceMileageQrIfUsed(
-      env,
-      workflow,
-      proof.paper_return_page_key,
-      proof.qr_payload
-    );
-  }
   const result = proof.proof_contract_version === PAPER_RETURN_PROOF_V2
     ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
       ...commonArgs,
@@ -2394,168 +2376,6 @@ async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId)
       || (proof.proof_contract_version === PAPER_RETURN_PROOF_V2
         && result?.qr_payload_sha256 !== proof.qr_payload_sha256)) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_QR_PROOF_STALE');
-  }
-}
-
-function mileageFormProofMatchesIdentity(proof, identity, qrPayload) {
-  return proof?.proof_contract_version === MILEAGE_FORM_QR_PROOF_V1
-    && text(proof.mileage_form_semantic_sha256).toLowerCase() === identity.semantic_sha256
-    && Number(proof.mileage_units) === identity.mileage_units
-    && Number(qrPayload?.v) === 2
-    && JSON.stringify(qrPayload) === JSON.stringify(identity.qr_payload);
-}
-
-async function validateCandidateMileageFormProof(env, workflow, body) {
-  const proof = body.mileage_form_proof;
-  if (!exactKeys(proof, [
-    'proof_contract_version', 'mileage_form_semantic_sha256', 'mileage_units', 'qr_text'
-  ]) || proof.proof_contract_version !== MILEAGE_FORM_QR_PROOF_V1
-      || !SHA256_RE.test(text(proof.mileage_form_semantic_sha256))
-      || !text(proof.qr_text).startsWith('TSQ2.')) {
-    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_REQUIRED');
-  }
-  let qrPayload;
-  try {
-    qrPayload = await verifyCandidatePaperQrViaAdapter(env, proof.qr_text);
-  } catch (error) {
-    const code = text(error?.code || error?.message);
-    if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
-      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
-    }
-    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_UNREADABLE');
-  }
-  const identity = await candidateMileageFormQrIdentity(workflow, proof.mileage_units);
-  if (!mileageFormProofMatchesIdentity(proof, identity, qrPayload)) {
-    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_MISMATCH');
-  }
-  return {
-    ...identity,
-    qr_text: text(proof.qr_text),
-    qr_payload: qrPayload
-  };
-}
-
-async function revalidateCandidateMileageFormProof(env, ticket) {
-  if (!ticket.mileage_form_proof) return null;
-  const workflow = await workflowRow(env, ticket.workflow_id);
-  if (Number(workflow.generation) !== Number(ticket.generation)
-      || upper(workflow.state) !== 'WORKER_DRAFT') {
-    throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_QR_STALE');
-  }
-  const identity = await candidateMileageFormQrIdentity(
-    workflow,
-    ticket.mileage_form_proof.mileage_units
-  );
-  if (!mileageFormProofMatchesIdentity(
-    ticket.mileage_form_proof,
-    identity,
-    ticket.mileage_form_proof.qr_payload
-  )) {
-    throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_QR_STALE');
-  }
-  return identity;
-}
-
-async function candidatePaperMileageSourceArtifact(env, workflow, expectedPage) {
-  if (upper(expectedPage?.component_kind) !== 'MILEAGE_FORM'
-      || upper(expectedPage?.expense_category) !== 'MILEAGE'
-      || !UUID_RE.test(text(expectedPage?.source_component_id))
-      || !SHA256_RE.test(text(expectedPage?.source_content_sha256).toLowerCase())) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
-  }
-  const source = await restOne(
-    env,
-    'candidate_submission_components',
-    `id=eq.${encodeURIComponent(expectedPage.source_component_id)}`
-      + '&select=id,workflow_id,workflow_generation,timesheet_id,component_kind,expense_category,'
-      + 'document_role,state,source_component_id,storage_key,media_type,byte_size,source_content_sha256'
-  );
-  const sourceDigest = text(source?.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
-  const sourceGeneration = Number(source?.workflow_generation);
-  if (!source
-      || source.workflow_id !== workflow.id
-      || !Number.isSafeInteger(sourceGeneration) || sourceGeneration < 1
-      || sourceGeneration >= Number(workflow.generation)
-      || upper(source.component_kind) !== 'MILEAGE_FORM'
-      || upper(source.expense_category) !== 'MILEAGE'
-      || upper(source.document_role) !== 'MILEAGE_CLAIM_FORM'
-      || !['IMMUTABLE', 'SUPERSEDED'].includes(upper(source.state))
-      || source.source_component_id != null
-      || !text(source.storage_key)
-      || normaliseMediaType(source.media_type) !== 'image/jpeg'
-      || !Number.isSafeInteger(Number(source.byte_size)) || Number(source.byte_size) < 1
-      || sourceDigest !== text(expectedPage.source_content_sha256).toLowerCase()) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
-  }
-
-  const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
-  if (!(mileageUnits > 0)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
-  }
-  const sourceWorkflow = { ...workflow, generation: sourceGeneration };
-  const identity = await candidateMileageFormQrIdentity(sourceWorkflow, mileageUnits);
-  const stored = await env.R2?.head(text(source.storage_key));
-  const metadata = stored?.customMetadata || {};
-  if (!stored
-      || text(metadata.purpose) !== 'candidate-component'
-      || text(metadata.workflow_id) !== workflow.id
-      || text(metadata.component_id) !== source.id
-      || text(metadata.sha256).toLowerCase() !== sourceDigest
-      || text(metadata.media_type).toLowerCase() !== 'image/jpeg'
-      || Number(metadata.byte_size) !== Number(source.byte_size)
-      || text(metadata.mileage_form_qr_verified) !== 'true'
-      || text(metadata.mileage_form_semantic_sha256).toLowerCase() !== identity.semantic_sha256
-      || Number(metadata.mileage_form_mileage_units) !== identity.mileage_units
-      || text(metadata.mileage_form_qr_payload_sha256).toLowerCase() !== identity.qr_payload_sha256) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
-  }
-  const artifact = await r2Bytes(env, source.storage_key, sourceDigest);
-  if (artifact.media_type !== 'image/jpeg' || artifact.bytes.byteLength !== Number(source.byte_size)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_INVALID');
-  }
-  let decoded;
-  try {
-    decoded = decodeCandidatePaperQrTextsFromJpeg(artifact.bytes);
-  } catch {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
-  }
-  const pageQrs = decoded.qr_texts.filter((value) => text(value).startsWith('TSQ2.'));
-  if (pageQrs.length !== 1) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
-  }
-  let payload;
-  try {
-    payload = await verifyCandidatePaperQrViaAdapter(env, pageQrs[0]);
-  } catch (error) {
-    const code = text(error?.code || error?.message);
-    if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
-      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
-    }
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
-  }
-  if (JSON.stringify(payload) !== JSON.stringify(identity.qr_payload)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SOURCE_QR_INVALID');
-  }
-  return { source, bytes: artifact.bytes, identity };
-}
-
-async function assertCandidatePaperSourceMileageQrIfUsed(env, workflow, pageKey, payload) {
-  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
-  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
-  const pages = safePaperReturnPages(manifest, { includeSourceContentSha256: true });
-  const expected = pages.find((page) => page.page_key === pageKey);
-  if (!expected || !SHA256_RE.test(manifestHash)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
-  }
-  const usesCurrentPackQr = Number(payload?.g) === Number(workflow.generation)
-    && text(payload?.m).toLowerCase() === manifestHash;
-  if (usesCurrentPackQr) return;
-  if (upper(expected.component_kind) !== 'MILEAGE_FORM') {
-    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH');
-  }
-  const source = await candidatePaperMileageSourceArtifact(env, workflow, expected);
-  if (JSON.stringify(payload) !== JSON.stringify(source.identity.qr_payload)) {
-    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH');
   }
 }
 
@@ -2667,7 +2487,6 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   let expectedContentSha256 = null;
   let candidateAccess = null;
   let paperReturnProof = null;
-  let mileageFormProof = null;
   let reusableSource = null;
   if (owner === 'candidate') {
     const access = await verifyCandidateAccess(request, env);
@@ -2718,8 +2537,8 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     if (mediaType !== 'image/jpeg') {
       throw new CandidateHttpError(415, 'CANDIDATE_MILEAGE_FORM_IMAGE_REQUIRED');
     }
-    mileageFormProof = await validateCandidateMileageFormProof(env, await workflowRow(env, workflowId), body);
-  } else if (Object.prototype.hasOwnProperty.call(body, 'mileage_form_proof')) {
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'mileage_form_proof')) {
     throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_FORBIDDEN');
   }
   let approvalRequestId = body.approval_request_id ? requireUuid(body.approval_request_id) : null;
@@ -2745,7 +2564,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   if (owner !== 'candidate' && sourceContentSha256 != null) {
     throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
   }
-  if (owner === 'candidate' && !mileageFormProof) {
+  if (owner === 'candidate') {
     reusableSource = await reusableCandidateExpenseSource(
       env, candidateAccess, workflowId, componentKind,
       upper(body.document_role || ''),
@@ -2770,11 +2589,6 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     ...(expectedContentSha256 ? { expected_source_content_sha256_hex: expectedContentSha256 } : {})
     ,...(paperReturnProof ? {
       paper_return_proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
-    } : {}),
-    ...(mileageFormProof ? {
-      mileage_form_semantic_sha256: mileageFormProof.semantic_sha256,
-      mileage_form_mileage_units: mileageFormProof.mileage_units,
-      mileage_form_qr_payload_sha256: mileageFormProof.qr_payload_sha256
     } : {})
   };
   const idempotencyKey = owner === 'office'
@@ -2847,13 +2661,6 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       qr_payload: paperReturnProof.qr_payload || null,
       qr_payload_sha256: paperReturnProof.qr_payload_sha256 || null,
       proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
-    } } : {}),
-    ...(mileageFormProof ? { mileage_form_proof: {
-      proof_contract_version: mileageFormProof.proof_contract_version,
-      mileage_form_semantic_sha256: mileageFormProof.semantic_sha256,
-      mileage_units: mileageFormProof.mileage_units,
-      qr_payload: mileageFormProof.qr_payload,
-      qr_payload_sha256: mileageFormProof.qr_payload_sha256
     } } : {}),
     ...(authority?.authority_kind === 'MANAGER_EMAIL' ? {
       manager_route_ticket_id: authority.manager_route_ticket_id,
@@ -2946,7 +2753,6 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
     throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
   }
   let storedPaperQr = null;
-  let storedMileageFormQr = null;
   if (ticket.paper_return_proof?.proof_contract_version === PAPER_RETURN_PROOF_V2) {
     const replacementPageKey = ticket.paper_return_proof.paper_return_page_key;
     if (contentType !== 'image/jpeg') {
@@ -2991,48 +2797,6 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       height: decoded.height
     };
   }
-  if (ticket.mileage_form_proof) {
-    if (contentType !== 'image/jpeg') {
-      throw new CandidateHttpError(415, 'CANDIDATE_MILEAGE_FORM_IMAGE_REQUIRED');
-    }
-    const identity = await revalidateCandidateMileageFormProof(env, ticket);
-    let decoded;
-    try {
-      decoded = decodeCandidatePaperQrTextsFromJpeg(bytes);
-    } catch {
-      throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_UNREADABLE');
-    }
-    const pageQrs = decoded.qr_texts.filter((value) => text(value).startsWith('TSQ2.'));
-    if (pageQrs.length !== 1) {
-      throw new CandidateHttpError(
-        400,
-        pageQrs.length
-          ? 'CANDIDATE_MILEAGE_FORM_QR_AMBIGUOUS'
-          : 'CANDIDATE_MILEAGE_FORM_QR_UNREADABLE'
-      );
-    }
-    let qrPayload;
-    try {
-      qrPayload = await verifyCandidatePaperQrViaAdapter(env, pageQrs[0]);
-    } catch (error) {
-      const code = text(error?.code || error?.message);
-      if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
-        throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
-      }
-      throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_UNREADABLE');
-    }
-    if (JSON.stringify(qrPayload) !== JSON.stringify(identity.qr_payload)
-        || JSON.stringify(qrPayload) !== JSON.stringify(ticket.mileage_form_proof.qr_payload)) {
-      throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_MISMATCH');
-    }
-    storedMileageFormQr = {
-      semantic_sha256: identity.semantic_sha256,
-      mileage_units: identity.mileage_units,
-      payload_hash: identity.qr_payload_sha256,
-      width: decoded.width,
-      height: decoded.height
-    };
-  }
   await revalidateCandidatePaperReturnProof(env, deps, ticket, owner.session_id);
   const stored = await bucket.put(ticket.key, bytes, {
     onlyIf: { etagDoesNotMatch: '*' },
@@ -3043,11 +2807,7 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       authority_kind: ticket.authority_kind,
       capture_method: ticket.capture_method || '',
       paper_return_proof_receipt_sha256: ticket.paper_return_proof?.proof_receipt_sha256 || '',
-      paper_return_qr_payload_sha256: storedPaperQr?.payload_hash || '',
-      mileage_form_qr_verified: storedMileageFormQr ? 'true' : '',
-      mileage_form_semantic_sha256: storedMileageFormQr?.semantic_sha256 || '',
-      mileage_form_mileage_units: storedMileageFormQr ? String(storedMileageFormQr.mileage_units) : '',
-      mileage_form_qr_payload_sha256: storedMileageFormQr?.payload_hash || ''
+      paper_return_qr_payload_sha256: storedPaperQr?.payload_hash || ''
     }
   });
   if (!stored) {
@@ -3057,15 +2817,7 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
         || text(metadata.workflow_id) !== ticket.workflow_id
         || text(metadata.component_id) !== ticket.component_id
         || text(metadata.media_type).toLowerCase() !== contentType
-        || Number(metadata.byte_size) !== bytes.byteLength
-        || (storedMileageFormQr && (
-          text(metadata.mileage_form_qr_verified) !== 'true'
-          || text(metadata.mileage_form_semantic_sha256).toLowerCase()
-            !== storedMileageFormQr.semantic_sha256
-          || Number(metadata.mileage_form_mileage_units) !== storedMileageFormQr.mileage_units
-          || text(metadata.mileage_form_qr_payload_sha256).toLowerCase()
-            !== storedMileageFormQr.payload_hash
-        ))) {
+        || Number(metadata.byte_size) !== bytes.byteLength) {
       throw new CandidateHttpError(409, 'CANDIDATE_UPLOAD_TICKET_ALREADY_USED');
     }
   }
@@ -4488,9 +4240,12 @@ async function renderExpensePage(env, contract, state, phase) {
   const branding = await candidateDocumentBranding(env, workflow);
   const paperReturnQrText = text(contract.paper_return_qr_text);
   const isPaperReturn = paperReturnQrText.startsWith('TSQ2.');
+  const isMileageEvidence = upper(component.component_kind) === 'MILEAGE_FORM'
+    && upper(component.expense_category) === 'MILEAGE';
   page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52, color: rgb(0.04, 0.12, 0.24) });
   await drawCandidateBranding(pdf, page, branding, { x: 420, y: 800, maxWidth: 135, maxHeight: 30 });
-  page.drawText(component.component_kind === 'EXPENSE_SUMMARY' ? 'Expense claim approval summary' : 'Expense evidence', {
+  page.drawText(component.component_kind === 'EXPENSE_SUMMARY' ? 'Expense claim approval summary'
+    : isMileageEvidence ? 'Mileage evidence' : 'Expense evidence', {
     x: 36, y: 812, size: 16, font: bold, color: rgb(1, 1, 1)
   });
   page.drawText(`${branding.agency_name} | Page ${component.review_ordinal || contract.review_ordinal} | ${component.expense_category || 'General'}`, {
@@ -4498,8 +4253,8 @@ async function renderExpensePage(env, contract, state, phase) {
   });
   const hasSource = await embedExpenseSource(
     pdf, page, env, component, contract.render_input,
-    isPaperReturn ? 650 : 760,
-    isPaperReturn ? 510 : 570
+    isMileageEvidence ? (isPaperReturn ? 642 : 704) : (isPaperReturn ? 650 : 760),
+    isMileageEvidence ? (isPaperReturn ? 502 : 514) : (isPaperReturn ? 510 : 570)
   );
   if (!hasSource) {
     const lines = expenseLines(workflow, component).slice(0, 24);
@@ -4533,6 +4288,18 @@ async function renderExpensePage(env, contract, state, phase) {
         y -= 18;
       }
     }
+  }
+  if (isMileageEvidence) {
+    const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
+    const label = `Total mileage for this claim: ${mileageUnits} miles`;
+    page.drawRectangle({
+      x: 36, y: isPaperReturn ? 654 : 716, width: isPaperReturn ? 395 : 523, height: 38,
+      color: rgb(0.9, 0.95, 0.98), borderColor: rgb(0.1, 0.42, 0.62), borderWidth: 1
+    });
+    page.drawText(label.slice(0, 80), {
+      x: 50, y: isPaperReturn ? 668 : 730, size: 12, font: bold,
+      color: rgb(0.04, 0.2, 0.32)
+    });
   }
   if (isPaperReturn) {
     await drawCandidatePaperPageQr(page, paperReturnQrText, {
@@ -5531,45 +5298,6 @@ function normaliseMileageFormUnits(value) {
   return Math.round(mileageUnits * 100) / 100;
 }
 
-async function candidateMileageFormQrIdentity(workflow, suppliedMileageUnits) {
-  const mileageUnits = normaliseMileageFormUnits(suppliedMileageUnits);
-  const timesheetId = requireUuid(
-    workflow.target_timesheet_id || workflow.anchor_timesheet_id,
-    'CANDIDATE_MILEAGE_FORM_TIMESHEET_NOT_READY'
-  );
-  const semanticSha256 = await sha256Hex(JSON.stringify({
-    contract_version: 'CANDIDATE_MILEAGE_CLAIM_FORM_V2',
-    workflow_id: workflow.id,
-    workflow_generation: Number(workflow.generation),
-    timesheet_id: timesheetId,
-    week_ending_date: text(workflow.week_ending_date).slice(0, 10),
-    mileage_units: mileageUnits
-  }));
-  const pageKey = `MILEAGE_FORM:${semanticSha256}`;
-  const qrPayload = await buildTsq2PagePayload({
-    workflow_id: workflow.id,
-    timesheet_id: timesheetId,
-    workflow_generation: Number(workflow.generation),
-    paper_return_manifest_sha256: semanticSha256,
-    ordinal: 1,
-    page_key: pageKey,
-    page_kind: 'M',
-    category_code: 'M',
-    category_occurrence: 1
-  });
-  return {
-    proof_contract_version: MILEAGE_FORM_QR_PROOF_V1,
-    workflow_id: workflow.id,
-    workflow_generation: Number(workflow.generation),
-    timesheet_id: timesheetId,
-    mileage_units: mileageUnits,
-    semantic_sha256: semanticSha256,
-    page_key: pageKey,
-    qr_payload: qrPayload,
-    qr_payload_sha256: await sha256Hex(JSON.stringify(qrPayload))
-  };
-}
-
 function submittedMileageUnits(immutableSubmission) {
   const claim = isObject(immutableSubmission?.expense_claim)
     ? immutableSubmission.expense_claim
@@ -5582,151 +5310,117 @@ function submittedMileageUnits(immutableSubmission) {
   return normaliseMileageFormUnits(supplied);
 }
 
-async function assertCandidateMileageFormsMatchSubmission(env, workflow, immutableSubmission) {
+async function assertCandidateMileageEvidenceMatchesSubmission(env, workflow, immutableSubmission) {
   const mileageUnits = submittedMileageUnits(immutableSubmission);
   if (mileageUnits <= 0) return;
-  const identity = await candidateMileageFormQrIdentity(workflow, mileageUnits);
+  const claim = isObject(immutableSubmission?.expense_claim)
+    ? immutableSubmission.expense_claim
+    : isObject(immutableSubmission?.expense_submission)
+      ? immutableSubmission.expense_submission
+      : {};
+  if (claim.mileage_total_confirmed !== true) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_TOTAL_CONFIRMATION_REQUIRED');
+  }
   const components = await restRows(env, 'candidate_submission_components',
     `workflow_id=eq.${encodeURIComponent(workflow.id)}`
     + `&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
     + '&component_kind=eq.MILEAGE_FORM&expense_category=eq.MILEAGE&state=eq.IMMUTABLE'
-    + '&select=id,storage_key,source_content_sha256');
+    + '&select=id,media_type,byte_size,storage_key,source_content_sha256');
   if (!components.length) {
-    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_QR_REQUIRED');
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_REQUIRED');
   }
-  const storedForms = await Promise.all(components.map((component) => (
-    env.R2?.head(text(component.storage_key))
-  )));
-  for (const [index, component] of components.entries()) {
-    const object = storedForms[index];
-    const metadata = object?.customMetadata || {};
+  for (const component of components) {
+    const expectedHash = text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
+    if (normaliseMediaType(component.media_type) !== 'image/jpeg'
+        || !Number.isSafeInteger(Number(component.byte_size))
+        || Number(component.byte_size) < 1
+        || !text(component.storage_key)
+        || !SHA256_RE.test(expectedHash)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_INVALID');
+    }
+    const object = await env.R2?.head(text(component.storage_key));
     if (!object
-        || text(metadata.mileage_form_qr_verified) !== 'true'
-        || text(metadata.workflow_id) !== workflow.id
-        || text(metadata.component_id) !== component.id
-        || text(metadata.mileage_form_semantic_sha256).toLowerCase() !== identity.semantic_sha256
-        || Number(metadata.mileage_form_mileage_units) !== identity.mileage_units
-        || text(metadata.mileage_form_qr_payload_sha256).toLowerCase()
-          !== identity.qr_payload_sha256) {
-      throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_QR_STALE');
+        || normaliseMediaType(object.httpMetadata?.contentType) !== 'image/jpeg'
+        || Number(object.size) !== Number(component.byte_size)
+        || text(object.customMetadata?.sha256).toLowerCase() !== expectedHash) {
+      throw new CandidateHttpError(409, 'CANDIDATE_MILEAGE_FORM_EVIDENCE_INVALID');
     }
   }
 }
 
-async function candidateMileageFormArtifact(env, workflow, suppliedMileageUnits) {
-  const identity = await candidateMileageFormQrIdentity(workflow, suppliedMileageUnits);
-  const qrText = await buildCandidatePaperPageQrViaAdapter(env, identity.qr_payload);
-  const [presentation, agencyBranding] = await Promise.all([
-    buildOfficialPresentationSnapshot(env, workflow),
-    candidateAppAgencyDocumentBranding(env)
-  ]);
-  const formWorkflow = {
-    ...workflow,
-    immutable_submission_json: {
-      expense_claim: {
-        mileage_units: identity.mileage_units,
-        total_mileage: identity.mileage_units
-      },
-      official_presentation: presentation
-    }
-  };
-  const bytes = await mileageClaimFormBytes(
-    env,
-    formWorkflow,
-    agencyBranding,
-    presentation,
-    qrText,
-    `Mileage Form — ${identity.mileage_units} miles`,
-    { compactSigningFooter: false, includeSigningArea: false }
-  );
-  const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}`
-    + `/mileage-form/${identity.semantic_sha256}-${agencyBranding.branding_contract_sha256}.pdf`;
+async function candidateGenericMileageFormArtifact(env) {
+  const agencyBranding = await candidateAppAgencyDocumentBranding(env);
+  const bytes = await mileageClaimFormBytes(env, agencyBranding);
+  const semanticSha256 = await sha256Hex(JSON.stringify({
+    contract_version: 'CANDIDATE_GENERIC_MILEAGE_FORM_V1',
+    agency_branding_sha256: agencyBranding.branding_contract_sha256,
+    content_sha256: await sha256Hex(bytes)
+  }));
+  const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/agency/`
+    + `${agencyBranding.branding_contract_sha256}/generic/mileage-claim-form-v1.pdf`;
   const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
-    purpose: 'candidate-mileage-claim-form',
-    workflow_id: workflow.id,
-    workflow_generation: String(workflow.generation),
-    timesheet_id: identity.timesheet_id,
-    mileage_units: String(identity.mileage_units),
-    semantic_sha256: identity.semantic_sha256,
+    purpose: 'candidate-generic-mileage-claim-form',
+    semantic_sha256: semanticSha256,
     agency_branding_sha256: agencyBranding.branding_contract_sha256,
     agency_logo_sha256: agencyBranding.logo_sha256 || 'none',
-    qr_payload_sha256: identity.qr_payload_sha256,
     page_count: '1'
   });
   return {
-    ...identity,
-    qr_text: qrText,
     bytes,
     storage_key: storageKey,
     sha256: stored.sha256,
-    filename: `Mileage_Claim_Form_${text(workflow.week_ending_date).slice(0, 10)}.pdf`,
-    candidate_name: `${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(),
-    agency_name: text(presentation.branding?.agency_name) || 'CloudTMS agency',
+    semantic_sha256: semanticSha256,
+    filename: 'Mileage_Claim_Form.pdf',
+    agency_name: agencyBranding.agency_name,
     idempotent_replay: stored.created !== true
   };
 }
 
-async function handleCandidateMileageFormAction(env, workflow, access, body, dbAction) {
-  if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
-    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
-  }
-  if (Number(workflow.generation) !== Number(body.generation)) {
+async function handleCandidateMileageFormAction(env, access, body, dbAction) {
+  if (Number(body.generation) !== 1) {
     throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
   }
-  // Mileage forms belong to the newly-created, still mutable Candidate
-  // workflow. The database authority calls this state WORKER_DRAFT; using a
-  // presentation-only DRAFT label here made every real prepare/email request
-  // fail while the unit fixture passed.
-  if (upper(workflow.state) !== 'WORKER_DRAFT') {
-    throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
+  if (body.mileage_units != null || body.payload?.mileage_units != null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_GENERIC_MILEAGE_FORM_MUST_NOT_DECLARE_MILEAGE');
   }
-  if (!['CONTRACT_COMBINED', 'CONTRACT_EXPENSE'].includes(upper(workflow.workflow_kind))) {
-    throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_CLAIM_NOT_ALLOWED');
-  }
-  const mileageUnits = normaliseMileageFormUnits(
-    body.mileage_units ?? body.payload?.mileage_units
-  );
-  const artifact = await candidateMileageFormArtifact(env, workflow, mileageUnits);
+  const artifact = await candidateGenericMileageFormArtifact(env);
   const common = {
     ok: true,
-    workflow_id: workflow.id,
-    generation: Number(workflow.generation),
-    state: workflow.state,
+    workflow_id: GENERIC_DOCUMENT_WORKFLOW_ID,
+    generation: 1,
+    state: 'GENERIC_DOCUMENT_READY',
     idempotent_replay: artifact.idempotent_replay,
     mileage_form_state: dbAction === 'MILEAGE_FORM_EMAIL' ? 'EMAIL_QUEUED' : 'PREPARED',
+    mileage_form_scope: 'GENERIC',
     mileage_form_filename: artifact.filename,
     mileage_form_sha256: artifact.sha256,
-    mileage_form_byte_size: artifact.bytes.byteLength,
-    mileage_form_qr_proof_contract_version: artifact.proof_contract_version,
-    mileage_form_semantic_sha256: artifact.semantic_sha256,
-    mileage_form_qr_text: artifact.qr_text,
-    mileage_form_timesheet_id: artifact.timesheet_id,
-    mileage_form_mileage_units: artifact.mileage_units
+    mileage_form_byte_size: artifact.bytes.byteLength
   };
   if (dbAction === 'MILEAGE_FORM_PREPARE') {
     return { ...common, mileage_form_content_base64: pdfBase64(artifact.bytes) };
   }
   const account = await restOne(env, 'candidate_app_accounts',
-    `id=eq.${encodeURIComponent(workflow.account_id)}`
+    `id=eq.${encodeURIComponent(access.account_id)}`
     + `&environment=eq.${encodeURIComponent(environmentName(env))}`
     + '&status=eq.ACTIVE&select=id,email_normalized');
   if (!text(account?.email_normalized)) {
     throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
   }
+  const candidate = await restOne(env, 'candidates',
+    `id=eq.${encodeURIComponent(access.selected_candidate_id)}`
+    + '&select=id,display_name,first_name,last_name');
+  const candidateName = text(candidate?.display_name
+    || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`).trim();
   const email = normaliseEmail(account?.email_normalized);
   const safeAgency = escapeCandidateMailHtml(artifact.agency_name);
-  const safeCandidate = escapeCandidateMailHtml(artifact.candidate_name || 'Candidate');
-  const bodyText = `${artifact.agency_name} has prepared the attached Mileage Claim Form for ${artifact.candidate_name || 'the Candidate'}.\n\n`
-    + `Week ending: ${ukDate(workflow.week_ending_date)}\nTotal mileage across all Mileage Form pages: ${mileageUnits} miles\n\n`
-    + 'Complete the journey details, then return every completed page in MyTMS. Your manager signs later through the approval route you choose.';
-  const deterministicKey = `CANDIDATE_MILEAGE_FORM:${workflow.id}:${workflow.generation}:${artifact.semantic_sha256}`;
+  const bodyText = `${artifact.agency_name} has prepared the attached blank Mileage Claim Form.\n\n`
+    + 'You can print or reuse this form whenever you need to record mileage. Complete one or more sheets, then photograph the completed unsigned sheets when adding Mileage in MyTMS.';
+  const deterministicKey = `CANDIDATE_GENERIC_MILEAGE_FORM:${access.account_id}:${body.idempotency_key}`;
   const outbox = await restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
     type: 'TIMESHEET_GENERAL', to: email,
-    subject: `Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`,
-    body_html: `<p>${safeAgency} has prepared the attached Mileage Claim Form for ${safeCandidate}.</p>`
-      + `<p>Week ending: ${escapeCandidateMailHtml(ukDate(workflow.week_ending_date))}<br>`
-      + `Total mileage across all Mileage Form pages: ${escapeCandidateMailHtml(mileageUnits)} miles</p>`
-      + '<p>Complete the journey details, then return every completed page in MyTMS. Your manager signs later through the approval route you choose.</p>',
+    subject: 'Your blank Mileage Claim Form',
+    body_html: `<p>${safeAgency} has prepared the attached blank Mileage Claim Form.</p>`
+      + '<p>You can print or reuse this form whenever you need to record mileage. Complete one or more sheets, then photograph the completed unsigned sheets when adding Mileage in MyTMS.</p>',
     body_text: bodyText,
     attachments: [{
       r2_key: artifact.storage_key,
@@ -5737,19 +5431,18 @@ async function handleCandidateMileageFormAction(env, workflow, access, body, dbA
       page_count: 1
     }],
     status: 'QUEUED',
-    reference: `candidate-mileage-form:${workflow.id}:${workflow.generation}`,
+    reference: `candidate-generic-mileage-form:${access.account_id}`,
     recipient_kind: 'CANDIDATE',
-    recipient_id: workflow.candidate_id,
-    context_kind: 'CANDIDATE_WORKFLOW',
-    context_id: workflow.id,
+    recipient_id: access.selected_candidate_id,
+    ...(candidateName ? { recipient_display_name: candidateName.slice(0, 200) } : {}),
+    context_kind: 'CANDIDATE_ACCOUNT',
+    context_id: access.account_id,
     email_type: 'CANDIDATE_APP_TRANSACTIONAL',
     scheduled_for_utc: new Date().toISOString(),
     next_attempt_at_utc: new Date().toISOString(),
     deterministic_outbox_key: deterministicKey,
     payment_scope_json: {
-      candidate_mail_authority: 'CANDIDATE_MILEAGE_FORM_V1',
-      candidate_workflow_id: workflow.id,
-      candidate_workflow_generation: Number(workflow.generation),
+      candidate_mail_authority: 'CANDIDATE_GENERIC_DOCUMENT_V1',
       mileage_form_semantic_sha256: artifact.semantic_sha256
     }
   }, 'resolution=ignore-duplicates,return=representation');
@@ -5907,9 +5600,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
   }
   if (dbAction === 'MILEAGE_FORM_PREPARE' || dbAction === 'MILEAGE_FORM_EMAIL') {
-    const workflow = await workflowRow(env, workflowId);
+    if (workflowId !== GENERIC_DOCUMENT_WORKFLOW_ID) {
+      throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_FORM_GENERIC_ROUTE_REQUIRED');
+    }
     return jsonResponse(dbAction === 'MILEAGE_FORM_EMAIL' ? 202 : 200,
-      await handleCandidateMileageFormAction(env, workflow, access, body, dbAction));
+      await handleCandidateMileageFormAction(env, access, body, dbAction));
   }
   if (dbAction === 'PAPER_EMAIL') {
     const workflow = await workflowRow(env, workflowId);
@@ -5978,7 +5673,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
         submissionFacts, breakContext
       );
     }
-    await assertCandidateMileageFormsMatchSubmission(
+    await assertCandidateMileageEvidenceMatchesSubmission(
       env,
       workflow,
       normalisedSubmissionFacts
@@ -6664,135 +6359,46 @@ async function candidatePaperTimesheetPageBytes(env, workflow, timesheet, compon
   return rendered.pdf_bytes;
 }
 
-function mileageJourneyRows(workflow) {
-  const { expenseSubmission } = expenseClaim(workflow);
-  const source = [expenseSubmission.mileage_journeys, expenseSubmission.journeys, expenseSubmission.mileage_entries]
-    .find(Array.isArray) || [];
-  const rows = source.slice(0, 16).map((journey) => ({
-    post_code_from: text(journey?.post_code_from || journey?.postcode_from || journey?.from_postcode),
-    post_code_to: text(journey?.post_code_to || journey?.postcode_to || journey?.to_postcode),
-    miles: text(journey?.number_of_miles ?? journey?.miles ?? journey?.mileage_units)
-  }));
-  while (rows.length < 16) rows.push({ post_code_from: '', post_code_to: '', miles: '' });
-  return rows;
-}
-
-async function mileageClaimFormBytes(
-  env, workflow, brandingOverride = null, presentationOverride = null,
-  paperReturnQrText = null, paperReturnDisplayName = 'Mileage form',
-  { compactSigningFooter = true, includeSigningArea = true } = {}
-) {
+async function mileageClaimFormBytes(env, brandingOverride = null) {
   const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const branding = brandingOverride || await candidateDocumentBranding(env, workflow);
+  const branding = brandingOverride || await candidateAppAgencyDocumentBranding(env);
   page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
   await drawCandidateBranding(pdf, page, branding, {
     x: 561, y: 797, maxWidth: 125, maxHeight: 38, align: 'right'
   });
   page.drawText(branding.agency_name.slice(0, 55), { x: 34, y: 817, size: 9, font: bold, color: rgb(0.75, 0.9, 1) });
-  page.drawText(`Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`, {
+  page.drawText('Mileage Claim Form', {
     x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
   });
-  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
-  const presentation = presentationOverride || parseJson(immutable.official_presentation, {}) || {};
-  const { expenseSubmission, claim } = expenseClaim(workflow);
-  page.drawText(`Candidate: ${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(), {
-    x: 42, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
+  page.drawText('Candidate name', { x: 42, y: 752, size: 9, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  page.drawLine({ start: { x: 130, y: 750 }, end: { x: 350, y: 750 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawText('Week ending', { x: 370, y: 752, size: 9, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  page.drawLine({ start: { x: 445, y: 750 }, end: { x: 553, y: 750 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawText('Record each journey below. Use another sheet if required. Declare the combined total in MyTMS when making a claim.', {
+    x: 42, y: 721, size: 8.5, font: regular, color: rgb(0.15, 0.22, 0.3)
   });
-  page.drawText(`Client: ${text(presentation.client?.name) || '-'}`, {
-    x: 42, y: 728, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
-  });
-  if (paperReturnQrText) {
-    await drawCandidatePaperPageQr(page, paperReturnQrText, {
-      x: 465, y: 682, size: 88, label: paperReturnDisplayName
-    });
-  }
   const columns = [
     { label: 'Post Code from', x: 42, width: 180 },
     { label: 'Post Code To', x: 222, width: 180 },
     { label: 'Number of miles', x: 402, width: 151 }
   ];
-  const headerY = paperReturnQrText ? 638 : 712;
+  const headerY = 690;
   for (const column of columns) {
     page.drawRectangle({ x: column.x, y: headerY, width: column.width, height: 30, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
     page.drawText(column.label, { x: column.x + 8, y: headerY + 10, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24) });
   }
-  const journeys = mileageJourneyRows(workflow);
-  journeys.forEach((journey, index) => {
-    const rowHeight = 24;
+  Array.from({ length: 18 }).forEach((_, index) => {
+    const rowHeight = 32;
     const y = headerY - ((index + 1) * rowHeight);
-    const values = [journey.post_code_from, journey.post_code_to, journey.miles];
-    columns.forEach((column, columnIndex) => {
+    columns.forEach((column) => {
       page.drawRectangle({ x: column.x, y, width: column.width, height: rowHeight, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
-      if (values[columnIndex]) page.drawText(values[columnIndex].slice(0, 26), { x: column.x + 8, y: y + Math.max(9, rowHeight / 2 - 3), size: 9, font: regular });
     });
   });
-  const totalMileage = text(expenseSubmission.total_mileage ?? claim.mileage_units ?? expenseSubmission.mileage_units) || '0';
-  page.drawText(`Total mileage claimed across all Mileage Form pages: ${totalMileage} miles`, {
-    x: 42, y: 218, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24)
-  });
-  if (!includeSigningArea) {
-    // This first form is worker-completed factual evidence. Manager approval
-    // is added only by the subsequently selected approval route.
-  } else if (paperReturnQrText && compactSigningFooter) {
-    // QR packs add their one consistent signing footer when the held pack is
-    // rendered.  The standalone mileage form below retains its established
-    // signing area, so neither route can show two signature/date sections.
-    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 68, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawLine({ start: { x: 48, y: 58 }, end: { x: 340, y: 58 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Manager signature', { x: 48, y: 46, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
-    page.drawLine({ start: { x: 370, y: 58 }, end: { x: 535, y: 58 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 46, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
-  } else {
-    page.drawRectangle({ x: 42, y: 38, width: 511, height: 128, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-    page.drawText('Manager signature', { x: 56, y: 140, size: 10, font: bold });
-    page.drawText('Date', { x: 370, y: 140, size: 10, font: bold });
-    page.drawLine({ start: { x: 56, y: 67 }, end: { x: 330, y: 67 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawLine({ start: { x: 370, y: 67 }, end: { x: 530, y: 67 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-  }
-  return new Uint8Array(await pdf.save());
-}
-
-async function paperMileageSourcePageBytes(env, workflow, expectedPage) {
-  const source = await candidatePaperMileageSourceArtifact(env, workflow, expectedPage);
-  const pdf = await PDFDocument.create({ updateMetadata: false });
-  const page = pdf.addPage([595.28, 841.89]);
-  const image = await pdf.embedJpg(source.bytes);
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const margin = 12;
-  const signingTop = 116;
-  const contentBottom = signingTop + 12;
-  const scale = Math.min(
-    (page.getWidth() - (margin * 2)) / image.width,
-    (page.getHeight() - contentBottom - margin) / image.height
-  );
-  const width = image.width * scale;
-  const height = image.height * scale;
-  page.drawImage(image, {
-    x: (page.getWidth() - width) / 2,
-    y: contentBottom + ((page.getHeight() - margin - contentBottom - height) / 2),
-    width,
-    height
-  });
-  page.drawRectangle({
-    x: 36, y: 30, width: page.getWidth() - 72, height: 76,
-    borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1
-  });
-  page.drawLine({
-    start: { x: 48, y: 57 }, end: { x: 340, y: 57 },
-    thickness: 0.8, color: rgb(0.35, 0.42, 0.5)
-  });
-  page.drawText('Manager signature', {
-    x: 48, y: 43, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35)
-  });
-  page.drawLine({
-    start: { x: 370, y: 57 }, end: { x: 535, y: 57 },
-    thickness: 0.8, color: rgb(0.35, 0.42, 0.5)
-  });
-  page.drawText('Date', {
-    x: 370, y: 43, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35)
+  page.drawText('This reusable blank form contains no claim total, QR code or manager approval.', {
+    x: 42, y: 84, size: 8, font: regular, color: rgb(0.3, 0.36, 0.44)
   });
   return new Uint8Array(await pdf.save());
 }
@@ -6800,12 +6406,6 @@ async function paperMileageSourcePageBytes(env, workflow, expectedPage) {
 async function paperExpensePageBytes(
   env, workflow, component, expectedPage, ordinal, pageQrText, displayName
 ) {
-  if (upper(component.component_kind) === 'MILEAGE_FORM') {
-    if (pageQrText) {
-      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_MILEAGE_SECOND_QR_FORBIDDEN');
-    }
-    return paperMileageSourcePageBytes(env, workflow, expectedPage);
-  }
   const rendered = await renderExpensePage(env, {
     review_ordinal: ordinal,
     paper_return_qr_text: pageQrText,
@@ -7291,7 +6891,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
     const kind = upper(expected.component_kind);
-    const pageQrText = expected.manifest_version === 2 && kind !== 'MILEAGE_FORM'
+    const pageQrText = expected.manifest_version === 2
       ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
       : null;
     if (kind === 'HOURS_TIMESHEET') {
@@ -9198,7 +8798,6 @@ export const candidateAppBackendInternals = Object.freeze({
   expenseSummaryDisplayLines,
   currentSubmittedDisplayWorkflow,
   candidateSubmittedFactsProjection,
-  mileageJourneyRows,
   londonCalendarDate,
   officialPeriodWithShiftLines,
   paperPackIdentity,
@@ -9219,15 +8818,9 @@ export const candidateAppBackendInternals = Object.freeze({
   candidateDocumentBranding,
   candidateAppAgencyBranding,
   candidateAppAgencyDocumentBranding,
-  candidateMileageFormQrIdentity,
-  candidateMileageFormArtifact,
-  validateCandidateMileageFormProof,
-  revalidateCandidateMileageFormProof,
-  candidatePaperMileageSourceArtifact,
-  assertCandidatePaperSourceMileageQrIfUsed,
-  assertCandidateMileageFormsMatchSubmission,
+  candidateGenericMileageFormArtifact,
+  assertCandidateMileageEvidenceMatchesSubmission,
   mileageClaimFormBytes,
-  paperMileageSourcePageBytes,
   queueCandidatePaperPackEmail,
   candidatePaperEmailDeliveryMatches,
   candidatePaperEmailDeliveryByWorkflow,

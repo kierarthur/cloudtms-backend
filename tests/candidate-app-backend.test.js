@@ -23,7 +23,6 @@ const {
   preparedCandidateComponentReplay,
   currentCandidateExpenseComponentReplay,
   expenseSummaryDisplayLines,
-  mileageJourneyRows,
   officialPeriodWithShiftLines,
   paperPackIdentity,
   passwordVerificationProof,
@@ -45,9 +44,8 @@ const {
   candidateAppAgencyBranding,
   candidateAppAgencyDocumentBranding,
   createAccessToken,
-  candidateMileageFormQrIdentity,
-  validateCandidateMileageFormProof,
-  assertCandidateMileageFormsMatchSubmission,
+  candidateGenericMileageFormArtifact,
+  assertCandidateMileageEvidenceMatchesSubmission,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
   candidatePaperEmailDeliveryMatches,
@@ -3306,46 +3304,25 @@ test('idempotent component preparation always uses the original database-owned o
   }
 });
 
-test('paper mileage form preserves the approved labels and UK week-ending format', async () => {
-  const workflow = {
-    id: '00000000-0000-4000-8000-000000000020', generation: 3,
-    week_ending_date: '2026-08-09',
-    immutable_submission_json: {
-      official_presentation: { worker: { first_name: 'Test', surname: 'Worker' }, client: { name: 'Test Client' } },
-      expense_submission: {
-        canonical_tsfin_snapshot: { mileage_units: 18, travel_pay_ex_vat: 10, accommodation_pay_ex_vat: 100, expenses_pay_ex_vat: 110 },
-        mileage_journeys: [{ post_code_from: 'AA1 1AA', post_code_to: 'BB2 2BB', miles: 18 }]
-      }
-    }
-  };
-  const bytes = await mileageClaimFormBytes({}, workflow, { agency_name: 'Configured Agency', logo: null });
+test('generic Mileage Claim Form is blank, reusable and agency branded', async () => {
+  const bytes = await mileageClaimFormBytes({}, {
+    agency_name: 'Configured Agency', logo: null,
+    branding_contract_sha256: 'a'.repeat(64)
+  });
   const pdf = await PDFDocument.load(bytes);
   assert.equal(pdf.getPageCount(), 1);
-  assert.equal(mileageJourneyRows(workflow)[0].post_code_from, 'AA1 1AA');
-  assert.equal(mileageJourneyRows(workflow)[0].post_code_to, 'BB2 2BB');
-  assert.deepEqual(expenseSummaryDisplayLines(workflow), {
-    lines: ['Mileage: 18 miles', 'Accommodation: £100.00', 'Travel: £10.00'],
-    total: '£110.00'
-  });
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
-  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage claimed across all Mileage Form pages', 'Manager signature']) {
+  for (const label of ['Mileage Claim Form', 'Candidate name', 'Week ending', 'Post Code from', 'Post Code To', 'Number of miles']) {
     assert.equal(source.includes(label), true);
   }
-  assert.match(source, /Complete the journey details, then return every completed page in MyTMS\. Your manager signs later through the approval route you choose\./);
-  assert.doesNotMatch(source, /obtain the required manager signature before returning the form in MyTMS/);
-});
-
-test('Mileage Claim Form provides sixteen writable journey rows', () => {
-  const rows = mileageJourneyRows({
-    immutable_submission_json: {
-      expense_claim: {
-        mileage_journeys: [{ post_code_from: 'RG1', post_code_to: 'RG2', number_of_miles: 12 }]
-      }
-    }
-  });
-  assert.equal(rows.length, 16);
-  assert.deepEqual(rows[0], { post_code_from: 'RG1', post_code_to: 'RG2', miles: '12' });
-  assert.deepEqual(rows[15], { post_code_from: '', post_code_to: '', miles: '' });
+  const formBlock = source.slice(
+    source.indexOf('async function mileageClaimFormBytes('),
+    source.indexOf('async function paperExpensePageBytes(')
+  );
+  assert.match(formBlock, /Array\.from\(\{ length: 18 \}\)/);
+  assert.doesNotMatch(formBlock, /drawCandidatePaperPageQr|candidatePaperPageQrText/);
+  assert.doesNotMatch(formBlock, /page\.drawText\('Manager signature'|page\.drawText\('Date'/);
+  assert.doesNotMatch(formBlock, /submittedMileageUnits|mileage_units/);
 });
 
 test('Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment', async () => {
@@ -3364,16 +3341,7 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     expires_at_utc: '2099-01-01T00:00:00.000Z',
     absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
   };
-  const workflow = {
-    id: '00000000-0000-4000-8000-000000000094',
-    account_id: session.account_id,
-    candidate_id: session.selected_candidate_id,
-    environment: 'TEST', generation: 1, state: 'WORKER_DRAFT',
-    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'ELECTRONIC',
-    week_ending_date: '2026-08-30', contract_id: null,
-    target_timesheet_id: '00000000-0000-4000-8000-000000000098',
-    anchor_timesheet_id: '00000000-0000-4000-8000-000000000098'
-  };
+  const genericWorkflowId = '00000000-0000-0000-0000-000000000000';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
@@ -3404,16 +3372,10 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     const target = new URL(String(url));
     const method = String(init.method || 'GET').toUpperCase();
     if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
-    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
-    if (target.pathname.endsWith('/timesheets_financials')) return Response.json([{ client_id: null }]);
-    if (target.pathname.endsWith('/timesheets')) {
-      return Response.json([{
-        timesheet_id: workflow.target_timesheet_id, sheet_scope: 'WEEKLY',
-        hospital_norm: null, ward_norm: null, job_title_norm: 'Nurse', band: '6'
-      }]);
-    }
-    if (target.pathname.endsWith('/candidates')) {
-      return Response.json([{ id: session.selected_candidate_id, first_name: 'Test', last_name: 'Worker' }]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')
+        || target.pathname.endsWith('/timesheets_financials')
+        || target.pathname.endsWith('/timesheets')) {
+      throw new Error('A generic Mileage Form must not read a Timesheet workflow');
     }
     if (target.pathname.endsWith('/settings_defaults')) {
       return Response.json([{
@@ -3425,6 +3387,12 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     if (target.pathname.endsWith('/candidate_app_accounts')) {
       return Response.json([{ id: session.account_id, email_normalized: 'candidate@example.test' }]);
     }
+    if (target.pathname.endsWith('/candidates')) {
+      return Response.json([{
+        id: session.selected_candidate_id, display_name: 'Test Worker',
+        first_name: 'Test', last_name: 'Worker'
+      }]);
+    }
     if (target.pathname.endsWith('/mail_outbox') && method === 'POST') {
       const body = JSON.parse(String(init.body));
       outboxWrites.push(body);
@@ -3433,11 +3401,11 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     throw new Error(`Unexpected TEST request ${method} ${target.pathname}`);
   };
   const request = (action, key) => new Request(
-    `https://private.test/candidate-app/v1/workflows/${workflow.id}/actions/${action}`,
+    `https://private.test/candidate-app/v1/workflows/${genericWorkflowId}/actions/${action}`,
     {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ generation: 1, idempotency_key: key, mileage_units: 100 })
+      body: JSON.stringify({ generation: 1, idempotency_key: key })
     }
   );
   try {
@@ -3448,23 +3416,15 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     const preparedBody = await prepared.json();
     assert.equal(prepared.status, 200, JSON.stringify(preparedBody));
     assert.equal(preparedBody.mileage_form_state, 'PREPARED');
+    assert.equal(preparedBody.mileage_form_scope, 'GENERIC');
+    assert.equal(preparedBody.workflow_id, genericWorkflowId);
+    assert.equal(preparedBody.state, 'GENERIC_DOCUMENT_READY');
     assert.match(preparedBody.mileage_form_sha256, /^[0-9a-f]{64}$/);
-    assert.equal(preparedBody.mileage_form_qr_proof_contract_version, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_V1');
-    assert.equal(preparedBody.mileage_form_timesheet_id, workflow.target_timesheet_id);
-    assert.equal(preparedBody.mileage_form_mileage_units, 100);
-    assert.match(preparedBody.mileage_form_semantic_sha256, /^[0-9a-f]{64}$/);
-    assert.match(preparedBody.mileage_form_qr_text, /^TSQ2\./);
-    const expectedIdentity = await candidateMileageFormQrIdentity(workflow, 100);
-    assert.equal(preparedBody.mileage_form_semantic_sha256, expectedIdentity.semantic_sha256);
-    const validated = await validateCandidateMileageFormProof(env, workflow, {
-      mileage_form_proof: {
-        proof_contract_version: preparedBody.mileage_form_qr_proof_contract_version,
-        mileage_form_semantic_sha256: preparedBody.mileage_form_semantic_sha256,
-        mileage_units: preparedBody.mileage_form_mileage_units,
-        qr_text: preparedBody.mileage_form_qr_text
-      }
-    });
-    assert.equal(validated.semantic_sha256, expectedIdentity.semantic_sha256);
+    assert.equal(preparedBody.mileage_form_filename, 'Mileage_Claim_Form.pdf');
+    for (const forbidden of [
+      'mileage_form_qr_proof_contract_version', 'mileage_form_timesheet_id',
+      'mileage_form_mileage_units', 'mileage_form_semantic_sha256', 'mileage_form_qr_text'
+    ]) assert.equal(Object.hasOwn(preparedBody, forbidden), false);
     const preparedPdf = await PDFDocument.load(Buffer.from(preparedBody.mileage_form_content_base64, 'base64'));
     assert.equal(preparedPdf.getPageCount(), 1);
     assert.equal(outboxWrites.length, 0);
@@ -3476,32 +3436,52 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     assert.equal(emailed.status, 202);
     const emailedBody = await emailed.json();
     assert.equal(emailedBody.mileage_form_state, 'EMAIL_QUEUED');
-    assert.equal(emailedBody.mileage_form_qr_text, preparedBody.mileage_form_qr_text);
+    assert.equal(emailedBody.mileage_form_scope, 'GENERIC');
     assert.equal(outboxWrites.length, 1);
     assert.equal(outboxWrites[0].to, 'candidate@example.test');
-    assert.equal(outboxWrites[0].recipient_id, workflow.candidate_id);
-    assert.equal(Object.hasOwn(outboxWrites[0], 'recipient_display_name'), false);
+    assert.equal(outboxWrites[0].recipient_id, session.selected_candidate_id);
+    assert.equal(outboxWrites[0].context_kind, 'CANDIDATE_ACCOUNT');
+    assert.equal(outboxWrites[0].context_id, session.account_id);
+    assert.equal(outboxWrites[0].recipient_display_name, 'Test Worker');
     assert.equal(outboxWrites[0].attachments.length, 1);
     assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
     assert.match(
       outboxWrites[0].attachments[0].r2_key,
-      /\/mileage-form\/[0-9a-f]{64}-[0-9a-f]{64}\.pdf$/
+      /\/agency\/[0-9a-f]{64}\/generic\/mileage-claim-form-v1\.pdf$/
     );
+    assert.equal(outboxWrites[0].payment_scope_json.candidate_mail_authority, 'CANDIDATE_GENERIC_DOCUMENT_V1');
+    assert.equal(Object.hasOwn(outboxWrites[0].payment_scope_json, 'candidate_workflow_id'), false);
+
+    const declaredMileage = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${genericWorkflowId}/actions/mileage-form-prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1,
+          idempotency_key: '00000000-0000-4000-8000-000000000099',
+          mileage_units: 100
+        })
+      }
+    ), env, {}, { routeAudience: 'PRIVATE' });
+    assert.equal(declaredMileage.status, 400);
+    assert.equal((await declaredMileage.json()).error_code, 'CANDIDATE_GENERIC_MILEAGE_FORM_MUST_NOT_DECLARE_MILEAGE');
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('final mileage submission accepts multiple current verified form pages and rejects stale metadata', async () => {
+test('final mileage submission requires the declared total and every current JPEG evidence object', async () => {
   const workflow = {
     id: '00000000-0000-4000-8000-0000000000a1', generation: 4,
     target_timesheet_id: '00000000-0000-4000-8000-0000000000a2',
     week_ending_date: '2026-08-30'
   };
-  const identity = await candidateMileageFormQrIdentity(workflow, 35);
   const components = [1, 2].map((number) => ({
     id: `00000000-0000-4000-8000-0000000000a${number + 2}`,
-    storage_key: `candidate-app/test/${workflow.id}/4/mileage-${number}.jpg`
+    storage_key: `candidate-app/test/${workflow.id}/4/mileage-${number}.jpg`,
+    media_type: 'image/jpeg',
+    byte_size: 100 + number,
+    source_content_sha256: String(number).repeat(64)
   }));
   const env = {
     SUPABASE_URL: 'https://test.supabase.invalid',
@@ -3509,14 +3489,11 @@ test('final mileage submission accepts multiple current verified form pages and 
     R2: {
       async head(key) {
         const component = components.find((item) => item.storage_key === key);
-        return { customMetadata: {
-          mileage_form_qr_verified: 'true',
-          workflow_id: workflow.id,
-          component_id: component?.id,
-          mileage_form_semantic_sha256: identity.semantic_sha256,
-          mileage_form_mileage_units: '35',
-          mileage_form_qr_payload_sha256: identity.qr_payload_sha256
-        } };
+        return component ? {
+          size: component.byte_size,
+          httpMetadata: { contentType: 'image/jpeg' },
+          customMetadata: { sha256: component.source_content_sha256 }
+        } : null;
       }
     }
   };
@@ -3527,18 +3504,28 @@ test('final mileage submission accepts multiple current verified form pages and 
     throw new Error(`Unexpected TEST request GET ${target.pathname}`);
   };
   try {
-    await assertCandidateMileageFormsMatchSubmission(env, workflow, { expense_claim: { mileage_units: 35 } });
-    env.R2.head = async (key) => ({ customMetadata: {
-      mileage_form_qr_verified: 'true',
-      workflow_id: workflow.id,
-      component_id: components.find((item) => item.storage_key === key)?.id,
-      mileage_form_semantic_sha256: 'f'.repeat(64),
-      mileage_form_mileage_units: '35',
-      mileage_form_qr_payload_sha256: identity.qr_payload_sha256
-    } });
+    await assertCandidateMileageEvidenceMatchesSubmission(env, workflow, {
+      expense_claim: { mileage_units: 35, mileage_total_confirmed: true }
+    });
     await assert.rejects(
-      assertCandidateMileageFormsMatchSubmission(env, workflow, { expense_claim: { mileage_units: 35 } }),
-      error => error?.code === 'CANDIDATE_MILEAGE_FORM_QR_STALE'
+      assertCandidateMileageEvidenceMatchesSubmission(env, workflow, {
+        expense_claim: { mileage_units: 35, mileage_total_confirmed: false }
+      }),
+      error => error?.code === 'CANDIDATE_MILEAGE_TOTAL_CONFIRMATION_REQUIRED'
+    );
+    env.R2.head = async (key) => {
+      const component = components.find((item) => item.storage_key === key);
+      return {
+        size: component.byte_size,
+        httpMetadata: { contentType: 'image/jpeg' },
+        customMetadata: { sha256: 'f'.repeat(64) }
+      };
+    };
+    await assert.rejects(
+      assertCandidateMileageEvidenceMatchesSubmission(env, workflow, {
+        expense_claim: { mileage_units: 35, mileage_total_confirmed: true }
+      }),
+      error => error?.code === 'CANDIDATE_MILEAGE_FORM_EVIDENCE_INVALID'
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -3790,10 +3777,10 @@ test('persisted expense and mileage PDFs are byte-deterministic across wall-cloc
     document_role: 'EXPENSE_APPROVAL_SUMMARY', review_ordinal: 1
   };
   const env = {};
-  const firstMileage = await mileageClaimFormBytes(env, workflow, { ...branding, logo: null });
+  const firstMileage = await mileageClaimFormBytes(env, { ...branding, logo: null });
   const firstExpense = (await renderExpensePage(env, { review_ordinal: 1, render_input: {} }, { workflow, component }, 'REVIEW')).pdf_bytes;
   await new Promise(resolve => setTimeout(resolve, 1100));
-  const secondMileage = await mileageClaimFormBytes(env, workflow, { ...branding, logo: null });
+  const secondMileage = await mileageClaimFormBytes(env, { ...branding, logo: null });
   const secondExpense = (await renderExpensePage(env, { review_ordinal: 1, render_input: {} }, { workflow, component }, 'REVIEW')).pdf_bytes;
   const digest = bytes => createHash('sha256').update(bytes).digest('hex');
   assert.equal(digest(firstMileage), digest(secondMileage));

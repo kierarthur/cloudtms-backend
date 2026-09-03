@@ -136,7 +136,7 @@ test('server never treats a photographed page containing two QRs as one valid pa
   assert.notEqual(result.qr_texts.length, 1);
 });
 
-test('Candidate mileage upload independently reads the exact QR from JPEG bytes and records its identity', async () => {
+test('Candidate mileage upload accepts ordinary JPEG evidence and forbids the retired source-form QR proof', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000201',
     session_id: '00000000-0000-4000-8000-000000000201',
@@ -159,13 +159,10 @@ test('Candidate mileage upload independently reads the exact QR from JPEG bytes 
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
     CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
-    QR_SIGNING_SECRET: 'test-only-qr-signing-secret',
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
-  const identity = await candidateAppBackendInternals.candidateMileageFormQrIdentity(workflow, 27.5);
-  const qrText = await buildTsq2String(identity.qr_payload, env);
-  const jpegBytes = jpegWithCodes([qrText]);
+  const jpegBytes = jpeg.encode({ data: Buffer.alloc(64 * 64 * 4, 255), width: 64, height: 64 }, 92).data;
   const sourceSha256 = createHash('sha256').update(jpegBytes).digest('hex');
   let storedOptions;
   env.R2 = {
@@ -211,13 +208,7 @@ test('Candidate mileage upload independently reads the exact QR from JPEG bytes 
           media_type: 'image/jpeg',
           byte_size: jpegBytes.byteLength,
           source_content_sha256: sourceSha256,
-          idempotency_key: '00000000-0000-4000-8000-000000000207',
-          mileage_form_proof: {
-            proof_contract_version: identity.proof_contract_version,
-            mileage_form_semantic_sha256: identity.semantic_sha256,
-            mileage_units: identity.mileage_units,
-            qr_text: qrText
-          }
+          idempotency_key: '00000000-0000-4000-8000-000000000207'
         })
       }
     ), env, {}, { routeAudience: 'PRIVATE', ...deps });
@@ -233,99 +224,52 @@ test('Candidate mileage upload independently reads the exact QR from JPEG bytes 
     const uploadedBody = await uploaded.json();
     assert.equal(uploaded.status, 200, JSON.stringify(uploadedBody));
     assert.equal(uploadedBody.state, 'IMMUTABLE');
-    assert.equal(storedOptions.customMetadata.mileage_form_qr_verified, 'true');
-    assert.equal(storedOptions.customMetadata.mileage_form_semantic_sha256, identity.semantic_sha256);
-    assert.equal(storedOptions.customMetadata.mileage_form_mileage_units, '27.5');
-    assert.equal(storedOptions.customMetadata.mileage_form_qr_payload_sha256, identity.qr_payload_sha256);
+    assert.equal(storedOptions.customMetadata.sha256, sourceSha256);
+    for (const key of Object.keys(storedOptions.customMetadata)) {
+      assert.doesNotMatch(key, /mileage_form_qr|mileage_form_semantic|mileage_form_mileage/);
+    }
+
+    const retiredProof = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflow.id}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2,
+          component_kind: 'MILEAGE_FORM',
+          document_role: 'MILEAGE_CLAIM_FORM',
+          expense_category: 'MILEAGE',
+          media_type: 'image/jpeg',
+          byte_size: jpegBytes.byteLength,
+          idempotency_key: '00000000-0000-4000-8000-000000000208',
+          mileage_form_proof: { qr_text: 'retired' }
+        })
+      }
+    ), env, {}, { routeAudience: 'PRIVATE', ...deps });
+    const retiredProofBody = await retiredProof.json();
+    assert.equal(retiredProofBody.error_code, 'CANDIDATE_MILEAGE_FORM_QR_PROOF_FORBIDDEN');
+    assert.equal(retiredProof.status, 403);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('printed Mileage carries the exact accepted source photograph and its original signed QR identity', async () => {
-  const sourceId = '00000000-0000-4000-8000-000000000306';
-  const workflow = {
-    id: '00000000-0000-4000-8000-000000000304',
-    generation: 4,
-    week_ending_date: '2026-08-30',
-    target_timesheet_id: '00000000-0000-4000-8000-000000000305',
-    anchor_timesheet_id: '00000000-0000-4000-8000-000000000305',
-    immutable_submission_json: { expense_claim: { mileage_units: 27.5 } }
-  };
-  const env = {
-    CANDIDATE_APP_ENVIRONMENT: 'TEST',
-    QR_SIGNING_SECRET: 'test-only-qr-signing-secret',
-    SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-  };
-  const sourceWorkflow = { ...workflow, generation: 2 };
-  const identity = await candidateAppBackendInternals.candidateMileageFormQrIdentity(sourceWorkflow, 27.5);
-  const qrText = await buildTsq2String(identity.qr_payload, env);
-  const jpegBytes = jpegWithCodes([qrText]);
-  const sourceSha256 = createHash('sha256').update(jpegBytes).digest('hex');
-  const source = {
-    id: sourceId,
-    workflow_id: workflow.id,
-    workflow_generation: 2,
-    timesheet_id: workflow.target_timesheet_id,
-    component_kind: 'MILEAGE_FORM',
-    expense_category: 'MILEAGE',
-    document_role: 'MILEAGE_CLAIM_FORM',
-    state: 'SUPERSEDED',
-    source_component_id: null,
-    storage_key: `candidate-app/test/${workflow.id}/2/source/mileage.jpg`,
-    media_type: 'image/jpeg',
-    byte_size: jpegBytes.byteLength,
-    source_content_sha256: sourceSha256
-  };
-  const metadata = {
-    purpose: 'candidate-component',
-    workflow_id: workflow.id,
-    component_id: sourceId,
-    sha256: sourceSha256,
-    media_type: 'image/jpeg',
-    byte_size: String(jpegBytes.byteLength),
-    mileage_form_qr_verified: 'true',
-    mileage_form_semantic_sha256: identity.semantic_sha256,
-    mileage_form_mileage_units: '27.5',
-    mileage_form_qr_payload_sha256: identity.qr_payload_sha256
-  };
-  env.R2 = {
-    async head() { return { customMetadata: metadata }; },
-    async get() {
-      return {
-        httpMetadata: { contentType: 'image/jpeg' },
-        async arrayBuffer() {
-          return jpegBytes.buffer.slice(jpegBytes.byteOffset, jpegBytes.byteOffset + jpegBytes.byteLength);
-        }
-      };
-    }
-  };
-  const expectedPage = {
-    component_kind: 'MILEAGE_FORM',
-    expense_category: 'MILEAGE',
-    source_component_id: sourceId,
-    source_content_sha256: sourceSha256
-  };
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => {
-    const target = new URL(String(url));
-    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([source]);
-    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
-  };
-  try {
-    const artifact = await candidateAppBackendInternals.candidatePaperMileageSourceArtifact(
-      env, workflow, expectedPage
-    );
-    assert.deepEqual(Buffer.from(artifact.bytes), Buffer.from(jpegBytes));
-    assert.deepEqual(artifact.identity.qr_payload, identity.qr_payload);
-    const pdf = await candidateAppBackendInternals.paperMileageSourcePageBytes(
-      env, workflow, expectedPage
-    );
-    assert.equal(Buffer.from(pdf).subarray(0, 5).toString(), '%PDF-');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('printed Mileage carries each accepted photograph as a normal evidence page with a unique pack QR', () => {
+  const backend = read('broker/src/candidate-app-backend.js');
+  const render = backend.slice(
+    backend.indexOf('async function renderExpensePage('),
+    backend.indexOf('function candidateRpcArgs(')
+  );
+  assert.match(render, /const isMileageEvidence = upper\(component\.component_kind\) === 'MILEAGE_FORM'/);
+  assert.match(render, /Total mileage for this claim:/);
+  assert.match(render, /await drawCandidatePaperPageQr\(page, paperReturnQrText/);
+  assert.match(render, /page\.drawText\('Manager signature'/);
+  assert.match(render, /page\.drawText\('Date'/);
+  const assembly = backend.slice(
+    backend.indexOf('async function assembleCandidatePaperPack('),
+    backend.indexOf('function candidatePaperPackComponentForPage(')
+  );
+  assert.match(assembly, /const pageQrText = expected\.manifest_version === 2/);
+  assert.doesNotMatch(assembly, /kind !== 'MILEAGE_FORM'/);
 });
 
 test('whole-pack database adapter accepts only the exact complete manifest in one transaction', () => {
@@ -340,15 +284,12 @@ test('whole-pack database adapter accepts only the exact complete manifest in on
   assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
-test('Mileage return proof accepts only the original source-form identity through exact lineage', () => {
+test('Mileage return proof accepts only the exact current pack-page identity', () => {
   const sql = read('supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql');
-  assert.match(sql, /v_page->>'component_kind'='MILEAGE_FORM'/i);
-  assert.match(sql, /source_component\.id=\(v_page->>'source_component_id'\)::uuid/i);
-  assert.match(sql, /source_component\.source_component_id is null/i);
-  assert.match(sql, /source_component\.workflow_generation=\(p_qr_payload->>'g'\)::integer/i);
-  assert.match(sql, /lower\(p_qr_payload->>'m'\)=lower\(v_page->>'source_content_sha256'\)/i);
-  assert.match(sql, /extensions\.digest\('MILEAGE_FORM:'\|\|lower\(p_qr_payload->>'m'\),'sha256'\)/i);
-  assert.match(sql, /'qr_identity_kind',case when v_source_mileage_qr then 'SOURCE_MILEAGE_FORM' else 'PACK_PAGE' end/i);
+  assert.match(sql, /lower\(p_qr_payload->>'m'\)=v_manifest_hex/i);
+  assert.match(sql, /p_qr_payload->>'k'=v_page->>'page_kind_code'/i);
+  assert.match(sql, /'qr_identity_kind','PACK_PAGE'/i);
+  assert.doesNotMatch(sql, /SOURCE_MILEAGE_FORM|v_source_mileage_qr/i);
   assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
@@ -364,28 +305,20 @@ test('private adapter stages verified JPEG pages and submits sealed receipts onl
   assert.match(backend, /replacement_page_keys/);
 });
 
-test('Mileage is worker-completed unsigned, then carried into the pack with one signing area and no second QR', () => {
+test('Mileage is worker-completed unsigned, then carried into the pack with one signing area and one pack QR', () => {
   const backend = read('broker/src/candidate-app-backend.js');
   const mileageForm = backend.slice(
     backend.indexOf('async function mileageClaimFormBytes('),
-    backend.indexOf('async function paperMileageSourcePageBytes(')
+    backend.indexOf('async function paperExpensePageBytes(')
   );
-  assert.match(backend, /\{ compactSigningFooter: false, includeSigningArea: false \}/);
-  assert.match(mileageForm, /if \(!includeSigningArea\)/);
-  const packMileage = backend.slice(
-    backend.indexOf('async function paperMileageSourcePageBytes('),
-    backend.indexOf('function paperPackIdentity(')
-  );
-  assert.match(packMileage, /candidatePaperMileageSourceArtifact\(env, workflow, expectedPage\)/);
-  assert.match(packMileage, /page\.drawText\('Manager signature'/);
-  assert.match(packMileage, /page\.drawText\('Date'/);
-  assert.match(packMileage, /CANDIDATE_PAPER_MILEAGE_SECOND_QR_FORBIDDEN/);
-  assert.doesNotMatch(packMileage, /drawCandidatePaperPageQr|candidatePaperPageQrText/);
+  assert.doesNotMatch(mileageForm, /Manager signature|page\.drawText\('Date'/);
+  assert.doesNotMatch(mileageForm, /drawCandidatePaperPageQr|candidatePaperPageQrText/);
   const assembly = backend.slice(
     backend.indexOf('async function assembleCandidatePaperPack('),
     backend.indexOf('function candidatePaperPackComponentForPage(')
   );
-  assert.match(assembly, /expected\.manifest_version === 2 && kind !== 'MILEAGE_FORM'/);
+  assert.match(assembly, /expected\.manifest_version === 2\s*\? await candidatePaperPageQrText/);
+  assert.doesNotMatch(assembly, /kind !== 'MILEAGE_FORM'/);
 });
 
 test('landscape Timesheet pages are re-rendered with a dedicated large QR panel', () => {

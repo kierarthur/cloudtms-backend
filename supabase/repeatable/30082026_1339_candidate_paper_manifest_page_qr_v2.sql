@@ -223,10 +223,8 @@ declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_timesheet public.timesheets%rowtype;
   v_page jsonb;
-  v_source_component public.candidate_submission_components%rowtype;
   v_manifest_hex text;
   v_proof_identity text;
-  v_source_mileage_qr boolean:=false;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_writes');
   if p_expected_generation is null or p_expected_generation<1
@@ -290,38 +288,7 @@ begin
      and p_qr_payload->>'k'=v_page->>'page_kind_code'
      and coalesce(p_qr_payload->>'c','')=coalesce(v_page->>'category_code','')
      and (p_qr_payload->>'n')::integer=(v_page->>'category_occurrence')::integer then
-    v_source_mileage_qr:=false;
-  elsif v_page->>'component_kind'='MILEAGE_FORM'
-     and v_page->>'expense_category'='MILEAGE'
-     and (p_qr_payload->>'v')::integer=2
-     and lower(p_qr_payload->>'w')=v_workflow.id::text
-     and lower(p_qr_payload->>'t')=v_timesheet.timesheet_id::text
-     and p_qr_payload->>'k'='M'
-     and p_qr_payload->>'c'='M'
-     and (p_qr_payload->>'o')::integer=1
-     and (p_qr_payload->>'n')::integer=1
-     and lower(p_qr_payload->>'m')=lower(v_page->>'source_content_sha256')
-     and lower(p_qr_payload->>'p')=substring(encode(
-       extensions.digest('MILEAGE_FORM:'||lower(p_qr_payload->>'m'),'sha256'),'hex'
-     ) from 1 for 16) then
-    select source_component.* into v_source_component
-    from public.candidate_submission_components source_component
-    where source_component.id=(v_page->>'source_component_id')::uuid
-      and source_component.workflow_id=v_workflow.id
-      and source_component.workflow_generation=(p_qr_payload->>'g')::integer
-      and source_component.workflow_generation<v_workflow.generation
-      and source_component.component_kind='MILEAGE_FORM'
-      and source_component.expense_category='MILEAGE'
-      and source_component.document_role='MILEAGE_CLAIM_FORM'
-      and source_component.state in ('IMMUTABLE','SUPERSEDED')
-      and source_component.source_component_id is null
-      and source_component.source_content_sha256 is not null
-      and encode(source_component.source_content_sha256,'hex')
-        =lower(v_page->>'source_content_sha256');
-    if not found then
-      raise exception 'CANDIDATE_PAPER_QR_PROOF_MISMATCH' using errcode='28000';
-    end if;
-    v_source_mileage_qr:=true;
+    null;
   else
     raise exception 'CANDIDATE_PAPER_QR_PROOF_MISMATCH' using errcode='28000';
   end if;
@@ -338,7 +305,7 @@ begin
     'paper_return_manifest_sha256',v_manifest_hex,
     'paper_return_page_key',p_page_key,
     'page_component_kind',v_page->>'component_kind',
-    'qr_identity_kind',case when v_source_mileage_qr then 'SOURCE_MILEAGE_FORM' else 'PACK_PAGE' end,
+    'qr_identity_kind','PACK_PAGE',
     'qr_required',true,
     'qr_payload_sha256',encode(extensions.digest(p_qr_payload::text,'sha256'),'hex'),
     'proof_receipt_sha256',encode(extensions.digest(v_proof_identity,'sha256'),'hex')
