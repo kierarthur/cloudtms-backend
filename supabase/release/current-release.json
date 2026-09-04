@@ -104,7 +104,8 @@
     "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
     "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
     "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
-    "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql"
+    "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+    "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -173,6 +174,7 @@
     "tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql",
     "supabase/verification/04092026_1421_candidate_finalisation_single_flight_verification.sql",
     "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
-    "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql"
+    "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
+    "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql"
   ]
 }
