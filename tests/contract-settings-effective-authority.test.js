@@ -9,6 +9,7 @@ const migration = readFileSync(new URL('../supabase/migrations/03092026_1640_con
 const missingSettingsCanvasRepair = readFileSync(new URL('../supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql', import.meta.url), 'utf8');
 const processedDailyOriginRepair = readFileSync(new URL('../supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql', import.meta.url), 'utf8');
 const resolver = readFileSync(new URL('../supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql', import.meta.url), 'utf8');
+const plannedClientRefresh = readFileSync(new URL('../supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql', import.meta.url), 'utf8');
 const invoiceCore = readFileSync(new URL('../supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql', import.meta.url), 'utf8');
 const invoiceResolver = readFileSync(new URL('../supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql', import.meta.url), 'utf8');
 const invoiceVat = readFileSync(new URL('../supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql', import.meta.url), 'utf8');
@@ -71,6 +72,10 @@ test('planned weeks refresh and real Weekly and Daily Timesheets freeze at their
   assert.match(resolver, /when coalesce\(v_week\.is_adjustment,false\) or coalesce\(v_week\.additional_seq,0\)>0[\s\S]*?then v_week\.submission_mode_snapshot/);
   assert.match(resolver, /if not coalesce\(new\.is_adjustment,false\) and coalesce\(new\.additional_seq,0\)=0 then[\s\S]*?new\.submission_mode_snapshot/);
   assert.match(resolver, /No hours, rates, financials, invoices or payment rows are/);
+  assert.match(plannedClientRefresh, /create or replace function private\._contract_settings_refresh_planned_for_client_v1/);
+  assert.match(plannedClientRefresh, /where c\.client_id=p_client_id[\s\S]*?and cw\.timesheet_id is null/);
+  assert.doesNotMatch(plannedClientRefresh, /overrideclientsettings/);
+  assert.doesNotMatch(plannedClientRefresh, /total_pay|pay_method|settle|provider|Policy\.X/i);
 });
 
 test('dated import auto-authorise never derives part of its result from today', () => {

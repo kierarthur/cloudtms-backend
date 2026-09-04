@@ -268,18 +268,21 @@ begin
     raise exception 'INVOICE_VAT_DID_NOT_USE_FROZEN_TIMESHEET_AUTHORITY:%',v_vat;
   end if;
 
-  -- A Contract override governs its own remaining planned weeks and remains
-  -- isolated from subsequent Client changes.
+  -- A Contract override retains its governed values, while a subsequent
+  -- Client change still refreshes Client-owned values on the remaining
+  -- planned week.
   update public.contracts set
     overrideclientsettings=true,is_nhsp=false,autoprocess_hr=false,
     requires_hr=false,no_timesheet_required=false
   where id=v_contract;
   update public.client_settings set is_nhsp=true,autoprocess_hr=false,
-    requires_hr=false,no_timesheet_required=false where client_id=v_client;
+    requires_hr=false,no_timesheet_required=false,vat_rate_pct=7
+  where client_id=v_client;
   select settings_authority_json into v_authority
   from public.contract_weeks where id=v_week_two;
   if v_authority->>'configured_route'<>'STANDARD_WEEKLY'
-     or v_authority#>>'{sources,contract_governed_settings}'<>'CONTRACT_OVERRIDE' then
+     or v_authority#>>'{sources,contract_governed_settings}'<>'CONTRACT_OVERRIDE'
+     or coalesce((v_authority#>>'{values,vat_rate_pct}')::numeric,-1)<>7 then
     raise exception 'CONTRACT_OVERRIDE_PRECEDENCE_INVALID:%',v_authority;
   end if;
   update public.contracts set is_nhsp=true where id=v_contract;
