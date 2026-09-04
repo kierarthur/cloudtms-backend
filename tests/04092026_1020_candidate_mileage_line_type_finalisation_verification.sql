@@ -35,8 +35,24 @@ declare
   v_line_type text;
   v_new_target uuid;
 begin
-  insert into public.tms_users(id,email,is_active)
-  values(v_actor,'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',true);
+  -- The focused Candidate runtime fixture intentionally carries only the
+  -- shared tms_users columns, while a complete database also requires the
+  -- non-login password sentinel and role. Keep one rollback verifier valid
+  -- against both shapes without weakening either schema.
+  if exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='tms_users' and column_name='password_hash'
+  ) then
+    execute 'insert into public.tms_users(id,email,password_hash,role,is_active)
+      values($1,$2,$3,$4,$5)'
+    using v_actor,
+      'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',
+      'UNUSABLE_VERIFICATION_ONLY','admin',true;
+  else
+    execute 'insert into public.tms_users(id,email,is_active) values($1,$2,$3)'
+    using v_actor,
+      'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',true;
+  end if;
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
 
   insert into public.clients(id,name)
