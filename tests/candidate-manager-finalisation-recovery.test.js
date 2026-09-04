@@ -60,24 +60,24 @@ test('private scheduler retries only bounded manager finalisations through the s
   assert.match(privateWorkerSource, /ctx\.waitUntil\(recoverPendingCandidateManagerFinalisations\([\s\S]*,\s*5\s*\)\)/);
 });
 
-test('expense finalisation signs the authoritative anchor without pairing it to an unmaterialised carrier week', async () => {
+test('expense finalisation signs the unmaterialised carrier week without substituting its hours anchor', async () => {
   const calls = [];
   const result = await lifecycleSignature({
     rpc: async (name, args) => {
       calls.push({ name, args });
-      return { backend_row_signature: 'authoritative-anchor-signature' };
+      return { backend_row_signature: 'unmaterialised-carrier-signature' };
     }
   }, {
     target_timesheet_id: null,
     anchor_timesheet_id: '00000000-0000-4000-8000-000000000903',
     contract_week_id: '00000000-0000-4000-8000-000000000904'
   });
-  assert.equal(result, 'authoritative-anchor-signature');
+  assert.equal(result, 'unmaterialised-carrier-signature');
   assert.deepEqual(calls, [{
     name: 'timesheet_lifecycle_signature_v1',
     args: {
-      p_timesheet_id: '00000000-0000-4000-8000-000000000903',
-      p_contract_week_id: null,
+      p_timesheet_id: null,
+      p_contract_week_id: '00000000-0000-4000-8000-000000000904',
       p_include_payload: false
     }
   }]);

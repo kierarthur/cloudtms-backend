@@ -132,6 +132,13 @@ begin
     raise exception 'pure mileage carrier line type verification failed';
   end if;
 
+  -- Close the first fixture workflow before proving a later claim for the same
+  -- Candidate, Contract and week. Production permits one active claim at a
+  -- time; the later carrier is valid only after the earlier claim is terminal.
+  update public.candidate_submission_workflows
+  set state='FINALISED',finalised_at_utc=now(),updated_at_utc=now()
+  where id=v_workflow;
+
   -- The real Candidate route begins with an authoritative worked Timesheet and
   -- a reserved additional Contract week that has no Timesheet yet. Exercise
   -- that first-use materialisation so an invalid Contract-week status cannot
@@ -174,7 +181,7 @@ begin
   );
 
   perform set_config('cloudtms.candidate_finalize_workflow',v_new_carrier_workflow::text||':1',true);
-  v_signature:=public.timesheet_lifecycle_signature_v1(v_timesheet,null,false)->>'row_signature';
+  v_signature:=public.timesheet_lifecycle_signature_v1(null,v_new_carrier_week,false)->>'row_signature';
   v_response:=public.timesheet_expense_apply_atomic_v1(
     v_candidate,'TEST',null,v_new_carrier_workflow,1,v_signature,
     v_claim,array[v_new_carrier_component],
