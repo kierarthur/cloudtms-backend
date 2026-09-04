@@ -283,6 +283,7 @@ declare
   v_document_role text;
   v_paper_page jsonb;
   v_materialised_storage_key text;
+  v_expense_line_type text;
   v_system_actor uuid;
   v_constraint_name text;
 begin
@@ -420,6 +421,28 @@ begin
     v_required_categories:=array_append(v_required_categories,'MILEAGE');
   end if;
 
+  -- An empty reusable carrier may still have the generic EXPENSES line type.
+  -- Finalisation must project the submitted claim's exact final type so a
+  -- mileage-only claim cannot be rejected by the final-state guard.
+  v_expense_line_type:=case
+    when (
+      abs(coalesce(nullif(v_snapshot->>'mileage_units','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'mileage_pay_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'mileage_charge_ex_vat','')::numeric,0))
+    )<>0
+    and (
+      abs(coalesce(nullif(v_snapshot->>'expenses_pay_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'expenses_charge_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'travel_pay_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'travel_charge_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'accommodation_pay_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'accommodation_charge_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'other_pay_ex_vat','')::numeric,0))
+      +abs(coalesce(nullif(v_snapshot->>'other_charge_ex_vat','')::numeric,0))
+    )=0 then 'MILEAGE'
+    else 'EXPENSES'
+  end;
+
   select count(*)::integer into v_component_count
   from public.candidate_submission_components component
   where component.id=any(coalesce(p_evidence_component_ids,'{}'::uuid[]))
@@ -530,7 +553,7 @@ begin
           'status','SUBMITTED',
           'submission_mode','MANUAL',
           'sheet_scope','WEEKLY',
-          'line_type','EXPENSES',
+          'line_type',v_expense_line_type,
           'is_adjustment',true,
           'occupant_key_norm',v_anchor_timesheet.occupant_key_norm,
           'hospital_norm',v_anchor_timesheet.hospital_norm,
@@ -543,7 +566,9 @@ begin
         ) else v_electronic_patch end
       else null end,
     p_timesheet_patch_json=>coalesce(v_claim->'timesheet_patch_json','{}'::jsonb)
-      ||case when v_is_separate_carrier then '{}'::jsonb else v_electronic_patch end,
+      ||case when v_is_separate_carrier then jsonb_build_object(
+          'line_type',v_expense_line_type
+        ) else v_electronic_patch end,
     p_contract_week_patch_json=>coalesce(v_claim->'contract_week_patch_json','{}'::jsonb),
     p_tsfin_snapshot_json=>v_snapshot,
     p_rotation_json=>null,

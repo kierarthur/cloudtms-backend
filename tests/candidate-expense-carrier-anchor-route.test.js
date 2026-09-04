@@ -9,6 +9,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const repeatablePath = 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql';
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
+const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
 const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
@@ -41,6 +42,14 @@ test('expense workflow creation derives approval route from the worked anchor be
     /v_workflow_kind='CONTRACT_EXPENSE'[\s\S]*route_family'='QR'[\s\S]*v_route:='PAPER'/i
   );
   assert.doesNotMatch(repeatable, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+});
+
+test('expense finalisation projects the exact final line type onto new and reused carriers', () => {
+  assert.match(
+    read('supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql'),
+    /v_expense_line_type:=case[\s\S]*mileage_units[\s\S]*then 'MILEAGE'[\s\S]*else 'EXPENSES'[\s\S]*'line_type',v_expense_line_type[\s\S]*p_timesheet_patch_json[\s\S]*jsonb_build_object\(\s*'line_type',v_expense_line_type/i
+  );
+  assert.match(read(mileageLineTypeVerifierPath), /begin;[\s\S]*mileage_units',25[\s\S]*line_type','EXPENSES'[\s\S]*timesheet_expense_apply_atomic_v1[\s\S]*v_line_type<>'MILEAGE'[\s\S]*rollback;/i);
 });
 
 test('rollback-contained proof reproduces the app carrier-first sequence and protects finance', () => {
@@ -84,6 +93,8 @@ test('release and Candidate runtime install the successor before executing its f
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.ok(release.verificationFiles.includes(duplicateReviewVerifierPath));
   assert.ok(release.newVerificationFiles.includes(duplicateReviewVerifierPath));
+  assert.ok(release.verificationFiles.includes(mileageLineTypeVerifierPath));
+  assert.ok(release.newVerificationFiles.includes(mileageLineTypeVerifierPath));
   assert.match(
     runtime,
     /29082026_0951_candidate_expense_resubmission_anchor_v1\.sql[\s\S]*30082026_1903_candidate_expense_carrier_anchor_route_v1\.sql[\s\S]*30082026_1910_candidate_expense_carrier_anchor_route_verification\.sql/i

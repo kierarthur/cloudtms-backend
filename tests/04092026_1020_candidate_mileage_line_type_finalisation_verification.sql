@@ -1,0 +1,129 @@
+\set ON_ERROR_STOP on
+
+-- A reusable empty expense carrier can still be typed EXPENSES. A pure-mileage
+-- final claim must atomically retype it to MILEAGE. All fixture work rolls back.
+begin;
+
+update public.settings_defaults
+set candidate_app_feature_flags_json=coalesce(candidate_app_feature_flags_json,'{}'::jsonb)
+  ||jsonb_build_object(
+    'candidate_app_writes',true,
+    'candidate_record_role_capabilities',true,
+    'candidate_expense_atomic_placement',true
+  ),
+  candidate_app_environment='TEST';
+
+do $verification$
+declare
+  v_actor uuid:=gen_random_uuid();
+  v_client uuid:=gen_random_uuid();
+  v_candidate uuid:=gen_random_uuid();
+  v_contract uuid:=gen_random_uuid();
+  v_week uuid:=gen_random_uuid();
+  v_timesheet uuid:=gen_random_uuid();
+  v_account uuid:=gen_random_uuid();
+  v_workflow uuid:=gen_random_uuid();
+  v_component uuid:=gen_random_uuid();
+  v_claim jsonb;
+  v_response jsonb;
+  v_signature text;
+  v_line_type text;
+begin
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(v_actor,'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',
+    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
+
+  insert into public.clients(id,name)
+  values(v_client,'Mileage line type verification client');
+  insert into public.candidates(id,email,active)
+  values(v_candidate,'mileage-line-type-'||replace(v_candidate::text,'-','')||'@example.test',true);
+  insert into public.contracts(
+    id,candidate_id,client_id,start_date,end_date,
+    week_ending_weekday_snapshot,default_submission_mode,pay_method_snapshot
+  ) values(
+    v_contract,v_candidate,v_client,current_date-7,current_date+7,
+    extract(dow from current_date)::integer,'ELECTRONIC','PAYE'
+  );
+  insert into public.timesheets(
+    timesheet_id,booking_id,contract_id,week_ending_date,
+    occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    line_type,submission_mode,sheet_scope
+  ) values(
+    v_timesheet,'MILEAGE-LINE-TYPE-'||replace(v_timesheet::text,'-',''),
+    v_contract,current_date,'candidate','test hospital','test ward','test role',
+    'EXPENSES','MANUAL','WEEKLY'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,
+    submission_mode_snapshot,timesheet_id
+  ) values(v_week,v_contract,current_date,1,'OPEN','MANUAL',v_timesheet);
+  insert into public.candidate_app_accounts(
+    id,environment,email_normalized,status
+  ) values(
+    v_account,'TEST','mileage-line-type-'||replace(v_candidate::text,'-','')||'@example.test','SETUP_REQUIRED'
+  );
+
+  v_claim:=jsonb_build_object(
+    'contract_week_id',v_week,
+    'canonical_tsfin_snapshot',jsonb_build_object(
+      'candidate_id',v_candidate,'client_id',v_client,
+      'total_hours',0,'mileage_units',25,
+      'mileage_pay_ex_vat',0,'mileage_charge_ex_vat',0,
+      'expenses_pay_ex_vat',0,'expenses_charge_ex_vat',0,
+      'travel_pay_ex_vat',0,'travel_charge_ex_vat',0,
+      'accommodation_pay_ex_vat',0,'accommodation_charge_ex_vat',0,
+      'other_pay_ex_vat',0,'other_charge_ex_vat',0
+    ),
+    'timesheet_patch_json',jsonb_build_object('line_type','EXPENSES'),
+    'contract_week_patch_json','{}'::jsonb,
+    'evidence_display_name','Mileage Claim Form'
+  );
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    policy_snapshot_json,input_snapshot_json,idempotency_key,manager_approved_at_utc,
+    immutable_submission_json,immutable_submission_sha256
+  ) values(
+    v_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY','PHONE',
+    'READY_TO_FINALISE',1,v_contract,v_week,v_timesheet,v_timesheet,current_date,
+    '{}'::jsonb,'{}'::jsonb,'mileage-line-type-workflow-'||v_workflow::text,now(),
+    v_claim,private._candidate_sha256_jsonb_v1(v_claim)
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,review_ordinal,timesheet_id,component_kind,
+    expense_category,document_role,required,state,storage_key,media_type,byte_size,
+    source_content_sha256,immutable_at_utc,
+    review_render_state,review_storage_key,review_content_sha256,review_media_type,
+    review_byte_size,review_page_count,review_render_input_sha256,
+    review_renderer_contract_version,review_renderer_receipt_json,review_generated_at_utc,
+    final_signed_render_state,final_signed_storage_key,final_signed_content_sha256,
+    final_signed_media_type,final_signed_byte_size,final_signed_page_count,
+    final_signed_render_input_sha256,final_signed_renderer_contract_version,
+    final_signed_renderer_receipt_json,final_signed_generated_at_utc
+  ) values(
+    v_component,v_workflow,1,1,1,v_timesheet,'MILEAGE_FORM','MILEAGE','MILEAGE_CLAIM_FORM',
+    true,'IMMUTABLE','expense/mileage-source.jpg','image/jpeg',100,
+    decode(repeat('cc',32),'hex'),now(),
+    'READY','expense/mileage-review.pdf',decode(repeat('ab',32),'hex'),'application/pdf',
+    200,1,decode(repeat('ef',32),'hex'),'MILEAGE_REVIEW_TEST_V1','{}'::jsonb,now(),
+    'READY','expense/mileage-final.pdf',decode(repeat('dd',32),'hex'),'application/pdf',
+    220,1,decode(repeat('ef',32),'hex'),'MILEAGE_FINAL_TEST_V1','{}'::jsonb,now()
+  );
+
+  perform set_config('cloudtms.candidate_finalize_workflow',v_workflow::text||':1',true);
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_timesheet,v_week,false)->>'row_signature';
+  v_response:=public.timesheet_expense_apply_atomic_v1(
+    v_candidate,'TEST',v_timesheet,v_workflow,1,v_signature,
+    v_claim,array[v_component],'mileage-line-type-apply-'||v_workflow::text,now()
+  );
+  select line_type::text into v_line_type
+  from public.timesheets where timesheet_id=v_timesheet and is_current=true;
+  if not coalesce((v_response->>'ok')::boolean,false) or v_line_type<>'MILEAGE' then
+    raise exception 'pure mileage carrier line type verification failed';
+  end if;
+end;
+$verification$;
+
+rollback;
