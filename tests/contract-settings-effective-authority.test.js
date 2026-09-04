@@ -6,6 +6,7 @@ const worker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 
 const invoiceAsyncHttp = readFileSync(new URL('../broker/src/invoice-async-http.js', import.meta.url), 'utf8');
 const wrangler = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql', import.meta.url), 'utf8');
+const missingSettingsCanvasRepair = readFileSync(new URL('../supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql', import.meta.url), 'utf8');
 const resolver = readFileSync(new URL('../supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql', import.meta.url), 'utf8');
 const invoiceCore = readFileSync(new URL('../supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql', import.meta.url), 'utf8');
 const invoiceResolver = readFileSync(new URL('../supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql', import.meta.url), 'utf8');
@@ -83,6 +84,16 @@ test('legacy Client setting origin is corrected without a silent resolver fallba
   assert.match(resolver, /set effective_from=v_earliest_contract_date/);
   assert.match(resolver, /CONTRACT_SETTINGS_CLIENT_SETTINGS_NOT_FOUND/);
   assert.doesNotMatch(resolver, /GLOBAL_SAFE_FALLBACK|CLIENT_SETTINGS_MISSING/);
+});
+
+test('historical Clients missing their settings canvas receive current safe defaults exactly once', () => {
+  assert.match(missingSettingsCanvasRepair, /insert into public\.client_settings\(/);
+  assert.match(missingSettingsCanvasRepair, /min\(c\.start_date\) as earliest_contract_date/);
+  assert.match(missingSettingsCanvasRepair, /and not exists\([\s\S]*?from public\.client_settings cs where cs\.client_id=cl\.id/);
+  assert.match(missingSettingsCanvasRepair, /candidate_electronic_auto_authorise_default/);
+  assert.match(missingSettingsCanvasRepair, /candidate_paper_submission_enabled[\s\S]*?true/);
+  assert.doesNotMatch(missingSettingsCanvasRepair, /update public\.client_settings|delete from public\.client_settings/i);
+  assert.doesNotMatch(missingSettingsCanvasRepair, /total_pay|pay_method|settle|provider|Policy\.X/i);
 });
 
 test('invoice consumers use each real Timesheet frozen authority, not current Client or Contract settings', () => {

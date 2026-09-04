@@ -158,6 +158,7 @@ jobs:
             supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql
             supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql
             supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql
+            supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql

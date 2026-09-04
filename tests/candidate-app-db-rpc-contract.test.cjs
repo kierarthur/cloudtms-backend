@@ -68,6 +68,7 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
   const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
   const settingsAuthorityMigration = 'supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql';
+  const settingsCanvasRepair = 'supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql';
   const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
   const settingsAuthorityBarrier = 'supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql';
   const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
@@ -77,6 +78,7 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const firstRepeatableIndex = installPaths.findIndex(entry => entry.startsWith('supabase/repeatable/'));
   assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
   assert.ok(installPaths.includes(settingsAuthorityMigration), 'settings-authority schema migration is missing');
+  assert.ok(installPaths.includes(settingsCanvasRepair), 'historical missing Client settings repair is missing');
   assert.ok(helperIndex >= 0, 'break-entry precedence helper owner is missing');
   assert.ok(migrationIndex < firstRepeatableIndex, 'break-entry schema must be installed before every repeatable');
   assert.ok(migrationIndex < helperIndex, 'break-entry schema must precede its helper owner');
@@ -87,6 +89,11 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   assert.ok(
     installPaths.indexOf(settingsAuthorityMigration) < installPaths.indexOf(settingsAuthorityConsumer),
     'settings-authority frozen-reader migration must precede its generated Candidate/invoice consumer'
+  );
+  assert.ok(
+    installPaths.indexOf(settingsAuthorityMigration) < installPaths.indexOf(settingsCanvasRepair)
+      && installPaths.indexOf(settingsCanvasRepair) < installPaths.indexOf(settingsAuthorityConsumer),
+    'historical Client settings canvases must be repaired after the schema and before resolver consumers'
   );
   assert.ok(installPaths.includes(settingsAuthorityBarrier), 'frozen-settings evaluation barrier is missing');
   assert.ok(
