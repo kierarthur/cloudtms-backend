@@ -35,9 +35,8 @@ declare
   v_line_type text;
   v_new_target uuid;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(v_actor,'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',
-    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  insert into public.tms_users(id,email,is_active)
+  values(v_actor,'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',true);
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
 
   insert into public.clients(id,name)
@@ -227,7 +226,7 @@ begin
       raise;
     end if;
   end;
-  v_signature:=public.timesheet_lifecycle_signature_v1(null,v_new_carrier_week,false)->>'row_signature';
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(null,v_new_carrier_week,false)->>'row_signature';
   v_response:=public.timesheet_expense_apply_atomic_v1(
     v_candidate,'TEST',null,v_new_carrier_workflow,1,v_signature,
     v_claim,array[v_new_carrier_component],
