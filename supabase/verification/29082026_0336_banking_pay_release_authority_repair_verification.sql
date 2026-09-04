@@ -17,7 +17,7 @@ BEGIN
       ('public.bulk_authorise_dataset_v1(jsonb)', '930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3'),
       ('public.bulk_process_dataset_v1(jsonb)', 'b8faea3c39aed9d29108bb0dbb9ba8372c50cfff3733796d970b66814020a648'),
       ('public.bulk_timesheet_row_patch_v1(jsonb)', 'adc4f93bb1ef1186bdbb25438566da8f6548a305d61dc229505c075e69128af6'),
-      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', '89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f'),
+      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', 'ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19'),
       ('public.pay_workbench_mark_finance_case_dirty()', '50962ed4c2a7acdbf2a9e38d741d5cb017d56bb1501a92b76b8c980837cd7f08'),
       ('public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)', 'afff514075f85f88642783e6b72db24b64e922b4112274473f67e33c92694d79'),
       ('public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)', '09e28665f4fde5fac02310592c53de7b1cf0336c01a7cec5b182d8e1346666d8'),

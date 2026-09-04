@@ -21,6 +21,8 @@ on:
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
       - 'supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql'
       - 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql'
+      - 'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql'
+      - 'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql'
       - 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
@@ -208,6 +210,8 @@ jobs:
             supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql
             supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql
             supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql
+            supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql
+            supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
 

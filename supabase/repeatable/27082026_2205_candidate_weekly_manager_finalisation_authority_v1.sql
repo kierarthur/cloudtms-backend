@@ -501,7 +501,7 @@ BEGIN
       AND w.state IN ('READY_TO_FINALISE','RECEIVED')
     FOR SHARE;
 
-    IF NOT FOUND OR v_candidate_workflow_kind NOT IN ('CONTRACT_HOURS','CONTRACT_COMBINED') THEN
+    IF NOT FOUND OR v_candidate_workflow_kind NOT IN ('CONTRACT_HOURS','CONTRACT_COMBINED','CONTRACT_EXPENSE') THEN
       RAISE EXCEPTION 'CANDIDATE_FINALISE_WORKFLOW_INVALID' USING ERRCODE='42501';
     END IF;
 
@@ -509,8 +509,10 @@ BEGIN
       CASE WHEN v_current_ts.timesheet_id IS NULL THEN NULL ELSE v_current_ts.timesheet_id END,
       v_week.id
     );
-    IF v_candidate_route_guard->>'route_family' IN ('IMPORT_AUTHORITATIVE','MANUAL_NON_QR')
+    IF (v_candidate_route_guard->>'route_family' IN ('IMPORT_AUTHORITATIVE','MANUAL_NON_QR')
+          AND v_candidate_workflow_kind<>'CONTRACT_EXPENSE')
        OR (v_candidate_workflow_route='ELECTRONIC'
+           AND v_candidate_workflow_kind<>'CONTRACT_EXPENSE'
            AND v_candidate_route_guard->>'route_family'<>'ELECTRONIC')
        OR (v_candidate_workflow_route='PAPER'
            AND NOT COALESCE(

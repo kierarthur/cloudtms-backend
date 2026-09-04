@@ -12,6 +12,7 @@ const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candida
 const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
 const separationDeliveryPath = 'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql';
 const importCarrierFinalisationPath = 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql';
+const weeklyFinalisationPath = 'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
 const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
@@ -51,14 +52,15 @@ test('expense finalisation projects the exact final line type onto new and reuse
     'supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql',
     'supabase/repeatable/26082026_2121_candidate_expense_category_authority_v2.sql',
     'supabase/repeatable/26082026_2225_candidate_expense_finalise_signature_recheck_v3.sql',
-    'supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql'
+    'supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql',
+    'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql'
   ]) assert.match(
     read(sourcePath),
     /v_expense_line_type:=case[\s\S]*mileage_units[\s\S]*then 'MILEAGE'[\s\S]*else 'EXPENSES'[\s\S]*'line_type',v_expense_line_type[\s\S]*p_timesheet_patch_json[\s\S]*jsonb_build_object\(\s*'line_type',v_expense_line_type/i,
     `${sourcePath} must retain the pure-Mileage carrier correction`
   );
   assert.match(read(mileageLineTypeVerifierPath), /begin;[\s\S]*mileage_units',25[\s\S]*line_type','EXPENSES'[\s\S]*timesheet_expense_apply_atomic_v1[\s\S]*v_line_type<>'MILEAGE'[\s\S]*rollback;/i);
-  const installedSuccessor = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
+  const installedSuccessor = read('supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql');
   assert.match(
     installedSuccessor,
     /p_timesheet_create_json[\s\S]*'status','RECEIVED'[\s\S]*'line_type',v_expense_line_type/i,
@@ -68,6 +70,32 @@ test('expense finalisation projects the exact final line type onto new and reuse
     installedSuccessor,
     /p_timesheet_create_json[\s\S]*?'status','SUBMITTED'[\s\S]*?'line_type',v_expense_line_type/i,
     'SUBMITTED is a contract-week state and is invalid for a Timesheet carrier'
+  );
+});
+
+test('electronic expense carriers retain their approved manager projection', () => {
+  const installedSuccessor = read('supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql');
+  const weeklyFinalisation = read(weeklyFinalisationPath);
+  const mileageVerifier = read(mileageLineTypeVerifierPath);
+  assert.match(
+    installedSuccessor,
+    /if not v_is_paper then[\s\S]*manager_signature_component_id[\s\S]*'auth_name',v_workflow\.manager_name[\s\S]*'candidate_manager_approved_at_utc',v_workflow\.manager_approved_at_utc/i
+  );
+  assert.match(
+    installedSuccessor,
+    /when v_is_separate_carrier then jsonb_build_object\([\s\S]*'line_type',v_expense_line_type[\s\S]*\)\|\|v_electronic_patch[\s\S]*p_timesheet_patch_json[\s\S]*\)\|\|v_electronic_patch/i
+  );
+  assert.match(
+    installedSuccessor,
+    /set_config\(\s*'cloudtms\.candidate_electronic_finalise'[\s\S]*v_workflow\.id::text\|\|'\:'\|\|v_workflow\.generation::text/i
+  );
+  assert.match(
+    weeklyFinalisation,
+    /v_candidate_workflow_kind not in \('CONTRACT_HOURS','CONTRACT_COMBINED','CONTRACT_EXPENSE'\)[\s\S]*route_family' in \('IMPORT_AUTHORITATIVE','MANUAL_NON_QR'\)[\s\S]*v_candidate_workflow_kind<>'CONTRACT_EXPENSE'/i
+  );
+  assert.match(
+    mileageVerifier,
+    /target\.submission_mode='MANUAL'[\s\S]*target\.auth_name='Import Mileage Manager'[\s\S]*target\.candidate_manager_approved_at_utc is not null/i
   );
 });
 

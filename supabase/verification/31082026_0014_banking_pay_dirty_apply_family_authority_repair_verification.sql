@@ -54,7 +54,7 @@ BEGIN
       ('public.bulk_process_row_context_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.bulk_timesheet_row_patch_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)'::regprocedure,
-       '89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f'::text,
+       'ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19'::text,
        ARRAY['search_path=public']::text[]),
       ('public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
       ('public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),

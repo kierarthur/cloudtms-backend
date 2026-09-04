@@ -29,6 +29,10 @@ declare
   v_new_carrier_workflow uuid:=gen_random_uuid();
   v_component uuid:=gen_random_uuid();
   v_new_carrier_component uuid:=gen_random_uuid();
+  v_manager_component uuid:=gen_random_uuid();
+  v_new_manager_component uuid:=gen_random_uuid();
+  v_approval_request uuid:=gen_random_uuid();
+  v_new_approval_request uuid:=gen_random_uuid();
   v_claim jsonb;
   v_response jsonb;
   v_signature text;
@@ -139,8 +143,32 @@ begin
     'READY','expense/mileage-final.pdf',decode(repeat('dd',32),'hex'),'application/pdf',
     220,1,decode(repeat('ef',32),'hex'),'MILEAGE_FINAL_TEST_V1','{}'::jsonb,now()
   );
+  insert into public.candidate_approval_requests(
+    id,workflow_id,workflow_generation,request_generation,method,state,
+    review_manifest_sha256,required_component_ids,required_component_manifest_json,
+    manager_review_timesheet_sha256,approved_at_utc
+  ) values(
+    v_approval_request,v_workflow,1,1,'PHONE','APPROVED',decode(repeat('ab',32),'hex'),
+    array[v_component],jsonb_build_array(jsonb_build_object('component_id',v_component)),
+    decode(repeat('ab',32),'hex'),now()
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,component_kind,document_role,state,
+    approval_request_id,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,
+    required,review_render_state,final_signed_render_state
+  ) values(
+    v_manager_component,v_workflow,1,2,'MANAGER_SIGNATURE','MANAGER_SIGNATURE','IMMUTABLE',
+    v_approval_request,'expense/manager-signature.png','image/png',100,
+    decode(repeat('bc',32),'hex'),now(),false,'NOT_REQUIRED','NOT_REQUIRED'
+  );
+  update public.candidate_submission_workflows set
+    manager_name='Mileage Test Manager',manager_position='Service Manager',
+    manager_signature_component_id=v_manager_component,
+    manager_signature_sha256=decode(repeat('bc',32),'hex')
+  where id=v_workflow;
 
   perform set_config('cloudtms.candidate_finalize_workflow',v_workflow::text||':1',true);
+  perform set_config('cloudtms.candidate_electronic_finalise',v_workflow::text||':1',true);
   v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_timesheet,v_week,false)->>'row_signature';
   v_response:=public.timesheet_expense_apply_atomic_v1(
     v_candidate,'TEST',v_timesheet,v_workflow,1,v_signature,
@@ -208,8 +236,32 @@ begin
     'READY','expense/new-mileage-final.pdf',decode(repeat('af',32),'hex'),'application/pdf',
     220,1,decode(repeat('ae',32),'hex'),'MILEAGE_FINAL_TEST_V1','{}'::jsonb,now()
   );
+  insert into public.candidate_approval_requests(
+    id,workflow_id,workflow_generation,request_generation,method,state,
+    review_manifest_sha256,required_component_ids,required_component_manifest_json,
+    manager_review_timesheet_sha256,approved_at_utc
+  ) values(
+    v_new_approval_request,v_new_carrier_workflow,1,1,'PHONE','APPROVED',decode(repeat('ad',32),'hex'),
+    array[v_new_carrier_component],jsonb_build_array(jsonb_build_object('component_id',v_new_carrier_component)),
+    decode(repeat('ad',32),'hex'),now()
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,component_kind,document_role,state,
+    approval_request_id,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,
+    required,review_render_state,final_signed_render_state
+  ) values(
+    v_new_manager_component,v_new_carrier_workflow,1,2,'MANAGER_SIGNATURE','MANAGER_SIGNATURE','IMMUTABLE',
+    v_new_approval_request,'expense/new-manager-signature.png','image/png',100,
+    decode(repeat('bd',32),'hex'),now(),false,'NOT_REQUIRED','NOT_REQUIRED'
+  );
+  update public.candidate_submission_workflows set
+    manager_name='Import Mileage Manager',manager_position='Service Manager',
+    manager_signature_component_id=v_new_manager_component,
+    manager_signature_sha256=decode(repeat('bd',32),'hex')
+  where id=v_new_carrier_workflow;
 
   perform set_config('cloudtms.candidate_finalize_workflow',v_new_carrier_workflow::text||':1',true);
+  perform set_config('cloudtms.candidate_electronic_finalise',v_new_carrier_workflow::text||':1',true);
   if coalesce((private._candidate_import_authoritative_v1(
        v_client,v_contract,null,v_claim->'canonical_tsfin_snapshot',current_date
      )->>'is_import_authoritative')::boolean,false)=false then
@@ -256,6 +308,14 @@ begin
        select 1 from public.timesheets target
        where target.timesheet_id=v_new_target
          and target.line_type='MILEAGE' and target.status='RECEIVED'
+         and target.submission_mode='MANUAL'
+         and target.auth_name='Import Mileage Manager'
+         and target.auth_job_title='Service Manager'
+         and target.r2_auth_key='expense/new-manager-signature.png'
+         and target.img_sha256_auth=encode(decode(repeat('bd',32),'hex'),'hex')
+         and target.candidate_workflow_id=v_new_carrier_workflow
+         and target.candidate_workflow_generation=1
+         and target.candidate_manager_approved_at_utc is not null
          and target.is_current=true
      )
      or (select timesheet_id from public.contract_weeks where id=v_new_carrier_week)

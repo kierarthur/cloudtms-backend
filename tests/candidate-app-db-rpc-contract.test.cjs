@@ -26,7 +26,7 @@ const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
-const latestExpenseApply = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
+const latestExpenseApply = read('supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql');
 const latestExpenseCarrierAnchor = read(
   'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
 );
@@ -35,6 +35,9 @@ const latestWeeklyFinalisation = read(
 );
 const bankingReleaseAuthority = read(
   'supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql'
+);
+const expenseCarrierManagerProjection = read(
+  'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql'
 );
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 const candidateRuntimeFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
@@ -45,7 +48,7 @@ const refusedCardRecovery = read(
   'supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql'
 );
 
-test('Candidate runtime gate finishes with every current 2 September authority', () => {
+test('Candidate runtime gate finishes with every current 4 September authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
   assert.ok(
     candidateRuntimeWorkflow.indexOf(`apply_sql ${fixturePath}`) < candidateRuntimeWorkflow.indexOf('install_files=('),
@@ -135,13 +138,15 @@ test('Candidate runtime gate finishes with every current 2 September authority',
     'repeatable/03092026_1641_contract_settings_effective_authority_v1.sql',
     'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
   ]);
-  assert.deepEqual(installPaths.slice(-6), [
-    'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
+  assert.deepEqual(installPaths.slice(-8), [
     breakAuthority,
     'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
     'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
     settingsAuthorityBarrier,
     qrRefuseServiceAcl,
+    'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql',
+    'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql',
+    'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql',
   ]);
 
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
@@ -166,11 +171,16 @@ function exactFunctionDefinition(source, qualifiedName) {
   return match[0];
 }
 
-test('focused Candidate finalisation owner remains identical to the later Banking composite owner', () => {
+test('focused Candidate expense finalisation successor follows the historical Banking composite owner', () => {
   const qualifiedName = 'public.contract_week_manual_upsert_atomic';
-  assert.equal(
+  assert.notEqual(
     exactFunctionDefinition(latestWeeklyFinalisation, qualifiedName),
     exactFunctionDefinition(bankingReleaseAuthority, qualifiedName)
+  );
+  assert.match(latestWeeklyFinalisation, /'CONTRACT_HOURS','CONTRACT_COMBINED','CONTRACT_EXPENSE'/i);
+  assert.match(
+    expenseCarrierManagerProjection,
+    /\\ir 27082026_2205_candidate_weekly_manager_finalisation_authority_v1\.sql/i
   );
 
   const serviceOnlyAcl = /revoke all on function public\.contract_week_manual_upsert_atomic\(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb\) from public,\s*anon,\s*authenticated(?:,\s*service_role)?;\s*grant execute on function public\.contract_week_manual_upsert_atomic\(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb\) to service_role;/i;
