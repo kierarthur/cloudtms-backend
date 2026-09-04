@@ -11,6 +11,7 @@ const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carr
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
 const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
 const separationDeliveryPath = 'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql';
+const importCarrierFinalisationPath = 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
 const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
@@ -72,6 +73,7 @@ test('expense finalisation projects the exact final line type onto new and reuse
 
 test('an additional expense carrier stays expense-only on an import-authoritative Client', () => {
   const separationDelivery = read(separationDeliveryPath);
+  const finalisation = read(importCarrierFinalisationPath);
   const roleClassifier = separationDelivery.match(/if v_protected then v_role:='PROTECTED'[\s\S]*?else v_role:='HOURS_ONLY';\s*end if;/i)?.[0] || '';
   assert.match(
     roleClassifier,
@@ -80,6 +82,22 @@ test('an additional expense carrier stays expense-only on an import-authoritativ
   assert.ok(
     roleClassifier.indexOf("v_role:='EXPENSE_ONLY'") < roleClassifier.indexOf("v_import and v_expenses<>0"),
     'the explicit expense-carrier identity must be recognised before an inherited import route is treated as mixed-source data'
+  );
+  assert.match(
+    finalisation,
+    /current_setting\('cloudtms\.candidate_finalize_workflow',true\)[\s\S]*workflow_kind='CONTRACT_EXPENSE'[\s\S]*workflow\.contract_week_id=p_contract_week_id[\s\S]*workflow\.anchor_timesheet_id is distinct from p_timesheet_id/i
+  );
+  assert.match(
+    finalisation,
+    /when v_candidate_expense_carrier then 'EXPENSE_ONLY'[\s\S]*when v_import then 'IMPORT_HOURS'/i
+  );
+  assert.match(
+    finalisation,
+    /WORKFLOW_CARRIER_RESERVED[\s\S]*target_contract_week_id',v_bound_week\.id/i
+  );
+  assert.match(
+    read(mileageLineTypeVerifierPath),
+    /set is_nhsp=true[\s\S]*is_import_authoritative[\s\S]*Import hours accepted expense economics[\s\S]*HOURS_AND_EXPENSES_REQUIRE_SEPARATE_TIMESHEETS[\s\S]*timesheet_expense_apply_atomic_v1[\s\S]*new Mileage carrier materialisation verification failed/i
   );
 });
 

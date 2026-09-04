@@ -342,6 +342,26 @@ begin
          where candidate_id=v_candidate)<>2 then
     raise exception 'QR-backed expense creation changed Timesheet financial authority';
   end if;
+
+  -- Once the electronic workflow is manager-approved, finalisation must reuse
+  -- the exact carrier it reserved before approval. This remains true after the
+  -- Client becomes import-authoritative; no extra empty carrier may be created.
+  update public.client_settings set is_nhsp=true where client_id=v_client;
+  update public.candidate_submission_workflows
+  set state='READY_TO_FINALISE',manager_approved_at_utc=now(),updated_at_utc=now()
+  where id=v_workflow;
+  v_replayed:=public.expense_carrier_resolve_or_create_atomic_v1(
+    v_candidate,'TEST',v_anchor_timesheet,null,
+    'carrier-route:finalise-reserved-carrier',now()
+  );
+  if v_replayed->>'placement'<>'REUSE_CARRIER'
+     or v_replayed->>'reason_code'<>'WORKFLOW_CARRIER_RESERVED'
+     or (v_replayed->>'target_contract_week_id')::uuid is distinct from v_carrier_week
+     or nullif(v_replayed->>'target_timesheet_id','') is not null
+     or (select count(*) from public.contract_weeks
+         where contract_id=v_contract and week_ending_date=current_date)<>2 then
+    raise exception 'Finalisation did not reuse its reserved import expense carrier: %',v_replayed;
+  end if;
 end;
 $verification$;
 

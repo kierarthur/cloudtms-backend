@@ -21,7 +21,9 @@ declare
   v_contract uuid:=gen_random_uuid();
   v_week uuid:=gen_random_uuid();
   v_new_carrier_week uuid:=gen_random_uuid();
+  v_import_week uuid:=gen_random_uuid();
   v_timesheet uuid:=gen_random_uuid();
+  v_import_timesheet uuid:=gen_random_uuid();
   v_account uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
   v_new_carrier_workflow uuid:=gen_random_uuid();
@@ -142,6 +144,15 @@ begin
   set state='FINALISED',finalised_at_utc=now(),updated_at_utc=now()
   where id=v_workflow;
 
+  -- The second carrier deliberately inherits an NHSP/import-authoritative
+  -- Client. The separate zero-hour Mileage row must still materialise, while
+  -- the source imported-hours row remains protected by the exact workflow
+  -- and line-type boundary in the final-state guard.
+  update public.client_settings
+  set is_nhsp=true,
+      candidate_expense_invoice_email='expenses@example.test'
+  where client_id=v_client;
+
   -- The real Candidate route begins with an authoritative worked Timesheet and
   -- a reserved additional Contract week that has no Timesheet yet. Exercise
   -- that first-use materialisation so an invalid Contract-week status cannot
@@ -184,6 +195,38 @@ begin
   );
 
   perform set_config('cloudtms.candidate_finalize_workflow',v_new_carrier_workflow::text||':1',true);
+  if coalesce((private._candidate_import_authoritative_v1(
+       v_client,v_contract,null,v_claim->'canonical_tsfin_snapshot',current_date
+     )->>'is_import_authoritative')::boolean,false)=false then
+    raise exception 'Mileage carrier fixture is not import-authoritative';
+  end if;
+  insert into public.timesheets(
+    timesheet_id,booking_id,contract_id,week_ending_date,
+    occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    line_type,submission_mode,sheet_scope
+  ) values(
+    v_import_timesheet,'MILEAGE-IMPORT-HOURS-'||replace(v_import_timesheet::text,'-',''),
+    v_contract,current_date,'candidate','test hospital','test ward','test role',
+    'HOURS','MANUAL','WEEKLY'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,
+    submission_mode_snapshot,timesheet_id
+  ) values(v_import_week,v_contract,current_date,3,'AUTHORISED','MANUAL',v_import_timesheet);
+  insert into public.timesheets_financials(
+    timesheet_id,timesheet_version,candidate_id,client_id,basis,total_hours,processing_status
+  ) values(v_import_timesheet,1,v_candidate,v_client,'NHSP',8,'READY_FOR_INVOICE');
+  begin
+    v_response:=private._candidate_weekly_final_state_guard_v1(
+      v_import_week,v_import_timesheet,null,jsonb_build_object('line_type','MILEAGE'),
+      v_claim->'canonical_tsfin_snapshot'
+    );
+    raise exception 'Import hours accepted expense economics: %',v_response;
+  exception when sqlstate '22023' then
+    if sqlerrm<>'HOURS_AND_EXPENSES_REQUIRE_SEPARATE_TIMESHEETS' then
+      raise;
+    end if;
+  end;
   v_signature:=public.timesheet_lifecycle_signature_v1(null,v_new_carrier_week,false)->>'row_signature';
   v_response:=public.timesheet_expense_apply_atomic_v1(
     v_candidate,'TEST',null,v_new_carrier_workflow,1,v_signature,
