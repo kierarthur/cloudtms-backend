@@ -62,6 +62,15 @@ test('Candidate runtime gate finishes with every current 2 September authority',
       `Candidate compile fixture contracts table is missing ${column}`
     );
   }
+  const fixtureFinancials = candidateRuntimeFixture.match(
+    /create\s+table\s+public\.timesheets_financials\s*\(([\s\S]*?)\n\);/i
+  )?.[1];
+  assert.ok(fixtureFinancials, 'Candidate compile fixture Timesheet financials table is missing');
+  assert.match(
+    fixtureFinancials,
+    /\bprocessed_at_utc\s+timestamptz(?:\s|,|$)/i,
+    'Candidate compile fixture must expose the real Daily processing boundary'
+  );
 
   const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
@@ -69,6 +78,7 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
   const settingsAuthorityMigration = 'supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql';
   const settingsCanvasRepair = 'supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql';
+  const settingsProcessedDailyOriginRepair = 'supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql';
   const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
   const settingsAuthorityBarrier = 'supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql';
   const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
@@ -79,6 +89,7 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
   assert.ok(installPaths.includes(settingsAuthorityMigration), 'settings-authority schema migration is missing');
   assert.ok(installPaths.includes(settingsCanvasRepair), 'historical missing Client settings repair is missing');
+  assert.ok(installPaths.includes(settingsProcessedDailyOriginRepair), 'processed Daily Client settings origin repair is missing');
   assert.ok(helperIndex >= 0, 'break-entry precedence helper owner is missing');
   assert.ok(migrationIndex < firstRepeatableIndex, 'break-entry schema must be installed before every repeatable');
   assert.ok(migrationIndex < helperIndex, 'break-entry schema must precede its helper owner');
@@ -92,8 +103,9 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   );
   assert.ok(
     installPaths.indexOf(settingsAuthorityMigration) < installPaths.indexOf(settingsCanvasRepair)
-      && installPaths.indexOf(settingsCanvasRepair) < installPaths.indexOf(settingsAuthorityConsumer),
-    'historical Client settings canvases must be repaired after the schema and before resolver consumers'
+      && installPaths.indexOf(settingsCanvasRepair) < installPaths.indexOf(settingsProcessedDailyOriginRepair)
+      && installPaths.indexOf(settingsProcessedDailyOriginRepair) < installPaths.indexOf(settingsAuthorityConsumer),
+    'historical Client settings origins must be repaired after the schema and before resolver consumers'
   );
   assert.ok(installPaths.includes(settingsAuthorityBarrier), 'frozen-settings evaluation barrier is missing');
   assert.ok(

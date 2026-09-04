@@ -7,6 +7,7 @@ const invoiceAsyncHttp = readFileSync(new URL('../broker/src/invoice-async-http.
 const wrangler = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
 const migration = readFileSync(new URL('../supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql', import.meta.url), 'utf8');
 const missingSettingsCanvasRepair = readFileSync(new URL('../supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql', import.meta.url), 'utf8');
+const processedDailyOriginRepair = readFileSync(new URL('../supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql', import.meta.url), 'utf8');
 const resolver = readFileSync(new URL('../supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql', import.meta.url), 'utf8');
 const invoiceCore = readFileSync(new URL('../supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql', import.meta.url), 'utf8');
 const invoiceResolver = readFileSync(new URL('../supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql', import.meta.url), 'utf8');
@@ -94,6 +95,16 @@ test('historical Clients missing their settings canvas receive current safe defa
   assert.match(missingSettingsCanvasRepair, /candidate_paper_submission_enabled[\s\S]*?true/);
   assert.doesNotMatch(missingSettingsCanvasRepair, /update public\.client_settings|delete from public\.client_settings/i);
   assert.doesNotMatch(missingSettingsCanvasRepair, /total_pay|pay_method|settle|provider|Policy\.X/i);
+});
+
+test('processed Daily rows without a Contract can resolve the first historical Client settings canvas', () => {
+  assert.match(processedDailyOriginRepair, /t\.sheet_scope='DAILY'::public\.timesheet_scope_enum/);
+  assert.match(processedDailyOriginRepair, /tf\.processed_at_utc is not null/);
+  assert.match(processedDailyOriginRepair, /t\.settings_authority_json='\{\}'::jsonb/);
+  assert.match(processedDailyOriginRepair, /set effective_from=pdo\.earliest_processed_daily_date/);
+  assert.match(processedDailyOriginRepair, /CLIENT_SETTINGS_PROCESSED_DAILY_ORIGIN_REPAIR_INCOMPLETE/);
+  assert.doesNotMatch(processedDailyOriginRepair, /update public\.(?:timesheets|timesheets_financials)|delete from|insert into/i);
+  assert.doesNotMatch(processedDailyOriginRepair, /total_pay|pay_method|settle|provider|Policy\.X/i);
 });
 
 test('invoice consumers use each real Timesheet frozen authority, not current Client or Contract settings', () => {

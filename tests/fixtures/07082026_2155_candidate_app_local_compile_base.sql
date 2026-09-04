@@ -463,6 +463,7 @@ create table public.timesheets_financials (
   rate_source_refs_json jsonb not null default '{}'::jsonb,
   processing_status public.ts_fin_processing_status_enum not null default 'UNASSIGNED',
   computed_at_utc timestamptz,
+  processed_at_utc timestamptz,
   updated_at timestamptz not null default now(),
   worked_start_iso timestamptz,
   worked_end_iso timestamptz,

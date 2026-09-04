@@ -847,6 +847,10 @@
       "sha256": "33e4bf4b3aa5e87323bcff5c5f3b10552f3661cefa0de71270928b539c016979"
     },
     {
+      "path": "supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql",
+      "sha256": "bc9a5ddb2e30996fda8a5abd6852f180dd035a9efba86e1de9213c3dd5ca71d7"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
