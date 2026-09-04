@@ -220,6 +220,40 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       'revoke all on function private.example() from PUBLIC, supabase_admin;',
     );
     assert.equal(
+      mapLogicalPostgresOwnerSql('revoke all on function public.example()\n  from PUBLIC, authenticated, authenticator, service_role;'),
+      'revoke all on function public.example()\n  from PUBLIC, authenticated, service_role;',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql("select ', authenticator,'::text;"),
+      "select ', authenticator,'::text;",
+      'provider role mapping must not rewrite function bodies or data',
+    );
+    const current = inventory();
+    const authorityPaths = new Set([
+      ...current.migrations.map(item => item.path),
+      ...current.repeatables.flatMap(item => item.paths),
+    ]);
+    const aclRoles = new Set();
+    for (const relative of authorityPaths) {
+      const source = read(relative);
+      for (const match of source.matchAll(/^\s*(?:grant|revoke)\b[^;]*?\b(?:to|from)\s+([^;]+);/gim)) {
+        for (const rawRole of match[1].replace(/\s+with\s+grant\s+option\s*$/i, '').split(',')) {
+          const role = rawRole.trim().replace(/^"|"$/g, '').toLowerCase();
+          if (/^[a-z_][a-z0-9_]*$/.test(role)) aclRoles.add(role);
+        }
+      }
+      assert.doesNotMatch(
+        mapLogicalPostgresOwnerSql(source),
+        /^\s*(?:grant|revoke)\b[^;]*\bauthenticator\b[^;]*;/im,
+        `Miget executable ACL still names absent authenticator role: ${relative}`,
+      );
+    }
+    assert.deepEqual(
+      [...aclRoles].sort(),
+      ['anon', 'authenticated', 'authenticator', 'postgres', 'public', 'service_role', 'supabase_admin'],
+      'all authored migration/repeatable ACL roles must remain explicitly inventoried',
+    );
+    assert.equal(
       mapLogicalPostgresOwnerSql("SET plpgsql_check.mode TO 'disabled'\nSET search_path = ''\nselect 1;"),
       "SET search_path = ''\nselect 1;",
     );

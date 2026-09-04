@@ -9,6 +9,12 @@ export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 
 let logicalOwnerSqlRoot;
 
+function omitAbsentMigetAuthenticatorFromRevokes(source) {
+  return String(source).replace(/^[ \t]*revoke\b[^;]*;/gim, statement =>
+    statement.replace(/,\s*authenticator(?=\s*[,;])/gi, '')
+  );
+}
+
 export function mapLogicalPostgresOwnerSql(source) {
   const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
   if (!mode) return source;
@@ -17,7 +23,7 @@ export function mapLogicalPostgresOwnerSql(source) {
   }
   const diagnosticParameter = String.raw`(?:"plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)"|plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors))`;
   const diagnosticValue = String.raw`(?:'disabled'|'off')`;
-  return String(source)
+  const mapped = String(source)
     .replace(/\bowner\s+to\s+(?:"postgres"|postgres)(?=\s*;)/gi, 'OWNER TO CURRENT_USER')
     .replace(
       /\balter\s+default\s+privileges\s+for\s+role\s+(?:"postgres"|postgres)/gi,
@@ -36,13 +42,18 @@ export function mapLogicalPostgresOwnerSql(source) {
       new RegExp(`^[ \\t]*SET[ \\t]+${diagnosticParameter}[ \\t]+(?:TO|=)[ \\t]+${diagnosticValue}[ \\t]*;?[ \\t]*(?:\\r?\\n|$)`, 'gim'),
       '',
     );
+  // `authenticator` is a Supabase connection-pool role and is intentionally
+  // absent on Miget. Keep the canonical cross-provider ACL in Git, but omit
+  // only that missing grantee from REVOKE statements in Miget's executable
+  // owner-mapped tree. PUBLIC and every real browser/service role remain
+  // explicitly revoked exactly as authored.
+  return omitAbsentMigetAuthenticatorFromRevokes(mapped);
 }
 
 export function mapGeneratedAclBaselineSql(source) {
   return mapLogicalPostgresOwnerSql(source)
     .replace(/"postgres"/g, 'CURRENT_USER')
-    .replace(/^grant EXECUTE on function public\.cloudtms_data_api_mfa_gate\(\) to "authenticator";\r?\n/gm, '')
-    .replace(/,\s*authenticator(?=\s*[,;])/g, '');
+    .replace(/^grant EXECUTE on function public\.cloudtms_data_api_mfa_gate\(\) to "authenticator";\r?\n/gm, '');
 }
 
 const DEADLOCK_RETRY_SAFE_FILES = new Map([
