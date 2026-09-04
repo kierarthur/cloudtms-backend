@@ -8,11 +8,11 @@ select exists (
 \gset
 
 \if :invoice_presentation_active_work
-do $deferred$
+do $blocked$
 begin
-  raise notice 'INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK';
+  raise exception 'INVOICE_PRESENTATION_SNAPSHOT_ACTIVE_WORK';
 end;
-$deferred$;
+$blocked$;
 \else
 
 create or replace function private._invoice_presentation_snapshot_batch(

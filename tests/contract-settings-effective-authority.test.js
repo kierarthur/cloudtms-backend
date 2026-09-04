@@ -139,6 +139,14 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
   assert.match(invoiceGenerationFinal, /grant execute on function private\._invoice_generation_advance_core_v8\(jsonb,timestamptz\)[\s\S]*?to postgres, service_role/);
 });
 
+test('invoice presentation release fails closed instead of certifying a deferred definition', () => {
+  assert.match(invoicePresentation, /invoice_presentation_active_work/);
+  assert.match(invoicePresentation, /raise exception 'INVOICE_PRESENTATION_SNAPSHOT_ACTIVE_WORK'/);
+  assert.doesNotMatch(invoicePresentation, /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK|raise notice/);
+  assert.match(invoicePresentation, /_timesheet_settings_authority_frozen_v1/);
+  assert.doesNotMatch(invoicePresentation, /from public\.client_settings/);
+});
+
 test('Office summaries resolve planned and unprocessed Daily rows live but invoices require frozen Timesheet authority', () => {
   assert.match(timesheetSummary, /_contract_settings_effective_core_v1/);
   assert.match(timesheetSummary, /cw\.settings_authority_json IS NULL OR cw\.settings_authority_json='\{\}'::jsonb/);

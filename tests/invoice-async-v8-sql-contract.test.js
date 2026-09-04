@@ -1280,7 +1280,7 @@ test('merge and verify processor contexts carry frozen document identity', () =>
   assert.match(verifyContext, /'template_version',v\.template_version/);
 });
 
-test('presentation authority repeatable defers safely instead of failing CI while work is active', () => {
+test('presentation snapshot replacement fails closed while the broader runtime cutover may defer', () => {
   const presentationSnapshot = read(
     'supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql',
   );
@@ -1291,16 +1291,13 @@ test('presentation authority repeatable defers safely instead of failing CI whil
   assert.match(presentationSnapshot, /\\if :invoice_presentation_active_work/i);
   assert.match(
     presentationSnapshot,
-    /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK/i,
+    /raise exception 'INVOICE_PRESENTATION_SNAPSHOT_ACTIVE_WORK'/i,
   );
   assert.match(
     presentationSnapshot,
     /from public\.invoice_operation_chunks[\s\S]*status in \('QUEUED','RUNNING','WAITING','RETRY_WAIT'\)/i,
   );
-  assert.doesNotMatch(
-    presentationSnapshot,
-    /invoice_presentation_active_work[\s\S]{0,240}'BLOCKED'/i,
-  );
+  assert.doesNotMatch(presentationSnapshot, /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK/i);
   assert.match(presentationAuthority, /\\gset/i);
   assert.match(presentationAuthority, /\\if :invoice_presentation_active_work/i);
   assert.match(
