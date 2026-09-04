@@ -21,12 +21,14 @@ test('PAPER evidence uses the exact server manifest display name with non-paper 
   assert.doesNotMatch(successor, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
-test('the complete successor changes only the QR manifest label expression', () => {
+test('the complete successor changes only the QR manifest label expression and valid carrier start state', () => {
   const predecessorBody = predecessor.slice(predecessor.indexOf('\\set ON_ERROR_STOP on'));
-  const expectedBody = predecessorBody.replace(
-    "v_target_timesheet_id,v_kind,coalesce(nullif(v_claim->>'evidence_display_name',''),'Candidate submission evidence'),",
-    "v_target_timesheet_id,v_kind,coalesce(\n        case when v_is_paper then nullif(v_paper_page->>'display_name','') end,\n        nullif(v_claim->>'evidence_display_name',''),\n        'Candidate submission evidence'\n      ),"
-  );
+  const expectedBody = predecessorBody
+    .replace(
+      "v_target_timesheet_id,v_kind,coalesce(nullif(v_claim->>'evidence_display_name',''),'Candidate submission evidence'),",
+      "v_target_timesheet_id,v_kind,coalesce(\n        case when v_is_paper then nullif(v_paper_page->>'display_name','') end,\n        nullif(v_claim->>'evidence_display_name',''),\n        'Candidate submission evidence'\n      ),"
+    )
+    .replace("'status','SUBMITTED'", "'status','RECEIVED'");
   assert.notEqual(expectedBody, predecessorBody);
   assert.equal(successor.slice(successor.indexOf('\\set ON_ERROR_STOP on')), expectedBody);
 });

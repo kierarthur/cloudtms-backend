@@ -5017,9 +5017,15 @@ async function resolveWorkflowSession(env, workflow) {
 }
 
 async function lifecycleSignature(deps, workflow) {
+  const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id || null;
   const result = await rpcCall(deps, 'timesheet_lifecycle_signature_v1', {
-    p_timesheet_id: workflow.target_timesheet_id || workflow.anchor_timesheet_id,
-    p_contract_week_id: workflow.contract_week_id || null,
+    p_timesheet_id: timesheetId,
+    // A standalone expense workflow can be anchored to an authoritative hours
+    // Timesheet while its own contract_week_id names the unmaterialised expense
+    // carrier. Supplying both mismatched identities creates a signature that no
+    // canonical carrier resolver can accept. When a Timesheet is known, let the
+    // lifecycle authority resolve its own matching contract week.
+    p_contract_week_id: timesheetId ? null : workflow.contract_week_id || null,
     p_include_payload: false
   });
   return text(result?.backend_row_signature || result?.mutation_row_signature || result?.row_signature || result?.expected_row_signature);
@@ -8924,6 +8930,7 @@ export const candidateAppBackendInternals = Object.freeze({
   renderExpensePage,
   validateComponentBytes,
   renderContracts,
+  lifecycleSignature,
   routeMatch,
   officeErrorCode,
   knownErrorCode,

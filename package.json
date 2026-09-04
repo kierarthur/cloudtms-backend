@@ -23,6 +23,8 @@
     "db:lock:update": "node scripts/cloudtms-db-release.mjs lock:update",
     "db:contract:export": "node scripts/cloudtms-db-release.mjs export-contract --output=supabase/release/current-contract.json",
     "db:contract:verify": "node scripts/cloudtms-db-release.mjs compare-contract --expected=supabase/release/current-contract.json",
+    "db:contract:seal-local": "node scripts/seal-local-database-contract.mjs",
+    "db:contract:coupling": "node scripts/verify-database-contract-coupling.mjs",
     "db:plan": "node scripts/cloudtms-db-release.mjs plan",
     "db:apply": "node scripts/cloudtms-db-release.mjs apply",
     "dev": "wrangler dev",

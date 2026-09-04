@@ -20,14 +20,18 @@ declare
   v_candidate uuid:=gen_random_uuid();
   v_contract uuid:=gen_random_uuid();
   v_week uuid:=gen_random_uuid();
+  v_new_carrier_week uuid:=gen_random_uuid();
   v_timesheet uuid:=gen_random_uuid();
   v_account uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
+  v_new_carrier_workflow uuid:=gen_random_uuid();
   v_component uuid:=gen_random_uuid();
+  v_new_carrier_component uuid:=gen_random_uuid();
   v_claim jsonb;
   v_response jsonb;
   v_signature text;
   v_line_type text;
+  v_new_target uuid;
 begin
   insert into public.tms_users(id,email,password_hash,role,is_active)
   values(v_actor,'mileage-line-type-actor-'||replace(v_actor::text,'-','')||'@example.test',
@@ -36,6 +40,10 @@ begin
 
   insert into public.clients(id,name)
   values(v_client,'Mileage line type verification client');
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,
+    candidate_expenses_require_separate_timesheet
+  ) values(gen_random_uuid(),v_client,current_date-30,'ELECTRONIC',true);
   insert into public.candidates(id,email,active)
   values(v_candidate,'mileage-line-type-'||replace(v_candidate::text,'-','')||'@example.test',true);
   insert into public.contracts(
@@ -122,6 +130,69 @@ begin
   from public.timesheets where timesheet_id=v_timesheet and is_current=true;
   if not coalesce((v_response->>'ok')::boolean,false) or v_line_type<>'MILEAGE' then
     raise exception 'pure mileage carrier line type verification failed';
+  end if;
+
+  -- The real Candidate route begins with an authoritative worked Timesheet and
+  -- a reserved additional Contract week that has no Timesheet yet. Exercise
+  -- that first-use materialisation so an invalid Contract-week status cannot
+  -- be passed into the Timesheet enum, and ensure an inherited import route
+  -- cannot misclassify the explicit zero-hour Mileage carrier as mixed data.
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot
+  ) values(v_new_carrier_week,v_contract,current_date,2,'OPEN','MANUAL');
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    policy_snapshot_json,input_snapshot_json,idempotency_key,manager_approved_at_utc,
+    immutable_submission_json,immutable_submission_sha256
+  ) values(
+    v_new_carrier_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY','PHONE',
+    'READY_TO_FINALISE',1,v_contract,v_new_carrier_week,v_timesheet,null,current_date,
+    '{}'::jsonb,'{}'::jsonb,'mileage-new-carrier-workflow-'||v_new_carrier_workflow::text,now(),
+    v_claim,private._candidate_sha256_jsonb_v1(v_claim)
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,review_ordinal,timesheet_id,component_kind,
+    expense_category,document_role,required,state,storage_key,media_type,byte_size,
+    source_content_sha256,immutable_at_utc,
+    review_render_state,review_storage_key,review_content_sha256,review_media_type,
+    review_byte_size,review_page_count,review_render_input_sha256,
+    review_renderer_contract_version,review_renderer_receipt_json,review_generated_at_utc,
+    final_signed_render_state,final_signed_storage_key,final_signed_content_sha256,
+    final_signed_media_type,final_signed_byte_size,final_signed_page_count,
+    final_signed_render_input_sha256,final_signed_renderer_contract_version,
+    final_signed_renderer_receipt_json,final_signed_generated_at_utc
+  ) values(
+    v_new_carrier_component,v_new_carrier_workflow,1,1,1,v_timesheet,
+    'MILEAGE_FORM','MILEAGE','MILEAGE_CLAIM_FORM',true,'IMMUTABLE',
+    'expense/new-mileage-source.jpg','image/jpeg',100,decode(repeat('ac',32),'hex'),now(),
+    'READY','expense/new-mileage-review.pdf',decode(repeat('ad',32),'hex'),'application/pdf',
+    200,1,decode(repeat('ae',32),'hex'),'MILEAGE_REVIEW_TEST_V1','{}'::jsonb,now(),
+    'READY','expense/new-mileage-final.pdf',decode(repeat('af',32),'hex'),'application/pdf',
+    220,1,decode(repeat('ae',32),'hex'),'MILEAGE_FINAL_TEST_V1','{}'::jsonb,now()
+  );
+
+  perform set_config('cloudtms.candidate_finalize_workflow',v_new_carrier_workflow::text||':1',true);
+  v_signature:=public.timesheet_lifecycle_signature_v1(v_timesheet,null,false)->>'row_signature';
+  v_response:=public.timesheet_expense_apply_atomic_v1(
+    v_candidate,'TEST',null,v_new_carrier_workflow,1,v_signature,
+    v_claim,array[v_new_carrier_component],
+    'mileage-new-carrier-apply-'||v_new_carrier_workflow::text,now()
+  );
+  v_new_target:=nullif(v_response->>'target_timesheet_id','')::uuid;
+  if not coalesce((v_response->>'ok')::boolean,false)
+     or v_new_target is null or v_new_target=v_timesheet
+     or v_response#>>'{capabilities,record_role}'<>'EXPENSE_ONLY'
+     or not exists(
+       select 1 from public.timesheets target
+       where target.timesheet_id=v_new_target
+         and target.line_type='MILEAGE' and target.status='RECEIVED'
+         and target.is_current=true
+     )
+     or (select timesheet_id from public.contract_weeks where id=v_new_carrier_week)
+       is distinct from v_new_target then
+    raise exception 'new Mileage carrier materialisation verification failed: %',v_response;
   end if;
 end;
 $verification$;

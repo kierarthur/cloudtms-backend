@@ -348,7 +348,7 @@ begin
           'booking_id','CANDIDATE-EXPENSE-'||replace(v_week.id::text,'-',''),
           'contract_id',v_week.contract_id,
           'week_ending_date',v_week.week_ending_date,
-          'status','SUBMITTED',
+          'status','RECEIVED',
           'submission_mode','MANUAL',
           'sheet_scope','WEEKLY',
           'line_type',v_expense_line_type,

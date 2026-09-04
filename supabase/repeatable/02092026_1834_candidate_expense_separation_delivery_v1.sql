@@ -220,6 +220,11 @@ begin
   ) into v_has_active_submission_workflow;
 
   if v_protected then v_role:='PROTECTED'; v_reasons:=v_reasons||'"LIFECYCLE_PROTECTED"'::jsonb;
+  -- An additional expense carrier remains expense-only even when its Client
+  -- inherits an import-authoritative route. Only an imported hours record that
+  -- has also acquired expenses is a mixed-source conflict.
+  elsif v_timesheet.line_type in ('EXPENSES','MILEAGE')
+     and v_expenses<>0 and v_hours=0 and v_additional=0 then v_role:='EXPENSE_ONLY';
   elsif v_import and v_expenses<>0 then v_role:='CONFLICT'; v_reasons:=v_reasons||'"IMPORT_SOURCE_HAS_EXPENSES"'::jsonb;
   elsif v_import then v_role:='IMPORT_HOURS'; v_reasons:=v_reasons||'"IMPORT_AUTHORITATIVE_HOURS"'::jsonb;
   elsif v_separate and (v_hours<>0 or v_additional<>0) and v_expenses<>0 then v_role:='CONFLICT'; v_reasons:=v_reasons||'"SEPARATION_MIXED_ECONOMICS"'::jsonb;

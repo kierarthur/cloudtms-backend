@@ -116,8 +116,31 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /--lockfile=\.\/package-lock\.json/);
   assert.match(workflow, /npm run security:dependencies/);
   assert.match(workflow, /npm run security:secrets/);
+  assert.match(workflow, /fetch-depth:\s*2/);
+  assert.match(workflow, /npm run db:contract:coupling/);
   const sourceGate = workflow.slice(workflow.indexOf('source-gate:'), workflow.indexOf('\n  release:'));
   assert.doesNotMatch(sourceGate, /npm run security:verify/);
+});
+
+test('contract-bearing SQL is coupled to a fast local PostgreSQL 17 contract seal', () => {
+  const packageJson = readJson('package.json');
+  const localSeal = read('scripts/seal-local-database-contract.mjs');
+  const coupling = read('scripts/verify-database-contract-coupling.mjs');
+  const sourceWorkflow = read('.github/workflows/supabase-migrate.yml');
+
+  assert.equal(packageJson.scripts['db:contract:seal-local'], 'node scripts/seal-local-database-contract.mjs');
+  assert.equal(packageJson.scripts['db:contract:coupling'], 'node scripts/verify-database-contract-coupling.mjs');
+  assert.match(localSeal, /localhost.*127\.0\.0\.1.*::1.*host\.docker\.internal/s);
+  assert.match(localSeal, /server_version_num/);
+  assert.match(localSeal, /Math\.floor\(versionNumber \/ 10000\) !== 17/);
+  assert.match(localSeal, /ownsPrivateSchema/);
+  assert.match(localSeal, /local proof release owner/);
+  assert.match(localSeal, /exportContract\(\)/);
+  assert.match(localSeal, /writeJson\(outputPath, contract\)/);
+  assert.match(coupling, /supabase\\\/\(\?:migrations\|repeatable\)/);
+  assert.match(coupling, /Contract-bearing database source changed without/);
+  assert.match(coupling, /diff-tree.*--root.*HEAD/s);
+  assert.match(sourceWorkflow, /npm run db:contract:coupling/);
 });
 
 test('OSV exceptions are limited to the two false SheetJS findings on the exact patched release', () => {

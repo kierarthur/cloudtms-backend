@@ -10,6 +10,7 @@ const repeatablePath = 'supabase/repeatable/30082026_1903_candidate_expense_carr
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
 const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
+const separationDeliveryPath = 'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
 const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
@@ -56,6 +57,30 @@ test('expense finalisation projects the exact final line type onto new and reuse
     `${sourcePath} must retain the pure-Mileage carrier correction`
   );
   assert.match(read(mileageLineTypeVerifierPath), /begin;[\s\S]*mileage_units',25[\s\S]*line_type','EXPENSES'[\s\S]*timesheet_expense_apply_atomic_v1[\s\S]*v_line_type<>'MILEAGE'[\s\S]*rollback;/i);
+  const installedSuccessor = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
+  assert.match(
+    installedSuccessor,
+    /p_timesheet_create_json[\s\S]*'status','RECEIVED'[\s\S]*'line_type',v_expense_line_type/i,
+    'a newly materialised expense carrier must use the Timesheet status enum, not the contract-week status'
+  );
+  assert.doesNotMatch(
+    installedSuccessor,
+    /p_timesheet_create_json[\s\S]*?'status','SUBMITTED'[\s\S]*?'line_type',v_expense_line_type/i,
+    'SUBMITTED is a contract-week state and is invalid for a Timesheet carrier'
+  );
+});
+
+test('an additional expense carrier stays expense-only on an import-authoritative Client', () => {
+  const separationDelivery = read(separationDeliveryPath);
+  const roleClassifier = separationDelivery.match(/if v_protected then v_role:='PROTECTED'[\s\S]*?else v_role:='HOURS_ONLY';\s*end if;/i)?.[0] || '';
+  assert.match(
+    roleClassifier,
+    /line_type in \('EXPENSES','MILEAGE'\)[\s\S]*v_expenses<>0[\s\S]*v_hours=0[\s\S]*v_additional=0[\s\S]*v_role:='EXPENSE_ONLY'/i
+  );
+  assert.ok(
+    roleClassifier.indexOf("v_role:='EXPENSE_ONLY'") < roleClassifier.indexOf("v_import and v_expenses<>0"),
+    'the explicit expense-carrier identity must be recognised before an inherited import route is treated as mixed-source data'
+  );
 });
 
 test('rollback-contained proof reproduces the app carrier-first sequence and protects finance', () => {

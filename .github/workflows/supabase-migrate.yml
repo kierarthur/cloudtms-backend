@@ -6,6 +6,8 @@ on:
     paths:
       - "supabase/**"
       - "scripts/cloudtms-db-release*.mjs"
+      - "scripts/seal-local-database-contract.mjs"
+      - "scripts/verify-database-contract-coupling.mjs"
       - "tests/database-release-system.test.mjs"
       - "docs/DATABASE_RELEASE_BIBLE.md"
       - "AGENTS.md"
@@ -22,6 +24,8 @@ on:
     paths:
       - "supabase/**"
       - "scripts/cloudtms-db-release*.mjs"
+      - "scripts/seal-local-database-contract.mjs"
+      - "scripts/verify-database-contract-coupling.mjs"
       - "tests/database-release-system.test.mjs"
       - "docs/DATABASE_RELEASE_BIBLE.md"
       - "AGENTS.md"
@@ -62,6 +66,7 @@ jobs:
       - run: npm ci --engine-strict
       - run: npm run security:verify
       - run: npm run db:check
+      - run: npm run db:contract:coupling
       - run: node --test tests/database-release-system.test.mjs
       - name: Verify retained catalogue and runtime authority artifacts
         shell: bash
