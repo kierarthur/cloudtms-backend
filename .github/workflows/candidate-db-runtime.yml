@@ -20,6 +20,7 @@ on:
       - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
       - 'supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql'
+      - 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
@@ -205,6 +206,7 @@ jobs:
             supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql
             supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql
             supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql
+            supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
 
@@ -259,6 +261,7 @@ jobs:
             tests/18082026_0138_candidate_daily_first_generation_source_link_runtime_verification.sql
             tests/18082026_0807_candidate_daily_r16_identity_integrity_runtime_verification.sql
             tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql
+            tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql
             tests/21082026_2345_candidate_federated_membership_runtime_verification.sql
             supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql
             supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql
