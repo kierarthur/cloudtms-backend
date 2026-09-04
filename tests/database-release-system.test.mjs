@@ -111,6 +111,12 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.doesNotMatch(workflow, /CLOUDTMS_RELEASE_APPROVAL:\s*\$\{\{ inputs\.approval \}\}/);
   assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
   assert.match(workflow, /LEGACY_UPGRADE/);
+  assert.match(workflow, /google\/osv-scanner-action\/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1/);
+  assert.match(workflow, /--lockfile=\.\/package-lock\.json/);
+  assert.match(workflow, /npm run security:dependencies/);
+  assert.match(workflow, /npm run security:secrets/);
+  const sourceGate = workflow.slice(workflow.indexOf('source-gate:'), workflow.indexOf('\n  release:'));
+  assert.doesNotMatch(sourceGate, /npm run security:verify/);
 });
 
 test('standing database authority is limited to managed TEST UPGRADE', () => {

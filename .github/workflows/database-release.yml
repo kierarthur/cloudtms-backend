@@ -50,8 +50,14 @@ jobs:
         run: |
           npm install --global npm@11.12.1
           npm run security:toolchain
+      - name: Scan the exact dependency lockfile for known vulnerabilities
+        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1 # v2.5.0
+        with:
+          scan-args: |-
+            --lockfile=./package-lock.json
       - run: npm ci --engine-strict
-      - run: npm run security:verify
+      - run: npm run security:dependencies
+      - run: npm run security:secrets
       - run: npm run db:check
       - run: node --test tests/database-release-system.test.mjs
       - id: commit
