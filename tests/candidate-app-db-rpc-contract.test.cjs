@@ -81,6 +81,7 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   const settingsProcessedDailyOriginRepair = 'supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql';
   const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
   const settingsAuthorityBarrier = 'supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql';
+  const qrRefuseServiceAcl = 'supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql';
   const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
   const breakAuthority = 'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql';
   const migrationIndex = installPaths.indexOf(breakModeMigration);
@@ -112,6 +113,11 @@ test('Candidate runtime gate finishes with every current 2 September authority',
     installPaths.indexOf(settingsAuthorityConsumer) < installPaths.indexOf(settingsAuthorityBarrier),
     'frozen-settings evaluation barrier must follow every generated Candidate/invoice consumer'
   );
+  assert.ok(installPaths.includes(qrRefuseServiceAcl), 'QR refusal service-only ACL convergence is missing');
+  assert.ok(
+    installPaths.indexOf(settingsAuthorityBarrier) < installPaths.indexOf(qrRefuseServiceAcl),
+    'QR refusal service-only ACL convergence must follow every historical QR owner'
+  );
   assert.ok(helperIndex < installPaths.indexOf(breakAuthority), 'break-entry helper must precede its Candidate consumer');
   assert.ok(
     helperIndex < installPaths.indexOf('supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'),
@@ -129,12 +135,13 @@ test('Candidate runtime gate finishes with every current 2 September authority',
     'repeatable/03092026_1641_contract_settings_effective_authority_v1.sql',
     'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
   ]);
-  assert.deepEqual(installPaths.slice(-5), [
+  assert.deepEqual(installPaths.slice(-6), [
     'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
     breakAuthority,
     'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
     'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
     settingsAuthorityBarrier,
+    qrRefuseServiceAcl,
   ]);
 
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];

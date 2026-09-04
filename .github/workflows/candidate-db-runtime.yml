@@ -204,6 +204,7 @@ jobs:
             supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql
             supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql
             supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql
+            supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
 
