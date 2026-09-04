@@ -1297,6 +1297,10 @@ test('presentation snapshot replacement fails closed while the broader runtime c
     presentationSnapshot,
     /from public\.invoice_operation_chunks[\s\S]*status in \('QUEUED','RUNNING','WAITING','RETRY_WAIT'\)/i,
   );
+  assert.match(
+    presentationSnapshot,
+    /chunk_type='DOCUMENT_PLAN' and phase='BUILD_MANIFEST'[\s\S]*chunk_type='ISSUE_INVOICE' and phase='FREEZE'/i,
+  );
   assert.doesNotMatch(presentationSnapshot, /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK/i);
   assert.match(presentationAuthority, /\\gset/i);
   assert.match(presentationAuthority, /\\if :invoice_presentation_active_work/i);

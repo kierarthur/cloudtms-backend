@@ -141,6 +141,8 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
 
 test('invoice presentation release fails closed instead of certifying a deferred definition', () => {
   assert.match(invoicePresentation, /invoice_presentation_active_work/);
+  assert.match(invoicePresentation, /chunk_type='DOCUMENT_PLAN' and phase='BUILD_MANIFEST'/);
+  assert.match(invoicePresentation, /chunk_type='ISSUE_INVOICE' and phase='FREEZE'/);
   assert.match(invoicePresentation, /raise exception 'INVOICE_PRESENTATION_SNAPSHOT_ACTIVE_WORK'/);
   assert.doesNotMatch(invoicePresentation, /INVOICE_PRESENTATION_SNAPSHOT_DEFERRED_ACTIVE_WORK|raise notice/);
   assert.match(invoicePresentation, /_timesheet_settings_authority_frozen_v1/);

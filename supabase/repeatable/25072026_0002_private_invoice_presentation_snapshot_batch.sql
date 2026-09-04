@@ -4,6 +4,10 @@ select exists (
   select 1
   from public.invoice_operation_chunks
   where status in ('QUEUED','RUNNING','WAITING','RETRY_WAIT')
+    and (
+      (chunk_type='DOCUMENT_PLAN' and phase='BUILD_MANIFEST')
+      or (chunk_type='ISSUE_INVOICE' and phase='FREEZE')
+    )
 ) as invoice_presentation_active_work
 \gset
 
