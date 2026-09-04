@@ -12,6 +12,7 @@ declare
   v_definition text;
   v_old text;
   v_new text;
+  v_line_ending text;
   v_matches integer;
   v_new_matches integer;
   v_changed boolean;
@@ -22,6 +23,9 @@ begin
   if v_definition is null then
     raise exception 'BANKING_PAY_TIMESHEET_IMPACT_DEFINITION_MISSING';
   end if;
+  -- Historical definitions can retain CRLF inside pg_get_functiondef. Match
+  -- their representation without rewriting any unrelated function bytes.
+  v_line_ending:=case when strpos(v_definition,E'\r\n')>0 then E'\r\n' else E'\n' end;
 
   v_old := $old$
   select
@@ -42,6 +46,8 @@ begin
     false
   )
   into v_require_ref;$new$;
+  v_old:=replace(v_old,E'\n',v_line_ending);
+  v_new:=replace(v_new,E'\n',v_line_ending);
   v_matches := (length(v_definition)-length(replace(v_definition,v_old,'')))
     / nullif(length(v_old),0);
   v_new_matches := (length(v_definition)-length(replace(v_definition,v_new,'')))
@@ -60,9 +66,12 @@ begin
   if v_definition is null then
     raise exception 'BANKING_PAY_COLLECT_SCOPE_DEFINITION_MISSING';
   end if;
+  v_line_ending:=case when strpos(v_definition,E'\r\n')>0 then E'\r\n' else E'\n' end;
 
   v_old := $old$case when coalesce(con.overrideclientsettings,false) = true then coalesce(con.require_reference_to_pay,false) else coalesce(cs.pay_reference_required,false) end as require_reference_to_pay,$old$;
   v_new := $new$coalesce((private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)#>>'{values,require_reference_to_pay}')::boolean,false) as require_reference_to_pay,$new$;
+  v_old:=replace(v_old,E'\n',v_line_ending);
+  v_new:=replace(v_new,E'\n',v_line_ending);
   v_matches := (length(v_definition)-length(replace(v_definition,v_old,'')))
     / nullif(length(v_old),0);
   v_new_matches := (length(v_definition)-length(replace(v_definition,v_new,'')))
@@ -85,6 +94,7 @@ begin
   if v_definition is null then
     raise exception 'OFFICE_TIMESHEET_SUMMARY_DEFINITION_MISSING';
   end if;
+  v_line_ending:=case when strpos(v_definition,E'\r\n')>0 then E'\r\n' else E'\n' end;
   v_changed:=false;
 
   v_old := $old$  client_reference_settings AS MATERIALIZED (
@@ -101,6 +111,7 @@ begin
     GROUP BY client_setting.client_id
   ),
 $old$;
+  v_old:=replace(v_old,E'\n',v_line_ending);
   v_matches := (length(v_definition)-length(replace(v_definition,v_old,'')))
     / nullif(length(v_old),0);
   if v_matches=1 then
@@ -112,6 +123,7 @@ $old$;
 
   v_old := $old$            OR COALESCE(client_reference_settings.issue_reference_required, FALSE)
 $old$;
+  v_old:=replace(v_old,E'\n',v_line_ending);
   v_matches := (length(v_definition)-length(replace(v_definition,v_old,'')))
     / nullif(length(v_old),0);
   if v_matches=1 then
@@ -124,6 +136,7 @@ $old$;
   v_old := $old$    LEFT JOIN client_reference_settings
       ON client_reference_settings.client_id = source_rows.client_id
 $old$;
+  v_old:=replace(v_old,E'\n',v_line_ending);
   v_matches := (length(v_definition)-length(replace(v_definition,v_old,'')))
     / nullif(length(v_old),0);
   if v_matches=1 then

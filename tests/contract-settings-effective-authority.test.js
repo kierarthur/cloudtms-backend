@@ -151,6 +151,17 @@ test('Office summaries resolve planned and unprocessed Daily rows live but invoi
 });
 
 test('Banking Pay changes only the source of require-reference policy to the frozen real-Timesheet authority', () => {
+  assert.equal(
+    (bankingFrozenAuthority.match(/v_line_ending:=case when strpos\(v_definition,E'\\r\\n'\)>0 then E'\\r\\n' else E'\\n' end;/g) || []).length,
+    3,
+    'all source-preserving definition rewrites must detect historical CRLF storage'
+  );
+  assert.doesNotMatch(bankingFrozenAuthority, /v_definition:=replace\(v_definition,E'\\r\\n',E'\\n'\)/);
+  assert.equal(
+    (bankingFrozenAuthority.match(/v_old:=replace\(v_old,E'\\n',v_line_ending\);/g) || []).length,
+    5,
+    'only exact replacement tokens may be adapted to the installed line ending'
+  );
   assert.match(bankingFrozenAuthority, /pay_timesheet_impact_preview\(uuid\)/);
   assert.match(bankingFrozenAuthority, /pay_preview_candidate_collect_scope\(jsonb,uuid,jsonb,integer\)/);
   assert.match(bankingFrozenAuthority, /_timesheet_settings_authority_frozen_v1\(p_timesheet_id\)/);
