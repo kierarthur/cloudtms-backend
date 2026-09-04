@@ -21,6 +21,7 @@ const invoiceApplyEditsAcl = readFileSync(new URL('../supabase/repeatable/030920
 const invoiceGenerationFinal = readFileSync(new URL('../supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
 const invoiceEvaluationBarrier = readFileSync(new URL('../supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql', import.meta.url), 'utf8');
 const bankingFrozenAuthority = readFileSync(new URL('../supabase/repeatable/03092026_1643_banking_pay_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
+const qrRefuseServiceAcl = readFileSync(new URL('../supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql', import.meta.url), 'utf8');
 
 test('one dated resolver owns Client and Contract settings derivation', () => {
   assert.match(resolver, /_contract_settings_effective_core_v1/);
@@ -169,6 +170,13 @@ test('Banking Pay changes only the source of require-reference policy to the fro
   assert.match(bankingFrozenAuthority, /BANKING_PAY_TIMESHEET_IMPACT_SOURCE_DRIFT/);
   assert.match(bankingFrozenAuthority, /BANKING_PAY_COLLECT_SCOPE_SOURCE_DRIFT/);
   assert.doesNotMatch(bankingFrozenAuthority, /total_pay|pay_method|settle|provider|Policy.X/i);
+});
+
+test('the historical QR refusal helper is reachable only through its guarded service caller', () => {
+  assert.match(qrRefuseServiceAcl, /revoke all on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\)[\s\S]*?authenticated/);
+  assert.match(qrRefuseServiceAcl, /grant execute on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\)[\s\S]*?to postgres,service_role/);
+  assert.doesNotMatch(qrRefuseServiceAcl, /create or replace function|update |insert |delete |total_pay|pay_method|settle|provider|Policy\.X/i);
+  assert.match(worker, /requireUser\(env, req, \['admin'\]\)[\s\S]*?timesheet_qr_refuse_and_reset/);
 });
 
 test('Worker consumers use the central resolver and fail closed', () => {

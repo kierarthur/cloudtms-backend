@@ -94,14 +94,22 @@ begin
     'bulk_process_row_context_v1(jsonb)',
     'bulk_authorise_row_context_v1(jsonb)',
     'timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamp with time zone)',
-    'timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)',
-    'timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)'
+    'timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)'
   ] loop
     if not has_function_privilege('authenticated',v_signature,'EXECUTE')
        or not has_function_privilege('service_role',v_signature,'EXECUTE') then
       raise exception 'existing authenticated/service ACL mismatch: %',v_signature;
     end if;
   end loop;
+
+  if has_function_privilege('authenticated',
+       'timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)','EXECUTE')
+     or has_function_privilege('anon',
+       'timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)','EXECUTE')
+     or not has_function_privilege('service_role',
+       'timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)','EXECUTE') then
+    raise exception 'QR refusal/reset authority is not service-only';
+  end if;
 
   if has_function_privilege('anon',
        'contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamp with time zone,text,jsonb)',
