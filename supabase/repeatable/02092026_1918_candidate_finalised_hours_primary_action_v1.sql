@@ -25,7 +25,8 @@ declare
   v_draft_has_content boolean:=false;
   v_has_finalised_hours boolean:=false;
 begin
-  if upper(coalesce(p_candidate_status_code,'')) in ('PAID','AUTHORISED','INVOICED_NOT_PAID') then
+  if upper(coalesce(p_candidate_status_code,'')) in ('PAID','AUTHORISED','INVOICED_NOT_PAID')
+     and not coalesce((p_capabilities->>'can_edit_expenses')::boolean,false) then
     return null;
   end if;
   select item into v_workflow
@@ -59,8 +60,24 @@ begin
     'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
     'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'
   )
+    and (
+      item->>'state'<>'FINALISED'
+      or (
+        item->>'workflow_kind'='CONTRACT_EXPENSE'
+        and (
+          nullif(item->>'target_timesheet_id','') is null
+          or not exists(
+            select 1
+            from public.timesheets_financials expense_financial
+            where expense_financial.timesheet_id=nullif(item->>'target_timesheet_id','')::uuid
+              and expense_financial.is_current=true
+              and expense_financial.authorised_at_utc is not null
+          )
+        )
+      )
+    )
     and (
       item->>'state'<>'REFUSED'
       or not private._candidate_rejection_replaced_v1(

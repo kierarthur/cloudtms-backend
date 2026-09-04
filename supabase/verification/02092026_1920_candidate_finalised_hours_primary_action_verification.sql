@@ -18,6 +18,7 @@ begin
     'private._candidate_timesheet_primary_action_v1(text,jsonb,jsonb,uuid,uuid)'
   ))) into v_definition;
   if position('v_has_finalised_hours' in v_definition)=0
+     or position('expense_financial.authorised_at_utc is not null' in v_definition)=0
      or v_definition~'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Finalised-hours primary-action authority is not installed safely';
   end if;
@@ -62,8 +63,17 @@ begin
     jsonb_build_object('can_edit_hours',true,'can_edit_expenses',true),
     v_timesheet,v_week
   );
-  if v_action->>'code'<>'ENTER_TIMESHEET' then
-    raise exception 'A finalised expense-only claim wrongly hid the outstanding hours journey: %',v_action;
+  if v_action->>'code'<>'CONTINUE_EXPENSE_CLAIM' then
+    raise exception 'A finalised but not Office-authorised expense claim was not kept current: %',v_action;
+  end if;
+
+  v_action:=private._candidate_timesheet_primary_action_v1(
+    'AUTHORISED','[]'::jsonb,
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
+    v_timesheet,v_week
+  );
+  if v_action->>'code'<>'ADD_EXPENSES' then
+    raise exception 'An Office-authorised worked week did not offer a new separate expense claim: %',v_action;
   end if;
 end;
 $verification$;
