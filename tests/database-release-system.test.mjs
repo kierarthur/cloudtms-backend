@@ -415,7 +415,7 @@ test('read-only release plans render every exact pending authority path and hash
 });
 
 test('contract export normalises null ACLs to one-dimensional effective defaults', () => {
-  assert.equal(readJson('supabase/release/current-contract.json').contract_version, 2);
+  assert.equal(readJson('supabase/release/current-contract.json').contract_version, 3);
   const source = read('supabase/release/export_contract.sql');
   assert.doesNotMatch(source, /aclexplode\(coalesce\([^)]*,\s*'\{\}'::aclitem\[\]\)\)/s);
   assert.match(source, /acldefault\([\s\S]*c\.relowner/);

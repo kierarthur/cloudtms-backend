@@ -11,7 +11,22 @@ alter function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
   owner to postgres;
 
 revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
-  from public,anon,authenticated,service_role,authenticator,supabase_admin;
+  from public,anon,authenticated,service_role;
+
+do $acl$
+begin
+  if exists (
+    select 1 from pg_catalog.pg_roles where rolname='authenticator'
+  ) then
+    execute 'revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) from authenticator';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_roles where rolname='supabase_admin'
+  ) then
+    execute 'revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid) from supabase_admin';
+  end if;
+end;
+$acl$;
 
 grant execute on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
   to postgres,service_role;

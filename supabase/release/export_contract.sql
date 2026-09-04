@@ -380,7 +380,7 @@ default_acl_contract as (
   ) canonical_default_acl_rows
 )
 select jsonb_build_object(
-  'contract_version', 2,
+  'contract_version', 3,
   'extensions', coalesce((select value from extensions_contract), '[]'::jsonb),
   'schemas', coalesce((select value from schema_contract), '[]'::jsonb),
   'enums', coalesce((select value from enum_contract), '[]'::jsonb),

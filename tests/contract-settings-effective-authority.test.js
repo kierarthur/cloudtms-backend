@@ -174,6 +174,8 @@ test('Banking Pay changes only the source of require-reference policy to the fro
 
 test('the historical QR refusal helper is reachable only through its guarded service caller', () => {
   assert.match(qrRefuseServiceAcl, /revoke all on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\)[\s\S]*?authenticated/);
+  assert.match(qrRefuseServiceAcl, /if exists \([\s\S]*?pg_catalog\.pg_roles[\s\S]*?rolname='authenticator'[\s\S]*?execute 'revoke all on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\) from authenticator'/);
+  assert.match(qrRefuseServiceAcl, /if exists \([\s\S]*?pg_catalog\.pg_roles[\s\S]*?rolname='supabase_admin'[\s\S]*?execute 'revoke all on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\) from supabase_admin'/);
   assert.match(qrRefuseServiceAcl, /grant execute on function public\.timesheet_qr_refuse_and_reset\(uuid,uuid,text,uuid\)[\s\S]*?to postgres,service_role/);
   assert.doesNotMatch(qrRefuseServiceAcl, /create or replace function|update |insert |delete |total_pay|pay_method|settle|provider|Policy\.X/i);
   assert.match(worker, /requireUser\(env, req, \['admin'\]\)[\s\S]*?timesheet_qr_refuse_and_reset/);
