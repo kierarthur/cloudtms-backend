@@ -1103,6 +1103,8 @@ declare
   v_invoice uuid:='eeeeeeee-0000-0000-0000-000000000005';
   v_group jsonb;
   v_route jsonb;
+  v_authority jsonb;
+  v_authority_fingerprint text;
 begin
   insert into public.clients(id,name,primary_invoice_email)
   values(v_client,'Invoice test client','primary@example.test');
@@ -1122,9 +1124,34 @@ begin
     v_contract,v_candidate,v_client,current_date-30,current_date+30,true,
     extract(dow from current_date)::integer,'ELECTRONIC'
   );
+  v_authority:=jsonb_build_object(
+    'authority_version','CONTRACT_SETTINGS_AUTHORITY_V1',
+    'client_id',v_client,
+    'contract_id',v_contract,
+    'timesheet_id',v_timesheet,
+    'relevant_date',current_date,
+    'workflow','INVOICE',
+    'values',jsonb_build_object(
+      'self_bill',true,
+      'candidate_expense_invoice_email','expenses@example.test',
+      'invoice_consolidation_mode','BY_WEEK'
+    )
+  );
+  v_authority_fingerprint:=encode(
+    extensions.digest(convert_to(v_authority::text,'UTF8'),'sha256'),'hex'
+  );
+  v_authority:=v_authority||jsonb_build_object(
+    'authority_fingerprint',v_authority_fingerprint,
+    'resolved_at_utc',now()
+  );
   insert into public.timesheets(
-    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,is_current,updated_at
-  ) values(v_timesheet,v_contract,current_date,'HOURS','MANUAL',true,now());
+    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,is_current,updated_at,
+    settings_authority_json,settings_authority_version,
+    settings_authority_fingerprint,settings_authority_resolved_at
+  ) values(
+    v_timesheet,v_contract,current_date,'HOURS','MANUAL',true,now(),
+    v_authority,'CONTRACT_SETTINGS_AUTHORITY_V1',v_authority_fingerprint,now()
+  );
   insert into public.contract_weeks(
     contract_id,week_ending_date,additional_seq,status,timesheet_id
   ) values(v_contract,current_date,1,'AUTHORISED',v_timesheet);
@@ -1137,6 +1164,22 @@ begin
     0,0,0,0,-10,-12
   );
 
+  if not exists(
+    select 1 from public.timesheets t
+    where t.timesheet_id=v_timesheet and t.is_current
+      and t.settings_authority_json<>'{}'::jsonb
+      and t.settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1'
+      and t.settings_authority_fingerprint~'^[0-9a-f]{64}$'
+      and t.settings_authority_fingerprint=encode(extensions.digest(convert_to(
+        (t.settings_authority_json-'authority_fingerprint'-'resolved_at_utc')::text,
+        'UTF8'
+      ),'sha256'),'hex')
+      and t.settings_authority_json->>'authority_fingerprint'=
+        t.settings_authority_fingerprint
+  ) then
+    raise exception 'expense invoice fixture did not create frozen Timesheet authority';
+  end if;
+  perform private._timesheet_settings_authority_frozen_v1(v_timesheet);
   select to_jsonb(g) into v_group
   from private._invoice_generation_resolve_command_groups(
     jsonb_build_array(jsonb_build_object(
@@ -1181,6 +1224,50 @@ begin
   update public.client_settings
   set candidate_expense_invoice_email=null
   where client_id=v_client;
+  if not exists(
+    select 1 from public.timesheets t
+    where t.timesheet_id=v_timesheet and t.is_current
+      and t.settings_authority_json<>'{}'::jsonb
+      and t.settings_authority_version='CONTRACT_SETTINGS_AUTHORITY_V1'
+      and t.settings_authority_fingerprint~'^[0-9a-f]{64}$'
+      and t.settings_authority_fingerprint=encode(extensions.digest(convert_to(
+        (t.settings_authority_json-'authority_fingerprint'-'resolved_at_utc')::text,
+        'UTF8'
+      ),'sha256'),'hex')
+      and t.settings_authority_json->>'authority_fingerprint'=
+        t.settings_authority_fingerprint
+  ) then
+    raise exception 'expense invoice fixture did not retain frozen Timesheet authority';
+  end if;
+  select to_jsonb(g) into v_group
+  from private._invoice_generation_resolve_command_groups(
+    jsonb_build_array(jsonb_build_object(
+      'command_type','GENERATE_EXPENSES',
+      'source_ids',jsonb_build_array(v_timesheet)
+    )),null,now()
+  ) g
+  limit 1;
+  if v_group->>'blocker_code' is not null
+     or (v_group->>'self_bill')::boolean<>true then
+    raise exception 'later Client settings rewrote frozen Timesheet authority: %',v_group;
+  end if;
+
+  v_authority:=jsonb_set(
+    v_authority-'authority_fingerprint'-'resolved_at_utc',
+    '{values,candidate_expense_invoice_email}','null'::jsonb,true
+  );
+  v_authority_fingerprint:=encode(
+    extensions.digest(convert_to(v_authority::text,'UTF8'),'sha256'),'hex'
+  );
+  v_authority:=v_authority||jsonb_build_object(
+    'authority_fingerprint',v_authority_fingerprint,
+    'resolved_at_utc',now()
+  );
+  update public.timesheets
+  set settings_authority_json=v_authority,
+    settings_authority_fingerprint=v_authority_fingerprint,
+    settings_authority_resolved_at=now()
+  where timesheet_id=v_timesheet;
   select to_jsonb(g) into v_group
   from private._invoice_generation_resolve_command_groups(
     jsonb_build_array(jsonb_build_object(
@@ -1190,7 +1277,7 @@ begin
   ) g
   limit 1;
   if v_group->>'blocker_code'<>'EXPENSE_INVOICE_EMAIL_REQUIRED' then
-    raise exception 'missing expense email did not block grouping: %',v_group;
+    raise exception 'missing frozen expense email did not block grouping: %',v_group;
   end if;
 end;
 $expense_invoice_routing$;

@@ -6825,9 +6825,9 @@
       "schema": "private",
       "identity": "_timesheet_settings_authority_frozen_v1(p_timesheet_id uuid)",
       "parallel": "u",
-      "volatility": "s",
+      "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7198d8db47cc192ed8c82bdf80f435d055c2cc21d4e58401c788009f3c2b7726"
+      "definition_sha256": "5eca343f163d7f3a0eeae204222d9dbb0c95c6cf2dc3571a7489a0536977d321"
     },
     {
       "acl": [

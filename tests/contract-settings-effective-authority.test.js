@@ -17,6 +17,7 @@ const invoicePresentation = readFileSync(new URL('../supabase/repeatable/2507202
 const invoiceApplyEdits = readFileSync(new URL('../supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql', import.meta.url), 'utf8');
 const invoiceApplyEditsAcl = readFileSync(new URL('../supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql', import.meta.url), 'utf8');
 const invoiceGenerationFinal = readFileSync(new URL('../supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
+const invoiceEvaluationBarrier = readFileSync(new URL('../supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql', import.meta.url), 'utf8');
 const bankingFrozenAuthority = readFileSync(new URL('../supabase/repeatable/03092026_1643_banking_pay_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
 
 test('one dated resolver owns Client and Contract settings derivation', () => {
@@ -101,6 +102,10 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
   assert.match(invoiceApplyEditsAcl, /grant execute on function public\.invoice_detail_get\(uuid,uuid\)[\s\S]*?to postgres,service_role/);
   const resolverBody = invoiceResolver.match(/create or replace function private\._invoice_generation_resolve_command_groups[\s\S]*?\$function\$;/)?.[0] || '';
   assert.doesNotMatch(resolverBody, /from public\.client_settings/);
+  assert.match(invoiceEvaluationBarrier, /alter function private\._timesheet_settings_authority_frozen_v1\(uuid\) volatile/);
+  assert.match(invoiceEvaluationBarrier, /owner to postgres/);
+  assert.match(invoiceEvaluationBarrier, /revoke all on function private\._timesheet_settings_authority_frozen_v1\(uuid\)[\s\S]*?from public,anon,authenticated,service_role/);
+  assert.doesNotMatch(invoiceEvaluationBarrier, /create or replace function|total_pay|pay_method|settle|provider|Policy\.X/i);
   assert.match(invoiceCore, /'settings_authority',jsonb_build_object\(/);
   assert.match(invoiceCore, /'fingerprints',jsonb_agg/);
   const currentGenerationDefinition = invoiceCore.match(/create or replace function private\._invoice_generation_advance_core_v8[\s\S]*?\$function\$;/)?.[0] || '';

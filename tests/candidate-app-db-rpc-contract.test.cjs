@@ -67,15 +67,32 @@ test('Candidate runtime gate finishes with every current 2 September authority',
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
   const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
+  const settingsAuthorityMigration = 'supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql';
+  const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
+  const settingsAuthorityBarrier = 'supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql';
   const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
   const breakAuthority = 'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql';
   const migrationIndex = installPaths.indexOf(breakModeMigration);
   const helperIndex = installPaths.indexOf(breakHelperOwner);
   const firstRepeatableIndex = installPaths.findIndex(entry => entry.startsWith('supabase/repeatable/'));
   assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
+  assert.ok(installPaths.includes(settingsAuthorityMigration), 'settings-authority schema migration is missing');
   assert.ok(helperIndex >= 0, 'break-entry precedence helper owner is missing');
   assert.ok(migrationIndex < firstRepeatableIndex, 'break-entry schema must be installed before every repeatable');
   assert.ok(migrationIndex < helperIndex, 'break-entry schema must precede its helper owner');
+  assert.ok(
+    installPaths.indexOf(settingsAuthorityMigration) < firstRepeatableIndex,
+    'settings-authority schema must be installed before every repeatable'
+  );
+  assert.ok(
+    installPaths.indexOf(settingsAuthorityMigration) < installPaths.indexOf(settingsAuthorityConsumer),
+    'settings-authority frozen-reader migration must precede its generated Candidate/invoice consumer'
+  );
+  assert.ok(installPaths.includes(settingsAuthorityBarrier), 'frozen-settings evaluation barrier is missing');
+  assert.ok(
+    installPaths.indexOf(settingsAuthorityConsumer) < installPaths.indexOf(settingsAuthorityBarrier),
+    'frozen-settings evaluation barrier must follow every generated Candidate/invoice consumer'
+  );
   assert.ok(helperIndex < installPaths.indexOf(breakAuthority), 'break-entry helper must precede its Candidate consumer');
   assert.ok(
     helperIndex < installPaths.indexOf('supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'),
@@ -90,13 +107,15 @@ test('Candidate runtime gate finishes with every current 2 September authority',
       ) || []
     ).length > 0);
   assert.deepEqual(definingFiles.map(entry => entry.replaceAll('\\', '/')), [
+    'repeatable/03092026_1641_contract_settings_effective_authority_v1.sql',
     'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
   ]);
-  assert.deepEqual(installPaths.slice(-4), [
+  assert.deepEqual(installPaths.slice(-5), [
     'supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
     breakAuthority,
     'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
     'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
+    settingsAuthorityBarrier,
   ]);
 
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
