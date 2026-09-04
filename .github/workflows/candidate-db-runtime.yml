@@ -21,6 +21,7 @@ on:
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
       - 'supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql'
       - 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql'
+      - 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
