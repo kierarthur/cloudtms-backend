@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  AUDIT_REGISTRIES,
   AUDIT_FETCH_TIMEOUT_MS,
   MAX_AUDIT_ATTEMPTS,
   auditArguments,
@@ -13,6 +14,7 @@ test('npm audit arguments retain the high-severity gate and bound transport wait
   assert.deepEqual(auditArguments(), [
     'audit',
     '--audit-level=high',
+    `--registry=${AUDIT_REGISTRIES[0]}`,
     '--fetch-retries=0',
     `--fetch-timeout=${AUDIT_FETCH_TIMEOUT_MS}`
   ]);
@@ -20,6 +22,7 @@ test('npm audit arguments retain the high-severity gate and bound transport wait
     'audit',
     '--omit=dev',
     '--audit-level=high',
+    `--registry=${AUDIT_REGISTRIES[0]}`,
     '--fetch-retries=0',
     `--fetch-timeout=${AUDIT_FETCH_TIMEOUT_MS}`
   ]);
@@ -60,8 +63,29 @@ test('a transient npm service failure retries and can recover', async () => {
     writeStderr: () => undefined
   });
   assert.equal(status, 0);
-  assert.equal(calls, MAX_AUDIT_ATTEMPTS);
-  assert.deepEqual(delays, [15_000, 30_000]);
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [5_000, 10_000]);
+});
+
+test('transient retries alternate between the npm registry and its established mirror', async () => {
+  const registries = [];
+  const status = await runNpmAuditWithRetry({
+    execute: (args) => {
+      registries.push(args.find((value) => value.startsWith('--registry=')));
+      return registries.length < 3
+        ? { status: 1, stdout: '', stderr: 'npm error audit endpoint returned an error' }
+        : { status: 0, stdout: 'found 0 vulnerabilities', stderr: '' };
+    },
+    delay: async () => undefined,
+    writeStdout: () => undefined,
+    writeStderr: () => undefined
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(registries, [
+    `--registry=${AUDIT_REGISTRIES[0]}`,
+    `--registry=${AUDIT_REGISTRIES[1]}`,
+    `--registry=${AUDIT_REGISTRIES[0]}`
+  ]);
 });
 
 test('persistent npm service failure exhausts the bound and fails closed', async () => {

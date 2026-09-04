@@ -3,14 +3,19 @@ import { pathToFileURL } from 'node:url';
 
 const TRANSIENT_AUDIT_FAILURE = /(?:audit endpoint returned an error|\b(?:ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|ETIMEDOUT)\b|\b(?:408|425|429|500|502|503|504)\s+(?:Bad Gateway|Gateway Timeout|Internal Server Error|Service Unavailable|Too Many Requests|Request Timeout))/i;
 
-export const MAX_AUDIT_ATTEMPTS = 3;
+export const AUDIT_REGISTRIES = Object.freeze([
+  'https://registry.npmjs.org',
+  'https://registry.yarnpkg.com'
+]);
+export const MAX_AUDIT_ATTEMPTS = 4;
 export const AUDIT_FETCH_TIMEOUT_MS = 60_000;
 
-export function auditArguments({ omitDev = false } = {}) {
+export function auditArguments({ omitDev = false, registry = AUDIT_REGISTRIES[0] } = {}) {
   return [
     'audit',
     ...(omitDev ? ['--omit=dev'] : []),
     '--audit-level=high',
+    `--registry=${registry}`,
     '--fetch-retries=0',
     `--fetch-timeout=${AUDIT_FETCH_TIMEOUT_MS}`
   ];
@@ -41,8 +46,9 @@ export async function runNpmAuditWithRetry({
   writeStdout = (value) => process.stdout.write(value),
   writeStderr = (value) => process.stderr.write(value)
 } = {}) {
-  const args = auditArguments({ omitDev });
   for (let attempt = 1; attempt <= MAX_AUDIT_ATTEMPTS; attempt += 1) {
+    const registry = AUDIT_REGISTRIES[(attempt - 1) % AUDIT_REGISTRIES.length];
+    const args = auditArguments({ omitDev, registry });
     const result = execute(args);
     if (result.stdout) writeStdout(result.stdout);
     if (result.stderr) writeStderr(result.stderr);
@@ -57,8 +63,9 @@ export async function runNpmAuditWithRetry({
       writeStderr(`npm audit service remained unavailable after ${MAX_AUDIT_ATTEMPTS} attempts; failing closed.\n`);
       return 1;
     }
-    const delayMs = attempt * 15_000;
-    writeStderr(`npm audit service was temporarily unavailable (attempt ${attempt}/${MAX_AUDIT_ATTEMPTS}); retrying in ${delayMs / 1000} seconds.\n`);
+    const delayMs = attempt * 5_000;
+    const nextRegistry = AUDIT_REGISTRIES[attempt % AUDIT_REGISTRIES.length];
+    writeStderr(`npm audit service was temporarily unavailable (attempt ${attempt}/${MAX_AUDIT_ATTEMPTS}); retrying through ${new URL(nextRegistry).hostname} in ${delayMs / 1000} seconds.\n`);
     await delay(delayMs);
   }
   return 1;
