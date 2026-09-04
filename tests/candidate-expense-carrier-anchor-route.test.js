@@ -45,9 +45,15 @@ test('expense workflow creation derives approval route from the worked anchor be
 });
 
 test('expense finalisation projects the exact final line type onto new and reused carriers', () => {
-  assert.match(
-    read('supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql'),
-    /v_expense_line_type:=case[\s\S]*mileage_units[\s\S]*then 'MILEAGE'[\s\S]*else 'EXPENSES'[\s\S]*'line_type',v_expense_line_type[\s\S]*p_timesheet_patch_json[\s\S]*jsonb_build_object\(\s*'line_type',v_expense_line_type/i
+  for (const sourcePath of [
+    'supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql',
+    'supabase/repeatable/26082026_2121_candidate_expense_category_authority_v2.sql',
+    'supabase/repeatable/26082026_2225_candidate_expense_finalise_signature_recheck_v3.sql',
+    'supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql'
+  ]) assert.match(
+    read(sourcePath),
+    /v_expense_line_type:=case[\s\S]*mileage_units[\s\S]*then 'MILEAGE'[\s\S]*else 'EXPENSES'[\s\S]*'line_type',v_expense_line_type[\s\S]*p_timesheet_patch_json[\s\S]*jsonb_build_object\(\s*'line_type',v_expense_line_type/i,
+    `${sourcePath} must retain the pure-Mileage carrier correction`
   );
   assert.match(read(mileageLineTypeVerifierPath), /begin;[\s\S]*mileage_units',25[\s\S]*line_type','EXPENSES'[\s\S]*timesheet_expense_apply_atomic_v1[\s\S]*v_line_type<>'MILEAGE'[\s\S]*rollback;/i);
 });
