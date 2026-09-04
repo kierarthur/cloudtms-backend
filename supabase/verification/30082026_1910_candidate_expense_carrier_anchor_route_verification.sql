@@ -99,9 +99,10 @@ begin
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,
     candidate_expenses_require_separate_timesheet,
-    candidate_paper_submission_enabled
+    candidate_paper_submission_enabled,candidate_expense_invoice_email
   ) values(
-    gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',true,true
+    gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',true,true,
+    'expenses@example.test'
   );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,
