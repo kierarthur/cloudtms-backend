@@ -1,0 +1,9 @@
+[[IgnoredVulns]]
+id = "GHSA-4r6h-8v6p-xvw6"
+ignoreUntil = 2026-12-31
+reason = "The repository pins SheetJS xlsx 0.20.3 from the vendor CDN; this advisory is fixed in 0.19.3, but OSV does not encode the vendor-CDN fixed event and incorrectly flags the later patched release."
+
+[[IgnoredVulns]]
+id = "GHSA-5pgg-2g8v-p4x9"
+ignoreUntil = 2026-12-31
+reason = "The repository pins SheetJS xlsx 0.20.3 from the vendor CDN; this advisory is fixed in 0.20.2, but OSV does not encode the vendor-CDN fixed event and incorrectly flags the later patched release."

@@ -112,11 +112,28 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
   assert.match(workflow, /LEGACY_UPGRADE/);
   assert.match(workflow, /google\/osv-scanner-action\/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1/);
+  assert.match(workflow, /--config=\.\/osv-scanner\.toml/);
   assert.match(workflow, /--lockfile=\.\/package-lock\.json/);
   assert.match(workflow, /npm run security:dependencies/);
   assert.match(workflow, /npm run security:secrets/);
   const sourceGate = workflow.slice(workflow.indexOf('source-gate:'), workflow.indexOf('\n  release:'));
   assert.doesNotMatch(sourceGate, /npm run security:verify/);
+});
+
+test('OSV exceptions are limited to the two false SheetJS findings on the exact patched release', () => {
+  const config = read('osv-scanner.toml');
+  const ignoredIds = [...config.matchAll(/^id = "([^"]+)"$/gm)].map((match) => match[1]);
+  assert.deepEqual(ignoredIds, ['GHSA-4r6h-8v6p-xvw6', 'GHSA-5pgg-2g8v-p4x9']);
+  assert.equal((config.match(/^ignoreUntil = 2026-12-31$/gm) ?? []).length, 2);
+  assert.match(config, /xlsx 0\.20\.3[\s\S]*fixed in 0\.19\.3/);
+  assert.match(config, /xlsx 0\.20\.3[\s\S]*fixed in 0\.20\.2/);
+  assert.doesNotMatch(config, /\[\[PackageOverrides\]\]|ignore\s*=\s*true/);
+
+  const packageJson = readJson('package.json');
+  assert.equal(packageJson.dependencies.xlsx, 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz');
+  const packageLock = readJson('package-lock.json');
+  assert.equal(packageLock.packages['node_modules/xlsx'].version, '0.20.3');
+  assert.equal(packageLock.packages['node_modules/xlsx'].resolved, packageJson.dependencies.xlsx);
 });
 
 test('standing database authority is limited to managed TEST UPGRADE', () => {
