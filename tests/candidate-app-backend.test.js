@@ -6043,7 +6043,7 @@ test('finalisation probes its durable key receipt before current approval histor
     ), env, {}, {
       routeAudience: 'PRIVATE',
       async rpc(name, args) {
-        assert.equal(name, 'candidate_submission_finalize_atomic_v1');
+        assert.equal(name, 'candidate_submission_finalize_single_flight_v1');
         assert.equal(args.p_daily_materialisation_json.service_finalisation.replay_key_probe_only, true);
         return {
           ok: true, workflow_id: workflowId, generation: 3,

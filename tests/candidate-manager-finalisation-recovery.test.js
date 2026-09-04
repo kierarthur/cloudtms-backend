@@ -15,6 +15,8 @@ const recoverySql = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_2207_candidate_manager_finalisation_recovery_v1.sql'), 'utf8');
 const lockBudgetSql = fs.readFileSync(path.join(root,
   'supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql'), 'utf8');
+const singleFlightSql = fs.readFileSync(path.join(root,
+  'supabase/repeatable/04092026_1420_candidate_finalisation_single_flight_v1.sql'), 'utf8');
 const backendSource = fs.readFileSync(path.join(root, 'broker/src/candidate-app-backend.js'), 'utf8');
 const privateWorkerSource = fs.readFileSync(path.join(root, 'broker/src/candidate-private-worker.js'), 'utf8');
 
@@ -47,6 +49,23 @@ test('manager finalisation has bounded database lock and statement waits', () =>
   assert.match(lockBudgetSql, /set statement_timeout = '120s'/i);
   assert.match(lockBudgetSql, /revoke all[\s\S]*from public,anon,authenticated/i);
   assert.match(lockBudgetSql, /grant execute[\s\S]*to service_role/i);
+});
+
+test('manager finalisation uses a non-waiting database single-flight wrapper and bounded transport', () => {
+  assert.match(singleFlightSql, /pg_try_advisory_xact_lock/i);
+  assert.match(singleFlightSql, /CANDIDATE_FINALISATION_GLOBAL/i);
+  assert.match(singleFlightSql, /FINALISATION_CAPACITY_BUSY/i);
+  assert.match(singleFlightSql, /candidate_submission_finalize_atomic_v1/i);
+  assert.match(singleFlightSql, /single_flight_deferred/i);
+  assert.match(singleFlightSql, /ALREADY_BEING_PROCESSED/i);
+  assert.match(singleFlightSql, /revoke all[\s\S]*from public,anon,authenticated/i);
+  assert.match(singleFlightSql, /grant execute[\s\S]*to service_role/i);
+  assert.match(backendSource, /MANAGER_FINALISATION_RPC_TIMEOUT_MS = 20 \* 1000/);
+  assert.match(backendSource, /candidate_submission_finalize_single_flight_v1/g);
+  assert.doesNotMatch(
+    backendSource,
+    /rpcCall\(deps, 'candidate_submission_finalize_atomic_v1'/
+  );
 });
 
 test('private scheduler retries only bounded manager finalisations through the service contract', () => {

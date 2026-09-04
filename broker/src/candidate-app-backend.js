@@ -125,6 +125,7 @@ const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
 const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 const MANAGER_FINALISATION_LEASE_MS = 3 * 60 * 1000;
+const MANAGER_FINALISATION_RPC_TIMEOUT_MS = 20 * 1000;
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
@@ -4846,7 +4847,7 @@ function safeFinalisationResult(value) {
   const scalarKeys = [
     'ok', 'workflow_id', 'generation', 'state', 'idempotent_replay',
     'target_timesheet_id', 'hours_timesheet_id', 'expense_timesheet_id',
-    'auto_authorised', 'finalisation_pending', 'reason', 'error_code'
+    'auto_authorised', 'finalisation_pending', 'single_flight_deferred', 'reason', 'error_code'
   ];
   for (const key of scalarKeys) {
     if (Object.prototype.hasOwnProperty.call(source, key)) safe[key] = source[key];
@@ -5045,7 +5046,7 @@ async function probeFinalisationReplay(
       idempotency_key: finalisationKey,
       daily_materialisation_json: dailyMaterialisationJson
     })
-    : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', {
+    : await rpcCall(deps, 'candidate_submission_finalize_single_flight_v1', {
       p_session_id: null,
       p_environment: environmentName(env),
       p_workflow_id: workflow.id,
@@ -5054,7 +5055,7 @@ async function probeFinalisationReplay(
       p_idempotency_key: finalisationKey,
       p_now_utc: new Date().toISOString(),
       p_daily_materialisation_json: dailyMaterialisationJson
-    });
+    }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
   return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
 }
 
@@ -5070,7 +5071,7 @@ async function probeFinalisationReplayByKey(
       idempotency_key: finalisationKey,
       replay_key_probe_only: true
     })
-    : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', {
+    : await rpcCall(deps, 'candidate_submission_finalize_single_flight_v1', {
       p_session_id: null,
       p_environment: environmentName(env),
       p_workflow_id: workflow.id,
@@ -5085,7 +5086,7 @@ async function probeFinalisationReplayByKey(
           replay_key_probe_only: true
         }
       }
-    });
+    }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
   return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
 }
 
@@ -5169,7 +5170,12 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
       idempotency_key: finalisationPayload.p_idempotency_key,
       daily_materialisation_json: finalisationPayload.p_daily_materialisation_json
     })
-    : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', finalisationPayload));
+    : await rpcCall(
+      deps,
+      'candidate_submission_finalize_single_flight_v1',
+      finalisationPayload,
+      { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS }
+    ));
 }
 
 export async function recoverPendingCandidateManagerFinalisations(env, deps, limit = 5) {
@@ -5194,7 +5200,7 @@ export async function recoverPendingCandidateManagerFinalisations(env, deps, lim
             p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
             p_expected_generation: requireInteger(row.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
             p_now_utc: new Date().toISOString()
-          });
+          }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
           await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
           return finaliseWorkflow(
             env,

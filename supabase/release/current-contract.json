@@ -15218,6 +15218,30 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_submission_finalize_single_flight_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5b255dcd8b3371eb897125b7e0770922249423592419b2d626703ff5fa98482a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_submission_reject_atomic_v1(p_actor_user_id uuid, p_environment text, p_timesheet_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_reason text, p_idempotency_key text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",

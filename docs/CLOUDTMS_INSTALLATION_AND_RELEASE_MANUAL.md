@@ -111,7 +111,7 @@ Every agency keeps separate PostgreSQL credentials, PostgREST JWT, gateway confi
 
 Mandatory safeguards:
 
-- append `options=-c%20pg_show_plans.is_enabled%3Doff` to each CloudTMS PostgREST `PGRST_DB_URI`, preserving every other URI component;
+- append `options=-c%20pg_show_plans.is_enabled%3Doff%20-c%20statement_timeout%3D120s` to each CloudTMS PostgREST `PGRST_DB_URI`, preserving every other URI component; this bounds abandoned top-level API queries as well as disabling the Miget query-plan collector;
 - verify the live PostgreSQL memory profile and volume after any Miget resize;
 - map only the audited restored logical owner to `CURRENT_USER`; never assume `SET ROLE postgres` works;
 - reapply and verify audited owner default privileges after a restore;
