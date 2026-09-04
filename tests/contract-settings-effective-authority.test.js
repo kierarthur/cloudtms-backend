@@ -18,6 +18,7 @@ const invoiceCorrection = readFileSync(new URL('../supabase/repeatable/23072026_
 const invoicePresentation = readFileSync(new URL('../supabase/repeatable/25072026_0002_private_invoice_presentation_snapshot_batch.sql', import.meta.url), 'utf8');
 const invoiceApplyEdits = readFileSync(new URL('../supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql', import.meta.url), 'utf8');
 const invoiceApplyEditsAcl = readFileSync(new URL('../supabase/repeatable/03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql', import.meta.url), 'utf8');
+const invoiceTimesheetRefsRoot = readFileSync(new URL('../supabase/repeatable/30072026_1216_invoice_timesheet_refs_ward_selective_numbering.sql', import.meta.url), 'utf8');
 const invoiceGenerationFinal = readFileSync(new URL('../supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
 const invoiceEvaluationBarrier = readFileSync(new URL('../supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql', import.meta.url), 'utf8');
 const bankingFrozenAuthority = readFileSync(new URL('../supabase/repeatable/03092026_1643_banking_pay_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
@@ -123,6 +124,11 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
   assert.match(invoiceApplyEditsAcl, /grant execute on function public\.invoice_apply_edits\(uuid,jsonb,uuid\)[\s\S]*?to postgres,service_role/);
   assert.match(invoiceApplyEditsAcl, /revoke all on function public\.invoice_detail_get\(uuid,uuid\)[\s\S]*?authenticated/);
   assert.match(invoiceApplyEditsAcl, /grant execute on function public\.invoice_detail_get\(uuid,uuid\)[\s\S]*?to postgres,service_role/);
+  const detailIncludeAt = invoiceTimesheetRefsRoot.indexOf('23072026_2207_invoice_detail_get.sql');
+  const editorIncludeAt = invoiceTimesheetRefsRoot.indexOf('23072026_2207_invoice_apply_edits.sql');
+  const finalAclIncludeAt = invoiceTimesheetRefsRoot.indexOf('03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql');
+  assert.ok(detailIncludeAt >= 0 && editorIncludeAt >= 0 && finalAclIncludeAt > detailIncludeAt && finalAclIncludeAt > editorIncludeAt);
+  assert.ok(finalAclIncludeAt < invoiceTimesheetRefsRoot.lastIndexOf('commit;'));
   const resolverBody = invoiceResolver.match(/create or replace function private\._invoice_generation_resolve_command_groups[\s\S]*?\$function\$;/)?.[0] || '';
   assert.doesNotMatch(resolverBody, /from public\.client_settings/);
   assert.match(invoiceEvaluationBarrier, /alter function private\._timesheet_settings_authority_frozen_v1\(uuid\) volatile/);

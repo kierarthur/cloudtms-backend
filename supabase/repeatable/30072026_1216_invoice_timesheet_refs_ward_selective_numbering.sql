@@ -8,5 +8,10 @@ begin;
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_context_batch.sql
 \ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
+-- The historical detail/editor source pages above still carry their original
+-- browser grants. Reassert the current service-only authority inside this
+-- recursive closure so an incremental replay cannot end before the later
+-- standalone ACL repeatable is selected again.
+\ir 03092026_1644_invoice_apply_edits_frozen_authority_acl_v1.sql
 
 commit;
