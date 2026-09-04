@@ -124,6 +124,7 @@ const PAPER_RETURN_PROOF_V2 = 'CANDIDATE_PAPER_RETURN_PROOF_V2';
 const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
 const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
+const MANAGER_FINALISATION_LEASE_MS = 3 * 60 * 1000;
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
@@ -2921,6 +2922,81 @@ async function immutablePut(env, key, bytes, mediaType, metadata = {}) {
   return { created: false, sha256: digest };
 }
 
+function managerFinalisationLeaseKey(env, workflowId, generation) {
+  return [
+    'candidate-app', environmentName(env).toLowerCase(), 'manager-finalisation-leases',
+    requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    requireInteger(generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  ].join('/');
+}
+
+async function acquireManagerFinalisationLease(env, workflowId, generation, nowMs = Date.now()) {
+  const bucket = env.R2;
+  if (!bucket || typeof bucket.head !== 'function' || typeof bucket.put !== 'function') {
+    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  }
+  const key = managerFinalisationLeaseKey(env, workflowId, generation);
+  const existing = await bucket.head(key);
+  const existingExpiry = Date.parse(text(existing?.customMetadata?.expires_at_utc));
+  if (existing && (!Number.isFinite(existingExpiry) || existingExpiry > nowMs)) {
+    return { acquired: false, key };
+  }
+  const token = crypto.randomUUID();
+  const expiresAtMs = nowMs + MANAGER_FINALISATION_LEASE_MS;
+  const onlyIf = existing?.etag
+    ? { etagMatches: existing.etag }
+    : { etagDoesNotMatch: '*' };
+  const stored = await bucket.put(key, new Uint8Array(), {
+    onlyIf,
+    customMetadata: {
+      purpose: 'candidate-manager-finalisation-single-flight',
+      token,
+      expires_at_utc: new Date(expiresAtMs).toISOString()
+    }
+  });
+  return stored
+    ? { acquired: true, key, token, expires_at_ms: expiresAtMs }
+    : { acquired: false, key };
+}
+
+async function releaseManagerFinalisationLease(env, lease, nowMs = Date.now()) {
+  const bucket = env.R2;
+  if (!lease?.acquired || !lease.token || !lease.key
+      || nowMs >= Number(lease.expires_at_ms) - 5000
+      || typeof bucket?.head !== 'function' || typeof bucket?.delete !== 'function') return false;
+  const current = await bucket.head(lease.key);
+  if (text(current?.customMetadata?.token) !== lease.token) return false;
+  await bucket.delete(lease.key);
+  return true;
+}
+
+async function withManagerFinalisationLease(env, workflowId, generation, work) {
+  const lease = await acquireManagerFinalisationLease(env, workflowId, generation);
+  if (!lease.acquired) {
+    return {
+      ok: true,
+      workflow_id: workflowId,
+      state: 'FINALISATION_PENDING',
+      finalisation_pending: true,
+      single_flight_deferred: true
+    };
+  }
+  try {
+    const result = await work();
+    try {
+      await releaseManagerFinalisationLease(env, lease);
+    } catch (error) {
+      console.warn('[candidate-app] manager finalisation lease release failed',
+        safeCandidateTransportDiagnostic(error));
+    }
+    return result;
+  } catch (error) {
+    // Retain the short lease after failure so a disconnected PostgREST call
+    // cannot immediately be followed by a competing finaliser on the same row.
+    throw error;
+  }
+}
+
 function parseJson(value, fallback = null) {
   if (value == null) return fallback;
   if (typeof value === 'string') {
@@ -5102,31 +5178,37 @@ export async function recoverPendingCandidateManagerFinalisations(env, deps, lim
     + '&order=updated_at_utc.asc'
     + `&limit=${boundedLimit}`);
   let recovered = 0;
+  let deferred = 0;
   let failed = 0;
   for (const row of rows) {
     try {
-      const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {
-        p_environment: environment,
-        p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
-        p_expected_generation: requireInteger(row.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
-        p_now_utc: new Date().toISOString()
-      });
-      await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
-      await finaliseWorkflow(
-        env,
-        deps,
-        row.id,
-        Number(row.generation),
-        `candidate-system-finalise-recovery:${row.id}:${row.generation}`
+      const completion = await withManagerFinalisationLease(
+        env, row.id, Number(row.generation), async () => {
+          const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {
+            p_environment: environment,
+            p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+            p_expected_generation: requireInteger(row.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+            p_now_utc: new Date().toISOString()
+          });
+          await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
+          return finaliseWorkflow(
+            env,
+            deps,
+            row.id,
+            Number(row.generation),
+            `candidate-system-finalise-recovery:${row.id}:${row.generation}`
+          );
+        }
       );
-      recovered += 1;
+      if (completion?.single_flight_deferred === true) deferred += 1;
+      else recovered += 1;
     } catch (error) {
       failed += 1;
       console.error('[candidate-app] manager finalisation recovery failed',
         safeCandidateTransportDiagnostic(error));
     }
   }
-  return { scanned: rows.length, recovered, failed };
+  return { scanned: rows.length, recovered, deferred, failed };
 }
 
 async function handleCandidateRead(request, env, deps, kind, params = {}) {
@@ -5618,9 +5700,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
       throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
     }
-    return jsonResponse(200, await finaliseWorkflow(
-      env, deps, workflowId, generation, mutationKey
-    ));
+    const finalisation = await withManagerFinalisationLease(
+      env, workflowId, generation,
+      () => finaliseWorkflow(env, deps, workflowId, generation, mutationKey)
+    );
+    return jsonResponse(finalisation?.single_flight_deferred === true ? 202 : 200, finalisation);
   }
   let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
   let pendingManagerRoute = null;
@@ -5942,13 +6026,16 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     });
   }
   if (dbAction === 'PAPER_RETURN' && result?.state === 'RECEIVED') {
-    const completion = await finaliseReceivedPaperReturn(result, () => finaliseWorkflow(
+    const completion = await finaliseReceivedPaperReturn(result, () => withManagerFinalisationLease(
+      env, workflowId, generation,
+      () => finaliseWorkflow(
         env,
         deps,
         workflowId,
         generation,
         `${mutationKey}:paper-finalise`
-      ));
+      )
+    ));
     return jsonResponse(completion.status, completion.body);
   }
   return jsonResponse(200, result);
@@ -6107,10 +6194,10 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
     completeManagerEmailRoute(env, deps, routeAuthority, ctx);
   }
   if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
-    const work = (async () => {
+    const work = withManagerFinalisationLease(env, workflowId, result.generation, async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL');
       return finaliseWorkflow(env, deps, workflowId, result.generation, `${mutationKey}:finalise`);
-    })();
+    });
     const deferred = deferBackground(ctx, work, 'manager-final-render-and-finalise', {
       workflow_id: workflowId,
       generation: result.generation
@@ -7825,11 +7912,14 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     if (generation !== Number(workflow.generation)) {
       throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
     }
-    const contract = workflow.last_mutation_response_json?.final_render_contract;
-    if (contract) await renderAndRegister(env, deps, contract, 'FINAL', user.id);
-    return jsonResponse(200, await finaliseWorkflow(
-      env, deps, workflow.id, generation, idempotencyKey, user.id
-    ));
+    const finalisation = await withManagerFinalisationLease(
+      env, workflow.id, generation, async () => {
+        const contract = workflow.last_mutation_response_json?.final_render_contract;
+        if (contract) await renderAndRegister(env, deps, contract, 'FINAL', user.id);
+        return finaliseWorkflow(env, deps, workflow.id, generation, idempotencyKey, user.id);
+      }
+    );
+    return jsonResponse(finalisation?.single_flight_deferred === true ? 202 : 200, finalisation);
   }
   if (generation !== Number(workflow.generation)) {
     throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
@@ -7877,12 +7967,12 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
   }
   if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
-    const work = (async () => {
+    const work = withManagerFinalisationLease(env, workflow.id, result.generation, async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL', user.id);
       return finaliseWorkflow(env, deps, workflow.id, result.generation,
         await deterministicOpaqueToken(env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
           'cloudtms-office-phone-finalise-v1', idempotencyKey), user.id);
-    })();
+    });
     const deferred = deferBackground(ctx, work, 'office-final-render-and-finalise', {
       workflow_id: workflow.id,
       generation: result.generation
@@ -8794,6 +8884,9 @@ export const candidateAppBackendInternals = Object.freeze({
   safePaperReturnPages,
   candidatePaperReturnPackReceipts,
   immutablePut,
+  acquireManagerFinalisationLease,
+  releaseManagerFinalisationLease,
+  withManagerFinalisationLease,
   preparedUploadContract,
   preparedCandidateComponentReplay,
   currentCandidateExpenseComponentReplay,

@@ -15,6 +15,8 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = pg_catalog, public, private, pg_temp
+set lock_timeout = '5s'
+set statement_timeout = '120s'
 as $function$
 declare
   v_environment text;

@@ -15189,14 +15189,16 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "lock_timeout=5s",
+        "search_path=pg_catalog, public, private, pg_temp",
+        "statement_timeout=120s"
       ],
       "schema": "public",
       "identity": "candidate_submission_finalize_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4866e95faab5304c6ef37391c882c423508d3167c1df06fb57e8f28ca9101bdd"
+      "definition_sha256": "7e070b5582931c0157a9de64c7850fb40248c49fd2d7ce38fc54b98aedc06340"
     },
     {
       "acl": [

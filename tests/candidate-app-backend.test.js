@@ -6005,7 +6005,12 @@ test('finalisation probes its durable key receipt before current approval histor
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'finalisation-access-secret',
     SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async head() { return null; },
+      async put() { return { etag: 'finalisation-test-lease' }; },
+      async delete() {}
+    }
   };
   const accessToken = await createAccessToken(env, { session_id: sessionId, rotation: 0 });
   let approvalRead = false;
