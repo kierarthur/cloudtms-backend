@@ -5018,14 +5018,14 @@ async function resolveWorkflowSession(env, workflow) {
 }
 
 async function lifecycleSignature(deps, workflow) {
-  const timesheetId = workflow.target_timesheet_id || null;
+  const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id || null;
   const result = await rpcCall(deps, 'timesheet_lifecycle_signature_v1', {
     p_timesheet_id: timesheetId,
-    // The signature protects the workflow's actual expense target. An
-    // authoritative hours Timesheet can be the immutable anchor while the
-    // expense carrier is still an empty Contract week; the anchor must never be
-    // substituted for that unmaterialised carrier.
-    p_contract_week_id: workflow.contract_week_id || null,
+    // An unmaterialised standalone expense carrier has no Timesheet row to
+    // sign. Its atomic placement authority deliberately validates the protected
+    // hours Timesheet that anchors the carrier. Never pair that anchor with the
+    // carrier's different Contract-week identity.
+    p_contract_week_id: timesheetId ? null : workflow.contract_week_id || null,
     p_include_payload: false
   });
   return text(result?.backend_row_signature || result?.mutation_row_signature || result?.row_signature || result?.expected_row_signature);
@@ -5202,13 +5202,21 @@ export async function recoverPendingCandidateManagerFinalisations(env, deps, lim
             p_now_utc: new Date().toISOString()
           }, { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS });
           await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
-          return finaliseWorkflow(
+          const completion = await finaliseWorkflow(
             env,
             deps,
             row.id,
             Number(row.generation),
             `candidate-system-finalise-recovery:${row.id}:${row.generation}`
           );
+          if (completion?.ok !== true) {
+            throw new CandidateHttpError(
+              409,
+              knownErrorCode({ code: completion?.error_code })
+                || 'CANDIDATE_MANAGER_FINALISATION_INCOMPLETE'
+            );
+          }
+          return completion;
         }
       );
       if (completion?.single_flight_deferred === true) deferred += 1;
