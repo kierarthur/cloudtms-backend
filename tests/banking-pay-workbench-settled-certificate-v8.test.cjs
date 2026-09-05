@@ -25,6 +25,7 @@ const preapplyGenerator = read('supabase/verification/generate_banking_pay_catal
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const sourceWorkflow = read('.github/workflows/supabase-migrate.yml');
 const broker = read('broker/src/index.js');
+const runtimeVerification = read('tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql');
 
 test('targeted publication certifies completed rotation-family scope and permits a correct zero-row result', () => {
   const start = publisher.indexOf("IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS' THEN");
@@ -404,6 +405,21 @@ test('the release seals the exact H1 catalogue and rollback-contained first-use 
     assert.equal(release.verificationFiles.filter(file => file === proof).length, 1, proof);
     assert.equal(release.newVerificationFiles.filter(file => file === proof).length, 1, proof);
   }
+});
+
+test('managed-upgrade certificate proof is isolated from unrelated Workbench history without weakening the gate', () => {
+  assert.match(runtimeVerification,
+    /v_scope_generation\s*:=\s*public\.pay_workbench_scope_current_generation_v1\(\)/i);
+  assert.match(runtimeVerification,
+    /pg_catalog\.jsonb_build_object\('candidate_id',v_candidate_id::text\)/i);
+  assert.match(runtimeVerification,
+    /ARRAY\[v_candidate_id\],[\s\S]{0,120}v_scope_generation,v_scope_generation,v_scope_generation/i);
+  assert.match(runtimeVerification,
+    /v_economic_build_id,v_candidate_id,v_session_id,1,v_snapshot_id,v_source_build_run_id,[\s\S]{0,80}v_scope_generation,1,'COMPLETE','COMPLETE'/i);
+  assert.doesNotMatch(runtimeVerification,
+    /DATE '2099-04-03',DATE '2099-03-29','\{\}'::jsonb,v_prefix/i);
+  assert.match(build, /v_gate\s*:=\s*private\.pay_workbench_modal_draft_gate_v2/i);
+  assert.match(build, /WORKBENCH_CERTIFICATE_DRAFT_GATE_REJECTED/i);
 });
 
 test('the Workbench session-open catalogue owner contains the sole exact current definition', () => {

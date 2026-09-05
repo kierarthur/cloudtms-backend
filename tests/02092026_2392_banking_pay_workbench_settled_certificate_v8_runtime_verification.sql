@@ -124,7 +124,13 @@ DECLARE
   v_reference_envelope jsonb;
   v_certificate_reference jsonb;
   v_caught boolean;
+  v_scope_generation bigint;
 BEGIN
+  -- This verifier also runs during managed UPGRADE, where unrelated historic
+  -- Workbench failures and a non-zero global generation legitimately exist.
+  -- Bind the synthetic session to its sole Candidate and to the current
+  -- generation so the proof cannot inherit or mask unrelated business state.
+  v_scope_generation := public.pay_workbench_scope_current_generation_v1();
   INSERT INTO public.banking_pay_snapshot_runs(
     id,pay_date,week_ending_cutoff,pay_week_start,eligibility_from_date,
     eligibility_to_date,status,is_active
@@ -150,9 +156,11 @@ BEGIN
     scope_candidate_ids,scope_change_generation_target,scope_change_generation_applied,
     scope_change_generation_shadow_checked
   ) VALUES (
-    v_session_id,v_actor_id,DATE '2099-04-03',DATE '2099-03-29','{}'::jsonb,v_prefix,
+    v_session_id,v_actor_id,DATE '2099-04-03',DATE '2099-03-29',
+    pg_catalog.jsonb_build_object('candidate_id',v_candidate_id::text),v_prefix,
     v_snapshot_id,'OPEN',1,pg_catalog.jsonb_build_array(v_preview_row_id::text),
-    true,true,1,1,1,0,0,1,1,0,0,1,1,'READY',1,ARRAY[v_candidate_id],0,0,0
+    true,true,1,1,1,0,0,1,1,0,0,1,1,'READY',1,ARRAY[v_candidate_id],
+    v_scope_generation,v_scope_generation,v_scope_generation
   );
   INSERT INTO private.banking_pay_workbench_economic_builds(
     id,candidate_id,session_id,session_version,source_snapshot_run_id,source_build_run_id,
@@ -165,7 +173,7 @@ BEGIN
     reconciled_at_utc,completed_at_utc
   ) VALUES (
     v_economic_build_id,v_candidate_id,v_session_id,1,v_snapshot_id,v_source_build_run_id,
-    0,1,'COMPLETE','COMPLETE',
+    v_scope_generation,1,'COMPLETE','COMPLETE',
     '{"terminal":true}'::jsonb,'{"terminal":true,"seal_phase":"COMPLETE"}'::jsonb,
     1,md5(v_prefix||':SEED'),clock_timestamp(),1,true,true,
     md5(v_prefix||':UNIT'),md5(v_prefix||':EDGE-TAG'),md5(v_prefix||':SCOPE'),
