@@ -46,8 +46,14 @@ begin
   order by week_row.updated_at desc,week_row.id desc
   limit 1;
 
-  v_route:=private._candidate_route_family_v1(v_timesheet.timesheet_id,v_week.id);
-  v_route_family:=upper(coalesce(v_route->>'route_family',''));
+  if v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then
+    -- Daily is Contract-free and PHONE-only.  Its established Office rejection
+    -- must continue to work, but it is outside the Electronic/QR delete gate.
+    v_route_family:='PHONE';
+  else
+    v_route:=private._candidate_route_family_v1(v_timesheet.timesheet_id,v_week.id);
+    v_route_family:=upper(coalesce(v_route->>'route_family',''));
+  end if;
 
   select coalesce(array_agg(workflow_row.id order by workflow_row.id),array[]::uuid[])
   into v_workflow_ids
@@ -61,13 +67,8 @@ begin
           'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
         )
         and (
-          (
-            workflow_row.target_timesheet_id=v_timesheet.timesheet_id
-            and (
-              workflow_row.workflow_kind='CONTRACT_EXPENSE'
-              or v_route_family in ('ELECTRONIC','QR')
-            )
-          )
+          workflow_row.target_timesheet_id=v_timesheet.timesheet_id
+          or workflow_row.anchor_timesheet_id=v_timesheet.timesheet_id
           or (
             workflow_row.target_timesheet_id is null
             and v_route_family in ('ELECTRONIC','QR')
@@ -88,10 +89,6 @@ begin
       or (
         workflow_row.state='FINALISED'
         and workflow_row.target_timesheet_id=v_timesheet.timesheet_id
-        and (
-          workflow_row.workflow_kind='CONTRACT_EXPENSE'
-          or v_route_family in ('ELECTRONIC','QR')
-        )
       )
     );
 
@@ -117,6 +114,10 @@ begin
     end,
     'linked_pending_expense',workflow_row.workflow_kind='CONTRACT_EXPENSE'
       and workflow_row.target_timesheet_id is null,
+    'delete_guard_applicable',(
+      workflow_row.workflow_kind='CONTRACT_EXPENSE'
+        and workflow_row.target_timesheet_id=v_timesheet.timesheet_id
+    ) or v_route_family in ('ELECTRONIC','QR'),
     'candidate_submission_stage',case
       when workflow_row.state in (
         'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
@@ -315,14 +316,16 @@ begin
           v_all_workflow_ids,(v_target->>'workflow_id')::uuid
         );
       end if;
-      if coalesce((v_target->>'linked_pending_expense')::boolean,false)
+      if coalesce((v_target->>'delete_guard_applicable')::boolean,false)
+         and coalesce((v_target->>'linked_pending_expense')::boolean,false)
          and not ((v_target->>'workflow_id')::uuid
            =any(v_linked_pending_expense_workflow_ids)) then
         v_linked_pending_expense_workflow_ids:=array_append(
           v_linked_pending_expense_workflow_ids,(v_target->>'workflow_id')::uuid
         );
       end if;
-      if v_target->>'candidate_submission_stage'<>'DRAFT'
+      if coalesce((v_target->>'delete_guard_applicable')::boolean,false)
+         and v_target->>'candidate_submission_stage'<>'DRAFT'
          and not exists(
            select 1 from jsonb_array_elements(v_guard_items) existing(item)
            where existing.item->>'workflow_id'=v_target->>'workflow_id'
