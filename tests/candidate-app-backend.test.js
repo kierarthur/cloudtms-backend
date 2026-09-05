@@ -492,6 +492,51 @@ test('Candidate notification projection closes internal database payloads and li
   assert.equal(JSON.stringify(notification).includes('workflow_generation'), false);
 });
 
+test('linked expense cancellation notification explains the reject-before-delete cause', () => {
+  const workflowId = '00000000-0000-4000-8000-000000000072';
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000071',
+    workflow_id: workflowId,
+    timesheet_id: null,
+    event_type: 'EXPENSE_CLAIM_CANCELLED',
+    template_key: 'candidate-expense-claim-cancelled-timesheet-rejection-v1',
+    template_params: {
+      workflow_id: workflowId,
+      reason_code: 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+    },
+    deep_link_json: { type: 'workflow', workflow_id: workflowId },
+    state: 'UNREAD', created_at_utc: '2026-09-05T23:15:36.000Z', read_at_utc: null
+  });
+  assert.equal(
+    notification.payload_json.message,
+    'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.'
+  );
+  assert.equal(notification.deep_link_json.destination, 'WORKFLOW_DETAIL');
+  assert.equal(notification.deep_link_json.workflow_id, workflowId);
+  assert.equal(notification.payload_json.timesheet_id, undefined);
+});
+
+test('existing linked expense rejection rows also receive the accurate cancellation copy', () => {
+  const workflowId = '00000000-0000-4000-8000-000000000074';
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000073',
+    workflow_id: workflowId,
+    timesheet_id: '00000000-0000-4000-8000-000000000075',
+    event_type: 'OFFICE_REJECTED',
+    template_key: 'candidate-office-rejected-v1',
+    template_params: { resubmission_scope: 'COMPLETE_EXPENSE_CLAIM' },
+    deep_link_json: {
+      type: 'timesheet',
+      timesheet_id: '00000000-0000-4000-8000-000000000075'
+    },
+    state: 'UNREAD', created_at_utc: '2026-09-05T23:15:36.000Z', read_at_utc: null
+  });
+  assert.equal(
+    notification.payload_json.message,
+    'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.'
+  );
+});
+
 test('Candidate notification feed is scoped to the selected candidate and reads template_params', async () => {
   const sessionId = '00000000-0000-4000-8000-000000000064';
   const accountId = '00000000-0000-4000-8000-000000000065';

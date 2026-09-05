@@ -791,15 +791,35 @@ begin
     if not found then
       raise exception 'CANDIDATE_REJECT_WORKFLOW_CONFLICT' using errcode='40001';
     end if;
-    perform private._candidate_notification_insert_v1(v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_new_timesheet_id,
-      'OFFICE_REJECTED','office_rejection','candidate-office-rejected-v1',
+    perform private._candidate_notification_insert_v1(
+      v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then null else v_new_timesheet_id end,
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'EXPENSE_CLAIM_CANCELLED' else 'OFFICE_REJECTED' end,
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'timesheet_expense_attention' else 'office_rejection' end,
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'candidate-expense-claim-cancelled-timesheet-rejection-v1'
+        else 'candidate-office-rejected-v1' end,
       jsonb_build_object(
         'reason',btrim(p_reason),
+        'reason_code',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+          then 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+          else 'OFFICE_REJECTED' end,
+        'workflow_id',v_workflow.id,
         'resubmission_scope',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
           then 'COMPLETE_EXPENSE_CLAIM' else v_reject_scope end
       ),
-      jsonb_build_object('type','timesheet','timesheet_id',v_new_timesheet_id),
-      'CANDIDATE_OFFICE_REJECTED_V1:'||v_workflow.id::text||':'||(v_workflow.generation+1)::text,p_now_utc);
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then jsonb_build_object('type','workflow','workflow_id',v_workflow.id)
+        else jsonb_build_object('type','timesheet','timesheet_id',v_new_timesheet_id) end,
+      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'CANDIDATE_EXPENSE_CLAIM_CANCELLED_TIMESHEET_REJECTION_V1:'
+        else 'CANDIDATE_OFFICE_REJECTED_V1:' end
+        ||v_workflow.id::text||':'||(v_workflow.generation+1)::text,
+      p_now_utc
+    );
   end loop;
   v_response:=jsonb_build_object(
     'ok',true,'old_timesheet_id',v_timesheet.timesheet_id,'timesheet_id',v_new_timesheet_id,

@@ -198,8 +198,19 @@ begin
      or (select rejection_scope from public.candidate_submission_workflows
          where id=v_expense_workflow)<>'COMPLETE_EXPENSE_CLAIM'
      or (select count(*) from public.candidate_notifications
-         where workflow_id in (v_hours_workflow,v_expense_workflow)
-           and event_type='OFFICE_REJECTED')<>2 then
+         where workflow_id=v_hours_workflow
+           and event_type='OFFICE_REJECTED'
+           and template_key='candidate-office-rejected-v1'
+           and timesheet_id=v_new_timesheet)<>1
+     or (select count(*) from public.candidate_notifications
+         where workflow_id=v_expense_workflow
+           and event_type='EXPENSE_CLAIM_CANCELLED'
+           and preference_category='timesheet_expense_attention'
+           and template_key='candidate-expense-claim-cancelled-timesheet-rejection-v1'
+           and template_params->>'reason_code'='LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+           and deep_link_json->>'type'='workflow'
+           and deep_link_json->>'workflow_id'=v_expense_workflow::text
+           and timesheet_id is null)<>1 then
     raise exception 'Atomic rejection did not reject both workflows exactly: %',v_result;
   end if;
 

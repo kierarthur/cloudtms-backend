@@ -67,6 +67,14 @@ test('preview, rejection and final delete use the same guarded workflow authorit
   assert.match(verification, /Atomic rejection did not reject both workflows exactly/i);
 });
 
+test('linked expense rejection emits its own accurate push-ready notification', () => {
+  assert.match(sql, /workflow_kind='CONTRACT_EXPENSE'[\s\S]*?'EXPENSE_CLAIM_CANCELLED'[\s\S]*?'timesheet_expense_attention'/i);
+  assert.match(sql, /candidate-expense-claim-cancelled-timesheet-rejection-v1/i);
+  assert.match(sql, /LINKED_TIMESHEET_REJECTED_FOR_DELETE/i);
+  assert.match(sql, /jsonb_build_object\('type','workflow','workflow_id',v_workflow\.id\)/i);
+  assert.match(verification, /event_type='EXPENSE_CLAIM_CANCELLED'[\s\S]*?template_key='candidate-expense-claim-cancelled-timesheet-rejection-v1'/i);
+});
+
 test('Office validates and presents the reject-before-delete result', () => {
   assert.match(broker, /function loadTimesheetCandidateSubmissionDeleteGuard/i);
   assert.match(broker, /TIMESHEET_CANDIDATE_SUBMISSION_DELETE_GUARD_V1/i);

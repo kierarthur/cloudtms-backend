@@ -7596,6 +7596,23 @@ const CANDIDATE_NOTIFICATION_COPY = Object.freeze({
   EXPENSE_CLAIM_CANCELLED: 'Your pending expense claim was cancelled because its Timesheet was deleted.'
 });
 
+function candidateNotificationMessage(eventType, parameters = {}) {
+  const linkedExpenseRejectedBeforeDelete = (
+    (
+      eventType === 'EXPENSE_CLAIM_CANCELLED'
+      && upper(parameters?.reason_code) === 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
+    )
+    || (
+      eventType === 'OFFICE_REJECTED'
+      && upper(parameters?.resubmission_scope) === 'COMPLETE_EXPENSE_CLAIM'
+    )
+  );
+  if (linkedExpenseRejectedBeforeDelete) {
+    return 'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.';
+  }
+  return CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update in MyTMS.';
+}
+
 function optionalUuid(value) {
   const candidate = text(value);
   return UUID_RE.test(candidate) ? candidate : null;
@@ -7625,7 +7642,7 @@ function safeCandidateNotification(row) {
   const payload = {
     state: eventType || 'UPDATE',
     candidate_status_code: eventType || 'UPDATE',
-    message: CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update in MyTMS.',
+    message: candidateNotificationMessage(eventType, parameters),
     occurred_at_utc: source.created_at_utc
   };
   if (workflowId) payload.workflow_id = workflowId;
