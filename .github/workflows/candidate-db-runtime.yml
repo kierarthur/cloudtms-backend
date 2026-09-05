@@ -24,6 +24,8 @@ on:
       - 'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql'
       - 'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql'
       - 'supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql'
+      - 'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql'
+      - 'supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql'
       - 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
@@ -218,6 +220,7 @@ jobs:
             supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql
             supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql
             supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql
+            supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
 
@@ -285,6 +288,7 @@ jobs:
             supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql
             supabase/verification/05092026_0421_candidate_effective_pay_history_verification.sql
             supabase/verification/05092026_0735_candidate_expense_cancel_authority_verification.sql
+            supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 
