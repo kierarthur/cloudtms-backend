@@ -11,6 +11,7 @@ declare
   v_week uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
   v_action jsonb;
+  v_action_contract jsonb;
   v_workflows jsonb;
   v_definition text;
   v_protected_status text;
@@ -40,6 +41,20 @@ begin
   if v_action is not null then
     raise exception 'Unprotected finalised combined claim exposed another expense claim: %',v_action;
   end if;
+  v_action_contract:=private._candidate_timesheet_action_contract_v1(
+    'PENDING_AUTH',v_workflows,
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
+    v_timesheet,v_week,now()
+  );
+  if nullif(v_action_contract->>'primary_action','') is not null
+     or exists(
+       select 1
+       from jsonb_array_elements(v_action_contract->'available_actions') item
+       where item->>'code'='ADD_EXPENSES'
+     ) then
+    raise exception 'Unprotected finalised combined claim retained a secondary expense action: %',
+      v_action_contract;
+  end if;
 
   foreach v_protected_status in array array['AUTHORISED','INVOICED_NOT_PAID','PAID'] loop
     v_action:=private._candidate_timesheet_primary_action_v1(
@@ -53,6 +68,21 @@ begin
         v_protected_status,v_action;
     end if;
   end loop;
+
+  v_action_contract:=private._candidate_timesheet_action_contract_v1(
+    'AUTHORISED',v_workflows,
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
+    v_timesheet,v_week,now()
+  );
+  if v_action_contract#>>'{primary_action,code}'<>'ADD_EXPENSES'
+     or not exists(
+       select 1
+       from jsonb_array_elements(v_action_contract->'available_actions') item
+       where item->>'code'='ADD_EXPENSES'
+     ) then
+    raise exception 'Office-protected claim lost its authorised expense action: %',
+      v_action_contract;
+  end if;
 
   v_workflows:=jsonb_build_array(jsonb_build_object(
     'workflow_id',v_workflow,'workflow_kind','CONTRACT_HOURS',
