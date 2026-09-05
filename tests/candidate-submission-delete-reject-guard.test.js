@@ -83,6 +83,9 @@ test('final delete retains terminal Candidate history without retaining live Tim
   assert.match(sql, /contract_week_id=null,[\s\S]*?anchor_timesheet_id=null,[\s\S]*?target_timesheet_id=null/i);
   assert.match(sql, /office_permanent_delete_tombstone/i);
   assert.match(sql, /CANDIDATE_WORKFLOW_RETAINED_AFTER_TIMESHEET_DELETE/i);
+  assert.match(sql, /v_pre_retirement_row_signature[\s\S]*?ROW_SIGNATURE_MISMATCH/i);
+  assert.match(sql, /v_post_retirement_row_signature[\s\S]*?timesheet_delete_with_pending_expense_apply_v1/i);
+  assert.match(sql, /p_expected_timesheet_id,v_post_retirement_row_signature,p_expected_timesheet_ids/i);
   assert.match(verification, /Rejected replacement did not complete one safe permanent delete/i);
   assert.match(verification, /state='REJECTED'[\s\S]*?contract_week_id is null/i);
   assert.match(verification, /event_type='OFFICE_REJECTED'[\s\S]*?deep_link_json->>'type'='workflow'/i);

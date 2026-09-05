@@ -80,7 +80,10 @@ test('generated contract retains only the exact terminal Daily audit shape', () 
   assert.match(constraint.definition, /target_timesheet_id IS NULL/);
   assert.match(constraint.definition, /anchor_timesheet_id IS NULL/);
   assert.match(constraint.definition, /OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT/);
-  assert.doesNotMatch(constraint.definition, /state = ANY/);
+  const dailyBranch = constraint.definition.slice(
+    constraint.definition.indexOf("workflow_kind = 'DAILY'::text")
+  );
+  assert.doesNotMatch(dailyBranch, /state = ANY/);
 });
 
 test('preview delegates existing financial deletion classification and fails closed on approval or retained authority', () => {

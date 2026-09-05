@@ -625,6 +625,10 @@ declare
   v_pending_workflow_ids uuid[]:=array[]::uuid[];
   v_workflow_retirement jsonb;
   v_apply_result jsonb;
+  v_signature_contract_week_id uuid;
+  v_signature_result jsonb;
+  v_pre_retirement_row_signature text;
+  v_post_retirement_row_signature text;
 begin
   -- Rejections and PAPER changes already use this family lock.  Take it before
   -- any row lock so delete and reject cannot acquire the same rows in reverse.
@@ -702,6 +706,34 @@ begin
       using errcode='55000',detail=v_guard::text;
   end if;
 
+  -- Prove the caller's exact preview while all removal-unit and Candidate
+  -- workflow locks are held. Releasing a retained workflow/component link can
+  -- legitimately advance the server-owned summary revision, so the established
+  -- delete must receive a fresh signature after that internal audit-only step.
+  select week_row.id
+  into v_signature_contract_week_id
+  from public.contract_weeks week_row
+  where week_row.timesheet_id=p_expected_timesheet_id
+  order by week_row.updated_at desc,week_row.id desc
+  limit 1;
+  v_signature_result:=public.timesheet_lifecycle_guard_signature_v1(
+    p_expected_timesheet_id,v_signature_contract_week_id,false
+  );
+  v_pre_retirement_row_signature:=coalesce(
+    v_signature_result->>'backend_row_signature',
+    v_signature_result->>'row_signature'
+  );
+  if v_pre_retirement_row_signature is null
+     or lower(v_pre_retirement_row_signature)
+       is distinct from lower(p_expected_row_signature) then
+    raise exception 'ROW_SIGNATURE_MISMATCH'
+      using errcode='40001',detail=jsonb_build_object(
+        'expected_timesheet_id',p_expected_timesheet_id,
+        'expected_row_signature',p_expected_row_signature,
+        'current_row_signature',v_pre_retirement_row_signature
+      )::text;
+  end if;
+
   v_pending_context:=private._timesheet_pending_expense_delete_context_v1(
     v_environment,p_expected_timesheet_ids,false
   );
@@ -718,9 +750,25 @@ begin
     v_pending_workflow_ids,p_actor_user_id,p_delete_operation_id,p_now_utc
   );
 
+  v_signature_result:=public.timesheet_lifecycle_guard_signature_v1(
+    p_expected_timesheet_id,v_signature_contract_week_id,false
+  );
+  v_post_retirement_row_signature:=coalesce(
+    v_signature_result->>'backend_row_signature',
+    v_signature_result->>'row_signature'
+  );
+  if v_post_retirement_row_signature is null then
+    raise exception 'ROW_SIGNATURE_MISMATCH'
+      using errcode='40001',detail=jsonb_build_object(
+        'expected_timesheet_id',p_expected_timesheet_id,
+        'expected_row_signature',p_expected_row_signature,
+        'current_row_signature',v_post_retirement_row_signature
+      )::text;
+  end if;
+
   v_apply_result:=public.timesheet_delete_with_pending_expense_apply_v1(
     v_environment,p_delete_kind,p_timesheet_id,p_actor_user_id,
-    p_expected_timesheet_id,p_expected_row_signature,p_expected_timesheet_ids,
+    p_expected_timesheet_id,v_post_retirement_row_signature,p_expected_timesheet_ids,
     p_expected_contract_week_ids,p_expected_nhsp_shift_ids,
     p_expected_preserved_source_timesheet_ids,
     p_expected_preserved_source_contract_week_ids,
