@@ -2749,7 +2749,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5a9c4f87130293238fa0576276068fe8314a064491b4f958c75b65bce2a30af2"
+      "definition_sha256": "4027e81749579873c41baa16bb85b2861bf32ec97319414529720e4806c6610d"
     },
     {
       "acl": [
@@ -4393,7 +4393,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "32c4f30b2d0489c6d2a28bab3db3a8797f631e21a45a3e7c7777fd166b670e70"
+      "definition_sha256": "efc89f8b3c4347dd26c13224ccda526a6a6350171b3636688432e07da91adb6d"
     },
     {
       "acl": [
@@ -4640,7 +4640,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "936a897ed34dedda8b185d9d5874a6b96f4b91c94b2124a2a813b675aaf55881"
+      "definition_sha256": "100e6b73a2675aa0c3bf0b8e41866d13eec3dc2fd47c800b34fec9e38147996d"
     },
     {
       "acl": [
@@ -4911,7 +4911,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "088335b9451163136349f4bea828b0b9ecf98a07a4817858b9fe13fade44662c"
+      "definition_sha256": "e571141ffcdd9fd1f6de2c4393a2aa567a6ec9700462c979e5132694d8c494cc"
     },
     {
       "acl": [
@@ -14045,14 +14045,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "search_path=\"\""
       ],
       "schema": "public",
       "identity": "candidate_app_bootstrap_v1(p_session_id uuid, p_environment text, p_expected_rotation integer, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "388b5c8bf32a9864ae9f8e872e3f2a4b3847b73e9ea8dd4ba7af77cf8274c9b3"
+      "definition_sha256": "5c5d8b7046aac8a342411ea16df28f347de90f49187fdec25b815301d2ca2fe5"
     },
     {
       "acl": [
@@ -14148,7 +14148,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8570eb98db0a73647b9aa8928d0035d167074b1ecddd795c0cf411714b3707c6"
+      "definition_sha256": "b23a87fdf4560f9745fe5f7666db361e29a9be16cedbdd617351cafea4aafecb"
     },
     {
       "acl": [
@@ -14196,7 +14196,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ccff74f1b030a19c2f4141639ff5cffde0de35f1e5a4881ddc07accd88b4b7d3"
+      "definition_sha256": "243a625e223a98e5a5e650d300131f27cf1b0934438b722a4824ecc2c2a8c9ff"
     },
     {
       "acl": [
