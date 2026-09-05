@@ -4127,7 +4127,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "9b2be942cab3305fa8086662056348e7a9aaff61cc332b9c9a1737bfe74a5d83"
+      "definition_sha256": "808b1d4c5743144801350755b66e9b6c874d6429b0a119f981a9dfef9468c82b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_office_rejection_targets_v2(p_environment text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "aef11fa5954b4946c09528ec52e7f577b112fd744780b1b7ceae0e9c27c24e01"
     },
     {
       "acl": [
@@ -6633,6 +6652,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "0a4246fab681a5ba7a37082bd1c4a4ddcfed5589233b9a007fd0daae2d69f3d7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_candidate_submission_delete_guard_v1(p_environment text, p_timesheet_ids uuid[], p_lock_workflows boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b6bfbb2cb5eaf1f21e9c62bdb9f2e5c18b084dce8d3f1b638c4a6dacb5fd0a49"
     },
     {
       "acl": [
@@ -16272,7 +16310,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "af6c7589c21cc14a593c383fedbfcea6225b95ec0db68214140b7020cf4b5b1a"
+      "definition_sha256": "6faf079347bc80f26bc1a3196f7c7d6e8063dd84077297caff549da058512636"
     },
     {
       "acl": [
@@ -28541,6 +28579,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_candidate_submission_delete_guard_preview_v1(p_environment text, p_timesheet_ids uuid[])",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "fb6d98b57bd70c6c93d5600d50e9fb31cd952ee134caeb472b6911f3f4e09b4c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -28717,6 +28779,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "a6fdc93ef2e47ea0d8f19baa8da31cc1d43fe71b6ed776975e42ef4dfcab38b6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_delete_with_candidate_submission_guard_apply_v1(p_environment text, p_delete_kind text, p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_expected_timesheet_ids uuid[], p_expected_contract_week_ids uuid[], p_expected_nhsp_shift_ids uuid[], p_expected_preserved_source_timesheet_ids uuid[], p_expected_preserved_source_contract_week_ids uuid[], p_expected_pending_expense_context_sha256 text, p_delete_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ce21ed72be1f52241b67a1dceeab69caf70ac0ce40279f71a43fccce7b21ff7f"
     },
     {
       "acl": [

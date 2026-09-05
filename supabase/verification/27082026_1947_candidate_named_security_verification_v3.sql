@@ -1,7 +1,7 @@
 -- Supersedes the execution of the historical v2 verifier without rewriting it.
--- Adds the service-only Candidate Timesheet Summary cursor and automatic manager
--- finalisation recovery RPC to the exact public Candidate RPC inventory; browser
--- execution remains zero.
+-- Adds the service-only Candidate Timesheet Summary cursor, automatic manager
+-- finalisation recovery, and reject-before-delete guard RPCs to the exact public
+-- Candidate RPC inventory; browser execution remains zero.
 
 do $candidate_named_security_verification_v3$
 declare
@@ -111,11 +111,11 @@ begin
   -- repair, the three service-only MyTMS Places and contacts functions, the
   -- weekly paper-target preparation functions, the four QR signed-pack V2
   -- manifest/proof/component/whole-pack functions, and the exact service-only
-  -- legacy one-page cancellation wrapper and manager-finalisation single-flight
-  -- wrapper are present. Browser execution
+  -- legacy one-page cancellation wrapper, manager-finalisation single-flight
+  -- wrapper and two reject-before-delete guard functions are present. Browser execution
   -- remains exactly zero.
-  if v_count<>125 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'84575ef2d02293ecda5bf871a7359179' then
+  if v_count<>127 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'8eb227d347a976dee27ee3ea01c3a899' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
