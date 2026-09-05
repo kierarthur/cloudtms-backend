@@ -93,7 +93,7 @@ test('browser roles cannot call the new deletion authority', () => {
 test('Office uses one context digest from preview through apply and retires manager routes after commit', () => {
   assert.match(broker, /timesheet_pending_expense_delete_preview_v1/);
   assert.match(broker, /expected_pending_expense_context_sha256/);
-  assert.match(broker, /timesheet_delete_with_pending_expense_apply_v1/);
+  assert.match(broker, /timesheet_delete_with_candidate_submission_guard_apply_v1/);
   assert.match(broker, /resultMismatchFields\.push\('banking_pay_candidate_refresh'\)/);
   assert.match(broker, /banking_pay_candidate_refresh_queued: true/);
   assert.match(broker, /loadCandidateManagerRouteTicketsForWorkflows/);

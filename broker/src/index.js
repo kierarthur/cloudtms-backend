@@ -107020,6 +107020,81 @@ async function loadTimesheetPendingExpenseDeleteContext(env, timesheetIds, route
   };
 }
 
+async function loadTimesheetCandidateSubmissionDeleteGuard(env, timesheetIds, routeClass, purpose) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
+  const ids = Array.from(new Set(
+    (Array.isArray(timesheetIds) ? timesheetIds : [])
+      .map((value) => String(value || '').trim())
+      .filter((value) => uuidRe.test(value))
+  )).sort();
+  if (!['TEST', 'LIVE'].includes(environment) || ids.length < 1 || ids.length > 64) {
+    throw new Error('CANDIDATE_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  let result = await sbRpc(env, 'timesheet_candidate_submission_delete_guard_preview_v1', {
+    p_environment: environment,
+    p_timesheet_ids: ids
+  }, {
+    routeClass,
+    purpose,
+    timeoutMs: 8000
+  });
+  if (Array.isArray(result)) result = result[0] || null;
+  if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'data')) {
+    result = Array.isArray(result.data) ? (result.data[0] || null) : result.data;
+  }
+  if (!result || typeof result !== 'object' || Array.isArray(result)
+      || result.ok !== true
+      || result.contract_version !== 'TIMESHEET_CANDIDATE_SUBMISSION_DELETE_GUARD_V1'
+      || typeof result.candidate_submission_rejection_required !== 'boolean'
+      || !Array.isArray(result.guarded_workflows)) {
+    throw new Error('CANDIDATE_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  const stage = String(result.candidate_submission_stage || '').trim().toUpperCase() || null;
+  if (stage && !['CANDIDATE_SUBMITTED', 'MANAGER_APPROVED'].includes(stage)) {
+    throw new Error('CANDIDATE_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  const guardedWorkflows = result.guarded_workflows.map((workflow) => {
+    const workflowId = String(workflow?.workflow_id || '').trim();
+    const generation = Number(workflow?.workflow_generation);
+    const workflowStage = String(workflow?.candidate_submission_stage || '').trim().toUpperCase();
+    const rejectionTimesheetId = String(workflow?.rejection_timesheet_id || '').trim();
+    if (!uuidRe.test(workflowId) || !uuidRe.test(rejectionTimesheetId)
+        || !Number.isInteger(generation) || generation < 1
+        || !['CANDIDATE_SUBMITTED', 'MANAGER_APPROVED'].includes(workflowStage)) {
+      throw new Error('CANDIDATE_SUBMISSION_DELETE_GUARD_INVALID');
+    }
+    return {
+      workflow_id: workflowId,
+      workflow_generation: generation,
+      workflow_kind: String(workflow?.workflow_kind || '').trim().toUpperCase() || null,
+      route: String(workflow?.route || '').trim().toUpperCase() || null,
+      state: String(workflow?.state || '').trim().toUpperCase() || null,
+      candidate_submission_stage: workflowStage,
+      rejection_timesheet_id: rejectionTimesheetId,
+      link_kind: String(workflow?.link_kind || '').trim().toUpperCase() || null,
+      linked_pending_expense: workflow?.linked_pending_expense === true
+    };
+  });
+  const linkedPendingExpenseCount = Number(result.linked_pending_expense_claim_count);
+  if (Number(result.guarded_workflow_count) !== guardedWorkflows.length
+      || !Number.isInteger(linkedPendingExpenseCount)
+      || linkedPendingExpenseCount < 0
+      || linkedPendingExpenseCount > 20
+      || result.candidate_submission_rejection_required !== (guardedWorkflows.length > 0)
+      || (guardedWorkflows.length > 0 && !stage)
+      || (guardedWorkflows.length === 0 && stage)) {
+    throw new Error('CANDIDATE_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  return {
+    candidate_submission_rejection_required: guardedWorkflows.length > 0,
+    candidate_submission_stage: stage,
+    guarded_candidate_workflow_count: guardedWorkflows.length,
+    guarded_candidate_workflows: guardedWorkflows,
+    linked_pending_expense_claim_count: linkedPendingExpenseCount
+  };
+}
+
 async function loadCandidateManagerRouteTicketsForWorkflows(env, workflowIds) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const ids = Array.from(new Set(
@@ -107225,6 +107300,9 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
     'PENDING_EXPENSE_DELETE_CONTEXT_TOO_LARGE',
     'PENDING_EXPENSE_DELETE_TARGET_SET_INVALID',
     'PENDING_EXPENSE_CANCELLATION_NOT_PROVEN',
+    'CANDIDATE_SUBMISSION_REJECTION_REQUIRED',
+    'CANDIDATE_SUBMISSION_DELETE_TARGET_SET_INVALID',
+    'CANDIDATE_REJECTION_SCOPE_TOO_LARGE',
     'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID',
     'PAY_WORKBENCH_CANDIDATE_DELETE_CONTEXT_CONFLICT',
     'TIMESHEET_DELETE_AFTER_EXPENSE_CANCELLATION_NOT_PROVEN',
@@ -107495,12 +107573,20 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       throw new Error('DELETE_PREVIEW_STALE');
     }
 
-    const pendingExpenseContext = await loadTimesheetPendingExpenseDeleteContext(
-      env,
-      timesheetIds,
-      'OPERATION_NUDGE',
-      'TIMESHEET_DELETE_APPLY_REPREVIEW_PENDING_EXPENSE'
-    );
+    const [pendingExpenseContext, candidateSubmissionGuard] = await Promise.all([
+      loadTimesheetPendingExpenseDeleteContext(
+        env,
+        timesheetIds,
+        'OPERATION_NUDGE',
+        'TIMESHEET_DELETE_APPLY_REPREVIEW_PENDING_EXPENSE'
+      ),
+      loadTimesheetCandidateSubmissionDeleteGuard(
+        env,
+        timesheetIds,
+        'OPERATION_NUDGE',
+        'TIMESHEET_DELETE_APPLY_REPREVIEW_CANDIDATE_SUBMISSION'
+      )
+    ]);
 
     return {
       ...preview,
@@ -107513,6 +107599,7 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       preserved_source_timesheet_ids: preservedSourceTimesheetIds,
       preserved_source_contract_week_ids: preservedSourceContractWeekIds,
       ...pendingExpenseContext,
+      ...candidateSubmissionGuard,
       was_stale: resolved?.was_stale === true || currentTimesheetId !== requestedTimesheetId
     };
   };
@@ -107576,6 +107663,25 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       current_timesheet_id: freshPreview.current_timesheet_id,
       current_delete_kind: previewKind,
       retention_reasons: Array.isArray(freshPreview.retention_reasons) ? freshPreview.retention_reasons : [],
+      refresh_required: true
+    });
+  }
+  if (freshPreview.candidate_submission_rejection_required === true) {
+    const linkedExpenseCount = Number(freshPreview.linked_pending_expense_claim_count || 0);
+    const managerApproved = freshPreview.candidate_submission_stage === 'MANAGER_APPROVED';
+    return jsonResponse(409, {
+      error: managerApproved
+        ? `This Timesheet has been approved by the manager and must be rejected before it can be deleted.${linkedExpenseCount > 0 ? ` Rejecting it will also reject ${linkedExpenseCount} linked pending expense claim${linkedExpenseCount === 1 ? '' : 's'}.` : ''}`
+        : `This Timesheet has been submitted by the candidate and must be rejected before it can be deleted.${linkedExpenseCount > 0 ? ` Rejecting it will also reject ${linkedExpenseCount} linked pending expense claim${linkedExpenseCount === 1 ? '' : 's'}.` : ''}`,
+      error_code: 'CANDIDATE_SUBMISSION_REJECTION_REQUIRED',
+      delete_operation_id: operationId,
+      mutation_performed: false,
+      current_timesheet_id: freshPreview.current_timesheet_id,
+      current_delete_kind: previewKind,
+      candidate_submission_stage: freshPreview.candidate_submission_stage,
+      linked_pending_expense_claim_count: linkedExpenseCount,
+      guarded_candidate_workflows: freshPreview.guarded_candidate_workflows,
+      reject_candidate_submission_required: true,
       refresh_required: true
     });
   }
@@ -107685,7 +107791,7 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       env,
       freshPreview.pending_expense_claims.map((claim) => claim.workflow_id)
     );
-    applyResult = normaliseRpc(await sbRpc(env, 'timesheet_delete_with_pending_expense_apply_v1', {
+    applyResult = normaliseRpc(await sbRpc(env, 'timesheet_delete_with_candidate_submission_guard_apply_v1', {
       p_environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase(),
       p_delete_kind: previewKind,
       p_timesheet_id: freshPreview.current_timesheet_id,
@@ -107702,7 +107808,7 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       p_now_utc: operationStartedAtUtc
     }, {
       routeClass: 'OPERATION_NUDGE',
-      purpose: 'TIMESHEET_DELETE_WITH_PENDING_EXPENSE_APPLY',
+      purpose: 'TIMESHEET_DELETE_WITH_CANDIDATE_SUBMISSION_GUARD_APPLY',
       timeoutMs: 20000
     }));
   } catch (error) {
@@ -107729,6 +107835,8 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
     return jsonResponse(rpcCode === 'ACTOR_NOT_FOUND_OR_INACTIVE' || rpcCode === 'ACTOR_USER_ID_REQUIRED' ? 403 : 409, {
       error: rpcCode === 'LOCK_TIMEOUT' || rpcCode === 'DEADLOCK_DETECTED'
         ? 'The Timesheet is currently being changed. Refresh and try again.'
+        : rpcCode === 'CANDIDATE_SUBMISSION_REJECTION_REQUIRED'
+          ? 'This Candidate submission must be rejected before the Timesheet can be deleted.'
         : 'The permanent delete was rejected. Refresh and review the Timesheet before trying again.',
       error_code: rpcCode || 'DELETE_APPLY_FAILED',
       delete_operation_id: operationId,
@@ -195276,12 +195384,20 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       }
     }
 
-    const pendingExpenseContext = await loadTimesheetPendingExpenseDeleteContext(
-      env,
-      timesheetIds,
-      'PREVIEW_PROGRESS',
-      'TIMESHEET_DELETE_PREVIEW_PENDING_EXPENSE'
-    );
+    const [pendingExpenseContext, candidateSubmissionGuard] = await Promise.all([
+      loadTimesheetPendingExpenseDeleteContext(
+        env,
+        timesheetIds,
+        'PREVIEW_PROGRESS',
+        'TIMESHEET_DELETE_PREVIEW_PENDING_EXPENSE'
+      ),
+      loadTimesheetCandidateSubmissionDeleteGuard(
+        env,
+        timesheetIds,
+        'PREVIEW_PROGRESS',
+        'TIMESHEET_DELETE_PREVIEW_CANDIDATE_SUBMISSION'
+      )
+    ]);
     let decision = String(preview.decision || 'BLOCKED').trim().toUpperCase();
     const blockers = Array.isArray(preview.blockers)
       ? preview.blockers
@@ -195291,6 +195407,17 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       blockers.push({
         code: 'PENDING_EXPENSE_DELETE_BLOCKED',
         message: 'This Timesheet has an expense claim for which manager approval has already been recorded. Refresh and allow that approval to finish before deleting the Timesheet.'
+      });
+    }
+    if (candidateSubmissionGuard.candidate_submission_rejection_required) {
+      const linkedExpenseCount = candidateSubmissionGuard.linked_pending_expense_claim_count;
+      const managerApproved = candidateSubmissionGuard.candidate_submission_stage === 'MANAGER_APPROVED';
+      decision = 'BLOCKED';
+      blockers.push({
+        code: 'CANDIDATE_SUBMISSION_REJECTION_REQUIRED',
+        message: managerApproved
+          ? `This Timesheet has been approved by the manager and must be rejected before it can be deleted.${linkedExpenseCount > 0 ? ` Rejecting it will also reject ${linkedExpenseCount} linked pending expense claim${linkedExpenseCount === 1 ? '' : 's'}.` : ''}`
+          : `This Timesheet has been submitted by the candidate and must be rejected before it can be deleted.${linkedExpenseCount > 0 ? ` Rejecting it will also reject ${linkedExpenseCount} linked pending expense claim${linkedExpenseCount === 1 ? '' : 's'}.` : ''}`
       });
     }
 
@@ -195320,6 +195447,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       advance: preview.advance && typeof preview.advance === 'object' ? preview.advance : {},
       delete_items: deleteItems,
       ...pendingExpenseContext,
+      ...candidateSubmissionGuard,
       expected_pending_expense_context_sha256: pendingExpenseContext.context_sha256
     }));
   } catch (error) {
