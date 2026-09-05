@@ -7067,8 +7067,12 @@ BEGIN
           CASE
             WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) = 'PAPER' THEN 'QR Expense'
             WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) IN ('PHONE', 'EMAIL', 'ELECTRONIC') THEN 'Electronic Expense'
+            WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR Expense'
+            WHEN source_rows.submission_mode = 'ELECTRONIC'::public.submission_mode_enum
+              OR financial_row.nhsp_import_id IS NOT NULL
+              OR COALESCE(financial_row.external_source_rows_json, '[]'::jsonb)
+                NOT IN ('[]'::jsonb, '{}'::jsonb, 'null'::jsonb) THEN 'Electronic Expense'
             WHEN timesheet_row.submission_mode = 'MANUAL'::public.submission_mode_enum
-              AND UPPER(COALESCE(timesheet_row.status::text, '')) = 'SUBMITTED'
               AND timesheet_row.candidate_workflow_id IS NULL THEN 'Manual Expense'
             ELSE 'Expense'
           END
@@ -7115,8 +7119,12 @@ BEGIN
         WHEN NOT expense_presentation_fact.is_expense_only THEN 'UNKNOWN'
         WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) = 'PAPER' THEN 'QR'
         WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) IN ('PHONE', 'EMAIL', 'ELECTRONIC') THEN 'ELECTRONIC'
+        WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR'
+        WHEN source_rows.submission_mode = 'ELECTRONIC'::public.submission_mode_enum
+          OR financial_row.nhsp_import_id IS NOT NULL
+          OR COALESCE(financial_row.external_source_rows_json, '[]'::jsonb)
+            NOT IN ('[]'::jsonb, '{}'::jsonb, 'null'::jsonb) THEN 'ELECTRONIC'
         WHEN timesheet_row.submission_mode = 'MANUAL'::public.submission_mode_enum
-          AND UPPER(COALESCE(timesheet_row.status::text, '')) = 'SUBMITTED'
           AND timesheet_row.candidate_workflow_id IS NULL THEN 'MANUAL'
         ELSE 'UNKNOWN'
       END AS expense_route_kind,
@@ -7401,7 +7409,24 @@ BEGIN
     LEFT JOIN LATERAL (
       SELECT
         (
-          UPPER(COALESCE(timesheet_row.line_type::text, '')) IN ('EXPENSES', 'MILEAGE')
+          (
+            UPPER(COALESCE(timesheet_row.line_type::text, '')) IN ('EXPENSES', 'MILEAGE')
+            OR (
+              UPPER(COALESCE(timesheet_row.line_type::text, '')) = 'HOURS'
+              AND financial_row.total_pay_ex_vat IS NOT NULL
+              AND financial_row.total_charge_ex_vat IS NOT NULL
+              AND financial_row.expenses_pay_ex_vat IS NOT NULL
+              AND financial_row.expenses_charge_ex_vat IS NOT NULL
+              AND financial_row.mileage_pay_ex_vat IS NOT NULL
+              AND financial_row.mileage_charge_ex_vat IS NOT NULL
+              AND financial_row.total_pay_ex_vat
+                = financial_row.expenses_pay_ex_vat + financial_row.mileage_pay_ex_vat
+              AND financial_row.total_charge_ex_vat
+                = financial_row.expenses_charge_ex_vat + financial_row.mileage_charge_ex_vat
+              AND ABS(financial_row.expenses_pay_ex_vat + financial_row.mileage_pay_ex_vat)
+                + ABS(financial_row.expenses_charge_ex_vat + financial_row.mileage_charge_ex_vat) > 0::numeric
+            )
+          )
           AND financial_row.total_hours IS NOT NULL
           AND financial_row.total_hours = 0::numeric
           AND COALESCE(timesheet_row.actual_schedule_json, '[]'::jsonb) IN ('[]'::jsonb, '{}'::jsonb, 'null'::jsonb)

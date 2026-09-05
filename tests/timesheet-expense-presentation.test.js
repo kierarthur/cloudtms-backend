@@ -23,7 +23,14 @@ test('manual expense wording requires the exact Office-created storage shape', (
   assert.equal(isExplicitOfficeCreatedExpenseRecord({
     line_type: 'EXPENSES',
     submission_mode: 'MANUAL',
-    status: 'SUBMITTED',
+    candidate_workflow_id: null,
+    workflowRoute: null
+  }), true);
+  assert.equal(isExplicitOfficeCreatedExpenseRecord({
+    line_type: 'HOURS',
+    expense_only_proved: true,
+    submission_mode: 'MANUAL',
+    status: 'RECEIVED',
     candidate_workflow_id: null,
     workflowRoute: null
   }), true);
@@ -70,8 +77,11 @@ test('expense presentation uses the factual route only after the strict check pa
     [{ workflowRoute: 'PHONE' }, 'ELECTRONIC', 'Electronic Expense'],
     [{ workflowRoute: 'EMAIL' }, 'ELECTRONIC', 'Electronic Expense'],
     [{ workflowRoute: 'PAPER' }, 'QR', 'QR Expense'],
+    [{ importSourceProved: true }, 'ELECTRONIC', 'Electronic Expense'],
+    [{ submissionMode: 'ELECTRONIC' }, 'ELECTRONIC', 'Electronic Expense'],
     [{ explicitOfficeCreated: true }, 'MANUAL', 'Manual Expense'],
-    [{ submissionMode: 'MANUAL' }, 'UNKNOWN', 'Expense'],
+    [{ submissionMode: 'MANUAL', candidateWorkflowId: null }, 'MANUAL', 'Manual Expense'],
+    [{ submissionMode: 'MANUAL', candidateWorkflowId: 'unresolved-workflow' }, 'UNKNOWN', 'Expense'],
     [{}, 'UNKNOWN', 'Expense']
   ];
   for (const [route, kind, label] of cases) {
@@ -79,6 +89,56 @@ test('expense presentation uses the factual route only after the strict check pa
     assert.equal(result.is_expense_only, true);
     assert.equal(result.expense_route_kind, kind);
     assert.equal(result.display_route_label, label);
+  }
+});
+
+test('the contract route never overrides the expense record origin', () => {
+  assert.deepEqual(classifyExpenseTimesheetPresentation({
+    ...provedClaim,
+    routeType: 'WEEKLY_NHSP_ADJUSTMENT',
+    submissionMode: 'MANUAL',
+    candidateWorkflowId: null
+  }), {
+    is_expense_only: true,
+    expense_route_kind: 'MANUAL',
+    display_route_label: 'Manual Expense'
+  });
+});
+
+test('a legacy HOURS marker is accepted only when every penny reconciles to expenses', () => {
+  const legacyExpense = {
+    ...provedClaim,
+    line_type: 'HOURS',
+    total_pay_ex_vat: 4,
+    total_charge_ex_vat: 4,
+    expense_values: {
+      expenses_pay_ex_vat: 4,
+      expenses_charge_ex_vat: 4,
+      mileage_pay_ex_vat: 0,
+      mileage_charge_ex_vat: 0,
+      accommodation_pay_ex_vat: 4,
+      accommodation_charge_ex_vat: 4
+    },
+    submissionMode: 'MANUAL',
+    candidateWorkflowId: null
+  };
+  assert.deepEqual(classifyExpenseTimesheetPresentation(legacyExpense), {
+    is_expense_only: true,
+    expense_route_kind: 'MANUAL',
+    display_route_label: 'Manual Expense'
+  });
+  for (const unsafe of [
+    { total_pay_ex_vat: 5 },
+    { total_charge_ex_vat: 5 },
+    { total_hours: 0.01 },
+    { actual_schedule_json: [{ start: '09:00', end: '09:01' }] },
+    { additional_units_week: { correction: 1 } }
+  ]) {
+    assert.equal(classifyExpenseTimesheetPresentation({
+      ...legacyExpense,
+      ...unsafe,
+      fallbackDisplayLabel: 'Manual Adjustment'
+    }).is_expense_only, false);
   }
 });
 
@@ -114,6 +174,8 @@ test('Timesheet Summary reuses the set-wise reader result without another data r
   assert.match(summary, /v_route_type = 'manual_expense'/);
   assert.match(summary, /v_route_type = 'electronic_expense'/);
   assert.match(summary, /v_route_type = 'qr_expense'/);
+  assert.match(summary, /financial_row\.total_pay_ex_vat[\s\S]*financial_row\.expenses_pay_ex_vat \+ financial_row\.mileage_pay_ex_vat/);
+  assert.match(summary, /financial_row\.nhsp_import_id IS NOT NULL[\s\S]*'Electronic Expense'/);
   assert.match(summary,
     /REVOKE ALL ON FUNCTION public\.timesheet_summary_lightweight_rows_v1\(jsonb\) FROM PUBLIC, anon, authenticated;/i);
   assert.doesNotMatch(summary,

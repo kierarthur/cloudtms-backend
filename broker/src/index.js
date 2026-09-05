@@ -75792,6 +75792,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     const expensePresentation = classifyExpenseTimesheetPresentation({
       line_type: ts.line_type,
       total_hours: tsfinRaw?.total_hours,
+      total_pay_ex_vat: tsfinRaw?.total_pay_ex_vat,
+      total_charge_ex_vat: tsfinRaw?.total_charge_ex_vat,
       actual_schedule_json: ts.actual_schedule_json,
       financial_schedule_json: tsfinRaw?.actual_schedule_json,
       additional_units_week: ts.additional_units_week,
@@ -75814,13 +75816,22 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       },
       workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route,
       routeFamily,
+      routeType: effectiveRouteType,
       submissionMode: ts.submission_mode,
+      candidateWorkflowId: ts.candidate_workflow_id,
+      importSourceProved: Boolean(
+        tsfinRaw?.nhsp_import_id
+        || (tsfinRaw?.external_source_rows_json
+          && typeof tsfinRaw.external_source_rows_json === 'object'
+          && Object.keys(tsfinRaw.external_source_rows_json).length > 0)
+      ),
       explicitOfficeCreated: isExplicitOfficeCreatedExpenseRecord({
         line_type: ts.line_type,
         submission_mode: ts.submission_mode,
         status: ts.status,
         candidate_workflow_id: ts.candidate_workflow_id,
-        workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route
+        workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route,
+        expense_only_proved: false
       }),
       fallbackDisplayLabel: effective.route_display || null
     });

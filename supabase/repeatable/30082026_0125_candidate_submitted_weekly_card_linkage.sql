@@ -96,8 +96,11 @@ begin
            current_window.current_week_ending_date,
            t.booking_id,t.parent_timesheet_id,t.status as timesheet_status,t.submission_mode,t.line_type,t.sheet_scope,t.is_current,
            t.actual_schedule_json,t.worked_start_iso,t.worked_end_iso,t.candidate_workflow_id,
+           t.qr_r2_key,t.qr_signed_hash,t.qr_signed_at_utc,
            t.additional_units_week,t.additional_units_per_day,
-           tf.additional_units_json,tf.total_hours,tf.processing_status,tf.authorised_at_utc,
+           tf.additional_units_json,tf.total_hours,tf.total_pay_ex_vat,tf.total_charge_ex_vat,
+           tf.nhsp_import_id,tf.external_source_rows_json,
+           tf.processing_status,tf.authorised_at_utc,
            case when effective_pay.pay_status_code='PAID' then effective_pay.paid_at_utc else null end as paid_at_utc,
            tf.locked_by_invoice_id,
            tf.expenses_pay_ex_vat,tf.expenses_charge_ex_vat,
@@ -545,6 +548,19 @@ begin
         and (
           upper(coalesce(page.line_type::text,'')) in ('EXPENSES','MILEAGE')
           or expense_workflow.route is not null
+          or (
+            upper(coalesce(page.line_type::text,''))='HOURS'
+            and page.total_pay_ex_vat is not null
+            and page.total_charge_ex_vat is not null
+            and page.expenses_pay_ex_vat is not null
+            and page.expenses_charge_ex_vat is not null
+            and page.mileage_pay_ex_vat is not null
+            and page.mileage_charge_ex_vat is not null
+            and page.total_pay_ex_vat=page.expenses_pay_ex_vat+page.mileage_pay_ex_vat
+            and page.total_charge_ex_vat=page.expenses_charge_ex_vat+page.mileage_charge_ex_vat
+            and abs(page.expenses_pay_ex_vat+page.mileage_pay_ex_vat)
+              +abs(page.expenses_charge_ex_vat+page.mileage_charge_ex_vat)>0::numeric
+          )
         )
         and coalesce(page.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb)
         and not jsonb_path_exists(coalesce(page.additional_units_week,'{}'::jsonb),
@@ -571,16 +587,26 @@ begin
           when not expense_fact.is_expense_only then 'UNKNOWN'
           when expense_workflow.route='PAPER' then 'QR'
           when expense_workflow.route in ('PHONE','EMAIL','ELECTRONIC') then 'ELECTRONIC'
+          when page.qr_r2_key is not null or page.qr_signed_hash is not null
+            or page.qr_signed_at_utc is not null then 'QR'
+          when page.submission_mode='ELECTRONIC'::public.submission_mode_enum
+            or page.nhsp_import_id is not null
+            or coalesce(page.external_source_rows_json,'[]'::jsonb)
+              not in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb) then 'ELECTRONIC'
           when page.submission_mode='MANUAL'::public.submission_mode_enum
-            and upper(coalesce(page.timesheet_status::text,''))='SUBMITTED'
             and page.candidate_workflow_id is null then 'MANUAL'
           else 'UNKNOWN' end as expense_route_kind,
         case
           when not expense_fact.is_expense_only then null
           when expense_workflow.route='PAPER' then 'QR Expense'
           when expense_workflow.route in ('PHONE','EMAIL','ELECTRONIC') then 'Electronic Expense'
+          when page.qr_r2_key is not null or page.qr_signed_hash is not null
+            or page.qr_signed_at_utc is not null then 'QR Expense'
+          when page.submission_mode='ELECTRONIC'::public.submission_mode_enum
+            or page.nhsp_import_id is not null
+            or coalesce(page.external_source_rows_json,'[]'::jsonb)
+              not in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb) then 'Electronic Expense'
           when page.submission_mode='MANUAL'::public.submission_mode_enum
-            and upper(coalesce(page.timesheet_status::text,''))='SUBMITTED'
             and page.candidate_workflow_id is null then 'Manual Expense'
           else 'Expense' end as display_route_label
     ) expense_presentation
