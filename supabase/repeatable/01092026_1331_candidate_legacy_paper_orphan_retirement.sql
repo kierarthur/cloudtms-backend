@@ -384,18 +384,6 @@ begin
         where financial.timesheet_id=v_subject_timesheet_id
           and financial.is_current=true
           and financial.paid_at_utc is not null
-      ) or exists(
-        select 1 from public.timesheet_pay_state pay_state
-        where pay_state.timesheet_id=v_subject_timesheet_id
-          and (
-            upper(coalesce(pay_state.summary_pay_status_code,''))='PAID'
-            or pay_state.last_settled_at_utc is not null
-          )
-      ) or exists(
-        select 1 from public.timesheet_summary_pay_state_cache pay_cache
-        where pay_cache.timesheet_id=v_subject_timesheet_id
-          and coalesce(pay_cache.summary_state_applies,false)
-          and upper(coalesce(pay_cache.summary_pay_status_code,''))='PAID'
       ),
       exists(
         select 1 from public.timesheets subject_timesheet
@@ -421,6 +409,28 @@ begin
         where invoice_line.timesheet_id=v_subject_timesheet_id
       )
     into v_paid,v_authorised,v_invoice_locked;
+
+    -- The compact Candidate verification database deliberately omits the
+    -- optional pay-projection tables.  Read those extra authoritative markers
+    -- when installed without weakening the always-present financial marker.
+    if to_regclass('public.timesheet_pay_state') is not null then
+      select v_paid or exists(
+        select 1 from public.timesheet_pay_state pay_state
+        where pay_state.timesheet_id=v_subject_timesheet_id
+          and (
+            upper(coalesce(pay_state.summary_pay_status_code,''))='PAID'
+            or pay_state.last_settled_at_utc is not null
+          )
+      ) into v_paid;
+    end if;
+    if to_regclass('public.timesheet_summary_pay_state_cache') is not null then
+      select v_paid or exists(
+        select 1 from public.timesheet_summary_pay_state_cache pay_cache
+        where pay_cache.timesheet_id=v_subject_timesheet_id
+          and coalesce(pay_cache.summary_state_applies,false)
+          and upper(coalesce(pay_cache.summary_pay_status_code,''))='PAID'
+      ) into v_paid;
+    end if;
   end if;
 
   v_reason_code:=case
