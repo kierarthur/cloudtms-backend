@@ -529,7 +529,7 @@
       "schema": "public",
       "name": "pay_workbench_mark_candidate_dirty",
       "identity_arguments": "",
-      "definition_sha256": "a837cb8db96a68f1f1ee8394f392456db7f7cf92f3ebe59fc8faa0d19d501f74",
+      "definition_sha256": "62e25d7548b7c2488b76aa2d189bc07fc986364de5837f775bed3a3a364243e7",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
