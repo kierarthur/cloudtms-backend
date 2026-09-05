@@ -159517,12 +159517,17 @@ async function handleRelatedList(env, req, entity, id) {
     const chunkSize = 200;
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize);
-      const tsUrl =
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-        `?select=*` +
-        `&timesheet_id=in.(${chunk.map(enc).join(',')})`;
-      const { rows } = await sbFetch(env, tsUrl);
-      acc.push(...(rows || []));
+      const raw = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', {
+        p_filters: {
+          ids: chunk,
+          limit: chunk.length,
+          offset: 0
+        }
+      });
+      const rows = Array.isArray(raw)
+        ? raw
+        : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.rows) ? raw.rows : []));
+      acc.push(...rows);
     }
 
     // Sort to match RPC ordering: week_ending_date desc nulls last, client_name asc, candidate_name asc, timesheet_id::text
