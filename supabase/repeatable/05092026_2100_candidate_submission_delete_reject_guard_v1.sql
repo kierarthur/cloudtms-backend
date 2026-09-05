@@ -22,6 +22,9 @@ declare
   v_timesheet public.timesheets%rowtype;
   v_week public.contract_weeks%rowtype;
   v_route jsonb;
+  v_route_identity jsonb;
+  v_route_timesheet_id uuid;
+  v_route_contract_week_id uuid;
   v_route_family text;
   v_workflow_ids uuid[]:=array[]::uuid[];
   v_targets jsonb:='[]'::jsonb;
@@ -51,7 +54,27 @@ begin
     -- must continue to work, but it is outside the Electronic/QR delete gate.
     v_route_family:='PHONE';
   else
-    v_route:=private._candidate_route_family_v1(v_timesheet.timesheet_id,v_week.id);
+    if v_week.id is null then
+      -- A Weekly parent delete contains every Timesheet version in the stable
+      -- booking chain.  Older versions legitimately no longer own the current
+      -- Contract Week, so resolve them through the same closed identity rule
+      -- used by the Office Candidate projection before classifying the route.
+      v_route_identity:=private._candidate_office_projection_identity_v1(
+        v_timesheet.timesheet_id,null
+      );
+      v_route_timesheet_id:=nullif(
+        v_route_identity->>'current_timesheet_id',''
+      )::uuid;
+      v_route_contract_week_id:=nullif(
+        v_route_identity->>'contract_week_id',''
+      )::uuid;
+    else
+      v_route_timesheet_id:=v_timesheet.timesheet_id;
+      v_route_contract_week_id:=v_week.id;
+    end if;
+    v_route:=private._candidate_route_family_v1(
+      v_route_timesheet_id,v_route_contract_week_id
+    );
     v_route_family:=upper(coalesce(v_route->>'route_family',''));
   end if;
 

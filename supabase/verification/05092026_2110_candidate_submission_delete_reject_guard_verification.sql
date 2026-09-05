@@ -121,6 +121,22 @@ begin
     raise exception 'Candidate delete guard did not include the rotated linked expense: %',v_guard;
   end if;
 
+  -- Weekly parent deletion supplies every Timesheet version in the booking
+  -- chain.  The historical version has no Contract Week of its own; it must
+  -- inherit the current Electronic route without losing or duplicating either
+  -- protected workflow.
+  v_guard:=public.timesheet_candidate_submission_delete_guard_preview_v1(
+    'TEST',array[v_old_timesheet,v_timesheet]
+  );
+  if coalesce((v_guard->>'candidate_submission_rejection_required')::boolean,false) is not true
+     or v_guard->>'candidate_submission_stage'<>'MANAGER_APPROVED'
+     or coalesce((v_guard->>'guarded_workflow_count')::integer,0)<>2
+     or coalesce((v_guard->>'linked_pending_expense_claim_count')::integer,0)<>1
+     or (select count(*) from jsonb_array_elements(v_guard->'guarded_workflows') item
+         where item->>'workflow_id'=v_expense_workflow::text)<>1 then
+    raise exception 'Candidate delete guard did not resolve the full rotated Timesheet chain: %',v_guard;
+  end if;
+
   update public.candidate_submission_workflows
   set state='WORKER_DRAFT'
   where id=v_expense_workflow;

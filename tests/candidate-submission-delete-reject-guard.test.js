@@ -51,6 +51,13 @@ test('a target-less pending expense follows an equivalent rotated Timesheet iden
   assert.match(verification, /rejection_scope[\s\S]*?'COMPLETE_EXPENSE_CLAIM'/i);
 });
 
+test('a Weekly delete set resolves an older Timesheet version through the current route', () => {
+  assert.match(sql, /v_week\.id is null[\s\S]*?_candidate_office_projection_identity_v1\([\s\S]*?v_timesheet\.timesheet_id,null[\s\S]*?_candidate_route_family_v1\([\s\S]*?v_route_timesheet_id,v_route_contract_week_id/i);
+  assert.match(verification, /array\[v_old_timesheet,v_timesheet\]/i);
+  assert.match(verification, /full rotated Timesheet chain/i);
+  assert.match(verification, /workflow_id'=v_expense_workflow::text\)<>1/i);
+});
+
 test('preview, rejection and final delete use the same guarded workflow authority', () => {
   assert.match(sql, /_candidate_office_reject_preview_v1[\s\S]*?_candidate_office_rejection_targets_v2/i);
   assert.match(sql, /candidate_submission_reject_atomic_v1[\s\S]*?_candidate_office_rejection_targets_v2/i);
