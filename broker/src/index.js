@@ -80307,6 +80307,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             'r2_auth_key',
             'auth_name',
             'auth_job_title',
+            'candidate_manager_approved_at_utc',
             'authorised_at_server',
 
             // ✅ NEW: PDF generation flag (system-generated)
@@ -80443,12 +80444,24 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
           `?timesheet_id=eq.${enc(currentTsId)}` +
-          `&select=id,kind,display_name,storage_key,created_at,created_by,document_asset_id,source_revision,processing_state,processing_error_json` +
+            `&select=id,kind,display_name,storage_key,created_at,created_by,document_asset_id,document_role,candidate_component_id,source_revision,processing_state,processing_error_json` +
           `&order=created_at.asc`
       );
       return Array.isArray(rows) ? rows : [];
     };
-    const evRows = await fetchTimesheetEvidenceRows();
+    const candidateManagerApprovalConfirmed = !!ts?.candidate_manager_approved_at_utc;
+    const isOfficialCandidateSignedTimesheetEvidence = (row) => {
+      const kind = String(row?.kind || '').trim().toUpperCase();
+      const role = String(row?.document_role || '').trim().toUpperCase();
+      const label = String(row?.display_name || '').trim().toUpperCase();
+      return kind === 'TIMESHEET' && (
+        role === 'SIGNED_TIMESHEET'
+        || label === 'OFFICIAL ELECTRONICALLY SIGNED TIMESHEET'
+      );
+    };
+    const evRows = (await fetchTimesheetEvidenceRows()).filter((row) => (
+      candidateManagerApprovalConfirmed || !isOfficialCandidateSignedTimesheetEvidence(row)
+    ));
     const assetIds = Array.from(new Set(
       evRows.map(row => asUuidStringOrNull(row?.document_asset_id)).filter(Boolean)
     ));
@@ -80857,7 +80870,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     const authKey = (ts?.r2_auth_key && String(ts.r2_auth_key).trim()) ? String(ts.r2_auth_key).trim() : null;
     const hasSignatureArtefacts = !!(nurseKey || authKey);
 
-    if (hasSignatureArtefacts) {
+    if (candidateManagerApprovalConfirmed && hasSignatureArtefacts) {
       systemEvidence.push({
         id: `SYS:ELECTRONIC_SIGNATURES:${currentTsId}`,
         timesheet_id: currentTsId,

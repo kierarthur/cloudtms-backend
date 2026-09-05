@@ -50,6 +50,16 @@ test('the retained official timesheet and signatures are projected as separate v
   assert.match(handler, /r2_nurse_key: nurseKey \|\| null[\s\S]*r2_auth_key: authoriserKey \|\| null/);
 });
 
+test('current official Candidate evidence is visible only after durable manager approval', () => {
+  assert.match(handler, /'candidate_manager_approved_at_utc'/);
+  assert.match(handler, /document_asset_id,document_role,candidate_component_id,source_revision/);
+  assert.match(handler, /const candidateManagerApprovalConfirmed = !!ts\?\.candidate_manager_approved_at_utc/);
+  assert.match(handler, /role === 'SIGNED_TIMESHEET'/);
+  assert.match(handler, /label === 'OFFICIAL ELECTRONICALLY SIGNED TIMESHEET'/);
+  assert.match(handler, /candidateManagerApprovalConfirmed \|\| !isOfficialCandidateSignedTimesheetEvidence\(row\)/);
+  assert.match(handler, /if \(candidateManagerApprovalConfirmed && hasSignatureArtefacts\)/);
+});
+
 test('real Timesheet evidence metadata also includes read-only manager refusal history', () => {
   assert.match(handler, /loadCandidateManagerRefusalHistory\(env, \{[\s\S]*timesheetIds: \[currentTsId, resolved\.requested_timesheet_id \|\| tsId\]/);
   assert.match(handler, /evidence: all,[\s\S]*withdrawn_submissions: withdrawnSubmissions,[\s\S]*manager_refusals: managerRefusals/);
