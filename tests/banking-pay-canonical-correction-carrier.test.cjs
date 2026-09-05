@@ -65,6 +65,12 @@ const clearResolution = read(
 const freeze = read(
   'supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql'
 );
+const rowBackedFinanceFreeze = read(
+  'supabase/repeatable/02092026_2320_banking_pay_draft_finance_row_transport_v8.sql'
+);
+const mixedRecoveryFinanceFreeze = read(
+  'supabase/repeatable/04092026_1300_banking_pay_draft_mixed_recovery_partial_link_v8.sql'
+);
 const worker = read('broker/src/index.js');
 const importReview = read('broker/src/import-review.js');
 const sessionSql = read(
@@ -489,7 +495,7 @@ test('draft freeze adds provenance only to the four existing frozen JSON authori
   );
 });
 
-test('the approved finance-adjustment freeze has one repeatable definition', () => {
+test('the historical finance owner is followed by the exact row-backed and mixed-recovery replacement chain', () => {
   const repeatableFiles = listFiles('supabase/repeatable').filter((file) =>
     /\.(?:sql|txt)$/i.test(file)
   );
@@ -508,8 +514,33 @@ test('the approved finance-adjustment freeze has one repeatable definition', () 
   assert.deepEqual(
     definitions.map(({ relativePath }) => relativePath),
     [
+      'supabase/repeatable/02092026_2320_banking_pay_draft_finance_row_transport_v8.sql',
+      'supabase/repeatable/04092026_1300_banking_pay_draft_mixed_recovery_partial_link_v8.sql',
       'supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql',
     ]
+  );
+  for (const marker of [
+    'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE',
+    'PAY_BATCH_CANONICAL_CORRECTION_PROVENANCE_INVALID',
+    'PAYMENT_ADVANCE_REPAYMENT',
+    'LOAN_REPAYMENT',
+  ]) {
+    assert.match(rowBackedFinanceFreeze, new RegExp(marker));
+  }
+  assert.match(
+    rowBackedFinanceFreeze,
+    /REVOKE ALL ON FUNCTION public\.pay_batch_apply_finance_adjustments\([\s\S]*FROM PUBLIC, anon, authenticated[\s\S]*GRANT EXECUTE[\s\S]*TO service_role/
+  );
+  for (const marker of [
+    'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE',
+    'PAY_BATCH_CANONICAL_CORRECTION_PROVENANCE_INVALID',
+    'mixed-recovery retry compatibility',
+  ]) {
+    assert.match(mixedRecoveryFinanceFreeze, new RegExp(marker));
+  }
+  assert.match(
+    mixedRecoveryFinanceFreeze,
+    /REVOKE ALL ON FUNCTION public\.pay_batch_apply_finance_adjustments\([\s\S]*FROM PUBLIC, anon, authenticated[\s\S]*GRANT EXECUTE[\s\S]*TO service_role/
   );
 });
 

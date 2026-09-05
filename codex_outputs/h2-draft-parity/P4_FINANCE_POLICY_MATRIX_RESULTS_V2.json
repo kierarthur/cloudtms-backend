@@ -1,0 +1,57 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_FINANCE_POLICY_MATRIX_RESULTS_V2",
+  "status": "CURRENT_V8_LOCAL_DUAL_ENGINE_PASS_HISTORICAL_V1_AND_INSTALLED_MIGET_PARITY_OPEN",
+  "source_baseline": "6b2e3822e7239cf8fc9b6568194294731135137d",
+  "evidence": {
+    "runner": {
+      "path": "scripts/verify-banking-pay-draft-v8-finance-policy-matrix.mjs",
+      "sha256": "f33d81e87ab7be069c1d27ccff94c4cd21a0e0113b6022b8237eae4e2940d051"
+    },
+    "bridge_fixture": {
+      "path": "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql",
+      "sha256": "da338938dde0b70430f880bce917c35bac227485ed1c9029381915a7da155c87"
+    },
+    "canonical_fixture": {
+      "path": "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql",
+      "sha256": "38a6d13332a87718b27259b993f2c258d869b4bc85aa46d5277bed2f43d474c0"
+    }
+  },
+  "engines": {
+    "pg17": {
+      "server_version": "PostgreSQL 17.11",
+      "variant_count": 20,
+      "pass_count": 20,
+      "fail_count": 0,
+      "elapsed_ms_by_ordinal": [2825.729,2665.246,2435.532,2741.212,2533.022,2676.340,3076.548,3071.361,3205.048,2923.410,2908.919,2572.958,2434.457,2414.664,2558.245,2593.782,3065.908,3086.250,3057.913,3168.105]
+    },
+    "pg18": {
+      "server_version": "PostgreSQL 18.6",
+      "variant_count": 20,
+      "pass_count": 20,
+      "fail_count": 0,
+      "elapsed_ms_by_ordinal": [2989.118,2789.526,2837.248,3354.610,3109.434,3122.327,3258.814,3515.094,3115.161,2806.025,2695.829,2815.177,2773.123,4081.031,4130.217,3422.629,3291.835,2800.331,2808.295,2484.190]
+    }
+  },
+  "asserted_for_every_variant": [
+    "canonical producer identity",
+    "scope and allocation handoff",
+    "final Draft item type",
+    "exact ex-VAT, VAT and inclusive amount",
+    "PAYE gross or net treatment",
+    "Umbrella channel and payee identity",
+    "allocation-to-item link",
+    "reservation amount and case state",
+    "payout instruction snapshot",
+    "Timesheet snapshot and item breakdown",
+    "response-safe replay"
+  ],
+  "transaction_outcome": "ROLLBACK",
+  "provider_payment_settlement_remittance_actions": 0,
+  "payment_policy_or_economic_change_count": 0,
+  "open_gates": [
+    "historical V1 versus V8 typed parity",
+    "fresh reconciled release replay",
+    "installed Miget TEST proof",
+    "downstream Execute Payment parity"
+  ]
+}

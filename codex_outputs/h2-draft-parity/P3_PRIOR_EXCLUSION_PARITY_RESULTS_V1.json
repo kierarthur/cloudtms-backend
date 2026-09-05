@@ -1,0 +1,126 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_PRIOR_EXCLUSION_PARITY_RESULTS_V1",
+  "status": "CURRENT_V8_P3_LOCAL_DUAL_ENGINE_PASS_HISTORICAL_V1_PARITY_OPEN",
+  "source_baseline": {
+    "worktree_head": "f95d67259291cb8b69e5da22f39e8dea39bf2a5f",
+    "required_reconciled_shared_head": "c15d90c54384fa9250823693b71cadd838904e8e",
+    "reconciliation_status": "SOURCE_PATHS_DISJOINT_REBASE_AND_FULL_REPROOF_REQUIRED_BEFORE_RELEASE"
+  },
+  "fixture_contract": "tests/fixtures/banking-pay-draft-v8-prior-exclusion-parity-p3-v1.json",
+  "runtime_fixture": "tests/04092026_1210_banking_pay_draft_v8_prior_exclusion_parity_p3_runtime.sql",
+  "evidence_scope": "CURRENT_V8_POLICY_OWNER_DRAFT_OUTPUT_OR_TYPED_REJECTION",
+  "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+  "engines": {
+    "pg17": {
+      "status": "PASS",
+      "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",
+      "container": "h12-v8-release-pg17",
+      "database": "h12_v8_final_new17",
+      "classes_pass": 12,
+      "channel_cases_pass": 24,
+      "fail": 0,
+      "rollback": "24/24",
+      "post_rollback_fixture_counts": {"operations":0,"batches":0,"certificates":0,"unrelated_candidate":0}
+    },
+    "pg18": {
+      "status": "PASS",
+      "server_version": "18.6 (Debian 18.6-1.pgdg13+2)",
+      "container": "h12-v8-release-pg18",
+      "database": "h12_v8_final_new18",
+      "classes_pass": 12,
+      "channel_cases_pass": 24,
+      "fail": 0,
+      "rollback": "24/24",
+      "post_rollback_fixture_counts": {"operations":0,"batches":0,"certificates":0,"unrelated_candidate":0}
+    }
+  },
+  "class_results": [
+    {"class_id":"part_paid_residual","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"RESIDUAL_SELECTED","v1_v8_status":"OPEN"},
+    {"class_id":"fully_settled_absent","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"},
+    {"class_id":"active_reservation_residual","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"RESIDUAL_SELECTED","v1_v8_status":"OPEN"},
+    {"class_id":"superseded_absent","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"CURRENT_REPLACES_SUPERSEDED","v1_v8_status":"OPEN"},
+    {"class_id":"cancelled_untouched_reappears_once","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"RELEASED_SOURCE_SELECTED_ONCE","v1_v8_status":"OPEN"},
+    {"class_id":"timesheet_snoozed_excluded","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"},
+    {"class_id":"segment_snooze_isolation","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"ONE_SEGMENT_EXCLUDED_SIBLING_SELECTED","v1_v8_status":"OPEN"},
+    {"class_id":"finance_case_snoozed_excluded","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"},
+    {"class_id":"snooze_expiry_reappears_once","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXPIRED_SNOOZE_SELECTED_ONCE","v1_v8_status":"OPEN"},
+    {"class_id":"action_required_excluded","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"},
+    {"class_id":"blocked_excluded","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"},
+    {"class_id":"active_draft_excluded","status":"CURRENT_V8_LOCAL_PASS","pg17":"PAYE+UMBRELLA_PASS","pg18":"PAYE+UMBRELLA_PASS","profile":"EXCLUDED_WITH_UNRELATED_CONTROL","v1_v8_status":"OPEN"}
+  ],
+  "counts": {
+    "classes_total": 12,
+    "channel_cases_per_engine": 24,
+    "channel_case_executions_total": 48,
+    "classes_source_bound": 12,
+    "classes_current_v8_runtime_pass": 12,
+    "classes_runtime_fail": 0,
+    "classes_runtime_pending": 0,
+    "v1_v8_parity_pass": 0,
+    "policy_or_economic_changes": 0,
+    "provider_payment_settlement_remittance_actions": 0
+  },
+  "findings": [
+    {
+      "finding_id": "P3-F001-CERTIFICATE-SNOOZE-STATE-SHAPE",
+      "classification": "FIXED_LOCAL_PASS",
+      "first_divergent_boundary": "WORKBENCH_SETTLED_CERTIFICATE_V8_EXCLUSION_UNIVERSE_CLASSIFICATION",
+      "pre_change_evidence": "On PG17 and PG18 an object-form NONE row was selected while also classified SNOOZED: selected=1, READY=0, SNOOZED=1, followed by ROLLBACK and zero rows.",
+      "correction": "Existing nested-object-first, scalar-string-only, blocked-fallback normalization; NONE, NOT_SNOOZED and CLEARED inactive.",
+      "owner": "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql",
+      "current_owner_sha256": "6fa3238ae8f6419dd08ade55714fb990d2633e6fd71bcb019ca91ed71feb14c9",
+      "post_change_proof": "PG17 24/24 and PG18 24/24 complete P3 channel cases PASS with rollback."
+    },
+    {
+      "finding_id": "P3-F002-CERTIFICATE-INELIGIBLE-NULL-BOOLEAN",
+      "classification": "FIXED_LOCAL_PASS",
+      "first_divergent_boundary": "WORKBENCH_SETTLED_CERTIFICATE_V8_SECTION_UNIVERSE_MEMBERSHIP",
+      "pre_change_evidence": "After F001, missing optional raw ineligible flags propagated SQL NULL and the canonical READY row entered no section universe; PG17 stopped at P3_GREEN_OBJECT_NONE_CLASSIFICATION_FAILED with zero persistent writes.",
+      "correction": "COALESCE the raw ineligible predicate to false while preserving every explicit false/INELIGIBLE/NOT_ELIGIBLE/EXCLUDED marker.",
+      "owner": "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql",
+      "current_owner_sha256": "6fa3238ae8f6419dd08ade55714fb990d2633e6fd71bcb019ca91ed71feb14c9",
+      "post_change_proof": "Object NONE/NOT_SNOOZED/CLEARED are Ready-not-Snoozed; active dated/indefinite are Snoozed; PG17 and PG18 complete P3 matrices PASS."
+    },
+    {
+      "finding_id": "P3-F003-PARITY-SOURCE-RESERVATION-DOMAIN-CONFLATION",
+      "classification": "FIXED_LOCAL_PASS",
+      "first_divergent_boundary": "DRAFT_V8_CONSTITUENT_PARITY_COMPARATOR",
+      "pre_change_evidence": {
+        "engine": "PostgreSQL 17.11",
+        "class": "active_reservation_residual/PAYE",
+        "error": "DRAFT_BOUNDED_ADVANCE_PARITY_FAILED",
+        "first_mismatch_code": "DRAFT_PARITY_SOURCE_RESERVATION_AMOUNT_MISMATCH",
+        "expected_pre_draft_active_source_reservation_ex_vat": "25.00",
+        "canonical_residual_and_new_draft_item_ex_vat": "75.00",
+        "transaction": "ABORTED_THEN_ROLLED_BACK",
+        "persistent_write_delta": 0
+      },
+      "contract_evidence": "WORKBENCH_SETTLED_CERTIFICATION_V1 defines ordered_active_source_reservation_ids as stable pre-Draft source-owner reservation ids, never Draft reservation row ids.",
+      "correction": "Removed only the invalid cross-domain equality between the new Draft item's source amount and the prior active source-reservation amount. Ordered IDs, exact pre-Draft amount/evidence digest, residual allocation/item amount and Draft reservation-row integrity remain independently fail-closed.",
+      "owner": "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql",
+      "current_owner_sha256": "eec3daa61350be710ad47b1968fa129e47a17fdce9f9eb2b4bd479c621419061",
+      "post_change_proof": "truth 100.00 minus prior active reservation 25.00 produces exact certified residual/allocation/item 75.00 while separately proving the prior 25.00 ordered reservation evidence; PAYE and Umbrella PASS on PG17 and PG18."
+    }
+  ],
+  "audit_events": [
+    {
+      "event": "STALE_FIXTURE_EXPECTATION_CORRECTED",
+      "superseded_expectation": "55000/WORKBENCH_CERTIFICATE_DRAFT_GATE_REJECTED",
+      "current_first_boundary": "P0001/WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED",
+      "owner": "public.pay_workbench_prepare_draft",
+      "classification": "STALE_FIXTURE_EVIDENCE_NOT_PRODUCT_DEFECT"
+    }
+  ],
+  "open_findings": [],
+  "blocking_gates": [
+    "FRESH_SHARED_HEAD_RECONCILIATION_AND_FULL_REPROOF",
+    "TRUE_V1_V8_TYPED_PARITY_OR_AUTHORITATIVE_HISTORICAL_ORACLE",
+    "INSTALLED_MIGET_AND_FINAL_POST_CHANGE_AUDIT"
+  ],
+  "notes": [
+    "This is complete current-V8 local rollback evidence for the P3 group; it is not historical V1 parity, installed Miget proof or final release evidence.",
+    "Selected cases prove exact identity, sign, ex-VAT allocation/item, source reservation and supersession facts. Exclusion cases prove exact universe membership, typed first-boundary rejection and zero target Draft/financial effects.",
+    "Every case proves the unrelated Candidate digest and artifacts are unchanged. Totals are secondary.",
+    "No provider, payment execution, settlement or remittance owner was invoked."
+  ]
+}

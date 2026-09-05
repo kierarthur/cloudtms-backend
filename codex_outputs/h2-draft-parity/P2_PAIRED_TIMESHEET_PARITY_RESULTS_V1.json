@@ -1,0 +1,141 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_PAIRED_TIMESHEET_PARITY_RESULTS_V1",
+  "status": "FIXED_LOCAL_PASS_NOT_INSTALLED_POLICY_PARITY_OPEN",
+  "source_baseline": {
+    "worktree_head": "6b2e3822e7239cf8fc9b6568194294731135137d",
+    "reconciliation_status": "RECONCILED_TO_CURRENT_SHARED_HEAD_AND_FULL_FUNCTIONAL_REPROOF_PASS_RELEASE_REPLAY_PENDING"
+  },
+  "fixture_contract": "tests/fixtures/banking-pay-draft-v8-paired-timesheet-parity-p2-v1.json",
+  "runtime_fixture": "tests/04092026_1200_banking_pay_draft_v8_paired_timesheet_parity_p2_runtime.sql",
+  "runtime_fixture_sha256": "cd355078a6c01e8fafd2550c33fb9abe709029b1e14751be2e45984a21fe1244",
+  "local_correction_owner": "supabase/repeatable/04092026_1230_timesheet_correction_family_overlap_compatibility_v1.sql",
+  "local_correction_owner_sha256": "3c9eccac41eac245a4a78f2bce9a9f5119e661ffc7eaf08d7b3bb300518a73fb",
+  "evidence_scope": "CURRENT_V8_POLICY_OWNER_PROOF_WITH_LOCAL_PROVISIONAL_CORRECTION",
+  "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+  "pre_change_divergence": {
+    "classification": "SOURCE_AND_RUNTIME_PROVED_OVERLAP_OWNER_CONFLICT",
+    "first_blocked_class_id": "paired_reversal_replacement_paye",
+    "runtime_error": {
+      "sqlstate": "PT409",
+      "message": "TIMESHEET_WORK_INTERVAL_OVERLAP",
+      "owner": "private._timesheet_authorisation_overlap_trg_v1",
+      "owner_source": "supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql",
+      "introduced_by_commit": "756fb259"
+    },
+    "historical_first_attempt_runtime_fixture_sha256": "a2db7fc2b848bd370060e66a9bb609efbcea55ec79fefca00ce04d0ab45b6bbd",
+    "persistent_write_delta": 0,
+    "external_action_delta": 0,
+    "cause": "The canonical import-correction producer and lifecycle require the root and exact correction legs to remain current while atomic authorisation authorises the required legs together. The later overlap owner treated those members of one certified correction family as unrelated Timesheets."
+  },
+  "local_correction": {
+    "classification": "NARROW_EXISTING_OWNER_COMPATIBILITY_CORRECTION",
+    "policy_or_economic_change": false,
+    "exact_effect": "Exclude only root and member IDs proved by a complete valid authoritative import-correction chain when checking one member against accepted Timesheets.",
+    "fail_closed_guards": [
+      "current row is an authoritative import correction",
+      "whole chain is valid",
+      "requested correction unit is valid",
+      "every correction unit is valid",
+      "root plus distinct member count equals certified chain member_count",
+      "current Timesheet is in the exact certified family"
+    ],
+    "preserved_blocks": [
+      "ordinary overlapping Timesheets",
+      "unrelated overlapping Timesheets",
+      "missing or duplicate correction legs",
+      "stale or tampered correction evidence",
+      "mixed Candidate or client identities",
+      "paid or invoice-locked correction units"
+    ]
+  },
+  "engines": {
+    "pg17": {
+      "status": "PASS_ROLLBACK_ONLY",
+      "server_version": "PostgreSQL 17.11 (official disposable local image)",
+      "classes_pass": 11,
+      "classes_fail": 0,
+      "classes_blocked": 0,
+      "result_digest_sha256": "9e02862381bb8ffacd75893e198aa40204b2a9261271d821c41c644a1ec30be8",
+      "rollback": "PASS_ZERO_PERSISTENT_WRITES"
+    },
+    "pg18": {
+      "status": "PASS_ROLLBACK_ONLY",
+      "server_version": "PostgreSQL 18.6 (official disposable local image)",
+      "classes_pass": 11,
+      "classes_fail": 0,
+      "classes_blocked": 0,
+      "result_digest_sha256": "9e02862381bb8ffacd75893e198aa40204b2a9261271d821c41c644a1ec30be8",
+      "rollback": "PASS_ZERO_PERSISTENT_WRITES"
+    }
+  },
+  "class_results": [
+    {"class_id":"paired_reversal_replacement_paye","status":"PASS_CURRENT_V8","typed_artifact_profile":"POSITIVE_PAIR_AND_V8_TRANSPORT","v1_v8_status":"OPEN"},
+    {"class_id":"paired_reversal_replacement_umbrella","status":"PASS_CURRENT_V8","typed_artifact_profile":"POSITIVE_PAIR_AND_V8_TRANSPORT","v1_v8_status":"OPEN"},
+    {"class_id":"paired_cross_channel_resolution","status":"PASS_CURRENT_V8","typed_artifact_profile":"CROSS_CHANNEL_RESOLUTION","v1_v8_status":"OPEN"},
+    {"class_id":"paired_broken_or_duplicate_leg","status":"PASS_TYPED_ZERO_WRITE","typed_artifact_profile":"FAIL_CLOSED_ZERO_WRITE","v1_v8_status":"OPEN"},
+    {"class_id":"paired_stale_fingerprint","status":"PASS_TYPED_ZERO_WRITE","typed_artifact_profile":"FAIL_CLOSED_ZERO_WRITE","v1_v8_status":"OPEN"},
+    {"class_id":"paired_mixed_candidate_or_client","status":"PASS_TYPED_ZERO_WRITE","typed_artifact_profile":"FAIL_CLOSED_ZERO_WRITE","v1_v8_status":"OPEN"},
+    {"class_id":"paired_paid_or_invoiced_conflict","status":"PASS_TYPED_ZERO_WRITE","typed_artifact_profile":"FAIL_CLOSED_ZERO_WRITE","v1_v8_status":"OPEN"},
+    {"class_id":"paired_transition_replay","status":"PASS_CURRENT_V8","typed_artifact_profile":"REPLAY_IDEMPOTENT","v1_v8_status":"OPEN"},
+    {"class_id":"paired_draft_response_loss_replay","status":"PASS_CURRENT_V8","typed_artifact_profile":"RESPONSE_LOSS_IDEMPOTENT","v1_v8_status":"OPEN"},
+    {"class_id":"paired_reversal_only_paye","status":"PASS_CURRENT_V8_RECOVERY_HANDOFF","typed_artifact_profile":"REVERSAL_ONLY_RECOVERY_HANDOFF_AND_HEADROOM_EXCLUSION","v1_v8_status":"OPEN"},
+    {"class_id":"paired_reversal_only_umbrella","status":"PASS_CURRENT_V8_RECOVERY_HANDOFF","typed_artifact_profile":"REVERSAL_ONLY_RECOVERY_HANDOFF_AND_HEADROOM_EXCLUSION","v1_v8_status":"OPEN"}
+  ],
+  "reversal_only_recovery_completion": {
+    "classification": "DELIBERATE_CROSS_CLASS_EXECUTABLE_POLICY_PROOF",
+    "producer_and_handoff_proof": "tests/04092026_1200_banking_pay_draft_v8_paired_timesheet_parity_p2_runtime.sql",
+    "producer_and_handoff_result": "PAYE and Umbrella each preserve one exact reversal, produce -100.00 signed residual, and map through _ctms_rewrite_sync_correction_cases_v1 to one OVERPAYMENT recovery candidate with 100.00 due and the exact correction-chain component evidence.",
+    "draft_headroom_proof": "codex_outputs/h2-draft-parity/P4_FINANCE_LIFECYCLE_HEADROOM_RESULTS_V1.json",
+    "draft_headroom_proof_sha256": "9a68f92513f62d51d5db7edfcd4403e3c848966eafe740cbdb86f6fe0a25735b",
+    "covering_p4_classes": ["overpayment_zero_headroom", "overpayment_exact_headroom", "overpayment_partial_headroom"],
+    "policy_result": "A negative reversal-only residual is not paid as a negative Timesheet. The existing overpayment owner alone decides zero, exact or partial recovery from retained positive-pay headroom. In this standalone reversal-only class there is zero headroom, so both channels correctly create no Draft item.",
+    "policy_or_economic_change": false
+  },
+  "member_deletion_policy_verification": {
+    "classification": "SOURCE_AND_INSTALLED_BEHAVIOUR_WITH_ONE_USER_CONFIRMED_UPSTREAM_GAP",
+    "miget_read_only_recheck": {
+      "database_target": "agency_test",
+      "observed_at_date": "2026-09-04",
+      "timesheet_standard_delete_preview_v1": "installed definition calls a changed-hours correction one exact two-row removal unit and loads both member IDs",
+      "timesheet_standard_delete_apply_v1": "installed definition deletes every Timesheet ID returned by the preview",
+      "timesheet_correction_chain_scope_v1": "installed definition accepts only REVERSAL_ONLY or REVERSAL_REPLACEMENT, requires exactly one reversal, and requires zero or one replacement according to the declared shape",
+      "_import_apply_operation_claim_core_v2": "installed definition requires CANCELLATION to use REVERSAL_ONLY and CHANGED_HOURS to use REVERSAL_REPLACEMENT",
+      "recovery_owners": "installed rewrite/materialisation/headroom definitions preserve a genuine negative-only residual as OVERPAYMENT recovery evidence and prevent recovery beyond same-candidate/same-channel positive headroom"
+    },
+    "proved_current_outcomes": {
+      "genuine_reversal_only": "VALID_AND_RETAINED_AS_RECOVERY_AUTHORITY",
+      "positive_only": "INVALID_FAIL_CLOSED",
+      "complete_pair_delete": "ATOMIC_TWO_MEMBER_TARGET_WHEN_DELETE_IS_ALLOWED; ARCHIVE_RULES_REMAIN_AUTHORITATIVE"
+    },
+    "open_upstream_gap": {
+      "finding": "STANDARD_DELETE_HAS_NO_EXPLICIT_REMOVE_REPLACEMENT_AND_RECLASSIFY_SURVIVING_REVERSAL_TRANSITION",
+      "required_policy": "A user may deliberately remove an unworked positive replacement while retaining the exact negative reversal; the survivor must become a genuine, fully fingerprinted REVERSAL_ONLY authority.",
+      "forbidden_shortcut": "Do not make Create Draft accept a malformed REVERSAL_REPLACEMENT unit with a missing leg.",
+      "runtime_correction_status": "NOT_IMPLEMENTED"
+    },
+    "policy_or_economic_change": false
+  },
+  "counts": {
+    "classes_total": 11,
+    "classes_source_bound": 11,
+    "classes_runtime_pass": 11,
+    "classes_runtime_fail": 0,
+    "classes_runtime_blocked": 0,
+    "v1_v8_parity_pass": 0,
+    "policy_or_economic_changes": 0,
+    "provider_payment_settlement_remittance_actions": 0
+  },
+  "blocking_gates": [
+    "FULL_RELEASE_ENGINE_REPLAY_FROM_RECONCILED_SHARED_HEAD",
+    "FULL_RELEASE_ENGINE_NEW_UPGRADE_REAPPLY_AND_METADATA_PROOF",
+    "MIGET_TEST_INSTALL_AND_READBACK",
+    "TRUE_V1_V8_TYPED_PARITY_OR_AUTHORITATIVE_HISTORICAL_ORACLE",
+    "UPSTREAM_REPLACEMENT_ONLY_DELETE_TO_REVERSAL_ONLY_TRANSITION_NOT_IMPLEMENTED_OR_PROVED",
+    "FRESH_COMPLETE_POST_CORRECTION_AUDIT"
+  ],
+  "notes": [
+    "This is local disposable-database evidence, not installed Miget TEST evidence or a final Draft parity verdict.",
+    "The disabled legacy V1 route was not reactivated.",
+    "No payment, provider, settlement or remittance action was executed."
+  ]
+}

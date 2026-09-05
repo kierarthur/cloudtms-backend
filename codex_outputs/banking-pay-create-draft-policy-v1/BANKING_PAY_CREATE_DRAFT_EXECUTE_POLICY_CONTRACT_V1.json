@@ -1,0 +1,2735 @@
+{
+  "contract": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1",
+  "schema_version": 1,
+  "purpose": "Freeze every current Banking Pay/Create Draft financial decision and downstream artifact contract so orchestration can change without any payment-policy or outcome drift.",
+  "authority": {
+    "repository": {
+      "backend_git_commit": "f95d67259291cb8b69e5da22f39e8dea39bf2a5f",
+      "backend_tree": "18dff76275eb46439df20686c99121d4b7e931ad",
+      "current_contract_file_sha256": "f7e15708494124c3f2b7ad2eb2b7e13515169bfce23656bc79bf9f172a413b95",
+      "relevant_source_file_sha256": {
+        "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql": "f8d926d1b76db29e099ba17242c96d3849c7b0f5bd1571bb0b465d86d38d4189",
+        "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql": "a05b10b328e312156c1c16f8b058b56ab9d49684e17b4b23d4033f4f7b3c087b",
+        "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql": "ea691560f6fd2f8381adaececa4ce727d346e50ad25db50982b8b1ecd8a3c01e",
+        "supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql": "11ff3d4c2a53126983fef9df49300c73d209a7dcecf1a7943c09bb9cb7dd15ee",
+        "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql": "60d0dcd34ec0429ee57986d5cdf87c1d42f093998395aeff5bc89e204d5d891f",
+        "supabase/repeatable/21072026_1820_00a_import_apply_operation_claim_v2.sql": "9a19209a32fd70633221e316aa4a047fae68b8c0d72c6b817704b6f58acfffb7",
+        "supabase/repeatable/19072026_2344_banking_pay_shared_selection_guard.sql": "f75909e9a86a2446331fdf404dfe272150f02ba8b49921a9516116d94b508b77",
+        "supabase/repeatable/21072026_1235_46_pay_workbench_prepare_draft_scope_seed.sql": "78191be37ac01ec5f2c6c43d56edc4da3b0ec7a935b73c7d84f894e221c19763",
+        "supabase/repeatable/08082026_0717_pay_workbench_prepare_draft_allocation_rows_seed_sort_order.sql": "570d0d0a32ca2ae8c74553334ffcc9a48c7a4d1eb77e4f249f51f7ae18ee1cc5",
+        "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql": "9171d175ea23a783f34c45cdbd42559062496bfa8d9daeac48dc9cb20abe4bd4",
+        "supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql": "ebbc86882312d06c1421b5dbe6abf62880f65beefe5ccf4bf7bb1d73c702b7b7",
+        "supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql": "c07bdc59c51efdbc7dde929406486ff2667f7b7207b398a827c7e7abf4a69667",
+        "supabase/repeatable/04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql": "8fc121202bfb96f537c2d0a307a61410cd177d764b4f14016ed9efbfc2796ca5",
+        "supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql": "e8b6ace569f4d2f9e48b54ba7c88b90d2b4fac47a140d398483c2e1d83080ccb",
+        "supabase/repeatable/04082026_1208_pay_payment_correction_expand_work.sql": "7d944938263dd27a77bc24632a48e2ff9283e01a004a74a3337e790711f2ad51",
+        "supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql": "48e059cd9df6fbeafe3560c4408fb167117f5c0da1933f13f1174c6125a3ac2e",
+        "supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql": "d71a4311cee098ced9e96e49dc3eef76a9a6a5e4d7eea7933f80eedc2011fd56",
+        "supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql": "adc1fdb34dcb598fd660304ecd96eddd7b253c04eca31d21866a8c86a1d38a9c",
+        "supabase/repeatable/04082026_1206_pay_batch_cancel.sql": "741d73b6a57fb268dfca16a400af52205aa28a095ff007338aac41e0579eaaad",
+        "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+      }
+    },
+    "frontend_bible": {
+      "git_commit": "8eb73b23ad504a3bde40bd612c2960f1158cd11f",
+      "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/TEST-Frontend/BANKING_PAY_BIBLE.md",
+      "sha256": "84435631b0211f058128d0cf9a1801aa194f2061f8bc1f2d0f906654b17bc2f2"
+    },
+    "installed_miget_test": {
+      "database_name": "cloudtms_test_clone",
+      "database_user_identity": "dee50tht",
+      "postgres_version": "17.11",
+      "release_id": "20260822-test-authority-upgrade-a849a25e5391",
+      "git_commit": "a849a25e5391b893f91aa4e5ada2c9794ba9244b",
+      "read_only_capture_date": "2026-09-02",
+      "routine_raw_definition_sha256": {
+        "public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)": "7ecd15aeaf8f0e21f5d834ba8603bcf8956e8452c5efdc4a7203ae178a633d3f",
+        "public.pay_workbench_prepare_draft(uuid,uuid,jsonb,text,text,boolean,boolean,uuid,timestamptz,uuid,boolean,boolean)": "5a879bc899cff1b1f08a7da0f4cfc1705ef9d3065697f22a20c9b8609ffedfb3",
+        "public.pay_workbench_prepare_draft_scope_seed(uuid,uuid,uuid,jsonb,text,jsonb)": "36e242fb406949ffe4112288d34a271bb32c4a5b61cd883c8e3fc7cb2ed2ecf7",
+        "public.pay_workbench_prepare_draft_allocation_rows_seed(uuid,jsonb)": "ffe1c3815d078c2d03eb3875e98a7672b03b993e0b01709ac6eee855431d3924",
+        "public.pay_batch_insert_candidates_from_preview(uuid,uuid,uuid,jsonb)": "d5002d6ca7c4ae0f22978cbbf24bb035b95707af89be26c23581815bc3c2071f",
+        "public.pay_batch_insert_items_from_preview(uuid,uuid,uuid,jsonb)": "4d0bfd29ac818046d9c9883e1e385578e8f4df7bc6b72aa0f419a50ebcbbc02f",
+        "public.pay_batch_apply_finance_adjustments(uuid,text,uuid,numeric,date,uuid,jsonb)": "9e30eb496c9c5bb5b50ab4da12cd3ccc936b170ded5c9789b401702b14054ec9",
+        "public.pay_batch_finalize_reservations_and_markers(uuid,text,uuid,date,date,uuid,jsonb)": "27b35e2b7f8472315e3e790e13ec150610c6cc3ced0fc59c3cd9927e1c5de875",
+        "public.pay_batch_populate_candidate_summaries(uuid,text,uuid,uuid,jsonb)": "29b38712b6bc811f77d322a2ce63ff161026e2cebadec786ae2a66bf8680993d",
+        "public.pay_batch_create_timesheet_snapshots(uuid,uuid,uuid,jsonb)": "8972c7224c49d6dbf6d11886af6b3490d8c40368e5a0dda2f1fdb7a60a5cc56f",
+        "public.pay_batch_build_item_breakdowns(uuid,uuid,uuid,jsonb)": "620b46dfca3e2eaa20d12a34af63463ae71788d20369b5794863de76c5e1019a",
+        "public.pay_batch_assert_integrity(uuid,uuid,uuid)": "6ab0b9b8fc5f2ceab2798db318da0ff00edc3c21da2bb97eefc6d0cf68b0d8ac",
+        "public.timesheet_correction_chain_scope_v1(uuid,boolean,integer,integer)": "4b3e403373a1eb004a061edc196ee56d5b5b8c7199a6bab49e9459534e7e3fb9",
+        "public.timesheet_correction_pair_transition_v1(uuid,text,uuid,uuid,text,boolean,integer)": "819f0f7e85f4b111347e52fe5b5c2c7014c53776583623a518a92ddf524b1bc6",
+        "public.timesheet_correction_pair_lifecycle_preview_v1(jsonb,text,uuid,integer)": "8ecf420f5a6f25d6e7e28a052e1594b7aa2e033b81f85526b79cca09a2c13a71",
+        "public.pay_correction_chain_residual_v1(uuid,uuid,text,uuid,uuid,integer)": "ab3f069966cbc77e4a26c8fb7e89cc91195200de7aa17e588e6384437d51a87f",
+        "public.pay_set_paye_net_manual(uuid,jsonb,uuid)": "67bd40c49284fad3c22177987829506b1e36c1edcd392826c000bdbabab68cec",
+        "public.pay_batch_execution_summary_get(uuid,uuid,text)": "74a7e6845c67592bd7aff10aa67894f9ace795a4852979df9a4a0ce0d79b8207",
+        "public._pay_batch_bank_payment_projection_rows(uuid,text)": "4ed334ff8314f9e7c6325650b431fafb8c8db0a03ed9d7ebfcc7bcadff89384d",
+        "public.pay_batch_payment_status_page_v1(uuid,uuid,jsonb,text,text,integer,jsonb)": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd",
+        "public.pay_bank_csv_export_summary_get(uuid,text,uuid)": "a3f3d9858e2de5963d8df34535cf9576f2e363daef8286cbdc9b086fe18623d0",
+        "public.pay_execute_bank_transfer_scope_seed(uuid,uuid,text,uuid,boolean)": "8dfdca201c80304b9278365f205070304acf637e96503c22e255824afd91bc35",
+        "public.pay_execute_bank_transfer_chunk_prepare(uuid,uuid,jsonb,uuid)": "9b276ea60596c256380ad7d8d97ad9c223b66c05069e1b9943703a55d752b67c",
+        "public.pay_bank_transfers_claim_provider_submit_chunk(uuid,uuid,integer,text,integer)": "64419bd47ef2ad466fc18bf7f2b0c5749795c61cb25bff2edd4d871d266410ff",
+        "public.pay_settle_rail(uuid,jsonb,uuid,uuid,jsonb)": "0e5c3e38a314945f67ca716c5e6897ca9ed9730d7bbfd8e39342e31bdf26a83f",
+        "public.pay_operation_remittance_scope_seed(uuid,uuid,text,uuid)": "140c6bada203f524cfce636c1295453ffe935ae910bf1b1745c92cd00a44ea33",
+        "public.pay_remittance_build(uuid,text,uuid,jsonb,integer,jsonb)": "fb6d237cee972eaa2d454439c2d8af32111da9bb448ebc2252d8d20e25ad3c1c",
+        "public.pay_remittance_maybe_queue_for_trigger(uuid,text,text,uuid,boolean,uuid,boolean)": "1745985bd2a722750514f77a5ce5f4ae5744b23dc2c4f0c37f3a8e53faad54db",
+        "public.pay_payment_correction_request_start(uuid,jsonb,text,uuid,uuid,boolean,jsonb)": "104d0460c50d4ccdb3e37a6e74d7a8de7a134445e66f3d2c05b15fd65298efb5",
+        "public._pay_payment_correction_selected_items(uuid,jsonb,boolean)": "dc89247906e064fea22d15ebdce07925118aa4fd4624c0dbb5ed9fa0dc3d247d",
+        "public.pay_payment_correction_selection_prepare_chunk_v1(uuid,uuid,jsonb,integer,text,uuid)": "784e3ee63dd7783a969c4c03956d3a021c441aaf94f9df0f328d643cdefaba42",
+        "public.pay_payment_correction_expand_work(uuid,uuid)": "3bcf21c8b46a64ce8dee0e9752606056149bc590669ea6065e674c50bdc705a7",
+        "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)": "34b334b3ad89d9de684e0fb86fe1b4f09ba3c4fc7802c53730a1a45e51ecf75a",
+        "private.pay_pre_bank_cancel_apply_work_page_v1(uuid,uuid[],uuid,jsonb)": "ede8dfe93aca76d294b59f4ab59211020fec2ac139d6f753a4c9ce1759eb4b46",
+        "private.pay_workbench_draft_overlay_remove_page_v1(uuid,uuid,uuid,uuid,integer,integer,uuid,jsonb)": "c1868e301765ce99d99e69359b99a8433a358e8742d5f835bf77cd2a7524e2c7",
+        "public.pay_pre_bank_cancel_apply_work_item(uuid,uuid)": "026ace84cc320562ea9d08631b68f9517dbcdbb3a3c9165b40bdcd1c087a6d22",
+        "public.pay_settled_payment_reversal_apply_work_item(uuid,uuid)": "d985e3af4f75e30654d7952b98172a826f5ec93909581d34f4eacee83656c296",
+        "public.pay_payment_cancelability_diagnostic(uuid,jsonb,uuid,text)": "c2df38403908cefa577c4e593223ca9dda1b708d4e0e1075d395ea2056d07843",
+        "public.pay_batch_cancel(uuid,uuid,text,uuid,uuid)": "10c3ffcaab90dddc256d29ab3df82b1d01d6eaf3a302688a6ba82f04234fb573"
+      },
+      "former_supabase_projects_used": false
+    },
+    "source_install_reconciliation": {
+      "status": "OPEN_FRESH_MIGET_AUDIT_REQUIRED",
+      "installed_commit_is_ancestor_of_reviewed_source": true,
+      "paths_changed_since_installed_release": [
+        ".github/workflows/candidate-db-runtime.yml",
+        ".github/workflows/candidate-manager-email-verify.yml",
+        ".github/workflows/database-contract-export.yml",
+        ".github/workflows/database-release.yml",
+        ".github/workflows/supabase-migrate.yml",
+        "broker/src/banking-pay-draft-certified-v8.js",
+        "broker/src/banking-pay-modal-v2.js",
+        "broker/src/candidate-app-backend.js",
+        "broker/src/candidate-paper-provider-authority.js",
+        "broker/src/index.js",
+        "candidate-broker/src/candidate-broker.js",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.schema.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_HOW_EVERY_PAYMENT_TYPE_WORKS.md",
+        "codex_outputs/banking-pay-create-draft-policy-v1/CHECKSUMS.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/CODEX_ZERO_DRIFT_IMPLEMENTATION_SPEC.md",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/CHECKSUMS.json",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/H1_CREATE_DRAFT_LIFECYCLE_PRODUCER_AUDIT_V1.json",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/H2_DEPENDENCY_CONTRACT.json",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/IMPLEMENTATION_EVIDENCE.json",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/INDEPENDENT_IMPLEMENTATION_REVIEW.md",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/ROLLBACK_PLAN.md",
+        "codex_outputs/h1-workbench-recovery-causal-v1/HANDOVER_FOR_INDEPENDENT_VERIFICATION.md",
+        "codex_outputs/h1-workbench-recovery-causal-v1/INDEPENDENT_AUDIT_PACK.md",
+        "codex_outputs/h1-workbench-recovery-causal-v1/LOCAL_CANDIDATE_CHECKSUMS.pending.json",
+        "codex_outputs/h1-workbench-recovery-causal-v1/MIGET_INSTALLED_IDENTITY_SNAPSHOT_12ecbb56.json",
+        "codex_outputs/h1-workbench-recovery-causal-v1/ROLLBACK_PACK.md",
+        "codex_outputs/h1-workbench-recovery-causal-v1/ROLLBACK_SOURCE_MANIFEST_14dd89af.json",
+        "codex_outputs/h1-workbench-recovery-causal-v1/SHARED_BASELINE_RECONCILIATION_14dd89af.json",
+        "codex_outputs/h1-workbench-recovery-causal-v1/WORKBENCH_SETTLED_CERTIFICATION_V1.contract.json",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_CANDIDATE_CHECKSUMS.json",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_IMPLEMENTATION_HANDOVER.md",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_MIGET_READ_ONLY_SNAPSHOT.json",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_ROLLBACK_MANIFEST.json",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_SOURCE_INVENTORY.json",
+        "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_TEST_EVIDENCE.json",
+        "codex_outputs/h2-draft-parity/DRAFT_CERTIFICATE_CONSUMER_V1.design.json",
+        "codex_outputs/h2-draft-parity/F010_REJECTED_ATOMIC_EXECUTOR_EVIDENCE.md",
+        "codex_outputs/h2-draft-parity/H2_CREATE_DRAFT_LIFECYCLE_CROSS_AUDIT_V1.json",
+        "scripts/cloudtms-db-release-lib.mjs",
+        "scripts/cloudtms-db-release.mjs",
+        "scripts/generate-banking-pay-draft-v8-policy-parity-matrix.mjs",
+        "scripts/generate-banking-pay-policy-contract-v1.mjs",
+        "scripts/verify-banking-pay-draft-v8-finance-policy-matrix.mjs",
+        "supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql",
+        "supabase/migrations/02092026_2300_banking_pay_workbench_settled_certificate_v8.sql",
+        "supabase/migrations/02092026_2305_banking_pay_workbench_settled_certificate_finance_keys_v8.sql",
+        "supabase/migrations/02092026_2310_banking_pay_draft_frozen_certificate_v8.sql",
+        "supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql",
+        "supabase/release/current-contract.json",
+        "supabase/release/current-release.json",
+        "supabase/release/export_contract.sql",
+        "supabase/release/migration-lock.json",
+        "supabase/repeatable/02092026_1040_banking_pay_draft_insert_items_finance_handoff_v1.sql",
+        "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+        "supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql",
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql",
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql",
+        "supabase/repeatable/02092026_2303_banking_pay_draft_certified_operation_start_v8.sql",
+        "supabase/repeatable/02092026_2304_banking_pay_workbench_session_authority_fence_v1.sql",
+        "supabase/repeatable/02092026_2305_banking_pay_operation_start_lock_budget_v1.sql",
+        "supabase/repeatable/02092026_2311_banking_pay_draft_frozen_certificate_adapters_v8.sql",
+        "supabase/repeatable/02092026_2312_banking_pay_draft_row_backed_orchestration_v8.sql",
+        "supabase/repeatable/02092026_2313_banking_pay_draft_candidate_scope_row_backed_v8.sql",
+        "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql",
+        "supabase/repeatable/02092026_2320_banking_pay_draft_finance_row_transport_v8.sql",
+        "supabase/repeatable/02092026_2330_banking_pay_draft_bounded_advance_v8.sql",
+        "supabase/repeatable/02092026_2331_banking_pay_draft_terminal_finish_v8.sql",
+        "supabase/repeatable/03092026_1200_banking_pay_draft_certificate_stage_advance_v8.sql",
+        "supabase/repeatable/03092026_1210_banking_pay_draft_readiness_page_v8.sql",
+        "supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql",
+        "supabase/repeatable/03092026_1451_banking_pay_draft_terminal_context_v8.sql",
+        "supabase/repeatable/03092026_1610_banking_pay_draft_snooze_guard_row_backed_v8.sql",
+        "supabase/repeatable/03092026_1620_banking_pay_draft_integrity_row_backed_v8.sql",
+        "supabase/repeatable/04082026_1154_banking_pay_operation_start.sql",
+        "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+        "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql",
+        "supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql",
+        "supabase/repeatable/07082026_1014_pay_workbench_source_build_attempt_execute_v1.sql",
+        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "supabase/repeatable/07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql",
+        "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+        "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
+        "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+        "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+        "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+        "supabase/verification/02092026_1106_candidate_paper_cancel_lookup_indexes_verification.sql",
+        "supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql",
+        "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+        "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+        "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+        "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+        "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+        "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+        "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+        "supabase/verification/banking_pay_revision5_catalog_manifest.json",
+        "supabase/verification/banking_pay_semantic_ready_cancellation_reversion_catalog_manifest.json",
+        "supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json",
+        "supabase/verification/banking_pay_workbench_certified_source_preview_catalog_manifest.json",
+        "supabase/verification/banking_pay_workbench_settled_certificate_v8_catalog_manifest.json",
+        "supabase/verification/catalog_logical_owner_adapter.mjs",
+        "supabase/verification/catalog_outer_transaction_envelope.mjs",
+        "supabase/verification/generate_banking_pay_catalog_preapply_check.mjs",
+        "supabase/verification/verify_banking_pay_targeted_fast_route_certified_reuse_catalog.mjs",
+        "supabase/verification/verify_banking_pay_workbench_settled_certificate_v8_catalog.mjs",
+        "tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql",
+        "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+        "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql",
+        "tests/02092026_2332_banking_pay_draft_bounded_advance_v8_runtime.sql",
+        "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+        "tests/02092026_2354_banking_pay_draft_candidate_scope_row_backed_v8_runtime.sql",
+        "tests/02092026_2357_banking_pay_draft_constituent_parity_v8_runtime.sql",
+        "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+        "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+        "tests/03092026_1010_banking_pay_workbench_settled_certificate_v8_scale_verification.sql",
+        "tests/03092026_1201_banking_pay_draft_certificate_stage_advance_v8_runtime.sql",
+        "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql",
+        "tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql",
+        "tests/08082026_1210_candidate_app_flag_acl_runtime_verification.sql",
+        "tests/11082026_0051_candidate_paper_caller_closure_runtime_verification.sql",
+        "tests/28082026_2130_banking_pay_task_pages_runtime.sql",
+        "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+        "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+        "tests/banking-pay-candidate-group-pagination.test.cjs",
+        "tests/banking-pay-canonical-correction-carrier.test.cjs",
+        "tests/banking-pay-catalog-preapply-gate.test.cjs",
+        "tests/banking-pay-create-draft-execute-policy-contract.test.cjs",
+        "tests/banking-pay-dirty-apply-family-authority-repair.test.cjs",
+        "tests/banking-pay-draft-bounded-advance-v8.test.cjs",
+        "tests/banking-pay-draft-candidate-scope-row-backed-v8.test.cjs",
+        "tests/banking-pay-draft-certificate-consumer-design.test.cjs",
+        "tests/banking-pay-draft-certificate-consumer-phase-units.test.cjs",
+        "tests/banking-pay-draft-certificate-stage-advance-v8.test.cjs",
+        "tests/banking-pay-draft-certified-v8-concurrency.runtime.test.cjs",
+        "tests/banking-pay-draft-certified-v8-lifecycle-audit.test.cjs",
+        "tests/banking-pay-draft-certified-v8-release-verifier.test.cjs",
+        "tests/banking-pay-draft-certified-v8-terminal.test.cjs",
+        "tests/banking-pay-draft-certified-v8-transport.test.cjs",
+        "tests/banking-pay-draft-certified-v8-worker-postgrest.test.cjs",
+        "tests/banking-pay-draft-constituent-parity-v8.test.cjs",
+        "tests/banking-pay-draft-finance-row-transport-v8.test.cjs",
+        "tests/banking-pay-draft-insert-items-certified-v8.test.cjs",
+        "tests/banking-pay-draft-v8-bounded-property.test.cjs",
+        "tests/banking-pay-draft-v8-mutation.test.cjs",
+        "tests/banking-pay-draft-v8-policy-parity-matrix.test.cjs",
+        "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs",
+        "tests/banking-pay-modal-v2-candidate-state.test.cjs",
+        "tests/banking-pay-modal-v2-contract.test.cjs",
+        "tests/banking-pay-modal-v2-draft-contract.test.cjs",
+        "tests/banking-pay-modal-v2-movement-envelope.test.cjs",
+        "tests/banking-pay-modal-v2-task-pages.test.cjs",
+        "tests/banking-pay-modal-v2-view-evidence.test.cjs",
+        "tests/banking-pay-pending-owner-recovery.test.cjs",
+        "tests/banking-pay-pending-owner-recovery.transactional.test.cjs",
+        "tests/banking-pay-stale-successor-convergence.test.js",
+        "tests/banking-pay-workbench-causal-recovery.test.js",
+        "tests/banking-pay-workbench-current-implementation-handover.test.js",
+        "tests/banking-pay-workbench-fail-job-authority.test.js",
+        "tests/banking-pay-workbench-settled-certificate-v8-handover.test.cjs",
+        "tests/banking-pay-workbench-settled-certificate-v8-worker-postgrest.test.cjs",
+        "tests/banking-pay-workbench-settled-certificate-v8.test.cjs",
+        "tests/banking-pay-workbench-settled-certification-contract.test.js",
+        "tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
+        "tests/banking-pay-workbench-source-build-authority.test.js",
+        "tests/candidate-app-backend.test.js",
+        "tests/candidate-app-db-rpc-contract.test.cjs",
+        "tests/candidate-app-finalisation.test.js",
+        "tests/candidate-broker-boundary.test.js",
+        "tests/candidate-expense-separation-delivery.test.js",
+        "tests/candidate-finalised-hours-primary-action.test.js",
+        "tests/candidate-paper-mail-authority.test.js",
+        "tests/candidate-paper-provider-authority.test.js",
+        "tests/candidate-paper-qr-pack-v2.test.js",
+        "tests/candidate-private-observability.test.js",
+        "tests/candidate-submitted-facts-readback.test.js",
+        "tests/candidate-weekly-paper-ready-transition.test.js",
+        "tests/candidate-weekly-withdrawal-reset.test.js",
+        "tests/database-release-system.test.mjs",
+        "tests/fixtures/02092026_2350_banking_pay_draft_certificate_consumer_schema_setup.sql",
+        "tests/fixtures/02092026_2356_banking_pay_draft_constituent_parity_schema_setup.sql",
+        "tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql",
+        "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql",
+        "tests/fixtures/banking-pay-create-draft-v8-policy-parity-matrix-v1.json",
+        "tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json",
+        "tests/fixtures/banking-pay-settled-certificate-v8-runtime-helpers.sql",
+        "tests/fixtures/banking-pay-workbench-f013-bible-evidence-v1.json",
+        "tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json",
+        "tests/supabase-security-catalog-manifest-boundary.test.js"
+      ],
+      "banking_or_draft_paths_changed_since_installed_release": [
+        "broker/src/banking-pay-draft-certified-v8.js",
+        "broker/src/banking-pay-modal-v2.js",
+        "broker/src/index.js",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.schema.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_HOW_EVERY_PAYMENT_TYPE_WORKS.md",
+        "codex_outputs/banking-pay-create-draft-policy-v1/CHECKSUMS.json",
+        "codex_outputs/banking-pay-create-draft-policy-v1/CODEX_ZERO_DRIFT_IMPLEMENTATION_SPEC.md",
+        "codex_outputs/h1-workbench-certificate-v8-implementation/H1_CREATE_DRAFT_LIFECYCLE_PRODUCER_AUDIT_V1.json",
+        "codex_outputs/h2-draft-parity/DRAFT_CERTIFICATE_CONSUMER_V1.design.json",
+        "codex_outputs/h2-draft-parity/F010_REJECTED_ATOMIC_EXECUTOR_EVIDENCE.md",
+        "codex_outputs/h2-draft-parity/H2_CREATE_DRAFT_LIFECYCLE_CROSS_AUDIT_V1.json",
+        "scripts/generate-banking-pay-draft-v8-policy-parity-matrix.mjs",
+        "scripts/generate-banking-pay-policy-contract-v1.mjs",
+        "scripts/verify-banking-pay-draft-v8-finance-policy-matrix.mjs",
+        "supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql",
+        "supabase/migrations/02092026_2300_banking_pay_workbench_settled_certificate_v8.sql",
+        "supabase/migrations/02092026_2305_banking_pay_workbench_settled_certificate_finance_keys_v8.sql",
+        "supabase/migrations/02092026_2310_banking_pay_draft_frozen_certificate_v8.sql",
+        "supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql",
+        "supabase/release/current-contract.json",
+        "supabase/release/current-release.json",
+        "supabase/release/export_contract.sql",
+        "supabase/release/migration-lock.json",
+        "supabase/repeatable/02092026_1040_banking_pay_draft_insert_items_finance_handoff_v1.sql",
+        "supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql",
+        "supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql",
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql",
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql",
+        "supabase/repeatable/02092026_2303_banking_pay_draft_certified_operation_start_v8.sql",
+        "supabase/repeatable/02092026_2304_banking_pay_workbench_session_authority_fence_v1.sql",
+        "supabase/repeatable/02092026_2305_banking_pay_operation_start_lock_budget_v1.sql",
+        "supabase/repeatable/02092026_2311_banking_pay_draft_frozen_certificate_adapters_v8.sql",
+        "supabase/repeatable/02092026_2312_banking_pay_draft_row_backed_orchestration_v8.sql",
+        "supabase/repeatable/02092026_2313_banking_pay_draft_candidate_scope_row_backed_v8.sql",
+        "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql",
+        "supabase/repeatable/02092026_2320_banking_pay_draft_finance_row_transport_v8.sql",
+        "supabase/repeatable/02092026_2330_banking_pay_draft_bounded_advance_v8.sql",
+        "supabase/repeatable/02092026_2331_banking_pay_draft_terminal_finish_v8.sql",
+        "supabase/repeatable/03092026_1200_banking_pay_draft_certificate_stage_advance_v8.sql",
+        "supabase/repeatable/03092026_1210_banking_pay_draft_readiness_page_v8.sql",
+        "supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql",
+        "supabase/repeatable/03092026_1451_banking_pay_draft_terminal_context_v8.sql",
+        "supabase/repeatable/03092026_1610_banking_pay_draft_snooze_guard_row_backed_v8.sql",
+        "supabase/repeatable/03092026_1620_banking_pay_draft_integrity_row_backed_v8.sql",
+        "supabase/repeatable/04082026_1154_banking_pay_operation_start.sql",
+        "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+        "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql",
+        "supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql",
+        "supabase/repeatable/07082026_1014_pay_workbench_source_build_attempt_execute_v1.sql",
+        "supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql",
+        "supabase/repeatable/07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql",
+        "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
+        "supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql",
+        "supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql",
+        "supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql",
+        "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+        "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+        "supabase/verification/02092026_1041_banking_pay_draft_insert_items_finance_handoff_verification.sql",
+        "supabase/verification/02092026_1106_candidate_paper_cancel_lookup_indexes_verification.sql",
+        "supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql",
+        "supabase/verification/02092026_2390_banking_pay_workbench_settled_certificate_v8_verification.sql",
+        "supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql",
+        "supabase/verification/03092026_1216_candidate_weekly_preroute_break_entry_verification.sql",
+        "supabase/verification/03092026_1944_banking_pay_draft_certified_v8_verification.sql",
+        "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+        "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
+        "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+        "supabase/verification/banking_pay_revision5_catalog_manifest.json",
+        "supabase/verification/banking_pay_semantic_ready_cancellation_reversion_catalog_manifest.json",
+        "supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json",
+        "supabase/verification/banking_pay_workbench_certified_source_preview_catalog_manifest.json",
+        "supabase/verification/banking_pay_workbench_settled_certificate_v8_catalog_manifest.json",
+        "supabase/verification/catalog_logical_owner_adapter.mjs",
+        "supabase/verification/catalog_outer_transaction_envelope.mjs",
+        "supabase/verification/generate_banking_pay_catalog_preapply_check.mjs",
+        "supabase/verification/verify_banking_pay_targeted_fast_route_certified_reuse_catalog.mjs",
+        "supabase/verification/verify_banking_pay_workbench_settled_certificate_v8_catalog.mjs",
+        "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+        "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql",
+        "tests/02092026_2332_banking_pay_draft_bounded_advance_v8_runtime.sql",
+        "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+        "tests/02092026_2354_banking_pay_draft_candidate_scope_row_backed_v8_runtime.sql",
+        "tests/02092026_2357_banking_pay_draft_constituent_parity_v8_runtime.sql",
+        "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql",
+        "tests/03092026_1000_banking_pay_workbench_targeted_zero_output_runtime_verification.sql",
+        "tests/03092026_1010_banking_pay_workbench_settled_certificate_v8_scale_verification.sql",
+        "tests/03092026_1201_banking_pay_draft_certificate_stage_advance_v8_runtime.sql",
+        "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql",
+        "tests/28082026_2130_banking_pay_task_pages_runtime.sql",
+        "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
+        "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql",
+        "tests/banking-pay-candidate-group-pagination.test.cjs",
+        "tests/banking-pay-canonical-correction-carrier.test.cjs",
+        "tests/banking-pay-catalog-preapply-gate.test.cjs",
+        "tests/banking-pay-create-draft-execute-policy-contract.test.cjs",
+        "tests/banking-pay-dirty-apply-family-authority-repair.test.cjs",
+        "tests/banking-pay-draft-bounded-advance-v8.test.cjs",
+        "tests/banking-pay-draft-candidate-scope-row-backed-v8.test.cjs",
+        "tests/banking-pay-draft-certificate-consumer-design.test.cjs",
+        "tests/banking-pay-draft-certificate-consumer-phase-units.test.cjs",
+        "tests/banking-pay-draft-certificate-stage-advance-v8.test.cjs",
+        "tests/banking-pay-draft-certified-v8-concurrency.runtime.test.cjs",
+        "tests/banking-pay-draft-certified-v8-lifecycle-audit.test.cjs",
+        "tests/banking-pay-draft-certified-v8-release-verifier.test.cjs",
+        "tests/banking-pay-draft-certified-v8-terminal.test.cjs",
+        "tests/banking-pay-draft-certified-v8-transport.test.cjs",
+        "tests/banking-pay-draft-certified-v8-worker-postgrest.test.cjs",
+        "tests/banking-pay-draft-constituent-parity-v8.test.cjs",
+        "tests/banking-pay-draft-finance-row-transport-v8.test.cjs",
+        "tests/banking-pay-draft-insert-items-certified-v8.test.cjs",
+        "tests/banking-pay-draft-v8-bounded-property.test.cjs",
+        "tests/banking-pay-draft-v8-mutation.test.cjs",
+        "tests/banking-pay-draft-v8-policy-parity-matrix.test.cjs",
+        "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs",
+        "tests/banking-pay-modal-v2-candidate-state.test.cjs",
+        "tests/banking-pay-modal-v2-contract.test.cjs",
+        "tests/banking-pay-modal-v2-draft-contract.test.cjs",
+        "tests/banking-pay-modal-v2-movement-envelope.test.cjs",
+        "tests/banking-pay-modal-v2-task-pages.test.cjs",
+        "tests/banking-pay-modal-v2-view-evidence.test.cjs",
+        "tests/banking-pay-pending-owner-recovery.test.cjs",
+        "tests/banking-pay-pending-owner-recovery.transactional.test.cjs",
+        "tests/banking-pay-stale-successor-convergence.test.js",
+        "tests/banking-pay-workbench-causal-recovery.test.js",
+        "tests/banking-pay-workbench-current-implementation-handover.test.js",
+        "tests/banking-pay-workbench-fail-job-authority.test.js",
+        "tests/banking-pay-workbench-settled-certificate-v8-handover.test.cjs",
+        "tests/banking-pay-workbench-settled-certificate-v8-worker-postgrest.test.cjs",
+        "tests/banking-pay-workbench-settled-certificate-v8.test.cjs",
+        "tests/banking-pay-workbench-settled-certification-contract.test.js",
+        "tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
+        "tests/banking-pay-workbench-source-build-authority.test.js",
+        "tests/fixtures/02092026_2350_banking_pay_draft_certificate_consumer_schema_setup.sql",
+        "tests/fixtures/02092026_2356_banking_pay_draft_constituent_parity_schema_setup.sql",
+        "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql",
+        "tests/fixtures/banking-pay-create-draft-v8-policy-parity-matrix-v1.json",
+        "tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json",
+        "tests/fixtures/banking-pay-settled-certificate-v8-runtime-helpers.sql",
+        "tests/fixtures/banking-pay-workbench-f013-bible-evidence-v1.json",
+        "tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json"
+      ],
+      "bounded_live_routine_hash_match_count": 0,
+      "bounded_live_routine_hash_mismatch_count": null,
+      "proof_rule": "The current source is newer only in the listed paths. A Banking/Draft path here, or any live routine mismatch, invalidates this reconciliation and requires a fresh audit."
+    },
+    "bounded_current_test_occurrence_evidence": {
+      "correction_pair_shape_count_rows": 0,
+      "interpretation": "The bounded non-sensitive Miget aggregate found no current qualifying paired-Timesheet business shape. Paired policy is therefore source/installed-owner/fixture proven; this is not evidence that the production-reachable category can be omitted."
+    }
+  },
+  "upstream_workbench_certificate_contract": {
+    "contract_name": "WORKBENCH_SETTLED_CERTIFICATION_V1",
+    "artifact_sha256": "569eac8f790478453ea47e75d84f3c5f0553ec36894ddb7fcde0570db85a16a8",
+    "artifact_bytes": 20449,
+    "artifact_status": "LOCAL_CANDIDATE_NOT_INSTALLED_NOT_DEPLOYED_NOT_FINAL",
+    "consumer_rule": "Consume certification_id and overall_digest_sha256 exactly; do not reconstruct Workbench selection.",
+    "h1_owned_input_facts": [
+      "exact current session/version/progress/snapshot/generation authority",
+      "complete ordered selected constituent identities and canonical ex-VAT amounts",
+      "exact candidate/pay-channel partitions and partition digests",
+      "Ready/Action Required/Blocked and exclusion-universe completeness proofs",
+      "source publication identities and expected pre-Draft recovery/headroom/item/source-reservation facts",
+      "accepted backend/database/Worker/frontend/Bible proof identities"
+    ],
+    "prohibited_h1_outputs": [
+      "Draft-produced allocation-row identity",
+      "Draft item identity",
+      "Draft reservation-row identity",
+      "post-Draft materialisation fact",
+      "Draft parity verdict"
+    ],
+    "activation_gate": "No populated sealed certificate instance or installed server-readable lifecycle is proved by this artifact. A future route must fail closed until those separately reviewed authorities exist."
+  },
+  "truth_hierarchy": [
+    "Before Draft: current server-owned Workbench publication, readiness, exact selected constituent identity and existing financial owners.",
+    "During Draft: the existing stage owner for that exact decision; orchestration transports identity/receipts but never recomputes money.",
+    "After Draft: frozen pay batch/candidate/item/allocation/reservation/snapshot/breakdown/effect artifacts only (Policy X).",
+    "Execute/cancel/revert: current downstream owners consume those frozen artifacts without a route-version branch."
+  ],
+  "non_negotiable_invariants": [
+    "No eligibility, selection, amount, sign, gross/net, tax, VAT, channel, payee, rate, headroom, grouping, approval, hold, resolution, provider, settlement, cancellation or reversion policy change.",
+    "Every selected constituent is compared by exact stable identity and amount; totals alone can never prove parity.",
+    "PAYE and Umbrella remain separate authoritative channel partitions and batch outputs.",
+    "Gross deductions/additions and net deductions/additions retain their deliberately different bank-scalar treatment.",
+    "Visible Workbench vocabulary may deliberately differ from frozen Draft vocabulary; aliases are mapped, never normalised by guess.",
+    "Paired Timesheet lifecycle is atomic, but its member and component identities are not collapsed.",
+    "No Draft or Execute RPC budget may be increased, removed or bypassed to obtain a pass.",
+    "Create Draft must support the settled complete selected set beyond 100, with no truncation or hidden cap; bounded pages/receipts replace giant arrays.",
+    "No downstream consumer may know whether the same Draft artifacts were produced by the current or revised orchestration route.",
+    "Any new field is additive and backward-compatible; no consumed field may be renamed, omitted, retyped or reinterpreted."
+  ],
+  "source_vocabulary_registry": {
+    "pay_channels": [
+      "PAYE",
+      "UMBRELLA"
+    ],
+    "paye_treatments": [
+      "GROSS_ADD",
+      "GROSS_DEDUCT",
+      "NET_ADD",
+      "NET_DEDUCT",
+      "NONE"
+    ],
+    "readiness_sections": [
+      "READY_TO_PAY",
+      "CASES_RESOLUTIONS",
+      "BLOCKED_FOR_PAY"
+    ],
+    "visible_payment_line_types": [
+      "TIMESHEET_PAYMENT",
+      "LOAN_PAYOUT",
+      "PAYMENT_ADVANCE_REPAYMENT",
+      "OVERPAYMENT_RECOVERY",
+      "UNDERPAYMENT_PAYMENT",
+      "MANUAL_CREDIT_ADJUSTMENT_PAYMENT",
+      "MANUAL_DEBT_RECOVERY",
+      "MANUAL_ADJUSTMENT_CARRY_FORWARD"
+    ],
+    "deliberately_hidden_or_frozen_aliases": [
+      "LOAN_REPAYMENT",
+      "MANUAL_CREDIT_PAYOUT"
+    ],
+    "frozen_item_types": [
+      "SEGMENT_DELTA",
+      "EXPENSE_DELTA",
+      "MILEAGE_DELTA",
+      "LOAN_PAYOUT",
+      "LOAN_REPAYMENT",
+      "OVERPAYMENT_RECOVERY",
+      "UNDERPAYMENT_PAYMENT",
+      "MANUAL_CREDIT_PAYOUT",
+      "MANUAL_DEBT_RECOVERY"
+    ],
+    "finance_case_types": [
+      "PAYMENT_ADVANCE",
+      "OVERPAYMENT",
+      "UNDERPAYMENT",
+      "MANUAL_CREDIT_ADJUSTMENT",
+      "MANUAL_DEBT_ADJUSTMENT"
+    ],
+    "economic_key_types": [
+      "TS_DAY",
+      "TS_TOTAL",
+      "EXPENSE_CODE",
+      "ADDITIONAL_CODE",
+      "ADJUSTMENT_CODE"
+    ],
+    "expense_codes": [
+      "EXPENSES",
+      "TRAVEL",
+      "ACCOMMODATION",
+      "OTHER",
+      "MILEAGE"
+    ],
+    "correction_member_kinds": [
+      "CHANGED_HOURS_REVERSAL",
+      "CHANGED_HOURS_REPLACEMENT",
+      "CANCELLATION_REVERSAL",
+      "CANCELLATION_REPLACEMENT"
+    ],
+    "correction_shapes": [
+      "REVERSAL_REPLACEMENT",
+      "REVERSAL_ONLY"
+    ],
+    "lifecycle_actions": [
+      "AUTHORISE",
+      "UNAUTHORISE",
+      "PROCESS",
+      "UNPROCESS"
+    ],
+    "mapping_rule": "Every token is owned by its source layer. A rewrite may translate only through the explicit visible→frozen mappings in the payment-family rows; it may not merge, rename or infer aliases."
+  },
+  "gross_net_policy": [
+    {
+      "rule_id": "PAYE_GROSS_ADD",
+      "meaning": "Taxable value belongs inside payroll gross. The saved PAYE net already reflects it, so the bank amount must not add it again.",
+      "applicable_sign": "POSITIVE",
+      "bank_scalar_owner": "saved PAYE net",
+      "forbidden": "Adding the item again after imported net."
+    },
+    {
+      "rule_id": "PAYE_GROSS_DEDUCT",
+      "meaning": "Taxable deduction belongs inside payroll gross. The saved PAYE net already reflects it, so the bank amount must not deduct it again.",
+      "applicable_sign": "NEGATIVE",
+      "bank_scalar_owner": "saved PAYE net",
+      "forbidden": "Deducting the item again after imported net."
+    },
+    {
+      "rule_id": "PAYE_NET_ADD",
+      "meaning": "Fixed or non-taxable credit is added after the imported payroll net.",
+      "applicable_sign": "POSITIVE",
+      "bank_scalar_owner": "saved PAYE net plus certified NET_ADD items",
+      "forbidden": "Putting it into payroll gross or applying it twice."
+    },
+    {
+      "rule_id": "PAYE_NET_DEDUCT",
+      "meaning": "Fixed or non-taxable deduction is taken after the imported payroll net.",
+      "applicable_sign": "NEGATIVE",
+      "bank_scalar_owner": "saved PAYE net less certified NET_DEDUCT items",
+      "forbidden": "Putting it into payroll gross or applying it twice."
+    },
+    {
+      "rule_id": "UMBRELLA_NONE",
+      "meaning": "PAYE gross/net treatment does not apply. Existing Umbrella ex-VAT, VAT, inclusive amount, payee and channel owners remain authoritative.",
+      "applicable_sign": "EITHER",
+      "bank_scalar_owner": "frozen Umbrella payment projection",
+      "forbidden": "Reusing PAYE net arithmetic or inventing VAT."
+    }
+  ],
+  "payment_families": [
+    {
+      "family_id": "ordinary_timesheet_components",
+      "title": "Ordinary Timesheet hours and rate components",
+      "real_world_event": "A processed, authorised Timesheet has an unpaid current entitlement.",
+      "visible_aliases": [
+        "TIMESHEET_PAYMENT"
+      ],
+      "frozen_item_types": [
+        "SEGMENT_DELTA"
+      ],
+      "identity": [
+        "physical Timesheet ID",
+        "segment/component source identity",
+        "economic key TS_DAY or TS_TOTAL",
+        "rate/revision/source fingerprint"
+      ],
+      "selection": "Only Ready components are selectable. Action Required, Blocked, snoozed, ineligible, superseded and already-active-Draft components are excluded.",
+      "amount_owner": "Current pre-Draft entitlement minus settled baseline minus active source reservation, at exact component identity.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "source residual",
+          "paye_treatment": "GROSS_ADD for ordinary positive earnings",
+          "vat": "not an Umbrella VAT calculation"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "source residual",
+          "paye_treatment": "NONE",
+          "vat": "existing frozen Umbrella ex-VAT/VAT/inclusive owners"
+        }
+      ],
+      "draft_result": "One or more frozen SEGMENT_DELTA items retain the exact component/economic identities; totals are a consequence, not the identity.",
+      "fail_closed": [
+        "missing or ambiguous rate/payment method",
+        "negative ordinary parent without certified recovery shape",
+        "stale source revision",
+        "duplicate/missing selected identity"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1330-1449",
+          "symbol": "canonical_timesheet_presentation_rows",
+          "proves": "TIMESHEET_PAYMENT readiness, PAYE treatment and amount"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2270-2564",
+          "symbol": "timesheet_allocation_component_lines",
+          "proves": "component-level economic identity and frozen item routing"
+        }
+      ]
+    },
+    {
+      "family_id": "paired_timesheet_reversal_replacement",
+      "title": "Paired Timesheets: reversal plus replacement",
+      "real_world_event": "An import-authoritative changed-hours correction replaces an earlier Timesheet by creating one reversal leg and one replacement leg under one correction operation.",
+      "visible_aliases": [
+        "CHANGED_HOURS_REVERSAL",
+        "CHANGED_HOURS_REPLACEMENT"
+      ],
+      "frozen_item_types": [
+        "SEGMENT_DELTA"
+      ],
+      "identity": [
+        "root Timesheet ID",
+        "correction operation ID",
+        "correction chain ID",
+        "ordered member Timesheet IDs",
+        "pair/chain fingerprint",
+        "per-leg policy fingerprint",
+        "TS_DAY economic key"
+      ],
+      "selection": "The correction unit is valid only when it has exactly one reversal and one replacement with the expected envelope, count, roles and fingerprints. Authorise/unauthorise/process/unprocess transitions are atomic across both legs.",
+      "amount_owner": "The correction residual owner sums current TS_DAY truth, subtracts settled baseline and active reservations, then accounts for settled/reserved correction finance movements. It does not include expenses, mileage, additional codes, loans or unrelated overpayments.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "net correction residual by TS_DAY",
+          "paye_treatment": "TAXABLE_CHANNEL_SENSITIVE; target resolution required if source channel differs",
+          "vat": "PAYE target amount is never inferred from Umbrella"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "net correction residual by TS_DAY",
+          "paye_treatment": "NONE",
+          "vat": "target ex-VAT/VAT amount requires existing channel authority; never converted by guess"
+        }
+      ],
+      "draft_result": "The pair is not collapsed into one invented payment. Frozen constituents preserve the ordered pair lineage and component identity, while the latest positive leg may act as the carrier Timesheet.",
+      "cancellation_reversion": "Reversion must restore/release both the frozen component lineage and the pair/chain evidence consistently; never revive just one leg as an unrelated payable row.",
+      "fail_closed": [
+        "broken pair",
+        "duplicate role",
+        "member-count mismatch",
+        "cycle/depth overflow",
+        "mixed worker or mixed client",
+        "stale chain or leg fingerprint",
+        "paid/invoiced lifecycle conflict",
+        "unresolved cross-channel target amount",
+        "reservation overrun"
+      ],
+      "test_occurrence": "No qualifying current business pair rows were returned by the bounded Miget TEST aggregate on 2026-09-02; source and deterministic fixture coverage are therefore mandatory.",
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+          "lines": "41-236",
+          "symbol": "timesheet_correction_chain_scope_v1",
+          "proves": "bounded chain, exact unit shape, fingerprints and member order"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+          "lines": "41-197",
+          "symbol": "timesheet_correction_pair_transition_v1",
+          "proves": "atomic lifecycle, per-leg evidence and paid/invoiced guards"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+          "lines": "105-338",
+          "symbol": "pay_correction_chain_residual_v1",
+          "proves": "single-worker/client/channel and policy-anchor validation"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+          "lines": "340-1300",
+          "symbol": "pay_correction_chain_residual_v1",
+          "proves": "TS_DAY residual, reservations, settlements, stable identity and draftability"
+        }
+      ]
+    },
+    {
+      "family_id": "paired_timesheet_reversal_only",
+      "title": "Paired Timesheet lifecycle: reversal-only cancellation correction",
+      "real_world_event": "An import-authoritative cancellation removes previously accepted hours without a positive replacement leg.",
+      "visible_aliases": [
+        "CANCELLATION_REVERSAL",
+        "REVERSAL_ONLY"
+      ],
+      "frozen_item_types": [
+        "SEGMENT_DELTA or certified recovery output selected by existing owner"
+      ],
+      "identity": [
+        "root Timesheet ID",
+        "one reversal member",
+        "correction operation/chain IDs",
+        "envelope and leg fingerprints",
+        "TS_DAY key"
+      ],
+      "selection": "Expected member count is one, reversal count is one and replacement count is zero. The same atomic lifecycle and stale/paid/invoiced guards apply.",
+      "amount_owner": "The same correction residual owner; no second cancellation arithmetic is permitted.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "source-proved residual, often recovery/zero after baselines",
+          "paye_treatment": "existing signed recovery and PAYE owners only",
+          "vat": "not guessed"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "source-proved residual",
+          "paye_treatment": "NONE",
+          "vat": "existing frozen Umbrella authority only"
+        }
+      ],
+      "draft_result": "Only the actual residual is frozen. A reversal row is not automatically converted into a payment or recovery merely because it is negative.",
+      "fail_closed": [
+        "unexpected replacement",
+        "wrong expected count/roles",
+        "unproved signed recovery evidence",
+        "stale envelope/leg",
+        "mixed worker/client/channel"
+      ],
+      "member_deletion_policy": {
+        "canonical_reversal_only": "A source cancellation creates REVERSAL_ONLY directly with one reversal and no replacement.",
+        "remove_positive_replacement_only": "User-confirmed valid outcome, but current standard delete does not implement it: the changed-hours pair is presently one two-row delete target. A future upstream transition must atomically remove the replacement and republish the survivor as a fully certified REVERSAL_ONLY unit before Draft.",
+        "remove_negative_reversal_only": "Strictly prohibited. A positive-only unit has no reversal and fails the exact correction-chain validator.",
+        "remove_both": "Valid cancellation of the correction when the existing delete/retention owner permits it. The current standard delete targets both members; retained financial history may require archive rather than physical deletion.",
+        "draft_safety_boundary": "Never make Create Draft accept a REVERSAL_REPLACEMENT unit with a missing member. That is corruption, not a valid reversal-only correction."
+      },
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+          "lines": "101-157",
+          "symbol": "timesheet_correction_chain_scope_v1",
+          "proves": "REVERSAL_ONLY exact shape"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+          "lines": "1-26",
+          "symbol": "pay_correction_chain_residual_v1",
+          "proves": "narrow residual scope and exclusions"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1820_00a_import_apply_operation_claim_v2.sql",
+          "lines": "45-104",
+          "symbol": "_import_apply_operation_claim_core_v2",
+          "proves": "CANCELLATION maps only to REVERSAL_ONLY; CHANGED_HOURS maps only to REVERSAL_REPLACEMENT"
+        },
+        {
+          "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "lines": "182957-183312",
+          "symbol": "timesheet_standard_delete_preview_v1",
+          "proves": "current changed-hours pair is an exact two-row delete target and malformed/single-child shapes block"
+        },
+        {
+          "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+          "lines": "153787-154375",
+          "symbol": "timesheet_standard_delete_apply_v1",
+          "proves": "apply consumes and deletes the exact preview target set; it does not reclassify one surviving member"
+        }
+      ]
+    },
+    {
+      "family_id": "timesheet_expenses_and_mileage",
+      "title": "Timesheet expenses, travel, accommodation, other and mileage",
+      "real_world_event": "An authorised Timesheet contains an unpaid expense component.",
+      "visible_aliases": [
+        "EXPENSES",
+        "TRAVEL",
+        "ACCOMMODATION",
+        "OTHER",
+        "MILEAGE"
+      ],
+      "frozen_item_types": [
+        "EXPENSE_DELTA",
+        "MILEAGE_DELTA"
+      ],
+      "identity": [
+        "Timesheet ID",
+        "EXPENSE_CODE economic key",
+        "expense code",
+        "source-basis fingerprint"
+      ],
+      "selection": "Each Ready expense component is selected independently. A blocked/snoozed expense does not disappear an unrelated Ready hours or expense component.",
+      "amount_owner": "Current component amount ex VAT after settled baseline and active reservation.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "source residual",
+          "paye_treatment": "GROSS_ADD in the current canonical component projection",
+          "vat": "no Umbrella VAT computation"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "source residual",
+          "paye_treatment": "NONE",
+          "vat": "preserve component ex-VAT and existing Umbrella VAT snapshot/rate"
+        }
+      ],
+      "draft_result": "MILEAGE maps to MILEAGE_DELTA; the other expense codes map to EXPENSE_DELTA. Source keys and expense code remain distinct.",
+      "fail_closed": [
+        "missing expense code/fingerprint",
+        "unsupported expense code",
+        "stale source basis",
+        "snoozed or blocked component"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2270-2564",
+          "symbol": "timesheet_allocation_component_lines",
+          "proves": "EXPENSE_CODE identity, MILEAGE routing and channel treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "3169-3227",
+          "symbol": "candidate totals",
+          "proves": "separate expense-code totals"
+        }
+      ]
+    },
+    {
+      "family_id": "additional_and_adjustment_components",
+      "title": "Additional-code and adjustment-code Timesheet components",
+      "real_world_event": "A Timesheet has a separately identified additional or adjustment component.",
+      "visible_aliases": [
+        "ADDITIONAL_CODE",
+        "ADJUSTMENT_CODE"
+      ],
+      "frozen_item_types": [
+        "EXPENSE_DELTA or existing component-specific output"
+      ],
+      "identity": [
+        "Timesheet ID",
+        "component key type",
+        "component key value",
+        "source/revision fingerprint"
+      ],
+      "selection": "Each component is independent even when another component shares a date or total.",
+      "amount_owner": "Current component entitlement less exact settled baseline and reservation.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "source residual",
+          "paye_treatment": "existing component treatment; no reclassification by label",
+          "vat": "not inferred"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "source residual",
+          "paye_treatment": "NONE",
+          "vat": "existing component VAT authority"
+        }
+      ],
+      "draft_result": "Stable key and source identity survive; a label collision must not turn a component into a finance case.",
+      "fail_closed": [
+        "ambiguous key",
+        "duplicate exact identity",
+        "stale fingerprint"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2270-2564",
+          "symbol": "timesheet_allocation_component_lines",
+          "proves": "key-type-specific identity and item routing"
+        }
+      ]
+    },
+    {
+      "family_id": "forced_advance_this_payment",
+      "title": "Forced Timesheet “advance this payment”",
+      "real_world_event": "An authorised override permits a particular otherwise-timed Timesheet payment into this pay run.",
+      "visible_aliases": [
+        "ADVANCE_THIS_PAYMENT"
+      ],
+      "frozen_item_types": [
+        "ordinary Timesheet component item types"
+      ],
+      "identity": [
+        "Timesheet/component identity",
+        "override ID",
+        "reason",
+        "actor and lifecycle evidence"
+      ],
+      "selection": "The override changes timing eligibility only; it does not change the money, channel, rate, tax or component identity.",
+      "amount_owner": "The same Timesheet/component financial owner as an ordinary payment.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "unchanged source residual",
+          "paye_treatment": "unchanged ordinary PAYE treatment",
+          "vat": "unchanged"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "unchanged source residual",
+          "paye_treatment": "NONE",
+          "vat": "unchanged Umbrella authority"
+        }
+      ],
+      "draft_result": "Ordinary frozen artifacts plus the existing override evidence; no loan or finance-case item is invented.",
+      "fail_closed": [
+        "cancelled/stale override",
+        "wrong Timesheet",
+        "override without authority"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1330-1449",
+          "symbol": "canonical_timesheet_presentation_rows",
+          "proves": "is_advanced, override ID and reason without amount rewrite"
+        }
+      ]
+    },
+    {
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "title": "Already-paid, part-paid, reserved and superseded source treatment",
+      "real_world_event": "Some or all of a source component has already been paid, reserved or superseded.",
+      "visible_aliases": [
+        "component residual or absence"
+      ],
+      "frozen_item_types": [
+        "the original family item type for the remaining exact residual"
+      ],
+      "identity": [
+        "same physical/economic component identity",
+        "settled baseline",
+        "active reservation",
+        "supersession/current-source fingerprint"
+      ],
+      "selection": "Fully settled or superseded authority is absent from Ready. A part-paid component contributes only its exact remaining amount. Cancelling an untouched Draft may release it to appear once again.",
+      "amount_owner": "truth minus settled baseline minus active reservation, with source-owned recovery/underpayment movements where applicable.",
+      "variants": [
+        {
+          "channel": "PAYE or UMBRELLA",
+          "sign": "residual sign",
+          "paye_treatment": "unchanged from original family",
+          "vat": "unchanged from original family"
+        }
+      ],
+      "draft_result": "No duplicate full payment; the exact residual and lineage are frozen.",
+      "fail_closed": [
+        "reservation overrun",
+        "same identity already active in another Draft",
+        "stale supersession/current revision"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+          "lines": "343-467",
+          "symbol": "raw_outstanding",
+          "proves": "truth minus baseline minus reservation equation"
+        }
+      ]
+    },
+    {
+      "family_id": "payment_advance_payout",
+      "title": "Payment advance / loan payout",
+      "real_world_event": "The agency pays the worker an advance before it becomes a repayment schedule.",
+      "visible_aliases": [
+        "LOAN_PAYOUT"
+      ],
+      "frozen_item_types": [
+        "LOAN_PAYOUT"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when Lifecycle is not PAID. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "POSITIVE",
+          "paye_treatment": "NET_ADD",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "POSITIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "not a recovery deduction",
+      "draft_result": "Visible LOAN_PAYOUT becomes frozen LOAN_PAYOUT; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "payment_advance_repayment",
+      "title": "Payment advance repayment",
+      "real_world_event": "The worker repays a previously paid advance. LOAN_REPAYMENT is the hidden/frozen item vocabulary, not a second visible product.",
+      "visible_aliases": [
+        "PAYMENT_ADVANCE_REPAYMENT"
+      ],
+      "frozen_item_types": [
+        "LOAN_REPAYMENT"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when Lifecycle is PAID and a repayment is due. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "NEGATIVE",
+          "paye_treatment": "NET_DEDUCT",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "NEGATIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "bounded by ordinary positive headroom and case residual",
+      "draft_result": "Visible PAYMENT_ADVANCE_REPAYMENT becomes frozen LOAN_REPAYMENT; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "overpayment_recovery",
+      "title": "Overpayment recovery",
+      "real_world_event": "The worker owes back a previous overpayment, but no more than current policy permits in this run.",
+      "visible_aliases": [
+        "OVERPAYMENT_RECOVERY"
+      ],
+      "frozen_item_types": [
+        "OVERPAYMENT_RECOVERY"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when A valid overpayment balance remains recoverable. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "NEGATIVE",
+          "paye_treatment": "TAXABLE → GROSS_DEDUCT; NON_TAXABLE → NET_DEDUCT",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "NEGATIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "zero/exact/partial recovery against candidate+channel ordinary positive headroom in deterministic case order",
+      "draft_result": "Visible OVERPAYMENT_RECOVERY becomes frozen OVERPAYMENT_RECOVERY; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "underpayment_payment",
+      "title": "Underpayment payment",
+      "real_world_event": "The agency owes the worker an amount previously underpaid.",
+      "visible_aliases": [
+        "UNDERPAYMENT_PAYMENT"
+      ],
+      "frozen_item_types": [
+        "UNDERPAYMENT_PAYMENT"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when A valid underpayment balance remains due. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "POSITIVE",
+          "paye_treatment": "TAXABLE → GROSS_ADD; NON_TAXABLE → NET_ADD",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "POSITIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "not a recovery deduction",
+      "draft_result": "Visible UNDERPAYMENT_PAYMENT becomes frozen UNDERPAYMENT_PAYMENT; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "manual_credit_adjustment",
+      "title": "Manual credit adjustment payment",
+      "real_world_event": "An authorised manual correction increases what the worker is paid. The visible and frozen names deliberately differ.",
+      "visible_aliases": [
+        "MANUAL_CREDIT_ADJUSTMENT_PAYMENT"
+      ],
+      "frozen_item_types": [
+        "MANUAL_CREDIT_PAYOUT"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when An authorised manual credit remains payable. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "POSITIVE",
+          "paye_treatment": "TAXABLE → GROSS_ADD; NON_TAXABLE → NET_ADD",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "POSITIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "not a recovery deduction",
+      "draft_result": "Visible MANUAL_CREDIT_ADJUSTMENT_PAYMENT becomes frozen MANUAL_CREDIT_PAYOUT; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "manual_debt_adjustment",
+      "title": "Manual debt adjustment recovery",
+      "real_world_event": "An authorised manual correction reduces what the worker is paid.",
+      "visible_aliases": [
+        "MANUAL_DEBT_RECOVERY"
+      ],
+      "frozen_item_types": [
+        "MANUAL_DEBT_RECOVERY"
+      ],
+      "identity": [
+        "finance case ID",
+        "finance component ID",
+        "case type",
+        "component key type/value",
+        "linked Timesheet when present",
+        "source basis fingerprint"
+      ],
+      "selection": "Ready only when An authorised manual debt remains recoverable. It remains blocked when snoozed, unresolved, invalid, zero due or otherwise case-blocked.",
+      "amount_owner": "The existing finance-case due/residual owner and later apply-finance owner. INSERT_ITEMS and orchestration must not calculate finance economics.",
+      "variants": [
+        {
+          "channel": "PAYE",
+          "sign": "NEGATIVE",
+          "paye_treatment": "TAXABLE → GROSS_DEDUCT; NON_TAXABLE → NET_DEDUCT",
+          "vat": "PAYE scalar rules apply"
+        },
+        {
+          "channel": "UMBRELLA",
+          "sign": "NEGATIVE",
+          "paye_treatment": "NONE with existing ex-VAT/VAT/channel/payee authority",
+          "vat": "existing Umbrella ex-VAT/VAT/inclusive amount, payee and channel rules"
+        }
+      ],
+      "headroom": "zero/exact/partial recovery against candidate+channel ordinary positive headroom in deterministic case order",
+      "draft_result": "Visible MANUAL_DEBT_RECOVERY becomes frozen MANUAL_DEBT_RECOVERY; allocation linkage and finance-case/component lineage remain exact.",
+      "fail_closed": [
+        "unsupported or hidden visible alias",
+        "wrong finance case/component/linkage",
+        "stale case residual",
+        "channel mismatch",
+        "snoozed/blocked/unresolved case",
+        "incorrect pre-finance ordinary item link"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "1771-1970",
+          "symbol": "finance_case_lines",
+          "proves": "case type → visible alias, direction, sign and PAYE treatment"
+        },
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2792-2974",
+          "symbol": "canonical_preview_lines finance branch",
+          "proves": "stable visible identity, headroom, readiness and source_ref"
+        },
+        {
+          "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_apply_finance_adjustments",
+          "proves": "unchanged frozen item, allocation, case state, PAYE/Umbrella and replay owner"
+        }
+      ]
+    },
+    {
+      "family_id": "manual_adjustment_carry_forward",
+      "title": "Manual adjustment carry-forward after correction/reversion",
+      "real_world_event": "A prior correction produces a certified amount that must be carried into a later Draft.",
+      "visible_aliases": [
+        "MANUAL_ADJUSTMENT_CARRY_FORWARD"
+      ],
+      "frozen_item_types": [
+        "source-owned carry-forward item type"
+      ],
+      "identity": [
+        "carry-forward ID",
+        "operation source key",
+        "source batch/item/transfer/correction lineage",
+        "candidate/channel/payee"
+      ],
+      "selection": "Only READY/current unconsumed carry-forward authority is draftable.",
+      "amount_owner": "Stored signed ex-VAT/VAT/inclusive amounts and stored tax treatment from the correction owner.",
+      "variants": [
+        {
+          "channel": "PAYE or UMBRELLA",
+          "sign": "CREDIT when positive; DEBIT when negative",
+          "paye_treatment": "stored source treatment",
+          "vat": "stored source VAT treatment"
+        }
+      ],
+      "draft_result": "The stored source economics and complete correction lineage are frozen without reinterpretation.",
+      "fail_closed": [
+        "missing source key",
+        "already consumed target",
+        "candidate/channel/payee mismatch",
+        "stale correction lineage"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+          "lines": "2978-3070",
+          "symbol": "manual carry-forward canonical lines",
+          "proves": "identity, signed values, tax/VAT and source lineage"
+        }
+      ]
+    },
+    {
+      "family_id": "signed_non_charge_recovery",
+      "title": "Signed recovery/return from frozen historical component evidence",
+      "real_world_event": "A historical frozen document proves an exact signed non-charge movement for a component.",
+      "visible_aliases": [
+        "certified signed recovery evidence"
+      ],
+      "frozen_item_types": [
+        "existing recovery/return type chosen by owner"
+      ],
+      "identity": [
+        "full economic key",
+        "amount/bucket/revision/target/conversion",
+        "sealed digest",
+        "decisive component ID"
+      ],
+      "selection": "Cardinality applies only after full signed pre-signature filtering; ordinary same-key components do not count as signed evidence.",
+      "amount_owner": "Existing signed-recovery classifier and recovery owner; no label or total-based inference.",
+      "variants": [
+        {
+          "channel": "PAYE or UMBRELLA",
+          "sign": "positive return or negative recovery as proved",
+          "paye_treatment": "existing frozen evidence",
+          "vat": "existing frozen evidence"
+        }
+      ],
+      "draft_result": "Exact decisive component shape/digest is carried into finalisation and reservation evidence.",
+      "fail_closed": [
+        "zero or multiple decisive signed matches when one is required",
+        "tampered/missing digest",
+        "ordinary same-key false positive",
+        "amount/key/revision/conversion mismatch"
+      ],
+      "source_evidence": [
+        {
+          "path": "supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql",
+          "lines": "1-end",
+          "symbol": "pay_batch_signed_non_charge_recovery_evidence_v1 and finalizer",
+          "proves": "signed classification and frozen evidence checks"
+        }
+      ]
+    }
+  ],
+  "finite_equivalence_classes": [
+    {
+      "class_id": "ordinary_one_segment_paye",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one Ready TS_DAY component",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "ordinary_one_segment_umbrella",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one Ready TS_DAY component",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "ordinary_multi_segment_paye",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "multiple independently keyed Ready TS_DAY components",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "ordinary_multi_segment_umbrella",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "multiple independently keyed Ready TS_DAY components",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "ordinary_multiple_rate_families",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "DAY/NIGHT/SAT/SUN/BH/additional rates remain distinct",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "ordinary_same_key_multiple_components",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "multiple rate/correction components may share TS_DAY or TS_TOTAL and remain distinct physical constituents",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "saved_rate_resolution",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one current saved resolution binds exact component/source fingerprint and target amount",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "saved_payment_method_resolution",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one current saved pay-channel resolution is consumed; the Draft never guesses a channel",
+      "channel": "PAYE↔UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_reversal_replacement_paye",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "exact two-leg pair, source and target PAYE",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_reversal_replacement_umbrella",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "exact two-leg pair, source and target Umbrella",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_cross_channel_resolution",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "source method differs from target and requires one fresh saved target resolution",
+      "channel": "PAYE↔UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_broken_or_duplicate_leg",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "missing/duplicate role must fail closed",
+      "channel": "ALL",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_stale_fingerprint",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "stale chain/envelope/leg fingerprint must fail closed",
+      "channel": "ALL",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_mixed_candidate_or_client",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "pair members span worker/client and must fail closed",
+      "channel": "ALL",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_paid_or_invoiced_conflict",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "partial lifecycle mutation must fail closed",
+      "channel": "ALL",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_transition_replay",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "repeat of the same complete lifecycle transition is idempotent; mixed partial state fails closed",
+      "channel": "ALL",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_draft_response_loss_replay",
+      "family_id": "paired_timesheet_reversal_replacement",
+      "condition": "lost Draft response reuses the same ordered chain/component identity without duplicating either leg",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_reversal_only_paye",
+      "family_id": "paired_timesheet_reversal_only",
+      "condition": "one reversal/no replacement with proved residual",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "paired_reversal_only_umbrella",
+      "family_id": "paired_timesheet_reversal_only",
+      "condition": "one reversal/no replacement with proved residual",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_expenses_paye",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "EXPENSES code",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_travel_paye",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "TRAVEL code",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_accommodation_paye",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "ACCOMMODATION code",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_other_paye",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "OTHER code",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "mileage_paye",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "MILEAGE maps to MILEAGE_DELTA",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_vat_umbrella",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "VAT-bearing Umbrella expense preserves ex-VAT/VAT/inclusive values",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "expense_non_vat_umbrella",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "zero/non-VAT Umbrella expense preserves source VAT evidence",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "mileage_umbrella",
+      "family_id": "timesheet_expenses_and_mileage",
+      "condition": "MILEAGE maps to MILEAGE_DELTA with Umbrella authority",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "additional_code_component",
+      "family_id": "additional_and_adjustment_components",
+      "condition": "ADDITIONAL_CODE exact key",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "adjustment_code_component",
+      "family_id": "additional_and_adjustment_components",
+      "condition": "ADJUSTMENT_CODE exact key",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "forced_advance_paye",
+      "family_id": "forced_advance_this_payment",
+      "condition": "timing override retains ordinary economics",
+      "channel": "PAYE",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "forced_advance_umbrella",
+      "family_id": "forced_advance_this_payment",
+      "condition": "timing override retains ordinary economics",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "part_paid_residual",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "only exact unpaid residual remains",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "fully_settled_absent",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "fully settled component absent from Ready",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "active_reservation_residual",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "active reservation subtracted exactly",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "superseded_absent",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "superseded physical identity absent unless current residual authority says otherwise",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "cancelled_untouched_reappears_once",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "released untouched Draft source returns once",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_payout_paye",
+      "family_id": "payment_advance_payout",
+      "condition": "positive initial payout",
+      "channel": "PAYE NET_ADD",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_payout_umbrella",
+      "family_id": "payment_advance_payout",
+      "condition": "positive initial payout",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_repayment_paye",
+      "family_id": "payment_advance_repayment",
+      "condition": "visible PAYMENT_ADVANCE_REPAYMENT freezes LOAN_REPAYMENT",
+      "channel": "PAYE NET_DEDUCT",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_repayment_umbrella",
+      "family_id": "payment_advance_repayment",
+      "condition": "visible PAYMENT_ADVANCE_REPAYMENT freezes LOAN_REPAYMENT",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_part_repaid_residual",
+      "family_id": "payment_advance_repayment",
+      "condition": "only remaining scheduled residual",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_paid_off_absent",
+      "family_id": "payment_advance_repayment",
+      "condition": "no remaining due; absent/blocked",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_cancelled_absent",
+      "family_id": "payment_advance_repayment",
+      "condition": "cancelled authority not selectable",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "advance_voided_reappears_once",
+      "family_id": "payment_advance_repayment",
+      "condition": "certified release permits one correct reappearance",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_taxable_paye",
+      "family_id": "overpayment_recovery",
+      "condition": "taxable recovery",
+      "channel": "PAYE GROSS_DEDUCT",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_nontaxable_paye",
+      "family_id": "overpayment_recovery",
+      "condition": "non-taxable recovery",
+      "channel": "PAYE NET_DEDUCT",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_umbrella",
+      "family_id": "overpayment_recovery",
+      "condition": "Umbrella recovery",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_zero_headroom",
+      "family_id": "overpayment_recovery",
+      "condition": "no ordinary positive headroom; zero draftable recovery",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_exact_headroom",
+      "family_id": "overpayment_recovery",
+      "condition": "recovery exactly consumes allowed headroom",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "overpayment_partial_headroom",
+      "family_id": "overpayment_recovery",
+      "condition": "partial recovery only; residual remains",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "underpayment_taxable_paye",
+      "family_id": "underpayment_payment",
+      "condition": "taxable credit",
+      "channel": "PAYE GROSS_ADD",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "underpayment_nontaxable_paye",
+      "family_id": "underpayment_payment",
+      "condition": "non-taxable credit",
+      "channel": "PAYE NET_ADD",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "underpayment_umbrella",
+      "family_id": "underpayment_payment",
+      "condition": "Umbrella credit",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_credit_taxable_paye",
+      "family_id": "manual_credit_adjustment",
+      "condition": "taxable credit",
+      "channel": "PAYE GROSS_ADD",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_credit_nontaxable_paye",
+      "family_id": "manual_credit_adjustment",
+      "condition": "non-taxable credit",
+      "channel": "PAYE NET_ADD",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_credit_umbrella",
+      "family_id": "manual_credit_adjustment",
+      "condition": "Umbrella credit",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_debt_taxable_paye",
+      "family_id": "manual_debt_adjustment",
+      "condition": "taxable deduction",
+      "channel": "PAYE GROSS_DEDUCT",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_debt_nontaxable_paye",
+      "family_id": "manual_debt_adjustment",
+      "condition": "non-taxable deduction",
+      "channel": "PAYE NET_DEDUCT",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_debt_umbrella",
+      "family_id": "manual_debt_adjustment",
+      "condition": "Umbrella deduction",
+      "channel": "UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_debt_zero_headroom",
+      "family_id": "manual_debt_adjustment",
+      "condition": "zero permitted recovery",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "manual_debt_partial_headroom",
+      "family_id": "manual_debt_adjustment",
+      "condition": "partial permitted recovery",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "mixed_recoveries_deterministic_order",
+      "family_id": "overpayment_recovery",
+      "condition": "overpayment, manual debt and advance repayment share headroom in source-defined deterministic order",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "carry_forward_credit",
+      "family_id": "manual_adjustment_carry_forward",
+      "condition": "positive stored carry-forward",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "carry_forward_debit",
+      "family_id": "manual_adjustment_carry_forward",
+      "condition": "negative stored carry-forward",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "signed_positive_return",
+      "family_id": "signed_non_charge_recovery",
+      "condition": "exact positive signed evidence",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "signed_negative_recovery",
+      "family_id": "signed_non_charge_recovery",
+      "condition": "exact negative signed evidence",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "signed_mixed_ordinary_same_key",
+      "family_id": "signed_non_charge_recovery",
+      "condition": "ordinary same-key components do not enter signed cardinality",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "signed_two_decisive_matches",
+      "family_id": "signed_non_charge_recovery",
+      "condition": "two genuine signed matches reject",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "signed_tampered_or_incomplete",
+      "family_id": "signed_non_charge_recovery",
+      "condition": "tampered/missing digest or shape rejects",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "timesheet_snoozed_excluded",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "active Timesheet snooze excludes exact scope",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "segment_snooze_isolation",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "only exact segment scope excluded; unrelated Ready components preserved",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "finance_case_snoozed_excluded",
+      "family_id": "overpayment_recovery",
+      "condition": "active finance-case snooze excludes exact case",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "snooze_expiry_reappears_once",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "expired/released source reappears once subject to ordinary checks",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "action_required_excluded",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "unresolved rate/payment/case evidence excluded",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "blocked_excluded",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "blocked source excluded",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "active_draft_excluded",
+      "family_id": "prior_paid_part_paid_and_superseded",
+      "condition": "active frozen reservation prevents duplicate Draft",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "mixed_candidates_independent",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one worker failure cannot change another worker decision; operation atomicity still applies",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "mixed_channel_partitions",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "PAYE and Umbrella split into exact separate batch partitions",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "over_100_distinct_timesheets",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "complete selection beyond the historical 100-row defect threshold",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "multi_segment_over_100",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "more than 100 components across fewer Timesheets",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "pagination_1001",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "bounded pages reproduce complete 1,001 set",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "boundary_50000",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "bounded complete settled maximum without giant arrays",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "boundary_50001_reject",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "deterministic fail closed before partial state",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "duplicate_delivery_replay",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "same operation/receipt does not duplicate artifacts",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "response_loss_replay",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "lost response resumes from durable receipt without duplicate economics",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "concurrent_same_selection",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "one winner or exact idempotent replay; no double reservation",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "stale_selection_revision",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "context/source change rejects before Draft effects",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    },
+    {
+      "class_id": "atomic_multibatch_failure",
+      "family_id": "ordinary_timesheet_components",
+      "condition": "failure in one channel/candidate partition leaves no partial authoritative Draft",
+      "channel": "PAYE+UMBRELLA",
+      "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+    }
+  ],
+  "create_draft_stage_contract": [
+    {
+      "phase": "VALIDATE_SESSION",
+      "owner": "pay_workbench_prepare_draft",
+      "decision": "Re-read the current Workbench selection/readiness/context and preserve override rules; create no finance output."
+    },
+    {
+      "phase": "SYNC_SELECTED_ROWS",
+      "owner": "Worker operation state",
+      "decision": "Persist the accepted validation receipt and advance only the same certified selected-row operation; do not reconstruct selection."
+    },
+    {
+      "phase": "WAIT_FOR_PREVIEW_READY",
+      "owner": "pay_workbench_session_get_progress",
+      "decision": "Require the same current Workbench session to remain Ready before any Draft scope is frozen."
+    },
+    {
+      "phase": "SEED_CANDIDATE_SCOPE",
+      "owner": "pay_workbench_prepare_draft_scope_seed",
+      "decision": "Freeze the complete selected constituent identities by candidate and channel; exact count/digest/missing/extra checks."
+    },
+    {
+      "phase": "DRAIN_TSFIN",
+      "owner": "Worker + existing TSFIN readiness owners",
+      "decision": "Complete required Timesheet financial readiness for the frozen scope; no timeout relaxation or skip."
+    },
+    {
+      "phase": "ENSURE_PAYEE_READINESS",
+      "owner": "Worker + existing payee readiness owner",
+      "decision": "Validate existing payee/bank readiness for the frozen scope without changing payee/channel policy."
+    },
+    {
+      "phase": "SEED_ALLOCATION_ROWS",
+      "owner": "pay_workbench_prepare_draft_allocation_rows_seed",
+      "decision": "Create source-owned allocation facts; preserve recovery/headroom ordering."
+    },
+    {
+      "phase": "CREATE_BATCH_SHELLS",
+      "owner": "pay_batch_shell_ensure_from_operation",
+      "decision": "Create the same PAYE/Umbrella batch shells and statuses."
+    },
+    {
+      "phase": "INSERT_CANDIDATES",
+      "owner": "pay_batch_insert_candidates_from_preview",
+      "decision": "Create exact batch-candidate membership once."
+    },
+    {
+      "phase": "INSERT_ITEMS",
+      "owner": "pay_batch_insert_items_from_preview",
+      "decision": "Materialise ordinary items or certify the exact finance handoff; calculate no finance economics."
+    },
+    {
+      "phase": "APPLY_FINANCE_ADJUSTMENTS",
+      "owner": "pay_batch_apply_finance_adjustments",
+      "decision": "Existing owner materialises finance items, allocations, PAYE/Umbrella treatment and case state."
+    },
+    {
+      "phase": "FINALISE_RESERVATIONS",
+      "owner": "pay_batch_finalize_reservations_and_markers",
+      "decision": "Create exact reservations, retention markers, signed recovery evidence and final authority."
+    },
+    {
+      "phase": "POPULATE_CANDIDATE_SUMMARIES",
+      "owner": "pay_batch_populate_candidate_summaries",
+      "decision": "Freeze candidate and batch totals derived from items."
+    },
+    {
+      "phase": "CREATE_TIMESHEET_SNAPSHOTS",
+      "owner": "pay_batch_create_timesheet_snapshots",
+      "decision": "Freeze the same source Timesheet snapshots and lineage."
+    },
+    {
+      "phase": "BUILD_ITEM_BREAKDOWNS",
+      "owner": "pay_batch_build_item_breakdowns",
+      "decision": "Freeze the same item breakdowns and component evidence."
+    },
+    {
+      "phase": "ASSERT_INTEGRITY",
+      "owner": "pay_batch_assert_integrity",
+      "decision": "Reject incomplete/duplicate/inconsistent Draft artifacts; no hiding rows."
+    },
+    {
+      "phase": "POST_CREATE_REFRESH",
+      "owner": "Worker operation result + Workbench targeted refresh",
+      "decision": "Return the same created batch IDs/result fields and refresh source visibility."
+    }
+  ],
+  "durable_artifact_contracts": [
+    {
+      "artifact": "pay_batches",
+      "invariant": "Batch identity, PAYE/Umbrella split, Draft status, source session/context, execution/freshness/rail snapshots.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "pay_batch_candidates",
+      "invariant": "Exact candidate membership, channel, payee, totals and stable batch relationship.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "pay_batch_items",
+      "invariant": "Exact item type, source/economic keys, sign, ex-VAT/VAT/inclusive amounts, PAYE treatment, void/status and lineage.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "banking_pay_operation_candidate_allocation_rows",
+      "invariant": "Exact selected source/recovery allocation identity, amount and finance/component linkage.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "pay_advance_reservations and timesheet_financial_retention",
+      "invariant": "Exact reserved finance/component identity and sticky Timesheet protection against double payment or unsafe deletion.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "timesheet snapshots",
+      "invariant": "Frozen post-Draft Timesheet/component/rate/payment-method evidence.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "item breakdowns",
+      "invariant": "Frozen segment, expense, rate, finance and source-basis details.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "finance effects",
+      "invariant": "Exact case/component balance and state transitions owned by finance routines.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "expected-effect attestations",
+      "invariant": "Exact expected effect identities/hashes used by execution and reversion.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "post-Draft authority and fast-reversion lineage",
+      "invariant": "Policy X frozen authority, source publication and certified cancellation/reversion evidence.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    },
+    {
+      "artifact": "operation result/audit",
+      "invariant": "Same operation status, public result fields, created batch IDs, alerts and grouped ownership evidence.",
+      "comparison_rule": "Compare full typed V1 and candidate rows after role-mapping only generated technical IDs; no money/status/type/key/hash normalization."
+    }
+  ],
+  "downstream_consumers": [
+    {
+      "consumer": "Current Payment Status",
+      "must_receive": [
+        "same rows",
+        "same payment lifecycle/status/action",
+        "same amounts and evidence"
+      ]
+    },
+    {
+      "consumer": "PAYE Worksheet",
+      "must_receive": [
+        "same PAYE candidates/items",
+        "same gross additions/deductions",
+        "same net additions/deductions",
+        "same saved net scalar and state hash"
+      ]
+    },
+    {
+      "consumer": "Umbrella payment/remittance",
+      "must_receive": [
+        "same payee/channel",
+        "same ex-VAT/VAT/inclusive totals",
+        "same remittance visibility/suppression"
+      ]
+    },
+    {
+      "consumer": "Overview",
+      "must_receive": [
+        "same beneficiary counts",
+        "same channel/payment totals",
+        "same actions/statuses"
+      ]
+    },
+    {
+      "consumer": "Execute Payment eligibility/preview",
+      "must_receive": [
+        "same freshness and integrity result",
+        "same batch/candidate/item/allocation scope",
+        "same bank projection and hashes"
+      ]
+    },
+    {
+      "consumer": "Immediate/scheduled provider submission",
+      "must_receive": [
+        "same frozen projection",
+        "same provider/rail environment authority",
+        "same idempotency/effect attestations"
+      ]
+    },
+    {
+      "consumer": "Bank transfer and CSV settlement",
+      "must_receive": [
+        "same payment rows/references/amounts",
+        "same positive/explicit-zero classification",
+        "same projection hash"
+      ]
+    },
+    {
+      "consumer": "External settlement/remittance",
+      "must_receive": [
+        "same execution/settlement lineage",
+        "same remittance generation or suppression"
+      ]
+    },
+    {
+      "consumer": "Cancellation before payment",
+      "must_receive": [
+        "same whole-batch versus whole-Candidate scope",
+        "same cancelability decision",
+        "same selected releases/voids with unrelated Candidates unchanged",
+        "same Workbench reappearance exactly once"
+      ]
+    },
+    {
+      "consumer": "Executed-not-paid cancellation and certified reversion",
+      "must_receive": [
+        "same whole-Candidate scope for local or future-dated scheduled payments not sent to the provider",
+        "same frozen lineage",
+        "same safe reversion or established fallback",
+        "same blocked-funds/correction behavior"
+      ]
+    },
+    {
+      "consumer": "Frontend operation polling",
+      "must_receive": [
+        "same operation type/status/phase/result/error fields",
+        "same terminal interpretation",
+        "no V2-specific branch"
+      ]
+    }
+  ],
+  "downstream_owner_census": [
+    {
+      "boundary": "Batch Overview and execution eligibility",
+      "owner": "public.pay_batch_execution_summary_get",
+      "installed_definition_sha256": "74a7e6845c67592bd7aff10aa67894f9ace795a4852979df9a4a0ce0d79b8207",
+      "reads": [
+        "pay_batches",
+        "pay_batch_candidates",
+        "pay_batch_items",
+        "transfers",
+        "freshness/rail/PAYE state"
+      ],
+      "decision": "Produces the authoritative high-level batch, candidate, bank-out and readiness summary consumed before execution.",
+      "source": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql: current pay_batch_execution_summary_get definition",
+      "worker_calls": [
+        "broker/src/index.js:24464",
+        "broker/src/index.js:44482-44486",
+        "broker/src/index.js:52855-52859"
+      ]
+    },
+    {
+      "boundary": "Current Payment Status",
+      "owner": "public.pay_batch_payment_status_page_v1",
+      "installed_definition_sha256": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd",
+      "reads": [
+        "frozen batch/candidate/item/allocation",
+        "bank transfers/events",
+        "correction/cancel/retry evidence"
+      ],
+      "decision": "Returns stable paged payment rows, statuses and exact allowed actions; the frontend must not repair or infer them.",
+      "source": "supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql",
+      "worker_calls": [
+        "broker/src/index.js:51006-51014",
+        "broker/src/index.js:51523-51531"
+      ],
+      "frontend_calls": [
+        "TEST-Frontend/js/main.js:23757-26172"
+      ]
+    },
+    {
+      "boundary": "PAYE Worksheet save and bank scalar",
+      "owner": "public.pay_set_paye_net_manual",
+      "installed_definition_sha256": "67bd40c49284fad3c22177987829506b1e36c1edcd392826c000bdbabab68cec",
+      "reads": [
+        "frozen PAYE items",
+        "GROSS_ADD/GROSS_DEDUCT schedule",
+        "NET_ADD/NET_DEDUCT schedule",
+        "candidate membership"
+      ],
+      "decision": "Validates and saves imported PAYE net amounts; gross items are already reflected while net items adjust afterward.",
+      "source": "supabase/repeatable/21072026_1235_48_pay_set_paye_net_manual.sql",
+      "worker_calls": [
+        "broker/src/index.js:47634-47640"
+      ],
+      "frontend_calls": [
+        "TEST-Frontend/js/main.js:76629-77517"
+      ]
+    },
+    {
+      "boundary": "Frozen bank payment projection",
+      "owner": "public._pay_batch_bank_payment_projection_rows",
+      "installed_definition_sha256": "4ed334ff8314f9e7c6325650b431fafb8c8db0a03ed9d7ebfcc7bcadff89384d",
+      "reads": [
+        "frozen batch/candidate/item amounts",
+        "saved PAYE net",
+        "Umbrella totals/payee",
+        "void/status evidence"
+      ],
+      "decision": "Produces the final per-beneficiary bank amount and projection hash used by Execute and CSV.",
+      "source": "supabase/repeatable/20072026_1105_resolve_paye_deduction_bank_projection.sql",
+      "worker_calls": [
+        "broker/src/index.js:44402-44405",
+        "broker/src/index.js:52869-52872"
+      ]
+    },
+    {
+      "boundary": "Bank CSV evidence",
+      "owner": "public.pay_bank_csv_export_summary_get plus frozen bank projection",
+      "installed_definition_sha256": "a3f3d9858e2de5963d8df34535cf9576f2e363daef8286cbdc9b086fe18623d0",
+      "reads": [
+        "bank payment projection rows/hash",
+        "PAYE net state hash",
+        "batch freshness and rail snapshots"
+      ],
+      "decision": "Exports only the exact positive/explicit-zero frozen payment scope and rejects projection or row-count change.",
+      "source": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql: pay_bank_csv_export_summary_get",
+      "worker_calls": [
+        "broker/src/index.js:52744-53116"
+      ]
+    },
+    {
+      "boundary": "Execute Payment scope",
+      "owner": "public.pay_execute_bank_transfer_scope_seed",
+      "installed_definition_sha256": "8dfdca201c80304b9278365f205070304acf637e96503c22e255824afd91bc35",
+      "reads": [
+        "frozen projection",
+        "candidate/channel membership",
+        "freshness/integrity",
+        "retry-blocked-funds state"
+      ],
+      "decision": "Seeds the exact transfer work scope; no Create Draft version is an input.",
+      "source": "supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql",
+      "worker_calls": [
+        "broker/src/index.js: PAYMENT_EXECUTE orchestration"
+      ]
+    },
+    {
+      "boundary": "Bank-transfer preparation",
+      "owner": "public.pay_execute_bank_transfer_chunk_prepare",
+      "installed_definition_sha256": "9b276ea60596c256380ad7d8d97ad9c223b66c05069e1b9943703a55d752b67c",
+      "reads": [
+        "row-backed execution scope",
+        "frozen bank projection",
+        "provider/rail snapshots",
+        "void overlays"
+      ],
+      "decision": "Creates/reuses exact transfer preparation evidence without changing beneficiary or amount.",
+      "source": "supabase/repeatable/12082026_1446_pay_execute_bank_transfer_chunk_prepare_voided_overlay.sql",
+      "worker_calls": [
+        "broker/src/index.js: PAYMENT_EXECUTE prepare phase"
+      ]
+    },
+    {
+      "boundary": "Provider submission claim",
+      "owner": "public.pay_bank_transfers_claim_provider_submit_chunk",
+      "installed_definition_sha256": "64419bd47ef2ad466fc18bf7f2b0c5749795c61cb25bff2edd4d871d266410ff",
+      "reads": [
+        "prepared transfer rows",
+        "operation scope/lease",
+        "provider submission state"
+      ],
+      "decision": "Claims only safe prepared transfers for unchanged provider submission.",
+      "source": "supabase/repeatable/04082026_1154_pay_bank_transfers_claim_provider_submit_chunk.sql",
+      "worker_calls": [
+        "broker/src/index.js: PAYMENT_EXECUTE provider phase"
+      ]
+    },
+    {
+      "boundary": "Settlement",
+      "owner": "public.pay_settle_rail",
+      "installed_definition_sha256": "0e5c3e38a314945f67ca716c5e6897ca9ed9730d7bbfd8e39342e31bdf26a83f",
+      "reads": [
+        "submitted/settled transfer evidence",
+        "exact settlement scope",
+        "frozen batch artifacts"
+      ],
+      "decision": "Applies authoritative settlement results within existing 6000ms/1000ms budgets.",
+      "source": "supabase/repeatable/04082026_1211_pay_settle_rail.sql",
+      "worker_calls": [
+        "broker/src/index.js:64289-64295",
+        "broker/src/index.js:64460-64466"
+      ]
+    },
+    {
+      "boundary": "Remittance scope and rendering",
+      "owner": "public.pay_operation_remittance_scope_seed + public.pay_remittance_build + public.pay_remittance_maybe_queue_for_trigger",
+      "installed_definition_sha256": [
+        "140c6bada203f524cfce636c1295453ffe935ae910bf1b1745c92cd00a44ea33",
+        "fb6d237cee972eaa2d454439c2d8af32111da9bb448ebc2252d8d20e25ad3c1c",
+        "1745985bd2a722750514f77a5ce5f4ae5744b23dc2c4f0c37f3a8e53faad54db"
+      ],
+      "reads": [
+        "frozen items/breakdowns",
+        "candidate/Umbrella payee",
+        "execution/settlement state",
+        "remittance settings/suppression"
+      ],
+      "decision": "Generates or suppresses the same candidate/Umbrella remittance from frozen Draft and execution evidence.",
+      "source": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql: remittance owners",
+      "worker_calls": [
+        "broker/src/index.js:196862 remittance endpoint"
+      ],
+      "frontend_calls": [
+        "TEST-Frontend/js/main.js:43522-43699",
+        "TEST-Frontend/js/main.js:68016-68531"
+      ]
+    },
+    {
+      "boundary": "Whole-batch Draft cancellation wrapper",
+      "owner": "public.pay_batch_cancel",
+      "installed_definition_sha256": "10c3ffcaab90dddc256d29ab3df82b1d01d6eaf3a302688a6ba82f04234fb573",
+      "reads": [
+        "one Draft pay batch",
+        "active batch payments",
+        "batch cancellation idempotency and audit"
+      ],
+      "decision": "Cancels only the explicitly requested whole Draft batch. It is not the owner for a whole-Candidate selection and cannot be used to widen Candidate scope.",
+      "source": "supabase/repeatable/04082026_1206_pay_batch_cancel.sql",
+      "worker_calls": [
+        "broker/src/index.js: handleBankingPayBatchCancel"
+      ]
+    },
+    {
+      "boundary": "Whole-Candidate cancellation before payment",
+      "owner": "pay_payment_cancelability_diagnostic → correction request/selection → Candidate-scoped Draft overlay or pre-bank cancellation page",
+      "installed_definition_sha256": [
+        "c2df38403908cefa577c4e593223ca9dda1b708d4e0e1075d395ea2056d07843",
+        "104d0460c50d4ccdb3e37a6e74d7a8de7a134445e66f3d2c05b15fd65298efb5",
+        "dc89247906e064fea22d15ebdce07925118aa4fd4624c0dbb5ed9fa0dc3d247d",
+        "784e3ee63dd7783a969c4c03956d3a021c441aaf94f9df0f328d643cdefaba42",
+        "3bcf21c8b46a64ce8dee0e9752606056149bc590669ea6065e674c50bdc705a7",
+        "34b334b3ad89d9de684e0fb86fe1b4f09ba3c4fc7802c53730a1a45e51ecf75a",
+        "c1868e301765ce99d99e69359b99a8433a358e8742d5f835bf77cd2a7524e2c7",
+        "ede8dfe93aca76d294b59f4ab59211020fec2ac139d6f753a4c9ce1759eb4b46",
+        "026ace84cc320562ea9d08631b68f9517dbcdbb3a3c9165b40bdcd1c087a6d22"
+      ],
+      "reads": [
+        "frozen Candidate/item/allocation/reservation scope",
+        "provider/bank/settlement evidence",
+        "DRAFT_CANCEL or PRE_BANK_CANCEL action",
+        "source and post-Draft lineage"
+      ],
+      "decision": "Freezes the selected Candidate membership, then voids/releases only that Candidate whole-payment scope. Untouched Draft and future-dated scheduled/local-not-sent states take their established separate branches; unrelated Candidates must remain unchanged and payable.",
+      "source": "supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql; supabase/repeatable/04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql; supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql; supabase/repeatable/04082026_1208_pay_payment_correction_expand_work.sql; supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql; supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql; supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql",
+      "worker_calls": [
+        "broker/src/index.js: handleBankingPayCorrectionPlanV1",
+        "broker/src/index.js: handleBankingPayCorrectionStartPreparedV1",
+        "broker/src/index.js: PAYMENT_CORRECTION continuation"
+      ]
+    },
+    {
+      "boundary": "Executed/settled correction and certified reversion",
+      "owner": "public.pay_payment_correction_request_start + public.pay_settled_payment_reversal_apply_work_item",
+      "installed_definition_sha256": [
+        "104d0460c50d4ccdb3e37a6e74d7a8de7a134445e66f3d2c05b15fd65298efb5",
+        "d985e3af4f75e30654d7952b98172a826f5ec93909581d34f4eacee83656c296"
+      ],
+      "reads": [
+        "frozen source/effect/settlement lineage",
+        "selected payment status scope",
+        "accepted resolution and correction work"
+      ],
+      "decision": "Uses certified frozen lineage to reverse/correct or chooses the established safe fallback; never live-reconstructs the Draft.",
+      "source": "supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql plus current monolith settled reversal",
+      "worker_calls": [
+        "broker/src/index.js: payment correction orchestration"
+      ]
+    },
+    {
+      "boundary": "Frontend interpretation",
+      "owner": "TEST-Frontend/js/main.js current Banking Pay child/modal code",
+      "installed_definition_sha256": null,
+      "reads": [
+        "operation response",
+        "Overview",
+        "PAYE Worksheet",
+        "Current Payment Status",
+        "remittance and correction outputs"
+      ],
+      "decision": "Renders current authoritative fields and backend-resolved actions; no route-version repair is permitted.",
+      "source": "TEST-Frontend/js/main.js at frontend commit e58e567f66ed8108a40e3c3e8388dbe33e0b0361",
+      "frontend_calls": [
+        "23757-26172",
+        "76629-77517",
+        "79323-79382"
+      ]
+    }
+  ],
+  "operation_response_contract": {
+    "endpoint_and_operation_type": "unchanged DRAFT_CREATE route and operation type",
+    "required_fields": [
+      "status",
+      "phase",
+      "progress",
+      "result/error",
+      "pay_batch_id",
+      "pay_batch_ids",
+      "created_pay_batch_ids",
+      "primary_pay_batch_id"
+    ],
+    "rule": "Existing Worker/frontend polling and terminal-result interpretation must remain valid without a V2-specific compatibility branch."
+  },
+  "exact_parity_method": {
+    "fixture_rule": "Create equivalent fresh V1 and candidate-route universes from the same deterministic source fixture and recorded seed.",
+    "generated_identity_rule": "Map only generated technical IDs by stable business role. Do not normalise amounts, statuses, item types, source/economic keys, VAT, hashes or authority fields.",
+    "compare_every_artifact": [
+      "pay_batches",
+      "pay_batch_candidates",
+      "pay_batch_items",
+      "banking_pay_operation_candidate_allocation_rows",
+      "pay_advance_reservations",
+      "timesheet_financial_retention",
+      "pay_batch_timesheet_snapshots",
+      "pay_batch_item_breakdowns",
+      "pay_advances/pay_finance_case_components/pay_finance_case_events effects",
+      "operation-scoped expected-effect attestations",
+      "post-Draft authority",
+      "source-publication and fast-reversion lineage",
+      "operation result and created batch IDs",
+      "audit records and grouped ownership evidence"
+    ],
+    "compare_downstream_views": [
+      "Current Payment Status",
+      "PAYE Worksheet",
+      "Umbrella payment/remittance",
+      "Overview",
+      "Execute Payment eligibility/preview",
+      "Immediate/scheduled provider submission",
+      "Bank transfer and CSV settlement",
+      "External settlement/remittance",
+      "Cancellation before payment",
+      "Executed-not-paid cancellation and certified reversion",
+      "Frontend operation polling"
+    ],
+    "required_end_to_end_path": [
+      "Draft creation",
+      "PAYE/Umbrella preparation",
+      "payment execution preview and authorised disposable execution",
+      "Current Payment Status",
+      "cancellation before payment",
+      "certified reversion or established safe fallback"
+    ],
+    "failure_rule": "Any unexplained row/field/type/value/identity/state difference, V2-specific downstream branch, timeout relaxation, skipped owner or hidden row is a parity failure."
+  },
+  "known_execution_findings_separate_from_policy": [
+    {
+      "finding": "Original Workbench recovery failure",
+      "owner": "HANDOVER 1",
+      "status": "source-package complete; not a populated installed certificate in this contract",
+      "policy_delta": false
+    },
+    {
+      "finding": "F-010 complete selected-set handoff and >100 scope incompatibility",
+      "owner": "H2 orchestration/scope boundary",
+      "status": "proved; final compact server-backed interface and runtime implementation remain gated",
+      "policy_delta": false
+    },
+    {
+      "finding": "F-013 six visible finance families rejected at current scope/INSERT_ITEMS handoff",
+      "owner": "H2 Draft handoff boundaries",
+      "status": "proved with 20 variants; provisional local owner proof only, not installed",
+      "policy_delta": false
+    },
+    {
+      "finding": "F-013b LOAN_REPAYMENT equality hypothesis",
+      "owner": "policy investigation",
+      "status": "NOT A DEFECT; deliberate visible PAYMENT_ADVANCE_REPAYMENT → frozen LOAN_REPAYMENT vocabulary",
+      "policy_delta": false
+    },
+    {
+      "finding": "Paired Timesheet replacement-only deletion transition",
+      "owner": "upstream Timesheet correction lifecycle",
+      "status": "USER-CONFIRMED POLICY; current standard delete targets both changed-hours members and has no explicit replacement-only delete plus REVERSAL_ONLY republish transition; not a Create Draft validation change",
+      "policy_delta": false
+    },
+    {
+      "finding": "Small Draft 99% latency",
+      "owner": "Worker/PostgREST orchestration",
+      "status": "measured as round-trip/orchestration dominant; must be improved without merging or skipping business owners",
+      "policy_delta": false
+    }
+  ],
+  "coverage_gates": {
+    "payment_family_count": 15,
+    "finite_equivalence_class_count": 88,
+    "paired_timesheet_families": [
+      "paired_timesheet_reversal_replacement",
+      "paired_timesheet_reversal_only"
+    ],
+    "required_paired_member_deletion_subcases": [
+      "genuine REVERSAL_ONLY remains valid",
+      "delete positive replacement only requires explicit upstream reclassification and preserves negative recovery",
+      "delete negative reversal only is prohibited",
+      "delete the complete pair is valid subject to existing financial retention/archive authority"
+    ],
+    "required_state_cross_product": [
+      "Ready",
+      "Action Required",
+      "Blocked",
+      "snoozed",
+      "part-paid",
+      "fully settled",
+      "superseded",
+      "active Draft",
+      "cancelled/voided/reappearing once"
+    ],
+    "required_channel_cross_product": [
+      "PAYE",
+      "UMBRELLA",
+      "mixed separate partitions"
+    ],
+    "required_orchestration_cross_product": [
+      "one constituent",
+      "over 100 distinct Timesheets",
+      "multi-segment",
+      "1,001 constituents",
+      "50,000 boundary",
+      "50,001 deterministic rejection",
+      "replay",
+      "response loss",
+      "concurrency",
+      "stale/tampered/malformed"
+    ],
+    "zero_tolerance": [
+      "unmapped production alias",
+      "unproved policy assertion",
+      "open placeholder at enablement",
+      "skipped acceptance case",
+      "mutation survivor",
+      "unexplained parity difference",
+      "downstream V2 branch"
+    ]
+  }
+}

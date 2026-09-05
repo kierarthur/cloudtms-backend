@@ -28,12 +28,30 @@ const canonicalIdentities = [
   'pay_pre_bank_cancel_apply_work_item',
   'pay_settle_rail'
 ];
+const laterReplacementOwners = new Map([
+  ['pay_batches_claim_due_scheduled', [
+    '04082026_1154_pay_batches_claim_due_scheduled.sql',
+    '04092026_2330_banking_pay_due_schedule_local_prepare_evidence_v1.sql',
+  ]],
+  ['pay_payment_correction_process_chunk', [
+    '04082026_1209_pay_payment_correction_process_chunk.sql',
+    '04092026_2350_banking_pay_cancellation_completion_v1.sql',
+  ]],
+  ['pay_pre_bank_cancel_apply_work_item', [
+    '04082026_1158_pay_pre_bank_cancel_apply_work_item.sql',
+    '04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql',
+  ]],
+]);
 
-test('every Revision 5 amended function has one repeatable source authority', () => {
+test('every Revision 5 amended function has one current authority or an exact later replacement chain', () => {
   for (const identity of canonicalIdentities) {
     const re = new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${identity}\\s*\\(`, 'gi');
     const owners = sqlFiles.flatMap(({ name, source }) => (source.match(re) || []).map(() => name));
-    assert.deepEqual(owners.length, 1, `${identity} authorities: ${owners.join(', ')}`);
+    if (laterReplacementOwners.has(identity)) {
+      assert.deepEqual(owners, laterReplacementOwners.get(identity), `${identity} replacement chain`);
+    } else {
+      assert.equal(owners.length, 1, `${identity} authorities: ${owners.join(', ')}`);
+    }
   }
 });
 

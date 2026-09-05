@@ -21,7 +21,7 @@ const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const expected = Array.isArray(manifest.functions) ? manifest.functions : [];
 const repoRoot = path.resolve(here, '..', '..');
 const jamesSerializerPath = 'supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql';
-const jamesHelperPath = 'supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql';
+const jamesHelperPath = 'supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql';
 const jamesSynchronizerPath = 'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql';
 const jamesSourceBuildPath = 'supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql';
 const jamesSourceBuildAuthorityPath = 'supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql';
@@ -30,6 +30,7 @@ const cursorPreservePath = 'supabase/repeatable/05082026_1348_pay_workbench_fact
 const cursorTransitionPath = 'supabase/repeatable/05082026_1539_pay_workbench_fact_cursor_transition_v3.sql';
 const claimStartPath = 'supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql';
 const financeCancellationAuthorityPath = 'supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql';
+const canonicalLinesAuthorityPath = 'supabase/repeatable/04092026_1330_banking_pay_manual_carry_forward_selection_authority_v1.sql';
 const jamesSerializer = fs.readFileSync(path.join(repoRoot, jamesSerializerPath), 'utf8');
 const jamesHelper = fs.readFileSync(path.join(repoRoot, jamesHelperPath), 'utf8');
 const jamesSynchronizer = fs.readFileSync(path.join(repoRoot, jamesSynchronizerPath), 'utf8');
@@ -115,24 +116,37 @@ for (const [schema, name, sourceFiles] of requiredJamesOwners) {
 }
 
 const requiredFinanceCancellationOwners = [
-  ['public', 'pay_preview_candidate_build_finance_case_baseline'],
-  ['public', 'pay_preview_candidate_build_canonical_lines'],
-  ['public', 'pay_workbench_session_clear_case_resolution'],
+  ['public', 'pay_preview_candidate_build_finance_case_baseline', financeCancellationAuthorityPath],
+  ['public', 'pay_preview_candidate_build_canonical_lines', canonicalLinesAuthorityPath],
+  ['public', 'pay_workbench_session_clear_case_resolution', financeCancellationAuthorityPath],
 ];
-for (const [schema, name] of requiredFinanceCancellationOwners) {
+for (const [schema, name, sourcePath] of requiredFinanceCancellationOwners) {
   const matches = expected.filter((item) => item.schema === schema && item.name === name);
   if (matches.length !== 1
-      || JSON.stringify(matches[0].source_files) !== JSON.stringify([financeCancellationAuthorityPath])) {
+      || JSON.stringify(matches[0].source_files) !== JSON.stringify([sourcePath])) {
     problems.push(`finance cancellation owner or source file is not exact: ${schema}.${name}`);
   }
 }
-if (!fs.existsSync(path.join(repoRoot, financeCancellationAuthorityPath))) {
+if (!fs.existsSync(path.join(repoRoot, financeCancellationAuthorityPath))
+    || !fs.existsSync(path.join(repoRoot, canonicalLinesAuthorityPath))) {
   problems.push('finance cancellation authority source file is missing');
 }
 
 const helperManifest = expected.find((item) =>
   item.schema === 'private' && item.name === 'pay_workbench_sealed_rate_component_projection_v1');
 const helperActual = helperManifest ? actualByKey.get(keyOf(helperManifest)) : undefined;
+const canonicalLinesManifest = expected.find((item) =>
+  item.schema === 'public' && item.name === 'pay_preview_candidate_build_canonical_lines');
+if (!canonicalLinesManifest
+    || canonicalLinesManifest.definition_sha256 !== '3aa94ba810ad14a48926ebef2787909f6870df83724abb8a3aad3eb58ec0e25b'
+    || canonicalLinesManifest.preapply_definition_sha256 !== '0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715') {
+  problems.push('canonical-line raw installed and provider-portable pre-apply hashes are not separately exact');
+}
+if (!helperManifest || JSON.stringify(helperManifest.preapply_dependency_files) !== JSON.stringify([
+  'supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql',
+])) {
+  problems.push('sealed rate helper pre-apply dependency is not exact');
+}
 if (!helperActual || helperActual.volatility !== 's' || helperActual.parallel !== 'u'
     || helperActual.security_definer !== true
     || JSON.stringify(helperActual.proconfig) !== JSON.stringify(['search_path=""'])

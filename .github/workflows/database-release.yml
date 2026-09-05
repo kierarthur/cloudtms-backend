@@ -76,6 +76,7 @@ jobs:
     env:
       CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && secrets.MIGET_DATABASE_URL_LIVE) }}
       CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_TARGET_LIVE) }}
+      CLOUDTMS_EXPECTED_DATABASE: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_NAME_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_NAME_LIVE) }}
       CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
@@ -123,6 +124,9 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          if [[ "${{ inputs.mode }}" == "NEW" || "${{ inputs.mode }}" == "UPGRADE" ]]; then
+            test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact database name"; exit 1; }
+          fi
           if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
             expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
             if [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" ]]; then

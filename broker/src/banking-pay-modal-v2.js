@@ -292,6 +292,13 @@ function validIssueCounts(value) {
     && typeof value.affected_payment_count_complete === 'boolean'
     && (value.affected_payment_count_complete ? count(value.affected_payment_count) : value.affected_payment_count === null);
 }
+function sameUpdatingTaskCore(left, right) {
+  const keys = ['identity', 'issue_state', 'title_message_id', 'title',
+    'affected_candidate_count', 'affected_payment_count', 'affected_payment_count_complete'];
+  return isObject(left) && isObject(right)
+    && keys.every(key => Object.hasOwn(left, key) === Object.hasOwn(right, key)
+      && left[key] === right[key]);
+}
 function validTask(row, state) {
   return isObject(row) && text(row.identity) && TOKEN.test(row.identity) && row.issue_state === state
     && text(row.title) && row.title.trim().length > 0 && validIssueCounts(row)
@@ -323,7 +330,8 @@ function validateTasks(payload, args, fail) {
   if (args.p_view === 'UPDATING' && (payload.scope_count !== payload.updating_count
       || args.p_search !== '' || args.p_sort_key !== 'TITLE' || args.p_sort_direction !== 'ASC'
       || (args.p_cursor === null && args.p_limit === 100
-        && JSON.stringify(payload.rows) !== JSON.stringify(payload.updating)))) fail();
+        && (payload.rows.length !== payload.updating.length
+          || payload.rows.some((row, index) => !sameUpdatingTaskCore(row, payload.updating[index])))))) fail();
 }
 function validateBlocked(payload, fail) {
   if (payload.rows.some(row => !TOKEN.test(row.identity) || !UUID.test(row.candidate_id)

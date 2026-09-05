@@ -37,4 +37,21 @@ test('actual Action pages retain complete tasks and reject changed cursor scope'
   assert.doesNotThrow(()=>worker.validateBankingPayModalEnvelope(payload,'actions',args),label);
   assert.doesNotThrow(()=>issues.validate(payload,summary,'actions',cursor,limit,payload.view),label);
  }
+ const updating=results.find(result=>result.label==='updating_first');
+ assert.ok(updating,'updating_first');
+ const mutations=[
+  row=>{row.identity='0'.repeat(64);},
+  row=>{row.title_message_id=`${row.title_message_id||'UPDATING'}_CHANGED`;},
+  row=>{row.title=`${row.title} changed`;},
+  row=>{row.affected_candidate_count+=1;},
+  row=>{row.affected_payment_count_complete=true;row.affected_payment_count=0;}
+ ];
+ for(const mutate of mutations){
+  const changed=structuredClone(updating.payload);mutate(changed.rows[0]);
+  const args={p_session_id:changed.session_id,p_options_json:{expected_session_version:changed.session_version,
+   expected_progress_counter_version:changed.progress_counter_version,scope_hash:changed.scope_hash,pay_channel_scope:'ALL'},
+   p_sort_key:'TITLE',p_sort_direction:'ASC',p_view:'UPDATING',p_search:'',p_limit:100,p_cursor:null};
+  assert.throws(()=>worker.validateBankingPayModalEnvelope(changed,'actions',args),/BANKING_PAY_V2_INVALID_RESPONSE/);
+  assert.throws(()=>issues.validate(changed,updating.summary,'actions',null,100,'UPDATING'),/BANKING_PAY_V2_INVALID_RESPONSE/);
+ }
 });

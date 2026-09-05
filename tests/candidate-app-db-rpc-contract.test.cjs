@@ -48,7 +48,7 @@ const refusedCardRecovery = read(
   'supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql'
 );
 
-test('Candidate runtime gate finishes with every current 4 September authority', () => {
+test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
   assert.ok(
     candidateRuntimeWorkflow.indexOf(`apply_sql ${fixturePath}`) < candidateRuntimeWorkflow.indexOf('install_files=('),
@@ -139,14 +139,14 @@ test('Candidate runtime gate finishes with every current 4 September authority',
     'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
   ]);
   assert.deepEqual(installPaths.slice(-8), [
-    breakAuthority,
-    'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
-    'supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
     settingsAuthorityBarrier,
     qrRefuseServiceAcl,
     'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql',
     'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql',
     'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql',
+    'supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql',
+    'supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql',
+    'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql',
   ]);
 
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
@@ -157,8 +157,8 @@ test('Candidate runtime gate finishes with every current 4 September authority',
     'break-entry verifier must run after the migration and authority install phase'
   );
   assert.deepEqual(suitePaths.slice(-2), [
-    'supabase/verification/02092026_0310_candidate_paper_break_entry_verification.sql',
-    'supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql',
+    'supabase/verification/05092026_0735_candidate_expense_cancel_authority_verification.sql',
+    'supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql',
   ]);
 });
 

@@ -1,0 +1,98 @@
+{
+  "artifact_contract": "H1_WORKBENCH_CERTIFICATE_V8_IMPLEMENTATION_EVIDENCE_V2",
+  "status": "LOCAL_IMPLEMENTATION_CANDIDATE_AWAITING_H2_INDEPENDENT_REVIEW_NOT_INSTALLED_NOT_DEPLOYED",
+  "workbench_recovery_pass": false,
+  "no_edit_in_flight": true,
+  "runtime_authority": "MIGET_TEST",
+  "source_path_note": "Repository directories named supabase are historical source paths only.",
+  "source": {
+    "backend_shared_base_commit": "16b299bf03c3d752f6dbd7891c0d23044e88e890",
+    "backend_implementation_commit": "f6abc37d71879e204ea8dba11900c385c07c2959",
+    "backend_implementation_tree": "80b3b08aafc0a424e84712fa561a4196ef781a02",
+    "frontend_shared_base_commit": "278dcbd007bb3cb6a13d09b5fe0d8aaf5132a5be",
+    "frontend_implementation_commit": "6ec5f56cf236c43ad1864ae44514d1d634230aae",
+    "frontend_implementation_tree": "af79cbbe4cdf433d569a9a85f987160a41460377",
+    "generated_contract_sha256": "fcf3895ad455d3e5fff66476c45542171261a9edf053670dfe22a617525aea70",
+    "generated_contract_file_sha256": "711c9caf6cef0951ce0a2e1c0ba35fadff790239c34f22af9ae8106fad34714f"
+  },
+  "installed_baseline": {
+    "fresh_read_only_source": "H2_CLOUDTMS_MIGET_OPERATIONS_PRECHECK",
+    "database": "cloudtms_test_clone",
+    "postgres_version": "17.11",
+    "latest_release": "20260822-test-authority-upgrade-16b299bf03c3",
+    "installed_source_commit": "16b299bf03c3d752f6dbd7891c0d23044e88e890",
+    "repository_contract_sha256": "35f33db2ee73689d72106fa90cfc250d0ad587051704af335f405dad1fc6946e",
+    "v8_installed": false,
+    "h1_causal_recovery_closure_installed": true
+  },
+  "certificate": {
+    "contract": "WORKBENCH_SETTLED_CERTIFICATION_V2",
+    "implementation_version": 8,
+    "maximum_selected_constituents": 50000,
+    "practical_pressure_test_rows": 5000,
+    "requested_page_limit": 256,
+    "maximum_build_emission_rows": 64,
+    "terminal_sentinel_rows": 1,
+    "retention": "INDEFINITE_NO_AUTOMATIC_EXPIRY_PURGE_OR_ARCHIVE",
+    "lifecycle": ["BUILDING", "BUILD_FAILED", "SEALED_CURRENT", "SUPERSEDED_BY_NEW_SESSION", "REVOKED_CORRUPT_OR_SECURITY"],
+    "channel_manifests": ["ALL", "PAYE", "UMBRELLA"],
+    "digest_compatibility": "BYTE_IDENTICAL_V1_STABLE_STRINGIFY_CONSTITUENT_PARTITION_AND_OVERALL_DIGESTS"
+  },
+  "producer": {
+    "automatic_ready_trigger": true,
+    "durable_queue_continuation": true,
+    "append_pages_per_delivery": 8,
+    "seal_steps_per_delivery": 4,
+    "maximum_delivery_runtime_ms": 20000,
+    "maximum_continuation_depth": 1024,
+    "message_maximum_bytes": 2048,
+    "queue_delay_seconds": 1,
+    "display_readiness_preserved_during_seal": true,
+    "create_draft_temporarily_blocked_until_sealed_current": true,
+    "payment_policy_change": false
+  },
+  "independent_review_corrections": {
+    "IR_01_producer_lifecycle": "SOURCE_FIXED_LOCAL_PASS",
+    "IR_02_page_limit_contract": "SOURCE_FIXED_LOCAL_PASS",
+    "IR_03_exact_prior_reservation_supersession": "SOURCE_FIXED_PG17_PG18_RUNTIME_PASS",
+    "IR_04_function_count": "SOURCE_FIXED_LOCAL_PASS",
+    "IR_09_compact_operation_projection": "SOURCE_FIXED_DIRECT_RPC_PG17_PG18_PASS_ACTUAL_H2_WORKER_CALL_OPEN"
+  },
+  "budgets": {
+    "operation_start_statement_ms": 6000,
+    "operation_start_lock_ms": 1000,
+    "workbench_chunk_statement_ms": 15000,
+    "workbench_chunk_lock_ms": 1500,
+    "workbench_chunk_idle_transaction_ms": 30000,
+    "increased_removed_or_bypassed": false
+  },
+  "current_impact_based_tests": {
+    "h1_backend_source": {"pass": 18, "fail": 0, "todo": 0, "skip": 0},
+    "h1_frontend_and_merged_frontend_boundary": {"pass": 6, "fail": 0, "todo": 0, "skip": 0},
+    "latest_candidate_baseline_boundary": {"pass": 151, "fail": 0, "todo": 0, "skip": 0},
+    "h2_exact_control_audit": {"pass": 10, "fail": 0, "todo": 0, "skip": 0},
+    "db_check": {"migrations": 212, "repeatables": 518, "pass": true},
+    "v8_catalogue": {"functions": 39, "pass": true},
+    "pg17_combined_contract": "PASS_fcf3895ad455d3e5fff66476c45542171261a9edf053670dfe22a617525aea70",
+    "pg17_current_rollback_first_use": "PASS",
+    "pg18_h1_changed_definition_identity": "PASS",
+    "pg18_exact_final_combined_new_upgrade": "OPEN_H1_H2_COMBINED_RELEASE",
+    "h1_causal_mutations": {"total": 18, "killed": 18, "surviving": 0}
+  },
+  "worker_postgrest_pressure": {
+    "target_count": 5000,
+    "queue_deliveries": 131,
+    "append_calls": 79,
+    "elapsed_ms": 160591,
+    "completed": true,
+    "final_lifecycle": "SEALED_CURRENT",
+    "timeout_or_lost_continuation": false,
+    "note": "5,000 is the user-approved practical pressure size; the enforced product maximum remains 50,000 and deterministic 50,001 rejection remains tested."
+  },
+  "authoritative_function_manifest": "supabase/verification/banking_pay_workbench_settled_certificate_v8_catalog_manifest.json",
+  "authoritative_function_count": 39,
+  "policy_change": false,
+  "h2_consumer_implemented_by_h1": false,
+  "h2_cross_audit": "codex_outputs/h1-workbench-certificate-v8-implementation/H1_CREATE_DRAFT_LIFECYCLE_PRODUCER_AUDIT_V1.json",
+  "handover_2_dependency": "UNAVAILABLE_UNTIL_H2_CORRECTS_CONSUMER_GATES_AND_H1_IS_INDEPENDENTLY_APPROVED_INSTALLED_POPULATED"
+}

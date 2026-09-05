@@ -1,0 +1,229 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_PAIRED_TIMESHEET_PARITY_P2_V1",
+  "status": "LOCAL_CURRENT_V8_PASS_POLICY_PARITY_OPEN",
+  "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE",
+  "scope": {
+    "proof_kind": "CURRENT_V8_POLICY_OWNER_PROOF",
+    "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+    "reason_v1_is_open": "The legacy all-at-once Draft route is deliberately disabled. This package must not invent or reactivate it. Equivalent fresh V1-versus-V8 universes remain a separate blocking gate until an authorised historical oracle exists.",
+    "policy_delta_allowed": false,
+    "production_runtime_edits": "ONE_LOCAL_PROVISIONAL_OVERLAP_OWNER_REPLACEMENT_NOT_INSTALLED",
+    "database_execution": "DISPOSABLE_PG17_11_AND_PG18_6_ROLLBACK_PASS",
+    "provider_payment_settlement_remittance_actions": false
+  },
+  "budgets": {
+    "statement_timeout": "15s",
+    "lock_timeout": "1500ms",
+    "idle_in_transaction_session_timeout": "30s",
+    "may_increase_or_bypass": false
+  },
+  "policy_invariants": [
+    "A reversal-and-replacement correction is one atomic lifecycle unit with exactly one reversal and exactly one replacement.",
+    "A reversal-only correction is one atomic lifecycle unit with exactly one reversal and no replacement.",
+    "A canonical cancellation can create a genuine REVERSAL_ONLY unit directly; this is different from a REVERSAL_REPLACEMENT unit whose replacement row has merely disappeared.",
+    "A replacement-only remnant is always invalid because every valid correction unit requires exactly one reversal.",
+    "The current standard delete owner removes a valid changed-hours reversal/replacement pair as one exact two-row unit when deletion is allowed; retained financial history may instead require the existing archive path.",
+    "The current standard delete owner does not convert a two-member changed-hours unit into REVERSAL_ONLY when only its replacement is to be removed. That user-required transition is an upstream lifecycle gap and must not be approximated by weakening Draft validation.",
+    "Only every exact member of a fully valid authoritative import-correction family is exempted from conflicting with another member of that same family; ordinary and unrelated overlaps remain prohibited.",
+    "The physical leg identities and ordered member identities remain explicit; the pair is never collapsed into one invented Timesheet.",
+    "The correction residual owner alone calculates the TS_DAY residual and applies Policy X settled and reserved evidence.",
+    "A reversal-only negative residual enters the existing overpayment recovery handoff with its exact correction-chain evidence; it is not paid as a negative Timesheet and cannot become a Draft deduction without the existing recovery-headroom owner.",
+    "PAYE and Umbrella source amounts are never converted by the fixture. Cross-channel conversion remains blocked until the exact saved resolution fingerprint is present and current.",
+    "Paid, invoiced, broken, duplicate, mixed-identity and stale-fingerprint shapes fail closed without creating Draft, payment, provider, settlement or remittance state.",
+    "Current V8 row-backed transport may carry the certified typed constituent but may not recalculate its amount, identity, channel or policy evidence."
+  ],
+  "owners": [
+    {
+      "path": "supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql",
+      "sha256": "8c44d6ce6267996f148084fdb492fd7200b4c0110bfebf952b7e3501c3b874b5",
+      "responsibility": "classify canonical import corrections and validate envelope and leg fingerprints"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_05_timesheet_correction_chain_scope_v1.sql",
+      "sha256": "a05b10b328e312156c1c16f8b058b56ab9d49684e17b4b23d4033f4f7b3c087b",
+      "responsibility": "bounded root, member, unit, role, shape and chain fingerprint authority"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_08_timesheet_correction_pair_transition_v1.sql",
+      "sha256": "ea691560f6fd2f8381adaececa4ce727d346e50ad25db50982b8b1ecd8a3c01e",
+      "responsibility": "atomic lifecycle eligibility, paid/invoiced blocks, exact leg policy and replay plan"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+      "sha256": "60d0dcd34ec0429ee57986d5cdf87c1d42f093998395aeff5bc89e204d5d891f",
+      "responsibility": "Policy X TS_DAY truth, settled baseline, reservation, cross-channel resolution and residual authority"
+    },
+    {
+      "path": "supabase/repeatable/21072026_1820_00a_import_apply_operation_claim_v2.sql",
+      "sha256": "9a19209a32fd70633221e316aa4a047fae68b8c0d72c6b817704b6f58acfffb7",
+      "responsibility": "canonical source distinction: CANCELLATION creates REVERSAL_ONLY, while CHANGED_HOURS creates REVERSAL_REPLACEMENT"
+    },
+    {
+      "path": "supabase/repeatable/02082026_2014_timesheet_correction_pair_lifecycle_preview_v1.sql",
+      "sha256": "11ff3d4c2a53126983fef9df49300c73d209a7dcecf1a7943c09bb9cb7dd15ee",
+      "responsibility": "grouped pair preview and lifecycle fingerprint projection"
+    },
+    {
+      "path": "supabase/repeatable/25072026_1615_banking_pay_canonical_correction_carrier.sql",
+      "sha256": "99af601ea966e0b43f31f639a29bf07e5a3439f523d3b5cbef432da2b1bbf373",
+      "responsibility": "canonical correction carrier and resolution authority identities"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2312_banking_pay_draft_row_backed_orchestration_v8.sql",
+      "sha256": "689179b380b30d3a4b0cd9480ef977abb7f327f2026158d5cdf76de8dd723e27",
+      "responsibility": "row-backed V8 Draft transport without financial recalculation"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2320_banking_pay_draft_finance_row_transport_v8.sql",
+      "sha256": "d88481c81847a7ed071cfd32e511dfe0981f2fe931c1ab02cd0b8ee1699110a0",
+      "responsibility": "correction provenance and unchanged Draft finance transport"
+    },
+    {
+      "path": "supabase/repeatable/04082026_1206_pay_batch_cancel.sql",
+      "sha256": "741d73b6a57fb268dfca16a400af52205aa28a095ff007338aac41e0579eaaad",
+      "responsibility": "current cancellation authority retained as an unchanged downstream boundary"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1230_timesheet_correction_family_overlap_compatibility_v1.sql",
+      "sha256": "3c9eccac41eac245a4a78f2bce9a9f5119e661ffc7eaf08d7b3bb300518a73fb",
+      "responsibility": "local provisional exact-family overlap compatibility; ordinary, unrelated, incomplete and tampered overlaps remain blocked"
+    },
+    {
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f",
+      "responsibility": "current standard Timesheet delete preview/apply: valid changed-hours pairs are exact two-row deletion units; no replacement-only deletion-to-REVERSAL_ONLY transition exists"
+    }
+  ],
+  "member_deletion_policy": {
+    "classification": "SOURCE_AND_INSTALLED_BEHAVIOUR_WITH_USER_CONFIRMED_GAP",
+    "genuine_reversal_only": {
+      "required_result": "VALID",
+      "current_result": "SUPPORTED_WHEN_THE_CANONICAL_ENVELOPE_IS_REVERSAL_ONLY",
+      "draft_effect": "preserve the negative residual as the existing OVERPAYMENT recovery obligation; zero headroom retains it outside the Draft, and only the existing headroom owner may later allocate exact or partial recovery"
+    },
+    "delete_replacement_only_from_changed_hours_pair": {
+      "required_result": "VALID_SURVIVING_REVERSAL_ONLY_AFTER_ONE_EXPLICIT_ATOMIC_UPSTREAM_TRANSITION",
+      "current_result": "NOT_IMPLEMENTED_BY_STANDARD_DELETE; THE CURRENT PREVIEW TARGETS BOTH MEMBERS",
+      "gap": "The upstream owner needs a separately reviewed transition that locks the complete valid pair, removes only the replacement, rewrites and fingerprints the survivor as a genuine REVERSAL_ONLY unit, and republishes derived authority. Create Draft must not accept a malformed REVERSAL_REPLACEMENT unit as a substitute."
+    },
+    "delete_reversal_only_from_changed_hours_pair": {
+      "required_result": "PROHIBITED",
+      "current_result": "FAILS_CLOSED; A POSITIVE-ONLY UNIT HAS ZERO REVERSALS AND IS INVALID"
+    },
+    "delete_complete_pair": {
+      "required_result": "VALID_CANCELLATION_OF_THE_CORRECTION_WHEN_EXISTING_FINANCIAL_RETENTION_RULES_ALLOW",
+      "current_result": "SUPPORTED_AS_ONE_EXACT_TWO_ROW DELETE TARGET; EXISTING ARCHIVE_REQUIRED OUTCOME IS PRESERVED WHEN HISTORY MUST BE RETAINED"
+    },
+    "create_draft_boundary": "Create Draft may consume a genuine REVERSAL_ONLY unit or a complete REVERSAL_REPLACEMENT unit only. It must never repair, relabel or silently accept a missing leg."
+  },
+  "typed_artifact_profile": {
+    "positive": [
+      "correction_shape",
+      "root_timesheet_id",
+      "ordered_member_timesheet_ids",
+      "reversal_timesheet_id",
+      "replacement_timesheet_id",
+      "chain_fingerprint",
+      "policy_envelope_fingerprint",
+      "per_leg_fingerprint",
+      "component_key_type",
+      "component_key_value",
+      "canonical_correction_key",
+      "component_lineage_fingerprint",
+      "source_basis_fingerprint",
+      "source_pay_methods",
+      "target_pay_method",
+      "amount_ex_vat",
+      "amount_inc_vat",
+      "resolution_required",
+      "resolution_complete",
+      "carrier_timesheet_id",
+      "v8_payload_digest",
+      "v8_row_backed_replay_equal"
+    ],
+    "negative": [
+      "sqlstate",
+      "typed_error_code",
+      "draft_rows_delta",
+      "financial_rows_delta",
+      "unrelated_candidate_digest_before",
+      "unrelated_candidate_digest_after",
+      "provider_action_delta",
+      "payment_action_delta",
+      "settlement_action_delta",
+      "remittance_action_delta"
+    ],
+    "generated_id_comparison_rule": "Generated technical IDs may be role-mapped only. Money, signs, statuses, categories, source/economic keys, membership, ordering, fingerprints, channel and policy output may not be normalized."
+  },
+  "classes": [
+    {
+      "class_id": "paired_reversal_replacement_paye",
+      "case_selectors": ["pair_shape=REVERSAL_REPLACEMENT", "target_channel=PAYE"],
+      "expected": "two exact legs, TS_DAY residual owned by pay_correction_chain_residual_v1, V8 row-backed constituent preserves identity and amount",
+      "assertion_profile": "POSITIVE_PAIR_AND_V8_TRANSPORT"
+    },
+    {
+      "class_id": "paired_reversal_replacement_umbrella",
+      "case_selectors": ["pair_shape=REVERSAL_REPLACEMENT", "target_channel=UMBRELLA"],
+      "expected": "two exact legs, Umbrella ex-VAT and VAT evidence preserved, V8 row-backed constituent preserves identity and amount",
+      "assertion_profile": "POSITIVE_PAIR_AND_V8_TRANSPORT"
+    },
+    {
+      "class_id": "paired_cross_channel_resolution",
+      "case_selectors": ["source_channel=PAYE", "target_channel=UMBRELLA", "saved_resolution=EXACT_CURRENT"],
+      "expected": "unresolved source first blocks with CORRECTION_CHAIN_PAY_METHOD_RESOLUTION_REQUIRED; exact saved source-basis, envelope and economic fingerprints make only that component draftable",
+      "assertion_profile": "CROSS_CHANNEL_RESOLUTION"
+    },
+    {
+      "class_id": "paired_broken_or_duplicate_leg",
+      "case_selectors": ["subcase=MISSING_REPLACEMENT", "subcase=POSITIVE_ONLY_MISSING_REVERSAL", "subcase=DUPLICATE_REPLACEMENT"],
+      "expected": "missing replacement, positive-only missing reversal, or duplicate legs fail closed; ordinary overlap and a third unrelated overlap remain TIMESHEET_WORK_INTERVAL_OVERLAP; zero Draft and financial writes",
+      "assertion_profile": "FAIL_CLOSED_ZERO_WRITE"
+    },
+    {
+      "class_id": "paired_stale_fingerprint",
+      "case_selectors": ["subcase=STALE_CHAIN_FINGERPRINT", "subcase=STALE_LEG_POLICY_FINGERPRINT"],
+      "expected": "CORRECTION_TRANSITION_CHAIN_STALE or CORRECTION_LEG_POLICY_NOT_FROZEN with zero Draft and financial writes",
+      "assertion_profile": "FAIL_CLOSED_ZERO_WRITE"
+    },
+    {
+      "class_id": "paired_mixed_candidate_or_client",
+      "case_selectors": ["subcase=MIXED_CANDIDATE", "subcase=MIXED_CLIENT"],
+      "expected": "CORRECTION_RESIDUAL_CHAIN_IDENTITY_MISMATCH before economic materialisation",
+      "assertion_profile": "FAIL_CLOSED_ZERO_WRITE"
+    },
+    {
+      "class_id": "paired_paid_or_invoiced_conflict",
+      "case_selectors": ["subcase=PAID_LEG", "subcase=INVOICED_LEG"],
+      "expected": "lifecycle transition returns action_ready=false and the exact paid or invoice count; Draft state is unchanged",
+      "assertion_profile": "FAIL_CLOSED_ZERO_WRITE"
+    },
+    {
+      "class_id": "paired_transition_replay",
+      "case_selectors": ["same_transition_request=TWICE"],
+      "expected": "the same complete atomic transition plan and fingerprints are returned without duplicate mutation",
+      "assertion_profile": "REPLAY_IDEMPOTENT"
+    },
+    {
+      "class_id": "paired_draft_response_loss_replay",
+      "case_selectors": ["same_v8_frozen_scope_read=TWICE"],
+      "expected": "the exact same row-backed payload and digest are returned; no duplicate scope/member/payload/item is created",
+      "assertion_profile": "RESPONSE_LOSS_IDEMPOTENT"
+    },
+    {
+      "class_id": "paired_reversal_only_paye",
+      "case_selectors": ["pair_shape=REVERSAL_ONLY", "target_channel=PAYE"],
+      "expected": "one exact reversal leg, no invented replacement, signed residual and lineage preserved; the existing sync owner creates one OVERPAYMENT recovery handoff, and the existing zero-headroom rule creates no Draft item when this is the only selected economic fact",
+      "assertion_profile": "REVERSAL_ONLY_RECOVERY_HANDOFF_AND_HEADROOM_EXCLUSION"
+    },
+    {
+      "class_id": "paired_reversal_only_umbrella",
+      "case_selectors": ["pair_shape=REVERSAL_ONLY", "target_channel=UMBRELLA"],
+      "expected": "one exact reversal leg, no invented replacement, Umbrella ex-VAT/VAT/channel evidence and lineage preserved; the existing sync owner creates one OVERPAYMENT recovery handoff, and the existing zero-headroom rule creates no Draft item when this is the only selected economic fact",
+      "assertion_profile": "REVERSAL_ONLY_RECOVERY_HANDOFF_AND_HEADROOM_EXCLUSION"
+    }
+  ],
+  "runtime_fixture": "tests/04092026_1200_banking_pay_draft_v8_paired_timesheet_parity_p2_runtime.sql",
+  "result_manifest": "codex_outputs/h2-draft-parity/P2_PAIRED_TIMESHEET_PARITY_RESULTS_V1.json",
+  "pass_rule": "All 11 class rows must have PG17 and PG18 rollback-contained results. Positive rows require exact typed current-V8 artifacts; negative rows require their exact error or block plus zero-write and unrelated-Candidate equality. Reversal-only rows additionally require the exact existing OVERPAYMENT handoff here and the separately bound P4 zero-headroom Draft exclusion on both channels. Source guards must preserve the four distinct member-deletion outcomes and must keep the replacement-only-to-REVERSAL_ONLY gap explicit rather than weakening Draft validation. This still does not close true V1-versus-V8 parity."
+}

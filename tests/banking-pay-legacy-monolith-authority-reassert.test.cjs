@@ -9,10 +9,12 @@ const repeatableDir = path.join(root, 'supabase', 'repeatable');
 const monolithName = '26052026_2100HRS_NEW_FUNCTIONS.sql';
 const reassertName = '08082026_0902_reassert_authorities_after_legacy_monolith.sql';
 const currentClosureName = '29082026_0326_banking_pay_release_authority_repair_v1.sql';
+const finalAuthorityClosureName = '05092026_1200_banking_pay_draft_v8_final_authority_closure.sql';
 const normalizeLf = (value) => String(value || '').replace(/\r\n/g, '\n');
 const monolith = normalizeLf(fs.readFileSync(path.join(repeatableDir, monolithName), 'utf8'));
 const reassert = normalizeLf(fs.readFileSync(path.join(repeatableDir, reassertName), 'utf8'));
 const currentClosure = normalizeLf(fs.readFileSync(path.join(repeatableDir, currentClosureName), 'utf8'));
+const finalAuthorityClosure = normalizeLf(fs.readFileSync(path.join(repeatableDir, finalAuthorityClosureName), 'utf8'));
 const targetedManifest = JSON.parse(fs.readFileSync(
   path.join(root, 'supabase', 'verification', 'banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json'),
   'utf8',
@@ -64,7 +66,7 @@ const definition = (source, name) => {
   return source.slice(start, end + terminator.length).trim();
 };
 
-test('immutable legacy replay is followed by the exact provider-neutral eight-routine repair', () => {
+test('immutable legacy replay is followed by the provider-neutral repair and final current reassertion', () => {
   const monolithHash = crypto.createHash('sha256').update(monolith).digest('hex');
   assert.match(reassert, new RegExp(`legacy_monolith_sha256:\\s*\\n-- ${monolithHash}`));
   const historicalIncludedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
@@ -83,8 +85,20 @@ test('immutable legacy replay is followed by the exact provider-neutral eight-ro
 
   for (const [name, sourceName] of repairTargets) {
     const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, sourceName), 'utf8'));
+    if (name === 'contract_week_manual_upsert_atomic') {
+      assert.notEqual(
+        definition(currentClosure, name),
+        definition(source, name),
+        `${name} must retain the source-proved later current owner distinction`,
+      );
+      continue;
+    }
     assert.equal(definition(currentClosure, name), definition(source, name), `${name} must be byte-identical`);
   }
+  const f7Index = finalAuthorityClosure.indexOf('\\ir 30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql');
+  const manualIndex = finalAuthorityClosure.indexOf('\\ir 27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql');
+  assert.ok(f7Index >= 0 && manualIndex > f7Index,
+    'the exact later current manual-upsert owner must reassert after the historical closure');
   const bulkAuthorise = definition(currentClosure, 'bulk_authorise_dataset_v1');
   assert.match(bulkAuthorise, /DUPLICATE_EXPENSE_REVIEW[\s\S]*can_bulk_authorise_calc/i);
   assert.match(bulkAuthorise, /processed_review_required/i);

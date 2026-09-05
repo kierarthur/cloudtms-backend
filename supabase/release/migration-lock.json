@@ -835,6 +835,18 @@
       "sha256": "e2d4b56593162f717189b2f054bfaa390a6f5a0bcdfaa1d95993c8c0ca1fe950"
     },
     {
+      "path": "supabase/migrations/02092026_2300_banking_pay_workbench_settled_certificate_v8.sql",
+      "sha256": "726e55525a9602903c72f683c61c08380b54e495fdbe8c664806691154f34723"
+    },
+    {
+      "path": "supabase/migrations/02092026_2305_banking_pay_workbench_settled_certificate_finance_keys_v8.sql",
+      "sha256": "039d95327202f2b8c8a7e880bda5b29e97a290437238cf3249fb3d4439bb5cdc"
+    },
+    {
+      "path": "supabase/migrations/02092026_2310_banking_pay_draft_frozen_certificate_v8.sql",
+      "sha256": "5fe9a422ac58edb0fd1e5c407d5d30f2b7ae3c72ad4dee624e88503888ffff1e"
+    },
+    {
       "path": "supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql",
       "sha256": "4312233fe45ccb1b17b7d7cea2c1f896aa15774c160f1760abe917ebf215d92e"
     },
@@ -843,12 +855,28 @@
       "sha256": "b4c610103e8eeca9f4a080707b8b31ec6d53054ca8f7f20c5b695b214bdb7b30"
     },
     {
+      "path": "supabase/migrations/04092026_1450_banking_pay_draft_parity_allocation_preview_lookup_v8.sql",
+      "sha256": "5bafc528c70010b79928021fb0525ea54ad561e11227087fc9d43bc724883b53"
+    },
+    {
+      "path": "supabase/migrations/04092026_1500_banking_pay_draft_finalizer_scope_lookup_v8.sql",
+      "sha256": "1096cbc4e128fd71e087b0a925bef0e6d1450c07f77d5f5d179207cec40ececf"
+    },
+    {
       "path": "supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql",
       "sha256": "33e4bf4b3aa5e87323bcff5c5f3b10552f3661cefa0de71270928b539c016979"
     },
     {
+      "path": "supabase/migrations/04092026_1520_banking_pay_draft_advanced_override_lookup_v8.sql",
+      "sha256": "d150dee74a654e2f8e5693e1975857fb2e81b1e4fdbbb02f134c00cfba91da14"
+    },
+    {
       "path": "supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql",
       "sha256": "bc9a5ddb2e30996fda8a5abd6852f180dd035a9efba86e1de9213c3dd5ca71d7"
+    },
+    {
+      "path": "supabase/migrations/05092026_1330_banking_pay_bank_event_movement_classification_v1.sql",
+      "sha256": "e9f0da6abacb029c94742d648a151d4272b1730ed22bc82ec81ce15cbcdac5d8"
     },
     {
       "path": "supabase/migrations/remittance_config_table.sql",

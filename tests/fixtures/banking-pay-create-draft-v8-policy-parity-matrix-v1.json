@@ -1,0 +1,448 @@
+{
+  "contract": "BANKING_PAY_CREATE_DRAFT_V8_POLICY_PARITY_MATRIX_V1",
+  "source_policy_contract": {
+    "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+    "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd",
+    "payment_family_count": 15,
+    "finite_equivalence_class_count": 88
+  },
+  "status": "EXECUTION_REQUIRED_BEFORE_RELEASE",
+  "policy_rule": "The candidate route may change orchestration only. Every eligibility, identity, amount, sign, gross/net, tax, VAT, channel, payee, recovery, reservation, lifecycle and frozen-authority outcome remains owned by the existing policy contract.",
+  "execution_efficiency": {
+    "database_fixture_groups": 6,
+    "rule": "Exercise compatible categories together in bounded pages. Do not create one Draft per raw value or repeat an unchanged run for confidence.",
+    "load_dataset_rows": [
+      101,
+      1001,
+      5000
+    ],
+    "maximum_materialised_load_rows": 5000,
+    "supported_configured_ceiling": 50000,
+    "configured_ceiling_proof": "SCALAR_SOURCE_AND_CONTRACT_ONLY_NO_50000_ROW_DATASET",
+    "first_rejected_count": 50001,
+    "first_rejected_count_proof": "SCALAR_SOURCE_AND_CONTRACT_ONLY_ZERO_WRITES",
+    "prohibited_test": "DO_NOT_GENERATE_OR_EXECUTE_A_50000_ROW_LOAD_TEST"
+  },
+  "recorded_property_seeds": [
+    "0x43544d530001",
+    "0x43544d530002",
+    "0x43544d530003",
+    "0x43544d530004"
+  ],
+  "generated_property_cases": {
+    "accepted": 48,
+    "rejected": 48,
+    "total": 96,
+    "execution_test": "tests/banking-pay-draft-v8-bounded-property.test.cjs"
+  },
+  "bounded_property_dimensions": [
+    "PAYE_OR_UMBRELLA",
+    "ONE_OR_MULTI_CANDIDATE",
+    "ONE_OR_MULTI_COMPONENT",
+    "POSITIVE_NEGATIVE_OR_ZERO_RESIDUAL",
+    "TAXABLE_OR_NONTAXABLE",
+    "VAT_OR_ZERO_VAT",
+    "FRESH_REPLAY_OR_RESPONSE_LOSS",
+    "CURRENT_STALE_OR_TAMPERED"
+  ],
+  "mutation_operators": [
+    "DROP_SELECTED_CONSTITUENT",
+    "DUPLICATE_SELECTED_CONSTITUENT",
+    "FLIP_PAY_CHANNEL",
+    "FLIP_SIGN",
+    "CHANGE_AMOUNT_BY_ONE_PENNY",
+    "CHANGE_VAT_BY_ONE_PENNY",
+    "CHANGE_ECONOMIC_KEY",
+    "CHANGE_SOURCE_IDENTITY_DIGEST",
+    "DROP_PARTITION_MEMBER",
+    "CHANGE_PRIOR_PAID_RESIDUAL",
+    "REUSE_STALE_PAGE_RECEIPT",
+    "CHANGE_SCOPE_GENERATION",
+    "SUBSTITUTE_HIDDEN_FINANCE_ALIAS",
+    "DROP_PAIRED_TIMESHEET_LEG"
+  ],
+  "mutation_evidence": {
+    "execution_test": "tests/banking-pay-draft-v8-mutation.test.cjs",
+    "operators_total": 14,
+    "killed": 14,
+    "surviving": 0,
+    "status": "LOCAL_EXECUTION_REQUIRED_BEFORE_RELEASE"
+  },
+  "class_groups": [
+    {
+      "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES",
+      "purpose": "Ordinary Timesheet, rate, expense, mileage, additional-code and forced-advance mapping in PAYE and Umbrella.",
+      "class_ids": [
+        "ordinary_one_segment_paye",
+        "ordinary_one_segment_umbrella",
+        "ordinary_multi_segment_paye",
+        "ordinary_multi_segment_umbrella",
+        "ordinary_multiple_rate_families",
+        "ordinary_same_key_multiple_components",
+        "saved_rate_resolution",
+        "saved_payment_method_resolution",
+        "expense_expenses_paye",
+        "expense_travel_paye",
+        "expense_accommodation_paye",
+        "expense_other_paye",
+        "mileage_paye",
+        "expense_vat_umbrella",
+        "expense_non_vat_umbrella",
+        "mileage_umbrella",
+        "additional_code_component",
+        "adjustment_code_component",
+        "forced_advance_paye",
+        "forced_advance_umbrella"
+      ],
+      "execution_kind": "DIRECT_DETERMINISTIC_AND_BOUNDED_PROPERTY",
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-canonical-segment-state-allocation.test.js",
+          "sha256": "4f0f6614f0a39d717bcca577d149fe58c195d4484fab29c110d4be9d87bf0e53"
+        },
+        {
+          "path": "tests/banking-pay-draft-insert-items-certified-v8.test.cjs",
+          "sha256": "991526f9294ff7d00fe0e0d6feac895945959bb22f1e4ead61b10be818d1a4cb"
+        },
+        {
+          "path": "tests/banking-pay-draft-finance-item-plan.test.cjs",
+          "sha256": "e051ea359a9d22360361d0bc74492941ae1bb3a6fba0cc52cc3faa3075005a2a"
+        },
+        {
+          "path": "tests/banking-pay-ts-total-draftability.test.cjs",
+          "sha256": "b8a31320b2f8034467ef3b2bf458e8a8cf775bc65a4c4eba176a3bf919378f6a"
+        },
+        {
+          "path": "tests/banking-pay-current-status-draft-amount.test.cjs",
+          "sha256": "0bb401ca9ff9f7e927c765cd662a991fefd0e6f4ed56b741ac8b1298b0c5d536"
+        },
+        {
+          "path": "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql",
+          "sha256": "38a6d13332a87718b27259b993f2c258d869b4bc85aa46d5277bed2f43d474c0"
+        }
+      ],
+      "class_count": 20
+    },
+    {
+      "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE",
+      "purpose": "Paired Timesheet reversal/replacement and reversal-only membership, identity, lifecycle and replay.",
+      "class_ids": [
+        "paired_reversal_replacement_paye",
+        "paired_reversal_replacement_umbrella",
+        "paired_cross_channel_resolution",
+        "paired_broken_or_duplicate_leg",
+        "paired_stale_fingerprint",
+        "paired_mixed_candidate_or_client",
+        "paired_paid_or_invoiced_conflict",
+        "paired_transition_replay",
+        "paired_draft_response_loss_replay",
+        "paired_reversal_only_paye",
+        "paired_reversal_only_umbrella"
+      ],
+      "execution_kind": "DIRECT_DETERMINISTIC_AND_MUTATION",
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-canonical-correction-carrier.test.cjs",
+          "sha256": "28060f46cb7e74d50af4018e50348eabf81054a65bc32fe35b29ae3f0758aea0"
+        },
+        {
+          "path": "tests/banking-pay-continuation-and-cancellation-contract.test.cjs",
+          "sha256": "f2da74033045e0000c745bf283bae32c62540463f6b47f7932a92d0eabd87bc5"
+        },
+        {
+          "path": "tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql",
+          "sha256": "c218233eb1eb8a1e7797d7aa92380af674e8c7f0dcc4e0c34fb4c3abed7eda2b"
+        }
+      ],
+      "class_count": 11
+    },
+    {
+      "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS",
+      "purpose": "Prior-paid residual, reservation, settled, superseded, cancellation and Workbench exclusion policy.",
+      "class_ids": [
+        "part_paid_residual",
+        "fully_settled_absent",
+        "active_reservation_residual",
+        "superseded_absent",
+        "cancelled_untouched_reappears_once",
+        "timesheet_snoozed_excluded",
+        "segment_snooze_isolation",
+        "finance_case_snoozed_excluded",
+        "snooze_expiry_reappears_once",
+        "action_required_excluded",
+        "blocked_excluded",
+        "active_draft_excluded"
+      ],
+      "execution_kind": "DIRECT_DETERMINISTIC_AND_CROSS_CLASS",
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-active-draft-preview-exclusion.test.cjs",
+          "sha256": "dfb7faaaf044ea0c3f2a088ba87ced4073dbcde55e65d9b00cebaf5e934af452"
+        },
+        {
+          "path": "tests/banking-pay-selection-row-json-and-draft-cleanup.test.cjs",
+          "sha256": "4dfd33db86cf9e8306a3ee34c463dde32adfc05ff0c70158fbf159530bb64e17"
+        },
+        {
+          "path": "tests/banking-pay-draft-fast-fallback.test.cjs",
+          "sha256": "95fc3deda793663e185a0b61e405963e60ef0de2dca0bb67655debb76012afc4"
+        },
+        {
+          "path": "tests/banking-pay-cancellation-selection-parity.test.cjs",
+          "sha256": "5c43447ba8c640fdb40a97b2dd92cb849768223ce72ab6194fb7c566c6834999"
+        },
+        {
+          "path": "tests/banking-pay-modal-v2-ready-completeness.test.mjs",
+          "sha256": "f086921447b2756eaec1297c9096bcf37db01802b3bd3e3dc6f8215d2724c85f"
+        },
+        {
+          "path": "tests/28082026_1759_banking_pay_global_selection_filters.sql",
+          "sha256": "d48bd1c1aadfa42127c4c1fea1ae3f5c8f132019b6290d74e8f982f77ffd0fb3"
+        }
+      ],
+      "class_count": 12
+    },
+    {
+      "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM",
+      "purpose": "Every visible finance family, exact staged vocabulary, PAYE gross/net, Umbrella VAT, headroom and carry-forward handling.",
+      "class_ids": [
+        "advance_payout_paye",
+        "advance_payout_umbrella",
+        "advance_repayment_paye",
+        "advance_repayment_umbrella",
+        "advance_part_repaid_residual",
+        "advance_paid_off_absent",
+        "advance_cancelled_absent",
+        "advance_voided_reappears_once",
+        "overpayment_taxable_paye",
+        "overpayment_nontaxable_paye",
+        "overpayment_umbrella",
+        "overpayment_zero_headroom",
+        "overpayment_exact_headroom",
+        "overpayment_partial_headroom",
+        "underpayment_taxable_paye",
+        "underpayment_nontaxable_paye",
+        "underpayment_umbrella",
+        "manual_credit_taxable_paye",
+        "manual_credit_nontaxable_paye",
+        "manual_credit_umbrella",
+        "manual_debt_taxable_paye",
+        "manual_debt_nontaxable_paye",
+        "manual_debt_umbrella",
+        "manual_debt_zero_headroom",
+        "manual_debt_partial_headroom",
+        "mixed_recoveries_deterministic_order",
+        "carry_forward_credit",
+        "carry_forward_debit"
+      ],
+      "execution_kind": "DIRECT_DETERMINISTIC_20_VARIANT_CHAIN_AND_BOUNDED_CROSS_PRODUCT",
+      "evidence_files": [
+        {
+          "path": "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql",
+          "sha256": "da338938dde0b70430f880bce917c35bac227485ed1c9029381915a7da155c87"
+        },
+        {
+          "path": "scripts/verify-banking-pay-draft-v8-finance-policy-matrix.mjs",
+          "sha256": "f33d81e87ab7be069c1d27ccff94c4cd21a0e0113b6022b8237eae4e2940d051"
+        },
+        {
+          "path": "tests/banking-pay-create-draft-headroom.test.mjs",
+          "sha256": "59c543d1a88873d70d7b12e2cdf8851078131b1666710f51733e907fffffdbfd"
+        },
+        {
+          "path": "tests/banking-pay-draft-finance-row-transport-v8.test.cjs",
+          "sha256": "f8e061b21ec3644e022edff61c1fd32d91563a38eaf7106481992208a1408323"
+        },
+        {
+          "path": "tests/banking-pay-post-materialisation-recovery-headroom.test.cjs",
+          "sha256": "168436c5e2e6e8e69408c6b752740da96f6231066fe6a76ab506734fce8c5639"
+        }
+      ],
+      "class_count": 28
+    },
+    {
+      "group_id": "P5_SIGNED_RECOVERY_EVIDENCE",
+      "purpose": "Signed non-charge recovery shape, same-key cardinality, exact evidence and tamper rejection.",
+      "class_ids": [
+        "signed_positive_return",
+        "signed_negative_recovery",
+        "signed_mixed_ordinary_same_key",
+        "signed_two_decisive_matches",
+        "signed_tampered_or_incomplete"
+      ],
+      "execution_kind": "DIRECT_DETERMINISTIC_AND_MUTATION",
+      "evidence_files": [
+        {
+          "path": "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+          "sha256": "7abb47f475e140aec0fbd8ee41e70e180afc4ccd00023fe23e2018a4ce432c5d"
+        },
+        {
+          "path": "tests/banking-pay-signed-recovery-draft-parity.test.cjs",
+          "sha256": "2525b426fa5e9fb646a484537853db68d047b407d87cc2ac855f62f10126785f"
+        },
+        {
+          "path": "tests/banking-pay-signed-recovery-classifier-historical-compatibility.test.cjs",
+          "sha256": "9b973d97ccf32980c231584bb3aa8decd6c33025ad6846eb088ab0c8f86b55c0"
+        },
+        {
+          "path": "tests/banking-pay-draft-constituent-parity-v8.test.cjs",
+          "sha256": "ce440ed4b569e74d75745130dac28597f57ef02cded86842c01f4d1a94f3650f"
+        }
+      ],
+      "class_count": 5
+    },
+    {
+      "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY",
+      "purpose": "Complete global selection across independent Candidates/channels with bounded pages, replay, stale input and atomic failure.",
+      "class_ids": [
+        "mixed_candidates_independent",
+        "mixed_channel_partitions",
+        "over_100_distinct_timesheets",
+        "multi_segment_over_100",
+        "pagination_1001",
+        "boundary_50000",
+        "boundary_50001_reject",
+        "duplicate_delivery_replay",
+        "response_loss_replay",
+        "concurrent_same_selection",
+        "stale_selection_revision",
+        "atomic_multibatch_failure"
+      ],
+      "execution_kind": "BOUNDED_LOAD_101_1001_5000_PLUS_SCALAR_CEILING_GUARDS",
+      "evidence_files": [
+        {
+          "path": "tests/03092026_1010_banking_pay_workbench_settled_certificate_v8_scale_verification.sql",
+          "sha256": "c28dbb786eb1f7b973c27d15dadc1aa87ccd8eb0527061600848d46acec05457"
+        },
+        {
+          "path": "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+          "sha256": "6f8e962afb690dc4e1f5821e84bbdf543bfd4a3c492eac287d398c3493977f12"
+        },
+        {
+          "path": "tests/02092026_2354_banking_pay_draft_candidate_scope_row_backed_v8_runtime.sql",
+          "sha256": "e2aeb2ad65315e61c401e08880cbe2be56b580abe43f973745b65d9c75e3add7"
+        },
+        {
+          "path": "tests/03092026_1201_banking_pay_draft_certificate_stage_advance_v8_runtime.sql",
+          "sha256": "09545f34e9cbc5842c9b3794d3632006ba36cbb3fd5263b328bbc82051ddf0dd"
+        },
+        {
+          "path": "tests/banking-pay-draft-certified-v8-concurrency.runtime.test.cjs",
+          "sha256": "55b64bd5cfde7c22b81cffc9e833e45eb53056390157a4c916a7c495bb23e78e"
+        },
+        {
+          "path": "tests/banking-pay-draft-v8-bounded-property.test.cjs",
+          "sha256": "4fa9865673941daf401729ae3310aafd238f4abd0ebb1b54e98b37e1a4450b8f"
+        },
+        {
+          "path": "tests/banking-pay-draft-certified-v8-transport.test.cjs",
+          "sha256": "9c801796aa188c96430b2d6c093b75a176bb00e8f0934b705872897078db2b3d"
+        },
+        {
+          "path": "tests/banking-pay-draft-certificate-consumer-phase-units.test.cjs",
+          "sha256": "907e00dcce3e72af83a5d2daa32ec23853cc739045d65ef3eda0d089aabed16d"
+        }
+      ],
+      "class_count": 12
+    }
+  ],
+  "downstream_contract_groups": [
+    {
+      "group_id": "D1_DRAFT_ARTIFACT_AND_OPERATION_RESPONSE",
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-draft-certified-v8-terminal.test.cjs",
+          "sha256": "62f4b705229d87e8fd0320fa4d91cdcbcc5b0955e972519a4278ca5c07863479"
+        },
+        {
+          "path": "tests/banking-pay-draft-certified-v8-lifecycle-audit.test.cjs",
+          "sha256": "bb6f8d97c93cf64675eabd95665798388f7e7a487fad87b8c1024936385023ff"
+        },
+        {
+          "path": "tests/02092026_2357_banking_pay_draft_constituent_parity_v8_runtime.sql",
+          "sha256": "be11f593b36e917604ceabdde12a25d30e134fd1cbbe503f01d35d6a7fd223d8"
+        }
+      ]
+    },
+    {
+      "group_id": "D2_EXECUTE_STATUS_WORKSHEET_OVERVIEW",
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-current-status-draft-amount.test.cjs",
+          "sha256": "0bb401ca9ff9f7e927c765cd662a991fefd0e6f4ed56b741ac8b1298b0c5d536"
+        },
+        {
+          "path": "tests/banking-pay-payment-date-fence.test.cjs",
+          "sha256": "6c0778406b7bef2ce13dfad94cff8790a532a354d1f02ab95cc1a8b02111c6ae"
+        },
+        {
+          "path": "tests/banking-pay-pre-provider-retry-recovery.test.cjs",
+          "sha256": "3c609fb7203331c57a2e1886c76e66fb9f826303f31328bbbc167921aa34321b"
+        },
+        {
+          "path": "tests/banking-pay-draft-fast-fallback.test.cjs",
+          "sha256": "95fc3deda793663e185a0b61e405963e60ef0de2dca0bb67655debb76012afc4"
+        }
+      ]
+    },
+    {
+      "group_id": "D3_CANCEL_REVERT_RETRY_LINEAGE",
+      "required_scenarios": [
+        "WHOLE_BATCH_DRAFT_CANCEL",
+        "ONE_WHOLE_CANDIDATE_DRAFT_CANCEL_UNRELATED_CANDIDATES_UNCHANGED",
+        "ONE_WHOLE_CANDIDATE_LOCAL_PREPARED_NOT_SENT_CANCEL",
+        "ONE_WHOLE_CANDIDATE_FUTURE_DATED_SCHEDULED_LOCAL_NOT_SENT_CANCEL",
+        "PROVIDER_SUBMITTED_OR_SETTLED_PRE_BANK_CANCEL_REJECT",
+        "CANDIDATE_CANCEL_REPLAY_RESPONSE_LOSS_IDEMPOTENT",
+        "CANDIDATE_CANCEL_WORKBENCH_REAPPEARANCE_ONCE",
+        "CERTIFIED_REVERSION_OR_EXISTING_SAFE_FALLBACK"
+      ],
+      "evidence_files": [
+        {
+          "path": "tests/banking-pay-create-draft-execute-policy-contract.test.cjs",
+          "sha256": "721cde698906394a4b019b7a8da70e03055c32d0abf3a67a5ec39aca9f7c30b7"
+        },
+        {
+          "path": "tests/banking-pay-cancellation-frozen-scope-v2.test.js",
+          "sha256": "501797fff03348e77ab3e2b835f3fc992d82a37919bb6ea13a6e3c3e433b813b"
+        },
+        {
+          "path": "tests/banking-pay-cancellation-selection-parity.test.cjs",
+          "sha256": "5c43447ba8c640fdb40a97b2dd92cb849768223ce72ab6194fb7c566c6834999"
+        },
+        {
+          "path": "tests/banking-pay-cancellation-post-finalise-refresh.test.cjs",
+          "sha256": "2161aeee645b640cf99eb2c31c2096ffa77021dd22f8b1d58f833b34c817dc94"
+        },
+        {
+          "path": "tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs",
+          "sha256": "4cad73fc8cf6295f51b29411745ce115d5970d3675afb46fbb6229172ad3caa9"
+        },
+        {
+          "path": "tests/banking-pay-source-publication-draft-cancel-fast-path.test.js",
+          "sha256": "7305a2932d1404c673d46278605b41dcf038e48468a6e1e160eaaa8c8edc059f"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "class_groups": 6,
+    "mapped_classes": 88,
+    "duplicate_assignments": 0,
+    "missing_assignments": 0,
+    "unknown_assignments": 0,
+    "downstream_contract_groups": 3
+  },
+  "release_gate": {
+    "pass_requires": [
+      "all 88 finite classes execute through their assigned deterministic or bounded property group",
+      "every generated seed is recorded and reproducible",
+      "every mutation operator is killed",
+      "PG17 and PG18 NEW, UPGRADE and reapply pass",
+      "the actual Worker-to-PostgREST route passes within unchanged budgets",
+      "V1-versus-V8 durable Draft and downstream projections are exact",
+      "no skipped acceptance case, TODO, unexplained divergence or policy delta remains"
+    ],
+    "no_real_payment_or_provider_action": true
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1",
+  "type": "object",
+  "required": [
+    "contract",
+    "schema_version",
+    "authority",
+    "upstream_workbench_certificate_contract",
+    "truth_hierarchy",
+    "non_negotiable_invariants",
+    "source_vocabulary_registry",
+    "gross_net_policy",
+    "payment_families",
+    "finite_equivalence_classes",
+    "create_draft_stage_contract",
+    "durable_artifact_contracts",
+    "downstream_consumers",
+    "downstream_owner_census",
+    "exact_parity_method",
+    "coverage_gates"
+  ],
+  "properties": {
+    "contract": {
+      "const": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "payment_families": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "family_id",
+          "title",
+          "real_world_event",
+          "visible_aliases",
+          "frozen_item_types",
+          "identity",
+          "selection",
+          "amount_owner",
+          "variants",
+          "draft_result",
+          "fail_closed",
+          "source_evidence"
+        ]
+      }
+    },
+    "finite_equivalence_classes": {
+      "type": "array",
+      "minItems": 70,
+      "items": {
+        "type": "object",
+        "required": [
+          "class_id",
+          "family_id",
+          "condition",
+          "channel",
+          "proof_rule"
+        ]
+      }
+    },
+    "create_draft_stage_contract": {
+      "type": "array",
+      "minItems": 17
+    },
+    "downstream_consumers": {
+      "type": "array",
+      "minItems": 10
+    },
+    "downstream_owner_census": {
+      "type": "array",
+      "minItems": 13,
+      "items": {
+        "type": "object",
+        "required": [
+          "boundary",
+          "owner",
+          "reads",
+          "decision",
+          "source"
+        ]
+      }
+    }
+  }
+}

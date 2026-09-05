@@ -1,0 +1,235 @@
+{
+  "contract": "DRAFT_CERTIFICATE_CONSUMER_V1",
+  "status": "LOCAL_DESIGN_IMPLEMENTATION_IN_PROGRESS_NOT_INSTALLED_NOT_DEPLOYED",
+  "runtime_authority": "MIGET_TEST",
+  "historical_source_directory_note": "The repository folder named supabase is a historical source-path name only. It is not a runtime target.",
+  "upstream_certificate": {
+    "contract": "WORKBENCH_SETTLED_CERTIFICATE_SERVER_INTERFACE_V8",
+    "manifest_sha256": "7e2880ca4719b5e50e02c67cf359891006e6f7df3a7c49431e0ea3c5dac839e7",
+    "producer_rules_frozen": true,
+    "implementation_assumed": false,
+    "consumer_rule": "Accept only the exact server-owned certificate UUID/reference, selected-set digests, channel manifest and current session fence; never accept browser constituent arrays."
+  },
+  "zero_drift_authority": {
+    "contract": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1",
+    "sha256": "3952c019426334a6c04b568226d019fc915f635d2411b7a295229c188beef42c",
+    "rule": "Transport and orchestration may change. Eligibility, identity, amount, sign, gross/net, tax, VAT, channel, payee, headroom, grouping, reservations, finance effects, cancellation, execution and settlement policy may not change."
+  },
+  "proved_current_failures": [
+    {
+      "code": "F010C_PRE_CHUNK_ARRAY_DUPLICATION",
+      "classification": "PROVED_CREATE_DRAFT_TRANSPORT_DEFECT",
+      "boundary": "VALIDATE_SESSION / operation input",
+      "proof": "The Worker materialises the complete selected set before chunking and repeats it in operation input.",
+      "required_correction": "Persist only a compact certificate reference in the operation and page server-owned rows."
+    },
+    {
+      "code": "F010A_SCOPE_SEED_100_CAP_AND_TRUNCATION",
+      "classification": "PROVED_CREATE_DRAFT_SCOPE_DEFECT",
+      "boundary": "pay_workbench_prepare_draft_scope_seed",
+      "proof": "The current owner rejects more than 100 selected ids and contains two LIMIT 100 selections.",
+      "required_correction": "Build the exact frozen Candidate/channel scopes from normalized certificate-backed rows with no hidden cap."
+    },
+    {
+      "code": "F010_PHASE_UNIT_RESEED_COLLISION",
+      "classification": "PROVED_INCOMPATIBILITY_WITH_BOUNDED_MULTI_PAGE_DESIGN",
+      "boundary": "banking_pay_operation_seed_chunks",
+      "proof": "Each call restarts sequence numbering at one, so independent pages cannot safely append to the same phase.",
+      "required_correction": "Use normalized deterministic phase units and a separate atomic finalise step."
+    },
+    {
+      "code": "F010_OWNER_CONTINUATION_IGNORED",
+      "classification": "SOURCE_PROVED_LATENT_HANDSHAKE_RISK_NOT_OBSERVED_ROOT",
+      "boundary": "Create Draft phase runner",
+      "proof": "The Worker marks a chunk complete after one owner call and ignores has_more returned by paged item, snapshot, breakdown and finalizer owners.",
+      "required_correction": "Persist one receipt per owner iteration and advance only after has_more=false and exact remaining-row reconciliation."
+    },
+    {
+      "code": "F010_FINANCE_OWNER_NOT_PAGED",
+      "classification": "SOURCE_PROVED_BOUNDED_ORCHESTRATION_DESIGN_CONSTRAINT_NOT_POLICY_DEFECT",
+      "boundary": "pay_batch_apply_finance_adjustments",
+      "proof": "The current finance owner accepts Candidate scope arrays but has no bounded continuation contract.",
+      "required_correction": "Add an owner-preserving bounded adapter/replacement whose page filter changes no finance equation or category semantics."
+    }
+  ],
+  "relations": [
+    {
+      "name": "private.banking_pay_draft_frozen_certificate_scopes_v8",
+      "purpose": "One compact immutable certificate identity and channel manifest per Draft operation.",
+      "primary_key": ["operation_id"],
+      "rule": "STAGING may become FROZEN only after exact constituent and partition reference counts and digests match the H1 certificate under the session fence."
+    },
+    {
+      "name": "private.banking_pay_draft_frozen_constituent_refs_v8",
+      "purpose": "One certificate UUID plus ordinal reference per selected constituent; no duplicate source-row JSON.",
+      "primary_key": ["operation_id", "constituent_ordinal"],
+      "rule": "References are page-staged from the exact immutable H1 certificate and retained indefinitely."
+    },
+    {
+      "name": "private.banking_pay_draft_frozen_partition_refs_v8",
+      "purpose": "One certificate UUID plus ordinal reference per authoritative Candidate/channel partition.",
+      "primary_key": ["operation_id", "partition_ordinal"],
+      "rule": "No consumer-derived regrouping is permitted."
+    },
+    {
+      "name": "private.banking_pay_draft_frozen_candidate_scopes_v8",
+      "purpose": "One compact row-backed Candidate/channel scope per authoritative certificate partition.",
+      "primary_key": ["operation_id", "candidate_scope_ordinal"],
+      "rule": "The shell carries counts, totals and identity only; complete membership remains normalized."
+    },
+    {
+      "name": "private.banking_pay_draft_frozen_candidate_scope_members_v8",
+      "purpose": "Normalized partition membership whose configured ceiling is 50,000 without an array; performance/load proof is bounded to 5,000 rows.",
+      "primary_key": ["operation_id", "candidate_scope_ordinal", "member_ordinal"],
+      "rule": "Each selected constituent appears exactly once in exactly one certificate-owned Candidate/channel partition."
+    },
+    {
+      "name": "private.banking_pay_draft_frozen_stage_receipts_v8",
+      "purpose": "Bounded page cursor and receipt chain for response-loss-safe staging.",
+      "primary_key": ["operation_id", "stage_kind", "page_sequence"],
+      "rule": "At most 256 rows and 524288 canonical bytes are admitted per page; a changed replay request fails closed."
+    },
+    {
+      "name": "private.banking_pay_draft_phase_units_v1",
+      "purpose": "Deterministic appendable phase units without JSON membership arrays.",
+      "primary_key": ["operation_id", "phase", "unit_ordinal"],
+      "rule": "INSERT SELECT from frozen Candidate scopes assigns global stable ordinals once; finalisation proves count, distinct identity and digest before any unit can be claimed."
+    },
+    {
+      "name": "private.banking_pay_draft_owner_receipts_v1",
+      "purpose": "Atomic response-loss/replay receipt for each bounded owner invocation.",
+      "primary_key": ["operation_id", "phase", "unit_ordinal", "iteration_sequence"],
+      "rule": "The same request returns the stored receipt; a changed request or non-next iteration fails closed. A unit completes only when the owner reports no more work and independent remaining-row checks agree."
+    },
+    {
+      "name": "private.banking_pay_draft_finalizer_iterations_v8",
+      "purpose": "One immutable receipt for each existing finalizer LIMIT 100 invocation.",
+      "primary_key": ["operation_id", "candidate_scope_ordinal", "iteration_sequence"],
+      "rule": "has_more advances to another short RPC; completion requires zero independently counted remaining rows."
+    },
+    {
+      "name": "private.banking_pay_draft_constituent_parity_results_v8",
+      "purpose": "Exact per-constituent comparison of H1 expected facts with actual allocation, item, reservation and materialisation outputs.",
+      "primary_key": ["operation_id", "constituent_ordinal"],
+      "rule": "The first mismatch blocks completion. The comparison records existing-owner outcomes and never recalculates economics."
+    },
+    {
+      "name": "private.banking_pay_draft_operation_terminal_results_v8",
+      "purpose": "Byte-compatible legacy terminal result plus additive certificate diagnostics.",
+      "primary_key": ["operation_id"],
+      "rule": "No existing Worker or frontend result field may be removed, renamed, retyped or reinterpreted."
+    }
+  ],
+  "candidate_scope_contract": {
+    "one_shell_per_candidate_channel": true,
+    "normalized_membership": true,
+    "preserved_small_owner_inputs": [
+      "effective_candidate_fragment_json",
+      "effective_summary_fragment_json",
+      "effective_paye_candidate_json",
+      "effective_non_paye_payee_json",
+      "effective_payees_json",
+      "effective_case_resolution_states_json",
+      "candidate_totals_json",
+      "allocation_basis_json"
+    ],
+    "prohibited_giant_inputs": [
+      "selected_preview_row_ids_json",
+      "selected_timesheet_ids_json",
+      "selected_finance_case_ids_json",
+      "effective_canonical_preview_lines_json",
+      "selected_canonical_preview_lines_json",
+      "baseline_component_rows_json",
+      "hidden_recovery_template_lines_json"
+    ],
+    "rule": "Small Candidate/channel facts required by unchanged owners remain on the shell; constituent-sized collections live only in normalized rows."
+  },
+  "owner_adapter_rules": [
+    {
+      "owner": "public.pay_workbench_prepare_draft_allocation_rows_seed",
+      "strategy": "Exact replacement reads at most 100 next frozen source rows from the normalized relation while retaining every current allocation/recovery/headroom expression and fail-closed check.",
+      "completion": "No unallocated normalized row remains for the unit."
+    },
+    {
+      "owner": "public.pay_batch_insert_candidates_from_preview",
+      "strategy": "Reuse unchanged with no more than 100 Candidate scope ids.",
+      "completion": "Every supplied scope is linked to the expected batch Candidate."
+    },
+    {
+      "owner": "public.pay_batch_insert_items_from_preview",
+      "strategy": "Exact replacement obtains canonical selected rows from the normalized relation; existing LIMIT 100 and has_more semantics remain authoritative.",
+      "completion": "has_more=false and no expected ordinary allocation remains without an item or certified finance defer."
+    },
+    {
+      "owner": "public.pay_batch_apply_finance_adjustments",
+      "strategy": "Exact owner-preserving replacement/adapter processes one bounded deterministic finance-allocation page and retains all current equations, aliases, PAYE/Umbrella treatment, item types and case transitions.",
+      "completion": "Every certified finance allocation in the unit is linked exactly once and the owner plan parity check passes."
+    },
+    {
+      "owner": "public.pay_batch_finalize_reservations_and_markers",
+      "strategy": "Reuse unchanged one iteration at a time and obey has_more.",
+      "completion": "has_more=false and no eligible unreserved row remains."
+    },
+    {
+      "owner": "public.pay_batch_create_timesheet_snapshots",
+      "strategy": "Reuse unchanged one iteration at a time and obey has_more.",
+      "completion": "has_more=false and every touched Timesheet has its current-owner snapshot."
+    },
+    {
+      "owner": "public.pay_batch_build_item_breakdowns",
+      "strategy": "Reuse unchanged one iteration at a time and obey has_more.",
+      "completion": "has_more=false and no eligible item lacks its current-owner breakdown."
+    }
+  ],
+  "worker_contract": {
+    "operation_input": "Compact certificate reference only; no selected constituent arrays.",
+    "unit_claim": "One phase unit receipt at a time; each RPC performs at most one bounded database page.",
+    "no_in_request_loop": true,
+    "no_unbounded_response": true,
+    "no_timeout_change": true,
+    "completion_rule": "Never finish a chunk, phase or operation while the owner receipt says has_more or an independent remaining-row count is nonzero.",
+    "old_operation_rule": "Legacy operations continue only through their exact legacy route. Missing or mixed certified metadata fails closed; there is no implicit fallback."
+  },
+  "frontend_transport_contract": {
+    "current_source_evidence": "The existing Create Draft page constructs full selected row-id, constituent-contract and economic-key arrays, repeats them across request fields, and deep-copies the complete body for preflight before any bounded Draft phase starts.",
+    "new_submission_rule": "After the existing selection-sync step has completed and the server has certified that exact current selection, the certified Create Draft preflight and start requests carry only the session/version/progress context, requested channel scope, existing same-week PAYE override proof when applicable, and the compact server-issued certificate reference or issuer request. They never carry selected constituent arrays or constituent contracts.",
+    "selection_authority_rule": "The browser remains responsible for the user's selection interaction, but the Draft start consumes only the server-certified selection. Browser arrays are never accepted as Draft authority and cannot override, reconstruct or narrow the certificate.",
+    "result_rule": "The terminal operation result, created batch IDs, replacement-or-patched Workbench refresh contract, frontend progress interpretation and every existing downstream field retain their current meaning and type. Certificate and paging diagnostics are additive only.",
+    "legacy_rule": "Already-started legacy operations retain their exact legacy input and result path. New certified operations cannot fall back to legacy array input.",
+    "implementation_status": "SOURCE_MAPPED_NOT_YET_CONNECTED_TO_STABLE_H1_ISSUER"
+  },
+  "limits": {
+    "selected_constituent_max": 50000,
+    "selected_constituent_reject": 50001,
+    "performance_load_test_max": 5000,
+    "candidate_scope_rpc_page_max": 256,
+    "certificate_read_page_max": 256,
+    "owner_iteration_row_max": 100,
+    "page_size_review": {
+      "certificate_and_scope_staging_sizes_to_measure": [100, 128, 256],
+      "dual_engine_measurement_status": "PASS_LOCAL_PG17_11_AND_PG18_1",
+      "selected_transport_page_size": 256,
+      "financial_owner_size": 100,
+      "decision_rule": "Use 256 for lightweight certificate and normalized scope transport based on the bounded 101, 1001 and 5000-row measurements on both engines. Keep the distinct financial owner page at 100. Re-measure at no more than 5000 rows against the sealed shared candidate and Miget TEST before release; never increase a financial owner page without separate source and runtime proof.",
+      "evidence": "F010_V8_PAGE_SIZE_BENCHMARK.json"
+    },
+    "statement_timeout_change_permitted": false,
+    "lock_timeout_change_permitted": false
+  },
+  "policy_separation": {
+    "f013_scope_and_insert_items": "Separate provisional correctness work. It may be combined into final owners only after its own unchanged-policy parity gates pass.",
+    "f013b": "CLOSED_NOT_DEFECT. PAYMENT_ADVANCE_REPAYMENT visible input and LOAN_REPAYMENT hidden/frozen vocabulary remain deliberately distinct.",
+    "forbidden": [
+      "new eligibility decision",
+      "new amount equation",
+      "gross/net reclassification",
+      "PAYE or Umbrella tax/VAT change",
+      "channel or payee rerouting",
+      "headroom or recovery recomputation outside the existing owner",
+      "renaming staged aliases",
+      "raising a timeout",
+      "hiding or capping selected rows"
+    ]
+  },
+  "release_gate": "Local implementation and disposable proof only. No shared publication, Miget mutation, Worker deployment or real Draft until independent review and explicit user consent."
+}

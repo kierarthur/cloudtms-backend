@@ -6,6 +6,11 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const authorityName = '17082026_2052_pay_finance_resolution_cancel_authority.sql';
 const authority = fs.readFileSync(path.join(root, 'supabase', 'repeatable', authorityName), 'utf8');
+const canonicalAuthorityName = '04092026_1330_banking_pay_manual_carry_forward_selection_authority_v1.sql';
+const canonicalAuthority = fs.readFileSync(
+  path.join(root, 'supabase', 'repeatable', canonicalAuthorityName),
+  'utf8',
+);
 const reassert = fs.readFileSync(path.join(
   root,
   'supabase',
@@ -46,7 +51,7 @@ const canonical = functionBody(
 );
 const clear = functionBody('pay_workbench_session_clear_case_resolution');
 
-test('one durable authority owns the three finance cancellation functions and is replayed last', () => {
+test('finance cancellation roots stay intact and the later canonical-lines owner is explicit', () => {
   assert.equal((authority.match(/^CREATE OR REPLACE FUNCTION public\./gm) || []).length, 3);
   const authorityReplayAt = reassert.indexOf(`\\ir ${authorityName}`);
   const finalReplayAt = reassert.indexOf('\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty.sql');
@@ -62,18 +67,26 @@ test('one durable authority owns the three finance cancellation functions and is
     assert.match(authority, new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${signature.replace(/[().]/g, '\\$&')}[\\s\\S]*TO postgres,authenticated,service_role`, 'i'));
   }
 
-  const names = [
-    'pay_preview_candidate_build_finance_case_baseline',
-    'pay_preview_candidate_build_canonical_lines',
-    'pay_workbench_session_clear_case_resolution'
+  const owners = [
+    ['pay_preview_candidate_build_finance_case_baseline', authorityName],
+    ['pay_preview_candidate_build_canonical_lines', canonicalAuthorityName],
+    ['pay_workbench_session_clear_case_resolution', authorityName],
   ];
-  for (const name of names) {
+  for (const [name, sourceName] of owners) {
     const owner = manifest.functions.find((entry) => entry.schema === 'public' && entry.name === name);
     assert.ok(owner, `${name} must be in the installed-definition catalogue`);
-    assert.deepEqual(owner.source_files, [`supabase/repeatable/${authorityName}`]);
+    assert.deepEqual(owner.source_files, [`supabase/repeatable/${sourceName}`]);
   }
+  assert.match(canonicalAuthority, /CREATE OR REPLACE FUNCTION public\.pay_preview_candidate_build_canonical_lines\(/);
+  assert.match(canonicalAuthority, /MANUAL_ADJUSTMENT_CARRY_FORWARD/);
+  assert.match(canonicalAuthority, /REVOKE ALL ON FUNCTION public\.pay_preview_candidate_build_canonical_lines\(jsonb,uuid\)[\s\S]*FROM PUBLIC,anon,authenticated,service_role;/);
+  assert.match(canonicalAuthority, /GRANT EXECUTE ON FUNCTION public\.pay_preview_candidate_build_canonical_lines\(jsonb,uuid\)[\s\S]*TO postgres,service_role;/);
+  assert.doesNotMatch(canonicalAuthority, /TO postgres,authenticated,service_role;/);
+  assert.doesNotMatch(canonicalAuthority, /CREATE OR REPLACE FUNCTION public\.pay_preview_candidate_build_finance_case_baseline\(/);
+  assert.doesNotMatch(canonicalAuthority, /CREATE OR REPLACE FUNCTION public\.pay_workbench_session_clear_case_resolution\(/);
   assert.equal(manifest.function_count, manifest.functions.length);
   assert.match(verifier, /requiredFinanceCancellationOwners/);
+  assert.match(verifier, /canonicalLinesAuthorityPath/);
   assert.match(verifier, /finance cancellation owner or source file is not exact/);
 });
 

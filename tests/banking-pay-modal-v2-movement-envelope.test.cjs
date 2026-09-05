@@ -67,7 +67,7 @@ test('real all-page selection and recovery receipt survives the compact formatte
  const setup=fs.readFileSync(path.join(__dirname,'fixtures/28082026_1429_banking_pay_selection_setup.sql'),'utf8');
  assert.ok(setup.includes("current_database()<>'banking_modal_v2_test'"));
  let sql=fs.readFileSync(path.join(__dirname,'28082026_1432_banking_pay_candidate_selection_runtime.sql'),'utf8')
-  .replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',setup);
+  .replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',()=>setup);
  assert.ok(!sql.includes('\\ir'));assert.match(sql,/ROLLBACK;\s*$/);
  sql=sql.replace(/ROLLBACK;\s*$/,`SELECT jsonb_build_object('state_changed',true)||
   private.pay_workbench_modal_movement_envelope_v2(progress_json#>'{candidate_selection_receipt_v2,result,movements}')

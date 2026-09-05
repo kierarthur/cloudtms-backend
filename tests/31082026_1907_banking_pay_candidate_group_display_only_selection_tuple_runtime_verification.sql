@@ -6,7 +6,29 @@
 begin;
 set local statement_timeout='45s';
 set local client_min_messages='warning';
-set local cloudtms.rollback_fixture_scope='BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2';
+set local cloudtms.rollback_fixture_scope='BANKING_PAY_CANDIDATE_GROUP_DISPLAY_ONLY_SELECTION_TUPLE_V1';
+\if :{?cloudtms_release_fixture_context}
+select pg_catalog.set_config(
+  'cloudtms.release_verifier_context',
+  :'cloudtms_release_fixture_context',
+  true
+);
+\endif
+do $collision$
+begin
+  if exists (
+    select 1
+    from public.timesheets
+    where timesheet_id in (
+      '10000000-0000-4000-8000-000000006001',
+      '10000000-0000-4000-8000-000000006002'
+    )
+       or booking_id in ('current-payable-group','fully-paid-context')
+  ) then
+    raise exception 'ROLLBACK_FIXTURE_ID_COLLISION';
+  end if;
+end;
+$collision$;
 \ir fixtures/28082026_1429_banking_pay_selection_setup.sql
 
 delete from public.banking_pay_workbench_preview_rows

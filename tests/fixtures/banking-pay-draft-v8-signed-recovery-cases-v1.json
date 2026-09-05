@@ -1,0 +1,51 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_SIGNED_RECOVERY_CASES_V1",
+  "status": "RUNTIME_PROOF_PENDING",
+  "evidence_scope": "CURRENT_V8_POLICY_OWNER_ONLY",
+  "v1_v8_typed_parity_status": "OPEN_HISTORICAL_V1_HARNESS_NOT_EXECUTED",
+  "source_fixtures": [
+    "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql",
+    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql",
+    "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql"
+  ],
+  "cases": [
+    {
+      "class_id": "signed_positive_return",
+      "expected_marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_positive_return",
+      "assertion": "The frozen positive Draft item retains the signed return amount and exact economic key through finalisation."
+    },
+    {
+      "class_id": "signed_negative_recovery",
+      "expected_marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_negative_recovery",
+      "assertion": "The paired recovery reservation uses the frozen signed outstanding amount without consulting live Timesheet finance."
+    },
+    {
+      "class_id": "signed_mixed_ordinary_same_key",
+      "expected_marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_mixed_ordinary_same_key",
+      "assertion": "Ordinary same-key rate and correction components remain ordinary while exactly one fully signed component drives the frozen return and reservation."
+    },
+    {
+      "class_id": "signed_two_decisive_matches",
+      "expected_marker": "H2_V8_SIGNED_RECOVERY_REJECT=signed_two_decisive_matches|23514|PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID",
+      "assertion": "Two fully signed decisive components fail closed before any Draft or reservation mutation."
+    },
+    {
+      "class_id": "signed_tampered_or_incomplete",
+      "expected_marker": "H2_V8_SIGNED_RECOVERY_REJECT=signed_tampered_or_incomplete|23514|PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID",
+      "assertion": "A tampered seal and an incomplete frozen evidence shape each fail closed before any Draft or reservation mutation."
+    }
+  ],
+  "execution_contract": {
+    "transaction_outcome": "ROLLBACK",
+    "external_payment_actions": 0,
+    "provider_actions": 0,
+    "settlement_actions": 0,
+    "remittance_actions": 0,
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "idle_in_transaction_session_timeout_ms": 30000,
+    "jit": "OFF",
+    "harness_isolation": "EXACT_LOCAL_DATABASE_GUARD_SUBSTITUTION_ONLY",
+    "materialised_50000_rows": false
+  }
+}

@@ -1,0 +1,1050 @@
+{
+  "manifest_version": 1,
+  "contract": "CloudTMS Banking Pay Workbench recovery and settled-certificate V8 H1 authority",
+  "project": "CloudTMS managed PostgreSQL",
+  "project_ref": "provider-neutral",
+  "function_count": 39,
+  "functions": [
+    {
+      "schema": "private",
+      "name": "pay_workbench_publish_certified_source_preview_v1",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_economic_build_id uuid, p_source_build_run_id uuid, p_source_change_seq bigint, p_session_version bigint, p_completion_job_id uuid, p_refresh_scope_kind text, p_targeted_timesheet_ids jsonb, p_linked_timesheet_ids jsonb, p_publication_options_json jsonb",
+      "definition_sha256": "42971b436098105cc127e7a3f8df5e3541d11e48d81fe7284e362e8da53a2cc3",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_session_authority_fence_v1",
+      "identity_arguments": "",
+      "definition_sha256": "8c19b26542202a7f640b176749f6620e6ad4695df933f0bb10a646f0239f58ef",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2304_banking_pay_workbench_session_authority_fence_v1.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_canonical_stream_page_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_stream_kind text, p_pay_channel_scope text, p_after_ordinal integer, p_limit integer",
+      "definition_sha256": "9a456706cb0c25921b1901c22c3cd7680b4c2d2d9de35c30c338f73fe9b4a477",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_component_evidence_json_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_constituent_ordinal integer",
+      "definition_sha256": "7bf92b147556348df9f2261351d3067ea3507c5578427dbca7a7c435057ca0ad",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_component_seed_v8",
+      "identity_arguments": "p_component jsonb, p_frozen_component_ordinal integer, p_economic_key_type text, p_economic_key_value text",
+      "definition_sha256": "468af1e0bda428e016884e0742977ceb038860fdfa1fb82440dbc625abd13c02",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_constituent_json_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_constituent_ordinal integer",
+      "definition_sha256": "8cacd9222bfc98df053609e24fc1fb4222d458d77dad19f06e98984b4fe9b0a4",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_constituent_seed_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_constituent_ordinal integer",
+      "definition_sha256": "1e30ab375c87dd7953bc973e734d878cfaeb9bf13e1232b40c9a034c46092265",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_constituent_unsigned_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_constituent_ordinal integer",
+      "definition_sha256": "25f4e12f7a41ca3e7259aeb8b685ea418b110d33585f6d4a36a23f22a5f20242",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_digest_checkpoint_apply_v8",
+      "identity_arguments": "p_digest_run_uuid uuid, p_checkpoint_sequence integer, p_state_after_json jsonb, p_page_receipt_sha256 text",
+      "definition_sha256": "5aa80868d3b21ab5bd419762302120265a71a145e7f133cc60204483623d5769",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_money_v8",
+      "identity_arguments": "p_value jsonb",
+      "definition_sha256": "a4ef66e462ab4fdb1707911d68a3b6504246e6bc5a769cc6acf11ebdd1ac024c",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_operation_admit_v8",
+      "identity_arguments": "p_operation_id uuid",
+      "definition_sha256": "64355e58369e9107bece118a8e5b3334bf7aa4da443527ea2d9f128a14c0f132",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_overall_digest_advance_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_limit integer",
+      "definition_sha256": "50af816b061d59e2869b1858ae6b2a66ac8b0dd0cc1e9551c01be5788431ed22",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_preview_contract_v8",
+      "identity_arguments": "p_preview_row_id uuid",
+      "definition_sha256": "82a42d5528e293f6325d1b601901a55b01a3f45b1db37e5a11079f47c90fdd4e",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_sha256_final_v8",
+      "identity_arguments": "p_state jsonb",
+      "definition_sha256": "b5dee5cd133e3a80514fcb9e4e40d07e2a11248f29f170a2b49b088a7e4bd189",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_sha256_init_v8",
+      "identity_arguments": "",
+      "definition_sha256": "9f2695e66e513c9620d5ac4b8163476368c0184f3dcbdab5811f0e0a1cfbd8a0",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_sha256_text_v8",
+      "identity_arguments": "p_text text",
+      "definition_sha256": "1fc429c68e2e7b1ae5982c4a7d6acc37f5efb4619e51c12a8677fd472631f377",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_sha256_update_bytes_v8",
+      "identity_arguments": "p_state jsonb, p_bytes bytea, p_count_as_message boolean",
+      "definition_sha256": "191bc42fb64398cf14fe22da44202539acf15df0c0b620f4ef984d6d9cd493af",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_sha256_update_v8",
+      "identity_arguments": "p_state jsonb, p_text text",
+      "definition_sha256": "20b504bb2bdb6097866b774b68954eaa02e3c5babcbe92dcff6722bee0666ab8",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_source_row_digest_v8",
+      "identity_arguments": "p_preview_row_id uuid",
+      "definition_sha256": "7c48df159239f08fc2dfb28c96c64bd4c21d3a12095717396a8a21fe2e0be2c0",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "s",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_settled_certificate_stable_stringify_v8",
+      "identity_arguments": "p_value jsonb",
+      "definition_sha256": "e1a384e8fc40afff802ddf1fddb82baae371f280497384ef7c04ff4ec0446bcc",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "parallel": "s",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "workbench_settled_cert_same_week_override_validate_v8",
+      "identity_arguments": "p_same_week_paye_override jsonb",
+      "definition_sha256": "fe234e66b19b2f60a1c6316738a52a0ac5076812d816589bbc81067edc9a2499",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "banking_pay_draft_certified_operation_start_v8",
+      "identity_arguments": "p_certificate_reference jsonb, p_actor_user_id uuid, p_idempotency_key text",
+      "definition_sha256": "789587ca28fb9581b62823bf5559e35be85e712b0e450442e1df31d665dd5f2c",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "lock_timeout=1000ms",
+        "search_path=\"\"",
+        "statement_timeout=6000ms"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2303_banking_pay_draft_certified_operation_start_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "banking_pay_operation_start",
+      "identity_arguments": "p_operation_type text, p_actor_user_id uuid, p_idempotency_key text, p_workbench_session_id uuid, p_pay_batch_id uuid, p_root_operation_id uuid, p_input_json jsonb, p_config_json jsonb",
+      "definition_sha256": "dc2adce4e2b4f4acf57a2a1050ec08d87b18bc51029f44752d22bf8a761db0db",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "lock_timeout=1000ms",
+        "search_path=pg_catalog, private, extensions, pg_temp",
+        "statement_timeout=6000ms"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1154_banking_pay_operation_start.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_fail_job",
+      "identity_arguments": "p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer",
+      "definition_sha256": "85dee116f81fee1f0634d79f7562d2f6a97f3be9f1d3c40aef80238b13483656",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+        "supabase/repeatable/08082026_0313_pay_workbench_fail_job_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_repair_orphaned_pending_source_build",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text",
+      "definition_sha256": "887a4dda312aa81ed79114e97f7182ff36123e4ec4cde41ac519104e7afa3e37",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_session_open",
+      "identity_arguments": "p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text, p_force_new_session boolean, p_discard_source_session boolean, p_source_session_id uuid, p_obsolete_session_ids jsonb, p_mutation_context text, p_created_pay_batch_ids jsonb, p_dirty_candidate_ids jsonb, p_refresh_job_ids jsonb",
+      "definition_sha256": "a095777dc9c95f60ca638000286bd9b64ddaf5e635b2673631f8220ca3e6708b",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2304_banking_pay_workbench_session_authority_fence_v1.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_build_append_page_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_after_ordinal integer, p_requested_limit integer, p_expected_previous_receipt_sha256 text, p_lease_owner text",
+      "definition_sha256": "91b7b9f475d5544c82358e836d26a15cc9fa2b2a993c15fbe3ebaf282928999c",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_build_start_v8",
+      "identity_arguments": "p_workbench_session_id uuid, p_actor_user_id uuid, p_build_idempotency_key text",
+      "definition_sha256": "1dfba0424215530d26c36f18f367f6c5c0a07fe77d049f9a4813da8d7f3742dc",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_component_page_v8",
+      "identity_arguments": "p_operation_id uuid, p_certification_id text, p_evidence_kind text, p_after_ordinal integer, p_limit integer, p_expected_previous_receipt_sha256 text",
+      "definition_sha256": "7ee0929c82e596333ba22f16d2c870997f0f6476ea437b01902f4c2af4c732fe",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_current_reference_issue_v8",
+      "identity_arguments": "p_workbench_session_id uuid, p_session_version bigint, p_progress_counter_version bigint, p_pay_channel_scope text, p_idempotency_key text, p_same_week_paye_override jsonb",
+      "definition_sha256": "17979eef9295902e70bcd10d5b342f2ad0aa41a3650502cf3e2ddc0a6e479fd5",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "lock_timeout=1000ms",
+        "search_path=\"\"",
+        "statement_timeout=6000ms"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_due_claim_v8",
+      "identity_arguments": "p_limit integer",
+      "definition_sha256": "d854674d2f2e0d55af4a2e1d7be612616243d097ce1427294695627c773c30eb",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_entry_page_v8",
+      "identity_arguments": "p_operation_id uuid, p_certification_id text, p_after_ordinal integer, p_limit integer, p_expected_previous_receipt_sha256 text",
+      "definition_sha256": "e155e2bc89687fe102ceb8c602baa60a513207b32d19c4f91281c13b9f23f5b1",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_filter_manifest_v8",
+      "identity_arguments": "p_operation_id uuid, p_certification_id text",
+      "definition_sha256": "9db77ac51bb221d1df6d9f03b2b82e3d0b938d856a55ba7d9e3aecbb542b171e",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_lifecycle_v8",
+      "identity_arguments": "p_certification_id text, p_action text, p_reason_code text, p_actor_user_id uuid",
+      "definition_sha256": "1309a84f340cf3b3c0f79b88c7917f4b81518a0f49ef2279cb00f217a05ae6c2",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_partition_page_v8",
+      "identity_arguments": "p_operation_id uuid, p_certification_id text, p_after_ordinal integer, p_limit integer, p_expected_previous_receipt_sha256 text",
+      "definition_sha256": "2b413baedd185e3df2c99bd8a3d59ff90beecce211ca58d4476f0ced4a00c1a4",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_reference_issue_v8",
+      "identity_arguments": "p_certification_id text, p_pay_channel_scope text, p_idempotency_key text, p_same_week_paye_override jsonb",
+      "definition_sha256": "2f27bb4319932985759f2c52ac46241c902f9588dbabbfb81f5b53510f4ee828",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "lock_timeout=1000ms",
+        "search_path=\"\"",
+        "statement_timeout=6000ms"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_seal_v8",
+      "identity_arguments": "p_certificate_uuid uuid, p_actor_user_id uuid",
+      "definition_sha256": "f9b73d774f0cf987500fa415207d4f93ee181e0afe001ff9802e20a459ab9cd3",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_settled_certificate_status_v8",
+      "identity_arguments": "p_workbench_session_id uuid, p_actor_user_id uuid",
+      "definition_sha256": "d0beea474b3751d6c965c5faad5f6bed817426452c46201fccf6306130a46b94",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "s",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_source_build_attempt_execute_v1",
+      "identity_arguments": "p_job_id uuid, p_build_id uuid, p_private_stage text, p_attempt_id uuid, p_attempt_nonce uuid, p_worker_id text, p_lane_identity text",
+      "definition_sha256": "5e19de05c1faea46029f81e0063e0eed12c9223189d3c45d55133babd11a0e83",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel": "u",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "privilege_type": "EXECUTE",
+          "is_grantable": false
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1014_pay_workbench_source_build_attempt_execute_v1.sql"
+      ]
+    }
+  ]
+}

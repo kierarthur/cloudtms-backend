@@ -1,0 +1,94 @@
+{
+  "contract": "BANKING_PAY_SCHEDULED_DUE_LOCAL_PREPARE_EVIDENCE_V1",
+  "status": "EXACT_V1_V8_SCHEDULED_LOCAL_PREPARATION_PARITY_PASS_NOT_INSTALLED",
+  "classification": "SCHEDULED_EXECUTION_ORCHESTRATION_DEFECT_POLICY_DELTA_ZERO",
+  "first_divergent_boundary": "pay_batches_claim_due_scheduled post-lock provider-evidence guard",
+  "source_history": {
+    "historical_due_owner": "supabase/repeatable/04082026_1154_pay_batches_claim_due_scheduled.sql",
+    "historical_due_owner_sha256": "228c1b3a5cfd168e29963b5224216e81595fa5ad6e190bd9f79fcee7acea0a91",
+    "local_transfer_prepare_owner": "supabase/repeatable/12082026_1446_pay_execute_bank_transfer_chunk_prepare_voided_overlay.sql",
+    "local_transfer_prepare_owner_sha256": "31f50ee838bb0ee4289f635f7c5624d0db3e46ab33132db4a01c3689e3e632ac",
+    "canonical_classifier_owner": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+    "canonical_classifier_owner_sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+  },
+  "pre_change": {
+    "pg17": "PASS_EXACT_DIVERGENCE_REPRODUCED_ROLLBACK_ONLY",
+    "pg18": "PASS_EXACT_DIVERGENCE_REPRODUCED_ROLLBACK_ONLY",
+    "prepare_ready": true,
+    "authorisation_state": "AUTHORISED",
+    "schedule_state": "SCHEDULED",
+    "due_claim_code": "NO_DUE_BATCH",
+    "due_claimed_count": 0,
+    "due_skipped_count": 1,
+    "due_skip_code": "PROVIDER_EVIDENCE_PRESENT",
+    "canonical_classification": "SCHEDULED_LOCAL_NOT_SENT",
+    "canonical_is_unattempted_submit_eligible": true,
+    "provider_submission_evidence": false,
+    "provider_event_count": 0,
+    "provider_attempt_count": 0,
+    "persistent_write_delta": 0
+  },
+  "local_correction": {
+    "owner": "supabase/repeatable/04092026_2330_banking_pay_due_schedule_local_prepare_evidence_v1.sql",
+    "owner_sha256": "10c76505ad83b6696a6e37ff0ddcc291d8d67a9998d82924d34b5eec9d166683",
+    "installed_pg_get_functiondef_sha256": "51440c38e2552c1c75907c537ca38d337ec99b241f9de510445fc421a9205073",
+    "runtime_fixture": "tests/04092026_2340_banking_pay_scheduled_due_local_prepare_runtime.sql",
+    "runtime_fixture_sha256": "0f79ca8801195a4d1e18aaae6230f8e53526beef9aa1ebeeaec2a5d5b6d8d13d",
+    "runner": "scripts/verify-banking-pay-scheduled-due-local-prepare-v1.mjs",
+    "semantic_result_sha256": "4cdbecca7a42379d35be53acc0977227f963d849ad63761a4295e73fe2843b3a",
+    "semantic_change": "Use the existing canonical transfer-evidence classifier so a local preparation identity is not confused with provider submission evidence.",
+    "policy_or_economic_change_count": 0,
+    "statement_timeout_changed": false,
+    "lock_timeout_changed": false
+  },
+  "local_results": {
+    "pg17": {
+      "status": "PASS_ROLLBACK_ONLY",
+      "pre_change_elapsed_ms": 959.35,
+      "corrected_elapsed_ms": 903.83,
+      "due_claimed_count": 1,
+      "due_operation_created": true,
+      "replay_claimed_count": 0,
+      "unsafe_provider_evidence_cases_blocked": 5
+    },
+    "pg18": {
+      "status": "PASS_ROLLBACK_ONLY",
+      "pre_change_elapsed_ms": 972.6,
+      "corrected_elapsed_ms": 968.35,
+      "due_claimed_count": 1,
+      "due_operation_created": true,
+      "replay_claimed_count": 0,
+      "unsafe_provider_evidence_cases_blocked": 5
+    }
+  },
+  "historical_v1_current_v8_parity": {
+    "status": "PASS_ROLLBACK_ONLY",
+    "postgres_17_11": "PASS",
+    "postgres_18_6": "PASS",
+    "paye_and_umbrella_created_together": true,
+    "semantic_result_sha256_v1": "4cdbecca7a42379d35be53acc0977227f963d849ad63761a4295e73fe2843b3a",
+    "semantic_result_sha256_v8": "4cdbecca7a42379d35be53acc0977227f963d849ad63761a4295e73fe2843b3a",
+    "schedule_state_equal": true,
+    "local_transfer_count_and_penny_amounts_equal": true,
+    "due_operation_created_equal": true,
+    "replay_created_no_duplicate": true,
+    "unsafe_provider_evidence_cases_blocked_per_route": 5,
+    "provider_payment_settlement_remittance_action_count": 0,
+    "transaction_rolled_back": true
+  },
+  "preserved_invariants": [
+    "No provider call, payment submission, settlement or remittance action occurs in the fixture.",
+    "All payment amounts, PAYE net values, VAT, routes, payees and authorisation decisions are unchanged.",
+    "The existing 6000 ms statement timeout and 1000 ms lock timeout remain unchanged.",
+    "Actual provider evidence, ambiguous outcomes, terminal states and non-eligible transfer states remain fail closed.",
+    "A repeated due claim creates no second operation."
+  ],
+  "blocking_gates": [
+    "CONCURRENT_DUE_CLAIM_SINGLE_FLIGHT",
+    "CURRENT_CONTRACT_AND_RELEASE_COUPLING",
+    "FULL_PG17_PG18_NEW_UPGRADE_REAPPLY",
+    "MIGET_TEST_INSTALL_AND_READBACK",
+    "AUTHORISED_REAL_TEST_NON_PROVIDER_ACCEPTANCE",
+    "FRESH_COMPLETE_POST_CORRECTION_AUDIT"
+  ]
+}

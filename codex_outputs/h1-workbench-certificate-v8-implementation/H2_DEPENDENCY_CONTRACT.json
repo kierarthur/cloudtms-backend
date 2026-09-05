@@ -1,0 +1,93 @@
+{
+  "contract": "H1_TO_H2_WORKBENCH_SETTLED_CERTIFICATE_V8_HANDOFF_V2",
+  "status": "H1_LOCAL_PRODUCER_READY_FOR_INDEPENDENT_REVIEW_H2_CONSUMER_NOT_READY",
+  "runtime_authority": "MIGET_TEST",
+  "certificate_contract": "WORKBENCH_SETTLED_CERTIFICATION_V2",
+  "compact_reference_request": {
+    "workbench_session_id": "uuid",
+    "session_version": "bigint",
+    "progress_counter_version": "bigint",
+    "pay_channel_scope": "ALL|PAYE|UMBRELLA",
+    "idempotency_key": "non-empty text",
+    "same_week_paye_override": "validated object or empty object"
+  },
+  "reference_response_required_fields": [
+    "certification_id",
+    "overall_digest_sha256",
+    "workbench_session_id",
+    "session_version",
+    "progress_counter_version",
+    "authority_fence_generation",
+    "pay_channel_scope",
+    "constituent_count",
+    "selected_constituents_digest_sha256",
+    "selected_partition_count",
+    "selected_partitions_digest_sha256",
+    "canonical_ex_vat_total",
+    "reference_digest_sha256"
+  ],
+  "operation_start": "public.banking_pay_draft_certified_operation_start_v8(jsonb,uuid,text)",
+  "operation_projection": {
+    "contract": "WORKBENCH_SETTLED_CERTIFICATE_OPERATION_PROJECTION_V1",
+    "top_level_fields": ["pay_channel_scope", "draft_scope", "same_week_paye_override"],
+    "invariant": "draft_scope equals pay_channel_scope",
+    "replay": "exact same values only",
+    "selected_arrays_present": false,
+    "actual_h2_worker_call_proved": false
+  },
+  "producer": {
+    "owner": "H1_WORKBENCH",
+    "ready_progress_trigger": "automatic bounded start or idempotent resume",
+    "durable_queue": "BANKING_PAY_CONTINUATION_QUEUE",
+    "append_pages_per_delivery": 8,
+    "seal_steps_per_delivery": 4,
+    "maximum_delivery_runtime_ms": 20000,
+    "maximum_requested_page_size": 256,
+    "maximum_build_emission_rows": 64,
+    "maximum_supported_constituents": 50000
+  },
+  "readers": {
+    "entries": "public.pay_workbench_settled_certificate_entry_page_v8(uuid,text,integer,integer,text)",
+    "partitions": "public.pay_workbench_settled_certificate_partition_page_v8(uuid,text,integer,integer,text)",
+    "components": "public.pay_workbench_settled_certificate_component_page_v8(uuid,text,text,integer,integer,text)",
+    "filters": "public.pay_workbench_settled_certificate_filter_manifest_v8(uuid,text)"
+  },
+  "reader_rules": {
+    "maximum_page_size": 256,
+    "terminal_sentinel": true,
+    "keyset_cursor": "strictly increasing ordinal",
+    "receipt_chain": "previous receipt required on every non-first page",
+    "availability": "STAGING only; H2 persists row-backed frozen authority before FROZEN",
+    "replay": "same operation/reference/cursor returns the stored identical result",
+    "response_loss": "retry returns the stored identical result without duplicate financial work",
+    "stale_or_tampered": "fail closed before Draft financial state"
+  },
+  "old_operation_cutover": {
+    "legacy_active_operations_at_activation": 0,
+    "implicit_legacy_fallback": false,
+    "new_operations_require_certificate": true,
+    "frozen_link_retention": "indefinite",
+    "aborted_or_failed_link_retention": "indefinite audit evidence"
+  },
+  "h1_expected_pre_draft_facts_only": true,
+  "excluded_h2_owned_outputs": [
+    "Draft allocation rows",
+    "Draft item identities and amounts",
+    "Draft reservation rows",
+    "Draft finance mutations",
+    "Draft materialisation facts",
+    "post-Draft parity verdict"
+  ],
+  "h2_corrections_required_before_installed_integration": [
+    "activate certified V8 route",
+    "bounded distinct frozen Timesheet reader plus unchanged DRAIN_TSFIN",
+    "unchanged ENSURE_PAYEE_READINESS",
+    "typed cleanup and terminal adapters",
+    "complete expected-fact parity enforcement including NOT_APPLICABLE reservation policy",
+    "durable Draft continuation and full downstream parity proof"
+  ],
+  "retention_policy": "INDEFINITE_NO_AUTOMATIC_EXPIRY_REVOCATION_PURGE_OR_ARCHIVE",
+  "policy_change": false,
+  "ready_for_h2_installed_integration": false,
+  "required_final_statement": "HANDOVER 2 DEPENDENCY REMAINS UNAVAILABLE"
+}

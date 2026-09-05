@@ -63,6 +63,49 @@ const DEADLOCK_RETRY_SAFE_FILES = new Map([
   ],
 ]);
 
+const RELEASE_ROLLBACK_FIXTURE_SCOPES = new Map([
+  [
+    'tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql',
+    'BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2',
+  ],
+  [
+    'tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql',
+    'BANKING_PAY_CANDIDATE_GROUP_DISPLAY_ONLY_SELECTION_TUPLE_V1',
+  ],
+  [
+    'tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql',
+    'BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1',
+  ],
+]);
+
+export function releaseVerifierVariables(file, mode, context = {}) {
+  const normalFile = String(file || '').replaceAll('\\', '/');
+  const scope = RELEASE_ROLLBACK_FIXTURE_SCOPES.get(normalFile);
+  if (!scope || !['NEW', 'UPGRADE'].includes(mode)) return {};
+
+  const expectedDatabase = String(context.expectedDatabase || '');
+  const releaseId = String(context.releaseId || '');
+  const gitCommit = String(context.gitCommit || '');
+  const environment = String(context.environment || '');
+  const customerKey = String(context.customerKey || '');
+  if (!expectedDatabase || !releaseId || !/^[0-9a-f]{40}$/.test(gitCommit)
+      || !['TEST', 'LIVE'].includes(environment)) {
+    throw new Error(`Rollback fixture release context is incomplete for ${normalFile}`);
+  }
+
+  return {
+    cloudtms_release_fixture_context: JSON.stringify({
+      scope,
+      mode,
+      expected_database: expectedDatabase,
+      release_id: releaseId,
+      git_commit: gitCommit,
+      environment,
+      customer_key: customerKey,
+    }),
+  };
+}
+
 export function deadlockRetryCountForFile(file) {
   const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
   const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/');
@@ -302,6 +345,16 @@ export function validateTarget(environment, expectedTarget) {
   if (!expectedTarget) throw new Error('CLOUDTMS_EXPECTED_TARGET is required for hosted targets');
   const locator = `${url.hostname}|${decodeURIComponent(url.username)}|${decodeURIComponent(url.pathname)}`;
   if (!locator.includes(expectedTarget)) throw new Error('Database URL does not match CLOUDTMS_EXPECTED_TARGET');
+}
+
+export function validateExpectedDatabase(expectedDatabase) {
+  if (!expectedDatabase) throw new Error('CLOUDTMS_EXPECTED_DATABASE is required for NEW and UPGRADE');
+  const url = new URL(databaseUrl());
+  const databasePath = decodeURIComponent(url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname);
+  if (!databasePath || databasePath !== expectedDatabase) {
+    throw new Error('Database URL path does not match CLOUDTMS_EXPECTED_DATABASE');
+  }
+  return databasePath;
 }
 
 export function psql({ file, sql, variables = {}, quiet = true }) {

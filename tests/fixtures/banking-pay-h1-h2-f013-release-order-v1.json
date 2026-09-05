@@ -58,6 +58,28 @@
       "codex_outputs/h2-draft-parity/BANKING_PAY_FINANCE_CATEGORY_OPERATING_MODEL.md": "b314aa42d579eaf7c0b680c5336558523e0d0377f8f34bc844dc7b49005f5f57"
     }
   },
+  "combined_h12_reconciliation": {
+    "status": "AUTHORISED_LOCAL_COMBINED_OWNER_PRESENT_POLICY_PARITY_PROOF_REQUIRED_FOR_RELEASE",
+    "predecessor_owner_path": "supabase/repeatable/02092026_1040_banking_pay_draft_insert_items_finance_handoff_v1.sql",
+    "predecessor_owner_sha256": "30a69f758756703fc669afdfcaa73642cdecf759bdefb4c5322123fa9988c21c",
+    "current_owner_path": "supabase/repeatable/04092026_1340_banking_pay_draft_carry_forward_policy_transport_v8.sql",
+    "current_owner_sha256": "3899783f13998310606492592fc990155d7b99439ed78041a624a66c4df7472e",
+    "obsolete_all_eight_owner_path": "supabase/repeatable/01092026_2245_banking_pay_draft_finance_category_handoff_v1.sql",
+    "economic_or_policy_delta_count": 0,
+    "visible_certified_finance_aliases": [
+      "MANUAL_CREDIT_ADJUSTMENT_PAYMENT",
+      "MANUAL_DEBT_RECOVERY",
+      "LOAN_PAYOUT",
+      "OVERPAYMENT_RECOVERY",
+      "PAYMENT_ADVANCE_REPAYMENT",
+      "UNDERPAYMENT_PAYMENT"
+    ],
+    "hidden_or_frozen_aliases_still_rejected_as_visible_input": [
+      "LOAN_REPAYMENT",
+      "MANUAL_CREDIT_PAYOUT"
+    ],
+    "note": "This append-only reconciliation supersedes only the old H1-only absence expectation. It does not rewrite the historical investigation or assert installed/final parity."
+  },
   "rules": [
     "H1 final closure and every transitive dependency must not define or replace the target routine.",
     "The obsolete provisional H2 path must remain absent from the H1-only tree and every stable combined candidate unless category-specific policy proof supports a new correction and the parent renews authority.",
@@ -70,4 +92,3 @@
   ],
   "current_h1_only_disposition": "The former 01092026_2245 proposal is retained only as append-only compatibility history and is absent from the H1-only tree. The all-eight-alias premise remains invalidated: PAYMENT_ADVANCE_REPAYMENT to LOAN_REPAYMENT and MANUAL_CREDIT_ADJUSTMENT_PAYMENT to MANUAL_CREDIT_PAYOUT are deliberate cross-layer translations. H2's 2313 PG17/PG18 fixture manually seeds Candidate scope/allocation rows and starts at INSERT_ITEMS. It proves OVERPAYMENT_RECOVERY correct only through the exercised downstream phases and records five category rows/sixteen variants as PROVISIONAL_PROVED_INTERFACE_DIVERGENCE; final proved defect rows are zero until a real canonical-preview through finalizer fixture passes. This guard proves only that F7 does not overwrite INSERT_ITEMS and that no unsupported finance replacement enters a combined candidate. F-013 remains H2-owned; no runtime correction is authorised, and any future correction requires complete end-to-end defect proof, a new exact owner path, explicit parent authority, stable manifest and combined-candidate order proof."
 }
-

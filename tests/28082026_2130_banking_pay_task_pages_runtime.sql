@@ -142,7 +142,9 @@ BEGIN
  IF a->>'total_count'<>'106' OR jsonb_array_length(all_rows)<>106
   OR (SELECT count(DISTINCT x->>'identity') FROM jsonb_array_elements(all_rows) x)<>106 THEN RAISE EXCEPTION 'VARIED_TASK_SORT_LOST_MEMBERS';END IF;
  WITH values AS (SELECT n,r->>'identity' AS id,
-  CASE p_sort WHEN 'CANDIDATES' THEN lower(COALESCE(r->>'candidate_name',(r->>'affected_candidate_count')||' candidates')) COLLATE "C"
+  CASE p_sort WHEN 'CANDIDATES' THEN CASE WHEN r->>'candidate_name' IS NOT NULL
+      THEN ('0|'||lower(r->>'candidate_name')||'|'||lower(COALESCE(r->>'candidate_reference',''))) COLLATE "C"
+      ELSE '1|'||lpad((r->>'affected_candidate_count')::text,20,'0') END
     ELSE lower(r->>'title') COLLATE "C" END AS title,
   CASE p_sort WHEN 'PAYMENTS' THEN (r->>'affected_payment_count')::numeric
     WHEN 'AMOUNT' THEN (r->>'affected_display_amount')::numeric END AS amount
@@ -199,7 +201,22 @@ BEGIN
  IF a->>'total_count'<>'105' OR a->>'updating_count'<>'105' OR jsonb_array_length(a->'updating')<>100
   OR a->'updating_has_more'<>'true'::jsonb OR jsonb_typeof(a->'updating_next_cursor')<>'string' THEN RAISE EXCEPTION 'UPDATING_INLINE_TRUNCATED_WITHOUT_CONTINUATION';END IF;
  IF b->>'view'<>'UPDATING' OR b->>'total_count'<>'105' OR b->>'scope_count'<>'105' OR b->'rows' IS DISTINCT FROM a->'updating'
-  OR c->>'page_number'<>'2' OR jsonb_array_length(c->'rows')<>5 OR c->'has_more'<>'false'::jsonb THEN RAISE EXCEPTION 'UPDATING_CONTINUATION_LOST_TASKS';END IF;
+  OR c->>'page_number'<>'2' OR jsonb_array_length(c->'rows')<>5 OR c->'has_more'<>'false'::jsonb THEN
+  -- A direct UPDATING page carries the standard nullable presentation keys;
+  -- the inline summary intentionally carries only the compact task core.
+  IF b->>'view'<>'UPDATING' OR b->>'total_count'<>'105' OR b->>'scope_count'<>'105'
+    OR (SELECT jsonb_agg(
+          row_value
+            - 'candidate_name' - 'candidate_reference' - 'payment_label'
+            - 'payment_date' - 'affected_display_amount' - 'linked_timesheet_id'
+          ORDER BY row_ordinal
+        )
+        FROM jsonb_array_elements(b->'rows') WITH ORDINALITY AS page_row(row_value,row_ordinal)
+       ) IS DISTINCT FROM a->'updating'
+    OR c->>'page_number'<>'2' OR jsonb_array_length(c->'rows')<>5 OR c->'has_more'<>'false'::jsonb THEN
+    RAISE EXCEPTION 'UPDATING_CONTINUATION_LOST_TASKS';
+  END IF;
+ END IF;
  IF (SELECT count(DISTINCT r->>'identity') FROM jsonb_array_elements((b->'rows')||(c->'rows')) r)<>105
   OR EXISTS(SELECT 1 FROM jsonb_array_elements((b->'rows')||(c->'rows')) r WHERE r->>'issue_state'<>'UPDATING'
    OR r->>'title'<>'Refreshing…' OR r->'affected_payment_count'<>'null'::jsonb OR r->'affected_payment_count_complete'<>'false'::jsonb) THEN

@@ -16,7 +16,7 @@ test('actual full-scope summary and child content evidence agrees with private s
  const fixture=fs.readFileSync(path.join(__dirname,'28082026_2038_banking_pay_summary_runtime.sql'),'utf8');
  const setup=fs.readFileSync(path.join(__dirname,'fixtures/28082026_1429_banking_pay_selection_setup.sql'),'utf8');
  assert.ok(setup.includes("current_database()<>'banking_modal_v2_test'"));assert.equal(fixture.split('DO $summary$').length,2);
- const prefix=fixture.slice(0,fixture.indexOf('DO $summary$')).replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',setup);
+ const prefix=fixture.slice(0,fixture.indexOf('DO $summary$')).replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',()=>setup);
  assert.ok(!prefix.includes('\\ir'));
  const sql=`${prefix}
  DO $evidence$

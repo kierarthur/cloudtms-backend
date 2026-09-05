@@ -1,0 +1,82 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_SAVED_RESOLUTION_FULL_CHAIN_RESULTS_V1",
+  "status": "CURRENT_V8_LOCAL_DUAL_ENGINE_PASS_HISTORICAL_V1_PARITY_OPEN",
+  "source_baseline": {
+    "worktree_head": "6b2e3822e7239cf8fc9b6568194294731135137d",
+    "reconciliation_status": "RECONCILED_TO_CURRENT_SHARED_HEAD_AND_FULL_FUNCTIONAL_REPROOF_PASS_RELEASE_REPLAY_PENDING"
+  },
+  "case_contract": "tests/fixtures/banking-pay-draft-v8-saved-resolution-cases-v1.json",
+  "runner": "scripts/verify-banking-pay-draft-v8-saved-resolution-reconciled.mjs",
+  "replacement_owner": "supabase/repeatable/04092026_0910_banking_pay_finance_saved_resolution_evidence_v1.sql",
+  "evidence_scope": "SAVED_RESOLUTION_WRITER_TO_CURRENT_V8_FINALIZER",
+  "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+  "policy_result": {
+    "saved_conversion_evidence": "PRESERVED_EXACTLY",
+    "current_pay_run_recovery_cap": "PRESERVED_EXACTLY",
+    "policy_or_economic_delta_count": 0,
+    "provider_payment_settlement_remittance_actions": 0
+  },
+  "engines": {
+    "pg17": {
+      "server_version": "PostgreSQL 17.11",
+      "status": "PASS",
+      "case_count": 2,
+      "fail_count": 0,
+      "transaction_outcome": "ROLLBACK",
+      "unchanged_statement_timeout_ms": 15000,
+      "unchanged_lock_timeout_ms": 1500,
+      "unchanged_idle_in_transaction_timeout_ms": 30000
+    },
+    "pg18": {
+      "server_version": "PostgreSQL 18.6",
+      "status": "PASS",
+      "case_count": 2,
+      "fail_count": 0,
+      "transaction_outcome": "ROLLBACK",
+      "unchanged_statement_timeout_ms": 15000,
+      "unchanged_lock_timeout_ms": 1500,
+      "unchanged_idle_in_transaction_timeout_ms": 30000
+    }
+  },
+  "case_results": [
+    {
+      "case_id": "SAVED_RATE_RESOLUTION_UMBRELLA_TO_PAYE",
+      "class_id": "saved_rate_resolution",
+      "status": "CURRENT_V8_LOCAL_FULL_DRAFT_OUTPUT_PASS",
+      "saved_target_amount_ex_vat": "88.00",
+      "saved_target_amount_vat": "0.00",
+      "saved_target_amount_inc_vat": "88.00",
+      "final_recovery_amount_ex_vat": "-80.00",
+      "final_recovery_amount_vat": "0.00",
+      "final_recovery_amount_inc_vat": "-80.00",
+      "final_paye_treatment": "GROSS_DEDUCT",
+      "transaction_outcome": "ROLLBACK"
+    },
+    {
+      "case_id": "SAVED_PAYMENT_METHOD_RESOLUTION_PAYE_TO_UMBRELLA",
+      "class_id": "saved_payment_method_resolution",
+      "status": "CURRENT_V8_LOCAL_FULL_DRAFT_OUTPUT_PASS",
+      "saved_target_amount_ex_vat": "91.04",
+      "saved_target_amount_vat": "18.21",
+      "saved_target_amount_inc_vat": "109.25",
+      "final_recovery_amount_ex_vat": "-80.00",
+      "final_recovery_amount_vat": "-16.00",
+      "final_recovery_amount_inc_vat": "-96.00",
+      "final_pay_channel": "UMBRELLA",
+      "transaction_outcome": "ROLLBACK"
+    }
+  ],
+  "source_sha256": {
+    "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql": "38a6d13332a87718b27259b993f2c258d869b4bc85aa46d5277bed2f43d474c0",
+    "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea",
+    "tests/fixtures/banking-pay-draft-v8-saved-resolution-cases-v1.json": "279853b07dfdf0bc6dbba93695e1aad2c6cc1847cf4202bed28b9774cb05da68",
+    "supabase/repeatable/04092026_0910_banking_pay_finance_saved_resolution_evidence_v1.sql": "5cbf6b5c6eadb20c0058279f161982939422d6ec0dc1795e47bd6c518f0b26a6",
+    "supabase/repeatable/02092026_1030_banking_pay_draft_scope_finance_constituent_handoff_v1.sql": "78faa3126b25735a735f5597e4f85397da579376f5492b3aa3c25cf6f5c59599",
+    "scripts/verify-banking-pay-draft-v8-saved-resolution-reconciled.mjs": "417b0818549a198f761fd81c4ffa64631b6b86dda2875faf8f765bf9641be166"
+  },
+  "blocking_gates": [
+    "FULL_RELEASE_ENGINE_REPLAY_FROM_RECONCILED_SHARED_HEAD",
+    "TRUE_V1_V8_TYPED_PARITY_OR_AUTHORITATIVE_HISTORICAL_ORACLE",
+    "INSTALLED_MIGET_AND_FINAL_POST_CHANGE_AUDIT"
+  ]
+}

@@ -12,20 +12,11 @@ const postgresImage = 'postgres:17.6-alpine';
 
 const completionHashes = {
   pay_workbench_repair_orphaned_pending_source_build:
-    '78d2a4ac9dd7b8309ed5c77112d981f0',
+    'acef7a9cca0d21d975c836228c799dfb',
   pay_workbench_session_get_progress_light:
-    '9f7489d1242697dea393fab3a1d748e3',
+    'b1b7095c12cacaf2333cd0ba59a90f79',
   pay_workbench_session_recompute_progress_counters:
-    '3ba446a42bab9f8d25dd165a77b0af82'
-};
-
-const preDeltaHashes = {
-  pay_workbench_repair_orphaned_pending_source_build:
-    '977f2aa68b33a10649c69e308cf86e16',
-  pay_workbench_session_get_progress_light:
-    '64a227e561acf1be8bf434b13dd253c7',
-  pay_workbench_session_recompute_progress_counters:
-    '0830bcf4a7895de0cfee6960120580df'
+    '7a5dbbc94630c93205c9a07c9b826808'
 };
 
 const commonFunctionMetadata = {
@@ -135,24 +126,6 @@ const rollbackSql = fs.readFileSync(
     '31072026_1122_banking_pay_source_build_owner_recovery_completion_rollback.sql'
   ),
   'utf8'
-);
-
-const rollbackFailureMarker =
-  'CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_counters';
-const rollbackFailureSql = rollbackSql.replace(
-  rollbackFailureMarker,
-  `DO $forced_failure$
-  BEGIN
-    RAISE EXCEPTION 'FORCED_MID_ROLLBACK_FAILURE' USING ERRCODE = 'P0001';
-  END
-  $forced_failure$;
-
-  ${rollbackFailureMarker}`
-);
-assert.notEqual(
-  rollbackFailureSql,
-  rollbackSql,
-  'replacement rollback must expose the deterministic failure injection point'
 );
 
 const run = (command, args, options = {}) => {
@@ -529,6 +502,7 @@ const callHelper = ({
 
 const setupSql = `
   CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  CREATE SCHEMA private;
   DO $roles$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
@@ -601,7 +575,58 @@ const setupSql = `
     started_at_utc timestamptz,
     completed_at_utc timestamptz,
     failed_at_utc timestamptz,
-    last_error_json jsonb
+    last_error_json jsonb,
+    economic_build_id uuid,
+    private_stage text,
+    private_stage_version integer
+  );
+
+  CREATE TABLE private.banking_pay_workbench_candidate_scope_registry (
+    candidate_id uuid PRIMARY KEY,
+    dirty_generation bigint NOT NULL DEFAULT 0,
+    current_source_change_seq bigint NOT NULL DEFAULT 0,
+    current_build_id uuid
+  );
+
+  CREATE TABLE private.banking_pay_workbench_economic_builds (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_job_id uuid,
+    session_id uuid,
+    candidate_id uuid,
+    session_version bigint,
+    source_snapshot_run_id uuid,
+    source_build_run_id uuid,
+    captured_candidate_generation bigint,
+    source_change_seq bigint,
+    status text,
+    private_stage text,
+    stage_version integer,
+    failure_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    failed_at_utc timestamptz,
+    updated_at_utc timestamptz NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE private.banking_pay_workbench_stage_attempts (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id uuid,
+    build_id uuid,
+    candidate_id uuid,
+    private_stage text,
+    attempt_number integer,
+    captured_candidate_generation bigint,
+    captured_source_change_seq bigint,
+    execution_profile_version integer,
+    attempt_status text NOT NULL DEFAULT 'STARTED',
+    started_at_utc timestamptz,
+    lease_expires_at_utc timestamptz,
+    completed_at_utc timestamptz,
+    failed_at_utc timestamptz,
+    expired_at_utc timestamptz,
+    obsolete_at_utc timestamptz,
+    result_code text,
+    error_class text,
+    error_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at_utc timestamptz NOT NULL DEFAULT now()
   );
 
   CREATE TABLE public.banking_pay_workbench_session_scope (
@@ -614,6 +639,14 @@ const setupSql = `
     seeded boolean DEFAULT false,
     dirty boolean DEFAULT false,
     error_json jsonb,
+    certified_preview_publication_required boolean DEFAULT false,
+    certified_preview_publication_parity_ok boolean DEFAULT false,
+    certified_preview_publication_session_version bigint,
+    certified_preview_publication_source_change_seq bigint,
+    certified_preview_publication_source_build_run_id uuid,
+    certified_preview_publication_attestation_json jsonb DEFAULT '{}'::jsonb,
+    certified_preview_publication_attested_at_utc timestamptz,
+    certified_preview_publication_source_publication_id uuid,
     created_at_utc timestamptz DEFAULT now(),
     updated_at_utc timestamptz DEFAULT now(),
     UNIQUE(session_id, candidate_id)
@@ -696,6 +729,12 @@ const setupSql = `
     updated_at timestamptz DEFAULT now()
   );
 
+  CREATE TABLE public.settings_defaults (
+    id smallint PRIMARY KEY DEFAULT 1,
+    banking_pay_source_publication_identity_enforce_v1_enabled boolean
+      NOT NULL DEFAULT false
+  );
+
   CREATE TABLE public.test_control (
     candidate_id uuid PRIMARY KEY,
     reconcile_mode text NOT NULL DEFAULT 'SUCCESS',
@@ -707,6 +746,27 @@ const setupSql = `
   RETURNS void
   LANGUAGE sql
   AS $$ SELECT NULL::void $$;
+
+  CREATE OR REPLACE FUNCTION public._pay_workbench_candidate_serial_key(
+    p_candidate_id uuid
+  )
+  RETURNS text
+  LANGUAGE sql
+  IMMUTABLE
+  AS $$
+    SELECT CASE
+      WHEN p_candidate_id IS NULL THEN NULL::text
+      ELSE 'WORKBENCH_CANDIDATE_SERIAL:candidate:' || p_candidate_id::text
+    END
+  $$;
+
+  CREATE OR REPLACE FUNCTION public.pay_workbench_scope_progress_v1(
+    p_session_id uuid
+  )
+  RETURNS jsonb
+  LANGUAGE sql
+  STABLE
+  AS $$ SELECT '{}'::jsonb $$;
 
   CREATE OR REPLACE FUNCTION public.pay_workbench_session_compact_progress_json(
     p_progress_json jsonb DEFAULT '{}'::jsonb,
@@ -907,16 +967,13 @@ test('M00 exact PostgreSQL 17.6 compilation reproduces the verified completion m
   assertFunctionManifest(completionHashes);
 });
 
-test('R01 a forced mid-rollback failure is atomic and preserves the completion manifest', { skip: !enabled }, () => {
-  const errorText = psqlExpectFailure(rollbackFailureSql);
-  assert.match(errorText, /FORCED_MID_ROLLBACK_FAILURE/);
+test('R01 the historical rollback fails closed against later current authority', { skip: !enabled }, () => {
+  const errorText = psqlExpectFailure(rollbackSql);
+  assert.match(errorText, /POST_DELTA_HELPER_HASH_MISMATCH/);
   assertFunctionManifest(completionHashes);
 });
 
-test('R02 replacement rollback is exact and completion definitions reinstall cleanly', { skip: !enabled }, () => {
-  psql(rollbackSql);
-  assertFunctionManifest(preDeltaHashes);
-
+test('R02 current completion definitions reapply idempotently after the rejected historical rollback', { skip: !enabled }, () => {
   installCompletionFunctions();
   assertFunctionManifest(completionHashes);
 });

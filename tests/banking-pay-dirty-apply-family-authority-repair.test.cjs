@@ -243,7 +243,7 @@ test('release inventory orders H1 roots, historical reassertions, then the estab
   assert.ok(historicalReassert < finalClosure);
 });
 
-test('F7 does not overwrite INSERT_ITEMS and unsupported F-013 proposals remain excluded', async () => {
+test('F7 does not overwrite INSERT_ITEMS and the exact combined H2 owner supersedes the rejected proposal', async () => {
   const targetDefinition = /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.pay_batch_insert_items_from_preview\s*\(/ig;
   const closure = closureForFixture(finalClosureName);
   const closureTargetOwners = closure.paths.filter((entryPath) => {
@@ -293,7 +293,36 @@ test('F7 does not overwrite INSERT_ITEMS and unsupported F-013 proposals remain 
     'ba32d34f591277cd4a91e1e892eb265cfbb9fcfb2e4092f19c174dece7eec975',
   );
   assert.match(f013OrderGuard.h2_obsolete_provisional_owner_path, /^supabase\/repeatable\/\d{8}_\d{4}_[a-z0-9_]+[.]sql$/);
-  assert.deepEqual(laterOwners, [], 'H1-only tree must not contain an unsupported later INSERT_ITEMS owner');
+  assert.deepEqual(
+    laterOwners.map(({ path: entryPath }) => entryPath),
+    [
+      f013OrderGuard.combined_h12_reconciliation.predecessor_owner_path,
+      f013OrderGuard.combined_h12_reconciliation.current_owner_path,
+    ],
+    'the unified tree must contain the exact reviewed INSERT_ITEMS successor chain',
+  );
+  const predecessorOwner = laterOwners[0];
+  assert.equal(
+    crypto.createHash('sha256').update(normalizeLf(fs.readFileSync(path.join(root, predecessorOwner.path), 'utf8'))).digest('hex'),
+    f013OrderGuard.combined_h12_reconciliation.predecessor_owner_sha256,
+  );
+  const combinedOwner = laterOwners.at(-1);
+  assert.equal(
+    crypto.createHash('sha256').update(normalizeLf(fs.readFileSync(path.join(root, combinedOwner.path), 'utf8'))).digest('hex'),
+    f013OrderGuard.combined_h12_reconciliation.current_owner_sha256,
+  );
+  assert.equal(f013OrderGuard.combined_h12_reconciliation.economic_or_policy_delta_count, 0);
+  assert.deepEqual(
+    f013OrderGuard.combined_h12_reconciliation.visible_certified_finance_aliases,
+    [
+      'MANUAL_CREDIT_ADJUSTMENT_PAYMENT',
+      'MANUAL_DEBT_RECOVERY',
+      'LOAN_PAYOUT',
+      'OVERPAYMENT_RECOVERY',
+      'PAYMENT_ADVANCE_REPAYMENT',
+      'UNDERPAYMENT_PAYMENT',
+    ],
+  );
   assert.equal(
     fs.existsSync(path.join(root, f013OrderGuard.h2_obsolete_provisional_owner_path)),
     false,

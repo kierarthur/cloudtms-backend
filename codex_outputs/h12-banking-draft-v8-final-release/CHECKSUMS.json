@@ -1,0 +1,88 @@
+{
+  "contract": "H12_BANKING_DRAFT_V8_FINAL_TEST_RELEASE_CHECKSUMS_V1",
+  "algorithm": "SHA-256",
+  "candidate_code_commit": "0415cdfa86c8dc5bea6bf7a4ee4244fd5a8a6f31",
+  "files": [
+    {
+      "path": "codex_outputs/h12-banking-draft-v8-final-release/H12_FINAL_TEST_RELEASE_EVIDENCE_V1.json",
+      "bytes": 8029,
+      "sha256": "e8ba1f3109d78155553bed8032ac2882363ed0f6a0bfcf32060c8cd36106789b"
+    },
+    {
+      "path": "codex_outputs/h12-banking-draft-v8-final-release/H12_FINAL_TEST_RELEASE_HANDOVER.md",
+      "bytes": 4794,
+      "sha256": "a2cfc37fb13135b0efe2b054d5eeb42f9f1a6cbe08155160d9b2047e345d921a"
+    },
+    {
+      "path": "codex_outputs/h12-banking-draft-v8-final-release/H12_FINAL_TEST_RELEASE_ROLLBACK.md",
+      "bytes": 2831,
+      "sha256": "5772bf7107f516a9047dfdc5dccb7e88e35de55c9ece0ebfb3363ae4b1facc17"
+    },
+    {
+      "path": "broker/src/banking-pay-draft-certified-v8.js",
+      "bytes": 38447,
+      "sha256": "7673977ea63b4e0189e657ad1439b256bce8cc9d21d21d58990560c768fda6fa"
+    },
+    {
+      "path": "broker/src/index.js",
+      "bytes": 9002054,
+      "sha256": "17c450da63f96e27451c043c34157d6dbfeecfa581c9a8bd9be7abff051d6eb1"
+    },
+    {
+      "path": "supabase/migrations/05092026_1330_banking_pay_bank_event_movement_classification_v1.sql",
+      "bytes": 3512,
+      "sha256": "e9f0da6abacb029c94742d648a151d4272b1730ed22bc82ec81ce15cbcdac5d8"
+    },
+    {
+      "path": "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
+      "bytes": 2463,
+      "sha256": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846"
+    },
+    {
+      "path": "supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql",
+      "bytes": 121566,
+      "sha256": "2934fff3ee503cbf4a8336d449944bcf6c125fb7de87c3a7cd88aafe2b73b8cc"
+    },
+    {
+      "path": "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
+      "bytes": 3892,
+      "sha256": "c843b764d1c1022fdf48928635400190a07e1d824645718419d5f8aa929b2e22"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "bytes": 3503209,
+      "raw_sha256": "8a21a106929bdcacd337b298cd3607c9fdf200c6e6bd8c67016817209fe33b4e",
+      "canonical_sha256": "2cb1f059ff9f661105eb3e15b2fc985a45a46f17e7a061c23366ae3f8ee8b56b"
+    },
+    {
+      "path": "supabase/release/current-release.json",
+      "bytes": 18039,
+      "sha256": "3e286addf5b13752a4975eafc833b1095834fb01766409f96e2d7be857320173"
+    },
+    {
+      "path": "supabase/release/migration-lock.json",
+      "bytes": 40169,
+      "sha256": "506f82c4fa485518ab8ff28d9be1e9065fe9c4665ded68a9e5d360bbab94bcde"
+    },
+    {
+      "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+      "bytes": 149277,
+      "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd"
+    },
+    {
+      "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_TO_EXECUTE_PAYMENT_LIFECYCLE_MAP_V1.md",
+      "bytes": 24378,
+      "sha256": "56f2837545cc974097bb440b3b47feb8696257e3450ff15e9e8a337ed9ba5adc"
+    },
+    {
+      "path": "codex_outputs/h2-draft-parity/H12_CHANGE_COMPATIBILITY_LEDGER_V1.json",
+      "bytes": 28317,
+      "sha256": "5f1ac6117b60864ab9af313adb22a23b6fb5cece81a656329ef80ccb05207c09"
+    },
+    {
+      "path": "codex_outputs/h2-draft-parity/P6_SCALE_REPLAY_CONCURRENCY_RESULTS_V1.json",
+      "bytes": 20497,
+      "sha256": "dda171b3339445200d70209ca93ab74806d6a845a667e52fa78ccb7e84721134"
+    }
+  ]
+}

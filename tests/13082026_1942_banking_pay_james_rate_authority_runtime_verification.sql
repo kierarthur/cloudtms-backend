@@ -102,6 +102,8 @@ DECLARE
   v_ambiguous_reservation constant uuid := '13082026-1942-4000-8000-000000000004';
   v_recovery_reservation constant uuid := '13082026-1942-4000-8000-000000000005';
   v_recovery_case constant uuid := '13082026-1942-4000-8000-000000000006';
+  v_compat_reservation constant uuid := '13082026-1942-4000-8000-000000000007';
+  v_compat_allocation constant uuid := '13082026-1942-4000-8000-000000000008';
   v_family text := 'timesheet:'||v_timesheet::text;
   v_day_key text := 'RATE_BUCKET_V1|'||v_timesheet::text||'|'||
     'timesheet:'||v_timesheet::text||'|TS_DAY|2026-08-13|segment:test|DAY';
@@ -118,6 +120,7 @@ DECLARE
   v_baseline numeric;
   v_reserved numeric;
   v_residual_count integer;
+  v_compat_payload jsonb;
   v_fixture_now timestamptz:=clock_timestamp();
 BEGIN
   IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_builds
@@ -553,6 +556,109 @@ BEGIN
       '{source_method_authority,invalid_method_count}')::integer,0)>0;
   IF v_count<1 THEN
     RAISE EXCEPTION 'JAMES_RATE_SELECTED_TIER_INVALID_SOURCE_METHOD_NOT_TYPED';
+  END IF;
+
+  -- A cancelled Draft reservation can retain the same allocation once in the
+  -- allocation-row-backed frozen source basis and once in the ordinary case
+  -- component compatibility view.  These are two sealed representations of
+  -- one component, not two amounts.  Suppression is deliberately narrow: the
+  -- case view must repeat the exact parent key, amount, component identity,
+  -- source method and timesheet of a source basis carrying a valid allocation
+  -- row identity.  Every mismatch below must retain the existing fail-closed
+  -- over-consumption result.
+  v_compat_payload:=jsonb_build_object('pay_batch_item',jsonb_build_object(
+    'frozen_source_pay_method','PAYE',
+    'frozen_source_basis_json',jsonb_build_object(
+      'source','banking_pay_workbench_preview_rows',
+      'key_type','ADJUSTMENT_CODE',
+      'key_value','CANCELLED_DRAFT_RETURN',
+      'timesheet_id',v_timesheet::text,
+      'allocation_row_id',v_compat_allocation::text,
+      'source_pay_ex_vat',10,
+      'source_amount_ex_vat',10,
+      'source_entitlement_amount_ex_vat',10,
+      'source_reservation_amount_ex_vat',10),
+    'frozen_component_snapshot_json',jsonb_build_object(
+      'source_basis_json',jsonb_build_object(
+        'source_pay_ex_vat',10,
+        'source_amount_ex_vat',10,
+        'source_entitlement_amount_ex_vat',10,
+        'source_reservation_amount_ex_vat',10)),
+    'frozen_resolution_payload_json',jsonb_build_object(
+      'case_components',jsonb_build_array(jsonb_build_object(
+        'classification','ORDINARY',
+        'component_key_type','ADJUSTMENT_CODE',
+        'component_key_value','CANCELLED_DRAFT_RETURN',
+        'component_amount_ex_vat',10,
+        'source_pay_ex_vat',10,
+        'source_charge_ex_vat',0,
+        'source_pay_method','PAYE',
+        'component_member_identity','adjustment:CANCELLED_DRAFT_RETURN',
+        'bucket_code','FIXED',
+        'component_fingerprint','cancelled-draft-ordinary-view')))));
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    reserved_source_amount,reservation_id,source_payload_json,financial_digest)
+  VALUES(v_build,'RESERVATION_COMPONENT','fixture-cancelled-draft-duplicate-view',
+    v_candidate,v_timesheet,ARRAY[v_timesheet],'GLOBAL','JAMES_RATE_FIXTURE',
+    'ADJUSTMENT_CODE','CANCELLED_DRAFT_RETURN',10,v_compat_reservation,
+    v_compat_payload,md5('fixture-cancelled-draft-duplicate-view'));
+
+  SELECT count(*)::integer,min(failure_code),sum(reserved_ex_vat)
+  INTO v_count,v_failure,v_reserved
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.economic_key_type='ADJUSTMENT_CODE'
+    AND projection.economic_key_value='CANCELLED_DRAFT_RETURN';
+  IF v_count<>1 OR v_failure IS NOT NULL
+     OR round(v_reserved,2) IS DISTINCT FROM 10::numeric THEN
+    RAISE EXCEPTION USING
+      MESSAGE='CANCELLED_DRAFT_DUPLICATE_RESERVATION_VIEW_NOT_COLLAPSED',
+      DETAIL=jsonb_build_object('row_count',v_count,'failure_code',v_failure,
+        'reserved_ex_vat',v_reserved)::text;
+  END IF;
+
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET source_payload_json=jsonb_set(v_compat_payload,
+    '{pay_batch_item,frozen_resolution_payload_json,case_components,0,component_amount_ex_vat}',
+    '9'::jsonb)
+  WHERE build_id=v_build AND natural_key='fixture-cancelled-draft-duplicate-view';
+  SELECT min(failure_code) INTO v_failure
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.economic_key_type='ADJUSTMENT_CODE'
+    AND projection.economic_key_value='CANCELLED_DRAFT_RETURN';
+  IF v_failure IS DISTINCT FROM 'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' THEN
+    RAISE EXCEPTION 'CANCELLED_DRAFT_DIFFERENT_AMOUNT_DID_NOT_FAIL_CLOSED';
+  END IF;
+
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET source_payload_json=jsonb_set(v_compat_payload,
+    '{pay_batch_item,frozen_resolution_payload_json,case_components,0,component_key_value}',
+    to_jsonb('DIFFERENT_COMPONENT'::text))
+  WHERE build_id=v_build AND natural_key='fixture-cancelled-draft-duplicate-view';
+  SELECT min(failure_code) INTO v_failure
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.economic_key_type='ADJUSTMENT_CODE'
+    AND projection.economic_key_value='CANCELLED_DRAFT_RETURN';
+  IF v_failure IS DISTINCT FROM 'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' THEN
+    RAISE EXCEPTION 'CANCELLED_DRAFT_DIFFERENT_KEY_DID_NOT_FAIL_CLOSED';
+  END IF;
+
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET source_payload_json=(v_compat_payload
+    #- '{pay_batch_item,frozen_source_basis_json,allocation_row_id}')
+  WHERE build_id=v_build AND natural_key='fixture-cancelled-draft-duplicate-view';
+  SELECT min(failure_code) INTO v_failure
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.economic_key_type='ADJUSTMENT_CODE'
+    AND projection.economic_key_value='CANCELLED_DRAFT_RETURN';
+  IF v_failure IS DISTINCT FROM 'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' THEN
+    RAISE EXCEPTION 'CANCELLED_DRAFT_MISSING_ALLOCATION_ID_DID_NOT_FAIL_CLOSED';
   END IF;
 END;
 $sealed_amount_fixture$;

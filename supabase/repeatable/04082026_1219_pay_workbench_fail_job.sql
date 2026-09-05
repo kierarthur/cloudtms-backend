@@ -160,6 +160,7 @@ BEGIN
       'PAY_WORKBENCH_UNVALIDATED_RECONCILIATION_SCALE');
     v_is_deterministic_stage_error := v_error_code IN (
       'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED',
+      'CERTIFIED_SOURCE_PREVIEW_SCOPE_MISSING',
       'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID',
       'PAYMENT_CORRECTION_SCOPE_TYPE_REQUIRED',
       'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISSING',
@@ -181,7 +182,8 @@ BEGIN
         ELSE 'RETRYABLE_STAGE_ERROR'
       END,
       error_json=jsonb_strip_nulls(jsonb_build_object('code',p_error_json->>'code',
-        'message',p_error_json->>'message','sqlstate',p_error_json->>'sqlstate')),
+        'message',p_error_json->>'message','sqlstate',p_error_json->>'sqlstate',
+        'detail',p_error_json->>'detail')),
       updated_at_utc=clock_timestamp()
     WHERE id=v_attempt_id AND attempt_status='STARTED';
 
@@ -204,7 +206,8 @@ BEGIN
       jsonb_strip_nulls(jsonb_build_object(
         'code',p_error_json->>'code',
         'message',p_error_json->>'message',
-        'sqlstate',p_error_json->>'sqlstate'
+        'sqlstate',p_error_json->>'sqlstate',
+        'detail',p_error_json->>'detail'
       ))
     );
     v_first_divergent_attempt_number:=COALESCE(
@@ -219,7 +222,8 @@ BEGIN
         'latest_observed_failure',jsonb_strip_nulls(jsonb_build_object(
           'code',p_error_json->>'code',
           'message',p_error_json->>'message',
-          'sqlstate',p_error_json->>'sqlstate'
+          'sqlstate',p_error_json->>'sqlstate',
+          'detail',p_error_json->>'detail'
         )),
         'latest_attempt_number',v_attempt_count
       )

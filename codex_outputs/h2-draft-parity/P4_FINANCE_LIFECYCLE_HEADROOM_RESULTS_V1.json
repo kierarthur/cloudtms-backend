@@ -1,0 +1,104 @@
+{
+  "contract": "P4_FINANCE_LIFECYCLE_HEADROOM_RESULTS_V1",
+  "status": "LOCAL_DUAL_ENGINE_P4_PASS_POLICY_PRESERVED",
+  "historical_v1_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+  "policy_or_economic_change_authorised": false,
+  "local_runtime_owner_corrections_made": true,
+  "installed_in_miget": false,
+  "counts": {
+    "classes_total": 12,
+    "channels_per_class": 2,
+    "normal_channel_cases_per_engine": 24,
+    "normal_channel_cases_pass_pg17": 24,
+    "normal_channel_cases_pass_pg18": 24,
+    "normal_channel_cases_pass_total": 48,
+    "wrong_link_fail_closed_cases_pass": 8,
+    "malformed_identity_fail_closed_cases_pass": 8,
+    "runtime_cases_pass_total": 64,
+    "runtime_cases_fail_total": 0,
+    "policy_or_economic_changes": 0,
+    "provider_payment_settlement_remittance_actions": 0
+  },
+  "engine_evidence": {
+    "pg17": {
+      "identity": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2)",
+      "database": "h12_v8_final_new17",
+      "jit": "off",
+      "statement_timeout": "15s",
+      "lock_timeout": "1500ms",
+      "idle_in_transaction_session_timeout": "30s",
+      "normal_cases": "24/24 PASS",
+      "transaction_outcome": "ROLLBACK"
+    },
+    "pg18": {
+      "identity": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2)",
+      "database": "banking_modal_v2_test",
+      "jit": "off",
+      "statement_timeout": "15s",
+      "lock_timeout": "1500ms",
+      "idle_in_transaction_session_timeout": "30s",
+      "normal_cases": "24/24 PASS",
+      "transaction_outcome": "ROLLBACK"
+    }
+  },
+  "closed_divergences": [
+    {
+      "class_id": "advance_voided_reappears_once",
+      "original_first_divergence": "A certified released repayment was projected as a new positive payout.",
+      "proved_owner": "canonical Workbench finance projection",
+      "correction": "The later exact preview owner preserves the PAID repayment lifecycle after a certified reservation release.",
+      "policy_result": {
+        "visible_alias": "PAYMENT_ADVANCE_REPAYMENT",
+        "canonical_ex_vat": "-40.00",
+        "frozen_item_type": "LOAN_REPAYMENT",
+        "active_reservation_amount_ex_vat": "40.00"
+      },
+      "policy_delta": false
+    },
+    {
+      "class_id": "mixed_recoveries_deterministic_order",
+      "original_first_divergence": "The second partial recovery could lose exact source linkage in row-backed Draft staging.",
+      "proved_owner": "Draft allocation-to-item transport",
+      "correction": "The later exact owner preserves the existing ordered headroom allocation and exact partial source link.",
+      "policy_delta": false
+    },
+    {
+      "class_id": "carry_forward_credit_and_debit",
+      "original_first_divergence": "Current V8 row-backed allocation and item stages could not consume the canonical manual carry-forward constituent.",
+      "proved_owner": "canonical preview, row-backed allocation seed and Draft item transport",
+      "correction": "The exact certified carry-forward identity is transported through the existing owners without recalculating amount, VAT, channel or PAYE treatment.",
+      "policy_result": {
+        "visible_alias": "MANUAL_ADJUSTMENT_CARRY_FORWARD",
+        "frozen_item_type": "MANUAL_CREDIT_PAYOUT",
+        "credit_ex_vat": "25.00",
+        "debit_ex_vat": "-25.00"
+      },
+      "policy_delta": false
+    }
+  ],
+  "replay_and_fail_closed_evidence": {
+    "normal_response_loss_replay": "Every normal case replays INSERT_ITEMS after downstream completion; it inserts zero duplicates and preserves the item count.",
+    "wrong_link": "Eight carry-forward channel/engine cases reject a one-pence pre-existing item mismatch without repairing it.",
+    "malformed_identity": "Eight carry-forward channel/engine cases reject a changed carry-forward identity without accepting or repairing it.",
+    "zero_partial_state": true
+  },
+  "artifact_sha256": {
+    "carry_forward_transport_owner": "c1090037458025f72deb779886d181d0363529204061d664458ca8eb247598ac",
+    "carry_forward_allocation_owner": "16332530b5df11dcd93d205280e1a253b689a3c32f42157bc69d194223ec7bea",
+    "carry_forward_transport_generator": "3181a24da5ae35e671ffa9ee0156bc4d1bec33e1b861e0fab12ed1e7912cd4ba",
+    "carry_forward_allocation_generator": "5f4906894dc67227c53ab90319220326a628013b4b5d6d243fcaf3dfcdfe6e35",
+    "runtime_driver": "da0d85051821927dae5075bc3b5cdba8240582471122486ce1629401bf615411",
+    "runtime_fixture": "4b99d19fdad2e16dc792172ebb3447fcad286751fd17eeed75d514cc207da321",
+    "class_fixture": "fb1af0e67d1141698de52ad200d26b65ef69c0855dffae189e4c963a63be398a"
+  },
+  "post_draft_projection_evidence": {
+    "classification": "EXPECTED_EXISTING_BEHAVIOUR_NOT_A_DEFECT",
+    "description": "A successfully materialised source row is deliberately made selected=false/NOT_SELECTABLE in the live Workbench by the post-Draft overlay. Certificate entries and frozen refs preserve its earlier selected membership."
+  },
+  "remaining_gates": [
+    "TRUE_V1_V8_TYPED_PARITY_OR_AUTHORITATIVE_HISTORICAL_ORACLE",
+    "COMPLETE_88_CLASS_EXECUTABLE_DRAFT_OUTPUT_LEDGER",
+    "COMBINED_RELEASE_NEW_UPGRADE_REAPPLY_AND_MIGET_INSTALL_PROOF",
+    "FRESH_POST_INSTALL_FULL_AUDIT"
+  ]
+}

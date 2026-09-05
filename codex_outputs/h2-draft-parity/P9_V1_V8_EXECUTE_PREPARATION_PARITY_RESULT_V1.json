@@ -1,0 +1,88 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V1_V8_EXECUTE_PREPARATION_PARITY_RESULT_V1",
+  "status": "PASS",
+  "classification": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+  "scope": [
+    "PAYE Worksheet manual net input before execution",
+    "simultaneous PAYE and Umbrella Draft batches",
+    "freshness eligibility seed, page validation and terminal proof",
+    "frozen bank-transfer scope membership and rollup",
+    "immediate local transfer preparation before provider submission",
+    "response-loss replay of transfer preparation",
+    "beneficiary, payee, channel, reference, bank-detail and penny-amount parity",
+    "item-to-transfer membership parity"
+  ],
+  "source_identities": {
+    "historical_v1_git_commit": "a2447beacc417cd7e6142042f2901304a105a5ce",
+    "current_v8_local_git_head": "f95d67259291cb8b69e5da22f39e8dea39bf2a5f",
+    "verification_script": {
+      "path": "scripts/verify-banking-pay-draft-v1-v8-execute-preparation-parity.mjs",
+      "sha256": "c1bf7029eb417703beef74e4ea235d94ce07e16318aa6ebaba568150e1a972d5"
+    }
+  },
+  "engines": [
+    {
+      "postgres_major": 17,
+      "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",
+      "historical_v1_draft_operation_id": "bdf3153a-f07c-48d0-96a7-ee8dac8b3f66",
+      "current_v8_draft_operation_id": "79aef583-d7d8-4fab-930c-c05032ac60a1",
+      "normalized_result_sha256": "268d2d2518d7d2750063ac8593a1f87a7ccf0bf2f099cdbd4dcb883e5d4bd839",
+      "counts": {
+        "pay_batches": 2,
+        "transfer_scopes": 4,
+        "scope_items": 8,
+        "prepared_transfers": 4,
+        "linked_items": 8
+      },
+      "provider_attempts": 0,
+      "provider_events": 0,
+      "provider_submit_chunks": 0,
+      "persisted_transfer_rows_after_rollback": 0,
+      "pass": true
+    },
+    {
+      "postgres_major": 18,
+      "server_version": "18.6 (Debian 18.6-1.pgdg13+2)",
+      "historical_v1_draft_operation_id": "54c65fff-e0c0-483b-a07a-cf7cea475f02",
+      "current_v8_draft_operation_id": "378450de-c660-4834-9884-b1c10fb3a580",
+      "normalized_result_sha256": "268d2d2518d7d2750063ac8593a1f87a7ccf0bf2f099cdbd4dcb883e5d4bd839",
+      "counts": {
+        "pay_batches": 2,
+        "transfer_scopes": 4,
+        "scope_items": 8,
+        "prepared_transfers": 4,
+        "linked_items": 8
+      },
+      "provider_attempts": 0,
+      "provider_events": 0,
+      "provider_submit_chunks": 0,
+      "persisted_transfer_rows_after_rollback": 0,
+      "pass": true
+    }
+  ],
+  "exact_equivalence": {
+    "normalized_postgres_17_result_equals_postgres_18_result": true,
+    "historical_v1_equals_current_v8_on_each_engine": true,
+    "freshness_eligibility_equal": true,
+    "prepared_transfer_rows_equal": true,
+    "beneficiary_and_payment_amounts_equal_to_the_penny": true,
+    "frozen_item_membership_equal": true,
+    "response_loss_replay_idempotent": true,
+    "provider_boundary_crossed": false,
+    "policy_change_count": 0
+  },
+  "budgets": {
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "idle_in_transaction_session_timeout_ms": 30000,
+    "timeout_relaxation": false
+  },
+  "safety": {
+    "disposable_local_databases_only": true,
+    "outer_transaction_rolled_back": true,
+    "miget_mutated": false,
+    "provider_called": false,
+    "payment_executed": false,
+    "settlement_or_remittance_action": false
+  }
+}

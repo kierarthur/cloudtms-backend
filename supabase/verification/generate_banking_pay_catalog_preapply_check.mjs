@@ -7,6 +7,7 @@ import {
   adaptCatalogLogicalOwnerForRehearsal,
   expandCatalogRepeatableIncludesForRehearsal,
 } from './catalog_logical_owner_adapter.mjs';
+import { prepareCatalogOwnedSourceForRehearsal } from './catalog_outer_transaction_envelope.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -16,6 +17,7 @@ const manifestNames = [
   'banking_pay_workbench_certified_source_preview_catalog_manifest.json',
   'banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json',
   'banking_pay_semantic_ready_cancellation_reversion_catalog_manifest.json',
+  'banking_pay_workbench_settled_certificate_v8_catalog_manifest.json',
 ];
 
 const [outputArg, ...pendingArgs] = process.argv.slice(2);
@@ -28,7 +30,6 @@ const normalizeRepoPath = (value) => path.relative(repoRoot, path.resolve(repoRo
   .split(path.sep)
   .join('/');
 const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
-const psqlPath = (value) => String(value).replaceAll('\\', '/').replaceAll("'", "''");
 const requireRepeatablePath = (absolutePath, label) => {
   const relative = path.relative(repeatableRoot, absolutePath);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
@@ -39,11 +40,16 @@ const requireRepeatablePath = (absolutePath, label) => {
 const readRepeatableSource = (absolutePath, label) => {
   requireRepeatablePath(absolutePath, label);
   if (!fs.existsSync(absolutePath)) throw new Error(`Catalog-owned repeatable is missing: ${absolutePath}`);
-  const sourceSql = fs.readFileSync(absolutePath, 'utf8');
-  if (/^\s*(?:BEGIN|COMMIT|ROLLBACK)\s*;/im.test(sourceSql)) {
-    throw new Error(`Catalog-owned repeatable contains transaction control and cannot be rehearsed safely: ${absolutePath}`);
-  }
-  return sourceSql;
+  return fs.readFileSync(absolutePath, 'utf8');
+};
+const prepareRepeatableSource = (sourceSql) => {
+  const prepared = prepareCatalogOwnedSourceForRehearsal(sourceSql);
+  return {
+    mode: prepared.mode,
+    sourceSql: prepared.mode === 'EXACT_OUTER_TRANSACTION_ENVELOPE'
+      ? prepared.innerSql
+      : prepared.sourceSql,
+  };
 };
 const pending = pendingArgs.map(normalizeRepoPath);
 for (const pendingPath of pending) {
@@ -60,13 +66,38 @@ const manifests = manifestNames.map((name) => ({
 
 const functionsByIdentity = new Map();
 const ownedPending = new Set();
+const dependenciesByOwnedSource = new Map();
+const dependencyOwnersByPendingSource = new Map();
 for (const { name: manifestName, value: manifest } of manifests) {
   for (const fn of manifest.functions || []) {
     const sourceFiles = (fn.source_files || []).map(normalizeRepoPath);
     const matchingSources = sourceFiles.filter((sourceFile) => pendingSet.has(sourceFile));
     if (matchingSources.length === 0) continue;
 
-    for (const sourceFile of matchingSources) ownedPending.add(sourceFile);
+    const dependencyFiles = (fn.preapply_dependency_files || []).map(normalizeRepoPath);
+    for (const dependencyFile of dependencyFiles) {
+      const absoluteDependency = path.resolve(repoRoot, dependencyFile);
+      requireRepeatablePath(absoluteDependency, `dependency for ${fn.schema}.${fn.name}`);
+      if (!fs.existsSync(absoluteDependency)) {
+        throw new Error(`Catalog-owned pre-apply dependency is missing: ${dependencyFile}`);
+      }
+    }
+    for (const sourceFile of matchingSources) {
+      ownedPending.add(sourceFile);
+      const existingDependencies = dependenciesByOwnedSource.get(sourceFile) || [];
+      dependenciesByOwnedSource.set(
+        sourceFile,
+        [...new Set([...existingDependencies, ...dependencyFiles])],
+      );
+      for (const dependencyFile of dependencyFiles) {
+        if (!pendingSet.has(dependencyFile)) continue;
+        const dependencyOwners = dependencyOwnersByPendingSource.get(dependencyFile) || [];
+        dependencyOwnersByPendingSource.set(
+          dependencyFile,
+          [...new Set([...dependencyOwners, sourceFile])],
+        );
+      }
+    }
     const key = `${fn.schema}\u0000${fn.name}\u0000${fn.identity_arguments}`;
     const existing = functionsByIdentity.get(key);
     if (existing && existing.definition_sha256 !== fn.definition_sha256) {
@@ -80,12 +111,13 @@ const statements = [
   '\\set ON_ERROR_STOP on',
   'BEGIN;',
 ];
-for (const sourceFile of pending) {
-  if (!ownedPending.has(sourceFile)) continue;
+const emittedRehearsalFiles = new Set();
+const appendRehearsalFile = (sourceFile, dependencyOf = null) => {
+  if (emittedRehearsalFiles.has(sourceFile)) return;
   const absoluteSource = path.resolve(repoRoot, sourceFile);
-  const sourceSql = readRepeatableSource(absoluteSource, sourceFile);
+  const preparedSource = prepareRepeatableSource(readRepeatableSource(absoluteSource, sourceFile));
   const expanded = expandCatalogRepeatableIncludesForRehearsal({
-    sourceSql,
+    sourceSql: preparedSource.sourceSql,
     sourcePath: sourceFile,
     resolveInclude(currentSourcePath, includeReference) {
       const currentAbsolute = path.resolve(repoRoot, currentSourcePath);
@@ -94,19 +126,40 @@ for (const sourceFile of pending) {
         `relative include from ${currentSourcePath}`,
       );
       const includedPath = normalizeRepoPath(includedAbsolute);
+      const includedSource = prepareRepeatableSource(readRepeatableSource(includedAbsolute, includedPath));
       return {
         sourcePath: includedPath,
-        sourceSql: readRepeatableSource(includedAbsolute, includedPath),
+        sourceSql: includedSource.sourceSql,
       };
     },
   });
   const adaptedOwner = adaptCatalogLogicalOwnerForRehearsal(expanded.sourceSql);
-  statements.push(`-- Catalog-owned repeatable inlined after exact relative-include and logical-owner validation: ${sourceFile}`);
+  const reason = dependencyOf
+    ? `declared dependency of ${dependencyOf}`
+    : 'catalog-owned pending repeatable';
+  statements.push(`-- ${reason} inlined after exact transaction-envelope, relative-include, and logical-owner validation (${preparedSource.mode}): ${sourceFile}`);
   statements.push(adaptedOwner.sourceSql);
+  emittedRehearsalFiles.add(sourceFile);
+};
+for (const sourceFile of pending) {
+  if (dependencyOwnersByPendingSource.has(sourceFile)) {
+    appendRehearsalFile(
+      sourceFile,
+      dependencyOwnersByPendingSource.get(sourceFile).join(', '),
+    );
+  }
+  if (!ownedPending.has(sourceFile)) continue;
+  for (const dependencyFile of dependenciesByOwnedSource.get(sourceFile) || []) {
+    if (dependencyFile === sourceFile) {
+      throw new Error(`Catalog-owned pre-apply dependency cannot reference its owner: ${sourceFile}`);
+    }
+  }
+  appendRehearsalFile(sourceFile);
 }
 
 for (const fn of functionsByIdentity.values()) {
   const label = `${fn.schema}.${fn.name}`;
+  const expectedPreapplyDefinition = fn.preapply_definition_sha256 || fn.definition_sha256;
   statements.push(`
 DO $catalog_preapply$
 DECLARE
@@ -135,7 +188,7 @@ BEGIN
   )
   INTO v_actual_sha256;
 
-  IF v_actual_sha256 IS DISTINCT FROM ${sqlLiteral(fn.definition_sha256)} THEN
+  IF v_actual_sha256 IS DISTINCT FROM ${sqlLiteral(expectedPreapplyDefinition)} THEN
     RAISE EXCEPTION 'BANKING_PAY_CATALOG_PREAPPLY_DEFINITION_MISMATCH: ${label} (${fn.manifestName})';
   END IF;
 END
@@ -144,4 +197,4 @@ $catalog_preapply$;`);
 
 statements.push('ROLLBACK;', '');
 fs.writeFileSync(path.resolve(outputArg), statements.join('\n'), 'utf8');
-console.log(`Catalog pre-apply rehearsal covers ${ownedPending.size} pending repeatable(s) and ${functionsByIdentity.size} function identity/identities.`);
+console.log(`Catalog pre-apply rehearsal covers ${ownedPending.size} pending repeatable(s), ${emittedRehearsalFiles.size - ownedPending.size} declared dependency file(s), and ${functionsByIdentity.size} function identity/identities.`);

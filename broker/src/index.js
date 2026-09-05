@@ -132,6 +132,13 @@ import {
   isCertifiedEmptyTimesheetSnapshotsResult
 } from './banking-pay-draft-insert-items.js';
 import {
+  buildCertifiedDraftTerminalResultV8,
+  findExpandedSelectionKeys,
+  validateCertifiedDraftOperationProjectionV8,
+  validateCertifiedDraftTerminalContextV8,
+  validateCurrentCertificateIssuerEnvelopeV8
+} from './banking-pay-draft-certified-v8.js';
+import {
   createReadyInvoiceDocumentLink,
   handleInvoiceAsyncHttpRequest
 } from './invoice-async-http.js';
@@ -16262,6 +16269,313 @@ function bankingPayWorkbenchLogsEnabled(env) {
   }
 }
 
+async function readBankingPayWorkbenchSettledCertificateStatusV8(env, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const sessionId = trimStr(options.sessionId || options.session_id);
+  const actorUserId = trimStr(options.actorUserId || options.actor_user_id);
+  if (!uuidRe.test(sessionId) || !uuidRe.test(actorUserId) || typeof sbRpc !== 'function') {
+    return {
+      ok: false,
+      workbench_session_id: sessionId || null,
+      certificate_lifecycle: 'STATUS_UNAVAILABLE',
+      certificate_ready_for_draft: false,
+      certificate_build_pending: true,
+      certificate_continue_polling: true,
+      certificate_recovery_required: false,
+      certificate_error_code: 'WORKBENCH_CERTIFICATE_STATUS_SCOPE_INVALID'
+    };
+  }
+  try {
+    let payload = await sbRpc(env, 'pay_workbench_settled_certificate_status_v8', {
+      p_workbench_session_id: sessionId,
+      p_actor_user_id: actorUserId
+    }, {
+      routeClass: 'PREVIEW_PROGRESS',
+      purpose: trimStr(options.purpose) || 'WORKBENCH_SETTLED_CERTIFICATE_STATUS_V8',
+      timeoutMs: 6000,
+      bankingPay: true
+    });
+    if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+    if (payload && typeof payload === 'object'
+        && !Array.isArray(payload)
+        && Object.prototype.hasOwnProperty.call(payload, 'pay_workbench_settled_certificate_status_v8')) {
+      payload = payload.pay_workbench_settled_certificate_status_v8;
+    }
+    if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    const lifecycle = trimStr(source.certificate_lifecycle).toUpperCase();
+    const returnedSessionId = trimStr(source.workbench_session_id);
+    const validLifecycle = [
+      'MISSING', 'BUILDING', 'SEALED_CURRENT', 'BUILD_FAILED',
+      'REVOKED_CORRUPT_OR_SECURITY', 'SUPERSEDED_BY_NEW_SESSION',
+      'SESSION_NOT_CURRENT_READY'
+    ].includes(lifecycle);
+    if (source.ok !== true || returnedSessionId !== sessionId || !validLifecycle) {
+      throw new Error('WORKBENCH_CERTIFICATE_STATUS_CONTRACT_INVALID');
+    }
+    const ready = source.certificate_ready_for_draft === true
+      && lifecycle === 'SEALED_CURRENT'
+      && /^WORKBENCH_SETTLED_CERTIFICATION_V2:[0-9a-f]{64}$/.test(trimStr(source.certification_id))
+      && /^[0-9a-f]{64}$/.test(trimStr(source.overall_digest_sha256));
+    const pending = source.certificate_build_pending === true
+      && source.certificate_continue_polling === true
+      && (lifecycle === 'MISSING' || lifecycle === 'BUILDING');
+    const recoveryRequired = source.certificate_recovery_required === true
+      || ['BUILD_FAILED', 'REVOKED_CORRUPT_OR_SECURITY', 'SUPERSEDED_BY_NEW_SESSION'].includes(lifecycle);
+    return {
+      ...source,
+      ok: true,
+      workbench_session_id: returnedSessionId,
+      certificate_lifecycle: lifecycle,
+      certificate_ready_for_draft: ready,
+      certificate_build_pending: pending,
+      certificate_continue_polling: pending,
+      certificate_recovery_required: recoveryRequired,
+      certificate_error_code: trimStr(source.certificate_error_code).toUpperCase() || null,
+      certificate_error_message: trimStr(source.certificate_error_message) || null
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      workbench_session_id: sessionId,
+      certificate_lifecycle: 'STATUS_UNAVAILABLE',
+      certificate_ready_for_draft: false,
+      certificate_build_pending: true,
+      certificate_continue_polling: true,
+      certificate_recovery_required: false,
+      certificate_error_code: 'WORKBENCH_CERTIFICATE_STATUS_READ_FAILED',
+      certificate_error_message: String(error?.message || error || '').slice(0, 2000)
+    };
+  }
+}
+
+async function advanceBankingPayWorkbenchSettledCertificateV8(env, options = {}) {
+  const trimStr = (value) => String(value == null ? '' : value).trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const clampInt = (value, fallback, min, max) => {
+    const n = Number(value);
+    return Math.max(min, Math.min(max, Number.isFinite(n) ? Math.trunc(n) : fallback));
+  };
+  const unwrap = (value, key) => {
+    let payload = value;
+    if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+    if (payload && typeof payload === 'object' && !Array.isArray(payload) && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+    if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  };
+  const sessionId = trimStr(options.sessionId || options.session_id);
+  const actorUserId = trimStr(options.actorUserId || options.actor_user_id);
+  const requestedLeaseOwner = trimStr(options.leaseOwner || options.lease_owner);
+  const maxAppendPages = clampInt(options.maxAppendPages ?? options.max_append_pages, 8, 1, 32);
+  const maxSealSteps = clampInt(options.maxSealSteps ?? options.max_seal_steps, 4, 1, 16);
+  const maxRuntimeMs = clampInt(options.maxRuntimeMs ?? options.max_runtime_ms, 20000, 1000, 24000);
+  const startedAtMs = Date.now();
+  if (!uuidRe.test(sessionId) || !uuidRe.test(actorUserId) || requestedLeaseOwner.length > 512) {
+    return { ok: false, completed: false, code: 'WORKBENCH_CERTIFICATE_PRODUCER_SCOPE_INVALID' };
+  }
+  if (typeof sbRpc !== 'function') {
+    return { ok: false, completed: false, code: 'WORKBENCH_CERTIFICATE_PRODUCER_RPC_UNAVAILABLE' };
+  }
+  const call = async (name, args, purpose) => unwrap(await sbRpc(env, name, args, {
+    routeClass: 'PREVIEW_PROGRESS',
+    purpose,
+    timeoutMs: 15000,
+    bankingPay: true
+  }), name);
+  const result = {
+    ok: true,
+    completed: false,
+    session_id: sessionId,
+    append_pages_processed: 0,
+    seal_steps_processed: 0,
+    maximum_requested_page_size: 256,
+    maximum_build_emission_rows: 64,
+    maximum_supported_constituents: 50000
+  };
+  try {
+    const start = await call('pay_workbench_settled_certificate_build_start_v8', {
+      p_workbench_session_id: sessionId,
+      p_actor_user_id: actorUserId,
+      p_build_idempotency_key: `WORKBENCH_SETTLED_CERTIFICATE_V8:${sessionId}`
+    }, 'WORKBENCH_SETTLED_CERTIFICATE_BUILD_START_V8');
+    result.certificate_uuid = trimStr(start.certificate_uuid) || null;
+    result.lifecycle = trimStr(start.lifecycle).toUpperCase() || null;
+    result.replayed = start.replayed === true;
+    const leaseOwner = trimStr(requestedLeaseOwner || start.lease_owner || actorUserId);
+    if (!leaseOwner || leaseOwner.length > 512) {
+      return { ...result, ok: false, code: 'WORKBENCH_CERTIFICATE_BUILD_LEASE_INVALID', elapsed_ms: Math.max(0, Date.now() - startedAtMs) };
+    }
+    if (start.ok === false || result.lifecycle === 'BUILD_FAILED') {
+      return {
+        ...result,
+        ok: false,
+        code: trimStr(start.build_failure_code || start.error_code || 'WORKBENCH_CERTIFICATE_BUILD_FAILED'),
+        message: trimStr(start.build_failure_message || start.error_message || start.message) || null,
+        elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+      };
+    }
+    if (result.lifecycle === 'SEALED_CURRENT') {
+      return {
+        ...result,
+        completed: true,
+        certification_id: trimStr(start.certification_id) || null,
+        overall_digest_sha256: trimStr(start.overall_digest_sha256) || null,
+        elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+      };
+    }
+    if (!uuidRe.test(result.certificate_uuid || '')) {
+      return { ...result, ok: false, code: 'WORKBENCH_CERTIFICATE_BUILD_IDENTITY_INVALID', elapsed_ms: Math.max(0, Date.now() - startedAtMs) };
+    }
+
+    let appendComplete = start.append_complete === true;
+    let afterOrdinal = start.next_after_ordinal !== null
+      && start.next_after_ordinal !== undefined
+      && Number.isInteger(Number(start.next_after_ordinal))
+      ? Math.trunc(Number(start.next_after_ordinal))
+      : null;
+    let previousReceipt = /^[0-9a-f]{64}$/i.test(trimStr(start.last_page_receipt_sha256)) ? trimStr(start.last_page_receipt_sha256).toLowerCase() : null;
+    while (!appendComplete
+      && result.append_pages_processed < maxAppendPages
+      && Date.now() - startedAtMs < maxRuntimeMs) {
+      const page = await call('pay_workbench_settled_certificate_build_append_page_v8', {
+        p_certificate_uuid: result.certificate_uuid,
+        p_after_ordinal: afterOrdinal,
+        p_requested_limit: 256,
+        p_expected_previous_receipt_sha256: previousReceipt,
+        p_lease_owner: leaseOwner
+      }, 'WORKBENCH_SETTLED_CERTIFICATE_BUILD_APPEND_V8');
+      result.append_pages_processed += 1;
+      if (page.ok === false) {
+        return {
+          ...result,
+          ok: false,
+          lifecycle: trimStr(page.lifecycle).toUpperCase() || 'BUILD_FAILED',
+          code: trimStr(page.error_code || page.code || 'WORKBENCH_CERTIFICATE_BUILD_APPEND_FAILED'),
+          message: trimStr(page.error_message || page.message) || null,
+          elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+        };
+      }
+      afterOrdinal = page.next_after_ordinal !== null
+        && page.next_after_ordinal !== undefined
+        && Number.isInteger(Number(page.next_after_ordinal))
+        ? Math.trunc(Number(page.next_after_ordinal))
+        : afterOrdinal;
+      previousReceipt = /^[0-9a-f]{64}$/i.test(trimStr(page.page_receipt_sha256)) ? trimStr(page.page_receipt_sha256).toLowerCase() : previousReceipt;
+      appendComplete = page.has_more !== true;
+    }
+
+    if (appendComplete) {
+      while (result.seal_steps_processed < maxSealSteps && Date.now() - startedAtMs < maxRuntimeMs) {
+        const seal = await call('pay_workbench_settled_certificate_seal_v8', {
+          p_certificate_uuid: result.certificate_uuid,
+          p_actor_user_id: actorUserId
+        }, 'WORKBENCH_SETTLED_CERTIFICATE_SEAL_V8');
+        result.seal_steps_processed += 1;
+        if (seal.ok === false) {
+          return {
+            ...result,
+            ok: false,
+            code: trimStr(seal.error_code || seal.code || 'WORKBENCH_CERTIFICATE_SEAL_FAILED'),
+            message: trimStr(seal.error_message || seal.message) || null,
+            elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+          };
+        }
+        const sealed = seal.sealed === true || trimStr(seal.lifecycle).toUpperCase() === 'SEALED_CURRENT';
+        if (sealed) {
+          return {
+            ...result,
+            completed: true,
+            lifecycle: 'SEALED_CURRENT',
+            certification_id: trimStr(seal.certification_id) || null,
+            overall_digest_sha256: trimStr(seal.overall_digest_sha256) || null,
+            elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+          };
+        }
+        if (seal.has_more !== true) break;
+      }
+    }
+
+    const continuationResult = {
+      ...result,
+      lifecycle: 'BUILDING',
+      append_complete: appendComplete,
+      continuation_required: true,
+      next_after_ordinal: afterOrdinal,
+      last_page_receipt_sha256: previousReceipt,
+      code: 'WORKBENCH_CERTIFICATE_BUILD_CONTINUATION_REQUIRED',
+      elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+    };
+    if (options.enqueueDurableContinuation === false) return continuationResult;
+    const previousSequence = clampInt(options.continuationSequence ?? options.continuation_sequence, 0, 0, 1024);
+    if (previousSequence >= 1024) {
+      return { ...continuationResult, ok: false, code: 'WORKBENCH_CERTIFICATE_CONTINUATION_DEPTH_EXHAUSTED' };
+    }
+    const durableContinuation = await enqueueBankingPayWorkbenchCertificateContinuationV8(env, {
+      continuation_sequence: previousSequence + 1,
+      session_id: sessionId,
+      actor_user_id: actorUserId,
+      certificate_uuid: result.certificate_uuid,
+      lease_owner: leaseOwner
+    });
+    return { ...continuationResult, durable_continuation: durableContinuation };
+  } catch (error) {
+    return {
+      ...result,
+      ok: false,
+      code: 'WORKBENCH_CERTIFICATE_PRODUCER_FAILED',
+      message: String(error?.message || error || 'Certificate producer failed'),
+      elapsed_ms: Math.max(0, Date.now() - startedAtMs)
+    };
+  }
+}
+
+async function advanceReadyBankingPayWorkbenchCertificatesV8(env, options = {}) {
+  const limit = Math.max(1, Math.min(2, Math.trunc(Number(options.limit) || 1)));
+  if (typeof sbRpc !== 'function') {
+    return { ok: false, processed: 0, code: 'WORKBENCH_CERTIFICATE_SWEEP_UNAVAILABLE' };
+  }
+  try {
+    let claimed = await sbRpc(env, 'pay_workbench_settled_certificate_due_claim_v8', {
+      p_limit: limit
+    }, {
+      routeClass: 'PREVIEW_PROGRESS',
+      purpose: 'WORKBENCH_SETTLED_CERTIFICATE_DUE_CLAIM_V8',
+      timeoutMs: 15000,
+      bankingPay: true
+    });
+    if (Array.isArray(claimed) && claimed.length === 1) claimed = claimed[0];
+    if (claimed && typeof claimed === 'object'
+      && !Array.isArray(claimed)
+      && Object.prototype.hasOwnProperty.call(claimed, 'pay_workbench_settled_certificate_due_claim_v8')) {
+      claimed = claimed.pay_workbench_settled_certificate_due_claim_v8;
+    }
+    if (Array.isArray(claimed) && claimed.length === 1) claimed = claimed[0];
+    const rows = Array.isArray(claimed?.claims) ? claimed.claims : [];
+    const results = [];
+    for (const row of rows) {
+      results.push(await advanceBankingPayWorkbenchSettledCertificateV8(env, {
+        sessionId: row?.session_id,
+        actorUserId: row?.actor_user_id,
+        leaseOwner: row?.lease_owner,
+        maxAppendPages: 8,
+        maxSealSteps: 4,
+        maxRuntimeMs: 20000
+      }));
+    }
+    return {
+      ok: results.every((item) => item?.ok !== false),
+      processed: results.length,
+      completed: results.filter((item) => item?.completed === true).length,
+      continuation_required: results.filter((item) => item?.continuation_required === true).length,
+      failures: results.filter((item) => item?.ok === false).map((item) => ({ code: item.code || null, session_id: item.session_id || null })),
+      results
+    };
+  } catch (error) {
+    return { ok: false, processed: 0, code: 'WORKBENCH_CERTIFICATE_SWEEP_FAILED', message: String(error?.message || error || '') };
+  }
+}
+
 async function bankingPayWorkbenchCronTick(env, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -17244,6 +17558,29 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       }
     }
 
+    let certificateProducerResult = {
+      ok: true,
+      processed: 0,
+      skipped: true,
+      code: 'WORKBENCH_CERTIFICATE_SWEEP_NOT_DUE'
+    };
+    const cronElapsedBeforeCertificateMs = Math.max(0, Date.now() - tickStartedAtMs);
+    if (budgetProfile === 'CRON'
+        && !sessionId
+        && !candidateId
+        && normalizedDrainResult.more_due !== true
+        && cronElapsedBeforeCertificateMs + 2000 < maxRuntimeMs
+        && typeof advanceReadyBankingPayWorkbenchCertificatesV8 === 'function') {
+      certificateProducerResult = await advanceReadyBankingPayWorkbenchCertificatesV8(env, { limit: 1 });
+      if (certificateProducerResult.ok === false) {
+        logCronDiag('WORKBENCH_SETTLED_CERTIFICATE_SWEEP_FAILED', {
+          code: certificateProducerResult.code || null,
+          processed: Number(certificateProducerResult.processed) || 0,
+          failures: Array.isArray(certificateProducerResult.failures) ? certificateProducerResult.failures : []
+        }, 'warn');
+      }
+    }
+
     const metrics = coreMetrics(normalizedDrainResult, { more_due: true, stop_reason: 'INVALID_DRAIN_RESULT' });
 
     return finishCronTick({
@@ -17277,6 +17614,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       rollover_reused_count: metricInt(rolloverResult, ['reused_count']),
       rollover_skipped_count: metricInt(rolloverResult, ['skipped_count']),
       rollover_failed_count: metricInt(rolloverResult, ['failed_count']),
+      settled_certificate_producer_result: certificateProducerResult,
       drain_result: normalizedDrainResult
     }, normalizedDrainResult.ok === false || rolloverResult.ok === false || expiryResult.ok === false ? 'warn' : 'info');
   } catch (error) {
@@ -20728,6 +21066,112 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
       const progressPayload = normaliseProgress(progressRaw, { session_id: id });
       const resolvedSessionId = trimStr(progressPayload.session_id || id) || id;
       const progressNudge = scheduleProgressNudge(progressPayload);
+      const workbenchDisplayReady = progressPayload.ready === true;
+      const workbenchReadyForDraft = progressPayload.ready_for_draft === true;
+      let certificateStatus = {
+        ok: true,
+        workbench_session_id: resolvedSessionId,
+        certificate_lifecycle: 'SESSION_NOT_CURRENT_READY',
+        certificate_ready_for_draft: false,
+        certificate_build_pending: false,
+        certificate_continue_polling: false,
+        certificate_recovery_required: false,
+        certificate_error_code: null,
+        certificate_error_message: null
+      };
+      if (workbenchDisplayReady) {
+        certificateStatus = await readBankingPayWorkbenchSettledCertificateStatusV8(env, {
+          sessionId: resolvedSessionId,
+          actorUserId,
+          purpose: 'WORKBENCH_SESSION_PROGRESS_CERTIFICATE_STATUS_V8'
+        });
+      }
+      const certificateReadyForDraft = workbenchDisplayReady
+        && workbenchReadyForDraft
+        && certificateStatus.certificate_ready_for_draft === true
+        && certificateStatus.certificate_lifecycle === 'SEALED_CURRENT';
+      const certificateBuildPending = workbenchDisplayReady
+        && certificateReadyForDraft !== true
+        && certificateStatus.certificate_continue_polling === true;
+      const certificateRecoveryRequired = workbenchDisplayReady
+        && certificateStatus.certificate_recovery_required === true;
+      const certificateDraftBlocker = !workbenchDisplayReady
+        ? null
+        : (certificateRecoveryRequired
+            ? 'WORKBENCH_SETTLED_CERTIFICATE_RECOVERY_REQUIRED'
+            : (certificateReadyForDraft ? null : 'WORKBENCH_SETTLED_CERTIFICATE_BUILD_PENDING'));
+      progressPayload.display_ready = workbenchDisplayReady;
+      progressPayload.ready_for_draft = certificateReadyForDraft;
+      progressPayload.can_create_draft = certificateReadyForDraft;
+      progressPayload.draft_safe = progressPayload.draft_safe === true && certificateReadyForDraft;
+      progressPayload.certificate_status_checked = certificateStatus.ok === true;
+      progressPayload.certificate_lifecycle = certificateStatus.certificate_lifecycle;
+      progressPayload.certificate_uuid = certificateStatus.certificate_uuid || null;
+      progressPayload.certification_id = certificateReadyForDraft ? (certificateStatus.certification_id || null) : null;
+      progressPayload.certificate_overall_digest_sha256 = certificateReadyForDraft ? (certificateStatus.overall_digest_sha256 || null) : null;
+      progressPayload.certificate_ready_for_draft = certificateReadyForDraft;
+      progressPayload.certificate_build_pending = certificateBuildPending;
+      progressPayload.certificate_continue_polling = certificateBuildPending;
+      progressPayload.certificate_recovery_required = certificateRecoveryRequired;
+      progressPayload.certificate_error_code = certificateStatus.certificate_error_code || null;
+      progressPayload.certificate_error_message = certificateStatus.certificate_error_message || null;
+      if (certificateDraftBlocker) {
+        progressPayload.draft_blocker_codes = Array.from(new Set([
+          ...(Array.isArray(progressPayload.draft_blocker_codes) ? progressPayload.draft_blocker_codes : []),
+          certificateDraftBlocker
+        ]));
+        progressPayload.blocker_codes = progressPayload.draft_blocker_codes;
+      }
+      if (certificateBuildPending) {
+        progressPayload.status_text = 'Payment preview is ready. Completing the final safety check.';
+        progressPayload.next_recommended_action = 'WAIT_FOR_SETTLED_CERTIFICATE';
+      } else if (certificateRecoveryRequired) {
+        progressPayload.status_text = certificateStatus.certificate_error_message
+          || 'The final safety check could not be completed. Refresh Banking Pay to rebuild safely.';
+        progressPayload.next_recommended_action = 'REFRESH_WORKBENCH';
+      }
+      let certificateProducer = {
+        ok: true,
+        attempted: false,
+        scheduled: false,
+        code: 'WORKBENCH_CERTIFICATE_SESSION_NOT_READY'
+      };
+      if (workbenchDisplayReady && certificateBuildPending) {
+        if (ctx && typeof ctx.waitUntil === 'function'
+            && typeof advanceBankingPayWorkbenchSettledCertificateV8 === 'function') {
+          const certificatePromise = advanceBankingPayWorkbenchSettledCertificateV8(env, {
+            sessionId: resolvedSessionId,
+            actorUserId,
+            maxAppendPages: 8,
+            maxSealSteps: 4,
+            maxRuntimeMs: 20000
+          }).then((producerResult) => {
+            if (producerResult?.ok === false && typeof logBankingPayWorkbenchDiag === 'function') {
+              logBankingPayWorkbenchDiag(env, 'WORKBENCH_SETTLED_CERTIFICATE_PRODUCER_FAILED', {
+                session_id: resolvedSessionId,
+                code: producerResult.code || null,
+                lifecycle: producerResult.lifecycle || null
+              }, { severity: 'warn' });
+            }
+            return producerResult;
+          });
+          ctx.waitUntil(certificatePromise);
+          certificateProducer = {
+            ok: true,
+            attempted: true,
+            scheduled: true,
+            code: 'WORKBENCH_SETTLED_CERTIFICATE_PRODUCER_SCHEDULED'
+          };
+        } else {
+          certificateProducer = {
+            ok: true,
+            attempted: false,
+            scheduled: false,
+            code: 'WORKBENCH_SETTLED_CERTIFICATE_BACKGROUND_CONTEXT_UNAVAILABLE',
+            cron_fallback: true
+          };
+        }
+      }
       const drainResult = progressNudge.nudge || {
         ok: true,
         scheduled: false,
@@ -20741,6 +21185,11 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
         progress: progressPayload,
         preview_deferred: progressPayload.ready !== true,
         preview_ready: progressPayload.ready === true,
+        ready_for_draft: progressPayload.ready_for_draft === true,
+        can_create_draft: progressPayload.can_create_draft === true,
+        certificate_lifecycle: progressPayload.certificate_lifecycle,
+        certificate_ready_for_draft: progressPayload.certificate_ready_for_draft === true,
+        certificate_continue_polling: progressPayload.certificate_continue_polling === true,
         requires_paging: true,
         session_obsolete: progressPayload.session_obsolete === true,
         obsolete: progressPayload.obsolete === true || progressPayload.session_obsolete === true,
@@ -20759,6 +21208,7 @@ async function handleBankingPayWorkbenchSessionProgress(env, req, user, sessionI
         progress_nudge_already_running: progressNudge.already_running === true,
         progress_nudge_reason: progressNudge.reason || progressNudge.code || null,
         progress_nudge_decision: progressNudge.decision || null,
+        settled_certificate_producer: certificateProducer,
         server_time_utc: new Date().toISOString()
       }));
     } catch (e) {
@@ -30197,7 +30647,25 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const replacementSessionId = trimStr(progress.replacement_session_id || '');
     const storedReadyMismatch = booleanFrom(progress.stored_ready_mismatch);
     const sessionReady = booleanFrom(progress.session_ready);
-    const readyForDraft = booleanFrom(progress.ready_for_draft);
+    const workbenchReadyForDraft = booleanFrom(progress.ready_for_draft);
+    const certificateStatus = sessionReady && workbenchReadyForDraft
+      ? await readBankingPayWorkbenchSettledCertificateStatusV8(env, {
+          sessionId: id,
+          actorUserId: trimStr(user?.id),
+          purpose: 'CREATE_DRAFT_CERTIFICATE_STATUS_V8'
+        })
+      : {
+          ok: true,
+          certificate_lifecycle: 'SESSION_NOT_CURRENT_READY',
+          certificate_ready_for_draft: false,
+          certificate_continue_polling: false,
+          certificate_recovery_required: false,
+          certificate_error_code: null
+        };
+    const certificateReadyForDraft = certificateStatus.ok === true
+      && certificateStatus.certificate_lifecycle === 'SEALED_CURRENT'
+      && certificateStatus.certificate_ready_for_draft === true;
+    const readyForDraft = workbenchReadyForDraft && certificateReadyForDraft;
 
     const derivedBlockers = [];
     if (sessionStatus !== 'OPEN') derivedBlockers.push('SESSION_NOT_OPEN');
@@ -30223,6 +30691,11 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     if (selectedEligibleReadyRowCount <= 0) derivedBlockers.push('NO_SELECTED_READY_ROWS');
     if (storedReadyMismatch) derivedBlockers.push('STORED_READY_MISMATCH');
     if (!sessionReady) derivedBlockers.push('SESSION_NOT_READY');
+    if (workbenchReadyForDraft && !certificateReadyForDraft) {
+      derivedBlockers.push(certificateStatus.certificate_recovery_required === true
+        ? 'WORKBENCH_SETTLED_CERTIFICATE_RECOVERY_REQUIRED'
+        : 'WORKBENCH_SETTLED_CERTIFICATE_NOT_READY');
+    }
     if (!readyForDraft) derivedBlockers.push('SESSION_NOT_READY_FOR_DRAFT');
     if (expectedSessionVersion && returnedSessionVersion !== expectedSessionVersion) derivedBlockers.push('SESSION_VERSION_CHANGED');
 
@@ -30273,6 +30746,14 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       session_status: sessionStatus,
       session_ready: sessionReady,
       ready_for_draft: readyForDraft,
+      workbench_ready_for_draft: workbenchReadyForDraft,
+      certificate_lifecycle: certificateStatus.certificate_lifecycle || 'STATUS_UNAVAILABLE',
+      certificate_ready_for_draft: certificateReadyForDraft,
+      certificate_continue_polling: certificateStatus.certificate_continue_polling === true,
+      certificate_recovery_required: certificateStatus.certificate_recovery_required === true,
+      certificate_error_code: certificateStatus.certificate_error_code || null,
+      certification_id: certificateReadyForDraft ? (certificateStatus.certification_id || null) : null,
+      certificate_overall_digest_sha256: certificateReadyForDraft ? (certificateStatus.overall_digest_sha256 || null) : null,
       scope_seed_complete: booleanFrom(progress.scope_seed_complete),
       scope_cursor_remaining: scopeCursorRemaining,
       session_obsolete: sessionObsolete,
@@ -30328,6 +30809,11 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       progress_state: readiness.progress_state || null,
       session_ready: readiness.session_ready === true,
       ready_for_draft: readiness.ready_for_draft === true,
+      certificate_lifecycle: readiness.certificate_lifecycle || null,
+      certificate_ready_for_draft: readiness.certificate_ready_for_draft === true,
+      certificate_continue_polling: readiness.certificate_continue_polling === true,
+      certificate_recovery_required: readiness.certificate_recovery_required === true,
+      certificate_error_code: readiness.certificate_error_code || null,
       blocker_codes: uniqueStrings(readiness.blocker_codes || readiness.draft_blocker_codes || []),
       session_blocker_codes: uniqueStrings(readiness.session_blocker_codes || []),
       blocker_counts: isPlainObject(readiness.blocker_counts) ? readiness.blocker_counts : {},
@@ -31553,6 +32039,331 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
   if (sameWeekPayeOverrideReason.length > 2000) {
     return fail(400, 'PAYE_SAME_WEEK_OVERRIDE_REASON_TOO_LONG', 'The PAYE override reason is too long. Shorten it and try again. No draft has been created.', { field: 'same_week_paye_override_reason', maximum_length: 2000, session_id: sessionId });
   }
+
+  // The certified route is explicitly selected by the matching frontend.  It
+  // obtains the complete selection from the sealed server certificate and
+  // therefore must run before any legacy selected-row arrays are parsed.
+  if (body.certified_draft_v8 === true) {
+    const forbiddenSelectionKeys = findExpandedSelectionKeys(body);
+    if (forbiddenSelectionKeys.length > 0) {
+      return fail(400, 'BANKING_PAY_DRAFT_CERTIFIED_EXPANDED_SELECTION_FORBIDDEN', 'Create Draft received legacy selected-row data for the certified route. Refresh Banking and try again.', {
+        session_id: sessionId,
+        forbidden_keys: forbiddenSelectionKeys
+      });
+    }
+
+    const sessionVersion = Number(body.session_version ?? body.sessionVersion);
+    const progressCounterVersion = Number(body.expected_progress_counter_version
+      ?? body.expectedProgressCounterVersion
+      ?? body.progress_counter_version
+      ?? body.progressCounterVersion);
+    if (!Number.isSafeInteger(sessionVersion) || sessionVersion < 1
+        || !Number.isSafeInteger(progressCounterVersion) || progressCounterVersion < 1) {
+      return fail(409, 'WORKBENCH_SESSION_PROGRESS_CONTEXT_REQUIRED', 'Banking Pay has changed. Refresh the preview, review the latest payment details, then try Create Draft again.', {
+        session_id: sessionId
+      });
+    }
+
+    const requestedCandidateFilterId = trimStr(body.candidate_filter_id || body.candidateFilterId || '') || null;
+    const requestedClientFilterId = trimStr(body.client_filter_id || body.clientFilterId || '') || null;
+    if ((requestedCandidateFilterId && !uuidRe.test(requestedCandidateFilterId))
+        || (requestedClientFilterId && !uuidRe.test(requestedClientFilterId))) {
+      return fail(400, 'BANKING_PAY_CREATE_DRAFT_FILTER_CONTEXT_INVALID', 'The Create Draft filter context is not valid. Refresh Banking Pay and try again.', {
+        session_id: sessionId
+      });
+    }
+
+    const initialReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
+    if (!initialReadiness || initialReadiness.ok !== true || initialReadiness.gate_ready !== true) {
+      return rejectWorkbenchNotReady(sessionId, 'CERTIFIED_INITIAL_READINESS', initialReadiness);
+    }
+    if (Number(initialReadiness.session_version) !== sessionVersion
+        || Number(initialReadiness.progress_counter_version) !== progressCounterVersion) {
+      return fail(409, 'WORKBENCH_SESSION_PROGRESS_CHANGED', 'Banking Pay has changed. Refresh the preview, review the latest payment details, then try Create Draft again.', {
+        session_id: sessionId,
+        expected_session_version: sessionVersion,
+        current_session_version: initialReadiness.session_version ?? null,
+        expected_progress_counter_version: progressCounterVersion,
+        current_progress_counter_version: initialReadiness.progress_counter_version ?? null
+      });
+    }
+
+    const payDateUtc = new Date(`${payDate}T00:00:00.000Z`);
+    const mondayOffset = (payDateUtc.getUTCDay() + 6) % 7;
+    const payWeekStartUtc = new Date(payDateUtc.getTime() - mondayOffset * 86400000);
+    const payWeekEndUtc = new Date(payWeekStartUtc.getTime() + 6 * 86400000);
+    const payWeekStart = payWeekStartUtc.toISOString().slice(0, 10);
+    const payWeekEnd = payWeekEndUtc.toISOString().slice(0, 10);
+    const inactiveOverride = {
+      continue: false,
+      guardrail_code: null,
+      pay_date: payDate,
+      pay_week_end: payWeekEnd,
+      pay_week_start: payWeekStart,
+      reason: null,
+      reauth_purpose: null,
+      used: false,
+      verified: false,
+      verified_at_utc: null,
+      verified_by_user_id: null
+    };
+    const makeCertifiedIdempotencyKey = async (override) => {
+      const digest = await sha256Hex(stableStringify({
+        contract: 'BANKING_PAY_DRAFT_CERTIFIED_OPERATION_V8',
+        workbench_session_id: sessionId,
+        session_version: sessionVersion,
+        progress_counter_version: progressCounterVersion,
+        pay_channel_scope: payChannelScope,
+        pay_date: payDate,
+        candidate_filter_id: requestedCandidateFilterId,
+        client_filter_id: requestedClientFilterId,
+        same_week_paye_override: override
+      }));
+      return `draft-create:v8:${digest}`;
+    };
+    const issueCertifiedEnvelope = async (idempotencyKey, override, purpose) => {
+      const raw = unwrapRpc(await sbRpc(env, 'pay_workbench_settled_certificate_current_reference_issue_v8', {
+        p_workbench_session_id: sessionId,
+        p_session_version: sessionVersion,
+        p_progress_counter_version: progressCounterVersion,
+        p_pay_channel_scope: payChannelScope,
+        p_idempotency_key: idempotencyKey,
+        p_same_week_paye_override: override
+      }, {
+        routeClass: 'BANKING_PAY_OPERATION',
+        purpose,
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'pay_workbench_settled_certificate_current_reference_issue_v8');
+      const validated = validateCurrentCertificateIssuerEnvelopeV8(raw);
+      if (validated.ok !== true) {
+        const error = new Error(validated.code || 'BANKING_PAY_DRAFT_CERTIFIED_ISSUER_RESPONSE_INVALID');
+        error.code = validated.code || 'BANKING_PAY_DRAFT_CERTIFIED_ISSUER_RESPONSE_INVALID';
+        throw error;
+      }
+      if (validated.workbench_session_id !== sessionId.toLowerCase()
+          || validated.session_version !== sessionVersion
+          || validated.progress_counter_version !== progressCounterVersion
+          || validated.pay_channel_scope !== payChannelScope
+          || validated.pay_date !== payDate
+          || (validated.certificate_reference.candidate_filter_id || null) !== requestedCandidateFilterId
+          || (validated.certificate_reference.client_filter_id || null) !== requestedClientFilterId) {
+        const error = new Error('BANKING_PAY_DRAFT_CERTIFIED_ISSUER_CONTEXT_MISMATCH');
+        error.code = 'BANKING_PAY_DRAFT_CERTIFIED_ISSUER_CONTEXT_MISMATCH';
+        throw error;
+      }
+      return validated;
+    };
+
+    try {
+      let certifiedOverride = inactiveOverride;
+      let idempotencyKey = await makeCertifiedIdempotencyKey(certifiedOverride);
+      let certified = await issueCertifiedEnvelope(idempotencyKey, certifiedOverride, 'CREATE_DRAFT_CERTIFIED_REFERENCE_PREFLIGHT');
+      const scopeCounts = {
+        paye_rows: certified.pre_admission_scope_facts.selected_ready_paye,
+        umbrella_rows: certified.pre_admission_scope_facts.selected_ready_umbrella,
+        selected_ready_total: certified.pre_admission_scope_facts.selected_ready_total,
+        selected_ready_paye: certified.pre_admission_scope_facts.selected_ready_paye,
+        selected_ready_umbrella: certified.pre_admission_scope_facts.selected_ready_umbrella,
+        selected_ready_for_scope: certified.selected_ready_for_request,
+        pay_channel_scope: payChannelScope,
+        candidate_filter_id: requestedCandidateFilterId,
+        client_filter_id: requestedClientFilterId
+      };
+      const payeRowsIncluded = scopeCounts.paye_rows > 0 && payChannelScope !== 'UMBRELLA';
+      const umbrellaRowsIncluded = scopeCounts.umbrella_rows > 0 && payChannelScope !== 'PAYE';
+      let payeGuardrails = null;
+      const buildActionRequiredPayload = (code, title, message, choices, extra = {}) => ({
+        ok: false,
+        preflight: true,
+        can_start: false,
+        action_required: true,
+        operation_started: false,
+        no_operation_started: true,
+        no_batch_created: true,
+        code,
+        error_code: code,
+        title,
+        message,
+        choices,
+        pay_channel_scope: payChannelScope,
+        scope_counts: scopeCounts,
+        ui: { code, title, message, choices, detail: trimStr(extra.detail || '') || null },
+        guardrail: payeGuardrails,
+        ...extra
+      });
+      const readPayeGuardrails = async (purpose) => {
+        const guardrailPayload = unwrapRpc(await sbRpc(env, 'pay_paye_guardrails', {
+          p_pay_date: payDate,
+          p_ignore_pay_batch_id: null,
+          p_actor_user_id: actorUserId
+        }, {
+          routeClass: 'BANKING_PAY_GUARDRAIL',
+          purpose,
+          timeoutMs: 8000,
+          bankingPay: true
+        }), 'pay_paye_guardrails');
+        if (!isPlainObject(guardrailPayload) || guardrailPayload.ok !== true) {
+          throw new Error('PAYE_GUARDRAIL_RESPONSE_INVALID');
+        }
+        return guardrailPayload;
+      };
+
+      if (payeRowsIncluded) {
+        payeGuardrails = await readPayeGuardrails(preflightOnly ? 'CREATE_DRAFT_CERTIFIED_PREFLIGHT_PAYE_GUARDRAIL' : 'CREATE_DRAFT_CERTIFIED_PAYE_GUARDRAIL');
+        const activeUi = isPlainObject(payeGuardrails.ui) && isPlainObject(payeGuardrails.ui.active) ? payeGuardrails.ui.active : {};
+        const existingDraft = payeGuardrails.create_paye_blocked === true || payeGuardrails.has_existing_paye_draft === true;
+        const overrideRequired = !existingDraft && payeGuardrails.override_required === true;
+        if (existingDraft) {
+          const choices = umbrellaRowsIncluded && payChannelScope === 'ALL' ? ['CREATE_UMBRELLA_ONLY', 'CANCEL'] : ['CANCEL'];
+          const payload = buildActionRequiredPayload(
+            'PAYE_DRAFT_ALREADY_EXISTS',
+            trimStr(activeUi.title) || 'Existing PAYE draft already exists',
+            trimStr(activeUi.message) || 'A PAYE draft batch already exists. Cancel or delete the existing PAYE draft before creating another PAYE draft.',
+            choices,
+            { hard_block: true, override_available: false, existing_paye_draft: payeGuardrails.existing_paye_draft || null }
+          );
+          return response(preflightOnly ? 200 : 409, preflightOnly ? payload : { ...payload, preflight: false, create_draft_unavailable: true });
+        }
+        if (overrideRequired) {
+          const proofSupplied = sameWeekPayeOverrideContinue === true && !!sameWeekPayeOverrideReason && !!sameWeekPayeReauthToken;
+          if (!proofSupplied) {
+            const choices = payChannelScope === 'ALL' && umbrellaRowsIncluded
+              ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL']
+              : ['VERIFY_AND_CREATE_PAYE', 'CANCEL'];
+            const payload = buildActionRequiredPayload(
+              payChannelScope === 'ALL' && umbrellaRowsIncluded ? 'PAYE_SAME_WEEK_OVERRIDE_CHOICE_REQUIRED' : 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+              trimStr(activeUi.title) || 'A PAYE batch already exists for this payroll week',
+              trimStr(activeUi.message) || 'Creating another PAYE batch for the same Monday-based payroll week is override-only.',
+              choices,
+              { hard_block: false, override_available: true, same_week_non_draft_paye_batches: Array.isArray(payeGuardrails.same_week_non_draft_paye_batches) ? payeGuardrails.same_week_non_draft_paye_batches : [] }
+            );
+            return response(preflightOnly ? 200 : 409, preflightOnly ? payload : { ...payload, preflight: false, create_draft_unavailable: true });
+          }
+          if (typeof verifyPayeSameWeekOverrideReauth !== 'function') {
+            return fail(503, 'PAYE_SAME_WEEK_OVERRIDE_VERIFIER_UNAVAILABLE', 'PAYE override verification is not available. Refresh Banking and try again. No draft has been created.', { session_id: sessionId });
+          }
+          const verification = await verifyPayeSameWeekOverrideReauth(env, user, sameWeekPayeReauthToken);
+          if (!verification || verification.ok !== true) {
+            return fail(Number(verification && verification.http_status) || 401, trimStr(verification && verification.error_code) || 'PAYE_SAME_WEEK_REAUTH_INVALID', trimStr(verification && verification.message) || 'PAYE override verification failed or expired. No draft has been created.', { session_id: sessionId });
+          }
+          certifiedOverride = {
+            continue: true,
+            guardrail_code: 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED',
+            pay_date: payDate,
+            pay_week_end: trimStr(payeGuardrails.pay_week_end) || payWeekEnd,
+            pay_week_start: trimStr(payeGuardrails.pay_week_start) || payWeekStart,
+            reason: sameWeekPayeOverrideReason,
+            reauth_purpose: 'PAYE_SAME_WEEK_OVERRIDE',
+            used: true,
+            verified: true,
+            verified_at_utc: verification.verified_at_utc,
+            verified_by_user_id: verification.verified_by_user_id
+          };
+        }
+      }
+
+      if (!preflightOnly && payeRowsIncluded) {
+        const finalGuardrails = await readPayeGuardrails('CREATE_DRAFT_CERTIFIED_FINAL_PAYE_GUARDRAIL_RECHECK');
+        payeGuardrails = finalGuardrails;
+        const existingDraft = finalGuardrails.create_paye_blocked === true || finalGuardrails.has_existing_paye_draft === true;
+        const overrideRequired = !existingDraft && finalGuardrails.override_required === true;
+        if (existingDraft || (overrideRequired && certifiedOverride.used !== true)) {
+          const code = existingDraft ? 'PAYE_DRAFT_ALREADY_EXISTS' : (payChannelScope === 'ALL' && umbrellaRowsIncluded ? 'PAYE_SAME_WEEK_OVERRIDE_CHOICE_REQUIRED' : 'PAYE_SAME_WEEK_OVERRIDE_REQUIRED');
+          const choices = existingDraft
+            ? (payChannelScope === 'ALL' && umbrellaRowsIncluded ? ['CREATE_UMBRELLA_ONLY', 'CANCEL'] : ['CANCEL'])
+            : (payChannelScope === 'ALL' && umbrellaRowsIncluded ? ['CREATE_UMBRELLA_ONLY', 'VERIFY_AND_CREATE_BOTH', 'CANCEL'] : ['VERIFY_AND_CREATE_PAYE', 'CANCEL']);
+          const payload = buildActionRequiredPayload(code, existingDraft ? 'Existing PAYE draft already exists' : 'A PAYE batch already exists for this payroll week', existingDraft ? 'A PAYE draft batch already exists. Cancel or delete it before creating another PAYE draft.' : 'Creating another PAYE batch for the same Monday-based payroll week is override-only.', choices, { hard_block: existingDraft, override_available: !existingDraft });
+          return response(409, { ...payload, preflight: false, create_draft_unavailable: true });
+        }
+        if (!overrideRequired) certifiedOverride = inactiveOverride;
+      }
+
+      if (preflightOnly) {
+        return response(200, {
+          ok: true,
+          preflight: true,
+          can_start: true,
+          action_required: false,
+          operation_started: false,
+          no_operation_started: true,
+          no_batch_created: true,
+          pay_channel_scope: payChannelScope,
+          scope: payChannelScope,
+          scope_counts: scopeCounts,
+          candidate_filter_id: requestedCandidateFilterId,
+          client_filter_id: requestedClientFilterId,
+          selected_preview_row_count: certified.selected_ready_for_request,
+          guardrail: payeGuardrails,
+          override_required: !!(payeGuardrails && payeGuardrails.override_required === true),
+          override_verified: certifiedOverride.used === true,
+          certified_draft_v8: true
+        });
+      }
+
+      const finalReadiness = await readAuthoritativeProgress(sessionId, sessionVersion);
+      if (!finalReadiness || finalReadiness.ok !== true || finalReadiness.gate_ready !== true
+          || Number(finalReadiness.session_version) !== sessionVersion
+          || Number(finalReadiness.progress_counter_version) !== progressCounterVersion) {
+        return rejectWorkbenchNotReady(sessionId, 'CERTIFIED_PRE_OPERATION_START_READINESS', finalReadiness);
+      }
+
+      idempotencyKey = await makeCertifiedIdempotencyKey(certifiedOverride);
+      certified = await issueCertifiedEnvelope(idempotencyKey, certifiedOverride, 'CREATE_DRAFT_CERTIFIED_REFERENCE_FINAL');
+      const started = unwrapRpc(await sbRpc(env, 'banking_pay_draft_certified_operation_start_v8', {
+        p_certificate_reference: certified.certificate_reference,
+        p_actor_user_id: actorUserId,
+        p_idempotency_key: idempotencyKey
+      }, {
+        routeClass: 'BANKING_PAY_OPERATION',
+        purpose: 'CREATE_DRAFT_CERTIFIED_OPERATION_START',
+        timeoutMs: 8000,
+        bankingPay: true
+      }), 'banking_pay_draft_certified_operation_start_v8');
+      const operationId = trimStr(started.operation_id || started.id || '');
+      if (started.ok !== true || !uuidRe.test(operationId)
+          || upperTrim(started.contract) !== 'WORKBENCH_SETTLED_CERTIFICATE_OPERATION_ADMISSION_V8') {
+        throw new Error('BANKING_PAY_DRAFT_CERTIFIED_OPERATION_START_INVALID');
+      }
+      const operationPayload = {
+        ok: true,
+        certified_draft_v8: true,
+        operation_id: operationId,
+        id: operationId,
+        operation_type: 'DRAFT_CREATE',
+        status: upperTrim(started.operation_status) || 'QUEUED',
+        phase: upperTrim(started.operation_phase) || 'INITIALISE',
+        operation_created: started.operation_is_existing !== true,
+        operation_started: true,
+        no_operation_started: false,
+        no_batch_created: true,
+        is_existing: started.operation_is_existing === true,
+        backend_runner_owned: true,
+        frontend_completion_required: false,
+        workbench_session_id: sessionId,
+        session_id: sessionId,
+        source_session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        scope: payChannelScope,
+        scope_counts: scopeCounts,
+        selected_preview_row_count: certified.selected_ready_for_request,
+        certification_id: certified.certification_id,
+        overall_digest_sha256: certified.overall_digest_sha256,
+        manifest_digest_sha256: certified.manifest_digest_sha256
+      };
+      await scheduleDraftCreateDrainBestEffort(operationPayload);
+      return response(200, operationPayload);
+    } catch (error) {
+      const code = upperTrim(error && (error.code || error.message) || '');
+      const stale = code.includes('WORKBENCH_CERTIFICATE') || code.includes('WORKBENCH_SESSION');
+      return fail(stale ? 409 : 503, stale ? (code || 'WORKBENCH_CERTIFICATE_NOT_CURRENT') : 'BANKING_PAY_CREATE_DRAFT_CERTIFIED_START_FAILED', stale ? 'Banking Pay changed before Draft creation started. Refresh the preview, review the latest payment details, then try again.' : 'CloudTMS could not start the certified Draft operation. Refresh Banking and try again.', {
+        session_id: sessionId,
+        pay_channel_scope: payChannelScope,
+        reason: String(error && error.message ? error.message : error)
+      });
+    }
+  }
+
   const rawSelectedPreviewRowIds = Array.isArray(body.selected_preview_row_ids)
     ? body.selected_preview_row_ids
     : (Array.isArray(body.selectedPreviewRowIds) ? body.selectedPreviewRowIds : (Array.isArray(previewDecisions.selected_preview_row_ids) ? previewDecisions.selected_preview_row_ids : []));
@@ -40848,6 +41659,98 @@ function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
   return message;
 }
 
+function parseBankingPayWorkbenchCertificateContinuationV8(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  if (!source || String(source.message_type || '').trim().toUpperCase() !== 'WORKBENCH_SETTLED_CERTIFICATE_CONTINUATION_V8') return null;
+  const allowedKeys = new Set([
+    'message_type', 'contract_version', 'continuation_sequence', 'session_id',
+    'actor_user_id', 'certificate_uuid', 'lease_owner', 'enqueued_at_utc'
+  ]);
+  for (const key of Object.keys(source)) {
+    if (!allowedKeys.has(key)) {
+      throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_FIELD_INVALID'), {
+        code: 'WORKBENCH_CERTIFICATE_CONTINUATION_FIELD_INVALID'
+      });
+    }
+  }
+  const uuid = (raw, code) => {
+    const value = String(raw || '').trim().toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+      throw Object.assign(new Error(code), { code });
+    }
+    return value;
+  };
+  const contractVersion = Number(source.contract_version);
+  const continuationSequence = Number(source.continuation_sequence);
+  const leaseOwner = String(source.lease_owner || '').trim();
+  const enqueuedAtMs = Date.parse(String(source.enqueued_at_utc || ''));
+  if (contractVersion !== 1) {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_VERSION_INVALID'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_VERSION_INVALID'
+    });
+  }
+  // 50,000 / 64 is 782 pages.  A limit of 1,024 remains finite while still
+  // completing the supported maximum even if every delivery advances only one
+  // page plus bounded seal phases.
+  if (!Number.isInteger(continuationSequence) || continuationSequence < 1 || continuationSequence > 1024) {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_SEQUENCE_INVALID'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_SEQUENCE_INVALID'
+    });
+  }
+  if (!leaseOwner || leaseOwner.length > 512 || /[\u0000-\u001f\u007f]/.test(leaseOwner)) {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_LEASE_INVALID'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_LEASE_INVALID'
+    });
+  }
+  if (!Number.isFinite(enqueuedAtMs)) {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_TIMESTAMP_INVALID'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_TIMESTAMP_INVALID'
+    });
+  }
+  return {
+    message_type: 'WORKBENCH_SETTLED_CERTIFICATE_CONTINUATION_V8',
+    contract_version: 1,
+    continuation_sequence: continuationSequence,
+    session_id: uuid(source.session_id, 'WORKBENCH_CERTIFICATE_CONTINUATION_SESSION_INVALID'),
+    actor_user_id: uuid(source.actor_user_id, 'WORKBENCH_CERTIFICATE_CONTINUATION_ACTOR_INVALID'),
+    certificate_uuid: uuid(source.certificate_uuid, 'WORKBENCH_CERTIFICATE_CONTINUATION_IDENTITY_INVALID'),
+    lease_owner: leaseOwner,
+    enqueued_at_utc: new Date(enqueuedAtMs).toISOString()
+  };
+}
+
+async function enqueueBankingPayWorkbenchCertificateContinuationV8(env, options = {}) {
+  if (!env || !env.BANKING_PAY_CONTINUATION_QUEUE || typeof env.BANKING_PAY_CONTINUATION_QUEUE.send !== 'function') {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_QUEUE_MISSING'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_QUEUE_MISSING'
+    });
+  }
+  const message = parseBankingPayWorkbenchCertificateContinuationV8({
+    message_type: 'WORKBENCH_SETTLED_CERTIFICATE_CONTINUATION_V8',
+    contract_version: 1,
+    continuation_sequence: options.continuation_sequence,
+    session_id: options.session_id,
+    actor_user_id: options.actor_user_id,
+    certificate_uuid: options.certificate_uuid,
+    lease_owner: options.lease_owner,
+    enqueued_at_utc: new Date().toISOString()
+  });
+  const encoded = new TextEncoder().encode(JSON.stringify(message));
+  if (encoded.byteLength > 2048) {
+    throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_MESSAGE_TOO_LARGE'), {
+      code: 'WORKBENCH_CERTIFICATE_CONTINUATION_MESSAGE_TOO_LARGE'
+    });
+  }
+  await env.BANKING_PAY_CONTINUATION_QUEUE.send(message, { delaySeconds: 1 });
+  return {
+    ok: true,
+    enqueued: true,
+    continuation_sequence: message.continuation_sequence,
+    message_bytes: encoded.byteLength,
+    delay_seconds: 1
+  };
+}
+
 function parseBankingPayWorkbenchDrainWakeMessage(value) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   if (!source || String(source.message_type || '').trim().toUpperCase() !== 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1') return null;
@@ -41195,6 +42098,51 @@ async function handleBankingPayContinuationQueue(batch, env, ctx) {
   }
   const message = messages[0];
   try {
+    const certificateWake = parseBankingPayWorkbenchCertificateContinuationV8(message.body);
+    if (certificateWake) {
+      const certificateResult = await advanceBankingPayWorkbenchSettledCertificateV8(env, {
+        sessionId: certificateWake.session_id,
+        actorUserId: certificateWake.actor_user_id,
+        leaseOwner: certificateWake.lease_owner,
+        continuationSequence: certificateWake.continuation_sequence,
+        maxAppendPages: 8,
+        maxSealSteps: 4,
+        maxRuntimeMs: 20000
+      });
+      if (!certificateResult || certificateResult.ok === false) {
+        const terminalFailure = String(certificateResult?.lifecycle || '').trim().toUpperCase() === 'BUILD_FAILED';
+        if (terminalFailure) {
+          console.warn('[banking-pay-workbench] certificate continuation terminal failure retained', {
+            event: 'WORKBENCH_CERTIFICATE_CONTINUATION_TERMINAL_FAILURE',
+            session_id: certificateWake.session_id,
+            certificate_uuid: certificateWake.certificate_uuid,
+            continuation_sequence: certificateWake.continuation_sequence,
+            code: String(certificateResult?.code || 'WORKBENCH_CERTIFICATE_BUILD_FAILED').slice(0, 160)
+          });
+          message.ack();
+          return;
+        }
+        throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_ADVANCE_FAILED'), {
+          code: 'WORKBENCH_CERTIFICATE_CONTINUATION_ADVANCE_FAILED'
+        });
+      }
+      if (certificateResult.certificate_uuid !== certificateWake.certificate_uuid) {
+        throw Object.assign(new Error('WORKBENCH_CERTIFICATE_CONTINUATION_IDENTITY_CHANGED'), {
+          code: 'WORKBENCH_CERTIFICATE_CONTINUATION_IDENTITY_CHANGED'
+        });
+      }
+      console.log('[banking-pay-workbench] durable certificate continuation completed', {
+        event: 'WORKBENCH_CERTIFICATE_CONTINUATION_COMPLETED',
+        session_id: certificateWake.session_id,
+        certificate_uuid: certificateWake.certificate_uuid,
+        continuation_sequence: certificateWake.continuation_sequence,
+        append_pages_processed: certificateResult.append_pages_processed,
+        completed: certificateResult.completed === true,
+        successor_enqueued: certificateResult.durable_continuation?.enqueued === true
+      });
+      message.ack();
+      return;
+    }
     const workbenchWake = parseBankingPayWorkbenchDrainWakeMessage(message.body);
     if (workbenchWake) {
       const drainInvocationId = workbenchWake.wake_id
@@ -42081,12 +43029,14 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       if (typeof value === 'string') return value;
       try { return JSON.stringify(value); } catch { return String(value); }
     }).join(' ').toUpperCase();
+    const diagnosticTokens = new Set(diagnosticText.split(/[^A-Z0-9_]+/).filter(Boolean));
     return [
       'PAYMENT_CANCEL_CURRENT_OR_REPAIR_OWNER_REQUIRED',
       'PAYMENT_CORRECTION_WORKBENCH_ROUTE_NOT_PHYSICALLY_CURRENT',
+      'PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_NOT_FINALIZED',
       'PAYMENT_CORRECTION_WORKBENCH_REVERSION_RETRY',
       'PAYMENT_CORRECTION_WORKBENCH_OVERLAY_RESTORE_RETRY'
-    ].some((code) => diagnosticText.includes(code));
+    ].some((code) => diagnosticTokens.has(code));
   };
 
   const extractPaymentCorrectionFinaliseErrorEnvelope = (error) => {
@@ -65110,6 +66060,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const operation = safeObject(operationRow);
   const operationId = String(operation.operation_id || operation.id || '').trim();
   const inputJson = safeObject(operation.input_json);
+  const certifiedDraftProjection = validateCertifiedDraftOperationProjectionV8(inputJson);
+  const certifiedDraftV8 = certifiedDraftProjection.ok === true;
+  const hasCertifiedDraftReference = Object.prototype.hasOwnProperty.call(
+    inputJson,
+    'workbench_settled_certificate_reference_v8'
+  );
   const configJson = safeObject(operation.config_json);
   const progressJson = safeObject(operation.progress_json);
   const workbenchSessionId = String(operation.workbench_session_id || inputJson.workbench_session_id || inputJson.session_id || '').trim();
@@ -65123,6 +66079,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   if (!operationId) throw new Error('advanceBankingPayDraftCreateOperation: operation_id is required');
   if (!workbenchSessionId) throw new Error('advanceBankingPayDraftCreateOperation: workbench_session_id is required');
   if (!actorUserId) throw new Error('advanceBankingPayDraftCreateOperation: actor_user_id is required');
+  if (hasCertifiedDraftReference && !certifiedDraftV8) {
+    const error = new Error(certifiedDraftProjection.code || 'BANKING_PAY_DRAFT_CERTIFIED_OPERATION_PROJECTION_INVALID');
+    error.code = certifiedDraftProjection.code || 'BANKING_PAY_DRAFT_CERTIFIED_OPERATION_PROJECTION_INVALID';
+    error.status = 409;
+    throw error;
+  }
 
   const numberFrom = (value, fallback) => {
     const n = Number(value);
@@ -65322,7 +66284,23 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         : (Array.isArray(inputJson.draftSelectedPreviewRowIds) ? inputJson.draftSelectedPreviewRowIds : null)));
   const selectedPreviewRowCount = Array.isArray(selectedPreviewRowIds)
     ? selectedPreviewRowIds.length
-    : Math.max(0, Number.isFinite(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) ? Math.trunc(Number(inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)) : 0);
+    : Math.max(0, Number.isFinite(Number(
+      certifiedDraftV8
+        ? (operation.frozen_selected_row_count
+          ?? progressJson.draft_scope_last_selected_row_count
+          ?? progressJson.selected_preview_row_count
+          ?? progressJson.selected_rows_total
+          ?? 0)
+        : (inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)
+    )) ? Math.trunc(Number(
+      certifiedDraftV8
+        ? (operation.frozen_selected_row_count
+          ?? progressJson.draft_scope_last_selected_row_count
+          ?? progressJson.selected_preview_row_count
+          ?? progressJson.selected_rows_total
+          ?? 0)
+        : (inputJson.selected_preview_row_count || inputJson.selectedPreviewRowCount || inputJson.selected_rows_total)
+    )) : 0);
   const normalisePayChannelScopeForDraftCreate = (value) => {
     const raw = upperTrim(value)
       .replace(/[^A-Z0-9]+/g, '_')
@@ -65517,8 +66495,12 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   } else if (canonicalProofHasMeaningfulValues && sameWeekPayeOverrideProofStructurallyValid !== true) {
     proofProblems.push({ code: 'PAYE_OVERRIDE_CANONICAL_PROOF_INCOMPLETE_OR_INVALID', field: 'same_week_paye_override' });
   }
-  const sameWeekPayeOverrideProofValid = proofProblems.length <= 0 && sameWeekPayeOverrideProofStructurallyValid;
-  const sameWeekPayeOverrideJson = sameWeekPayeOverrideProofValid ? {
+  const sameWeekPayeOverrideProofValid = certifiedDraftV8
+    ? certifiedDraftProjection.same_week_paye_override.used === true
+    : (proofProblems.length <= 0 && sameWeekPayeOverrideProofStructurallyValid);
+  const sameWeekPayeOverrideJson = certifiedDraftV8
+    ? certifiedDraftProjection.same_week_paye_override
+    : (sameWeekPayeOverrideProofValid ? {
     used: true,
     continue: true,
     reason: sameWeekPayeOverrideReason,
@@ -65530,8 +66512,10 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     pay_date: trimStr(canonicalSameWeekPayeOverrideJson.pay_date || inputJson.pay_date) || null,
     pay_week_start: trimStr(canonicalSameWeekPayeOverrideJson.pay_week_start) || null,
     pay_week_end: trimStr(canonicalSameWeekPayeOverrideJson.pay_week_end) || null
-  } : {};
-  const operationInputContractError = storedPayChannelScopeResolution.ok !== true
+  } : {});
+  const operationInputContractError = certifiedDraftV8
+    ? null
+    : (storedPayChannelScopeResolution.ok !== true
     ? {
         code: storedPayChannelScopeResolution.code || 'BANKING_PAY_CREATE_DRAFT_INVALID_SCOPE',
         message: storedPayChannelScopeResolution.message || 'Create Draft scope stored on the operation is not valid. No draft batch has been created.',
@@ -65547,8 +66531,8 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           pay_channel_scope: payChannelScope,
           proof_problems: proofProblems
         }
-      : null);
-  const draftCreatePhaseOrder = [
+      : null));
+  const legacyDraftCreatePhaseOrder = [
     'VALIDATE_SESSION',
     'SYNC_SELECTED_ROWS',
     'WAIT_FOR_PREVIEW_READY',
@@ -65569,6 +66553,31 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     'POST_CREATE_REFRESH',
     'COMPLETE'
   ];
+  const certifiedDraftCreatePhaseOrder = [
+    'INITIALISE',
+    'CERTIFICATE_CONSTITUENT_REFS',
+    'CERTIFICATE_PARTITION_REFS',
+    'CANDIDATE_SCOPE',
+    'CERTIFICATE_FINAL_FREEZE',
+    'DRAIN_TSFIN',
+    'ENSURE_PAYEE_READINESS',
+    'SEED_ALLOCATION_ROWS',
+    'CREATE_BATCH_SHELLS',
+    'INSERT_CANDIDATES',
+    'INSERT_ITEMS',
+    'APPLY_FINANCE_ADJUSTMENTS',
+    'FINALISE_RESERVATIONS',
+    'POPULATE_CANDIDATE_SUMMARIES',
+    'CREATE_TIMESHEET_SNAPSHOTS',
+    'BUILD_ITEM_BREAKDOWNS',
+    'ASSERT_INTEGRITY',
+    'CONSTITUENT_PARITY',
+    'POST_CREATE_REFRESH',
+    'COMPLETE'
+  ];
+  const draftCreatePhaseOrder = certifiedDraftV8
+    ? certifiedDraftCreatePhaseOrder
+    : legacyDraftCreatePhaseOrder;
   const phaseIndexFor = (phaseName) => {
     const normalisedPhaseName = String(phaseName || '').trim().toUpperCase();
     let effectivePhaseName = normalisedPhaseName;
@@ -67010,8 +68019,429 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     return true;
   };
 
+  const buildCertifiedDraftStepPayload = async (stepResult = {}) => {
+    const latestOperation = await fetchLatestDraftCreateOperationRow();
+    const publicOperation = latestOperation
+      ? buildBankingPayOperationPublicPayload(latestOperation)
+      : buildBankingPayOperationPublicPayload(operation);
+    return Object.assign({}, publicOperation, {
+      certified_draft_v8: true,
+      bounded_row_backed_transport: true,
+      draft_v8_step: safeObject(stepResult)
+    });
+  };
+
+  const collectCertifiedReadinessPayees = (items) => {
+    const collected = [];
+    const seenNodes = new Set();
+    const visit = (value) => {
+      if (value == null) return;
+      if (typeof value === 'string') {
+        const raw = value.trim();
+        if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return;
+        try { visit(JSON.parse(raw)); } catch {}
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (typeof value !== 'object' || seenNodes.has(value)) return;
+      seenNodes.add(value);
+      const kind = trimStr(value.payee_entity_kind || value.entity_kind || value.payee_kind || '').toUpperCase();
+      const id = trimStr(value.payee_entity_id || value.entity_id || value.payee_id || value.id || '');
+      const bankHash = trimStr(value.bank_details_hash || '');
+      const hasEvidence = !!bankHash || Array.isArray(value.blockers) || !!value.name_check || !!value.payee_map || !!value.transfers;
+      if (kind && id && hasEvidence) collected.push(value);
+      for (const key of [
+        'payees', 'effective_payees_json', 'effective_payees',
+        'effective_paye_candidate_json', 'effective_non_paye_payee_json',
+        'effective_candidate_fragment_json', 'effective_summary_fragment_json',
+        'selected_canonical_preview_lines_json', 'selected_canonical_preview_lines',
+        'canonical_preview_lines', 'rows', 'items'
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) visit(value[key]);
+      }
+    };
+    visit(items);
+
+    const deduped = [];
+    const seen = new Set();
+    for (const payee of collected) {
+      const kind = trimStr(payee.payee_entity_kind || payee.entity_kind || payee.payee_kind || '').toUpperCase();
+      const id = trimStr(payee.payee_entity_id || payee.entity_id || payee.payee_id || payee.id || '');
+      const bankHash = trimStr(payee.bank_details_hash || '');
+      const key = `${kind}|${id}|${bankHash}`;
+      if (!kind || !id || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(payee);
+    }
+    return deduped;
+  };
+
 
   try {
+    if (certifiedDraftV8) {
+      const certificateStagePhases = new Set([
+        'INITIALISE',
+        'CERTIFICATE_CONSTITUENT_REFS',
+        'CERTIFICATE_PARTITION_REFS',
+        'CANDIDATE_SCOPE',
+        'CERTIFICATE_FINAL_FREEZE'
+      ]);
+
+      if (certificateStagePhases.has(phase)) {
+        const staged = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_certificate_stage_advance_v8', {
+          p_operation_id: operationId,
+          p_worker_id: lockOwner
+        }, {
+          routeClass: 'BANKING_PAY_OPERATION',
+          purpose: `DRAFT_CREATE_V8_${phase}`,
+          timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+          bankingPay: true
+        }), 'banking_pay_draft_certificate_stage_advance_v8');
+        if (staged.ok !== true || staged.handled !== true) {
+          throw new Error('DRAFT_CERTIFICATE_STAGE_ADVANCE_RESULT_INVALID');
+        }
+        return buildCertifiedDraftStepPayload(staged);
+      }
+
+      if (phase === 'DRAIN_TSFIN') {
+        const afterOrdinal = Number.isFinite(Number(progressJson.draft_v8_tsfin_after_ordinal))
+          ? Math.trunc(Number(progressJson.draft_v8_tsfin_after_ordinal))
+          : null;
+        const page = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_readiness_page_v8', {
+          p_operation_id: operationId,
+          p_worker_id: lockOwner,
+          p_readiness_kind: 'TIMESHEET',
+          p_after_ordinal: afterOrdinal,
+          p_limit: 100
+        }, {
+          routeClass: 'BANKING_PAY_OPERATION',
+          purpose: 'DRAFT_CREATE_V8_TIMESHEET_READINESS_PAGE',
+          timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+          bankingPay: true
+        }), 'banking_pay_draft_readiness_page_v8');
+        const pageItems = Array.isArray(page.items) ? page.items : [];
+        const timesheetIds = uniqueUuidArray(pageItems.map((item) => item && item.timesheet_id));
+        if (page.ok !== true
+            || upperTrim(page.readiness_kind) !== 'TIMESHEET'
+            || pageItems.length !== Number(page.row_count || 0)
+            || timesheetIds.length !== pageItems.length
+            || pageItems.length > 100) {
+          throw new Error('DRAFT_CREATE_V8_TIMESHEET_READINESS_PAGE_INVALID');
+        }
+
+        let readiness = { ok: true, remaining: 0, made_ready: 0, failed: 0, still_pending: 0, next_cursor: null };
+        if (timesheetIds.length > 0 && typeof tsfinBestEffortMakeReadyForDraft === 'function') {
+          readiness = await tsfinBestEffortMakeReadyForDraft(env, timesheetIds, {
+            operationId,
+            chunkSize: 100,
+            lockOwner,
+            cursor: 0
+          });
+        }
+        const failedCount = Math.max(0, Math.trunc(Number(readiness?.failed || 0)));
+        const remaining = Math.max(0, Math.trunc(Number(readiness?.remaining || 0)));
+        const stillPending = Math.max(0, Math.trunc(Number(readiness?.still_pending || 0)));
+        const madeReady = Math.max(0, Math.trunc(Number(readiness?.made_ready || 0)));
+        const tailRetryCount = Math.max(0, Math.trunc(Number(progressJson.draft_v8_tsfin_tail_retry_count || 0)));
+        if (failedCount > 0) {
+          return finishFailedWithCleanup(null, {
+            code: 'DRAFT_TSFIN_READINESS_FAILED',
+            message: 'Timesheet financials could not be prepared for draft creation.',
+            phase,
+            tsfin_drain: readiness
+          });
+        }
+        if (remaining > 0 || stillPending > 0) {
+          if (stillPending > 0 && madeReady <= 0 && tailRetryCount >= 2) {
+            return finishFailedWithCleanup(null, {
+              code: 'DRAFT_TSFIN_READINESS_PENDING',
+              message: 'Timesheet financials are still pending after repeated draft-readiness attempts.',
+              phase,
+              tsfin_drain: readiness
+            });
+          }
+          return lockProgressForRetryableWait('DRAIN_TSFIN', {
+            status_text: 'Timesheet financials are still pending; CloudTMS will retry this bounded readiness page.',
+            draft_v8_tsfin_after_ordinal: afterOrdinal,
+            draft_v8_tsfin_tail_retry_count: tailRetryCount + 1,
+            draft_v8_tsfin_readiness: readiness
+          }, 5);
+        }
+
+        const nextPhase = page.has_more === true ? 'DRAIN_TSFIN' : 'ENSURE_PAYEE_READINESS';
+        return lockProgress('RUNNING', nextPhase, {
+          status_text: page.has_more === true
+            ? 'Prepared one bounded Timesheet-financials page.'
+            : 'Timesheet financials checked.',
+          draft_v8_tsfin_after_ordinal: page.next_after_ordinal,
+          draft_v8_tsfin_tail_retry_count: 0,
+          draft_v8_tsfin_readiness: readiness,
+          draft_v8_tsfin_page_digest_sha256: page.payload_digest_sha256 || null
+        });
+      }
+
+      if (phase === 'ENSURE_PAYEE_READINESS') {
+        const afterOrdinal = Number.isFinite(Number(progressJson.draft_v8_payee_after_ordinal))
+          ? Math.trunc(Number(progressJson.draft_v8_payee_after_ordinal))
+          : null;
+        const innerCursor = Math.max(0, Math.trunc(Number(progressJson.draft_v8_payee_inner_cursor || 0)));
+        const page = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_readiness_page_v8', {
+          p_operation_id: operationId,
+          p_worker_id: lockOwner,
+          p_readiness_kind: 'PAYEE',
+          p_after_ordinal: afterOrdinal,
+          p_limit: 25
+        }, {
+          routeClass: 'BANKING_PAY_OPERATION',
+          purpose: 'DRAFT_CREATE_V8_PAYEE_READINESS_PAGE',
+          timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+          bankingPay: true
+        }), 'banking_pay_draft_readiness_page_v8');
+        const pageItems = Array.isArray(page.items) ? page.items : [];
+        if (page.ok !== true
+            || upperTrim(page.readiness_kind) !== 'PAYEE'
+            || pageItems.length !== Number(page.row_count || 0)
+            || pageItems.length > 25) {
+          throw new Error('DRAFT_CREATE_V8_PAYEE_READINESS_PAGE_INVALID');
+        }
+        const payees = collectCertifiedReadinessPayees(pageItems);
+        let readiness = { ok: true, remaining: 0, failed: 0, next_cursor: null };
+        if (payees.length > 0 && typeof revolutEnsurePayeesReadyFromPreview === 'function') {
+          const railEnvSnapshot = upperTrim(inputJson.rail_env_snapshot || inputJson.rail_env || '');
+          if (!railEnvSnapshot) throw new Error('DRAFT_CREATE_V8_RAIL_ENV_SNAPSHOT_MISSING');
+          readiness = await revolutEnsurePayeesReadyFromPreview(env, railEnvSnapshot, payees, actorUserId, {
+            operationId,
+            chunkSize: 50,
+            lockOwner,
+            cursor: innerCursor
+          });
+        }
+        const failedCount = Math.max(0, Math.trunc(Number(readiness?.failed ?? readiness?.failed_count ?? 0)));
+        const remaining = Math.max(0, Math.trunc(Number(readiness?.remaining || 0)));
+        const nextCursor = Number.isFinite(Number(readiness?.next_cursor))
+          ? Math.max(0, Math.trunc(Number(readiness.next_cursor)))
+          : null;
+        if (failedCount > 0) {
+          return finishFailedWithCleanup(null, {
+            code: 'DRAFT_PAYEE_READINESS_FAILED',
+            message: 'Provider payee readiness could not be completed for draft creation.',
+            phase,
+            payee_readiness: readiness
+          });
+        }
+        if (remaining > 0 && nextCursor !== null) {
+          return lockProgress('RUNNING', 'ENSURE_PAYEE_READINESS', {
+            status_text: 'Checked one bounded payee-readiness subpage.',
+            draft_v8_payee_after_ordinal: afterOrdinal,
+            draft_v8_payee_inner_cursor: nextCursor,
+            draft_v8_payee_readiness: readiness
+          });
+        }
+
+        const nextPhase = page.has_more === true ? 'ENSURE_PAYEE_READINESS' : 'SEED_ALLOCATION_ROWS';
+        return lockProgress('RUNNING', nextPhase, {
+          status_text: page.has_more === true
+            ? 'Checked one bounded payee-readiness page.'
+            : 'Payee readiness checked.',
+          draft_v8_payee_after_ordinal: page.next_after_ordinal,
+          draft_v8_payee_inner_cursor: 0,
+          draft_v8_payee_readiness: readiness,
+          draft_v8_payee_page_digest_sha256: page.payload_digest_sha256 || null
+        });
+      }
+
+      const partitionReceipt = trimStr(progressJson.draft_v8_certificate_partition_receipt_sha256 || '');
+      if (!/^[0-9a-f]{64}$/.test(partitionReceipt)) {
+        throw new Error('DRAFT_CREATE_V8_PARTITION_RECEIPT_MISSING');
+      }
+      const bounded = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_advance_bounded_v8', {
+        p_operation_id: operationId,
+        p_worker_id: lockOwner,
+        p_expected_partition_stage_receipt_sha256: partitionReceipt
+      }, {
+        routeClass: 'BANKING_PAY_OPERATION',
+        purpose: `DRAFT_CREATE_V8_${phase}`,
+        timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+        bankingPay: true
+      }), 'banking_pay_draft_advance_bounded_v8');
+      if (bounded.handled !== true) throw new Error('DRAFT_CREATE_V8_BOUNDED_ADVANCE_RESULT_INVALID');
+
+      const workKind = upperTrim(bounded.work_kind || '');
+      if (workKind === 'EMPTY_RESERVED_BATCH_CLEANUP_REQUIRED') {
+        const cleanup = await cancelSkippedEmptyReservedDraftBatches(
+          Array.isArray(bounded.skipped_empty_pay_batch_ids) ? bounded.skipped_empty_pay_batch_ids : [],
+          'Draft shell contained only payments already reserved in another active draft batch; eligible payments were created in a separate draft shell.'
+        );
+        if (cleanup.ok !== true) {
+          return finishFailedWithCleanup(null, {
+            code: 'DRAFT_EMPTY_RESERVED_BATCH_CLEANUP_FAILED',
+            message: 'An empty already-reserved draft shell could not be safely cancelled.',
+            phase,
+            empty_reserved_batch_cleanup: cleanup
+          });
+        }
+        return lockProgress('RUNNING', 'ASSERT_INTEGRITY', {
+          status_text: 'Empty already-reserved draft shells were safely excluded.',
+          skipped_empty_pay_batch_ids: bounded.skipped_empty_pay_batch_ids || [],
+          cancelled_empty_pay_batch_ids: cleanup.cancelled_pay_batch_ids || [],
+          empty_reserved_batch_cleanup: cleanup
+        });
+      }
+      if (workKind === 'TERMINAL_FAILURE_REQUIRED') {
+        return finishFailedWithCleanup(null, {
+          code: bounded.code || 'DRAFT_CREATE_OPERATION_FAILED',
+          message: bounded.message || 'Draft create operation failed.',
+          phase,
+          bounded_result: bounded
+        });
+      }
+      if (workKind === 'POST_CREATE_REFRESH_RETRY_REQUIRED') {
+        return lockProgressForRetryableWait('POST_CREATE_REFRESH', {
+          status_text: 'Draft created; the bounded Workbench refresh will retry.',
+          draft_v8_post_create_refresh: bounded,
+          resume_reason: bounded.code || 'POST_CREATE_PATCH_RETRY'
+        }, 10);
+      }
+      if (workKind === 'READY_FOR_TERMINAL_FINISH') {
+        const terminalContext = validateCertifiedDraftTerminalContextV8(
+          safeObject(bounded.terminal_prepare)
+        );
+        if (terminalContext.ok !== true) {
+          throw new Error(terminalContext.code || 'BANKING_PAY_DRAFT_TERMINAL_CONTEXT_INVALID');
+        }
+
+        let replacementResult = null;
+        if (terminalContext.replacement_session_required) {
+          try {
+            replacementResult = unwrapRpcPayload(await sbRpc(env, 'pay_workbench_session_replace_after_mutation', {
+              p_actor_user_id: actorUserId,
+              p_source_session_id: workbenchSessionId,
+              p_replacement_idempotency_key: terminalContext.replacement_idempotency_key,
+              p_expected_source_version: terminalContext.source_session_version,
+              p_reason: `DRAFT_CREATE_COMPLETE:${operationId}`
+            }, {
+              routeClass: 'BANKING_PAY_OPERATION',
+              purpose: 'DRAFT_CREATE_V8_REPLACEMENT_SESSION',
+              timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+              bankingPay: true
+            }), 'pay_workbench_session_replace_after_mutation');
+          } catch (replacementError) {
+            return lockProgressForRetryableWait('POST_CREATE_REFRESH', {
+              status_text: 'Draft created; waiting to attach the replacement payment preview session.',
+              resume_reason: 'POST_CREATE_REPLACEMENT_RETRY',
+              replacement_idempotency_key: terminalContext.replacement_idempotency_key,
+              replacement_error: {
+                code: 'POST_CREATE_REPLACEMENT_RPC_FAILED',
+                message: String(replacementError?.message || replacementError || 'Replacement session creation failed')
+              }
+            }, 10);
+          }
+        }
+
+        let terminalResult;
+        try {
+          terminalResult = buildCertifiedDraftTerminalResultV8(
+            terminalContext,
+            replacementResult,
+            null
+          );
+        } catch (terminalResultError) {
+          if (terminalContext.replacement_session_required) {
+            return lockProgressForRetryableWait('POST_CREATE_REFRESH', {
+              status_text: 'Draft created; waiting for a valid replacement payment preview session.',
+              resume_reason: 'POST_CREATE_REPLACEMENT_INVALID_RESULT',
+              replacement_idempotency_key: terminalContext.replacement_idempotency_key,
+              replacement_error: {
+                code: 'POST_CREATE_REPLACEMENT_INVALID_RESULT',
+                message: String(terminalResultError?.message || terminalResultError || 'Replacement session result was invalid')
+              }
+            }, 10);
+          }
+          throw terminalResultError;
+        }
+
+        const postCreateRefresh = safeObject(terminalResult.post_create_refresh);
+        const wakeRequired = terminalContext.replacement_session_required
+          || postCreateRefresh.targeted_refresh_enqueued === true;
+        const wakeSessionId = trimStr(
+          terminalContext.replacement_session_required
+            ? terminalResult.replacement_session_id
+            : terminalContext.workbench_session_id
+        );
+        let workerWake = null;
+        if (wakeRequired) {
+          const hasWaitUntil = (value) => !!(value && typeof value === 'object' && typeof value.waitUntil === 'function');
+          const drainCtx = hasWaitUntil(options.ctx) ? options.ctx
+            : (hasWaitUntil(options.executionContext) ? options.executionContext
+              : (hasWaitUntil(options.execution_context) ? options.execution_context
+                : (hasWaitUntil(options.context) ? options.context
+                  : (hasWaitUntil(options.waitUntilContext) ? options.waitUntilContext
+                    : (hasWaitUntil(options.wait_until_context) ? options.wait_until_context
+                      : (hasWaitUntil(options.req) ? options.req : null))))));
+          try {
+            workerWake = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, drainCtx, {
+              origin: terminalContext.replacement_session_required
+                ? 'DRAFT_CREATE_POST_CREATE_REPLACEMENT'
+                : 'DRAFT_CREATE_POST_ACTION_PATCH_TARGETED_REFRESH',
+              reason: terminalContext.replacement_session_required
+                ? 'DRAFT_CREATE_POST_CREATE_REPLACEMENT'
+                : 'DRAFT_CREATE_POST_ACTION_PATCH_TARGETED_REFRESH',
+              mutation_type: 'DRAFT_CREATE',
+              budgetProfile: 'NUDGE',
+              profile: 'NUDGE',
+              sessionId: wakeSessionId,
+              session_id: wakeSessionId,
+              replacementSessionId: terminalContext.replacement_session_required ? wakeSessionId : null,
+              replacement_session_id: terminalContext.replacement_session_required ? wakeSessionId : null,
+              sourceSessionId: workbenchSessionId,
+              source_session_id: workbenchSessionId,
+              actorUserId,
+              actor_user_id: actorUserId,
+              post_action_refresh: postCreateRefresh
+            });
+          } catch (wakeError) {
+            workerWake = {
+              ok: false,
+              scheduled: false,
+              code: terminalContext.replacement_session_required
+                ? 'DRAFT_CREATE_REPLACEMENT_NUDGE_FAILED'
+                : 'DRAFT_CREATE_POST_ACTION_PATCH_NUDGE_FAILED',
+              message: String(wakeError?.message || wakeError || 'Post-Draft Workbench nudge failed'),
+              worker_scope: 'SESSION',
+              requested_session_id: wakeSessionId,
+              scheduled_worker_is_durable_fallback: true
+            };
+          }
+          terminalResult = buildCertifiedDraftTerminalResultV8(
+            terminalContext,
+            replacementResult,
+            workerWake
+          );
+        }
+
+        const terminal = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_operation_finish_v8', {
+          p_operation_id: operationId,
+          p_status: 'COMPLETE',
+          p_result_json: terminalResult,
+          p_error_json: null
+        }, {
+          routeClass: 'BANKING_PAY_OPERATION',
+          purpose: 'DRAFT_CREATE_V8_TERMINAL_FINISH',
+          timeoutMs: Math.min(18000, draftCreateRequestBudgetMs),
+          bankingPay: true
+        }), 'banking_pay_draft_operation_finish_v8');
+        return Object.assign({}, buildBankingPayOperationPublicPayload(terminal), {
+          certified_draft_v8: true,
+          bounded_row_backed_transport: true,
+          draft_v8_step: bounded
+        });
+      }
+      return buildCertifiedDraftStepPayload(bounded);
+    }
+
     const contractFailure = getOperationInputContractFailure();
     if (contractFailure) {
       return await finishDraftCreateAuthorityFailure(contractFailure.code, contractFailure.message, contractFailure);

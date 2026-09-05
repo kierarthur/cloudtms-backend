@@ -1,0 +1,483 @@
+{
+  "contract": "H12_BANKING_PAY_CHANGE_COMPATIBILITY_LEDGER_V1",
+  "append_only": true,
+  "entries": [
+    {
+      "entry_id": "F-014-DRAFT-INTEGRITY-SETWISE-PERFORMANCE-PREEDIT",
+      "recorded_at_utc": "2026-09-05T02:06:39Z",
+      "classification": "PROVED_PERFORMANCE_AND_RELIABILITY_DEFECT_POLICY_UNCHANGED",
+      "source_baseline": {
+        "backend_commit": "4d5a13cb8b7aadc424f1ba18061fa32d3153ae88",
+        "worktree": "h12-banking-draft-v8-final2-backend",
+        "branch": "codex/h12-banking-draft-v8-final-4d5-v2"
+      },
+      "current_owner": {
+        "routine": "public.pay_batch_assert_integrity(uuid,uuid,uuid)",
+        "source": "supabase/repeatable/04092026_1530_banking_pay_draft_integrity_advance_lookup_v8.sql",
+        "slow_boundary": "operation_checks",
+        "first_divergent_check": "MISSING_SELECTED_PREVIEW_ROW_ITEM"
+      },
+      "prechange_evidence": {
+        "postgres_17_11": {
+          "workload": "5000 selected constituents over 1000 distinct Timesheets, split across PAYE and UMBRELLA",
+          "outcome": "PASS_WITH_INTERMITTENT_PRIOR_STATEMENT_TIMEOUT",
+          "passed_max_bounded_call_ms": 6056.727,
+          "pay_batch_assert_integrity_operation_checks_ms": 6032,
+          "operation_checks_shared_buffers": 2013444,
+          "missing_selected_preview_item_shared_buffers": 901250
+        },
+        "postgres_18_6": {
+          "workload": "5000 selected constituents over 1000 distinct Timesheets, split across PAYE and UMBRELLA",
+          "outcome": "PASS",
+          "passed_max_bounded_call_ms": 6401.475,
+          "bounded_advance_call_count": 184,
+          "full_harness_ms": 405989.061
+        },
+        "root_cause": "The final integrity query invokes the same row-backed selected-line reader repeatedly and performs a per-selected-row wildcard search across all batch item source keys. Work grows quadratically with selected rows and creates avoidable late-stage latency and timeout variance.",
+        "no_payment_or_provider_action": true,
+        "transaction_outcome": "ROLLBACK"
+      },
+      "controlling_rules": {
+        "banking_pay_bible_sections": [
+          "3 Policy X",
+          "13 Modal responsiveness and state adoption",
+          "14 Draft creation",
+          "16 Mandatory regression matrix",
+          "17 Evidence standards"
+        ],
+        "policy_contract": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1",
+        "policy_contract_phase": "ASSERT_INTEGRITY",
+        "required_outcome": "Reject incomplete, duplicate or inconsistent Draft artifacts without hiding rows.",
+        "forbidden_changes": [
+          "selection membership or eligibility",
+          "economic keys, signs or ex-VAT/VAT amounts",
+          "PAYE gross/net treatment",
+          "Umbrella VAT/channel/payee treatment",
+          "finance or recovery/headroom equations",
+          "Draft item, allocation, reservation or snapshot identity",
+          "provider, execution, settlement, remittance or cancellation behaviour",
+          "statement_timeout, lock_timeout or idle transaction budgets",
+          "error codes, response fields or mismatch meaning"
+        ]
+      },
+      "planned_owner_boundary": {
+        "replacement_kind": "additive complete single-function authority",
+        "routine": "public.pay_batch_assert_integrity(uuid,uuid,uuid)",
+        "source_path": "supabase/repeatable/05092026_0310_banking_pay_draft_integrity_setwise_v8.sql",
+        "generator_path": "scripts/generate-banking-pay-draft-integrity-setwise-v8.mjs",
+        "semantic_change": "none",
+        "performance_change": "Read the frozen selected-line set once, parse reservation evidence once, and prove selected-line materialisation through the existing exact allocation-row to batch-item linkage instead of wildcard item-key searching.",
+        "metadata_acl_signature_security_and_budgets_unchanged": true
+      },
+      "proof_and_stop_gates": [
+        "Preserve the exact pre-change large-run evidence.",
+        "Prove every integrity check code and returned field remains present.",
+        "Prove valid output is byte-equivalent apart from generated technical IDs already mapped by the parity oracle.",
+        "Prove every focused corruption/missing/duplicate/mismatch fixture still fails with the same typed outcome.",
+        "Prove PostgreSQL 17 and 18 NEW, UPGRADE and idempotent reapply under the unchanged 15000/1500/30000 millisecond budgets.",
+        "Prove the 5000-row/1000-Timesheet case on both engines with no timeout and materially lower work at the final integrity stage.",
+        "Stop and revert this candidate if any financial, policy, identity, downstream or error-contract difference appears."
+      ],
+      "publication_status": "LOCAL_PREEDIT_ONLY",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "bible_status": "FULL_BIBLE_REREAD_COMPLETE_FINAL_ENTRY_PENDING_PROOF"
+    },
+    {
+      "entry_id": "F-016-ONE-CANDIDATE-CANCELLATION-UNSELECTED-SCOPE-INTEGRITY-PREEDIT",
+      "recorded_at_utc": "2026-09-05T04:02:00Z",
+      "classification": "PROVED_ORCHESTRATION_INTEGRITY_DEFECT_POLICY_UNCHANGED",
+      "source_baseline": {
+        "backend_commit": "6b2e3822e7239cf8fc9b6568194294731135137d",
+        "worktree": "h12-banking-draft-v8-final2-backend",
+        "branch": "codex/h12-banking-draft-v8-final-4d5-v2"
+      },
+      "current_owner": {
+        "routine": "public.pay_payment_correction_selection_prepare_chunk_v1(uuid,uuid,jsonb,integer,text,uuid)",
+        "source": "supabase/repeatable/04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql",
+        "downstream_integrity_owner": "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)",
+        "first_divergent_boundary": "EXPLICIT_PREPARE_UNSELECTED_SCOPE_CHAIN"
+      },
+      "prechange_evidence": {
+        "scope": "One Candidate selected for DRAFT_CANCEL from a two-Candidate PAYE Draft",
+        "financial_result_before_final_integrity": "Selected Candidate items voided; unrelated Candidate items remained active; batch remained DRAFT",
+        "terminal_result": "PAYMENT_CORRECTION_SCOPE_INTEGRITY_CONFLICT",
+        "unselected_scope_hash_before": "f0067e91daf31b8c9e0c47b67203899fdb6e776654103e482f08848b56819ce4",
+        "unselected_scope_hash_after": "722dfea0b95ccd98c414d934cc7d4dcf149f310a58698e6bae526002eda8b8ff",
+        "proved_reason": "EXPLICIT preparation scans only selected Candidate IDs, so the before hash is the empty unselected-chain seed. FINALISE scans the complete batch and correctly adds the unchanged unselected Candidate to the after chain. The two differently scoped hashes cannot match.",
+        "unchanged_unselected_candidate_audit_hash_before_and_after": "c56a38c70d4bf84cafe320cf9aef37aa6aad75130583bb1251c0cf087b97fa55",
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0,
+        "disposable_database_only": true
+      },
+      "controlling_rules": {
+        "banking_pay_bible_sections": [
+          "3 Policy X",
+          "14 Draft creation",
+          "15 Fast future-payment cancellation",
+          "16 Mandatory Draft-cancellation retry matrix",
+          "17 Evidence standards"
+        ],
+        "policy_contract": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1",
+        "required_outcome": "Cancelling one whole Candidate payment must preserve every unrelated frozen Candidate and complete without a false integrity failure.",
+        "forbidden_changes": [
+          "which Candidate is selected",
+          "eligibility or cancellation policy",
+          "amount, tax, VAT, pay channel or payee",
+          "frozen item, allocation, reservation or economic identity",
+          "provider, execution, settlement or remittance behaviour",
+          "statement_timeout or lock_timeout",
+          "weakening the unchanged-unselected integrity fence"
+        ]
+      },
+      "planned_owner_boundary": {
+        "replacement_kind": "additive complete single-function authority",
+        "semantic_change": "For EXPLICIT selection, page the complete batch identity set so selected and unselected Candidates are fingerprinted against the same bounded universe; selected membership remains the exact explicit set.",
+        "policy_or_economic_change": false,
+        "metadata_acl_signature_security_and_budgets_unchanged": true
+      },
+      "proof_and_stop_gates": [
+        "Preserve the exact pre-change false-conflict fixture.",
+        "Prove one-Candidate PAYE and Umbrella cancellation on PostgreSQL 17 and 18.",
+        "Prove the unrelated Candidate audit hash, items, amount and eligibility remain byte-identical.",
+        "Prove whole-Draft cancellation, ALL_MATCHING and ordinary explicit correction compatibility.",
+        "Prove stale, malformed, changed-unselected, response-loss and replay cases still fail closed or remain idempotent as applicable.",
+        "Prove zero provider, settlement and remittance effects.",
+        "Prove no timeout or lock-budget relaxation."
+      ],
+      "publication_status": "LOCAL_PREEDIT_ONLY",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "bible_status": "FULL_BIBLE_REREAD_COMPLETE_FINAL_ENTRY_PENDING_PROOF"
+    },
+    {
+      "entry_id": "F-017-ONE-CANDIDATE-CANCELLATION-WHOLE-BATCH-METADATA-HANDOFF-PREEDIT",
+      "recorded_at_utc": "2026-09-05T04:18:00Z",
+      "classification": "PROVED_ORCHESTRATION_HANDOFF_DEFECT_POLICY_UNCHANGED",
+      "source_baseline": {
+        "backend_commit": "6b2e3822e7239cf8fc9b6568194294731135137d",
+        "candidate_owner": "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql"
+      },
+      "first_divergent_boundary": "REFRESH_WORKBENCH_WHOLE_BATCH_METADATA_DISPATCH",
+      "prechange_evidence": {
+        "prior_f016_boundary_passed": true,
+        "selected_candidate_item_count_voided": 2,
+        "unselected_candidate_active_item_count_preserved": 2,
+        "batch_status": "DRAFT",
+        "request_status": "APPLIED",
+        "failure": "PAYMENT_CANCEL_FINALISE_BATCH_NOT_SAFE",
+        "proved_reason": "The staged completion owner invokes the whole-batch cancellation metadata routine for every DRAFT_CANCEL request. Candidate-only cancellation deliberately leaves the batch DRAFT with unrelated active items, so whole-batch metadata is inapplicable and correctly fails closed.",
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0
+      },
+      "controlling_policy": {
+        "candidate_only_outcome": "Void only the selected Candidate payment and keep the remaining batch DRAFT.",
+        "whole_batch_outcome": "Invoke the existing whole-batch metadata/audit owner only when no active payment item remains and the batch is CANCELLED.",
+        "policy_or_economic_change": false
+      },
+      "planned_owner_boundary": {
+        "routine": "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)",
+        "source": "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql",
+        "change": "Strengthen the existing terminal DRAFT_CANCEL metadata dispatch guard with exact current batch status CANCELLED; keep the metadata routine itself unchanged.",
+        "metadata_acl_signature_security_and_budgets_unchanged": true
+      },
+      "proof_and_stop_gates": [
+        "Candidate-only PAYE and Umbrella cancellation completes with the unrelated Candidate unchanged.",
+        "Whole-Draft cancellation still invokes the existing metadata/audit owner exactly once.",
+        "Replay and response loss do not duplicate audit or correction work.",
+        "No provider, settlement or remittance action occurs.",
+        "No timeout or lock-budget relaxation occurs."
+      ],
+      "publication_status": "LOCAL_PREEDIT_ONLY",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED"
+    },
+    {
+      "entry_id": "F-016-ONE-CANDIDATE-CANCELLATION-UNSELECTED-SCOPE-INTEGRITY-POSTCHANGE",
+      "recorded_at_utc": "2026-09-05T04:16:06Z",
+      "classification": "FIXED_LOCAL_PASS_POLICY_UNCHANGED_NOT_INSTALLED",
+      "source_baseline": {
+        "backend_commit": "6b2e3822e7239cf8fc9b6568194294731135137d",
+        "branch": "codex/h12-banking-draft-v8-final-4d5-v2"
+      },
+      "replacement": {
+        "routine": "public.pay_payment_correction_selection_prepare_chunk_v1(uuid,uuid,jsonb,integer,text,uuid)",
+        "source": "supabase/repeatable/05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1.sql",
+        "source_sha256": "47d79ef8f50a6a313e2ac20d0ff9b6e4d6ec5ee6c99a7d0be376724564b10634",
+        "historical_owner_byte_identical": true,
+        "policy_or_economic_change_count": 0,
+        "timeout_or_lock_budget_change_count": 0
+      },
+      "local_runtime_proof": {
+        "postgres_engines": ["17.11", "18.6"],
+        "draft_routes": ["HISTORICAL_V1", "CERTIFIED_V8"],
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "selected_candidate_count": 1,
+        "batch_candidate_count": 2,
+        "selected_candidate_only_voided": true,
+        "unselected_candidate_items_reservations_transfers_digest_preserved": true,
+        "batch_remains_draft": true,
+        "request_and_operation_complete": true,
+        "postgres_17_18_normalized_digest_equal": true,
+        "historical_v1_current_v8_normalized_digest_equal": true,
+        "maximum_bounded_rpc_ms": 888.093,
+        "selected_candidate_ex_vat_vat_inc_vat_pence_reconciled": true,
+        "selected_candidate_reservation_rows_in_this_synthetic_shape": 0,
+        "reservation_release_arithmetic_guard_executed": true,
+        "nonzero_finance_reservation_release_remains_separately_fixture_bound": true,
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0
+      },
+      "test_evidence": {
+        "runner": "scripts/verify-banking-pay-draft-v1-v8-cancellation-parity.mjs",
+        "runner_sha256": "49bc16399319681951ffb621df685e7932999b171c63bb87515913ec6dd83daa",
+        "source_test": "tests/banking-pay-one-candidate-cancellation-scope-integrity.test.cjs",
+        "source_test_sha256": "ae83d4fdee0968133ba475519c876f7ad4ebfc27318c3239bcbaa365c105c145",
+        "source_and_mutation_tests": "6_PASS_0_FAIL",
+        "dual_engine_verifier": "PASS_ROLLBACK_ONLY",
+        "mutation_operators_killed": 14
+      },
+      "publication_status": "LOCAL_POSTCHANGE_PASS_NOT_INSTALLED",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "F-017-ONE-CANDIDATE-CANCELLATION-WHOLE-BATCH-METADATA-HANDOFF-POSTCHANGE",
+      "recorded_at_utc": "2026-09-05T04:16:06Z",
+      "classification": "FIXED_LOCAL_PASS_POLICY_UNCHANGED_NOT_INSTALLED",
+      "replacement": {
+        "routine": "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)",
+        "source": "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql",
+        "source_sha256": "60e5fc26fbd147991c16ada0aaf2a9691143ccf46aa6e3227dc78d823a7a7ce1",
+        "semantic_change": "Invoke the unchanged whole-Draft metadata owner only when the whole batch is actually CANCELLED.",
+        "policy_or_economic_change_count": 0,
+        "timeout_or_lock_budget_change_count": 0
+      },
+      "candidate_only_result": {
+        "paye": "PASS_POSTGRES_17_AND_18",
+        "umbrella": "PASS_POSTGRES_17_AND_18",
+        "whole_batch_metadata_invocation": false,
+        "operation_complete": true
+      },
+      "whole_draft_regression": {
+        "paye": "PASS_POSTGRES_17_AND_18",
+        "umbrella": "PASS_POSTGRES_17_AND_18",
+        "all_candidates_voided": true,
+        "batch_cancelled": true,
+        "cancellation_audit_present": true,
+        "workbench_return_history_present": true,
+        "postgres_17_18_normalized_digest_equal": true,
+        "maximum_bounded_rpc_ms": 1255.279,
+        "exact_ex_vat_vat_inc_vat_pence_reconciled": true,
+        "whole_draft_reservation_rows_in_this_synthetic_shape": 0,
+        "reservation_release_arithmetic_guard_executed": true,
+        "nonzero_finance_reservation_release_remains_separately_fixture_bound": true,
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0
+      },
+      "test_evidence": {
+        "source_test": "tests/banking-pay-cancellation-completion-handoff.test.cjs",
+        "source_test_sha256": "08b726df328d485e13348030a0392f40170a20c685957c38a9ec0d3ad51f3b00",
+        "source_and_mutation_tests": "6_PASS_0_FAIL",
+        "dual_engine_verifier": "PASS_ROLLBACK_ONLY",
+        "verifier": "supabase/verification/05092026_0410_banking_pay_one_candidate_cancellation_scope_integrity_verification.sql",
+        "verifier_sha256": "f126afc09e0efc21adf8db990de9eb508bf2cfb3335a6bcc702e0efc4c501e2c"
+      },
+      "publication_status": "LOCAL_POSTCHANGE_PASS_NOT_INSTALLED",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "F-018-ACTIVE-DRAFT-RESERVATION-DUPLICATE-EVIDENCE-PRECEDENCE",
+      "recorded_at_utc": "2026-09-05T06:21:57Z",
+      "classification": "FIXED_LOCAL_PASS_POLICY_UNCHANGED_NOT_INSTALLED",
+      "source_baseline": {
+        "backend_commit": "6b2e3822e7239cf8fc9b6568194294731135137d",
+        "branch": "codex/h12-banking-draft-v8-final-4d5-v2"
+      },
+      "first_divergent_boundary": {
+        "routine": "private.pay_workbench_sealed_rate_component_projection_v1(uuid,uuid,uuid[])",
+        "historical_owner": "supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql",
+        "historical_owner_sha256": "ebbc86882312d06c1421b5dbe6abf62880f65beefe5ccf4bf7bb1d73c702b7b7",
+        "failure_code": "RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED",
+        "proved_reason": "One cancelled-Draft reservation retained the same allocation-row-backed frozen source basis and ordinary case-component compatibility view. Their representation digests differed, so the helper added the same reserved amount twice before applying its valid over-consumption guard.",
+        "historical_v1_reproduced": true,
+        "certified_v8_reproduced": true,
+        "draft_creation_or_cancellation_financial_failure": false,
+        "post_cancellation_workbench_rebuild_failure": true,
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0
+      },
+      "replacement": {
+        "source": "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+        "source_sha256": "49ae5f6729122e9f611096b458df1b52e2fd2be211a14a4b32f3837f591a6037",
+        "historical_owner_byte_identical": true,
+        "semantic_change": "Suppress only an ORDINARY flat case-component view when the same frozen parent also contains one valid allocation-row-backed top-level source basis with the exact same timesheet, economic key, component identity, bucket, amount, reservation amount and source method.",
+        "overconsumption_guard_preserved": true,
+        "parent_reconciliation_guard_preserved": true,
+        "different_amount_key_component_or_missing_allocation_id_fails_closed": true,
+        "policy_or_economic_change_count": 0,
+        "timeout_or_lock_budget_change_count": 0
+      },
+      "local_runtime_proof": {
+        "postgres_engines": ["17.11", "18.6"],
+        "draft_routes": ["HISTORICAL_V1", "CERTIFIED_V8"],
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "cancellation_scopes": ["ONE_CANDIDATE", "WHOLE_BATCH"],
+        "one_candidate_unrelated_candidate_preserved": true,
+        "whole_batch_all_items_voided_and_all_amounts_released": true,
+        "workbench_current_rows_equal_current_source_rows": true,
+        "cancelled_rows_retained_once_as_unselected_history": true,
+        "historical_v1_current_v8_normalized_digest_equal": true,
+        "postgres_17_18_normalized_digest_equal": true,
+        "paye_whole_batch_digest_sha256": "2d18d2c87eb410550ac504f757141b2958a29444a3a4f1f8a8a708f77ccf84e3",
+        "umbrella_whole_batch_digest_sha256": "de49e63f6995fc3d8451447d05da0181da1f920cf02b0109e46dec685d6506a1",
+        "maximum_bounded_rpc_ms": 1255.279,
+        "statement_timeout_ms": 15000,
+        "lock_timeout_ms": 1500,
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0
+      },
+      "test_evidence": {
+        "runtime_fixture": "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
+        "runtime_fixture_sha256": "e0666765091409704533ed0f471aea4dc0d001801715a5730be00c3697c6dede",
+        "source_test": "tests/banking-pay-active-draft-reservation-evidence-precedence.test.cjs",
+        "source_test_sha256": "dc6eeefa32ef3e88ccd13a7e9314c0dd09ed8598b9fc50cd160a4ad7b2b2615b",
+        "cancellation_runner": "scripts/verify-banking-pay-draft-v1-v8-cancellation-parity.mjs",
+        "cancellation_runner_sha256": "b58b581bfd15b0052e48bea3c70f9d0a1d842cfdc23771db0a408466841d8784",
+        "focused_tests": "5_PASS_0_FAIL",
+        "mutation_operators_total": 34,
+        "mutation_operators_killed": 34,
+        "mutation_survivors": 0
+      },
+      "publication_status": "LOCAL_POSTCHANGE_PASS_NOT_INSTALLED",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "F-018B-LOCAL-CANDIDATE-RESERVATION-EVIDENCE-SCALE-REGRESSION",
+      "recorded_at_utc": "2026-09-05T08:03:11Z",
+      "classification": "LOCAL_CANDIDATE_REGRESSION_FOUND_AND_FIXED_BEFORE_RELEASE_POLICY_UNCHANGED",
+      "affected_owner": "private.pay_workbench_sealed_rate_component_projection_v1(uuid,uuid,uuid[])",
+      "first_divergent_boundary": {
+        "case": "REPRESENTATIVE_5000",
+        "postgres_17_result": "FINALISE_RESERVATIONS_STATEMENT_TIMEOUT_ZERO_RETAINED_WRITES",
+        "postgres_18_result": "FINALISE_RESERVATIONS_STATEMENT_TIMEOUT_ZERO_RETAINED_WRITES",
+        "proved_cause": "The first F-018 candidate performed the new exact top-level allocation-evidence match as a correlated scan for every ordinary nested component.",
+        "prior_owner_comparator": "PostgreSQL 18 exact prior helper passed the same 5000-row case with maximum production call 3521.618ms and rollback, proving the new lookup rather than existing finance policy caused the regression."
+      },
+      "correction": {
+        "source": "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+        "source_sha256": "49ae5f6729122e9f611096b458df1b52e2fd2be211a14a4b32f3837f591a6037",
+        "change": "Precompute the same exact allocation-row-backed top-level evidence once and join it set-wise to ordinary nested components; retain every F-018 identity, amount, method, parent and over-consumption check.",
+        "timeout_or_lock_budget_change_count": 0,
+        "policy_or_economic_change_count": 0
+      },
+      "dual_engine_scale_proof": {
+        "materialised_row_count": 5000,
+        "configured_scalar_ceiling": 50000,
+        "materialised_50000_test_prohibited": true,
+        "shapes": [
+          "500_TIMESHEETS_X_10_SEGMENTS",
+          "1000_TIMESHEETS_X_5_SEGMENTS"
+        ],
+        "postgres_17_maximum_call_ms": 3986.594,
+        "postgres_18_maximum_call_ms": 3917.446,
+        "postgres_17_finalise_reservations_max_ms": 908.935,
+        "postgres_18_finalise_reservations_max_ms": 999.212,
+        "exact_items_allocations_breakdowns": 5000,
+        "exact_snapshot_counts": [500, 1000],
+        "paye_and_umbrella": true,
+        "response_loss_replay": true,
+        "transaction_outcome": "ROLLBACK_ZERO_RETAINED_WRITES",
+        "external_payment_actions": 0
+      },
+      "harness_audit_event": {
+        "event": "PARALLEL_HEAVYWEIGHT_ENGINE_RESOURCE_CONTENTION",
+        "result": "One PostgreSQL 18 1000-Timesheet run timed out while PostgreSQL 17 ran concurrently on the same Docker host; the controlled isolated PostgreSQL 18 rerun passed and only isolated measurements count as acceptance."
+      },
+      "publication_status": "LOCAL_POSTCHANGE_PASS_NOT_INSTALLED",
+      "miget_status": "NOT_APPLIED",
+      "worker_status": "NOT_DEPLOYED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "P11-SCHEDULED-ONE-CANDIDATE-CANCELLATION-DUAL-ENGINE-PASS",
+      "recorded_at_utc": "2026-09-05T11:36:00Z",
+      "classification": "LOCAL_POLICY_PARITY_AND_SAFE_FALLBACK_PASS_NOT_INSTALLED",
+      "scope": {
+        "payment_state": "SCHEDULED_LOCAL_NOT_SENT",
+        "postgres_engines": ["17.11", "18.6"],
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "selected_candidate_count": 1,
+        "batch_candidate_count": 2
+      },
+      "proved_outcome": {
+        "selected_candidate_items_voided": 2,
+        "unselected_candidate_items_active": 2,
+        "remaining_batch_status": "DRAFT",
+        "request_status": "APPLIED",
+        "operation_status": "COMPLETE",
+        "workbench_terminal_current": true,
+        "unselected_candidate_authority_preserved": true,
+        "provider_attempt_delta": 0,
+        "provider_event_delta": 0,
+        "paye_normalized_digest_sha256": "80234ae7a9d3b78138af65a81281dd39b61206687bf1033e5eea46dfc901c1b3",
+        "umbrella_normalized_digest_sha256": "a335d03852ddcd5f72ca836a97f0792d513ac31c40fdb82c5cc2892cd9e531b3"
+      },
+      "route_evidence": {
+        "route": "SAFE_SOURCE_REBUILD_FALLBACK",
+        "fast_reversion_claimed": false,
+        "exact_reason": "The ordinary scheduled fixtures have transfer-link transitions but no finance/reservation schedule transition, so the current chain owner correctly rejects certified fast reversion as incomplete and the unchanged cancellation owner rebuilds from current source.",
+        "policy_or_economic_change_count": 0,
+        "timeout_or_lock_budget_change_count": 0
+      },
+      "runner": {
+        "path": "scripts/verify-banking-pay-draft-v1-v8-cancellation-parity.mjs",
+        "sha256": "b58b581bfd15b0052e48bea3c70f9d0a1d842cfdc23771db0a408466841d8784"
+      },
+      "publication_status": "LOCAL_ONLY",
+      "miget_status": "NOT_APPLIED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "F-019-PAYMENT-CORRECTION-POST-COMMIT-CURRENTNESS-RETRY",
+      "recorded_at_utc": "2026-09-05T11:36:00Z",
+      "classification": "FIXED_LOCAL_SOURCE_AND_ORCHESTRATION_PASS_POLICY_UNCHANGED_NOT_DEPLOYED",
+      "first_divergent_boundary": {
+        "database_owner": "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)",
+        "database_result_code": "PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_NOT_FINALIZED",
+        "retry_detail": "REFRESH_RETRY",
+        "worker_owner": "broker/src/index.js PAYMENT_CORRECTION REFRESH_WORKBENCH retry classifier",
+        "prechange_worker_exact_code_present": false
+      },
+      "correction": {
+        "change": "Recognise the existing database-owned result as an exact retry token; reject substring near-misses.",
+        "database_sql_changed": false,
+        "payment_policy_or_economic_change_count": 0,
+        "timeout_or_lock_budget_change_count": 0
+      },
+      "proof": {
+        "test": "tests/banking-pay-payment-correction-post-commit-currentness-retry.test.cjs",
+        "test_sha256": "8a8901cd5958b5f2a240a3b08e38a5375619f07b2d000f7d770e10d5a5862509",
+        "focused_and_existing_semantic_tests_passed": 40,
+        "tests_failed": 0,
+        "mutation_survivors": 0
+      },
+      "publication_status": "LOCAL_ONLY",
+      "miget_status": "DATABASE_CODE_READ_ONLY_CONFIRMED_WORKER_NOT_DEPLOYED",
+      "final_audit_status": "OPEN"
+    },
+    {
+      "entry_id": "LOCAL-PG17-CLOCK-STEP-AUDIT-EVENT",
+      "recorded_at_utc": "2026-09-05T11:36:00Z",
+      "classification": "LOCAL_DISPOSABLE_ENVIRONMENT_EVENT_NOT_PRODUCT_FINDING",
+      "event": "During one post-restart PostgreSQL 17 Umbrella run, the Docker wall clock stepped backwards by approximately 0.57 seconds between stage-attempt creation and failure handling. The existing timestamp-order constraint rejected the row. An immediate unchanged rerun after clock stability passed with the same normalized Umbrella digest as PostgreSQL 18.",
+      "acceptance_use": "The interrupted run is retained as audit history and is not counted as acceptance. Only the stable isolated rerun is counted.",
+      "product_change_authorised": false
+    }
+  ]
+}

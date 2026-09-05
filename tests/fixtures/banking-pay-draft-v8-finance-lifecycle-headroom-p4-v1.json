@@ -1,0 +1,146 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_FINANCE_LIFECYCLE_HEADROOM_P4_V1",
+  "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM",
+  "scope": {
+    "proof_kind": "CURRENT_V8_CANONICAL_PRODUCER_TO_FINALIZER_OR_EXACT_ABSENCE",
+    "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+    "policy_delta_allowed": false,
+    "production_runtime_edits": false,
+    "provider_payment_settlement_remittance_actions": false
+  },
+  "frozen_policy_contract": {
+    "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+    "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd",
+    "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+  },
+  "common_assertions": {
+    "channels": ["PAYE", "UMBRELLA"],
+    "totals_are_secondary": true,
+    "outer_transaction_rollback": true,
+    "jit": "off",
+    "statement_timeout": "15s",
+    "lock_timeout": "1500ms",
+    "idle_in_transaction_session_timeout": "30s",
+    "unrelated_candidate_zero_change": true,
+    "external_action_count": 0,
+    "post_draft_live_preview_rule": "A successfully materialised source row is deliberately changed to selected=false and selection_state=NOT_SELECTABLE by the existing post-Draft overlay; its immutable certificate entry and frozen constituent reference prove its earlier selected membership."
+  },
+  "owners": [
+    {
+      "role": "SOURCE_SCOPE_AND_LIFECYCLE",
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f"
+    },
+    {
+      "role": "CANONICAL_LINE_AND_HEADROOM",
+      "path": "supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql",
+      "sha256": "5579e9cd33c6a4d413f467451c75172cfcec3bfb00258f9e31d1b31021cc4d5a"
+    },
+    {
+      "role": "SELECTION_HEADROOM_OVERLAY",
+      "path": "supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql",
+      "sha256": "adc1fdb34dcb598fd660304ecd96eddd7b253c04eca31d21866a8c86a1d38a9c"
+    },
+    {
+      "role": "FINANCE_MATERIALISATION",
+      "path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+      "sha256": "9171d175ea23a783f34c45cdbd42559062496bfa8d9daeac48dc9cb20abe4bd4"
+    },
+    {
+      "role": "FINANCE_CASE_LIFECYCLE_PROJECTION",
+      "path": "supabase/migrations/19072026_0120_fix_finance_case_resolution_register.sql",
+      "sha256": "4e1213d9f6f64ff6fb53aba1f0f858197746dabaaf2b22ad8d0af9c9d1153705"
+    },
+    {
+      "role": "CERTIFIED_PRE_BANK_CANCELLATION_RELEASE",
+      "path": "supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql",
+      "sha256": "d71a4311cee098ced9e96e49dc3eef76a9a6a5e4d7eea7933f80eedc2011fd56"
+    }
+  ],
+  "classes": [
+    {
+      "class_id": "advance_part_repaid_residual",
+      "family_id": "payment_advance_repayment",
+      "policy_condition": "only remaining scheduled residual",
+      "scenario": {"kind": "ADVANCE_REPAYMENT", "headroom_ex_vat": "100.00", "nominal_due_ex_vat": "40.00", "outstanding_ex_vat": "40.00", "payout_status": "PAID"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "frozen_item_type": "LOAN_REPAYMENT", "item_count": 1, "canonical_ex_vat": "-40.00", "headroom_allocation_ex_vat": "40.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "advance_paid_off_absent",
+      "family_id": "payment_advance_repayment",
+      "policy_condition": "no remaining due; absent/blocked",
+      "scenario": {"kind": "ADVANCE_REPAYMENT", "headroom_ex_vat": "100.00", "nominal_due_ex_vat": "0.00", "outstanding_ex_vat": "0.00", "payout_status": "PAID"},
+      "expected": {"preview_disposition": "ABSENT", "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "frozen_item_type": "LOAN_REPAYMENT", "item_count": 0, "canonical_ex_vat": "0.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "advance_cancelled_absent",
+      "family_id": "payment_advance_repayment",
+      "policy_condition": "cancelled authority not selectable",
+      "scenario": {"kind": "ADVANCE_REPAYMENT", "headroom_ex_vat": "100.00", "nominal_due_ex_vat": "40.00", "outstanding_ex_vat": "40.00", "payout_status": "CANCELLED"},
+      "expected": {"preview_disposition": "ABSENT", "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "frozen_item_type": "LOAN_REPAYMENT", "item_count": 0, "canonical_ex_vat": "0.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "40.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "advance_voided_reappears_once",
+      "family_id": "payment_advance_repayment",
+      "policy_condition": "certified release permits one correct reappearance",
+      "scenario": {"kind": "ADVANCE_REPAYMENT_RELEASED", "headroom_ex_vat": "100.00", "nominal_due_ex_vat": "40.00", "outstanding_ex_vat": "40.00", "payout_status": "PAID", "prior_reservation_status": "RELEASED"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "frozen_item_type": "LOAN_REPAYMENT", "item_count": 1, "canonical_ex_vat": "-40.00", "headroom_allocation_ex_vat": "40.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "overpayment_zero_headroom",
+      "family_id": "overpayment_recovery",
+      "policy_condition": "no ordinary positive headroom; zero draftable recovery",
+      "scenario": {"kind": "OVERPAYMENT", "headroom_ex_vat": "0.00", "nominal_due_ex_vat": "100.00", "outstanding_ex_vat": "100.00"},
+      "expected": {"preview_disposition": "BLOCKED_NO_PAY_HEADROOM", "visible_alias": "OVERPAYMENT_RECOVERY", "frozen_item_type": "OVERPAYMENT_RECOVERY", "item_count": 0, "canonical_ex_vat": "0.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "100.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "overpayment_exact_headroom",
+      "family_id": "overpayment_recovery",
+      "policy_condition": "recovery exactly consumes allowed headroom",
+      "scenario": {"kind": "OVERPAYMENT", "headroom_ex_vat": "100.00", "nominal_due_ex_vat": "100.00", "outstanding_ex_vat": "100.00"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "OVERPAYMENT_RECOVERY", "frozen_item_type": "OVERPAYMENT_RECOVERY", "item_count": 1, "canonical_ex_vat": "-100.00", "headroom_allocation_ex_vat": "100.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "overpayment_partial_headroom",
+      "family_id": "overpayment_recovery",
+      "policy_condition": "partial recovery only; residual remains",
+      "scenario": {"kind": "OVERPAYMENT", "headroom_ex_vat": "40.00", "nominal_due_ex_vat": "100.00", "outstanding_ex_vat": "100.00"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "OVERPAYMENT_RECOVERY", "frozen_item_type": "OVERPAYMENT_RECOVERY", "item_count": 1, "canonical_ex_vat": "-40.00", "headroom_allocation_ex_vat": "40.00", "residual_ex_vat": "60.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "manual_debt_zero_headroom",
+      "family_id": "manual_debt_adjustment",
+      "policy_condition": "zero permitted recovery",
+      "scenario": {"kind": "MANUAL_DEBT", "headroom_ex_vat": "0.00", "nominal_due_ex_vat": "100.00", "outstanding_ex_vat": "100.00"},
+      "expected": {"preview_disposition": "BLOCKED_NO_PAY_HEADROOM", "visible_alias": "MANUAL_DEBT_RECOVERY", "frozen_item_type": "MANUAL_DEBT_RECOVERY", "item_count": 0, "canonical_ex_vat": "0.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "100.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "manual_debt_partial_headroom",
+      "family_id": "manual_debt_adjustment",
+      "policy_condition": "partial permitted recovery",
+      "scenario": {"kind": "MANUAL_DEBT", "headroom_ex_vat": "40.00", "nominal_due_ex_vat": "100.00", "outstanding_ex_vat": "100.00"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "MANUAL_DEBT_RECOVERY", "frozen_item_type": "MANUAL_DEBT_RECOVERY", "item_count": 1, "canonical_ex_vat": "-40.00", "headroom_allocation_ex_vat": "40.00", "residual_ex_vat": "60.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "mixed_recoveries_deterministic_order",
+      "family_id": "overpayment_recovery",
+      "policy_condition": "overpayment, manual debt and advance repayment share headroom in source-defined deterministic order",
+      "scenario": {"kind": "MIXED_RECOVERIES", "headroom_ex_vat": "100.00", "nominal_due_by_alias": {"OVERPAYMENT_RECOVERY": "60.00", "MANUAL_DEBT_RECOVERY": "60.00", "PAYMENT_ADVANCE_REPAYMENT": "60.00"}, "source_order": ["OVERPAYMENT_RECOVERY", "MANUAL_DEBT_RECOVERY", "PAYMENT_ADVANCE_REPAYMENT"]},
+      "expected": {"preview_disposition": "MIXED_SELECTED_AND_BLOCKED", "item_count": 2, "canonical_amounts_by_alias": {"OVERPAYMENT_RECOVERY": "-60.00", "MANUAL_DEBT_RECOVERY": "-40.00", "PAYMENT_ADVANCE_REPAYMENT": "0.00"}, "frozen_item_types": ["OVERPAYMENT_RECOVERY", "MANUAL_DEBT_RECOVERY"], "headroom_allocation_ex_vat": "100.00", "residual_ex_vat": "80.00", "paye_treatment": {"PAYE": "CATEGORY_OWNED_GROSS_OR_NET_DEDUCT", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "carry_forward_credit",
+      "family_id": "manual_adjustment_carry_forward",
+      "policy_condition": "positive stored carry-forward",
+      "scenario": {"kind": "CARRY_FORWARD", "stored_ex_vat": "25.00", "stored_vat": {"PAYE": "0.00", "UMBRELLA": "5.00"}, "stored_inc_vat": {"PAYE": "25.00", "UMBRELLA": "30.00"}, "direction": "CREDIT"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "MANUAL_ADJUSTMENT_CARRY_FORWARD", "frozen_item_type": "MANUAL_CREDIT_PAYOUT", "item_count": 1, "canonical_ex_vat": "25.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_ADD", "UMBRELLA": "NONE"}}
+    },
+    {
+      "class_id": "carry_forward_debit",
+      "family_id": "manual_adjustment_carry_forward",
+      "policy_condition": "negative stored carry-forward",
+      "scenario": {"kind": "CARRY_FORWARD", "stored_ex_vat": "-25.00", "stored_vat": {"PAYE": "0.00", "UMBRELLA": "-5.00"}, "stored_inc_vat": {"PAYE": "-25.00", "UMBRELLA": "-30.00"}, "direction": "DEBIT"},
+      "expected": {"preview_disposition": "SELECTED", "visible_alias": "MANUAL_ADJUSTMENT_CARRY_FORWARD", "frozen_item_type": "MANUAL_CREDIT_PAYOUT", "item_count": 1, "canonical_ex_vat": "-25.00", "headroom_allocation_ex_vat": "0.00", "residual_ex_vat": "0.00", "paye_treatment": {"PAYE": "NET_DEDUCT", "UMBRELLA": "NONE"}}
+    }
+  ]
+}

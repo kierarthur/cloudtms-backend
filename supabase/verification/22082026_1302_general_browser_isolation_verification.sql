@@ -135,16 +135,14 @@ begin
        v_browser_executable_identities,v_hash
   from targets;
 
-  -- Banking Pay Modal Structure v2 and its discarded-session/invalid-source
-  -- convergence repairs, the guarded unfinished Daily-receipt Preview/APPLY
-  -- boundary and the dirty-apply family repair add fourteen service-only RPCs to this
-  -- non-Candidate catalogue. The explicit reviewed Timesheet-authorisation wrapper
-  -- adds one service-only RPC. The dated Contract-settings resolver and its
-  -- three leased Bank Holiday feed operations add four service-only RPCs;
-  -- the dated import auto-authorise entry point adds one more. Browser
-  -- execution remains exactly zero.
-  if v_count<>663 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'dd94a616e208227e133e5f21b1446555' then
+  -- The settled Workbench certificate boundary adds eleven non-Candidate
+  -- SECURITY DEFINER RPCs. The row-backed Draft V8 consumer then adds thirteen
+  -- exact service-only RPCs. The later Candidate and expense-carrier releases
+  -- remain additive. The owner-internal reference issuer and the established
+  -- shared-session opener remain withheld, so browser execution stays zero.
+  -- The combined hash is sealed from the clean dual-engine candidate below.
+  if v_count<>687 or v_service_missing<>74 or v_browser_executable<>0
+     or v_hash<>'291cf1fd204fa7049880804c2ef42fd5' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

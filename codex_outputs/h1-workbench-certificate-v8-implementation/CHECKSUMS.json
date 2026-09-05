@@ -1,0 +1,37 @@
+{
+  "manifest_contract": "H1_WORKBENCH_CERTIFICATE_V8_IMPLEMENTATION_CHECKSUMS_V2",
+  "status": "LOCAL_IMPLEMENTATION_CANDIDATE_AWAITING_H2_INDEPENDENT_REVIEW_NOT_INSTALLED_NOT_DEPLOYED",
+  "no_edit_in_flight": true,
+  "files": [
+    {
+      "path": "INDEPENDENT_IMPLEMENTATION_REVIEW.md",
+      "bytes": 6101,
+      "sha256": "82d2fa7c0e8f4e6531c601ece5d984915ddb5012f549bbe6c94f2ea345cb82b5"
+    },
+    {
+      "path": "IMPLEMENTATION_EVIDENCE.json",
+      "bytes": 5149,
+      "sha256": "bd3685a9d7bbaa4b56915837acc5593c193ce7b682530fe1821ec935cb1a5bb0"
+    },
+    {
+      "path": "H2_DEPENDENCY_CONTRACT.json",
+      "bytes": 4095,
+      "sha256": "64ffc6acd5bb23d5a346dcad46cc0a3ce6e33809a92c3a32a7ec59d13915c34f"
+    },
+    {
+      "path": "ROLLBACK_PLAN.md",
+      "bytes": 2043,
+      "sha256": "4cfca86bfa1a7b28315bd7b8742f924017dfcbae884d59579729f00fa27c1da2"
+    },
+    {
+      "path": "H1_CREATE_DRAFT_LIFECYCLE_PRODUCER_AUDIT_V1.json",
+      "bytes": 11574,
+      "sha256": "17206828f38e4aa75dbd37f9b1b138be6b3ed25df183ebcf8740e7beacec9bec"
+    },
+    {
+      "path": "../../tests/banking-pay-workbench-settled-certificate-v8-handover.test.cjs",
+      "bytes": 4277,
+      "sha256": "d20089ffa614f2545cc2284acda07a04c0b5ae99721a1a99006e2cd38874fd84"
+    }
+  ]
+}

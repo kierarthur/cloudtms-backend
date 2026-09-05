@@ -1,0 +1,182 @@
+{
+  "contract": "H2_CREATE_DRAFT_LIFECYCLE_CROSS_AUDIT_V1",
+  "status": "OPEN_PRE_INTEGRATION_AUDIT",
+  "runtime_authority": "MIGET_TEST",
+  "source_note": "Repository paths under supabase are historical source-path names only; they are not a runtime target.",
+  "local_review_head": "a780388dc667586297b29d13f3b96968fbb60f26",
+  "local_review_tree": "54d39bdf23dfaf2a6c4b5867743ff791e8c63199",
+  "shared_backend_base": "e20379928dc94d3fb7fb7dabe58ba3baa803d373",
+  "shared_frontend_base": "8eb73b23ad504a3bde40bd612c2960f1158cd11f",
+  "evidence_dashboard": {
+    "weighted_score": 60,
+    "weighted_total": 100,
+    "fully_passed_gates": ["H2-1", "H2-2", "H2-3", "H2-5", "H2-6"],
+    "current_gate": "H2-4 exact 88-class constituent and durable-output parity",
+    "finite_payment_policy_classes_total": 88,
+    "finite_payment_policy_classes_mapped": 88,
+    "generated_property_cases": 96,
+    "recorded_property_seeds": 4,
+    "mutation_operators_total": 14,
+    "mutation_operators_killed": 14,
+    "mutation_survivors": 0,
+    "maximum_materialised_load_rows": 5000,
+    "configured_ceiling": 50000,
+    "configured_ceiling_load_test_performed": false,
+    "first_rejected_count": 50001,
+    "complete_clean_post_correction_audits": 0,
+    "remaining_primary_gates": [
+      "exact V1-versus-V8 durable Draft and downstream projection parity",
+      "independent review and user-approved coherent TEST release",
+      "fresh installed Miget TEST and browser acceptance audit"
+    ]
+  },
+  "review_rule": "Every OPEN or FAIL gate blocks publication, Miget installation and a Draft parity verdict. H1 producer evidence cannot close an H2 consumer gate, and H2 evidence cannot certify the H1 producer.",
+  "policy_rule": "Only transport and orchestration may change. Eligibility, selection, identity, amount, sign, gross or net treatment, tax, VAT, payment channel, payee, recovery, headroom, reservation, case state, cancellation, execution, settlement and provider policy must remain byte-for-byte or semantically identical to the accepted owners.",
+  "gates": [
+    {
+      "id": "H2-L01",
+      "name": "Certified admission and one-click readiness",
+      "owner": "H1_PRODUCER_WITH_H2_ROUTE_CONSUMER",
+      "status": "OPEN_H1_STABLE_PACK_REQUIRED",
+      "required_result": "The exact SEALED_CURRENT certificate starts one idempotent Draft operation; BUILDING, stale, mismatched or incomplete evidence fails before any Draft artifact."
+    },
+    {
+      "id": "H2-L02",
+      "name": "Worker route activation",
+      "owner": "H2_WORKER",
+      "status": "LOCAL_SOURCE_ROUTE_PRESENT_FULL_RUNTIME_OPEN",
+      "evidence": "The isolated candidate imports the certified V8 transport, admits only the exact compact database-issued projection, dispatches certificate staging/readiness/bounded business phases and publishes the terminal result through the existing operation response. Installation and a real Miget/PostgREST route remain unproved.",
+      "required_result": "The existing Create Draft endpoint accepts the compact server-issued reference and never carries selected constituent arrays."
+    },
+    {
+      "id": "H2-L03",
+      "name": "Compact certified input projection",
+      "owner": "H1_ADMISSION_AND_H2_WORKER",
+      "status": "LOCAL_SOURCE_AND_FOCUSED_RUNTIME_PASS_FINAL_INTEGRATION_OPEN",
+      "evidence": "The isolated transport projects only server-validated pay-channel, rail and exact same-week PAYE override facts alongside the compact certificate reference. It rejects selected-row arrays and a 50,001 count. The sealed installed producer/interface and complete route remain open.",
+      "required_result": "Only server-validated compact scope and override facts are projected into the accepted operation input; no browser arrays or recalculated policy."
+    },
+    {
+      "id": "H2-L04",
+      "name": "Bounded certificate staging and final freeze",
+      "owner": "H1_PRODUCER_AND_H2_CERTIFICATE_ADAPTER",
+      "status": "LOCAL_DUAL_ENGINE_5000_ROW_HANDOFF_PASS_RELEASE_RUNTIME_OPEN",
+      "evidence": "The complete H1 producer to H2 normalized Draft handoff passes at 5,000 rows on disposable PostgreSQL 17.11 and 18.6. Each run creates exactly 5,000 frozen references, payloads and partition memberships, reaches DRAIN_TSFIN in 23 bounded staging calls, accepts exact response-loss replay and rolls back. Slowest H2 admission/stage call: 387.640 ms on PG17 and 337.260 ms on PG18. The configured ceiling remains 50,000 but no 50,000-row test is performed.",
+      "required_result": "All constituents and partitions are staged in bounded pages, exact counts and digests reconcile, and stale authority can block only before the immutable FROZEN boundary."
+    },
+    {
+      "id": "H2-L05",
+      "name": "Timesheet financial readiness",
+      "owner": "H2_WORKER_REUSING_EXISTING_OWNER",
+      "status": "LOCAL_SOURCE_AND_BOUNDED_PAGE_PROOF_PRESENT_FULL_RUNTIME_OPEN",
+      "evidence": "The isolated candidate pages distinct Timesheet IDs from frozen server-owned rows and passes one bounded page to the unchanged TSFIN readiness owner, with a durable ordinal cursor. The legacy empty selected_timesheet_ids_json compatibility field is not used as authority. Complete fresh NEW/UPGRADE and installed Miget proof remain open.",
+      "required_result": "Page distinct selected Timesheet IDs from the frozen server-owned rows under the operation boundary, feed only one bounded page into the unchanged readiness owner, and durably resume before allocation. Empty, duplicate, more-than-100, response-loss and retry cases must prove exact coverage without changing any amount or policy."
+    },
+    {
+      "id": "H2-L06",
+      "name": "Payee readiness",
+      "owner": "H2_WORKER_REUSING_EXISTING_OWNER",
+      "status": "LOCAL_SOURCE_AND_BOUNDED_PAGE_PROOF_PRESENT_FULL_RUNTIME_OPEN",
+      "evidence": "The isolated candidate pages the existing payee-readiness inputs from frozen row-backed scopes and invokes the unchanged PAYE/Umbrella readiness owner with the frozen rail environment. Complete route, scale and installed proof remain open.",
+      "required_result": "Retain the existing PAYE/Umbrella payee readiness decision without changing payee, channel, VAT or provider policy."
+    },
+    {
+      "id": "H2-L07",
+      "name": "Row-backed Candidate and channel scopes",
+      "owner": "H2_DATABASE_TRANSPORT",
+      "status": "LOCAL_DUAL_ENGINE_5000_ROW_SCOPE_PASS_FINAL_RELEASE_RUNTIME_OPEN",
+      "required_result": "Every selected constituent appears once in the exact authoritative Candidate/channel partition, including more than 100 Timesheets and a 5,000-member load case, without a giant JSON array. The configured ceiling remains 50,000 and is guarded without constructing a 50,000-row test data set."
+    },
+    {
+      "id": "H2-L08",
+      "name": "Allocation, items and finance handoff",
+      "owner": "H2_TRANSPORT_REUSING_EXISTING_ECONOMIC_OWNERS",
+      "status": "LOCAL_DUAL_ENGINE_20_VARIANT_POLICY_MATRIX_PASS_COMPLETE_RELEASE_PARITY_OPEN",
+      "evidence": "The canonical Workbench producer through row-backed Draft scope, allocation, item handoff, unchanged finance/reservation/finalizer owners and post-create refresh passes all 20 source-supported finance category/tax/channel variants on disposable PostgreSQL 17.11 and 18.6. Each case ends at POST_CREATE_REFRESH with zero unlinked finance allocations, zero external payment action and outer rollback. Full 88-class V1-versus-V8 and installed Miget parity remain open.",
+      "required_result": "Every ordinary and visible finance constituent reaches the unchanged allocation/item/finance owners with exact identity, pence, gross/net, PAYE/Umbrella and staged vocabulary."
+    },
+    {
+      "id": "H2-L09",
+      "name": "Reservations, summaries, snapshots and breakdowns",
+      "owner": "H2_ORCHESTRATION_REUSING_EXISTING_OWNERS",
+      "status": "LOCAL_SOURCE_EVIDENCE_PRESENT_FULL_RUNTIME_AND_PARITY_OPEN",
+      "required_result": "Each independent owner continuation is drained to has_more=false with exact remaining-row proof and idempotent response-loss replay."
+    },
+    {
+      "id": "H2-L10",
+      "name": "Integrity and constituent parity",
+      "owner": "H2_PARITY_CONSUMER",
+      "status": "LOCAL_SOURCE_AND_DUAL_ENGINE_EXPECTED_FACT_PASS_FULL_V1_V8_PARITY_OPEN",
+      "evidence": "The local comparator requires the exact certified constituent/source binding, source semantic kind, economic key, canonical amount, item-source digest, recovery basis/result/overlay digest and source-reservation identity digest. It validates any reservation artifact that the existing owner creates but deliberately does not infer that every finance case must create one; category-specific materialisation and visible-to-frozen vocabulary remain owned by the unchanged item/finance/reservation owners and the frozen policy audit. Fresh rollback-contained PostgreSQL 17.11 and 18.6 executions pass the exact-match path, chained response-loss replay and independent mutations of certificate identity, source semantic, recovery evidence, source-reservation identity and produced item amount, with zero durable rows. Complete V1-versus-V8 artifact parity remains open.",
+      "required_result": "H1 expected facts are compared to actual Draft allocations, items, reservations and materialisation constituent by constituent; totals are secondary evidence."
+    },
+    {
+      "id": "H2-L11",
+      "name": "Empty-shell and failure cleanup",
+      "owner": "H2_WORKER_REUSING_EXISTING_ABORT_AND_REFRESH_OWNERS",
+      "status": "LOCAL_SOURCE_AND_DUAL_ENGINE_SEQUENCE_PASS_FULL_RUNTIME_OPEN",
+      "evidence": "The isolated Worker consumes the exact cleanup/failure signals and reuses the existing empty-shell cancellation and failed-Draft cleanup owners. Rollback-contained PG17.11/PG18.6 sequencing proves mixed-channel cleanup and all-empty failure with no terminal success. Real owner first-use and installed proof remain open.",
+      "required_result": "Failure before finance leaves no partial Draft; later failure uses the accepted safe abort; skipped empty shells are cancelled; status, alerts and overview are refreshed; the operation becomes terminal exactly once."
+    },
+    {
+      "id": "H2-L12",
+      "name": "Terminal success publication",
+      "owner": "H2_WORKER_AND_TERMINAL_DATABASE_OWNER",
+      "status": "LOCAL_SOURCE_AND_DUAL_ENGINE_SEQUENCE_PASS_FULL_PARITY_OPEN",
+      "evidence": "The row-backed terminal-context owner supplies accepted batch, channel, reservation-availability and post-refresh facts; the Worker builds the legacy-compatible success result, performs replacement only when the existing patch owner explicitly requests it, calls banking_pay_draft_operation_finish_v8 exactly once and schedules the existing durable wake. PG17.11/PG18.6 rollback tests prove terminal publication/replay. Complete V1-versus-V8 artifact parity and installed proof remain open.",
+      "required_result": "A V8 Worker terminal adapter must construct the same accepted success payload from row-backed receipts and current post-create results, call the terminal owner exactly once, preserve every existing field and type with additive diagnostics only, and then schedule the required Workbench wake. No V8-specific frontend or downstream branch is permitted, and the UI must not remain at 99 percent after durable completion."
+    },
+    {
+      "id": "H2-L13",
+      "name": "Durable continuation and bounded RPCs",
+      "owner": "H2_WORKER_USING_EXISTING_CONTINUATION_QUEUE",
+      "status": "LOCAL_DUAL_ENGINE_5000_ROW_BOUNDED_TRANSPORT_PASS_QUEUE_AND_INSTALLED_RUNTIME_OPEN",
+      "evidence": "The certified V8 route dispatches through the existing durable Banking Pay continuation queue. Exact Worker-to-PostgREST staging passed on PostgreSQL 17.11 and 18.6 at 101, 1,001 and 5,000 rows with response-loss replay, compact Candidate scopes and no timeout increase. At 5,000 rows the H2 Draft handoff completed in 1,730 ms on PG17 and 1,668 ms on PG18; the slowest individual Worker/RPC call was 582/574 ms on PG17 and 471/465 ms on PG18. No 50,000-row load test was performed. Installed Miget/Cloudflare proof remains open.",
+      "required_result": "A durable queue delivery advances several safe short steps within the existing request budget, then enqueues exactly one successor when work remains. No browser retry dependency, no unbounded waitUntil work and no timeout increase."
+    },
+    {
+      "id": "H2-L14",
+      "name": "Frontend polling and result interpretation",
+      "owner": "H2_ROUTE_COMPATIBILITY",
+      "status": "LOCAL_SOURCE_TERMINAL_COMPATIBILITY_PRESENT_BROWSER_ACCEPTANCE_OPEN",
+      "evidence": "The frontend still consumes the accepted operation phases and terminal COMPLETE result. The isolated Worker invokes the V8 terminal owner and returns the same created-batch fields, so no V8-specific downstream rendering branch was introduced. The complete frontend unit suite passes 1,311/1,311. Two unrelated root static tests also fail unchanged on the clean shared frontend baseline and are recorded as pre-existing baseline issues, not Draft regressions. Real browser timing and terminal acceptance remain open.",
+      "required_result": "The existing frontend sees the same operation statuses, phases, batch IDs, success and failure result fields; no V8-specific downstream workaround and no selected-row array recovery path is needed."
+    },
+    {
+      "id": "H2-L15",
+      "name": "Execute Payment and downstream contract equivalence",
+      "owner": "H2_PARITY_AUDIT",
+      "status": "OPEN_FRESH_COMPLETE_AUDIT_REQUIRED",
+      "required_result": "V1 and the revised route create the same durable batches, candidates, items, allocations, totals, VAT, reservations, snapshots, breakdowns, finance effects, lineage and operation results consumed by Execute Payment, status, worksheet, cancellation, reversion, remittance and settlement."
+    },
+    {
+      "id": "H2-L16",
+      "name": "Release, security, rollback and Miget TEST acceptance",
+      "owner": "H1_H2_SHARED_RELEASE_BOUNDARY",
+      "status": "OPEN",
+      "required_result": "Exact combined ancestry, function definitions, ACLs, manifests and release order pass PG17.11 and PG18.6 NEW/UPGRADE/reapply/first-use, full suites and mutations; user-approved Miget TEST installation is then independently verified without real payment/provider action."
+    }
+  ],
+  "blocking_gate_ids": [
+    "H2-L01",
+    "H2-L02",
+    "H2-L03",
+    "H2-L04",
+    "H2-L05",
+    "H2-L06",
+    "H2-L07",
+    "H2-L08",
+    "H2-L09",
+    "H2-L10",
+    "H2-L11",
+    "H2-L12",
+    "H2-L13",
+    "H2-L14",
+    "H2-L15",
+    "H2-L16"
+  ],
+  "wrong_chat_requirements_retained": false,
+  "publication_authorised": false,
+  "miget_installation_authorised_by_this_artifact": false,
+  "real_draft_or_payment_action_authorised": false
+}

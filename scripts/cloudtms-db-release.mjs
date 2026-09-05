@@ -5,7 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   canonicalContractHash, contractDifference, contractDifferenceDetails, databaseUrl, exportContract, inventory,
-  formatPlanSection, legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
+  formatPlanSection, legacyUpgradeInventory, psql, readJson, releaseVerifierVariables,
+  repoRoot, shellGitHead, validateExpectedDatabase, validateTarget,
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 
@@ -89,9 +90,26 @@ function verificationFilesForMode(release, mode) {
   return release.verificationFiles;
 }
 
-function runVerifiers(mode) {
+function runVerifiers(mode, context) {
   const release = readJson('supabase/release/current-release.json');
-  for (const file of verificationFilesForMode(release, mode)) psql({ file });
+  for (const file of verificationFilesForMode(release, mode)) {
+    psql({ file, variables: releaseVerifierVariables(file, mode, context) });
+  }
+}
+
+function expectedDatabaseForMode(mode) {
+  if (!['NEW', 'UPGRADE'].includes(mode)) return null;
+  return validateExpectedDatabase(
+    options['expected-database'] ?? process.env.CLOUDTMS_EXPECTED_DATABASE,
+  );
+}
+
+function assertCurrentDatabase(expectedDatabase) {
+  if (!expectedDatabase) return;
+  const actualDatabase = psql({ sql: 'select pg_catalog.current_database();' });
+  if (actualDatabase !== expectedDatabase) {
+    throw new Error('Connected database does not match CLOUDTMS_EXPECTED_DATABASE');
+  }
 }
 
 function assertLegacyTransitionShimsReplaced() {
@@ -270,14 +288,24 @@ function applyRelease() {
       ?? process.env.CLOUDTMS_EXPECTED_TARGET
       ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF,
   );
+  const expectedDatabase = expectedDatabaseForMode(mode);
+  const gitCommit = shellGitHead();
   const approval = process.env.CLOUDTMS_RELEASE_APPROVAL;
-  const expectedApproval = `APPLY ${environment} ${mode} ${shellGitHead()}`;
+  const expectedApproval = `APPLY ${environment} ${mode} ${gitCommit}`;
   if (approval !== expectedApproval) throw new Error(`Approval mismatch. Required exact phrase: ${expectedApproval}`);
+  assertCurrentDatabase(expectedDatabase);
   const expected = readJson(release.contractPath);
   const expectedHash = canonicalContractHash(expected);
   const customerKey = options['customer-key'] ?? process.env.CLOUDTMS_CUSTOMER_KEY ?? '';
   const current = inventory();
-  const releaseId = `${release.releaseId}-${mode.toLowerCase()}-${shellGitHead().slice(0, 12)}`;
+  const releaseId = `${release.releaseId}-${mode.toLowerCase()}-${gitCommit.slice(0, 12)}`;
+  const releaseVerifierContext = {
+    expectedDatabase,
+    releaseId,
+    gitCommit,
+    environment,
+    customerKey,
+  };
 
   if (mode === 'LEGACY_UPGRADE') {
     const legacy = legacyUpgradeState(current, environment);
@@ -292,7 +320,7 @@ function applyRelease() {
     for (const item of legacy.pendingRepeatables) psql({ file: item.path });
     assertLegacyTransitionShimsReplaced();
     reloadPostgrestSchemaCache();
-    runVerifiers(mode);
+    runVerifiers(mode, releaseVerifierContext);
     const verified = compareExpected(release.contractPath);
     adoptLegacyInventoryAtomically({
       releaseId,
@@ -369,7 +397,7 @@ function applyRelease() {
     }
   }
   reloadPostgrestSchemaCache();
-  runVerifiers(mode);
+  runVerifiers(mode, releaseVerifierContext);
   const verified = compareExpected(release.contractPath);
   recordRelease({ releaseId, mode, status: 'VERIFIED', expectedHash, installedHash: verified.sha256, evidence: { verificationFiles: verificationFilesForMode(release, mode) } });
   activeReleaseId = null;
@@ -395,6 +423,9 @@ try {
     verifyIntegrity();
     const environment = required('environment', process.env.CLOUDTMS_ENVIRONMENT);
     const mode = required('mode', process.env.CLOUDTMS_RELEASE_MODE);
+    if (!['NEW', 'UPGRADE', 'ADOPT', 'LEGACY_UPGRADE'].includes(mode)) {
+      throw new Error('mode must be NEW, UPGRADE, ADOPT, or LEGACY_UPGRADE');
+    }
     validateTarget(
       environment,
       options['expected-target']
@@ -402,10 +433,9 @@ try {
         ?? process.env.CLOUDTMS_EXPECTED_TARGET
         ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF,
     );
+    const expectedDatabase = expectedDatabaseForMode(mode);
+    assertCurrentDatabase(expectedDatabase);
     const release = readJson('supabase/release/current-release.json');
-    if (!['NEW', 'UPGRADE', 'ADOPT', 'LEGACY_UPGRADE'].includes(mode)) {
-      throw new Error('mode must be NEW, UPGRADE, ADOPT, or LEGACY_UPGRADE');
-    }
     if (mode === 'ADOPT') compareExpected(release.contractPath);
     if (mode === 'LEGACY_UPGRADE') {
       const legacy = legacyUpgradeState(inventory(), environment);

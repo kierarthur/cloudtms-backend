@@ -1,0 +1,98 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_ORDINARY_POLICY_RESULTS_V1",
+  "status": "CURRENT_V8_POLICY_OWNER_PASS_V1_PARITY_OPEN",
+  "evidence_tier": "FULL_TYPED_CURRENT_V8_POLICY_OWNER",
+  "v1_v8_typed_parity_status": "OPEN_HISTORICAL_V1_HARNESS_NOT_EXECUTED",
+  "source_sha256": {
+    "scripts/verify-banking-pay-draft-v8-ordinary-policy-matrix.mjs": "e124def513450c8f6455c4ce727d7017d0d57725d8d9b5eca518632a58c335c8",
+    "tests/fixtures/banking-pay-draft-v8-ordinary-policy-cases-v1.json": "6a8b35fc5c11bb75387474fc35cfc80858f032e6697829eab8392dfd5992934c",
+    "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql": "da338938dde0b70430f880bce917c35bac227485ed1c9029381915a7da155c87",
+    "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql": "38a6d13332a87718b27259b993f2c258d869b4bc85aa46d5277bed2f43d474c0",
+    "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea"
+  },
+  "execution_contract": {
+    "transaction_outcome": "ROLLBACK",
+    "external_payment_actions": 0,
+    "provider_actions": 0,
+    "settlement_actions": 0,
+    "remittance_actions": 0,
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "idle_in_transaction_session_timeout_ms": 30000,
+    "jit": "OFF",
+    "harness_isolation": "EXACT_LOCAL_DATABASE_GUARD_SUBSTITUTION_ONLY",
+    "committed_fixture_unchanged": true,
+    "pre_insert_collision_guard_preserved": true,
+    "maximum_materialised_row_count": 11,
+    "prohibited_materialised_row_count": 50000
+  },
+  "engines": [
+    {
+      "engine_id": "PG17_11",
+      "engine_identity": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu",
+      "container": "h12-v8-release-pg17",
+      "database": "h12_v8_final_new17",
+      "case_count": 8,
+      "pass_count": 8,
+      "fail_count": 0,
+      "class_pass_count": 18,
+      "elapsed_ms_by_case": {
+        "SIMPLE_PAYE": 2035.841,
+        "SIMPLE_UMBRELLA": 1982.799,
+        "MULTI_TIMESHEET_PAYE": 2176.495,
+        "MULTI_TIMESHEET_UMBRELLA": 2221.427,
+        "FALLBACK_EXPENSES_PAYE": 2161.605,
+        "COMPONENT_MIX_PAYE": 2685.116,
+        "COMPONENT_MIX_UMBRELLA_VAT": 2840.338,
+        "COMPONENT_MIX_UMBRELLA_NON_VAT": 2742.640
+      }
+    },
+    {
+      "engine_id": "PG18_6",
+      "engine_identity": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu",
+      "container": "h12-v8-release-pg18",
+      "database": "h12_v8_final_new18",
+      "case_count": 8,
+      "pass_count": 8,
+      "fail_count": 0,
+      "class_pass_count": 18,
+      "elapsed_ms_by_case": {
+        "SIMPLE_PAYE": 2426.568,
+        "SIMPLE_UMBRELLA": 1933.786,
+        "MULTI_TIMESHEET_PAYE": 2097.130,
+        "MULTI_TIMESHEET_UMBRELLA": 2182.109,
+        "FALLBACK_EXPENSES_PAYE": 2165.633,
+        "COMPONENT_MIX_PAYE": 2758.364,
+        "COMPONENT_MIX_UMBRELLA_VAT": 2799.011,
+        "COMPONENT_MIX_UMBRELLA_NON_VAT": 2679.251
+      }
+    }
+  ],
+  "passed_class_ids": [
+    "ordinary_one_segment_paye",
+    "ordinary_one_segment_umbrella",
+    "ordinary_multi_segment_paye",
+    "ordinary_multi_segment_umbrella",
+    "expense_expenses_paye",
+    "ordinary_multiple_rate_families",
+    "ordinary_same_key_multiple_components",
+    "expense_travel_paye",
+    "expense_accommodation_paye",
+    "expense_other_paye",
+    "mileage_paye",
+    "additional_code_component",
+    "adjustment_code_component",
+    "forced_advance_paye",
+    "expense_vat_umbrella",
+    "mileage_umbrella",
+    "forced_advance_umbrella",
+    "expense_non_vat_umbrella"
+  ],
+  "open_class_ids": ["saved_rate_resolution", "saved_payment_method_resolution"],
+  "summary": {
+    "p1_classes": 20,
+    "full_typed_current_v8_policy_owner_pass": 18,
+    "open_exact_resolution_owner_fixture": 2,
+    "full_typed_v1_v8_parity_pass": 0
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_ORDINARY_POLICY_CASES_V1",
+  "evidence_scope": "FULL_TYPED_CURRENT_V8_POLICY_OWNER",
+  "v1_v8_typed_parity_status": "OPEN_HISTORICAL_V1_HARNESS_NOT_EXECUTED",
+  "materialised_row_ceiling": 5000,
+  "configured_scalar_ceiling": 50000,
+  "cases": [
+    {
+      "case_id": "SIMPLE_PAYE",
+      "finance_variant_ordinal": 1,
+      "profile": "SIMPLE",
+      "pay_channel": "PAYE",
+      "vat_chargeable": false,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 1,
+      "class_ids": ["ordinary_one_segment_paye"]
+    },
+    {
+      "case_id": "SIMPLE_UMBRELLA",
+      "finance_variant_ordinal": 2,
+      "profile": "SIMPLE",
+      "pay_channel": "UMBRELLA",
+      "vat_chargeable": true,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 1,
+      "class_ids": ["ordinary_one_segment_umbrella"]
+    },
+    {
+      "case_id": "MULTI_TIMESHEET_PAYE",
+      "finance_variant_ordinal": 1,
+      "profile": "MULTI_TIMESHEET",
+      "pay_channel": "PAYE",
+      "vat_chargeable": false,
+      "expected_timesheet_count": 2,
+      "expected_ordinary_constituents": 2,
+      "class_ids": ["ordinary_multi_segment_paye"]
+    },
+    {
+      "case_id": "MULTI_TIMESHEET_UMBRELLA",
+      "finance_variant_ordinal": 2,
+      "profile": "MULTI_TIMESHEET",
+      "pay_channel": "UMBRELLA",
+      "vat_chargeable": true,
+      "expected_timesheet_count": 2,
+      "expected_ordinary_constituents": 2,
+      "class_ids": ["ordinary_multi_segment_umbrella"]
+    },
+    {
+      "case_id": "FALLBACK_EXPENSES_PAYE",
+      "finance_variant_ordinal": 1,
+      "profile": "FALLBACK_EXPENSES",
+      "pay_channel": "PAYE",
+      "vat_chargeable": false,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 2,
+      "class_ids": ["expense_expenses_paye"]
+    },
+    {
+      "case_id": "COMPONENT_MIX_PAYE",
+      "finance_variant_ordinal": 1,
+      "profile": "COMPONENT_MIX",
+      "pay_channel": "PAYE",
+      "vat_chargeable": false,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 11,
+      "class_ids": [
+        "ordinary_multiple_rate_families",
+        "ordinary_same_key_multiple_components",
+        "expense_travel_paye",
+        "expense_accommodation_paye",
+        "expense_other_paye",
+        "mileage_paye",
+        "additional_code_component",
+        "adjustment_code_component",
+        "forced_advance_paye"
+      ]
+    },
+    {
+      "case_id": "COMPONENT_MIX_UMBRELLA_VAT",
+      "finance_variant_ordinal": 2,
+      "profile": "COMPONENT_MIX",
+      "pay_channel": "UMBRELLA",
+      "vat_chargeable": true,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 11,
+      "class_ids": ["expense_vat_umbrella", "mileage_umbrella", "forced_advance_umbrella"]
+    },
+    {
+      "case_id": "COMPONENT_MIX_UMBRELLA_NON_VAT",
+      "finance_variant_ordinal": 2,
+      "profile": "COMPONENT_MIX",
+      "pay_channel": "UMBRELLA",
+      "vat_chargeable": false,
+      "expected_timesheet_count": 1,
+      "expected_ordinary_constituents": 11,
+      "class_ids": ["expense_non_vat_umbrella"]
+    }
+  ],
+  "explicit_open_classes": [
+    {
+      "class_id": "saved_rate_resolution",
+      "reason": "Exact reusable component fingerprint and saved target amount must be produced by the current resolution owner before a Draft-output PASS can be claimed."
+    },
+    {
+      "class_id": "saved_payment_method_resolution",
+      "reason": "Exact cross-channel saved resolution, payee authority and target amount must be source-proved before a Draft-output PASS can be claimed."
+    }
+  ]
+}

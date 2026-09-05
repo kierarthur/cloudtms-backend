@@ -7,6 +7,7 @@ const manifestUrls = [
   '../supabase/verification/banking_pay_workbench_certified_source_preview_catalog_manifest.json',
   '../supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json',
   '../supabase/verification/banking_pay_semantic_ready_cancellation_reversion_catalog_manifest.json',
+  '../supabase/verification/banking_pay_workbench_settled_certificate_v8_catalog_manifest.json',
 ].map((relativePath) => new URL(relativePath, import.meta.url));
 
 const browserGrantees = new Set(['PUBLIC', 'anon', 'authenticated']);

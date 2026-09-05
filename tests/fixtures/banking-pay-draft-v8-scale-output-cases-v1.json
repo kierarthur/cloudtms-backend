@@ -1,0 +1,60 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_SCALE_OUTPUT_CASES_V1",
+  "configured_scalar_ceiling": 50000,
+  "materialised_row_ceiling": 5000,
+  "materialised_50000_test_prohibited": true,
+  "cases": [
+    {
+      "case_id": "MIXED_PAYE_UMBRELLA_ORACLE_8",
+      "target_count": 8,
+      "segments_per_timesheet": 1,
+      "class_ids": [
+        "mixed_channel_partitions"
+      ]
+    },
+    {
+      "case_id": "DISTINCT_TIMESHEETS_101",
+      "target_count": 101,
+      "segments_per_timesheet": 1,
+      "class_ids": [
+        "mixed_candidates_independent",
+        "mixed_channel_partitions",
+        "over_100_distinct_timesheets",
+        "duplicate_delivery_replay",
+        "response_loss_replay"
+      ]
+    },
+    {
+      "case_id": "MULTI_SEGMENT_101",
+      "target_count": 101,
+      "segments_per_timesheet": 7,
+      "class_ids": [
+        "multi_segment_over_100"
+      ]
+    },
+    {
+      "case_id": "PAGINATION_1001",
+      "target_count": 1001,
+      "segments_per_timesheet": 10,
+      "class_ids": [
+        "pagination_1001"
+      ]
+    },
+    {
+      "case_id": "REPRESENTATIVE_5000",
+      "target_count": 5000,
+      "segments_per_timesheet": 10,
+      "class_ids": [
+        "configured_50000_materialised_5000_representative"
+      ]
+    },
+    {
+      "case_id": "REPRESENTATIVE_5000_1000_TIMESHEETS",
+      "target_count": 5000,
+      "segments_per_timesheet": 5,
+      "class_ids": [
+        "configured_50000_materialised_5000_one_thousand_timesheets"
+      ]
+    }
+  ]
+}

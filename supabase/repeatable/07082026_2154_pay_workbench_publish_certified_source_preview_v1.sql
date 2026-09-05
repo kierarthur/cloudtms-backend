@@ -681,6 +681,10 @@ BEGIN
   END IF;
 
   IF v_refresh_scope_kind = 'TARGETED_TIMESHEETS' THEN
+    -- A targeted Timesheet is certified by inclusion of its exact rotation
+    -- family in the completed economic-build scope. It is valid for that
+    -- completed build to publish zero payment rows (for example, a revoked
+    -- predecessor whose current replacement is correctly non-payable).
     WITH requested_ids AS (
       SELECT DISTINCT value::uuid AS timesheet_id
       FROM (
@@ -688,27 +692,36 @@ BEGIN
         UNION ALL
         SELECT value FROM jsonb_array_elements_text(COALESCE(p_linked_timesheet_ids, '[]'::jsonb))
       ) AS raw_ids
+    ), requested_rotation_scope AS (
+      SELECT
+        requested_ids.timesheet_id AS requested_timesheet_id,
+        rotation_scope.canonical_timesheet_id,
+        rotation_scope.family_timesheet_id
+      FROM requested_ids
+      LEFT JOIN LATERAL public._pay_timesheet_rotation_scope(
+        ARRAY[requested_ids.timesheet_id]
+      ) AS rotation_scope
+        ON rotation_scope.requested_timesheet_id=requested_ids.timesheet_id
+    ), completed_build_coverage AS (
+      SELECT
+        requested_rotation_scope.requested_timesheet_id,
+        COALESCE(BOOL_OR(build_scope.timesheet_id IS NOT NULL),false) AS covered
+      FROM requested_rotation_scope
+      LEFT JOIN private.banking_pay_workbench_economic_build_scope AS build_scope
+        ON build_scope.build_id=p_economic_build_id
+       AND build_scope.candidate_id=p_candidate_id
+       AND build_scope.closure_status='SEALED'
+       AND build_scope.timesheet_id IN (
+         requested_rotation_scope.requested_timesheet_id,
+         requested_rotation_scope.canonical_timesheet_id,
+         requested_rotation_scope.family_timesheet_id
+       )
+      GROUP BY requested_rotation_scope.requested_timesheet_id
     )
     SELECT COUNT(*)::integer
     INTO v_unmatched_target_id_count
-    FROM requested_ids
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM private.banking_pay_workbench_economic_build_scope AS build_scope
-      WHERE build_scope.build_id = p_economic_build_id
-        AND build_scope.timesheet_id = requested_ids.timesheet_id
-    )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.banking_pay_workbench_candidate_source_lines AS source_scope
-        WHERE source_scope.session_id = p_session_id
-          AND source_scope.candidate_id = p_candidate_id
-          AND source_scope.session_version = p_session_version
-          AND source_scope.source_build_run_id = p_source_build_run_id
-          AND source_scope.source_change_seq = p_source_change_seq
-          AND source_scope.status = 'CURRENT'
-          AND source_scope.timesheet_id = requested_ids.timesheet_id
-      );
+    FROM completed_build_coverage
+    WHERE completed_build_coverage.covered IS FALSE;
 
     IF v_unmatched_target_id_count > 0
        OR (
@@ -717,10 +730,10 @@ BEGIN
        ) = 0 THEN
       RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_SCOPE_MISSING'
         USING ERRCODE = 'P0001',
-              DETAIL = jsonb_build_object(
-                'code', 'CERTIFIED_SOURCE_PREVIEW_SCOPE_MISSING',
-                'reason', 'TARGETED_SCOPE_NOT_CERTIFIED'
-              )::text;
+               DETAIL = jsonb_build_object(
+                 'code', 'CERTIFIED_SOURCE_PREVIEW_SCOPE_MISSING',
+                 'reason', 'TARGETED_SCOPE_NOT_IN_COMPLETED_BUILD'
+               )::text;
     END IF;
   END IF;
 

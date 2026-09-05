@@ -1,0 +1,88 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_SIGNED_RECOVERY_RESULTS_V1",
+  "status": "CURRENT_V8_POLICY_OWNER_PASS_V1_PARITY_OPEN",
+  "evidence_tier": "CURRENT_V8_POLICY_OWNER_ONLY",
+  "v1_v8_typed_parity_status": "OPEN_HISTORICAL_V1_HARNESS_NOT_EXECUTED",
+  "source_sha256": {
+    "scripts/verify-banking-pay-draft-v8-signed-recovery-matrix.mjs": "4e338f3057727b1b69f2f71cecbd8f918c41ffa27a7886ccf31dd72d5d6d3cfb",
+    "tests/fixtures/banking-pay-draft-v8-signed-recovery-cases-v1.json": "a8ecef217a95b68a4a9e3a5ec8b1832703190e5916d9eef8c5aa86baf6e3d1af",
+    "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql": "7abb47f475e140aec0fbd8ee41e70e180afc4ccd00023fe23e2018a4ce432c5d",
+    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql": "1be7a8fd32208b0f14a76bbae5bb435dd9501179ade4b4cbe3551c9797ad8915",
+    "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea"
+  },
+  "execution_contract": {
+    "transaction_outcome": "ROLLBACK",
+    "external_payment_actions": 0,
+    "provider_actions": 0,
+    "settlement_actions": 0,
+    "remittance_actions": 0,
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "idle_in_transaction_session_timeout_ms": 30000,
+    "jit": "OFF",
+    "harness_isolation": "EXACT_LOCAL_DATABASE_GUARD_SUBSTITUTION_ONLY",
+    "committed_fixtures_unchanged": true,
+    "pre_insert_collision_guard_preserved": true,
+    "materialised_50000_rows": false
+  },
+  "engines": [
+    {
+      "engine_id": "PG17_11",
+      "engine_identity": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu",
+      "container": "h12-v8-release-pg17",
+      "database": "h12_v8_final_new17",
+      "case_count": 5,
+      "pass_count": 5,
+      "fail_count": 0,
+      "elapsed_ms": 669.062
+    },
+    {
+      "engine_id": "PG18_6",
+      "engine_identity": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu",
+      "container": "h12-v8-release-pg18",
+      "database": "h12_v8_final_new18",
+      "case_count": 5,
+      "pass_count": 5,
+      "fail_count": 0,
+      "elapsed_ms": 653.53
+    }
+  ],
+  "class_results": [
+    {
+      "class_id": "signed_positive_return",
+      "status": "PASS",
+      "proof_kind": "FULL_TYPED_CURRENT_V8_POLICY_OWNER",
+      "marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_positive_return"
+    },
+    {
+      "class_id": "signed_negative_recovery",
+      "status": "PASS",
+      "proof_kind": "FULL_TYPED_CURRENT_V8_POLICY_OWNER",
+      "marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_negative_recovery"
+    },
+    {
+      "class_id": "signed_mixed_ordinary_same_key",
+      "status": "PASS",
+      "proof_kind": "FULL_TYPED_CURRENT_V8_POLICY_OWNER",
+      "marker": "H2_V8_SIGNED_RECOVERY_PASS=signed_mixed_ordinary_same_key"
+    },
+    {
+      "class_id": "signed_two_decisive_matches",
+      "status": "PASS",
+      "proof_kind": "TYPED_FAIL_CLOSED_ZERO_WRITE",
+      "marker": "H2_V8_SIGNED_RECOVERY_REJECT=signed_two_decisive_matches|23514|PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID"
+    },
+    {
+      "class_id": "signed_tampered_or_incomplete",
+      "status": "PASS",
+      "proof_kind": "TYPED_FAIL_CLOSED_ZERO_WRITE",
+      "marker": "H2_V8_SIGNED_RECOVERY_REJECT=signed_tampered_or_incomplete|23514|PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID"
+    }
+  ],
+  "summary": {
+    "p5_classes": 5,
+    "full_typed_current_v8_policy_owner_pass": 3,
+    "typed_fail_closed_zero_write_pass": 2,
+    "full_typed_v1_v8_parity_pass": 0
+  }
+}

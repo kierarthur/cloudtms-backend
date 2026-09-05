@@ -2363,7 +2363,8 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'dirty_candidate_count', v_dirty_candidate_count,
     'freshness_dirtied', COALESCE(v_dirty_candidate_count, 0) > 0,
     'freshness_dirty_candidate_count', COALESCE(v_dirty_candidate_count, 0),
-    'blockers', '[]'::jsonb,
+    'blockers', '[]'::jsonb
+  ) || jsonb_build_object(
     'manual_adjustment_support_details_json', COALESCE(v_manual_adjustment_result, '{}'::jsonb),
     'carry_forward_created_count', COALESCE(v_carry_forward_created_count, 0),
     'carry_forward_existing_count', COALESCE(v_carry_forward_existing_count, 0),

@@ -75,6 +75,7 @@ jobs:
           test -f supabase/verification/verify_banking_pay_revision5_catalog.mjs
           test -f supabase/verification/verify_banking_pay_workbench_certified_source_preview_catalog.mjs
           test -f supabase/verification/verify_banking_pay_semantic_ready_cancellation_reversion_catalog.mjs
+          test -f supabase/verification/verify_banking_pay_workbench_settled_certificate_v8_catalog.mjs
           test -f tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql
           test -f supabase/verification/22082026_1302_general_browser_isolation_verification.sql
           test -f supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql

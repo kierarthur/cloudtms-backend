@@ -309,7 +309,7 @@
       "schema": "private",
       "name": "pay_workbench_sealed_rate_component_projection_v1",
       "identity_arguments": "p_build_id uuid, p_candidate_id uuid, p_timesheet_ids uuid[]",
-      "definition_sha256": "a3e3a35101070382fb2e9957bc007ef31f9801afca165b2391ae0179adf6da0e",
+      "definition_sha256": "7f454ee064f08480e9da8ea9c6b378fda3ed4833b965d65ea991874ab4560d4b",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -324,7 +324,10 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql"
+        "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql"
+      ],
+      "preapply_dependency_files": [
+        "supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql"
       ]
     },
     {
@@ -473,7 +476,7 @@
       "schema": "public",
       "name": "pay_workbench_fail_job",
       "identity_arguments": "p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer",
-      "definition_sha256": "baef72fe071ed7bb0ee3a48cc82acf33053c2a5f0bba0bb8816bccbbb34abb49",
+      "definition_sha256": "85dee116f81fee1f0634d79f7562d2f6a97f3be9f1d3c40aef80238b13483656",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -643,7 +646,8 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "9216d9e6c3c73514149dc20e93b75648c42ffd6850b0eaff2fbe4764e713c0b5",
+      "definition_sha256": "3aa94ba810ad14a48926ebef2787909f6870df83724abb8a3aad3eb58ec0e25b",
+      "preapply_definition_sha256": "0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -671,7 +675,7 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql"
+        "supabase/repeatable/04092026_1330_banking_pay_manual_carry_forward_selection_authority_v1.sql"
       ]
     },
     {
@@ -713,7 +717,7 @@
       "schema": "public",
       "name": "pay_workbench_repair_orphaned_pending_source_build",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text",
-      "definition_sha256": "d8c224d170144b23f0bd2f04a492a04a4e4e16fafd4664a579d18794df531e26",
+      "definition_sha256": "887a4dda312aa81ed79114e97f7182ff36123e4ec4cde41ac519104e7afa3e37",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

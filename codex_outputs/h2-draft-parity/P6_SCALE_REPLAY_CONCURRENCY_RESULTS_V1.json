@@ -1,0 +1,382 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_SCALE_REPLAY_CONCURRENCY_RESULTS_V1",
+  "status": "CURRENT_V8_BOUNDED_TRANSPORT_AND_FULL_DRAFT_LOCAL_PASS_V1_PARITY_OPEN",
+  "source_baseline": {
+    "worktree_head": "6b2e3822e7239cf8fc9b6568194294731135137d",
+    "reconciliation_status": "RECONCILED_TO_CURRENT_SHARED_HEAD_FUNCTIONAL_REPROOF_PASS_RELEASE_REPLAY_PENDING"
+  },
+  "evidence_scope": "BOUNDED_CERTIFICATE_BUILD_ADMISSION_ROW_BACKED_SCOPE_FULL_CURRENT_V8_DRAFT_OUTPUT_WORKER_POSTGREST_AND_REPLAY",
+  "materialised_boundary": {
+    "tested_row_counts": [101, 1001, 5000],
+    "maximum_materialised_row_count": 5000,
+    "configured_ceiling": 50000,
+    "configured_ceiling_proof": "SCALAR_SOURCE_AND_CONTRACT_GUARD_ONLY",
+    "materialised_50000_test_prohibited": true,
+    "first_rejected_count": 50001,
+    "first_rejected_count_proof": "WORKER_TYPED_PRE_ADMISSION_REJECTION_PLUS_DUAL_ENGINE_SCALAR_SERVER_CONSTRAINT_ZERO_WRITE_PASS"
+  },
+  "evidence_files": [
+    {
+      "path": "tests/03092026_1010_banking_pay_workbench_settled_certificate_v8_scale_verification.sql",
+      "sha256": "c28dbb786eb1f7b973c27d15dadc1aa87ccd8eb0527061600848d46acec05457"
+    },
+    {
+      "path": "tests/banking-pay-draft-v8-bounded-property.test.cjs",
+      "sha256": "4fa9865673941daf401729ae3310aafd238f4abd0ebb1b54e98b37e1a4450b8f"
+    },
+    {
+      "path": "tests/banking-pay-draft-certified-v8-concurrency.runtime.test.cjs",
+      "sha256": "55b64bd5cfde7c22b81cffc9e833e45eb53056390157a4c916a7c495bb23e78e"
+    },
+    {
+      "path": "tests/04092026_1845_banking_pay_draft_v8_atomic_multibatch_failure_runtime.sql",
+      "sha256": "b235806500e349e839da3cf356d3ec62f4cb1acf1f2abf51c84f21e41bd3aebc"
+    },
+    {
+      "path": "tests/banking-pay-draft-v8-atomic-multibatch-cleanup.test.cjs",
+      "sha256": "0e11c5c3339d5fe4dec59e6260c4d429fdc03b33d446469dd9424fcf1b1c18a0"
+    },
+    {
+      "path": "tests/banking-pay-draft-candidate-scope-row-backed-v8.test.cjs",
+      "sha256": "3912d7661b401a6f653975a6de363aa9e8204de9988c67da9a41f8584bc538c8"
+    },
+    {
+      "path": "tests/banking-pay-draft-v8-mutation.test.cjs",
+      "sha256": "c90d475be784c9129c18110b9075de5fbc05fd82c00062ef61ae85656f2cbb17"
+    },
+    {
+      "path": "scripts/verify-banking-pay-draft-v8-scale-output-matrix.mjs",
+      "sha256": "f6b4e17ee92653e696e6613512d1358093d0f7caf86802316eb0de926f4e1692"
+    },
+    {
+      "path": "tests/fixtures/banking-pay-draft-v8-scale-output-cases-v1.json",
+      "sha256": "7b393ebc857bfc947ca33b86913d66c33a1e35115265f09ea365b8c571ac4f65"
+    },
+    {
+      "path": "tests/banking-pay-draft-certified-v8-worker-postgrest.test.cjs",
+      "sha256": "0102c7a4323d9571bc5e3791123882b6821994b53295087be7718327a580b95c"
+    },
+    {
+      "path": "tests/banking-pay-draft-v8-scale-performance-guards.test.cjs",
+      "sha256": "aa4542b24c6dd7a227099a7adbedc52b2b04b7cc39e69365f0ccbfc149c452ec"
+    },
+    {
+      "path": "tests/banking-pay-draft-certified-v8-transport.test.cjs",
+      "sha256": "9c801796aa188c96430b2d6c093b75a176bb00e8f0934b705872897078db2b3d"
+    },
+    {
+      "path": "tests/04092026_1825_banking_pay_draft_v8_scalar_selection_boundary_runtime.sql",
+      "sha256": "ac5e964396717c5631946255f57a1738e9dbe70796984d1e7153fdd2b4f298b5"
+    },
+    {
+      "path": "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+      "sha256": "6f8e962afb690dc4e1f5821e84bbdf543bfd4a3c492eac287d398c3493977f12"
+    }
+  ],
+  "engines": {
+    "pg17": {
+      "status": "PASS",
+      "server_version": "17.11 (Debian 17.11-1.pgdg13+2)",
+      "container": "h12-v8-release-pg17",
+      "database": "h12_v8_new17",
+      "measurements": [
+        {"target_count": 101, "partitions": 4, "append_calls": 2, "seal_calls": 70, "stage_calls": 4, "max_append_ms": 626.876, "max_seal_ms": 77.951, "max_stage_or_admission_ms": 20.192},
+        {"target_count": 1001, "partitions": 4, "append_calls": 16, "seal_calls": 123, "stage_calls": 7, "max_append_ms": 807.782, "max_seal_ms": 76.130, "max_stage_or_admission_ms": 82.314},
+        {"target_count": 5000, "partitions": 4, "append_calls": 79, "seal_calls": 489, "stage_calls": 23, "max_append_ms": 1620.609, "max_seal_ms": 135.338, "max_stage_or_admission_ms": 261.223}
+      ],
+      "same_operation_concurrency": "PASS_EXISTING_LOCK_BUDGET_THEN_EXACT_REPLAY",
+      "same_selection_competing_operations": "PASS_ONE_ACTIVE_OPERATION_SECOND_LOCK_TIMEOUT_THEN_REPLAY_RETURNS_EXISTING_OPERATION",
+      "post_rollback_fixture_counts": {"snapshot_runs": 0, "sessions": 0, "certificates": 0, "operations": 0, "batches": 0}
+    },
+    "pg18": {
+      "status": "PASS",
+      "server_version": "18.6 (Debian 18.6-1.pgdg13+2)",
+      "container": "h12-v8-release-pg18",
+      "database": "h12_v8_new18",
+      "measurements": [
+        {"target_count": 101, "partitions": 4, "append_calls": 2, "seal_calls": 70, "stage_calls": 4, "max_append_ms": 567.502, "max_seal_ms": 63.653, "max_stage_or_admission_ms": 17.939},
+        {"target_count": 1001, "partitions": 4, "append_calls": 16, "seal_calls": 123, "stage_calls": 7, "max_append_ms": 696.125, "max_seal_ms": 74.218, "max_stage_or_admission_ms": 81.976},
+        {"target_count": 5000, "partitions": 4, "append_calls": 79, "seal_calls": 489, "stage_calls": 23, "max_append_ms": 1098.377, "max_seal_ms": 96.432, "max_stage_or_admission_ms": 2575.000}
+      ],
+      "same_operation_concurrency": "PASS_EXISTING_LOCK_BUDGET_THEN_EXACT_REPLAY",
+      "same_selection_competing_operations": "PASS_ONE_ACTIVE_OPERATION_SECOND_LOCK_TIMEOUT_THEN_REPLAY_RETURNS_EXISTING_OPERATION",
+      "post_rollback_fixture_counts": {"snapshot_runs": 0, "sessions": 0, "certificates": 0, "operations": 0, "batches": 0}
+    }
+  },
+  "full_current_v8_draft_output": {
+    "status": "LOCAL_DUAL_ENGINE_PASS",
+    "limits": {
+      "statement_timeout_ms": 15000,
+      "lock_timeout_ms": 1500,
+      "idle_in_transaction_session_timeout_ms": 30000,
+      "timeout_increase_or_bypass": false
+    },
+    "cases": {
+      "DISTINCT_TIMESHEETS_101": {
+        "selected_constituents": 101,
+        "distinct_timesheets": 101,
+        "candidates": 4,
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "pg17": {"status": "PASS", "maximum_production_call_ms": 631.644, "full_draft_elapsed_ms": 10270},
+        "pg18": {"status": "PASS", "maximum_production_call_ms": 622.146, "full_draft_elapsed_ms": 9847}
+      },
+      "MULTI_SEGMENT_101": {
+        "selected_constituents": 101,
+        "distinct_timesheets": 16,
+        "candidates": 4,
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "pg17": {"status": "PASS", "maximum_production_call_ms": 209.601, "full_draft_elapsed_ms": 5582},
+        "pg18": {"status": "PASS", "maximum_production_call_ms": 217.164, "full_draft_elapsed_ms": 5596}
+      },
+      "PAGINATION_1001": {
+        "selected_constituents": 1001,
+        "distinct_timesheets": 101,
+        "candidates": 4,
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "bounded_draft_calls": 47,
+        "pg17": {"status": "PASS", "maximum_production_call_ms": 790.212, "full_draft_elapsed_ms": 47604},
+        "pg18": {"status": "PASS", "maximum_production_call_ms": 2444.672, "full_draft_elapsed_ms": 49634}
+      },
+      "PAGINATION_5000": {
+        "selected_constituents": 5000,
+        "tested_distinct_timesheet_counts": [500, 1000],
+        "candidates": 4,
+        "pay_channels": ["PAYE", "UMBRELLA"],
+        "tested_shapes": {
+          "500_timesheets_10_segments_each": {
+            "bounded_draft_calls": 160,
+            "pg17": {"status": "PASS", "maximum_production_call_ms": 3986.594, "finalise_reservations_max_ms": 869.409, "full_harness_elapsed_ms": 424820.622},
+            "pg18": {"status": "PASS", "maximum_production_call_ms": 3727.811, "finalise_reservations_max_ms": 999.212, "full_harness_elapsed_ms": 406306.945}
+          },
+          "1000_timesheets_5_segments_each": {
+            "bounded_draft_calls": 184,
+            "pg17": {"status": "PASS", "maximum_production_call_ms": 3793.116, "finalise_reservations_max_ms": 908.935, "full_harness_elapsed_ms": 413738.333},
+            "pg18": {"status": "PASS", "maximum_production_call_ms": 3917.446, "finalise_reservations_max_ms": 979.588, "full_harness_elapsed_ms": 370883.817}
+          }
+        },
+        "policy_and_output_result": "EXACT_5000_ITEMS_ALLOCATIONS_AND_BREAKDOWNS_BOTH_CHANNELS_RESPONSE_LOSS_REPLAY_ROLLBACK",
+        "local_resource_contention_audit_event": "The first PostgreSQL 18 1000-Timesheet run timed out only while the PostgreSQL 17 heavyweight benchmark ran concurrently on the same Docker host; its isolated rerun passed. The failed concurrent result is retained as harness resource-contention evidence and is not used as product acceptance."
+      }
+    },
+    "every_case_assertions": {
+      "exact_selected_constituent_count": true,
+      "exact_item_count": true,
+      "exact_allocation_count": true,
+      "exact_breakdown_count": true,
+      "exact_constituent_parity_row_count": true,
+      "exact_snapshot_count": true,
+      "candidate_membership_complete": true,
+      "channel_partition_membership_complete": true,
+      "response_loss_replay": true,
+      "provider_payment_settlement_remittance_actions": 0,
+      "transaction_outcome": "ROLLBACK"
+    },
+    "local_database_drift_event": {
+      "classification": "DISPOSABLE_TEST_DATABASE_DEFINITION_DRIFT_NOT_PRODUCT_DEFECT",
+      "affected_engine": "PostgreSQL 17.11",
+      "affected_case": "PAGINATION_1001",
+      "resolution": "Reapplied the existing current pay_batch_constituent_parity_assert_v8 owner; both engines then had raw MD5 d9921090cd6a735e5b29c88daf4dac14 and the unchanged case passed.",
+      "source_or_policy_change": false
+    }
+  },
+  "actual_worker_postgrest_handoff": {
+    "status": "LOCAL_DUAL_ENGINE_PASS",
+    "scope": "CERTIFICATE_ADMISSION_AND_ROW_BACKED_STAGING_BEFORE_FINANCIAL_DRAFT_PHASES",
+    "cases": {
+      "101": {
+        "pg17": {"worker_calls": 4, "rpc_calls": 7, "table_reads": 9, "maximum_worker_call_ms": 81, "maximum_rpc_ms": 139, "elapsed_ms": 363},
+        "pg18": {"worker_calls": 4, "rpc_calls": 7, "table_reads": 9, "maximum_worker_call_ms": 85, "maximum_rpc_ms": 86, "elapsed_ms": 333}
+      },
+      "1001": {
+        "pg17": {"worker_calls": 7, "rpc_calls": 10, "table_reads": 15, "maximum_worker_call_ms": 146, "maximum_rpc_ms": 132, "elapsed_ms": 825},
+        "pg18": {"worker_calls": 7, "rpc_calls": 10, "table_reads": 15, "maximum_worker_call_ms": 147, "maximum_rpc_ms": 131, "elapsed_ms": 829}
+      },
+      "5000": {
+        "pg17": {"worker_calls": 23, "rpc_calls": 26, "table_reads": 47, "maximum_worker_call_ms": 2530, "maximum_rpc_ms": 2516, "elapsed_ms": 18504},
+        "pg18": {"worker_calls": 23, "rpc_calls": 26, "table_reads": 47, "maximum_worker_call_ms": 2543, "maximum_rpc_ms": 2534, "elapsed_ms": 18371}
+      }
+    },
+    "expanded_selection_arrays": false,
+    "response_loss_replay": true,
+    "does_not_prove": "This staging measurement is not the complete Draft pipeline; the separate full_current_v8_draft_output results prove the financial pipeline."
+  },
+  "fresh_final_authority_closure_reaudit": {
+    "status": "LOCAL_DUAL_ENGINE_PASS",
+    "source_head": "6b2e3822e7239cf8fc9b6568194294731135137d",
+    "reason": "Fresh reconciled replay after adding the final non-business release closure and the set-wise integrity owner: PostgreSQL 17 and 18 NEW, UPGRADE and exact second apply all completed every mandatory verifier and matched the generated contract.",
+    "release_proof": {
+      "pg17_new": "PASS",
+      "pg18_new": "PASS",
+      "pg17_upgrade": "PASS",
+      "pg18_upgrade": "PASS",
+      "pg17_exact_reapply": "PASS",
+      "pg18_exact_reapply": "PASS",
+      "generated_contract_sha256": "3286e3d122c822f9a0ec65f3b61760f405744427f2a048601f51f71c6856a2b6"
+    },
+    "producer_worker_postgrest": {
+      "101": {
+        "pg17": {"queue_deliveries":18,"append_calls":2,"elapsed_ms":2761},
+        "pg18": {"queue_deliveries":18,"append_calls":2,"elapsed_ms":2452}
+      },
+      "1001": {
+        "pg17": {"queue_deliveries":33,"append_calls":16,"elapsed_ms":19563},
+        "pg18": {"queue_deliveries":33,"append_calls":16,"elapsed_ms":17835}
+      },
+      "5000": {
+        "pg17": {"queue_deliveries":140,"append_calls":79,"elapsed_ms":113222},
+        "pg18": {"queue_deliveries":140,"append_calls":79,"elapsed_ms":104841}
+      }
+    },
+    "draft_worker_postgrest": {
+      "101": {
+        "pg17": {"worker_calls":4,"rpc_calls":7,"table_reads":9,"maximum_worker_call_ms":50,"maximum_rpc_ms":48,"elapsed_ms":176},
+        "pg18": {"worker_calls":4,"rpc_calls":7,"table_reads":9,"maximum_worker_call_ms":52,"maximum_rpc_ms":50,"elapsed_ms":176}
+      },
+      "1001": {
+        "pg17": {"worker_calls":7,"rpc_calls":10,"table_reads":15,"maximum_worker_call_ms":209,"maximum_rpc_ms":203,"elapsed_ms":662},
+        "pg18": {"worker_calls":7,"rpc_calls":10,"table_reads":15,"maximum_worker_call_ms":118,"maximum_rpc_ms":111,"elapsed_ms":429}
+      },
+      "5000": {
+        "pg17": {"worker_calls":23,"rpc_calls":26,"table_reads":47,"maximum_worker_call_ms":1543,"maximum_rpc_ms":1538,"elapsed_ms":13356},
+        "pg18": {"worker_calls":23,"rpc_calls":26,"table_reads":47,"maximum_worker_call_ms":494,"maximum_rpc_ms":488,"elapsed_ms":1664}
+      }
+    },
+    "assertions": {
+      "expanded_selection_arrays": false,
+      "response_loss_replay": true,
+      "timeout_or_lock_budget_change_count": 0,
+      "materialised_50000_test_prohibited_and_not_run": true,
+      "configured_ceiling": 50000,
+      "maximum_materialised_test": 5000
+    }
+  },
+  "bounded_generated_property": {
+    "recorded_seeds": ["0x43544d530001", "0x43544d530002", "0x43544d530003", "0x43544d530004"],
+    "cases": 96,
+    "accepted": 48,
+    "mutated_rejected": 48,
+    "fail": 0
+  },
+  "stale_selection_final_freeze": {
+    "status": "LOCAL_DUAL_ENGINE_TYPED_REJECTION_PASS",
+    "fixture": "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+    "pg17": {
+      "container": "h12-v8-restart-pg17",
+      "database": "banking_modal_v2_test",
+      "status": "PASS"
+    },
+    "pg18": {
+      "container": "h12-v8-restart-pg18",
+      "database": "banking_modal_v2_test",
+      "status": "PASS"
+    },
+    "typed_error": "WORKBENCH_CERTIFICATE_FINAL_FREEZE_STALE",
+    "pre_freeze_result": "STAGING_PRESERVED_WITH_NO_PARTIAL_FREEZE",
+    "valid_freeze_and_response_loss_replay": true,
+    "post_freeze_policy_x_result": "LATER_WORKBENCH_REFRESH_DOES_NOT_POISON_FROZEN_DRAFT",
+    "provider_payment_settlement_remittance_actions": 0,
+    "transaction_outcome": "ROLLBACK_ZERO_FIXTURE_ROWS"
+  },
+  "scalar_50001_rejection": {
+    "status": "LOCAL_DUAL_ENGINE_LAYERED_REJECTION_PASS",
+    "materialised_rows": 0,
+    "worker_typed_error": "BANKING_PAY_DRAFT_CERTIFIED_SELECTED_COUNT_INVALID",
+    "worker_operation_start_called": false,
+    "database_build_guard": "LIMIT_50001_SENTINEL_THEN_WORKBENCH_CERTIFICATE_SELECTED_LIMIT_EXCEEDED",
+    "database_admission_guard": "CONSTITUENT_COUNT_BETWEEN_1_AND_50000",
+    "pg17": {
+      "container": "h12-v8-restart-pg17",
+      "database": "banking_modal_v2_test",
+      "status": "PASS_SCALAR_CHECK_VIOLATION_ZERO_MANIFEST_ZERO_OPERATION_ROLLBACK"
+    },
+    "pg18": {
+      "container": "h12-v8-restart-pg18",
+      "database": "banking_modal_v2_test",
+      "status": "PASS_SCALAR_CHECK_VIOLATION_ZERO_MANIFEST_ZERO_OPERATION_ROLLBACK"
+    },
+    "provider_payment_settlement_remittance_actions": 0
+  },
+  "scalar_50000_configured_ceiling": {
+    "status": "LOCAL_DUAL_ENGINE_SCALAR_CONTRACT_PASS",
+    "materialised_rows": 0,
+    "worker_envelope_accepts_exact_count": 50000,
+    "worker_compact_input_bytes_less_than": 5000,
+    "database_channel_manifest_accepts_exact_count": 50000,
+    "database_build_sentinel_limit": 50001,
+    "database_build_maximum_accepted_count": 50000,
+    "pg17": "PASS_SCALAR_ACCEPTANCE_ROLLBACK",
+    "pg18": "PASS_SCALAR_ACCEPTANCE_ROLLBACK",
+    "does_not_claim": "No 50,000-row workload was materialised and no 50,000-row runtime performance claim is made."
+  },
+  "atomic_multibatch_failure": {
+    "status": "LOCAL_DUAL_ENGINE_AND_WORKER_COMPENSATED_FAILURE_PASS",
+    "scenario_id": "ATOMIC_PAYE_UMBRELLA_MULTIBATCH_FAILURE",
+    "failure_point": "AFTER_PAYE_AND_UMBRELLA_DRAFT_BATCH_SHELLS_AND_PARTIAL_ITEMS_EXIST",
+    "durable_audit_evidence_retained": true,
+    "paye_batch_final_status": "CANCELLED",
+    "umbrella_batch_final_status": "CANCELLED",
+    "partial_items_voided": true,
+    "candidate_scopes_final_status": "FAILED",
+    "operation_final_status": "FAILED",
+    "replay_idempotent": true,
+    "active_financial_or_reservation_state_remaining": 0,
+    "provider_payment_settlement_remittance_actions": 0,
+    "pg17": "PASS_ROLLBACK_ZERO_FIXTURE_ROWS",
+    "pg18": "PASS_ROLLBACK_ZERO_FIXTURE_ROWS",
+    "worker_orchestration": "PASS_BOTH_CHANNEL_BATCHES_ABORTED_BEFORE_TERMINAL_FAILURE",
+    "classification": "COMPENSATED_FAIL_CLOSED_NOT_LITERAL_ZERO_WRITE"
+  },
+  "mutation": {"operators_total": 14, "killed": 14, "surviving": 0},
+  "proved_transport_subchecks": [
+    "mixed_candidates_independent_at_four_interleaved_candidates",
+    "mixed_channel_partitions",
+    "pagination_1001",
+    "duplicate_delivery_replay_at_certificate_stage",
+    "response_loss_replay_at_certificate_stage",
+    "concurrent_same_operation_lock_and_replay",
+    "concurrent_different_operations_same_selection_one_active_operation",
+    "atomic_paye_umbrella_multibatch_failure_compensated_without_active_financial_state",
+    "stale_selection_revision_typed_rejection_before_freeze",
+    "scalar_50000_configured_ceiling_acceptance_without_materialised_rows",
+    "scalar_50001_worker_pre_admission_and_server_zero_write_rejection",
+    "bounded_5000_row_transport_without_expanded_arrays"
+  ],
+  "proved_full_current_v8_draft_subchecks": [
+    "mixed_candidates_independent",
+    "mixed_channel_partitions",
+    "over_100_distinct_timesheets",
+    "multi_segment_over_100",
+    "pagination_1001",
+    "duplicate_delivery_replay",
+    "response_loss_replay",
+    "concurrent_same_selection",
+    "bounded_5000_full_draft_output"
+  ],
+  "open_class_gates": [
+    "historical_v1_v8_typed_output_parity",
+    "fresh_shared_candidate_and_installed_miget_reaudit"
+  ],
+  "policy_result": {
+    "economic_or_payment_policy_change_count": 0,
+    "timeout_or_lock_budget_change_count": 0,
+    "provider_payment_settlement_remittance_actions": 0,
+    "expanded_selection_arrays": false
+  },
+  "audit_events": [
+    {
+      "event": "PARALLEL_FIXED_FIXTURE_ID_COLLISION",
+      "classification": "LOCAL_HARNESS_ORCHESTRATION_ERROR_NOT_PRODUCT_FINDING",
+      "result": "The affected 1,001/5,000 cases were discarded and rerun sequentially; no timeout or lock setting was changed."
+    }
+  ],
+  "notes": [
+    "Every measured production-owned call remained below its existing source-configured timeout; fixture setup alone used a separate rollback-only setup budget.",
+    "The 101-distinct-Timesheet control and separate 101-multi-segment case prove the group-count and segment-count boundaries independently.",
+    "The 1,001 and 5,000 cases use four interleaved Candidates and both PAYE and UMBRELLA partitions and execute the complete current V8 Draft financial pipeline.",
+    "No 50,000-row test was run; the configured ceiling remains 50,000 and is checked only through scalar/source guards, as required by the user.",
+    "The 50,001 boundary is proved without a 50,000-row or 50,001-row dataset: the Worker rejects the exact scalar count before operation start, and both database engines reject an impossible 50,001 channel manifest with zero operation or partial manifest rows.",
+    "Two different idempotency keys racing for the same Workbench selection are serialized by the existing session advisory lock: the second call times out under the unchanged one-second lock budget, and its retry returns the one active operation without creating another batch.",
+    "A failure after both PAYE and Umbrella Draft batches exist retains truthful audit/failure evidence but compensates both channel batches to CANCELLED, voids their partial items, fails their Candidate scopes, and leaves no active financial, reservation, provider, payment, settlement or remittance state.",
+    "This evidence cannot close historical V1-versus-V8 or downstream Execute Payment parity gates."
+  ]
+}

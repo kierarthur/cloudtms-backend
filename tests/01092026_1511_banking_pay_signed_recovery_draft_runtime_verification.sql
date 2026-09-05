@@ -1,9 +1,83 @@
 -- Rollback-contained real first-use of the signed recovery Draft finaliser.
--- Local PostgreSQL 17 only: no provider, execution, settlement or remittance.
+-- Synthetic only: no provider, execution, settlement or remittance.
 \set ON_ERROR_STOP on
 begin;
 set local statement_timeout='45s';
 set local lock_timeout='5s';
+set local cloudtms.rollback_fixture_scope='BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1';
+\if :{?cloudtms_release_fixture_context}
+select pg_catalog.set_config(
+  'cloudtms.release_verifier_context',
+  :'cloudtms_release_fixture_context',
+  true
+);
+\endif
+do $collision$
+begin
+  if exists (
+       select 1 from public.timesheets
+       where timesheet_id='10000000-0000-4000-8000-000000009001'
+          or booking_id='signed-return-fixture'
+     )
+     or exists (
+       select 1 from public.pay_batches
+       where id in (
+         '10000000-0000-4000-8000-000000009101',
+         '10000000-0000-4000-8000-000000009201'
+       )
+     )
+     or exists (
+       select 1 from public.pay_batch_candidates
+       where id in (
+         '10000000-0000-4000-8000-000000009102',
+         '10000000-0000-4000-8000-000000009202'
+       )
+     )
+     or exists (
+       select 1 from public.banking_pay_operations
+       where id in (
+         '10000000-0000-4000-8000-000000009103',
+         '10000000-0000-4000-8000-000000009203'
+       )
+          or idempotency_key in (
+            'signed-return-finalizer-fixture',
+            'signed-return-duplicate-fixture'
+          )
+     )
+     or exists (
+       select 1 from public.banking_pay_operation_candidate_scope
+       where id in (
+         '10000000-0000-4000-8000-000000009104',
+         '10000000-0000-4000-8000-000000009204'
+       )
+          or scope_hash in ('signed-return-scope','signed-return-duplicate-scope')
+     )
+     or exists (
+       select 1 from public.pay_batch_items
+       where id in (
+         '10000000-0000-4000-8000-000000009105',
+         '10000000-0000-4000-8000-000000009205'
+       )
+          or operation_source_key in (
+            'signed-return-source',
+            'signed-return-duplicate-source'
+          )
+     )
+     or exists (
+       select 1 from public.banking_pay_operation_candidate_allocation_rows
+       where id in (
+         '10000000-0000-4000-8000-000000009106',
+         '10000000-0000-4000-8000-000000009206'
+       )
+          or operation_source_key in (
+            'signed-return-source',
+            'signed-return-duplicate-source'
+          )
+     ) then
+    raise exception 'ROLLBACK_FIXTURE_ID_COLLISION';
+  end if;
+end;
+$collision$;
 \ir fixtures/28082026_1429_banking_pay_selection_setup.sql
 
 insert into public.timesheets(

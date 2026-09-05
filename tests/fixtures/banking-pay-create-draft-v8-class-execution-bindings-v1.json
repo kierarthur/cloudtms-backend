@@ -1,0 +1,395 @@
+{
+  "contract": "BANKING_PAY_CREATE_DRAFT_V8_CLASS_EXECUTION_BINDINGS_V1",
+  "status": "OPEN_EXECUTABLE_PARITY_GATES",
+  "source_policy_contract": {
+    "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+    "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd"
+  },
+  "source_parity_matrix": {
+    "path": "tests/fixtures/banking-pay-create-draft-v8-policy-parity-matrix-v1.json",
+    "sha256": "a7f85c0ae98ede2c6eef02ffa7381fc50a7067d470260a20045cac32dd7edfab"
+  },
+  "evidence_definitions": {
+    "STRUCTURAL_MATRIX_CLASS_ID_ONLY": {
+      "evidence_kind": "SOURCE_ONLY_GROUP_ASSOCIATION",
+      "path": "tests/fixtures/banking-pay-create-draft-v8-policy-parity-matrix-v1.json",
+      "marker_template": "\"{class_id}\"",
+      "proves": "The policy class exists and is assigned to one evidence group only.",
+      "does_not_prove": "No class-specific Draft output, typed rejection or V1-versus-V8 parity is proved."
+    },
+    "FINANCE_V8_20_VARIANT_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_ONLY",
+      "runtime_fixture_path": "tests/03092026_1600_banking_pay_draft_v8_finance_category_runtime.sql",
+      "runtime_fixture_sha256": "da338938dde0b70430f880bce917c35bac227485ed1c9029381915a7da155c87",
+      "canonical_fixture_path": "tests/02092026_1042_banking_pay_draft_insert_items_finance_handoff_runtime_verification.sql",
+      "canonical_fixture_sha256": "38a6d13332a87718b27259b993f2c258d869b4bc85aa46d5277bed2f43d474c0",
+      "runner_path": "scripts/verify-banking-pay-draft-v8-finance-policy-matrix.mjs",
+    "runner_sha256": "f33d81e87ab7be069c1d27ccff94c4cd21a0e0113b6022b8237eae4e2940d051",
+      "result_path": "codex_outputs/h2-draft-parity/P4_FINANCE_POLICY_MATRIX_RESULTS_V2.json",
+    "result_sha256": "4ba597af16dda23e8d5a95977309ec8d2974a600e785a186376982b0fb4d9d36",
+      "required_literal_markers": [
+        "H2_V8_FINANCE_POLICY_ARTIFACT_PARITY_MISMATCH",
+        "H2_V8_FINANCE_POLICY_MATRIX_PASS=",
+        "for (let ordinal = 1; ordinal <= 20; ordinal += 1)"
+      ],
+      "proves": "Current V8 reaches POST_CREATE_REFRESH with exact finance item, amount, VAT, PAYE treatment, channel, allocation, reservation, case state, snapshots and breakdown assertions for the selected variant ordinals.",
+      "does_not_prove": "The runner does not execute V1 or produce a typed V1-versus-V8 result manifest."
+    },
+    "ORDINARY_V8_8_CASE_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_ONLY",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-ordinary-policy-cases-v1.json",
+      "case_contract_sha256": "6a8b35fc5c11bb75387474fc35cfc80858f032e6697829eab8392dfd5992934c",
+      "runner_path": "scripts/verify-banking-pay-draft-v8-ordinary-policy-matrix.mjs",
+    "runner_sha256": "e124def513450c8f6455c4ce727d7017d0d57725d8d9b5eca518632a58c335c8",
+      "result_path": "tests/fixtures/banking-pay-draft-v8-ordinary-policy-results-v1.json",
+    "result_sha256": "9ff57273a17fd40cf61f4e45b939b8945faecc125dbd3d17ba50138d687bf7e3",
+      "required_literal_markers": [
+        "H2_P1_TYPED_DRAFT_OUTPUT_MISMATCH",
+        "H2_P1_CHANNEL_VAT_POLICY_MISMATCH",
+        "H2_V8_ORDINARY_POLICY_PASS="
+      ],
+      "proves": "Current V8 reaches POST_CREATE_REFRESH on PostgreSQL 17.11 and 18.6 with exact selected component multiset, constituent-to-allocation-to-item links, amount, channel, VAT, Timesheet snapshot and item-breakdown assertions for each named case.",
+      "does_not_prove": "The runner does not execute historical V1. Saved resolution classes are proved by their separate current-owner writer-to-finalizer matrix."
+    },
+    "SAVED_RESOLUTION_V8_2_CASE_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_ONLY",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-saved-resolution-cases-v1.json",
+      "case_contract_sha256": "279853b07dfdf0bc6dbba93695e1aad2c6cc1847cf4202bed28b9774cb05da68",
+      "runner_path": "scripts/verify-banking-pay-draft-v8-saved-resolution-reconciled.mjs",
+    "runner_sha256": "417b0818549a198f761fd81c4ffa64631b6b86dda2875faf8f765bf9641be166",
+      "result_path": "tests/fixtures/banking-pay-draft-v8-saved-resolution-results-v1.json",
+    "result_sha256": "00ad0f85759cd71e4f34861ab3adaa88eee168958dc339733cf9cd836080b049",
+      "required_literal_markers": [
+        "SAVED_RESOLUTION_WRITER_TO_CURRENT_V8_FINALIZER",
+        "expected_reconciled_recovery_amount_ex_vat",
+        "full_typed_v1_v8_parity_pass: 0"
+      ],
+      "proves": "On PostgreSQL 17.11 and 18.6 the current writer's saved conversion evidence is consumed through the current V8 finalizer while the separate existing recovery headroom owner still controls the final Draft recovery amount.",
+      "does_not_prove": "The runner does not execute historical V1 and does not permit the saved converted amount to replace the current-pay-run recovery cap."
+    },
+    "PRIOR_EXCLUSION_V8_12_CLASS_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_AND_TYPED_REJECTION_ONLY",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-prior-exclusion-parity-p3-v1.json",
+      "case_contract_sha256": "5a618fd07f5442d8f36726a9509e6a83171835ea4fe126ecf77618fcc522c398",
+      "runtime_fixture_path": "tests/04092026_1210_banking_pay_draft_v8_prior_exclusion_parity_p3_runtime.sql",
+      "runtime_fixture_sha256": "4f419040d89d82d77f415aaae1c48ce7d91c57637124b9eabcfce9323ffeeaa8",
+      "source_test_path": "tests/banking-pay-draft-v8-prior-exclusion-parity-p3.test.cjs",
+    "source_test_sha256": "dca4c1766b63531d7cfeb6d74056abeb6727c32a7679885725635a1440f889b8",
+      "result_path": "codex_outputs/h2-draft-parity/P3_PRIOR_EXCLUSION_PARITY_RESULTS_V1.json",
+      "result_sha256": "fdde1743505234a169a245fb736c48a40dc1c7d361810142aa7931c160fdcf82",
+      "required_literal_markers": [
+        "H2_P3_PRIOR_EXCLUSION_RUNTIME_PASS",
+        "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED",
+        "ROLLBACK;"
+      ],
+      "proves": "On PostgreSQL 17.11 and 18.6 the 12 prior-paid, reservation, supersession, cancellation-return, snooze and exclusion classes each pass for PAYE and Umbrella with exact current-V8 output or typed zero-write rejection.",
+      "does_not_prove": "The fixture does not execute historical V1; excluded classes are successful fail-closed policy proofs, not Draft outputs."
+    },
+    "SIGNED_RECOVERY_V8_5_CASE_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_AND_TYPED_REJECTION_ONLY",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-signed-recovery-cases-v1.json",
+      "case_contract_sha256": "a8ecef217a95b68a4a9e3a5ec8b1832703190e5916d9eef8c5aa86baf6e3d1af",
+      "runner_path": "scripts/verify-banking-pay-draft-v8-signed-recovery-matrix.mjs",
+      "runner_sha256": "4e338f3057727b1b69f2f71cecbd8f918c41ffa27a7886ccf31dd72d5d6d3cfb",
+      "result_path": "tests/fixtures/banking-pay-draft-v8-signed-recovery-results-v1.json",
+      "result_sha256": "c2026bd86f3659e1b05f9ac377625aab732803e264981c6baa4af5f17270bab1",
+      "required_literal_markers": [
+        "H2_V8_SIGNED_RECOVERY_PASS=signed_positive_return",
+        "H2_V8_SIGNED_RECOVERY_PASS=signed_negative_recovery",
+        "H2_V8_SIGNED_RECOVERY_PASS=signed_mixed_ordinary_same_key",
+        "H2_V8_SIGNED_RECOVERY_REJECT=signed_two_decisive_matches",
+        "H2_V8_SIGNED_RECOVERY_REJECT=signed_tampered_or_incomplete"
+      ],
+      "proves": "On PostgreSQL 17.11 and 18.6 current V8 finalises the exact positive return, paired negative recovery and mixed ordinary same-key shape, while duplicate decisive and tampered/incomplete evidence fail typed with zero additional item, allocation or reservation rows.",
+      "does_not_prove": "The runner does not execute historical V1 and does not turn typed fail-closed negative cases into successful Draft outputs."
+    },
+    "PAIRED_V8_11_CLASS_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_TYPED_REJECTION_AND_RECOVERY_HANDOFF",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-paired-timesheet-parity-p2-v1.json",
+      "case_contract_sha256": "639ce95e69dce2729f4bda945c16892196f4a56a7a824cbf13fa8565d2bc3b22",
+      "runtime_fixture_path": "tests/04092026_1200_banking_pay_draft_v8_paired_timesheet_parity_p2_runtime.sql",
+    "runtime_fixture_sha256": "cd355078a6c01e8fafd2550c33fb9abe709029b1e14751be2e45984a21fe1244",
+      "source_test_path": "tests/banking-pay-draft-v8-paired-timesheet-parity-p2.test.cjs",
+      "source_test_sha256": "a24e90b746eb6db0efe7007a7d0abd688ea73cde6d0461c31bf6c5832822a4d6",
+      "result_path": "codex_outputs/h2-draft-parity/P2_PAIRED_TIMESHEET_PARITY_RESULTS_V1.json",
+    "result_sha256": "25da2d89cdc1cf1889bdaf1eec898a0930840856e4b1db5bffd0311030791e9a",
+      "proves": "Nine paired-Timesheet classes have exact current-V8 Draft output or typed zero-write rejection on PostgreSQL 17.11 and 18.6. The two reversal-only classes prove the current correction-chain owner maps the complete negative residual to the existing overpayment-recovery handoff; combined with the separate finance-headroom matrix, a standalone reversal with zero positive-pay headroom is retained but excluded from that Draft while exact and partial headroom remain governed by the existing recovery owner. The matrix also proves positive-only is invalid and source-binds the current atomic two-member delete behavior.",
+      "does_not_prove": "No historical V1 route is executed. The reversal-only result does not create a new negative Timesheet payment and does not alter recovery economics. The user-required replacement-only deletion to a republished genuine REVERSAL_ONLY unit is not implemented by the current standard delete owner and remains an explicit upstream gap."
+    },
+    "FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX": {
+      "evidence_kind": "CURRENT_V8_DRAFT_OUTPUT_AND_TYPED_REJECTION_ONLY",
+      "case_contract_path": "tests/fixtures/banking-pay-draft-v8-finance-lifecycle-headroom-p4-v1.json",
+      "case_contract_sha256": "8c4d4072bb1759dc31a758fe7c5e7a89e1af488068f58f8e368cc768f47cc7d6",
+      "runtime_fixture_path": "tests/04092026_1220_banking_pay_draft_v8_finance_lifecycle_headroom_p4_runtime.sql",
+      "runtime_fixture_sha256": "4b99d19fdad2e16dc792172ebb3447fcad286751fd17eeed75d514cc207da321",
+      "source_test_path": "tests/banking-pay-draft-v8-finance-lifecycle-headroom-p4.test.cjs",
+    "source_test_sha256": "2d109dbcd3ff773ca38ca547c9c30aa3c70cc106bafa530b2c4f4097b8fa6fa7",
+      "result_path": "codex_outputs/h2-draft-parity/P4_FINANCE_LIFECYCLE_HEADROOM_RESULTS_V1.json",
+      "result_sha256": "9a68f92513f62d51d5db7edfcd4403e3c848966eafe740cbdb86f6fe0a25735b",
+      "proves": "Twelve finance lifecycle, headroom and carry-forward classes pass across PAYE and Umbrella on PostgreSQL 17.11 and 18.6, including exact response-loss replay and typed tamper rejection.",
+      "does_not_prove": "The fixture does not execute historical V1 or prove an installed Miget definition."
+    },
+    "P6_BOUNDED_SCALE_REPLAY_CONCURRENCY": {
+      "evidence_kind": "CURRENT_V8_BOUNDED_TRANSPORT_AND_FULL_DRAFT_OUTPUT",
+      "scale_fixture_path": "tests/03092026_1010_banking_pay_workbench_settled_certificate_v8_scale_verification.sql",
+      "scale_fixture_sha256": "c28dbb786eb1f7b973c27d15dadc1aa87ccd8eb0527061600848d46acec05457",
+      "full_draft_runner_path": "scripts/verify-banking-pay-draft-v8-scale-output-matrix.mjs",
+    "full_draft_runner_sha256": "f6b4e17ee92653e696e6613512d1358093d0f7caf86802316eb0de926f4e1692",
+      "full_draft_case_contract_path": "tests/fixtures/banking-pay-draft-v8-scale-output-cases-v1.json",
+      "full_draft_case_contract_sha256": "7b393ebc857bfc947ca33b86913d66c33a1e35115265f09ea365b8c571ac4f65",
+      "property_test_path": "tests/banking-pay-draft-v8-bounded-property.test.cjs",
+      "property_test_sha256": "4fa9865673941daf401729ae3310aafd238f4abd0ebb1b54e98b37e1a4450b8f",
+      "concurrency_test_path": "tests/banking-pay-draft-certified-v8-concurrency.runtime.test.cjs",
+      "concurrency_test_sha256": "55b64bd5cfde7c22b81cffc9e833e45eb53056390157a4c916a7c495bb23e78e",
+      "atomic_multibatch_fixture_path": "tests/04092026_1845_banking_pay_draft_v8_atomic_multibatch_failure_runtime.sql",
+      "atomic_multibatch_fixture_sha256": "b235806500e349e839da3cf356d3ec62f4cb1acf1f2abf51c84f21e41bd3aebc",
+      "atomic_multibatch_worker_test_path": "tests/banking-pay-draft-v8-atomic-multibatch-cleanup.test.cjs",
+      "atomic_multibatch_worker_test_sha256": "0e11c5c3339d5fe4dec59e6260c4d429fdc03b33d446469dd9424fcf1b1c18a0",
+      "transport_test_path": "tests/banking-pay-draft-certified-v8-transport.test.cjs",
+      "transport_test_sha256": "9c801796aa188c96430b2d6c093b75a176bb00e8f0934b705872897078db2b3d",
+      "scalar_boundary_fixture_path": "tests/04092026_1825_banking_pay_draft_v8_scalar_selection_boundary_runtime.sql",
+      "scalar_boundary_fixture_sha256": "ac5e964396717c5631946255f57a1738e9dbe70796984d1e7153fdd2b4f298b5",
+      "stale_selection_fixture_path": "tests/02092026_2352_banking_pay_draft_certificate_consumer_phase_units_runtime.sql",
+      "stale_selection_fixture_sha256": "6f8e962afb690dc4e1f5821e84bbdf543bfd4a3c492eac287d398c3493977f12",
+      "result_path": "codex_outputs/h2-draft-parity/P6_SCALE_REPLAY_CONCURRENCY_RESULTS_V1.json",
+    "result_sha256": "dda171b3339445200d70209ca93ab74806d6a845a667e52fa78ccb7e84721134",
+      "required_literal_markers": [
+        "\"target_count\":5000",
+        "H2_V8_SCALE_FULL_OUTPUT_PASS",
+        "DISTINCT_TIMESHEETS_101",
+        "MULTI_SEGMENT_101",
+        "response_loss_replay",
+        "WORKBENCH_CERTIFICATE_FINAL_FREEZE_STALE",
+        "BANKING_PAY_DRAFT_CERTIFIED_SELECTED_COUNT_INVALID",
+        "ATOMIC_PAYE_UMBRELLA_MULTIBATCH_FAILURE",
+        "configured_ceiling",
+        "materialised_50000_test_prohibited"
+      ],
+      "proves": "PostgreSQL 17.11 and 18.6 accept bounded row-backed certificate transport and complete current-V8 Draft output at 101, 1,001 and 5,000 rows, including a distinct 101-Timesheet case, a separate 101-segment case, four independent Candidates, simultaneous PAYE/Umbrella partitions, exact items/allocations/breakdowns/parity rows/snapshots, response-loss replay and unchanged call budgets. Different operation keys racing for one Workbench selection are serialized to one active operation under the existing lock budget. A failure after both PAYE and Umbrella partial Draft batches exist compensates both channel batches, voids partial items and leaves no active financial/provider state while retaining truthful audit evidence. A separate rollback fixture proves a changed Workbench authority before final freeze returns WORKBENCH_CERTIFICATE_FINAL_FREEZE_STALE, preserves STAGING without partial freeze, and a later refresh cannot poison an already frozen Draft under Policy X. A scalar-only boundary proof shows exact count 50,001 is rejected by the Worker before operation start and cannot be represented by the server certificate/admission tables, with no Draft operation or partial manifest row on either engine.",
+      "does_not_prove": "This does not materialise 50,000 rows, execute historical V1 or prove downstream Execute Payment parity."
+    }
+  },
+  "assertion_profiles": {
+    "FULL_TYPED_DRAFT_V1_V8": {
+      "required_routes": [
+        "V1",
+        "V8"
+      ],
+      "required_artifacts": [
+        "operation_response",
+        "pay_batches",
+        "pay_batch_candidates",
+        "pay_batch_items",
+        "stable_economic_and_source_keys",
+        "selected_allocations",
+        "candidate_and_batch_totals",
+        "gross_net_and_vat_totals",
+        "reservations_and_retention_markers",
+        "timesheet_snapshots",
+        "item_breakdowns",
+        "finance_case_and_component_effects",
+        "expected_effect_attestations",
+        "post_draft_authority",
+        "source_publication_and_fast_reversion_lineage",
+        "audit_and_grouped_ownership_evidence"
+      ],
+      "generated_id_rule": "Map generated technical IDs only by stable business role; do not normalize money, status, type, key, membership, digest or policy output.",
+      "result_manifest_required": true
+    },
+    "FAIL_CLOSED_ZERO_WRITE": {
+      "required_assertions": [
+        "exact_typed_error",
+        "no_draft_or_financial_rows_created_or_changed",
+        "unrelated_candidates_unchanged",
+        "zero_provider_payment_settlement_or_remittance_actions",
+        "rollback_complete"
+      ],
+      "result_manifest_required": true
+    },
+    "FAIL_CLOSED_COMPENSATED_NO_ACTIVE_FINANCIAL_STATE": {
+      "required_assertions": [
+        "exact_typed_terminal_failure",
+        "all_partial_channel_batches_cancelled",
+        "all_partial_items_voided",
+        "all_candidate_scopes_failed",
+        "audit_and_failure_evidence_retained",
+        "no_active_financial_or_reservation_state",
+        "zero_provider_payment_settlement_or_remittance_actions",
+        "replay_idempotent",
+        "fixture_rollback_complete"
+      ],
+      "result_manifest_required": true
+    },
+    "BOUNDED_TRANSPORT_ONLY": {
+      "required_assertions": [
+        "count_digest_partition_and_page_reconciliation",
+        "bounded_payload_and_memory",
+        "replay_and_response_loss",
+        "unchanged_statement_and_lock_budgets"
+      ],
+      "counts_as_draft_output_proof": false
+    },
+    "DOWNSTREAM_V1_V8": {
+      "required_assertions": [
+        "PAYE_worksheet_before_manual_net",
+        "PAYE_saved_manual_net_and_post_entry_projection",
+        "Umbrella_VAT_payee_and_channel_projection",
+        "immediate_execute_eligibility_preview_and_local_preparation",
+        "scheduled_execute_eligibility_preview_and_local_preparation",
+        "Current_Payment_Status_and_Overview",
+        "whole_candidate_untouched_Draft_cancellation",
+        "whole_candidate_local_prepared_not_sent_cancellation",
+        "whole_candidate_future_dated_executed_not_paid_cancellation",
+        "provider_submitted_or_settled_cancellation_rejection",
+        "certified_reversion_or_existing_safe_fallback",
+        "remittance_generation_and_suppression_projection"
+      ],
+      "no_real_provider_payment_settlement_or_remittance_action": true,
+      "result_manifest_required": true
+    }
+  },
+  "execution_boundary": {
+    "materialised_load_rows": [
+      101,
+      1001,
+      5000
+    ],
+    "maximum_materialised_load_rows": 5000,
+    "configured_ceiling": 50000,
+    "configured_ceiling_evidence_kind": "SCALAR_SOURCE_AND_CONTRACT_ONLY",
+    "first_rejected_count": 50001,
+    "first_rejected_count_evidence_kind": "SCALAR_ZERO_WRITE_REJECTION",
+    "prohibited_materialised_row_count": 50000,
+    "unchanged_timeout_rule": "No statement, lock or idle-in-transaction budget may be increased, removed or bypassed."
+  },
+  "create_draft_policy_contract_conformance": {
+    "status": "PASS_ALL_88_CURRENT_V8_CREATE_DRAFT_OUTCOMES",
+    "scope": "Exact current-V8 Draft output, typed zero-write rejection, compensated failure or scalar ceiling outcome for every frozen policy class. Downstream Execute Payment and cancellation gates remain separately measured and this status does not claim historical V1 executed all 88 classes.",
+    "source_policy_contract_sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd",
+    "class_count": 88,
+    "pass_count": 88,
+    "policy_or_economic_delta_count": 0,
+    "direct_historical_v1_execution_claim": false
+  },
+  "class_execution_bindings": [
+    { "class_id": "ordinary_one_segment_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["SIMPLE_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "ordinary_one_segment_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["SIMPLE_UMBRELLA"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "ordinary_multi_segment_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["MULTI_TIMESHEET_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "ordinary_multi_segment_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["MULTI_TIMESHEET_UMBRELLA"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "ordinary_multiple_rate_families", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "ordinary_same_key_multiple_components", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "saved_rate_resolution", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["SAVED_RATE_RESOLUTION_UMBRELLA_TO_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SAVED_RESOLUTION_V8_2_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "saved_payment_method_resolution", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["SAVED_PAYMENT_METHOD_RESOLUTION_PAYE_TO_UMBRELLA"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SAVED_RESOLUTION_V8_2_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_expenses_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["FALLBACK_EXPENSES_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_travel_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_accommodation_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_other_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "mileage_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_vat_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_UMBRELLA_VAT"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "expense_non_vat_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_UMBRELLA_NON_VAT"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "mileage_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_UMBRELLA_VAT"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "additional_code_component", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "adjustment_code_component", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "forced_advance_paye", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_PAYE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "forced_advance_umbrella", "group_id": "P1_ORDINARY_COMPONENTS_RATES_EXPENSES", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["COMPONENT_MIX_UMBRELLA_VAT"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["ORDINARY_V8_8_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+
+    { "class_id": "paired_reversal_replacement_paye", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_reversal_replacement_paye"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "paired_reversal_replacement_umbrella", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_reversal_replacement_umbrella"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "paired_cross_channel_resolution", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_cross_channel_resolution"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "paired_broken_or_duplicate_leg", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_broken_or_duplicate_leg"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "paired_stale_fingerprint", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_stale_fingerprint"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "paired_mixed_candidate_or_client", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_mixed_candidate_or_client"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "paired_paid_or_invoiced_conflict", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_paid_or_invoiced_conflict"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "paired_transition_replay", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_transition_replay"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "paired_draft_response_loss_replay", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_draft_response_loss_replay"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "paired_reversal_only_paye", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "source_lifecycle_status": "VALID_GENUINE_REVERSAL_ONLY", "draft_zero_headroom_outcome": "RECOVERY_RETAINED_NOT_SELECTED", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_reversal_only_paye"] }], "cross_class_covering_case_ids": ["overpayment_zero_headroom"], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX", "FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "paired_reversal_only_umbrella", "group_id": "P2_PAIRED_TIMESHEET_LIFECYCLE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "source_lifecycle_status": "VALID_GENUINE_REVERSAL_ONLY", "draft_zero_headroom_outcome": "RECOVERY_RETAINED_NOT_SELECTED", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["paired_reversal_only_umbrella"] }], "cross_class_covering_case_ids": ["overpayment_zero_headroom"], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PAIRED_V8_11_CLASS_MATRIX", "FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+
+    { "class_id": "part_paid_residual", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["part_paid_residual"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "fully_settled_absent", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["fully_settled_absent"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "active_reservation_residual", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["active_reservation_residual"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "superseded_absent", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["superseded_absent"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "cancelled_untouched_reappears_once", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["cancelled_untouched_reappears_once"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "timesheet_snoozed_excluded", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["timesheet_snoozed_excluded"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "segment_snooze_isolation", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["segment_snooze_isolation"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "finance_case_snoozed_excluded", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["finance_case_snoozed_excluded"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "snooze_expiry_reappears_once", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["snooze_expiry_reappears_once"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "action_required_excluded", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["action_required_excluded"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "blocked_excluded", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["blocked_excluded"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "active_draft_excluded", "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["active_draft_excluded"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["PRIOR_EXCLUSION_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+
+    { "class_id": "advance_payout_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [11], "visible_alias": "LOAN_PAYOUT", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "advance_payout_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [12], "visible_alias": "LOAN_PAYOUT", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "advance_repayment_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [9], "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "advance_repayment_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [10], "visible_alias": "PAYMENT_ADVANCE_REPAYMENT", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "advance_part_repaid_residual", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["advance_part_repaid_residual"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "advance_paid_off_absent", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["advance_paid_off_absent"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "advance_cancelled_absent", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["advance_cancelled_absent"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "advance_voided_reappears_once", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["advance_voided_reappears_once"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "overpayment_taxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [3], "visible_alias": "OVERPAYMENT_RECOVERY", "pay_channel": "PAYE", "taxability": ["TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "overpayment_nontaxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [1], "visible_alias": "OVERPAYMENT_RECOVERY", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "overpayment_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [2, 4], "visible_alias": "OVERPAYMENT_RECOVERY", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE", "TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "overpayment_zero_headroom", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["overpayment_zero_headroom"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "overpayment_exact_headroom", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["overpayment_exact_headroom"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "overpayment_partial_headroom", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["overpayment_partial_headroom"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "underpayment_taxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [15], "visible_alias": "UNDERPAYMENT_PAYMENT", "pay_channel": "PAYE", "taxability": ["TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "underpayment_nontaxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [13], "visible_alias": "UNDERPAYMENT_PAYMENT", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "underpayment_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [14, 16], "visible_alias": "UNDERPAYMENT_PAYMENT", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE", "TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_credit_taxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [19], "visible_alias": "MANUAL_CREDIT_ADJUSTMENT_PAYMENT", "pay_channel": "PAYE", "taxability": ["TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_credit_nontaxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [17], "visible_alias": "MANUAL_CREDIT_ADJUSTMENT_PAYMENT", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_credit_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [18, 20], "visible_alias": "MANUAL_CREDIT_ADJUSTMENT_PAYMENT", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE", "TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_debt_taxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [7], "visible_alias": "MANUAL_DEBT_RECOVERY", "pay_channel": "PAYE", "taxability": ["TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_debt_nontaxable_paye", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [5], "visible_alias": "MANUAL_DEBT_RECOVERY", "pay_channel": "PAYE", "taxability": ["NON_TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_debt_umbrella", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "VARIANT_ORDINAL", "ordinals": [6, 8], "visible_alias": "MANUAL_DEBT_RECOVERY", "pay_channel": "UMBRELLA", "taxability": ["NON_TAXABLE", "TAXABLE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_V8_20_VARIANT_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "manual_debt_zero_headroom", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["manual_debt_zero_headroom"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "manual_debt_partial_headroom", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["manual_debt_partial_headroom"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "mixed_recoveries_deterministic_order", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["mixed_recoveries_deterministic_order"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "carry_forward_credit", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["carry_forward_credit"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "carry_forward_debit", "group_id": "P4_FINANCE_CATEGORIES_GROSS_NET_VAT_HEADROOM", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["carry_forward_debit"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["FINANCE_LIFECYCLE_HEADROOM_V8_12_CLASS_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+
+    { "class_id": "signed_positive_return", "group_id": "P5_SIGNED_RECOVERY_EVIDENCE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["signed_positive_return"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SIGNED_RECOVERY_V8_5_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "signed_negative_recovery", "group_id": "P5_SIGNED_RECOVERY_EVIDENCE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["signed_negative_recovery"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SIGNED_RECOVERY_V8_5_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "signed_mixed_ordinary_same_key", "group_id": "P5_SIGNED_RECOVERY_EVIDENCE", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["signed_mixed_ordinary_same_key"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SIGNED_RECOVERY_V8_5_CASE_MATRIX"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "signed_two_decisive_matches", "group_id": "P5_SIGNED_RECOVERY_EVIDENCE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["signed_two_decisive_matches"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SIGNED_RECOVERY_V8_5_CASE_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "signed_tampered_or_incomplete", "group_id": "P5_SIGNED_RECOVERY_EVIDENCE", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["signed_tampered_or_incomplete"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["SIGNED_RECOVERY_V8_5_CASE_MATRIX"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+
+    { "class_id": "mixed_candidates_independent", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_FOUR_INTERLEAVED_CANDIDATES_AND_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "mixed_channel_partitions", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["MIXED_PAYE_UMBRELLA_ORACLE_8", "DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_PAYE_UMBRELLA_PARTITIONS_AND_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "PARITY_PASS", "route_coverage": ["V1", "V8"], "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": { "path": "codex_outputs/h2-draft-parity/P7_V1_V8_MIXED_CHANNEL_ORACLE_RESULT_V1.json", "sha256": "9590d0dcc92b1cde5b4b049335f48a88e8922dbc43cfce793c9e0be44d5fab55" } },
+    { "class_id": "over_100_distinct_timesheets", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_101_DISTINCT_TIMESHEETS_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "multi_segment_over_100", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["MULTI_SEGMENT_101"] }], "transport_subcheck_status": "PASS_101_SEGMENTS_ACROSS_16_TIMESHEETS_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "pagination_1001", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["PAGINATION_1001"] }], "transport_subcheck_status": "PASS_1001_ROW_PAGED_TRANSPORT_AND_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "boundary_50000", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "SCALAR_CONTRACT_GUARD_ONLY", "current_v8_status": "CURRENT_V8_SCALAR_CONTRACT_PASS", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["boundary_50000"] }], "transport_subcheck_status": "PASS_SCALAR_CONFIGURED_CEILING_ONLY", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "BOUNDED_TRANSPORT_ONLY", "result_manifest": null },
+    { "class_id": "boundary_50001_reject", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["boundary_50001_reject"] }], "transport_subcheck_status": "PASS_WORKER_TYPED_PRE_ADMISSION_AND_DUAL_ENGINE_SERVER_ZERO_WRITE_REJECTION", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "duplicate_delivery_replay", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_FULL_DRAFT_DUPLICATE_DELIVERY_REPLAY", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "response_loss_replay", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_FULL_DRAFT_RESPONSE_LOSS_REPLAY", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "concurrent_same_selection", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_DRAFT_OUTPUT", "current_v8_status": "CURRENT_V8_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["DISTINCT_TIMESHEETS_101"] }], "transport_subcheck_status": "PASS_DIFFERENT_OPERATION_KEYS_SAME_SELECTION_ONE_ACTIVE_OPERATION_THEN_FULL_DRAFT_OUTPUT", "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FULL_TYPED_DRAFT_V1_V8", "result_manifest": null },
+    { "class_id": "stale_selection_revision", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_TYPED_REJECTION", "current_v8_status": "CURRENT_V8_TYPED_REJECTION_ONLY", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "CASE_ID", "case_ids": ["stale_selection_revision"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FAIL_CLOSED_ZERO_WRITE", "result_manifest": null },
+    { "class_id": "atomic_multibatch_failure", "group_id": "P6_SCALE_PARTITIONS_REPLAY_CONCURRENCY", "evidence_tier": "CURRENT_V8_COMPENSATED_FAILURE", "current_v8_status": "CURRENT_V8_COMPENSATED_FAILURE_PASS", "create_draft_policy_contract_conformance_status": "PASS_CURRENT_V8_EXACT_POLICY_OUTCOME", "current_v8_case_selectors": [{ "kind": "SCENARIO_ID", "scenario_ids": ["ATOMIC_PAYE_UMBRELLA_MULTIBATCH_FAILURE"] }], "v1_v8_typed_parity_status": "OPEN", "evidence_refs": ["P6_BOUNDED_SCALE_REPLAY_CONCURRENCY"], "assertion_profile_id": "FAIL_CLOSED_COMPENSATED_NO_ACTIVE_FINANCIAL_STATE", "result_manifest": null }
+  ],
+  "downstream_execution_gates": [
+    { "gate_id": "PAYE_WORKSHEET_BEFORE_AND_AFTER_MANUAL_NET", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "UMBRELLA_VAT_PAYEE_CHANNEL", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "IMMEDIATE_EXECUTE_ELIGIBILITY_PREVIEW_LOCAL_PREPARATION", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "SCHEDULED_EXECUTE_ELIGIBILITY_PREVIEW_LOCAL_PREPARATION", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "CURRENT_PAYMENT_STATUS_AND_OVERVIEW", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "WHOLE_CANDIDATE_UNTOUCHED_DRAFT_CANCEL", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "WHOLE_CANDIDATE_LOCAL_PREPARED_NOT_SENT_CANCEL", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "WHOLE_CANDIDATE_FUTURE_DATED_EXECUTED_NOT_PAID_CANCEL", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "PROVIDER_SUBMITTED_OR_SETTLED_CANCEL_REJECTION", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "CERTIFIED_REVERSION_OR_EXISTING_SAFE_FALLBACK", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" },
+    { "gate_id": "REMITTANCE_GENERATION_AND_SUPPRESSION_PROJECTION", "status": "OPEN_EXECUTABLE_V1_V8_PARITY_REQUIRED" }
+  ],
+  "totals": {
+    "classes": 88,
+    "current_v8_exact_draft_output_only": 65,
+    "current_v8_typed_rejection_only": 21,
+    "current_v8_compensated_failure_only": 1,
+    "current_v8_scalar_contract_only": 1,
+    "open_class_specific_draft_output_or_rejection": 0,
+    "current_v8_create_draft_policy_contract_conformance_pass": 88,
+    "v1_v8_full_typed_parity_pass": 1,
+    "downstream_execution_gates": 11,
+    "downstream_execution_gates_pass": 0
+  },
+  "pass_rule": "No class may become PARITY_PASS unless an exact case selector executes both V1 and V8 and a typed result manifest proves the required assertion profile. Group membership, source text, transport proof, totals-only evidence or a current-V8-only result cannot satisfy parity."
+}

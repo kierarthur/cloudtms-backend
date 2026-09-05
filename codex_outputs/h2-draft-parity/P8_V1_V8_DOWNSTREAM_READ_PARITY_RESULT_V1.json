@@ -1,0 +1,74 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1",
+  "status": "PASS_LOCAL_DUAL_ENGINE",
+  "historical_v1_source_head": "a2447beacc417cd7e6142042f2901304a105a5ce",
+  "current_v8_local_source_head": "f95d67259291cb8b69e5da22f39e8dea39bf2a5f",
+  "runtime_authority": "MIGET_TEST_NOT_MUTATED_BY_THIS_PROOF",
+  "engines": [
+    {
+      "engine": "PostgreSQL 17.11",
+      "historical_v1_operation_id": "bdf3153a-f07c-48d0-96a7-ee8dac8b3f66",
+      "current_v8_operation_id": "79aef583-d7d8-4fab-930c-c05032ac60a1",
+      "normalized_result_sha256": "10edd58c78925d6003f286aeb05619b694173efc97dbe7ee221aca53e15aa9b6",
+      "status": "PASS"
+    },
+    {
+      "engine": "PostgreSQL 18.6",
+      "historical_v1_operation_id": "54c65fff-e0c0-483b-a07a-cf7cea475f02",
+      "current_v8_operation_id": "378450de-c660-4834-9884-b1c10fb3a580",
+      "normalized_result_sha256": "10edd58c78925d6003f286aeb05619b694173efc97dbe7ee221aca53e15aa9b6",
+      "status": "PASS"
+    }
+  ],
+  "simultaneous_channels": [
+    "PAYE",
+    "UMBRELLA"
+  ],
+  "gates_proved": [
+    "PAYE_WORKSHEET_NET_ENTRY_AND_SAVED_SCALAR",
+    "UMBRELLA_PAYEE_VAT_AND_CHANNEL",
+    "CURRENT_PAYMENT_STATUS_ROWS_AMOUNTS_ACTIONS",
+    "OVERVIEW_BENEFICIARY_AND_PAYMENT_TOTALS",
+    "CSV_SETTLEMENT_PROJECTION"
+  ],
+  "compared_counts_per_route": {
+    "batches": 2,
+    "candidates": 4,
+    "items": 8,
+    "allocations": 8,
+    "snapshots": 8,
+    "breakdowns": 8,
+    "bank_projections": 4,
+    "payment_status_rows": 4
+  },
+  "comparison_rules": {
+    "money_precision": "EXACT_DATABASE_TWO_DECIMAL_VALUES",
+    "equivalent_fixture_identity": "PG18 used the same deterministic source identities in isolated databases. PG17 used a separate deterministic namespace for the V8 fixture so the earlier retained 101-row evidence was not deleted; the comparator maps only those enumerated fixture prefixes back to their equivalent source ordinals before comparison.",
+    "candidate_tms_reference": "Each route proves its frozen Candidate reference equals its own authoritative source Candidate before comparing the resulting business fields.",
+    "allocation_operation_binding": "Each route proves the allocation source key is bound to its own operation rather than comparing unrelated generated operation UUIDs."
+  },
+  "side_effect_boundary": {
+    "paye_net_entry": "ROLLBACK",
+    "provider_calls": 0,
+    "payment_submissions": 0,
+    "settlement_actions": 0,
+    "remittance_actions": 0
+  },
+  "source_artifacts": {
+    "comparison_runner": {
+      "path": "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs",
+      "sha256": "d431ebe090456f65d6f376bdaaccd0c35be0bd96428f41cb6e4f6f07e3683d9a"
+    },
+    "historical_v1_oracle_runner": {
+      "path": "scripts/verify-banking-pay-draft-v1-mixed-channel-oracle.mjs",
+      "sha256": "836800dd96bbcdfeeeaeeb7bc6995fa0c2d7108b6ee08dc40616fef6076596ab"
+    },
+    "current_v8_output_runner": {
+      "path": "scripts/verify-banking-pay-draft-v8-scale-output-matrix.mjs",
+      "sha256": "6984399be7756126686577defa2c76953d4209ec436e736babe3f8a68b1c9660"
+    }
+  },
+  "policy_change_count": 0,
+  "external_payment_action_count": 0,
+  "remaining_downstream_gates": 13
+}

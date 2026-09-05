@@ -1,0 +1,180 @@
+{
+  "contract": "H1_CREATE_DRAFT_LIFECYCLE_PRODUCER_AUDIT_V1",
+  "status": "H1_PRODUCER_LOCAL_PASS_H2_CONSUMER_CORRECTIONS_REQUIRED",
+  "runtime_authority": "MIGET_TEST",
+  "source_note": "Repository directories named supabase are historical source paths. No Supabase runtime was used.",
+  "assessment_rule": "All sixteen H2 lifecycle gates were assessed against exact current source. PASS means executed H1 evidence only. H2-owned consumer work is never converted to PASS by H1 producer evidence.",
+  "h2_control": {
+    "lifecycle_contract_sha256": "b13b5be38eeee54c587d26605c86015b08fbac7a39124b826c3136798a336727",
+    "lifecycle_test_sha256": "210898e32078b1c80dc8095ede6dd0fc0e5c1c3b34b4f805881a3a85672ad87c",
+    "policy_contract_sha256": "3952c019426334a6c04b568226d019fc915f635d2411b7a295229c188beef42c",
+    "policy_checksums_sha256": "4ffd0625217d68acd50985aaafe00b2e5e5ce450574fa140648ced97eaecfa5e",
+    "payment_families": 15,
+    "finite_equivalence_classes": 88,
+    "draft_stages": 17,
+    "h2_control_test": { "pass": 10, "fail": 0, "todo": 0, "skip": 0 }
+  },
+  "source": {
+    "backend_shared_base_commit": "16b299bf03c3d752f6dbd7891c0d23044e88e890",
+    "backend_implementation_commit": "f6abc37d71879e204ea8dba11900c385c07c2959",
+    "backend_implementation_tree": "80b3b08aafc0a424e84712fa561a4196ef781a02",
+    "frontend_shared_base_commit": "278dcbd007bb3cb6a13d09b5fe0d8aaf5132a5be",
+    "frontend_implementation_commit": "6ec5f56cf236c43ad1864ae44514d1d634230aae",
+    "frontend_implementation_tree": "af79cbbe4cdf433d569a9a85f987160a41460377"
+  },
+  "gates": [
+    {
+      "id": "H2-L01",
+      "name": "Certified admission and one-click readiness",
+      "h1_owner_status": "PASS_LOCAL",
+      "combined_status": "OPEN_H2_ROUTE_CONSUMER",
+      "evidence": "Exact SEALED_CURRENT/current-session reference admission and idempotent operation creation passed rollback-contained PostgreSQL 17 and 18 first use. Missing, stale, mismatched and tampered references fail before Draft financial state.",
+      "owner_location": "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql:1341"
+    },
+    {
+      "id": "H2-L02",
+      "name": "Worker route activation",
+      "h1_owner_status": "NOT_H1_OWNER",
+      "combined_status": "FAIL_H2_CURRENT_SOURCE",
+      "evidence": "Independent source check confirms broker/src/banking-pay-draft-certified-v8.js is not imported or invoked by the current dispatcher.",
+      "correction_owner": "H2_WORKER"
+    },
+    {
+      "id": "H2-L03",
+      "name": "Compact certified input projection",
+      "h1_owner_status": "PASS_SOURCE_AND_DIRECT_RPC",
+      "combined_status": "OPEN_H2_ADAPTER_RECHECK",
+      "evidence": "H1 admission independently validates the nine-key reference/current session/channel/same-week proof and persists only pay_channel_scope, equal draft_scope and same_week_paye_override. Exact direct-RPC replay passes; missing or altered compact facts fail closed. No selected arrays or economic facts are copied. The actual H2 Worker operation-start call remains open because H2-L02 is not activated.",
+      "owner_location": "supabase/repeatable/02092026_2302_banking_pay_workbench_settled_certificate_digest_reader_v8.sql:1341",
+      "runtime_fixture": "tests/02092026_2392_banking_pay_workbench_settled_certificate_v8_runtime_verification.sql"
+    },
+    {
+      "id": "H2-L04",
+      "name": "Bounded certificate staging and final freeze",
+      "h1_owner_status": "PASS_LOCAL_PRODUCER",
+      "combined_status": "OPEN_H2_FINAL_FREEZE",
+      "evidence": "H1 start, append, seal and paged readers reconcile exact counts and V1-compatible constituent/partition/overall digests. The actual Worker-to-PostgREST producer sealed 5,000 rows via 79 append calls and 131 durable deliveries in 160,591 ms without timeout or lost continuation.",
+      "owner_locations": [
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql:748",
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql:1213",
+        "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql:1822"
+      ]
+    },
+    {
+      "id": "H2-L05",
+      "name": "Timesheet financial readiness",
+      "h1_owner_status": "PASS_EXPECTED_TIMESHEET_ID_SOURCE_ONLY",
+      "combined_status": "FAIL_H2_BOUNDED_TIMESHEET_READER_MISSING",
+      "evidence": "H1 normalized entries retain typed timesheet_id per constituent. H2 currently freezes an empty selected_timesheet_ids_json and its V8 route does not page distinct frozen Timesheet IDs into the unchanged DRAIN_TSFIN owner; restoring the phase alone would process zero Timesheets.",
+      "correction_owner": "H2_WORKER_REUSING_EXISTING_TSFIN_OWNER"
+    },
+    {
+      "id": "H2-L06",
+      "name": "Payee readiness",
+      "h1_owner_status": "PASS_EXPECTED_PAYEE_AND_CHANNEL_FACTS_ONLY",
+      "combined_status": "FAIL_H2_PHASE_MISSING",
+      "evidence": "H1 supplies the certified source facts; the V8 Draft phase sequence does not call ENSURE_PAYEE_READINESS/revolutEnsurePayeesReadyFromPreview.",
+      "correction_owner": "H2_WORKER_REUSING_EXISTING_PAYEE_OWNER"
+    },
+    {
+      "id": "H2-L07",
+      "name": "Row-backed Candidate and channel scopes",
+      "h1_owner_status": "PASS_LOCAL_PRODUCER",
+      "combined_status": "OPEN_H2_FROZEN_SCOPE_RUNTIME",
+      "evidence": "H1 exposes normalized ordered constituents, normalized partition membership, ALL/PAYE/UMBRELLA counts/digests/totals and bounded terminal-sentinel pages. H2 owns the final row-backed frozen scope.",
+      "correction_owner": "H2_DATABASE_TRANSPORT"
+    },
+    {
+      "id": "H2-L08",
+      "name": "Allocation, items and finance handoff",
+      "h1_owner_status": "PASS_EXPECTED_PRE_DRAFT_FACTS_ONLY",
+      "combined_status": "OPEN_H2_POLICY_PARITY_RUNTIME",
+      "evidence": "H1 records expected allocation/item/reservation source facts without producing Draft outputs or changing economics. H2 must pass every certified row to the unchanged allocation, item and finance owners.",
+      "correction_owner": "H2_TRANSPORT_AND_EXISTING_ECONOMIC_OWNERS"
+    },
+    {
+      "id": "H2-L09",
+      "name": "Reservations, summaries, snapshots and breakdowns",
+      "h1_owner_status": "NOT_H1_OWNER",
+      "combined_status": "OPEN_H2_BOUNDED_CONTINUATIONS",
+      "evidence": "H2 must drain every existing downstream owner to has_more=false with replay/response-loss proof. H1 creates none of these Draft artifacts.",
+      "correction_owner": "H2_ORCHESTRATION"
+    },
+    {
+      "id": "H2-L10",
+      "name": "Integrity and constituent parity",
+      "h1_owner_status": "PASS_EXPECTED_FACT_SERIALIZATION",
+      "combined_status": "FAIL_H2_PARITY_CHECKER",
+      "evidence": "Independent source inspection confirms the current H2 parity routine serializes but does not enforce expected allocation basis/result/source digest, item semantic/source-identity/source digest and reservation applicability/source digest. It can also require a reservation before consulting NOT_APPLICABLE. Exact Draft semantics must come from unchanged owners, not an invented generic finance-case rule.",
+      "owner_location": "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql:113",
+      "first_divergence_location": "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql:343",
+      "correction_owner": "H2_PARITY_CONSUMER"
+    },
+    {
+      "id": "H2-L11",
+      "name": "Empty-shell and failure cleanup",
+      "h1_owner_status": "NOT_H1_OWNER",
+      "combined_status": "FAIL_H2_TYPED_RESULT_CONSUMER_MISSING",
+      "evidence": "The V8 database step returns EMPTY_RESERVED_BATCH_CLEANUP_REQUIRED and TERMINAL_FAILURE_REQUIRED; no V8 Worker branch consumes them through the accepted abort/refresh owners.",
+      "correction_owner": "H2_WORKER"
+    },
+    {
+      "id": "H2-L12",
+      "name": "Terminal success publication",
+      "h1_owner_status": "NOT_H1_OWNER",
+      "combined_status": "FAIL_H2_TERMINAL_ADAPTER_MISSING",
+      "evidence": "The terminal database owner validates core IDs/counts, but the V8 Worker does not consume READY_FOR_TERMINAL_FINISH, construct the complete accepted V1 success result, call finish exactly once, or schedule the post-Draft Workbench wake.",
+      "correction_owner": "H2_WORKER_AND_EXISTING_TERMINAL_OWNER"
+    },
+    {
+      "id": "H2-L13",
+      "name": "Durable continuation and bounded RPCs",
+      "h1_owner_status": "PASS_LOCAL_PRODUCER",
+      "combined_status": "OPEN_H2_DRAFT_QUEUE_INTEGRATION",
+      "evidence": "H1 producer messages are <=2,048 bytes, delayed one second, advance at most eight append/four seal steps per delivery, use the existing queue, and passed 5,000 rows with no browser dependency. H2 must connect its Draft operation dispatcher and prove retry/DLQ semantics.",
+      "owner_locations": [
+        "broker/src/index.js:41447",
+        "broker/src/index.js:41507",
+        "broker/src/index.js:41877"
+      ]
+    },
+    {
+      "id": "H2-L14",
+      "name": "Frontend polling and result interpretation",
+      "h1_owner_status": "PASS_LOCAL_WORKBENCH_UI",
+      "combined_status": "OPEN_H2_TERMINAL_RESULT",
+      "evidence": "Workbench rows remain visible while certificate sealing continues; Create Draft stays disabled until SEALED_CURRENT; polling stops only at exact Draft safety. The existing Draft UI remains capped at 99 percent until H2 calls the accepted terminal owner.",
+      "owner_location": "TEST-Frontend/js/main.js:32285"
+    },
+    {
+      "id": "H2-L15",
+      "name": "Execute Payment and downstream contract equivalence",
+      "h1_owner_status": "NOT_H1_OWNER_EXPECTED_FACTS_ONLY",
+      "combined_status": "OPEN_H2_COMPLETE_PARITY_AUDIT",
+      "evidence": "H1 provides the comparison oracle only. H2 must prove identical durable Draft and downstream artifacts for all 15 families/88 classes; no real payment/provider action is authorised.",
+      "correction_owner": "H2_PARITY_AUDIT"
+    },
+    {
+      "id": "H2-L16",
+      "name": "Release, security, rollback and Miget TEST acceptance",
+      "h1_owner_status": "PASS_LOCAL_SOURCE_SECURITY_CONTRACT",
+      "combined_status": "OPEN_INDEPENDENT_REVIEW_AND_TEST_INSTALL",
+      "evidence": "Merged source is based on exact origin/test 16b299bf. db:check is 212/518; V8 catalogue is 39/39; merged PostgreSQL 17 contract hash is fcf3895ad455d3e5fff66476c45542171261a9edf053670dfe22a617525aea70; PostgreSQL 17 rollback first use passed; PostgreSQL 18 H1 definitions match and earlier H1 NEW/UPGRADE passed. Exact final H1/H2 combined PG17/18 replay, installation and browser acceptance remain mandatory.",
+      "correction_owner": "H1_H2_SHARED_RELEASE_BOUNDARY"
+    }
+  ],
+  "known_h2_corrections_before_combined_pass": [
+    "Activate the certified V8 helper in the current Worker route.",
+    "Page distinct Timesheet IDs from frozen typed rows and run unchanged TSFIN readiness.",
+    "Run unchanged payee readiness.",
+    "Consume cleanup, failure and terminal work kinds exactly once.",
+    "Enforce every certified expected fact in constituent parity, including deliberate NOT_APPLICABLE reservations.",
+    "Complete the downstream Draft parity and durable continuation evidence."
+  ],
+  "policy_change": false,
+  "h1_unexamined_gate_count": 0,
+  "combined_open_or_failed_gate_count": 16,
+  "workbench_recovery_pass": false,
+  "ready_for_h2_installed_integration": false,
+  "required_statement": "HANDOVER 2 DEPENDENCY REMAINS UNAVAILABLE"
+}

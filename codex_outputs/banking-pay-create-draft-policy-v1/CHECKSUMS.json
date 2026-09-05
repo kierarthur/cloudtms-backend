@@ -1,0 +1,30 @@
+{
+  "contract": "BANKING_PAY_POLICY_CONTRACT_ARTIFACT_CHECKSUMS_V1",
+  "files": [
+    {
+      "file": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+      "bytes": 149277,
+      "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd"
+    },
+    {
+      "file": "BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.schema.json",
+      "bytes": 1971,
+      "sha256": "80adf49ab1a8be5c6567f30ab82641fac0222ff0e1f291ebc110999f0747e290"
+    },
+    {
+      "file": "BANKING_PAY_HOW_EVERY_PAYMENT_TYPE_WORKS.md",
+      "bytes": 21649,
+      "sha256": "a8948adc8a3bc7a4a5ce8a5cda3b94dd9df0f2ce3c63797c14e7955412bdab6b"
+    },
+    {
+      "file": "CODEX_ZERO_DRIFT_IMPLEMENTATION_SPEC.md",
+      "bytes": 40920,
+      "sha256": "7b1e9d40343842df5232d6a60ba2d4abd8cb736d0a6c671f09633adf039d1192"
+    },
+    {
+      "file": "BANKING_PAY_CREATE_DRAFT_TO_EXECUTE_PAYMENT_LIFECYCLE_MAP_V1.md",
+      "bytes": 24378,
+      "sha256": "56f2837545cc974097bb440b3b47feb8696257e3450ff15e9e8a337ed9ba5adc"
+    }
+  ]
+}

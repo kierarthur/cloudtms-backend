@@ -15,7 +15,7 @@ test('actual candidate changes, off-page names and exact selected Timesheets are
  const summaryFixture=fs.readFileSync(path.join(__dirname,'28082026_2038_banking_pay_summary_runtime.sql'),'utf8');
  assert.equal(summaryFixture.split('DO $summary$').length,2);
  const prefix=summaryFixture.slice(0,summaryFixture.indexOf('DO $summary$'))
-  .replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',setup);
+  .replace('\\ir fixtures/28082026_1429_banking_pay_selection_setup.sql',()=>setup);
  assert.ok(!prefix.includes('\\ir'));
  const sql=`${prefix}
  DO $state$

@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8').replace(/\r\n/g, '\n');
 const coreFile = 'supabase/repeatable/28082026_1424_banking_pay_modal_candidate_selection_core.sql';
 const bridgeFile = 'supabase/repeatable/28082026_1424_banking_pay_modal_selection_owner_bridge.sql';
+const finalOwnerFile = 'supabase/repeatable/04092026_2355_banking_pay_workbench_selection_owner_reassert_v1.sql';
 const oldFile = 'supabase/repeatable/09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql';
 function body(source) {
   const start = source.indexOf('CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows(');
@@ -54,4 +55,14 @@ test('selection bridge adds no browser-role grant and retains explicit schema re
   assert.match(sql, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated, service_role/);
   assert.doesNotMatch(sql, /GRANT[^;]*\bTO\s+[^;]*\b(?:anon|authenticated|PUBLIC)\b/i);
   assert.match(sql, /notify pgrst, 'reload schema'/i);
+});
+test('catalogue-safe final owner is byte-equivalent and contains no include or transaction wrapper', () => {
+  const bridge = read(bridgeFile);
+  const finalOwner = read(finalOwnerFile);
+  assert.equal(body(finalOwner), body(bridge));
+  assert.doesNotMatch(finalOwner, /^\s*\\i[ r]?\s+/mi);
+  assert.doesNotMatch(finalOwner, /^\s*(?:begin|commit|rollback|start\s+transaction)\s*;/mi);
+  assert.match(finalOwner, /ALTER FUNCTION public\.pay_workbench_session_set_selected_rows\(uuid,jsonb,uuid\) OWNER TO postgres/);
+  assert.match(finalOwner, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated, service_role/);
+  assert.match(finalOwner, /GRANT EXECUTE[\s\S]*TO postgres, service_role/);
 });

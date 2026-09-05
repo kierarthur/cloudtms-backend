@@ -133,7 +133,87 @@ const scanTopLevel = (source) => {
 };
 
 const ownerStatement = /^ALTER\s+(FUNCTION|PROCEDURE|ROUTINE)\s+([\s\S]+?)\s+OWNER\s+TO\s+([A-Za-z_][A-Za-z0-9_$]*|"[^"]+")\s*;$/i;
+const diagnosticName = String.raw`(?:"?plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)"?)`;
+const diagnosticValue = String.raw`(?:'disabled'|'off')`;
+const diagnosticFunctionSetting = new RegExp(
+  String.raw`^ALTER\s+FUNCTION\s+([\s\S]+?\))\s+SET\s+(${diagnosticName})\s+(?:TO|=)\s+(${diagnosticValue})\s*;$`,
+  'i',
+);
+const diagnosticSessionSetting = new RegExp(
+  String.raw`^SET\s+(?:LOCAL\s+|SESSION\s+)?(${diagnosticName})\s+(?:TO|=)\s+(${diagnosticValue})\s*;$`,
+  'i',
+);
+const diagnosticFunctionHeaderLine = new RegExp(
+  String.raw`^[ \t]*SET[ \t]+${diagnosticName}[ \t]+(?:TO|=)[ \t]+${diagnosticValue}[ \t]*(?:\r?\n|$)`,
+  'gim',
+);
 const relativeIncludeCommand = /^\\ir[ \t]+(?:(['"])([^'"\r\n]+)\1|([A-Za-z0-9_./-]+))[ \t]*$/i;
+
+const isExecutablePosition = (source, target) => {
+  let cursor = 0;
+  while (cursor < target) {
+    if (source[cursor] === '-' && source[cursor + 1] === '-') {
+      const end = source.indexOf('\n', cursor + 2);
+      if (end < 0 || end >= target) return false;
+      cursor = end + 1;
+      continue;
+    }
+    if (source[cursor] === '/' && source[cursor + 1] === '*') {
+      let depth = 1;
+      cursor += 2;
+      while (cursor < source.length && depth > 0) {
+        if (source[cursor] === '/' && source[cursor + 1] === '*') { depth += 1; cursor += 2; }
+        else if (source[cursor] === '*' && source[cursor + 1] === '/') { depth -= 1; cursor += 2; }
+        else cursor += 1;
+      }
+      if (cursor > target) return false;
+      continue;
+    }
+    if (source[cursor] === "'" || source[cursor] === '"') {
+      const end = readQuoted(
+        source,
+        cursor,
+        source[cursor],
+        source[cursor] === "'" && hasEscapeStringPrefix(source, cursor),
+      );
+      if (end > target) return false;
+      cursor = end;
+      continue;
+    }
+    if (source[cursor] === '$') {
+      const end = readDollarQuoted(source, cursor);
+      if (end !== null) {
+        if (end > target) return false;
+        cursor = end;
+        continue;
+      }
+    }
+    cursor += 1;
+  }
+  return cursor === target;
+};
+
+const omitPortableCreateFunctionDiagnostics = (source) => {
+  const { statements } = scanTopLevel(source);
+  const removals = [];
+  for (const match of source.matchAll(diagnosticFunctionHeaderLine)) {
+    const start = match.index;
+    if (!isExecutablePosition(source, start)) continue;
+    const statement = statements.find((item) => item.start <= start && item.end >= start + match[0].length);
+    if (!statement) fail('diagnostic function setting is outside a complete SQL statement');
+    const prefix = source.slice(statement.start, start);
+    if (!/^CREATE\s+OR\s+REPLACE\s+FUNCTION\b/i.test(prefix.trimStart())
+        || /\bAS\s+\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/i.test(prefix)) {
+      fail('diagnostic function setting is not in an exact CREATE FUNCTION header');
+    }
+    removals.push({ start, end: start + match[0].length });
+  }
+  let result = source;
+  for (const removal of removals.toReversed()) {
+    result = result.slice(0, removal.start) + result.slice(removal.end);
+  }
+  return { sourceSql: result, removedCount: removals.length };
+};
 
 export function expandCatalogRepeatableIncludesForRehearsal({ sourceSql, sourcePath, resolveInclude }) {
   if (typeof resolveInclude !== 'function') fail('include resolver is required');
@@ -172,18 +252,30 @@ export function expandCatalogRepeatableIncludesForRehearsal({ sourceSql, sourceP
 }
 
 export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
-  const source = String(sourceSql);
+  const originalSource = String(sourceSql);
+  const omitted = omitPortableCreateFunctionDiagnostics(originalSource);
+  const source = omitted.sourceSql;
   const { statements, metaCommands } = scanTopLevel(source);
   const replacements = [];
 
   for (const statement of statements) {
     const raw = source.slice(statement.start, statement.end);
+    const trimmed = raw.trim();
+    const diagnosticMatch = diagnosticFunctionSetting.exec(trimmed)
+      || diagnosticSessionSetting.exec(trimmed);
+    if (diagnosticMatch) {
+      replacements.push({ ...statement, adapted: '', identity: `OMIT ${diagnosticMatch[1]}` });
+      continue;
+    }
+    if (/^(?:ALTER\s+FUNCTION\s+[\s\S]+?\)\s+)?SET\s+"?plpgsql_check\./i.test(trimmed)) {
+      fail('only the seven exact disabled/off plpgsql_check settings are portable');
+    }
     const match = ownerStatement.exec(raw);
     if (!match) {
-      if (/^ALTER\s+[A-Za-z_]+[\s\S]+\bOWNER\s+TO\s+postgres\b/i.test(raw.trim())) {
+      if (/^ALTER\s+[A-Za-z_]+[\s\S]+\bOWNER\s+TO\s+postgres\b/i.test(trimmed)) {
         fail('only exact ALTER FUNCTION/PROCEDURE/ROUTINE ... OWNER TO postgres; is portable');
       }
-      if (/^(?:SET\s+(?:LOCAL\s+|SESSION\s+)?ROLE|SET\s+SESSION\s+AUTHORIZATION|REASSIGN\s+OWNED)\b/i.test(raw.trim())) {
+      if (/^(?:SET\s+(?:LOCAL\s+|SESSION\s+)?ROLE|SET\s+SESSION\s+AUTHORIZATION|REASSIGN\s+OWNED)\b/i.test(trimmed)) {
         fail('role-changing SQL is not permitted');
       }
       continue;
@@ -198,7 +290,9 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
     replacements.push({ ...statement, adapted, identity: `${match[1].toUpperCase()} ${match[2].trim()}` });
   }
 
-  if (replacements.length === 0) return { mode: 'UNCHANGED', sourceSql: source, mappedIdentities: [] };
+  if (replacements.length === 0 && omitted.removedCount === 0) {
+    return { mode: 'UNCHANGED', sourceSql: source, mappedIdentities: [] };
+  }
 
   if (metaCommands.length > 0) fail('psql meta-commands are not permitted when logical-owner mapping is required');
 
@@ -212,6 +306,8 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
   return {
     mode: 'MAPPED_LOGICAL_POSTGRES_TO_CURRENT_USER',
     sourceSql: adaptedSource,
-    mappedIdentities: replacements.map(({ identity }) => identity),
+    mappedIdentities: replacements
+      .map(({ identity }) => identity)
+      .filter((identity) => !identity.startsWith('OMIT ')),
   };
 }

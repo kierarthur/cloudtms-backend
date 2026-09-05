@@ -1,0 +1,166 @@
+{
+  "contract": "H12_BANKING_DRAFT_V8_FINAL_TEST_RELEASE_EVIDENCE_V1",
+  "generated_at_utc": "2026-09-05T15:15:03Z",
+  "status": "LOCAL_SEAL_PASS_TEST_RELEASE_PENDING",
+  "scope": "BANKING_PAY_WORKBENCH_CREATE_DRAFT_EXECUTE_PAYMENT_AND_SAFE_CANCELLATION_COMPATIBILITY",
+  "authority": {
+    "runtime_database": "MIGET_TEST",
+    "repository_supabase_directory_is_historical_path_only": true,
+    "shared_test_base_commit": "a8c88e6393629a0ca25e0072c7310ea37906f0d5",
+    "candidate_code_commit": "0415cdfa86c8dc5bea6bf7a4ee4244fd5a8a6f31",
+    "candidate_code_tree": "9edd1c7ae6a76ff3e7c72b42cf3fcfae7e8d3391",
+    "candidate_contains_shared_base": true,
+    "current_contract": {
+      "path": "supabase/release/current-contract.json",
+      "bytes": 3503209,
+      "raw_sha256": "8a21a106929bdcacd337b298cd3607c9fdf200c6e6bd8c67016817209fe33b4e",
+      "canonical_sha256": "2cb1f059ff9f661105eb3e15b2fc985a45a46f17e7a061c23366ae3f8ee8b56b"
+    },
+    "current_release_sha256": "3e286addf5b13752a4975eafc833b1095834fb01766409f96e2d7be857320173",
+    "migration_lock_sha256": "506f82c4fa485518ab8ff28d9be1e9065fe9c4665ded68a9e5d360bbab94bcde"
+  },
+  "policy_boundary": {
+    "policy_x_preserved": true,
+    "economic_policy_change_count": 0,
+    "eligibility_policy_change_count": 0,
+    "gross_net_policy_change_count": 0,
+    "tax_policy_change_count": 0,
+    "vat_policy_change_count": 0,
+    "pay_method_or_route_policy_change_count": 0,
+    "provider_settlement_remittance_policy_change_count": 0,
+    "timeout_or_lock_budget_increase_count": 0,
+    "policy_contract": {
+      "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+      "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd"
+    },
+    "create_draft_to_execute_lifecycle_map": {
+      "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_TO_EXECUTE_PAYMENT_LIFECYCLE_MAP_V1.md",
+      "sha256": "56f2837545cc974097bb440b3b47feb8696257e3450ff15e9e8a337ed9ba5adc"
+    },
+    "mapped_payment_classes": 88,
+    "explicitly_covered_boundaries": [
+      "PAYE_AND_UMBRELLA_IN_ONE_DRAFT",
+      "PAYE_GROSS_AND_NET_ADJUSTMENTS_AND_DEDUCTIONS",
+      "UMBRELLA_EX_VAT_AND_VAT",
+      "ADVANCES_LOANS_CREDITS_DEBITS_AND_RECOVERIES",
+      "EXPENSES_AND_MILEAGE",
+      "PRIOR_PAID_PART_PAID_SETTLED_AND_SUPERSEDED",
+      "PAIRED_TIMESHEETS_REVERSAL_REPLACEMENT_AND_PERMITTED_REVERSAL_ONLY",
+      "CANDIDATE_PAYMENT_METHOD_AND_SAVED_RATE_RESOLUTION",
+      "PRE_EXECUTION_AND_POST_EXECUTION_PRE_PAYMENT_CANCELLATION",
+      "SCHEDULED_AND_FAILED_PAYMENT_RELEASE",
+      "WORKBENCH_RETURN_AND_FROZEN_LINEAGE",
+      "EXECUTE_PAYMENT_PREPARATION_AND_DOWNSTREAM_READS"
+    ]
+  },
+  "completed_stages": {
+    "1_missing_audit_indicator": {
+      "status": "PASS",
+      "result": "The expected durable cancellation evidence is the applied correction work item and result. The optional debug audit row is not the business authority."
+    },
+    "2_exact_retry_and_response_loss": {
+      "status": "PASS",
+      "result": "The same operation resumes idempotently after a repeated request or lost reply and does not release, cancel, reserve or restore money twice."
+    },
+    "3_terminal_corrections": {
+      "status": "PASS",
+      "findings": [
+        {
+          "id": "F020",
+          "description": "The bank-event movement constraint omitted the two already-emitted terminal no-money classifications.",
+          "correction": "Adds only PROVIDER_CANCELLED_NO_MONEY and PROVIDER_FAILED_NO_MONEY to the accepted terminal classification vocabulary.",
+          "migration_sha256": "e9f0da6abacb029c94742d648a151d4272b1730ed22bc82ec81ce15cbcdac5d8",
+          "verification_sha256": "4fd1cecde5b0e7d460120551126ed020ba2bf02fe0172789b0186a80f87a9846"
+        },
+        {
+          "id": "F021",
+          "description": "The no-money release result used one PostgreSQL JSON constructor with 66 field pairs and exceeded PostgreSQL's hard 100-argument limit.",
+          "correction": "Builds the identical result from smaller JSON pieces and joins them; every field and value is unchanged.",
+          "repeatable_sha256": "2934fff3ee503cbf4a8336d449944bcf6c125fb7de87c3a7cd88aafe2b73b8cc",
+          "verification_sha256": "c843b764d1c1022fdf48928635400190a07e1d824645718419d5f8aa929b2e22"
+        }
+      ],
+      "known_old_behavior_red": true,
+      "current_dual_engine_green": true,
+      "idempotent_reapply_green": true
+    },
+    "4_banking_safety_matrix": {
+      "status": "PASS",
+      "focused_safety_tests": {
+        "pass": 162,
+        "fail": 0,
+        "environment_skip": 1
+      },
+      "final_combined_full_suites": {
+        "npm_test": { "pass": 1246, "fail": 0, "skip": 0, "todo": 0 },
+        "all_cjs": { "active_pass": 1008, "fail": 0, "conditional_environment_skip": 101, "todo": 0 },
+        "all_mjs": { "active_pass": 498, "fail": 0, "conditional_structural_skip": 1, "todo": 0 },
+        "combined_merge_focused": { "pass": 52, "fail": 0, "skip": 0, "todo": 0 }
+      }
+    },
+    "5_speed_and_bounded_work": {
+      "status": "PASS",
+      "maximum_materialised_test_rows": 5000,
+      "configured_ceiling": 50000,
+      "materialised_50000_test_run": false,
+      "first_rejected_scalar_count": 50001,
+      "expanded_selection_arrays": false,
+      "timeout_or_lock_budget_change_count": 0,
+      "maximum_measured_single_production_database_call_ms": 3986.594,
+      "maximum_measured_final_reservation_call_ms": 999.212,
+      "fresh_closure_5000_worker_postgrest": {
+        "worker_calls": 23,
+        "rpc_calls": 26,
+        "pg17_maximum_call_ms": 1543,
+        "pg18_maximum_call_ms": 494
+      },
+      "evidence": {
+        "path": "codex_outputs/h2-draft-parity/P6_SCALE_REPLAY_CONCURRENCY_RESULTS_V1.json",
+        "sha256": "dda171b3339445200d70209ca93ab74806d6a845a667e52fa78ccb7e84721134"
+      }
+    },
+    "6_clean_release_rehearsals": {
+      "status": "PASS",
+      "database_source_integrity": { "migrations": 221, "repeatables": 569 },
+      "contract_coupling": "PASS",
+      "local_release_contract_sha256": "2cb1f059ff9f661105eb3e15b2fc985a45a46f17e7a061c23366ae3f8ee8b56b",
+      "runs": [
+        { "engine": "PostgreSQL 17.6", "mode": "UPGRADE", "release_id": "20260822-test-authority-upgrade-0415cdfa86c8", "status": "VERIFIED" },
+        { "engine": "PostgreSQL 18.6", "mode": "UPGRADE", "release_id": "20260822-test-authority-upgrade-0415cdfa86c8", "status": "VERIFIED" },
+        { "engine": "PostgreSQL 17.6", "mode": "NEW", "release_id": "20260822-test-authority-new-0415cdfa86c8", "status": "VERIFIED" },
+        { "engine": "PostgreSQL 18.6", "mode": "NEW", "release_id": "20260822-test-authority-new-0415cdfa86c8", "status": "VERIFIED" }
+      ],
+      "repository_contract_equals_installed_contract_on_all_four": true
+    }
+  },
+  "worker_packaging": {
+    "status": "PASS",
+    "wrangler_version": "4.125.0",
+    "environment": "test",
+    "dry_run_only": true,
+    "worker_source_sha256": "7673977ea63b4e0189e657ad1439b256bce8cc9d21d21d58990560c768fda6fa",
+    "broker_source_sha256": "17c450da63f96e27451c043c34157d6dbfeecfa581c9a8bd9be7abff051d6eb1"
+  },
+  "remaining_release_gate": {
+    "stage": 7,
+    "status": "TEST_RELEASE_PENDING",
+    "required": [
+      "COMMIT_THIS_EVIDENCE_PACK_AND_VERIFY_CLEAN_TREE",
+      "REFETCH_AND_PROVE_NO_NEW_SHARED_SOURCE_DIVERGENCE",
+      "PUSH_ONE_COHERENT_TEST_CANDIDATE",
+      "RUN_PROTECTED_MIGET_TEST_UPGRADE",
+      "VERIFY_EXACT_INSTALLED_CONTRACT_AND_ROUTINES_READ_ONLY",
+      "VERIFY_TEST_WORKER_DEPLOYMENT_AND_HEALTH",
+      "RUN_READ_ONLY_FINAL_ACCEPTANCE_WITHOUT_CREATING_OR_EXECUTING_A_REAL_PAYMENT"
+    ]
+  },
+  "prohibited_actions": [
+    "LIVE_ACCESS_OR_DEPLOYMENT",
+    "REAL_PAYMENT_PROVIDER_SUBMISSION",
+    "REAL_SETTLEMENT_OR_REMITTANCE",
+    "REAL_DRAFT_CREATION_WITHOUT_SEPARATE_AUTHORITY",
+    "POLICY_OR_ECONOMIC_CHANGE",
+    "TIMEOUT_OR_LOCK_BUDGET_RELAXATION",
+    "DESTRUCTIVE_DATABASE_ROLLBACK"
+  ]
+}

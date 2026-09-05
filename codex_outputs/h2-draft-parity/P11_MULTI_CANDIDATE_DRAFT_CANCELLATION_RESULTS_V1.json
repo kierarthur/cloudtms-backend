@@ -1,0 +1,323 @@
+{
+  "contract": "BANKING_PAY_MULTI_CANDIDATE_DRAFT_CANCELLATION_EVIDENCE_V1",
+  "status": "FIXED_LOCAL_DRAFT_AND_SCHEDULED_ONE_CANDIDATE_PARITY_PASS_NOT_INSTALLED",
+  "finding_ids": ["F-014", "F-016", "F-017", "F-018", "F-019"],
+  "classification": "CANCELLATION_ORCHESTRATION_COMPATIBILITY_DEFECT_POLICY_DELTA_ZERO",
+  "first_divergent_boundary": "The second Candidate in one whole-Draft cancellation was checked against the legacy request-wide selected-item array even though current Candidate-scope V2 requests store immutable membership per Candidate.",
+  "source_history": {
+    "historical_owner": "supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql",
+    "historical_owner_sha256": "d71a4311cee098ced9e96e49dc3eef76a9a6a5e4d7eea7933f80eedc2011fd56",
+    "historical_owner_preserved_byte_identically": true,
+    "local_replacement_owner": "supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql",
+    "local_replacement_owner_sha256": "4a40fc4911382946dc5ba26d25d5963e552f01e9cada7280b2b4e69db427e43b",
+    "local_completion_owner": "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql",
+    "local_completion_owner_sha256": "60e5fc26fbd147991c16ada0aaf2a9691143ccf46aa6e3227dc78d823a7a7ce1",
+    "local_one_candidate_selection_owner": "supabase/repeatable/05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1.sql",
+    "local_one_candidate_selection_owner_sha256": "47d79ef8f50a6a313e2ac20d0ff9b6e4d6ec5ee6c99a7d0be376724564b10634",
+    "runner": "scripts/verify-banking-pay-draft-v1-v8-cancellation-parity.mjs",
+    "runner_sha256": "b58b581bfd15b0052e48bea3c70f9d0a1d842cfdc23771db0a408466841d8784",
+    "source_test": "tests/banking-pay-multi-candidate-cancel-continuation.test.cjs",
+    "source_test_sha256": "afc0feaf8bd3af1a48393fdda319105ef9cf5dde71324ee810e97e1a9d6cebe0",
+    "completion_source_test": "tests/banking-pay-cancellation-completion-handoff.test.cjs",
+    "completion_source_test_sha256": "08b726df328d485e13348030a0392f40170a20c685957c38a9ec0d3ad51f3b00",
+    "one_candidate_source_test": "tests/banking-pay-one-candidate-cancellation-scope-integrity.test.cjs",
+    "one_candidate_source_test_sha256": "ae83d4fdee0968133ba475519c876f7ad4ebfc27318c3239bcbaa365c105c145"
+  },
+  "pre_change": {
+    "pg17": "PASS_EXACT_DIVERGENCE_REPRODUCED_ROLLBACK_CONTAINED",
+    "pg18": "PASS_EXACT_DIVERGENCE_REPRODUCED_ROLLBACK_CONTAINED",
+    "channels": [
+      "PAYE",
+      "UMBRELLA"
+    ],
+    "batch_candidate_count": 2,
+    "items_per_candidate": 2,
+    "first_candidate_result": "APPLIED",
+    "second_candidate_result": "PRE_BANK_CANCEL_CLASSIFICATION_REQUIRED",
+    "legacy_request_wide_expected_item_count": 0,
+    "current_candidate_membership_present": true,
+    "second_candidate_selection_hash_matched": true,
+    "provider_or_settlement_effect_count": 0,
+    "persistent_fixture_write_count": 0
+  },
+  "local_correction": {
+    "semantic_change": "For current Candidate-scope V2 requests only, prove same-request continuation from the existing normalized immutable per-Candidate request memberships; retain the explicit legacy V1 array path and every existing safety gate.",
+    "policy_or_economic_change_count": 0,
+    "statement_timeout_changed": false,
+    "lock_timeout_changed": false,
+    "statement_timeout_ms": 6000,
+    "lock_timeout_ms": 1000,
+    "new_payment_category_count": 0,
+    "new_financial_equation_count": 0,
+    "new_provider_action_count": 0,
+    "same_request_membership_required": true,
+    "foreign_or_malformed_membership_fails_closed": true
+  },
+  "local_results": {
+    "pg17": {
+      "status": "FULL_CANCELLATION_AND_CURRENT_WORKBENCH_RETURN_PASS",
+      "paye": {
+        "batch_status": "CANCELLED",
+        "request_status": "APPLIED",
+        "applied_work_items": 2,
+        "total_work_items": 2,
+        "voided_items": 4,
+        "active_items": 0,
+        "provider_attempts": 0,
+        "provider_events": 0,
+        "workbench_ready_rows": 12,
+        "current_source_rows": 12,
+        "cancelled_unselected_history_rows": 4,
+        "queued_or_running_workbench_jobs": 0,
+        "maximum_rpc_ms": 906.692
+      },
+      "umbrella": {
+        "batch_status": "CANCELLED",
+        "request_status": "APPLIED",
+        "applied_work_items": 2,
+        "total_work_items": 2,
+        "voided_items": 4,
+        "active_items": 0,
+        "provider_attempts": 0,
+        "provider_events": 0,
+        "workbench_ready_rows": 12,
+        "current_source_rows": 12,
+        "cancelled_unselected_history_rows": 4,
+        "queued_or_running_workbench_jobs": 0,
+        "maximum_rpc_ms": 860.955
+      }
+    },
+    "pg18": {
+      "status": "FULL_CANCELLATION_AND_CURRENT_WORKBENCH_RETURN_PASS",
+      "paye": {
+        "batch_status": "CANCELLED",
+        "request_status": "APPLIED",
+        "applied_work_items": 2,
+        "total_work_items": 2,
+        "voided_items": 4,
+        "active_items": 0,
+        "provider_attempts": 0,
+        "provider_events": 0,
+        "workbench_ready_rows": 12,
+        "current_source_rows": 12,
+        "cancelled_unselected_history_rows": 4,
+        "queued_or_running_workbench_jobs": 0,
+        "maximum_rpc_ms": 803.7
+      },
+      "umbrella": {
+        "batch_status": "CANCELLED",
+        "request_status": "APPLIED",
+        "applied_work_items": 2,
+        "total_work_items": 2,
+        "voided_items": 4,
+        "active_items": 0,
+        "provider_attempts": 0,
+        "provider_events": 0,
+        "workbench_ready_rows": 12,
+        "current_source_rows": 12,
+        "cancelled_unselected_history_rows": 4,
+        "queued_or_running_workbench_jobs": 0,
+        "maximum_rpc_ms": 779.877
+      }
+    }
+  },
+  "one_candidate_local_results": {
+    "status": "EXACT_HISTORICAL_V1_CURRENT_V8_POSTGRES_17_18_PAYE_UMBRELLA_PARITY_PASS",
+    "selected_candidate_count": 1,
+    "batch_candidate_count": 2,
+    "selected_candidate_items_voided": 2,
+    "unselected_candidate_items_active": 2,
+    "unselected_candidate_items_reservations_transfers_digest_preserved": true,
+    "batch_status": "DRAFT",
+    "request_status": "APPLIED",
+    "operation_status": "COMPLETE",
+    "workbench_refresh_status": "STAGED",
+    "paye_normalized_digest_sha256": "fcbe799a5dfe79db6731ee7c70cceea1296e8e83183f352ca4997864262bd7d6",
+    "umbrella_normalized_digest_sha256": "abc1075b8b62b94006e957789d5d2ddd2b34f8ca776695113c010aea8d84cb28",
+    "maximum_bounded_rpc_ms": 888.093,
+    "exact_item_financial_reconciliation": {
+      "paye_active_ex_vat_pence_before": 400,
+      "paye_voided_ex_vat_pence": 200,
+      "paye_active_vat_pence_before": 0,
+      "paye_voided_vat_pence": 0,
+      "umbrella_active_ex_vat_pence_before": 400,
+      "umbrella_voided_ex_vat_pence": 200,
+      "umbrella_active_vat_pence_before": 80,
+      "umbrella_voided_vat_pence": 40,
+      "untouched_candidate_item_reservation_transfer_digest_preserved": true
+    },
+    "provider_attempt_delta": 0,
+    "provider_event_delta": 0
+  },
+  "scheduled_one_candidate_local_results": {
+    "status": "EXACT_POSTGRES_17_18_PAYE_UMBRELLA_SAFE_CANCELLATION_PASS",
+    "payment_state_before": "SCHEDULED_LOCAL_NOT_SENT",
+    "selected_candidate_count": 1,
+    "batch_candidate_count": 2,
+    "selected_candidate_items_voided": 2,
+    "unselected_candidate_items_active": 2,
+    "batch_status_after": "DRAFT",
+    "request_status": "APPLIED",
+    "operation_status": "COMPLETE",
+    "reversion_route": "SAFE_SOURCE_REBUILD_FALLBACK",
+    "fast_reversion_not_falsely_claimed": true,
+    "reason_fast_reversion_inapplicable": "Ordinary scheduled rows have a certified transfer-link transition but no finance-case or advance-reservation schedule transition; the existing chain owner therefore records diagnostic-only incomplete evidence and cancellation uses the established source-rebuild fallback.",
+    "postgres_17_18_normalized_digest_equal": true,
+    "paye_normalized_digest_sha256": "80234ae7a9d3b78138af65a81281dd39b61206687bf1033e5eea46dfc901c1b3",
+    "umbrella_normalized_digest_sha256": "a335d03852ddcd5f72ca836a97f0792d513ac31c40fdb82c5cc2892cd9e531b3",
+    "exact_item_financial_reconciliation": {
+      "paye_voided_ex_vat_pence": 200,
+      "paye_voided_vat_pence": 0,
+      "paye_voided_inc_vat_pence": 200,
+      "umbrella_voided_ex_vat_pence": 200,
+      "umbrella_voided_vat_pence": 40,
+      "umbrella_voided_inc_vat_pence": 240,
+      "unselected_candidate_preserved": true
+    },
+    "workbench_terminal_current_after": true,
+    "queued_or_running_workbench_jobs_after": 0,
+    "post_commit_currentness_retry_count": 0,
+    "maximum_bounded_rpc_ms": 946.728,
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "provider_attempt_delta": 0,
+    "provider_event_delta": 0
+  },
+  "whole_draft_historical_v1_current_v8_parity": {
+    "status": "PASS_ROLLBACK_ONLY",
+    "postgres_17_11": "PASS",
+    "postgres_18_6": "PASS",
+    "paye_normalized_digest_sha256": "2d18d2c87eb410550ac504f757141b2958a29444a3a4f1f8a8a708f77ccf84e3",
+    "umbrella_normalized_digest_sha256": "de49e63f6995fc3d8451447d05da0181da1f920cf02b0109e46dec685d6506a1",
+    "all_candidates_voided": true,
+    "all_penny_amounts_released": true,
+    "exact_item_financial_reconciliation": {
+      "paye_active_ex_vat_pence_before": 400,
+      "paye_voided_ex_vat_pence": 400,
+      "paye_active_vat_pence_before": 0,
+      "paye_voided_vat_pence": 0,
+      "umbrella_active_ex_vat_pence_before": 400,
+      "umbrella_voided_ex_vat_pence": 400,
+      "umbrella_active_vat_pence_before": 80,
+      "umbrella_voided_vat_pence": 80,
+      "reservation_rows_in_this_synthetic_shape": 0,
+      "finance_reservation_release_remains_separately_fixture_bound": true
+    },
+    "workbench_constituents_reappeared_once": true,
+    "cancellation_audit_present": true,
+    "provider_attempt_delta": 0,
+    "provider_event_delta": 0
+  },
+  "f018_cancelled_draft_reservation_evidence_precedence": {
+    "status": "FIXED_LOCAL_PASS_POLICY_UNCHANGED_NOT_INSTALLED",
+    "prechange": {
+      "historical_v1": "RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED",
+      "certified_v8": "RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED",
+      "same_frozen_reservation_represented_as_top_level_basis_and_ordinary_case_component": true,
+      "provider_or_payment_effect_count": 0
+    },
+    "correction": {
+      "owner": "private.pay_workbench_sealed_rate_component_projection_v1(uuid,uuid,uuid[])",
+      "replacement_source": "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+      "replacement_source_sha256": "49ae5f6729122e9f611096b458df1b52e2fd2be211a14a4b32f3837f591a6037",
+      "source_test_sha256": "dc6eeefa32ef3e88ccd13a7e9314c0dd09ed8598b9fc50cd160a4ad7b2b2615b",
+      "exact_allocation_backed_duplicate_only": true,
+      "different_amount_key_component_or_missing_allocation_id_still_fails_closed": true,
+      "overconsumption_guard_preserved": true,
+      "policy_or_economic_change_count": 0
+    },
+    "postchange_matrix": {
+      "postgres_17_11": "PASS",
+      "postgres_18_6": "PASS",
+      "historical_v1": "PASS",
+      "certified_v8": "PASS",
+      "paye": "PASS",
+      "umbrella": "PASS",
+      "one_candidate": "PASS_UNRELATED_CANDIDATE_PRESERVED",
+      "whole_batch": "PASS_ALL_ITEMS_VOIDED_AND_AMOUNTS_RELEASED",
+      "maximum_bounded_rpc_ms": 1255.279,
+      "provider_or_payment_effect_count": 0
+    },
+    "source_and_mutation_tests": {
+      "pass": 5,
+      "fail": 0,
+      "mutation_operators_total": 34,
+      "mutation_operators_killed": 34,
+      "mutation_survivors": 0
+    }
+  },
+  "f019_payment_correction_post_commit_currentness_retry": {
+    "status": "FIXED_LOCAL_SOURCE_AND_ORCHESTRATION_PASS_NOT_DEPLOYED",
+    "prechange": {
+      "database_owner": "public.pay_payment_correction_process_chunk(uuid,integer,text,uuid)",
+      "database_code": "PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_NOT_FINALIZED",
+      "database_retry_detail": "REFRESH_RETRY",
+      "worker_retry_classifier_exact_code_present": false,
+      "proved_result": "A retryable post-commit Workbench-currentness response could be interpreted as terminal review instead of bounded retry."
+    },
+    "correction": {
+      "owner": "broker/src/index.js PAYMENT_CORRECTION REFRESH_WORKBENCH classifier",
+      "change": "Add the existing database-owned retry code to the exact-token retry vocabulary and reject substring near-misses.",
+      "database_sql_changed": false,
+      "payment_policy_or_economic_change_count": 0,
+      "timeout_or_lock_budget_change_count": 0,
+      "provider_or_payment_action_count": 0
+    },
+    "proof": {
+      "focused_test": "tests/banking-pay-payment-correction-post-commit-currentness-retry.test.cjs",
+      "focused_test_sha256": "8a8901cd5958b5f2a240a3b08e38a5375619f07b2d000f7d770e10d5a5862509",
+      "exact_positive_and_three_fail_closed_negatives": true,
+      "source_and_semantic_tests_passed": 40,
+      "tests_failed": 0,
+      "mutation_survivors": 0
+    },
+    "miget_status": "DATABASE_CODE_READ_ONLY_CONFIRMED_WORKER_NOT_DEPLOYED",
+    "final_audit_status": "OPEN"
+  },
+  "source_guard_results": {
+    "test_files": [
+      "tests/banking-pay-multi-candidate-cancel-continuation.test.cjs",
+      "tests/banking-pay-cancellation-completion-handoff.test.cjs",
+      "tests/banking-pay-one-candidate-cancellation-scope-integrity.test.cjs",
+      "tests/banking-pay-active-draft-reservation-evidence-precedence.test.cjs",
+      "tests/banking-pay-payment-correction-post-commit-currentness-retry.test.cjs"
+    ],
+    "tests_passed": 25,
+    "tests_failed": 0,
+    "tests_todo": 0,
+    "tests_skipped": 0,
+    "mutation_operators_total": 70,
+    "mutation_operators_killed": 70,
+    "mutation_survivors": 0
+  },
+  "preserved_policy": [
+    "Every selected Candidate in the untouched Draft is cancelled; unrelated Drafts remain outside the request.",
+    "Only the frozen Candidate items and their existing reservation/effect scope are voided or released.",
+    "PAYE and Umbrella amounts, tax, VAT, payment route, payee and eligibility owners are unchanged.",
+    "No provider submission, settlement or remittance action is introduced.",
+    "Legacy V1 request evidence remains explicitly supported; current V2 evidence does not silently fall back to V1 arrays.",
+    "Malformed, foreign, incomplete, duplicated or mismatched membership remains fail closed.",
+    "Existing statement and lock timeouts are unchanged."
+  ],
+  "workbench_return_proof": {
+    "status": "PASS_LOCAL_DUAL_ENGINE_BOTH_CHANNELS",
+    "production_flags_matched_to_miget_test": true,
+    "reconciliation_envelope": "REPOSITORY_CONTROLLED_V2",
+    "physical_currentness": "TERMINAL_CURRENT_FOR_EVERY_AFFECTED_CANDIDATE",
+    "current_ready_rows_match_current_source_rows": true,
+    "cancelled_frozen_rows_retained_as_unselected_superseded_history": true,
+    "unrelated_or_newer_live_selection_state_preserved": true,
+    "historical_rows_deleted_or_hidden": false,
+    "source_session_preserved": true
+  },
+  "blocking_gates": [
+    "RESPONSE_LOSS_AND_CONCURRENT_REPLAY_RUNTIME_PROOF",
+    "BOUNDED_MULTI_CANDIDATE_SCALE_PLAN_AND_RUNTIME_PROOF",
+    "CURRENT_CONTRACT_SEMANTIC_MANIFEST_AND_RELEASE_COUPLING",
+    "FULL_PG17_PG18_NEW_UPGRADE_REAPPLY",
+    "FULL_88_CLASS_AND_DOWNSTREAM_REGRESSION",
+    "MIGET_TEST_INSTALL_AND_INSTALLED_READBACK",
+    "AUTHORISED_REAL_TEST_NON_PROVIDER_ACCEPTANCE",
+    "FRESH_COMPLETE_POST_CORRECTION_AUDIT"
+  ]
+}

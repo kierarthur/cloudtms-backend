@@ -11,14 +11,20 @@ const sourcePath = path.join(
   '01092026_1459_banking_pay_signed_recovery_draft_v1.sql'
 );
 const sql = fs.readFileSync(sourcePath, 'utf8');
+const currentProjectionSql = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'repeatable',
+  '05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql'
+), 'utf8');
 
-function functionBody(schema, name) {
+function functionBody(schema, name, source = sql) {
   const marker = `CREATE OR REPLACE FUNCTION ${schema}.${name}`;
-  const start = sql.indexOf(marker);
+  const start = source.indexOf(marker);
   assert.ok(start >= 0, `${schema}.${name} must be present`);
-  const end = sql.indexOf('$function$;', start + marker.length);
+  const end = source.indexOf('$function$;', start + marker.length);
   assert.ok(end > start, `${schema}.${name} must have a bounded body`);
-  return sql.slice(start, end + '$function$;'.length);
+  return source.slice(start, end + '$function$;'.length);
 }
 
 test('the signed recovery repair replaces only its classifier and the two existing Draft owners', () => {
@@ -75,7 +81,7 @@ test('the classifier accepts only one fully reconciled frozen non-charge return'
 });
 
 test('the sealed projection preserves the positive return and its paired negative recovery without live fallback', () => {
-  const body = functionBody('private', 'pay_workbench_sealed_rate_component_projection_v1');
+  const body = functionBody('private', 'pay_workbench_sealed_rate_component_projection_v1', currentProjectionSql);
   assert.match(body, /reservation_totals[\s\S]*signed_recovery\.evidence_json[\s\S]*outstanding_ex_vat/i);
   assert.match(body, /sealed_parent_facts[\s\S]*FROZEN_SIGNED_NON_CHARGE_RECOVERY/i);
   assert.match(body, /is_signed_non_charge_recovery[\s\S]*allocative_parent_facts/i);

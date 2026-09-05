@@ -1,0 +1,253 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_DOWNSTREAM_CONTRACT_BINDINGS_V1",
+  "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY",
+  "purpose": "Record the current evidence level for every Create Draft downstream Banking Pay boundary without allowing source text, isolated Worker helpers or totals-only assertions to be reported as complete executable parity.",
+  "policy_boundary": {
+    "policy_x": "Post-Draft consumers must use the same frozen batch artifacts and must not reconstruct live finance identity.",
+    "allowed_change": "Performance and orchestration only.",
+    "forbidden_changes": [
+      "eligibility",
+      "payment amount or timing",
+      "gross or net treatment",
+      "tax or VAT treatment",
+      "payment channel, payee or grouping",
+      "approval, hold or resolution behavior",
+      "provider, settlement or remittance behavior",
+      "cancellation, correction or reversion outcome"
+    ],
+    "route_transparency": "No downstream owner may branch on whether a Draft was created by V1 or V8.",
+    "no_real_action": true
+  },
+  "evidence_levels": {
+    "SOURCE_GUARD_ONLY": "An executable test reads source text and checks the intended owner or branch. It does not execute the database lifecycle and cannot close parity.",
+    "EXECUTABLE_COMPONENT_ONLY": "A pure helper or mocked Worker component executes, but no durable Draft-to-downstream database lifecycle is proved. It cannot close parity.",
+    "ROLLBACK_RUNTIME_COMPONENT_ONLY": "A database owner executes in rollback, but the equivalent V1 and V8 Drafts and complete downstream artifact comparison are absent. It cannot close parity.",
+    "EXACT_V1_V8_DOWNSTREAM_PARITY": "Equivalent fresh V1 and V8 Drafts are passed through the unchanged downstream owner and every typed result and durable artifact is compared. This is the only complete level."
+  },
+  "complete_gate_requirements": [
+    "equivalent fresh V1 and V8 Draft fixtures",
+    "exact operation response and downstream output comparison",
+    "all money compared to the penny with no normalization",
+    "exact membership, status, action, key, digest and lineage comparison",
+    "unrelated Candidates proved unchanged",
+    "replay and response-loss idempotency",
+    "zero provider, payment, settlement or remittance calls",
+    "rollback leaves zero durable test rows"
+  ],
+  "gates": [
+    {
+      "gate_id": "DRAFT_TERMINAL_OPERATION_RESPONSE",
+      "owner": "broker/src/banking-pay-draft-certified-v8.js and the existing DRAFT_CREATE terminal owners",
+      "current_evidence_level": "EXECUTABLE_COMPONENT_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["broker/src/banking-pay-draft-certified-v8.js", "supabase/repeatable/09082026_1128_banking_pay_operation_finish_post_draft_authority.sql"],
+      "evidence_paths": ["tests/banking-pay-draft-certified-v8-terminal.test.cjs"],
+      "proved_now": "The V8 terminal-result helper executes and preserves accepted success fields while omitting expanded selection arrays.",
+      "still_missing": ["typed V1-versus-V8 terminal response comparison from equivalent durable Draft rows", "frontend interpretation of every terminal and retry result"]
+    },
+    {
+      "gate_id": "PAYE_WORKSHEET_NET_ENTRY_AND_SAVED_SCALAR",
+      "owner": "public.pay_set_paye_net_manual",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/21072026_1235_48_pay_set_paye_net_manual.sql"],
+      "evidence_paths": ["tests/banking-pay-current-status-draft-amount.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs"],
+      "proved_now": "Equivalent simultaneous PAYE/Umbrella V1 and V8 Drafts accept the same manual PAYE net scalars, persist the same PAYE state inside rollback and produce identical post-entry bank projections on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P8_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1.json", "sha256": "4d959f8483131affeac04386cf13d453a7c11736b32645784bca1a8b9ee39376"}
+    },
+    {
+      "gate_id": "UMBRELLA_PAYEE_VAT_AND_CHANNEL",
+      "owner": "frozen Umbrella batch items and current bank projection owners",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql", "supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql"],
+      "evidence_paths": ["tests/banking-pay-current-status-draft-amount.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs"],
+      "proved_now": "Equivalent simultaneous PAYE/Umbrella V1 and V8 Drafts produce identical Umbrella payee, channel, ex-VAT, VAT, inclusive amount and bank-projection fields on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P8_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1.json", "sha256": "4d959f8483131affeac04386cf13d453a7c11736b32645784bca1a8b9ee39376"}
+    },
+    {
+      "gate_id": "CURRENT_PAYMENT_STATUS_ROWS_AMOUNTS_ACTIONS",
+      "owner": "public.pay_batch_payment_status_page_v1",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql"],
+      "evidence_paths": ["tests/banking-pay-current-status-draft-amount.test.cjs", "tests/banking-pay-cancellation-selection-parity.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs"],
+      "proved_now": "Equivalent V1 and V8 Drafts return identical Current Payment Status Candidate rows, displayed statuses, active/original penny amounts, action eligibility and overview inclusion on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P8_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1.json", "sha256": "4d959f8483131affeac04386cf13d453a7c11736b32645784bca1a8b9ee39376"}
+    },
+    {
+      "gate_id": "OVERVIEW_BENEFICIARY_AND_PAYMENT_TOTALS",
+      "owner": "public.pay_batch_execution_summary_get",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"],
+      "evidence_paths": ["tests/banking-pay-cancellation-stage1-corrections.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs"],
+      "proved_now": "Equivalent V1 and V8 Drafts return identical PAYE and Umbrella beneficiary counts, item counts, saved-net completeness, positive-bank-payment counts and every compared monetary summary on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P8_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1.json", "sha256": "4d959f8483131affeac04386cf13d453a7c11736b32645784bca1a8b9ee39376"}
+    },
+    {
+      "gate_id": "EXECUTE_PAYMENT_ELIGIBILITY_AND_PREVIEW",
+      "owner": "public.pay_batch_execution_summary_get plus public.pay_execute_bank_transfer_scope_seed",
+      "current_evidence_level": "ROLLBACK_RUNTIME_COMPONENT_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql", "supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql"],
+      "evidence_paths": ["tests/banking-pay-reauthorisation-safety.test.cjs", "tests/banking-pay-payment-date-fence.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-execute-preparation-parity.mjs"],
+      "proved_now": "Equivalent simultaneous PAYE/Umbrella V1 and V8 Drafts pass the unchanged bounded freshness and transfer-scope eligibility owners with identical Candidate membership, channels and penny amounts on PostgreSQL 17.11 and 18.6.",
+      "still_missing": ["equivalent V1-versus-V8 stale, changed-payment-date and invalid-bank-detail rejection cases"]
+    },
+    {
+      "gate_id": "IMMEDIATE_EXECUTION_LOCAL_PREPARATION",
+      "owner": "PAYMENT_EXECUTE orchestration and public.pay_execute_bank_transfer_chunk_prepare",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["broker/src/index.js", "supabase/repeatable/12082026_1446_pay_execute_bank_transfer_chunk_prepare_voided_overlay.sql"],
+      "evidence_paths": ["tests/banking-pay-pre-provider-retry-recovery.test.cjs", "tests/banking-pay-reauthorisation-safety.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-execute-preparation-parity.mjs"],
+      "proved_now": "Equivalent simultaneous PAYE/Umbrella V1 and V8 Drafts produce identical immediate local preparation responses, transfer scopes, member rows, beneficiary details and penny amounts; exact response-loss replay creates no duplicate and no provider boundary is crossed on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P9_V1_V8_EXECUTE_PREPARATION_PARITY_RESULT_V1.json", "sha256": "e31b6eb4c457104bf32061d1a4bede8e9cad3a05c814ad5c33a536acfcd812c7"}
+    },
+    {
+      "gate_id": "SCHEDULED_EXECUTION_LOCAL_PREPARATION",
+      "owner": "public.pay_batch_schedule plus public.pay_batches_claim_due_scheduled",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1158_pay_batch_schedule.sql", "supabase/repeatable/04082026_1154_pay_batches_claim_due_scheduled.sql", "broker/src/index.js"],
+      "evidence_paths": ["tests/banking-pay-continuation-and-cancellation-contract.test.cjs", "tests/banking-pay-payment-date-fence.test.cjs"],
+      "proved_now": "Source guards preserve future scheduled waiting, UK date fences and no premature provider submission.",
+      "still_missing": ["V1-versus-V8 schedule row, due-claim and local preparation comparison", "future-dated cancellation after execution authorisation but before provider send"]
+    },
+    {
+      "gate_id": "PROVIDER_PREPARATION_AND_SUBMISSION_AUTHORITY",
+      "owner": "public.pay_bank_transfers_claim_provider_submit_chunk",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1154_pay_bank_transfers_claim_provider_submit_chunk.sql"],
+      "evidence_paths": ["tests/banking-pay-pre-provider-retry-recovery.test.cjs", "tests/banking-pay-revision5-final-authority.test.cjs"],
+      "proved_now": "Source ownership and pre-provider retry fences are guarded.",
+      "still_missing": ["projection-only claim eligibility comparison from V1 and V8 Drafts", "proof that no V8-specific compatibility branch is needed"]
+    },
+    {
+      "gate_id": "BANK_TRANSFER_PREPARATION",
+      "owner": "public.pay_execute_bank_transfer_scope_seed plus public.pay_execute_bank_transfer_chunk_prepare",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql", "supabase/repeatable/12082026_1446_pay_execute_bank_transfer_chunk_prepare_voided_overlay.sql"],
+      "evidence_paths": ["tests/banking-pay-reauthorisation-safety.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-execute-preparation-parity.mjs"],
+      "proved_now": "Equivalent simultaneous PAYE/Umbrella V1 and V8 Drafts produce the same four local prepared transfer rows, eight exact frozen-item links, beneficiary identity, reference, channel, bank-detail snapshot, grouping and every penny amount on PostgreSQL 17.11 and 18.6; rollback leaves zero transfer rows.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P9_V1_V8_EXECUTE_PREPARATION_PARITY_RESULT_V1.json", "sha256": "e31b6eb4c457104bf32061d1a4bede8e9cad3a05c814ad5c33a536acfcd812c7"}
+    },
+    {
+      "gate_id": "CSV_SETTLEMENT_PROJECTION",
+      "owner": "public.pay_bank_csv_export_summary_get",
+      "current_evidence_level": "EXACT_V1_V8_DOWNSTREAM_PARITY",
+      "status": "EXACT_V1_V8_DOWNSTREAM_PARITY_PASS",
+      "source_paths": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"],
+      "evidence_paths": ["tests/banking-pay-create-draft-execute-policy-contract.test.cjs", "scripts/verify-banking-pay-draft-v1-v8-downstream-read-parity.mjs"],
+      "proved_now": "Equivalent V1 and V8 Drafts return identical pre-execution CSV scope, positive and explicit-zero row counts, PAYE saved-net projection amounts, pending/stable totals and batch execution state on PostgreSQL 17.11 and 18.6.",
+      "still_missing": [],
+      "result_manifest": {"path": "codex_outputs/h2-draft-parity/P8_V1_V8_DOWNSTREAM_READ_PARITY_RESULT_V1.json", "sha256": "4d959f8483131affeac04386cf13d453a7c11736b32645784bca1a8b9ee39376"}
+    },
+    {
+      "gate_id": "EXTERNAL_SETTLEMENT_PROJECTION",
+      "owner": "public.pay_settle_rail",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1211_pay_settle_rail.sql"],
+      "evidence_paths": ["tests/banking-pay-revision5-final-authority.test.cjs"],
+      "proved_now": "The final settlement owner and its source authority are pinned.",
+      "still_missing": ["projection-only settlement-scope comparison without settlement mutation", "exact frozen execution-lineage parity"]
+    },
+    {
+      "gate_id": "REMITTANCE_GENERATION_AND_SUPPRESSION_PROJECTION",
+      "owner": "public.pay_operation_remittance_scope_seed plus public.pay_remittance_build plus public.pay_remittance_maybe_queue_for_trigger",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"],
+      "evidence_paths": ["tests/banking-pay-create-draft-execute-policy-contract.test.cjs"],
+      "proved_now": "The zero-drift contract binds the unchanged remittance owners and forbids real sends.",
+      "still_missing": ["candidate and Umbrella remittance rendering parity", "generation-versus-suppression decision parity", "queue projection parity without enqueue"]
+    },
+    {
+      "gate_id": "WHOLE_BATCH_DRAFT_CANCELLATION",
+      "owner": "public.pay_batch_cancel",
+      "current_evidence_level": "EXECUTABLE_COMPONENT_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1206_pay_batch_cancel.sql", "broker/src/index.js"],
+      "evidence_paths": ["tests/banking-pay-cancellation-stage2-worker-contract.test.cjs", "tests/banking-pay-cancel-completion-and-refresh.test.cjs"],
+      "proved_now": "Worker replay helper execution and source guards distinguish whole-batch Draft cancellation from Candidate-scoped correction.",
+      "still_missing": ["rollback database execution from equivalent V1 and V8 Drafts", "exact released allocations, reservations, items, audit and Workbench reappearance comparison"]
+    },
+    {
+      "gate_id": "WHOLE_CANDIDATE_UNTOUCHED_DRAFT_CANCELLATION",
+      "owner": "Candidate-scoped DRAFT_CANCEL selection and Draft overlay removal",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql", "supabase/repeatable/04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql", "supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"],
+      "evidence_paths": ["tests/banking-pay-create-draft-execute-policy-contract.test.cjs", "tests/banking-pay-cancellation-frozen-scope-v2.test.js"],
+      "proved_now": "Source guards select a whole Candidate payment and keep the whole-batch wrapper separate.",
+      "still_missing": ["exact selected Candidate removal and reappearance once", "every unrelated Candidate remains unchanged and payable", "V1-versus-V8 allocation, reservation, item and lineage parity"]
+    },
+    {
+      "gate_id": "WHOLE_CANDIDATE_FUTURE_DATED_EXECUTED_NOT_PAID_CANCELLATION",
+      "owner": "Candidate-scoped PRE_BANK_CANCEL and public.pay_pre_bank_cancel_apply_work_item",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql", "supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql", "broker/src/index.js"],
+      "evidence_paths": ["tests/banking-pay-continuation-and-cancellation-contract.test.cjs", "tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs", "tests/banking-pay-cancellation-selection-parity.test.cjs"],
+      "proved_now": "Source recognises SCHEDULED_LOCAL_NOT_SENT and LOCAL_PREPARED_NOT_SENT only after proving absence of provider evidence.",
+      "still_missing": ["complete future-dated executed-but-local/not-paid Candidate cancellation runtime", "same Candidate frozen scope released with unrelated Candidates unchanged", "provider-submitted and settled negatives", "replay and response-loss parity"]
+    },
+    {
+      "gate_id": "CERTIFIED_REVERSION_CORRECTION_RETRY_AND_BLOCKED_FUNDS",
+      "owner": "public.pay_payment_correction_request_start plus frozen correction and settled-reversal owners",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": ["supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql", "supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql", "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"],
+      "evidence_paths": ["tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs", "tests/banking-pay-pre-provider-retry-recovery.test.cjs", "tests/banking-pay-finalise-residual-fast-route.test.cjs"],
+      "proved_now": "Source guards bind frozen correction scope, certified reversion admission and safe pre-provider retry behavior.",
+      "still_missing": ["V1-versus-V8 certified reversion result and fallback comparison", "blocked-funds, correction and retry state parity", "settled/provider-evidence fail-closed runtime cases"]
+    },
+    {
+      "gate_id": "FRONTEND_POLLING_AND_TERMINAL_INTERPRETATION",
+      "owner": "TEST-Frontend/js/main.js Banking Pay operation clients",
+      "current_evidence_level": "SOURCE_GUARD_ONLY",
+      "status": "OPEN_EXACT_V1_V8_DOWNSTREAM_PARITY_REQUIRED",
+      "source_paths": [],
+      "evidence_paths": ["tests/banking-pay-draft-certified-v8-terminal.test.cjs", "tests/banking-pay-create-draft-execute-policy-contract.test.cjs"],
+      "proved_now": "Backend terminal helper fields and the no-route-specific-branch rule are guarded.",
+      "still_missing": ["frontend worktree executable polling test", "99-percent still-running behavior", "success, retry, review-required and failure terminal interpretation from the exact V8 response"]
+    }
+  ],
+  "cancellation_invariants": {
+    "whole_batch_and_whole_candidate_are_distinct": true,
+    "whole_candidate_means_all_active_payment_artifacts_for_one_agency_worker_only": true,
+    "unrelated_candidates_must_remain_byte_for_byte_unchanged": true,
+    "untouched_draft_action": "DRAFT_CANCEL",
+    "future_dated_executed_not_paid_actions": ["LOCAL_PREPARED_NOT_SENT", "SCHEDULED_LOCAL_NOT_SENT"],
+    "failed_payment_return_invariants": {
+      "immediate_and_scheduled_failures_are_separate_required_cases": true,
+      "user_action": "RELEASE_FAILED_PAYMENT",
+      "accepted_no_money_classifications": ["PROVIDER_CANCELLED_NO_MONEY", "PROVIDER_FAILED_NO_MONEY"],
+      "provider_ambiguity_or_money_movement_must_fail_closed": true,
+      "released_constituents_must_reappear_once_in_current_workbench": true,
+      "remaining_draft_and_unrelated_candidates_must_remain_unchanged": true,
+      "current_complete_runtime_proof": false
+    },
+    "provider_submitted_or_settled_must_not_use_pre_bank_cancel": true,
+    "current_complete_runtime_proof": false
+  },
+  "totals": {
+    "gates": 18,
+    "source_guard_only": 8,
+    "executable_component_only": 2,
+    "rollback_runtime_component_only": 1,
+    "exact_v1_v8_downstream_parity_pass": 7,
+    "open": 11
+  },
+  "release_gate": "V8 cannot be enabled from this ledger. Every gate must reach EXACT_V1_V8_DOWNSTREAM_PARITY with a result manifest from equivalent fresh fixtures, and no downstream V8-specific branch may exist."
+}

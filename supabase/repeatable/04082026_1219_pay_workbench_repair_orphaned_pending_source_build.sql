@@ -373,6 +373,7 @@ BEGIN
                 AND deterministic_attempt.error_class = 'DETERMINISTIC_STAGE_ERROR'
                 AND UPPER(BTRIM(COALESCE(deterministic_attempt.error_json->>'code', ''))) IN (
                   'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED',
+                  'CERTIFIED_SOURCE_PREVIEW_SCOPE_MISSING',
                   'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID',
                   'PAYMENT_CORRECTION_SCOPE_TYPE_REQUIRED',
                   'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISSING',

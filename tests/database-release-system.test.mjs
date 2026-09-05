@@ -7,11 +7,24 @@ import {
   canonicalSqlBytes, closureFor, deadlockRetryCountForFile, inventory,
   formatPlanSection, legacyUpgradeInventory,
   mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
-  readJson, repoRoot, sha256, sqlDateKey,
-  validateTarget, verifyIntegrity,
+  readJson, releaseVerifierVariables, repoRoot, sha256, sqlDateKey,
+  validateExpectedDatabase, validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
+const filesUnder = relative => {
+  const root = path.join(repoRoot, relative);
+  const result = [];
+  const visit = directory => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else result.push(path.relative(repoRoot, absolute).replaceAll('\\', '/'));
+    }
+  };
+  visit(root);
+  return result;
+};
 
 test('date ordering distinguishes valid ISO from UK filenames', () => {
   assert.equal(sqlDateKey('20260218_smoke_once_only.sql'), '20260218_smoke_once_only.sql'.replace(/^20260218/, '20260218'));
@@ -95,8 +108,12 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /database-test/);
   assert.match(workflow, /secrets\.MIGET_DATABASE_URL_TEST/);
   assert.match(workflow, /vars\.MIGET_DATABASE_TARGET_TEST/);
+  assert.match(workflow, /vars\.MIGET_DATABASE_NAME_TEST/);
   assert.match(workflow, /secrets\.MIGET_DATABASE_URL_LIVE/);
   assert.match(workflow, /vars\.MIGET_DATABASE_TARGET_LIVE/);
+  assert.match(workflow, /vars\.MIGET_DATABASE_NAME_LIVE/);
+  assert.match(workflow, /CLOUDTMS_EXPECTED_DATABASE/);
+  assert.match(workflow, /inputs\.mode.*NEW.*inputs\.mode.*UPGRADE[\s\S]*Missing protected exact database name/);
   assert.doesNotMatch(workflow, /secrets\.SUPABASE_DB_URL_TEST/);
   assert.doesNotMatch(workflow, /inputs\.environment == 'LIVE'[\s\S]{0,200}secrets\.(?:CLOUDTMS_DATABASE_URL|SUPABASE_DB_URL)/);
   assert.match(workflow, /Read-only release plan/);
@@ -290,8 +307,11 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
 test('hosted target validation accepts a provider-neutral database locator and fails closed', () => {
   const previousUrl = process.env.CLOUDTMS_DATABASE_URL;
   try {
-    process.env.CLOUDTMS_DATABASE_URL = 'postgresql://automation:secret@postgres.example/cloudtms_test_clone?sslmode=require';
-    assert.doesNotThrow(() => validateTarget('TEST', 'cloudtms_test_clone'));
+    process.env.CLOUDTMS_DATABASE_URL = 'postgresql://automation:secret@postgres.example/h1%5Fworkbench%5Fnew17?sslmode=require';
+    assert.doesNotThrow(() => validateTarget('TEST', 'postgres.example'));
+    assert.equal(validateExpectedDatabase('h1_workbench_new17'), 'h1_workbench_new17');
+    assert.throws(() => validateExpectedDatabase('h1_workbench_new18'), /CLOUDTMS_EXPECTED_DATABASE/);
+    assert.throws(() => validateExpectedDatabase(''), /CLOUDTMS_EXPECTED_DATABASE is required/);
     assert.throws(() => validateTarget('TEST', 'another_database'), /CLOUDTMS_EXPECTED_TARGET/);
     assert.throws(() => validateTarget('TEST', ''), /CLOUDTMS_EXPECTED_TARGET/);
   } finally {
@@ -314,15 +334,89 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /assertLegacyTransitionShimsReplaced\(\)/);
   assert.match(source, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(source, /function reloadPostgrestSchemaCache\(\)[\s\S]*notify pgrst, 'reload schema';/i);
-  assert.match(source, /assertLegacyTransitionShimsReplaced\(\);[\s\S]*reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode\)/);
-  assert.match(source, /reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode\);[\s\S]*compareExpected\(release\.contractPath\)/);
+  assert.match(source, /assertLegacyTransitionShimsReplaced\(\);[\s\S]*reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode, releaseVerifierContext\)/);
+  assert.match(source, /reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode, releaseVerifierContext\);[\s\S]*compareExpected\(release\.contractPath\)/);
+  assert.equal((source.match(/assertCurrentDatabase\(expectedDatabase\);/g) || []).length, 2);
+  assert.match(source, /validateExpectedDatabase[\s\S]*assertCurrentDatabase\(expectedDatabase\)/);
+  assert.match(source, /select pg_catalog\.current_database\(\);/);
   assert.doesNotMatch(source, /marking existing migrations/);
   assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
   assert.match(source, /mode === 'NEW'[\s\S]*release\.newVerificationFiles/);
   const release = readJson('supabase/release/current-release.json');
   assert.ok(release.verificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
-  assert.ok(!release.newVerificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
+  assert.ok(release.newVerificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
   assert.ok(release.newVerificationFiles.includes('supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql'));
+});
+
+test('rollback fixture release context is capability-mapped to three NEW/UPGRADE verifiers only', () => {
+  const scopes = new Map([
+    ['tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql', 'BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2'],
+    ['tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql', 'BANKING_PAY_CANDIDATE_GROUP_DISPLAY_ONLY_SELECTION_TUPLE_V1'],
+    ['tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql', 'BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1'],
+  ]);
+  const context = {
+    expectedDatabase: 'h1_workbench_new17',
+    releaseId: '2026-08-31-banking-pay-v2-new-0123456789ab',
+    gitCommit: '0123456789abcdef0123456789abcdef01234567',
+    environment: 'TEST',
+    customerKey: 'fixture-agency',
+  };
+  for (const [file, scope] of scopes) {
+    for (const mode of ['NEW', 'UPGRADE']) {
+      const variables = releaseVerifierVariables(file.replaceAll('/', '\\'), mode, context);
+      assert.deepEqual(Object.keys(variables), ['cloudtms_release_fixture_context']);
+      assert.deepEqual(JSON.parse(variables.cloudtms_release_fixture_context), {
+        scope, mode, expected_database: context.expectedDatabase,
+        release_id: context.releaseId, git_commit: context.gitCommit,
+        environment: context.environment, customer_key: context.customerKey,
+      });
+    }
+    assert.deepEqual(releaseVerifierVariables(file, 'ADOPT', context), {});
+    assert.deepEqual(releaseVerifierVariables(file, 'LEGACY_UPGRADE', context), {});
+  }
+  assert.deepEqual(releaseVerifierVariables('tests/unmapped.sql', 'NEW', context), {});
+  assert.throws(() => releaseVerifierVariables(scopes.keys().next().value, 'NEW', {}), /release context is incomplete/);
+});
+
+test('shared rollback fixture is release-attested and every direct consumer stays rollback-contained', () => {
+  const mapped = new Map([
+    ['tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql', 'BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2'],
+    ['tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql', 'BANKING_PAY_CANDIDATE_GROUP_DISPLAY_ONLY_SELECTION_TUPLE_V1'],
+    ['tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql', 'BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1'],
+  ]);
+  const release = readJson('supabase/release/current-release.json');
+  for (const file of mapped.keys()) {
+    assert.ok(release.verificationFiles.includes(file));
+    assert.ok(release.newVerificationFiles.includes(file));
+  }
+  const fixtureInclude = /\\ir\s+fixtures\/28082026_1429_banking_pay_selection_setup\.sql/i;
+  const consumers = filesUnder('tests').filter(file => file.endsWith('.sql') && fixtureInclude.test(read(file)));
+  assert.ok(consumers.length >= mapped.size);
+  for (const file of consumers) {
+    const source = read(file);
+    const beginIndex = source.search(/\bbegin\s*;/i);
+    const includeIndex = source.search(fixtureInclude);
+    assert.match(source, /\\set ON_ERROR_STOP on/i, file);
+    assert.ok(beginIndex >= 0 && beginIndex < includeIndex, file);
+    assert.doesNotMatch(source, /\bcommit\s*;/i, file);
+    assert.match(source, /rollback\s*;\s*$/i, file);
+  }
+  for (const [file, scope] of mapped) {
+    const source = read(file);
+    assert.match(source, new RegExp(`set local cloudtms\\.rollback_fixture_scope='${scope}'`));
+    assert.match(source, /:\{\?cloudtms_release_fixture_context\}/);
+    assert.match(source, /set_config\(\s*'cloudtms\.release_verifier_context'/);
+    assert.ok(source.search(/ROLLBACK_FIXTURE_ID_COLLISION/) < source.search(fixtureInclude), file);
+  }
+  const fixture = read('tests/fixtures/28082026_1429_banking_pay_selection_setup.sql');
+  assert.match(fixture, /current_database\(\)<>'banking_modal_v2_test'/);
+  assert.doesNotMatch(fixture, /cloudtms_test_clone/);
+  assert.match(fixture, /v_context->>'mode'.*NOT IN \('NEW','UPGRADE'\)/);
+  assert.match(fixture, /v_context->>'expected_database'.*current_database\(\)/);
+  assert.match(fixture, /v_identity_count<>1 OR v_identity_match_count<>1/);
+  assert.match(fixture, /v_applying_count<>1 OR v_release_match_count<>1/);
+  assert.match(fixture, /WHERE status='APPLYING'/);
+  assert.ok(fixture.search(/ROLLBACK_FIXTURE_ID_COLLISION/) < fixture.search(/INSERT INTO public\.tms_users/i));
 });
 
 test('contract drift diagnostics name relation additions, removals, and changed definitions without row data', async () => {
@@ -414,20 +508,24 @@ test('read-only release plans render every exact pending authority path and hash
   assert.match(engine, /mode === 'UPGRADE'[\s\S]*PENDING\/CHANGED REPEATABLES/);
 });
 
-test('contract export normalises null ACLs to one-dimensional effective defaults', () => {
+test('contract export normalises null ACLs and binds default ACLs to the exact installation owner', () => {
   assert.equal(readJson('supabase/release/current-contract.json').contract_version, 5);
   const source = read('supabase/release/export_contract.sql');
   assert.doesNotMatch(source, /aclexplode\(coalesce\([^)]*,\s*'\{\}'::aclitem\[\]\)\)/s);
   assert.match(source, /acldefault\([\s\S]*c\.relowner/);
   assert.match(source, /acldefault\('f'::"char", p\.proowner\)/);
   assert.match(source, /acldefault\('n'::"char", n\.nspowner\)/);
+  assert.match(source, /c\.relkind = 'S' then 's'::"char" else 'r'::"char"/);
+  assert.doesNotMatch(source, /c\.relkind = 'S' then 'S'::"char"/);
   assert.equal((source.match(/select distinct\s+case when a\.grantee = 0 then 'PUBLIC'/gi) || []).length, 4);
   assert.equal((source.match(/\) expanded_acl/g) || []).length, 4);
   assert.match(source, /when rolname=current_user then 'postgres'/);
   assert.match(source, /d\.defaclrole = \([\s\S]*role_row\.rolname = current_user/);
   assert.match(source, /provider image can also contain a physical role[\s\S]*literally named `postgres`/);
   assert.match(source, /default_acl_rows as \(/);
-  assert.match(source, /select distinct owner_name, schema_name, object_kind, contract_row/);
+  assert.match(source, /select distinct owner_name, schema_name, object_kind, contract_row\s+from default_acl_rows/);
+  assert.doesNotMatch(source, /jsonb_array_elements\(source_row\.contract_row->'acl'\)/);
+  assert.doesNotMatch(source, /source_row\.owner_name = identity\.owner_name/);
 });
 
 test('contract export is provider and upgrade-history neutral without weakening security fields', () => {

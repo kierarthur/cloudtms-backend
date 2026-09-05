@@ -41,8 +41,8 @@ test('the Draft contract runtime fixture is local-only, rollback-contained and c
   assert.match(sql,/before_batches<>\(SELECT count\(\*\) FROM public.pay_batches\)/);
   assert.match(sql,/before_items<>\(SELECT count\(\*\) FROM public.pay_batch_items\)/);
 });
-test('the existing complete Worker Create Draft owner is unchanged',()=>{
-  assert.equal(ownerHash,'fa41380e83f7a6050dbadab046516cb3b8e42e1260896dd1c60e3c347b61ffd8');
+test('the reviewed combined legacy and certified Worker Create Draft owner is exact',()=>{
+  assert.equal(ownerHash,'610fd7f539f486f0cfb080dcf1755e91967904844702a8973f3895ab72600ab9');
 });
 for(const [index,phase] of ['ALL','SOME','NONE'].entries()){
   test(`real PG17 ${phase}: final locked Draft selection guard accepts the exact set and rejects four mismatches`,{skip:!enabled},()=>{

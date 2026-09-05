@@ -74,8 +74,6 @@ DECLARE
     v_correction_request_id uuid := NULL::uuid;
     v_correction_config public.banking_pay_operation_config%ROWTYPE;
 BEGIN
-    PERFORM set_config('lock_timeout', '3s', true);
-
     IF v_operation_type IS NULL THEN
         RAISE EXCEPTION 'BANKING_PAY_OPERATION_START_OPERATION_TYPE_REQUIRED'
           USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'BANKING_PAY_OPERATION_START_OPERATION_TYPE_REQUIRED')::text;

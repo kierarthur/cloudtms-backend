@@ -1,0 +1,193 @@
+{
+  "contract": "BANKING_PAY_DRAFT_V8_PRIOR_EXCLUSION_PARITY_P3_V1",
+  "status": "CURRENT_V8_LOCAL_DUAL_ENGINE_PASS_HISTORICAL_V1_PARITY_OPEN",
+  "group_id": "P3_PRIOR_PAYMENT_AND_EXCLUSIONS",
+  "scope": {
+    "proof_kind": "CURRENT_V8_POLICY_OWNER_DRAFT_OUTPUT_OR_TYPED_REJECTION",
+    "v1_v8_typed_parity_status": "OPEN_NO_ENABLED_HISTORICAL_V1_HARNESS",
+    "policy_delta_allowed": false,
+    "production_runtime_edits": false,
+    "local_parity_comparator_correction": true,
+    "database_execution": "DISPOSABLE_PG17_AND_PG18_ROLLBACK_ONLY_AFTER_COORDINATED_WINDOW",
+    "provider_payment_settlement_remittance_actions": false
+  },
+  "budgets": {
+    "statement_timeout": "15s",
+    "lock_timeout": "1500ms",
+    "idle_in_transaction_session_timeout": "30s",
+    "jit": "off",
+    "may_increase_or_bypass": false
+  },
+  "frozen_policy_contract": {
+    "path": "codex_outputs/banking-pay-create-draft-policy-v1/BANKING_PAY_CREATE_DRAFT_EXECUTE_POLICY_CONTRACT_V1.json",
+    "sha256": "6cfc84739ceff902b7716159e4085df5462486738c55e00a3be7068c2d70f1dd",
+    "proof_rule": "Compare exact selected constituent identity, sign, canonical ex-VAT amount, channel, allocation, item, reservation, materialisation and final downstream projection; totals are secondary."
+  },
+  "owners": [
+    {
+      "path": "supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql",
+      "sha256": "60d0dcd34ec0429ee57986d5cdf87c1d42f093998395aeff5bc89e204d5d891f",
+      "responsibility": "Policy X truth minus settled baseline minus active reservation and exact residual identity"
+    },
+    {
+      "path": "supabase/repeatable/09082026_0826_pay_preview_candidate_build_summary_fragment.sql",
+      "sha256": "e0db0a06f56dfcb83d6740ce013cd63594b40e394604f1a8708da4838f4892db",
+      "responsibility": "current canonical Workbench row, snooze and selection presentation"
+    },
+    {
+      "path": "supabase/repeatable/09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql",
+      "sha256": "5b07eefeefc355a9f276e5b770392533a2b7318f0c209f8baa4809369ffaea9c",
+      "responsibility": "current post-cancellation source reappearance owner"
+    },
+    {
+      "path": "supabase/repeatable/20072026_0117_banking_pay_preview_selection_revision.sql",
+      "sha256": "56776a347566e8a756febe34c7dd209b04b1b576bb693e9e333d5a67caf04cc2",
+      "responsibility": "set-wise selection revision and exact eligible selected membership"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql",
+      "sha256": "6fa3238ae8f6419dd08ade55714fb990d2633e6fd71bcb019ca91ed71feb14c9",
+      "responsibility": "complete selected and exclusion-universe certification with prior-payment, reservation and supersession evidence"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2311_banking_pay_draft_frozen_certificate_adapters_v8.sql",
+      "sha256": "3974d369ec5c7cc1b2eee997446cea59f9a259d4e862ccdeab9e4028c4a12472",
+      "responsibility": "row-backed certified constituent, partition and evidence adapters"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2312_banking_pay_draft_row_backed_orchestration_v8.sql",
+      "sha256": "689179b380b30d3a4b0cd9480ef977abb7f327f2026158d5cdf76de8dd723e27",
+      "responsibility": "bounded current-V8 Draft orchestration without economic recalculation"
+    },
+    {
+      "path": "supabase/repeatable/02092026_2315_banking_pay_draft_constituent_parity_v8.sql",
+      "sha256": "eec3daa61350be710ad47b1968fa129e47a17fdce9f9eb2b4bd479c621419061",
+      "responsibility": "exact constituent-level comparison with pre-Draft active source-reservation evidence kept separate from the newly created residual Draft item amount"
+    },
+    {
+      "path": "supabase/repeatable/03092026_1620_banking_pay_draft_integrity_row_backed_v8.sql",
+      "sha256": "8494f2f91792f60a042a88920e5fea906d65975cdfa7c463f31dc9a57efa3749",
+      "responsibility": "row-backed final integrity and all-selected-reserved typed rejection"
+    }
+  ],
+  "common_assertions": {
+    "channels": ["PAYE", "UMBRELLA"],
+    "exact_identity_fields": [
+      "preview_row_id",
+      "source_line_id",
+      "timesheet_id",
+      "candidate_id",
+      "economic_key_type",
+      "economic_key_value",
+      "resolved_pay_channel"
+    ],
+    "exact_money_fields": [
+      "truth_ex_vat",
+      "settled_baseline_ex_vat",
+      "active_source_reservation_ex_vat",
+      "canonical_residual_ex_vat",
+      "draft_allocation_ex_vat",
+      "draft_item_ex_vat",
+      "draft_reservation_ex_vat"
+    ],
+    "excluded_target_deltas": {
+      "selected_constituents": 0,
+      "allocation_rows": 0,
+      "draft_items": 0,
+      "reservations": 0
+    },
+    "unrelated_candidate_rule": "The unrelated control Candidate retains one exact selected constituent, allocation, item and reservation with the same identity digest and amount before and after target exclusion or typed rejection.",
+    "stale_selection_rule": "A server selection that names an excluded, superseded or no-longer-current preview identity fails closed before any Draft or financial artifact is created.",
+    "stale_selection_first_boundary": {"sqlstate":"P0001","error":"WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED","owner":"public.pay_workbench_prepare_draft","superseded_fixture_expectation":"55000/WORKBENCH_CERTIFICATE_DRAFT_GATE_REJECTED","classification":"STALE_FIXTURE_EXPECTATION_NOT_PRODUCT_DEFECT"},
+    "totals_are_secondary": true
+  },
+  "classes": [
+    {
+      "class_id": "part_paid_residual",
+      "case_profile": "RESIDUAL_SELECTED",
+      "policy_condition": "only exact unpaid residual remains",
+      "condition": "truth 100.00, settled baseline 40.00, no active reservation",
+      "expected": {"target_selected": 1, "sign": 1, "canonical_ex_vat": "60.00", "allocation_ex_vat": "60.00", "item_ex_vat": "60.00", "source_reservation_ex_vat": "0.00"}
+    },
+    {
+      "class_id": "fully_settled_absent",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "fully settled component absent from Ready",
+      "condition": "truth 100.00 equals settled baseline 100.00",
+      "expected": {"target_selected": 0, "target_universe": "INELIGIBLE", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "active_reservation_residual",
+      "case_profile": "RESIDUAL_SELECTED",
+      "policy_condition": "active reservation subtracted exactly",
+      "condition": "truth 100.00, no settled baseline, active source reservation 25.00",
+      "expected": {"target_selected": 1, "sign": 1, "canonical_ex_vat": "75.00", "allocation_ex_vat": "75.00", "item_ex_vat": "75.00", "source_reservation_ex_vat": "25.00"}
+    },
+    {
+      "class_id": "superseded_absent",
+      "case_profile": "CURRENT_REPLACES_SUPERSEDED",
+      "policy_condition": "superseded physical identity absent unless current residual authority says otherwise",
+      "condition": "superseded physical source is absent and one current certified replacement residual remains",
+      "expected": {"target_selected": 1, "superseded_selected": 0, "canonical_ex_vat": "55.00", "supersession_treatment": "CURRENT_CERTIFIED_SOURCE_REPLACES_PROVED_LINEAGE"}
+    },
+    {
+      "class_id": "cancelled_untouched_reappears_once",
+      "case_profile": "RELEASED_SOURCE_SELECTED_ONCE",
+      "policy_condition": "released untouched Draft source returns once",
+      "condition": "certified untouched Draft cancellation releases the source overlay",
+      "expected": {"target_selected": 1, "duplicate_selected": 0, "canonical_ex_vat": "50.00", "replay_equal": true}
+    },
+    {
+      "class_id": "timesheet_snoozed_excluded",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "active Timesheet snooze excludes exact scope",
+      "condition": "active whole-Timesheet snooze",
+      "expected": {"target_selected": 0, "target_universe": "SNOOZED", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "segment_snooze_isolation",
+      "case_profile": "ONE_SEGMENT_EXCLUDED_SIBLING_SELECTED",
+      "policy_condition": "only exact segment scope excluded; unrelated Ready components preserved",
+      "condition": "one exact segment is snoozed and an unrelated segment of the same Timesheet remains Ready",
+      "expected": {"target_selected": 0, "sibling_selected": 1, "sibling_canonical_ex_vat": "40.00", "target_universe": "SNOOZED", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "finance_case_snoozed_excluded",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "active finance-case snooze excludes exact case",
+      "condition": "active exact finance-case snooze",
+      "expected": {"target_selected": 0, "target_universe": "SNOOZED", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "snooze_expiry_reappears_once",
+      "case_profile": "EXPIRED_SNOOZE_SELECTED_ONCE",
+      "policy_condition": "expired/released source reappears once subject to ordinary checks",
+      "condition": "dated snooze is expired at the authoritative pay date and ordinary checks still pass",
+      "expected": {"target_selected": 1, "duplicate_selected": 0, "canonical_ex_vat": "50.00", "replay_equal": true}
+    },
+    {
+      "class_id": "action_required_excluded",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "unresolved rate/payment/case evidence excluded",
+      "condition": "unresolved rate, payment-method or case evidence is in cases_resolutions",
+      "expected": {"target_selected": 0, "target_universe": "ACTION_REQUIRED", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "blocked_excluded",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "blocked source excluded",
+      "condition": "blocked source is in blocked_for_pay",
+      "expected": {"target_selected": 0, "target_universe": "BLOCKED", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED"}
+    },
+    {
+      "class_id": "active_draft_excluded",
+      "case_profile": "EXCLUDED_WITH_UNRELATED_CONTROL",
+      "policy_condition": "active frozen reservation prevents duplicate Draft",
+      "condition": "active frozen reservation marks the exact source unavailable for another Draft",
+      "expected": {"target_selected": 0, "target_universe": "ACTIVE_DRAFT", "stale_selection_error": "WORKBENCH_SELECTION_CHANGED_REVIEW_REQUIRED", "downstream_defence_code": "PAY_DRAFT_ALL_SELECTED_PAYMENTS_ALREADY_RESERVED"}
+    }
+  ],
+  "runtime_fixture": "tests/04092026_1210_banking_pay_draft_v8_prior_exclusion_parity_p3_runtime.sql",
+  "result_manifest": "codex_outputs/h2-draft-parity/P3_PRIOR_EXCLUSION_PARITY_RESULTS_V1.json",
+  "pass_rule": "All 12 class rows must pass their source-supported PAYE and Umbrella cases on PG17.11 and PG18.6 under rollback. Selected cases require exact current-V8 Draft artifacts. Exclusion cases require exact target absence, unchanged unrelated-Candidate artifacts and typed zero-write stale-selection rejection. Historical V1 parity remains open."
+}

@@ -80,24 +80,24 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_scope_seed",
       "identity_arguments": "p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb, p_pay_channel_scope text, p_same_week_paye_override_json jsonb",
-      "definition_sha256": "36e242fb406949ffe4112288d34a271bb32c4a5b61cd883c8e3fc7cb2ed2ecf7",
+      "definition_sha256": "949eefd9bb3bd0addd472e1df40991ec3f22b73456f55c6956d9dbaaa75773ff",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/21072026_1235_46_pay_workbench_prepare_draft_scope_seed.sql"]
+      "source_files": ["supabase/repeatable/02092026_1030_banking_pay_draft_scope_finance_constituent_handoff_v1.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_allocation_rows_seed",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "ffe1c3815d078c2d03eb3875e98a7672b03b993e0b01709ac6eee855431d3924",
+      "definition_sha256": "98eac7baf1c59a774ae2cb7f40528466833443ece49109550ca233f2a9ac8563",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/08082026_0717_pay_workbench_prepare_draft_allocation_rows_seed_sort_order.sql"]
+      "source_files": ["supabase/repeatable/04092026_1360_banking_pay_manual_carry_forward_allocation_seed_v8.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation",
@@ -132,10 +132,10 @@
     {
       "schema": "private", "name": "pay_workbench_recovery_selection_overlay_apply_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "5b07356167c938076832108fb1ba3ae13e9d70021730d49f35c2a00da17367ad",
+      "definition_sha256": "a704f4ed3d34645ec262278aa20a85dc4fcafe5bf0cb64939974974f6a2c2c7f",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
-      "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
+      "source_files": ["supabase/repeatable/28082026_1427_banking_pay_modal_recovery_channel_scope.sql"]
     },
     {
       "schema": "private", "name": "pay_workbench_preview_effective_section_v1",
@@ -180,13 +180,13 @@
     {
       "schema": "public", "name": "pay_workbench_session_set_selected_rows",
       "identity_arguments": "p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid",
-      "definition_sha256": "602ee90a3eb35a958d0ba48c47fada1a6b7bb6d85fc7e612c585120011b9367f",
+      "definition_sha256": "7d622194f7bca877bf8420cb6f10f9ad46a69bad118c5f8fb9ed16810492d98c",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql"]
+      "source_files": ["supabase/repeatable/04092026_2355_banking_pay_workbench_selection_owner_reassert_v1.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_session_carry_forward_preview_selections_v1",
@@ -362,49 +362,46 @@
     {
       "schema": "public", "name": "pay_batch_insert_items_from_preview",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "4d0bfd29ac818046d9c9883e1e385578e8f4df7bc6b72aa0f419a50ebcbbc02f",
+      "definition_sha256": "62aae42fa85b5df8f744e92e39593f7793271d0a974d97e22f0a559fc4057d90",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"]
+      "source_files": ["supabase/repeatable/04092026_1340_banking_pay_draft_carry_forward_policy_transport_v8.sql"]
     },
     {
       "schema": "public", "name": "pay_batch_apply_finance_adjustments",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_vat_rate_pct numeric, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "9e30eb496c9c5bb5b50ab4da12cd3ccc936b170ded5c9789b401702b14054ec9",
+      "definition_sha256": "a2720729aa856c3846d18aa38aaa1fac6a37c6c7dcc3e9d69911a09f63e64b91",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql"]
+      "source_files": ["supabase/repeatable/04092026_1300_banking_pay_draft_mixed_recovery_partial_link_v8.sql"]
     },
     {
       "schema": "public", "name": "pay_batch_finalize_reservations_and_markers",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_pay_date date, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "9a2dc312996574822c1742cdc760219e6d5263793f9f325f5586d51acaa1a347",
-      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public", "plpgsql_check.mode=disabled"],
-      "expanded_acl": [
-        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
-      ],
-      "source_files": [
-        "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
-        "supabase/repeatable/20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql"
-      ]
-    },
-    {
-      "schema": "public", "name": "pay_batch_create_timesheet_snapshots",
-      "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "8972c7224c49d6dbf6d11886af6b3490d8c40368e5a0dda2f1fdb7a60a5cc56f",
+      "definition_sha256": "0449fe0daa2d6e1b23aa7d991bfce84d84fce30d7d123dff6804cbe528ddc4a4",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"]
+      "source_files": ["supabase/repeatable/04092026_1400_banking_pay_draft_finalizer_summary_paging_v8.sql"]
+    },
+    {
+      "schema": "public", "name": "pay_batch_create_timesheet_snapshots",
+      "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_candidate_scope_ids jsonb",
+      "definition_sha256": "90f9b67e423e2ad6a9fd9a5b9c0741a001decdd94777d0c75238ef9dde6f3827",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "expanded_acl": [
+        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
+      ],
+      "source_files": ["supabase/repeatable/04092026_1440_banking_pay_draft_snapshot_pagination_v8.sql"]
     },
     {
       "schema": "public", "name": "pay_batch_build_item_breakdowns",
@@ -461,13 +458,13 @@
     {
       "schema": "public", "name": "pay_workbench_session_refresh_current_authority_v1",
       "identity_arguments": "p_session_id uuid, p_actor_user_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "231ab97bee3dad27647c020b145ef300a4b84d5c1bd46fcf692adb2c715fff67",
+      "definition_sha256": "312ad0a8c75781e2b059678784ef66b06863a959a1a9315bb3186728ddc230b8",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\"", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
-      "source_files": ["supabase/repeatable/11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql"]
+      "source_files": ["supabase/repeatable/29082026_0801_banking_pay_version_one_refresh_v1.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_session_get_candidate_preview",

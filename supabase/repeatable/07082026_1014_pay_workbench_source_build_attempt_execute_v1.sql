@@ -36,6 +36,7 @@ DECLARE
   v_error_json jsonb := '{}'::jsonb;
   v_elapsed_ms integer;
   v_result_code text;
+  v_error_detail text;
   v_execution_profile_version integer:=1;
   v_call_cursor jsonb:='{}'::jsonb;
   v_call_started_at timestamptz;
@@ -322,7 +323,9 @@ BEGIN
 
   v_completion_result := public.pay_workbench_complete_job(p_job_id,v_stage_result);
   EXCEPTION WHEN OTHERS THEN
-    GET STACKED DIAGNOSTICS v_result_code=RETURNED_SQLSTATE;
+    GET STACKED DIAGNOSTICS
+      v_result_code=RETURNED_SQLSTATE,
+      v_error_detail=PG_EXCEPTION_DETAIL;
     v_error_json := jsonb_build_object(
       'code',CASE
         WHEN SQLERRM IN (
@@ -334,6 +337,7 @@ BEGIN
       END,
       'message',SQLERRM,
       'sqlstate',v_result_code,
+      'detail',NULLIF(v_error_detail,''),
       'private_stage',v_stage,
       'build_id',p_build_id,
       'attempt_id',p_attempt_id
