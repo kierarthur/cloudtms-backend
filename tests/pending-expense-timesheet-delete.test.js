@@ -108,6 +108,20 @@ test('Office uses one context digest from preview through apply and retires mana
   );
 });
 
+test('Office returns every new deterministic deletion rejection as a safe error code', () => {
+  for (const code of [
+    'PENDING_EXPENSE_DELETE_APPLY_INVALID',
+    'PENDING_EXPENSE_DELETE_CONTEXT_TOO_LARGE',
+    'PENDING_EXPENSE_DELETE_TARGET_SET_INVALID',
+    'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID',
+    'PAY_WORKBENCH_CANDIDATE_DELETE_CONTEXT_CONFLICT',
+    'TIMESHEET_DELETE_BANKING_REFRESH_NOT_PROVEN',
+    'TIMESHEET_DELETE_CANDIDATE_OWNERSHIP_INVALID'
+  ]) {
+    assert.match(broker, new RegExp(`'${code}'`));
+  }
+});
+
 test('rollback proof covers cancellation, rotation, manager approval and separate Timesheet exclusion', () => {
   assert.match(verification, /^begin;/im);
   assert.match(verification, /timesheet_delete_with_pending_expense_apply_v1/i);
