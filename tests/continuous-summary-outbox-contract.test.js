@@ -19,8 +19,23 @@ test('Outbox Ready filter and type-ahead are supported by the unified route', ()
 });
 
 test('Candidate Submission sort stays server-bounded and exposes the exact display label', () => {
-  assert.match(source, /const candidateSubmissionSort = orderByParam === 'candidate_submission'/);
+  const timesheetHandler = source.slice(
+    source.indexOf('async function handleTimesheetsSummary'),
+    source.indexOf('async function handleSummaryTypeAheadLookup')
+  );
+  const contractsHandler = source.slice(
+    source.indexOf('async function handleContractsList'),
+    source.indexOf('async function handleTimesheetsSummary')
+  );
+  assert.match(timesheetHandler, /const candidateSubmissionSort = orderByParam === 'candidate_submission'/);
+  assert.doesNotMatch(contractsHandler, /candidateSubmissionSort/);
   assert.match(source, /const scanPageSize = 200/);
   assert.match(source, /if \(keptRows\.length > keepCount\) keptRows\.length = keepCount/);
   assert.match(source, /candidate_office_summary_status_label = candidateOfficeSummaryStatusLabel/);
+});
+
+test('Outbox membership is count-only until full selection membership is requested', () => {
+  assert.match(source, /if \(!explicitFullMembership\) \{/);
+  assert.match(source, /limit: 1,[\s\S]*membership_deferred: true/);
+  assert.match(source, /if \(normalizedRowIds\.length !== resolvedTotal\)/);
 });

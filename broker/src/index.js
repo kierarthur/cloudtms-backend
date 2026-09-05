@@ -9945,7 +9945,6 @@ async function handleContractsList(env, req) {
 
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
-  const candidateSubmissionSort = orderByParam === 'candidate_submission';
 
   const sortMap = {
     candidate_display:             'candidate_id',
@@ -86683,6 +86682,7 @@ async function handleTimesheetsSummary(env, req) {
 
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
+  const candidateSubmissionSort = orderByParam === 'candidate_submission';
 
   const allowedSort = {
     week_ending_date:          'week_ending_date',
@@ -139899,6 +139899,34 @@ async function handleSummaryMembership(env, req, section) {
       const rowIds = [];
       let offset = 0;
       let totalCount = null;
+
+      if (!explicitFullMembership) {
+        const payload = await invokeJsonHandler('/api/outbox', {
+          limit: 1,
+          offset: 0,
+          search: trimStr(effectiveFilters.search || effectiveFilters.q || ''),
+          channel: trimStr(effectiveFilters.channel || ''),
+          status: effectiveFilters.status,
+          queue_state: trimStr(effectiveFilters.queue_state || ''),
+          sort_by: 'created_at_utc',
+          sort_dir: 'desc'
+        });
+        const countRaw = Number(payload && (payload.total_count ?? payload.total ?? payload.count));
+        const deferredTotal = Number.isFinite(countRaw) && countRaw >= 0 ? Math.trunc(countRaw) : null;
+
+        return withCORS(env, req, ok({
+          section: sectionKey,
+          dataset_key: datasetKey,
+          row_ids: [],
+          ids: [],
+          total_count: deferredTotal,
+          total: deferredTotal,
+          count: deferredTotal,
+          membership_deferred: true,
+          deferred: true,
+          ids_deferred: true
+        }));
+      }
 
       while (totalCount == null || offset < totalCount) {
         const payload = await invokeJsonHandler('/api/outbox', {
