@@ -413,6 +413,183 @@ as $function$
   )
 $function$;
 
+-- Once the rejection/delete guard has proved that no submitted or approved
+-- Candidate workflow remains, release only terminal/draft weekly workflow
+-- links that would otherwise retain the Timesheet or Contract Week. The
+-- workflow, components and notifications remain as immutable audit history.
+create or replace function private._candidate_timesheet_delete_retire_workflows_v1(
+  p_environment text,
+  p_timesheet_ids uuid[],
+  p_contract_week_ids uuid[],
+  p_excluded_workflow_ids uuid[],
+  p_actor_user_id uuid,
+  p_delete_operation_id uuid,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_timesheet_ids uuid[];
+  v_contract_week_ids uuid[];
+  v_excluded_workflow_ids uuid[];
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_retired_workflow_ids uuid[]:=array[]::uuid[];
+  v_previous_state text;
+begin
+  select coalesce(array_agg(distinct supplied_id order by supplied_id),array[]::uuid[])
+  into v_timesheet_ids
+  from unnest(coalesce(p_timesheet_ids,array[]::uuid[])) supplied(supplied_id)
+  where supplied_id is not null;
+  select coalesce(array_agg(distinct supplied_id order by supplied_id),array[]::uuid[])
+  into v_contract_week_ids
+  from unnest(coalesce(p_contract_week_ids,array[]::uuid[])) supplied(supplied_id)
+  where supplied_id is not null;
+  select coalesce(array_agg(distinct supplied_id order by supplied_id),array[]::uuid[])
+  into v_excluded_workflow_ids
+  from unnest(coalesce(p_excluded_workflow_ids,array[]::uuid[])) supplied(supplied_id)
+  where supplied_id is not null;
+
+  if p_actor_user_id is null or p_delete_operation_id is null
+     or cardinality(v_timesheet_ids)<1 or cardinality(v_timesheet_ids)>64
+     or cardinality(v_contract_week_ids)>64
+     or cardinality(v_excluded_workflow_ids)>20 then
+    raise exception 'CANDIDATE_TIMESHEET_DELETE_RETIREMENT_INVALID'
+      using errcode='22023';
+  end if;
+
+  for v_workflow in
+    select workflow_row.*
+    from public.candidate_submission_workflows workflow_row
+    where workflow_row.environment=v_environment
+      and workflow_row.workflow_kind in (
+        'CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'
+      )
+      and not (workflow_row.id=any(v_excluded_workflow_ids))
+      and (
+        workflow_row.target_timesheet_id=any(v_timesheet_ids)
+        or workflow_row.anchor_timesheet_id=any(v_timesheet_ids)
+        or workflow_row.contract_week_id=any(v_contract_week_ids)
+      )
+    order by workflow_row.id
+    for update
+  loop
+    if v_workflow.state not in (
+      'CREATED','WORKER_DRAFT','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+    ) then
+      raise exception 'CANDIDATE_SUBMISSION_REJECTION_REQUIRED'
+        using errcode='55000',detail=jsonb_build_object(
+          'workflow_id',v_workflow.id,
+          'workflow_state',v_workflow.state
+        )::text;
+    end if;
+    v_previous_state:=v_workflow.state;
+
+    update public.candidate_approval_requests approval
+    set state='CANCELLED',
+        cancelled_at_utc=coalesce(approval.cancelled_at_utc,p_now_utc),
+        updated_at_utc=p_now_utc
+    where approval.workflow_id=v_workflow.id
+      and approval.state='PENDING';
+
+    update public.candidate_submission_components component
+    set timesheet_id=null,
+        state=case
+          when v_previous_state in ('CREATED','WORKER_DRAFT')
+            and component.state not in ('SUPERSEDED','REJECTED','ABANDONED')
+            then 'ABANDONED'
+          else component.state
+        end,
+        superseded_at_utc=case
+          when v_previous_state in ('CREATED','WORKER_DRAFT')
+            then coalesce(component.superseded_at_utc,p_now_utc)
+          else component.superseded_at_utc
+        end
+    where component.workflow_id=v_workflow.id
+      and component.timesheet_id=any(v_timesheet_ids);
+
+    update public.candidate_notifications notification
+    set timesheet_id=null,
+        deep_link_json=(coalesce(notification.deep_link_json,'{}'::jsonb)
+          -'timesheet_id'-'contract_week_id')||jsonb_build_object(
+            'type','workflow','workflow_id',v_workflow.id
+          )
+    where notification.workflow_id=v_workflow.id;
+
+    update public.candidate_submission_workflows workflow_row
+    set state=case
+          when workflow_row.state in ('CREATED','WORKER_DRAFT')
+            then 'CANCELLED'
+          else workflow_row.state
+        end,
+        contract_week_id=null,
+        anchor_timesheet_id=null,
+        target_timesheet_id=null,
+        cancelled_at_utc=case
+          when workflow_row.state in ('CREATED','WORKER_DRAFT')
+            then coalesce(workflow_row.cancelled_at_utc,p_now_utc)
+          else workflow_row.cancelled_at_utc
+        end,
+        input_snapshot_json=coalesce(workflow_row.input_snapshot_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'office_permanent_delete_tombstone',jsonb_build_object(
+              'delete_operation_id',p_delete_operation_id,
+              'deleted_timesheet_ids',to_jsonb(v_timesheet_ids),
+              'deleted_contract_week_ids',to_jsonb(v_contract_week_ids),
+              'previous_contract_week_id',v_workflow.contract_week_id,
+              'previous_anchor_timesheet_id',v_workflow.anchor_timesheet_id,
+              'previous_target_timesheet_id',v_workflow.target_timesheet_id,
+              'retired_at_utc',p_now_utc
+            )
+          ),
+        issue_codes=case
+          when workflow_row.issue_codes
+            @> '["OFFICE_PERMANENTLY_DELETED_TIMESHEET"]'::jsonb
+            then workflow_row.issue_codes
+          else workflow_row.issue_codes
+            ||'["OFFICE_PERMANENTLY_DELETED_TIMESHEET"]'::jsonb
+        end,
+        updated_at_utc=p_now_utc
+    where workflow_row.id=v_workflow.id;
+
+    insert into public.audit_events(
+      actor_user_id,object_type,object_id_text,action,before_json,after_json,
+      reason,correlation_id,ts_utc
+    ) values (
+      p_actor_user_id,'candidate_submission_workflows',v_workflow.id::text,
+      'CANDIDATE_WORKFLOW_RETAINED_AFTER_TIMESHEET_DELETE',
+      jsonb_build_object(
+        'state',v_previous_state,
+        'contract_week_id',v_workflow.contract_week_id,
+        'anchor_timesheet_id',v_workflow.anchor_timesheet_id,
+        'target_timesheet_id',v_workflow.target_timesheet_id
+      ),
+      jsonb_build_object(
+        'state',case when v_previous_state in ('CREATED','WORKER_DRAFT')
+          then 'CANCELLED' else v_previous_state end,
+        'live_timesheet_links_released',true,
+        'terminal_audit_retained',true
+      ),
+      'OFFICE_PERMANENTLY_DELETED_TIMESHEET',p_delete_operation_id,p_now_utc
+    );
+    v_retired_workflow_ids:=array_append(
+      v_retired_workflow_ids,v_workflow.id
+    );
+  end loop;
+
+  return jsonb_build_object(
+    'ok',true,
+    'contract_version','CANDIDATE_TIMESHEET_DELETE_WORKFLOW_RETIREMENT_V1',
+    'retired_workflow_count',cardinality(v_retired_workflow_ids),
+    'retired_workflow_ids',to_jsonb(v_retired_workflow_ids)
+  );
+end;
+$function$;
+
 -- This wrapper is the final race-safe delete gate.  It locks the removal unit
 -- and its Contract Weeks, locks every related Candidate workflow, refuses a
 -- submitted/manager-approved Candidate record, and only then enters the
@@ -444,6 +621,10 @@ declare
   v_guard jsonb;
   v_family record;
   v_related_workflow_ids uuid[]:=array[]::uuid[];
+  v_pending_context jsonb;
+  v_pending_workflow_ids uuid[]:=array[]::uuid[];
+  v_workflow_retirement jsonb;
+  v_apply_result jsonb;
 begin
   -- Rejections and PAPER changes already use this family lock.  Take it before
   -- any row lock so delete and reject cannot acquire the same rows in reverse.
@@ -473,6 +654,26 @@ begin
   from jsonb_array_elements_text(coalesce(
     v_guard->'related_workflow_ids','[]'::jsonb
   )) values_json(value);
+  select coalesce(array_agg(distinct workflow_id order by workflow_id),array[]::uuid[])
+  into v_related_workflow_ids
+  from (
+    select unnest(v_related_workflow_ids) as workflow_id
+    union all
+    select workflow_row.id
+    from public.candidate_submission_workflows workflow_row
+    where workflow_row.environment=v_environment
+      and (
+        workflow_row.target_timesheet_id=any(
+          coalesce(p_expected_timesheet_ids,array[]::uuid[])
+        )
+        or workflow_row.anchor_timesheet_id=any(
+          coalesce(p_expected_timesheet_ids,array[]::uuid[])
+        )
+        or workflow_row.contract_week_id=any(
+          coalesce(p_expected_contract_week_ids,array[]::uuid[])
+        )
+      )
+  ) related(workflow_id);
   if cardinality(v_related_workflow_ids)>0 then
     perform 1
     from public.candidate_submission_workflows workflow_row
@@ -501,13 +702,32 @@ begin
       using errcode='55000',detail=v_guard::text;
   end if;
 
-  return public.timesheet_delete_with_pending_expense_apply_v1(
+  v_pending_context:=private._timesheet_pending_expense_delete_context_v1(
+    v_environment,p_expected_timesheet_ids,false
+  );
+  select coalesce(array_agg(
+    (item->>'workflow_id')::uuid order by (item->>'workflow_id')::uuid
+  ),array[]::uuid[])
+  into v_pending_workflow_ids
+  from jsonb_array_elements(coalesce(
+    v_pending_context->'pending_expense_claims','[]'::jsonb
+  )) pending(item);
+
+  v_workflow_retirement:=private._candidate_timesheet_delete_retire_workflows_v1(
+    v_environment,p_expected_timesheet_ids,p_expected_contract_week_ids,
+    v_pending_workflow_ids,p_actor_user_id,p_delete_operation_id,p_now_utc
+  );
+
+  v_apply_result:=public.timesheet_delete_with_pending_expense_apply_v1(
     v_environment,p_delete_kind,p_timesheet_id,p_actor_user_id,
     p_expected_timesheet_id,p_expected_row_signature,p_expected_timesheet_ids,
     p_expected_contract_week_ids,p_expected_nhsp_shift_ids,
     p_expected_preserved_source_timesheet_ids,
     p_expected_preserved_source_contract_week_ids,
     p_expected_pending_expense_context_sha256,p_delete_operation_id,p_now_utc
+  );
+  return v_apply_result||jsonb_build_object(
+    'candidate_workflow_retirement',v_workflow_retirement
   );
 end;
 $function$;
@@ -852,6 +1072,9 @@ $function$;
 alter function private._candidate_office_rejection_targets_v2(text,uuid) owner to postgres;
 alter function private._candidate_office_reject_preview_v1(text,uuid,uuid,timestamptz) owner to postgres;
 alter function private._timesheet_candidate_submission_delete_guard_v1(text,uuid[],boolean) owner to postgres;
+alter function private._candidate_timesheet_delete_retire_workflows_v1(
+  text,uuid[],uuid[],uuid[],uuid,uuid,timestamptz
+) owner to postgres;
 alter function public.timesheet_candidate_submission_delete_guard_preview_v1(text,uuid[]) owner to postgres;
 alter function public.timesheet_delete_with_candidate_submission_guard_apply_v1(
   text,text,uuid,uuid,uuid,text,uuid[],uuid[],uuid[],uuid[],uuid[],text,uuid,timestamptz
@@ -866,6 +1089,9 @@ revoke all on function private._candidate_office_reject_preview_v1(text,uuid,uui
   from public,anon,authenticated,service_role;
 revoke all on function private._timesheet_candidate_submission_delete_guard_v1(text,uuid[],boolean)
   from public,anon,authenticated,service_role;
+revoke all on function private._candidate_timesheet_delete_retire_workflows_v1(
+  text,uuid[],uuid[],uuid[],uuid,uuid,timestamptz
+) from public,anon,authenticated,service_role;
 revoke all on function public.timesheet_candidate_submission_delete_guard_preview_v1(text,uuid[])
   from public,anon,authenticated;
 revoke all on function public.timesheet_delete_with_candidate_submission_guard_apply_v1(
@@ -889,7 +1115,7 @@ comment on function public.timesheet_candidate_submission_delete_guard_preview_v
 comment on function public.timesheet_delete_with_candidate_submission_guard_apply_v1(
   text,text,uuid,uuid,uuid,text,uuid[],uuid[],uuid[],uuid[],uuid[],text,uuid,timestamptz
 ) is
-  'Atomically requires Candidate rejection before permanent delete, then delegates to the established pending-expense-aware Timesheet delete transaction.';
+  'Atomically requires Candidate rejection before permanent delete, preserves terminal Candidate history without live Timesheet links, then delegates to the established pending-expense-aware Timesheet delete transaction.';
 
 notify pgrst, 'reload schema';
 

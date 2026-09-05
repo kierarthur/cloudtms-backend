@@ -879,6 +879,10 @@
       "sha256": "e9f0da6abacb029c94742d648a151d4272b1730ed22bc82ec81ce15cbcdac5d8"
     },
     {
+      "path": "supabase/migrations/05092026_2345_candidate_weekly_deleted_submission_audit_shape.sql",
+      "sha256": "fa5748cad3ab7208eaab13e6e235e6ad6afe4fca2564d89237111648175a964c"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

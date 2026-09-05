@@ -69,7 +69,8 @@ test('Timesheet deletion produces one candidate-wide Banking refresh after the r
 });
 
 test('cancelled claim is detached from the deleted Timesheet and produces one push-ready notice', () => {
-  assert.match(sql, /set anchor_timesheet_id=null/i);
+  assert.match(sql, /set contract_week_id=null,[\s\S]*?anchor_timesheet_id=null,[\s\S]*?target_timesheet_id=null/i);
+  assert.match(sql, /office_permanent_delete_tombstone/i);
   assert.match(sql, /state='CANCELLED'/i);
   assert.match(sql, /OFFICE_TIMESHEET_DELETED_EXPENSE_CANCELLED/i);
   assert.match(sql, /'EXPENSE_CLAIM_CANCELLED','timesheet_expense_attention'/i);

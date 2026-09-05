@@ -24,11 +24,16 @@ declare
   v_account uuid:=gen_random_uuid();
   v_hours_workflow uuid:=gen_random_uuid();
   v_expense_workflow uuid:=gen_random_uuid();
+  v_hours_component uuid:=gen_random_uuid();
+  v_approval_request uuid:=gen_random_uuid();
   v_guard jsonb;
   v_preview jsonb;
   v_signature text;
   v_result jsonb;
   v_new_timesheet uuid;
+  v_delete_timesheet_ids uuid[];
+  v_delete_contract_week_ids uuid[];
+  v_delete_nhsp_shift_ids uuid[];
 begin
   insert into public.tms_users(id,email,password_hash,role,is_active)
   values(
@@ -102,6 +107,25 @@ begin
     v_expense_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY',
     'ELECTRONIC','READY_FOR_MANAGER_APPROVAL',1,v_contract,v_week,v_old_timesheet,
     null,current_date,'{}','{}','candidate-delete-reject-expense'
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,timesheet_id,
+    component_kind,document_role,state,immutable_at_utc,required,review_ordinal,
+    review_render_state,final_signed_render_state
+  ) values(
+    v_hours_component,v_hours_workflow,1,1,v_timesheet,
+    'HOURS_TIMESHEET','ELECTRONIC_TIMESHEET_MANAGER_REVIEW','IMMUTABLE',now(),
+    true,1,'PENDING','PENDING'
+  );
+  insert into public.candidate_approval_requests(
+    id,workflow_id,workflow_generation,method,state,approved_at_utc,
+    review_manifest_sha256,required_component_ids,
+    required_component_manifest_json,manager_review_timesheet_component_id
+  ) values(
+    v_approval_request,v_hours_workflow,1,'PHONE','APPROVED',now(),
+    decode(repeat('11',32),'hex'),array[v_hours_component],
+    jsonb_build_array(jsonb_build_object('component_id',v_hours_component)),
+    v_hours_component
   );
 
   v_guard:=public.timesheet_candidate_submission_delete_guard_preview_v1(
@@ -220,6 +244,74 @@ begin
   if coalesce((v_guard->>'candidate_submission_rejection_required')::boolean,true)
      or coalesce((v_guard->>'guarded_workflow_count')::integer,-1)<>0 then
     raise exception 'Rejected workflows still prevented deletion: %',v_guard;
+  end if;
+
+  -- The rejected replacement must now be genuinely deletable. Candidate
+  -- workflow and notification history is retained as a terminal tombstone,
+  -- but no retained row may keep a restrictive foreign key to the deleted
+  -- Timesheet or Contract Week.
+  v_preview:=public.timesheet_weekly_chain_delete_preview(v_new_timesheet,v_actor);
+  select coalesce(array_agg(value::uuid order by value),array[]::uuid[])
+  into v_delete_timesheet_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'timesheet_ids','[]'::jsonb)) ids(value);
+  select coalesce(array_agg(value::uuid order by value),array[]::uuid[])
+  into v_delete_contract_week_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'contract_week_ids','[]'::jsonb)) ids(value);
+  select coalesce(array_agg(value::uuid order by value),array[]::uuid[])
+  into v_delete_nhsp_shift_ids
+  from jsonb_array_elements_text(coalesce(v_preview->'nhsp_shift_ids','[]'::jsonb)) ids(value);
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(
+    v_new_timesheet,v_week,false
+  )->>'row_signature';
+  v_result:=public.timesheet_delete_with_candidate_submission_guard_apply_v1(
+    'TEST','WEEKLY_CHAIN_DELETE_PARENT',v_new_timesheet,v_actor,
+    v_new_timesheet,v_signature,v_delete_timesheet_ids,
+    v_delete_contract_week_ids,v_delete_nhsp_shift_ids,array[]::uuid[],
+    array[]::uuid[],
+    public.timesheet_pending_expense_delete_preview_v1(
+      'TEST',v_delete_timesheet_ids
+    )->>'context_sha256',gen_random_uuid(),now()
+  );
+  if coalesce((v_result->>'apply_performed')::boolean,false) is not true
+     or coalesce((v_result->>'decision'),'')<>'PERMANENT_DELETE'
+     or coalesce((v_result->>'cancelled_pending_expense_claim_count')::integer,-1)<>0
+     or exists(
+       select 1 from public.timesheets
+       where timesheet_id=any(v_delete_timesheet_ids)
+     )
+     or exists(
+       select 1 from public.contract_weeks
+       where id=any(v_delete_contract_week_ids)
+     )
+     or (select count(*) from public.candidate_submission_workflows
+         where id in (v_hours_workflow,v_expense_workflow)
+           and state='REJECTED'
+           and target_timesheet_id is null
+           and anchor_timesheet_id is null
+           and contract_week_id is null
+           and issue_codes @> '["OFFICE_PERMANENTLY_DELETED_TIMESHEET"]'::jsonb)<>2
+     or (select count(*) from public.candidate_submission_components
+         where id=v_hours_component
+           and workflow_id=v_hours_workflow
+           and timesheet_id is null
+           and state='REJECTED')<>1
+     or (select count(*) from public.candidate_approval_requests
+         where id=v_approval_request
+           and workflow_id=v_hours_workflow
+           and state='SUPERSEDED')<>1
+     or (select count(*) from public.candidate_notifications
+         where workflow_id=v_hours_workflow
+           and event_type='OFFICE_REJECTED'
+           and timesheet_id is null
+           and deep_link_json->>'type'='workflow'
+           and deep_link_json->>'workflow_id'=v_hours_workflow::text)<>1
+     or (select count(*) from public.candidate_notifications
+         where workflow_id=v_expense_workflow
+           and event_type='EXPENSE_CLAIM_CANCELLED'
+           and timesheet_id is null
+           and deep_link_json->>'type'='workflow'
+           and deep_link_json->>'workflow_id'=v_expense_workflow::text)<>1 then
+    raise exception 'Rejected replacement did not complete one safe permanent delete: %',v_result;
   end if;
 end;
 $verification$;

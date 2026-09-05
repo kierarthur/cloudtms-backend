@@ -408,12 +408,30 @@ begin
     where notification.workflow_id=v_workflow.id;
 
     update public.candidate_submission_workflows workflow_row
-    set anchor_timesheet_id=null,
-        issue_codes=case
+    set contract_week_id=null,
+        anchor_timesheet_id=null,
+        target_timesheet_id=null,
+        input_snapshot_json=coalesce(workflow_row.input_snapshot_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'office_permanent_delete_tombstone',jsonb_build_object(
+              'delete_operation_id',p_delete_operation_id,
+              'deleted_timesheet_ids',to_jsonb(p_expected_timesheet_ids),
+              'deleted_contract_week_ids',to_jsonb(p_expected_contract_week_ids),
+              'previous_contract_week_id',v_workflow.contract_week_id,
+              'previous_anchor_timesheet_id',v_workflow.anchor_timesheet_id,
+              'previous_target_timesheet_id',v_workflow.target_timesheet_id,
+              'retired_at_utc',p_now_utc
+            )
+          ),
+        issue_codes=(case
           when workflow_row.issue_codes @> '["OFFICE_TIMESHEET_DELETED_EXPENSE_CANCELLED"]'::jsonb
             then workflow_row.issue_codes
           else workflow_row.issue_codes||'["OFFICE_TIMESHEET_DELETED_EXPENSE_CANCELLED"]'::jsonb
-        end,
+        end)||(case
+          when workflow_row.issue_codes @> '["OFFICE_PERMANENTLY_DELETED_TIMESHEET"]'::jsonb
+            then '[]'::jsonb
+          else '["OFFICE_PERMANENTLY_DELETED_TIMESHEET"]'::jsonb
+        end),
         updated_at_utc=p_now_utc
     where workflow_row.id=v_workflow.id
       and workflow_row.state='CANCELLED'

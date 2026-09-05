@@ -4655,6 +4655,25 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_timesheet_delete_retire_workflows_v1(p_environment text, p_timesheet_ids uuid[], p_contract_week_ids uuid[], p_excluded_workflow_ids uuid[], p_actor_user_id uuid, p_delete_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b5c21cd24b7109c7f6c976c608ba04c225ec69629b5fe9937ed8007bd05270ee"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_timesheet_primary_action_v1(p_candidate_status_code text, p_workflows jsonb, p_capabilities jsonb, p_timesheet_id uuid, p_contract_week_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -28802,7 +28821,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ce21ed72be1f52241b67a1dceeab69caf70ac0ce40279f71a43fccce7b21ff7f"
+      "definition_sha256": "5b6df27dccea6ab6f32788e60f0e089b325ffa0ab81fc0fa44007954929c08f9"
     },
     {
       "acl": [
@@ -28826,7 +28845,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "60dba205f9e85a794b4833326158179c3f0b47550b6b550a2c0330ef7610041c"
+      "definition_sha256": "be3aed275f014693ad6776c6d6e783b5999e3cc68e401d498e09b78d1911bb7d"
     },
     {
       "acl": [
@@ -70038,7 +70057,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((workflow_kind = ANY (ARRAY['CONTRACT_HOURS'::text, 'CONTRACT_EXPENSE'::text, 'CONTRACT_COMBINED'::text])) AND contract_id IS NOT NULL AND contract_week_id IS NOT NULL AND week_ending_date IS NOT NULL OR workflow_kind = 'DAILY'::text AND work_date IS NOT NULL AND contract_week_id IS NULL AND week_ending_date IS NULL AND (target_timesheet_id IS NOT NULL AND anchor_timesheet_id = target_timesheet_id OR state = 'CANCELLED'::text AND target_timesheet_id IS NULL AND anchor_timesheet_id IS NULL AND issue_codes @> '[\"OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT\"]'::jsonb))"
+          "definition": "CHECK ((workflow_kind = ANY (ARRAY['CONTRACT_HOURS'::text, 'CONTRACT_EXPENSE'::text, 'CONTRACT_COMBINED'::text])) AND contract_id IS NOT NULL AND week_ending_date IS NOT NULL AND (contract_week_id IS NOT NULL OR (state = ANY (ARRAY['REFUSED'::text, 'REJECTED'::text, 'CANCELLED'::text, 'EXPIRED'::text, 'SUPERSEDED'::text])) AND contract_week_id IS NULL AND target_timesheet_id IS NULL AND anchor_timesheet_id IS NULL AND issue_codes @> '[\"OFFICE_PERMANENTLY_DELETED_TIMESHEET\"]'::jsonb) OR workflow_kind = 'DAILY'::text AND work_date IS NOT NULL AND contract_week_id IS NULL AND week_ending_date IS NULL AND (target_timesheet_id IS NOT NULL AND anchor_timesheet_id = target_timesheet_id OR state = 'CANCELLED'::text AND target_timesheet_id IS NULL AND anchor_timesheet_id IS NULL AND issue_codes @> '[\"OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT\"]'::jsonb))"
         },
         {
           "name": "candidate_submission_workflows_immutable_submission_ck",

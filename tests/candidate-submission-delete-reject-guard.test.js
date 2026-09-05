@@ -6,6 +6,14 @@ const sql = readFileSync(new URL(
   '../supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql',
   import.meta.url
 ), 'utf8');
+const pendingExpenseDeleteSql = readFileSync(new URL(
+  '../supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
+  import.meta.url
+), 'utf8');
+const deletedWeeklyAuditShapeMigration = readFileSync(new URL(
+  '../supabase/migrations/05092026_2345_candidate_weekly_deleted_submission_audit_shape.sql',
+  import.meta.url
+), 'utf8');
 const verification = readFileSync(new URL(
   '../supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql',
   import.meta.url
@@ -65,6 +73,36 @@ test('preview, rejection and final delete use the same guarded workflow authorit
   assert.match(sql, /timesheet_delete_with_candidate_submission_guard_apply_v1[\s\S]*?timesheet_delete_with_pending_expense_apply_v1/i);
   assert.match(verification, /Delete refusal changed the Timesheet or pending expense/i);
   assert.match(verification, /Atomic rejection did not reject both workflows exactly/i);
+});
+
+test('final delete retains terminal Candidate history without retaining live Timesheet links', () => {
+  assert.match(sql, /_candidate_timesheet_delete_retire_workflows_v1/i);
+  assert.match(sql, /'CREATED','WORKER_DRAFT','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'/i);
+  assert.match(sql, /CANDIDATE_SUBMISSION_REJECTION_REQUIRED/i);
+  assert.match(sql, /set timesheet_id=null,[\s\S]*?'type','workflow','workflow_id',v_workflow\.id/i);
+  assert.match(sql, /contract_week_id=null,[\s\S]*?anchor_timesheet_id=null,[\s\S]*?target_timesheet_id=null/i);
+  assert.match(sql, /office_permanent_delete_tombstone/i);
+  assert.match(sql, /CANDIDATE_WORKFLOW_RETAINED_AFTER_TIMESHEET_DELETE/i);
+  assert.match(verification, /Rejected replacement did not complete one safe permanent delete/i);
+  assert.match(verification, /state='REJECTED'[\s\S]*?contract_week_id is null/i);
+  assert.match(verification, /event_type='OFFICE_REJECTED'[\s\S]*?deep_link_json->>'type'='workflow'/i);
+});
+
+test('the deleted-week audit shape is terminal-only and does not relax active weekly identity', () => {
+  assert.match(deletedWeeklyAuditShapeMigration, /workflow_kind in \('CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'\)/i);
+  assert.match(deletedWeeklyAuditShapeMigration, /contract_id is not null[\s\S]*?week_ending_date is not null/i);
+  assert.match(deletedWeeklyAuditShapeMigration, /contract_week_id is not null[\s\S]*?or \([\s\S]*?state in \('REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'\)/i);
+  assert.match(deletedWeeklyAuditShapeMigration, /contract_week_id is null[\s\S]*?target_timesheet_id is null[\s\S]*?anchor_timesheet_id is null/i);
+  assert.match(deletedWeeklyAuditShapeMigration, /OFFICE_PERMANENTLY_DELETED_TIMESHEET/i);
+  assert.match(deletedWeeklyAuditShapeMigration, /OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT/i);
+});
+
+test('direct pending-expense cancellation records the same safe deleted-week tombstone', () => {
+  assert.match(pendingExpenseDeleteSql, /contract_week_id=null,[\s\S]*?anchor_timesheet_id=null,[\s\S]*?target_timesheet_id=null/i);
+  assert.match(pendingExpenseDeleteSql, /office_permanent_delete_tombstone/i);
+  assert.match(pendingExpenseDeleteSql, /OFFICE_TIMESHEET_DELETED_EXPENSE_CANCELLED/i);
+  assert.match(pendingExpenseDeleteSql, /OFFICE_PERMANENTLY_DELETED_TIMESHEET/i);
+  assert.match(pendingExpenseDeleteSql, /candidate-expense-claim-cancelled-timesheet-delete-v1/i);
 });
 
 test('linked expense rejection emits its own accurate push-ready notification', () => {
