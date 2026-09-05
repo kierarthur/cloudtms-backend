@@ -397,6 +397,7 @@ components:
             applicable ELECTRONIC or QR route and durable Candidate workflow truth.
         workflow: {$ref: '#/components/schemas/WorkflowProjection'}
         manager_approval: {type: [object, 'null'], additionalProperties: true}
+        retained_manager_approval: {$ref: '#/components/schemas/RetainedManagerApproval'}
         paper_pack: {$ref: '#/components/schemas/PaperPack'}
         rejections: {type: array, items: {$ref: '#/components/schemas/RejectionHistory'}}
         available_actions: {type: array, items: {$ref: '#/components/schemas/TypedAction'}}
@@ -480,6 +481,24 @@ components:
         historical:
           type: boolean
           description: Terminal workflow history is returned for audit but never drives current status.
+    RetainedManagerApproval:
+      description: >-
+        Exact manager-approved submission lineage retained by the current
+        Timesheet when a different, later Candidate workflow is active. This
+        keeps approved hours separate from a pending expense-only claim.
+      type: [object, 'null']
+      additionalProperties: false
+      required: [workflow_id, workflow_generation, current_generation, workflow_kind, scope, route, state, method, approved_at_utc]
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        workflow_generation: {type: integer, minimum: 1}
+        current_generation: {type: integer, minimum: 1}
+        workflow_kind: {type: string, enum: [CONTRACT_HOURS, CONTRACT_EXPENSE, CONTRACT_COMBINED, DAILY]}
+        scope: {type: string, enum: [HOURS, EXPENSE, COMBINED]}
+        route: {type: string, enum: [ELECTRONIC, PHONE, EMAIL, PAPER]}
+        state: {type: string}
+        method: {type: string, enum: [PHONE, EMAIL]}
+        approved_at_utc: {type: string, format: date-time}
     RejectionHistory:
       type: object
       additionalProperties: true

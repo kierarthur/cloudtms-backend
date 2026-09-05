@@ -50,13 +50,21 @@ test('the retained official timesheet and signatures are projected as separate v
   assert.match(handler, /r2_nurse_key: nurseKey \|\| null[\s\S]*r2_auth_key: authoriserKey \|\| null/);
 });
 
-test('current official Candidate evidence is visible only after durable manager approval', () => {
+test('current electronic Candidate evidence requires its exact durable manager approval lineage', () => {
+  assert.match(handler, /'candidate_workflow_id'/);
+  assert.match(handler, /'candidate_workflow_generation'/);
   assert.match(handler, /'candidate_manager_approved_at_utc'/);
   assert.match(handler, /document_asset_id,document_role,candidate_component_id,source_revision/);
-  assert.match(handler, /const candidateManagerApprovalConfirmed = !!ts\?\.candidate_manager_approved_at_utc/);
-  assert.match(handler, /role === 'SIGNED_TIMESHEET'/);
+  assert.match(handler, /candidate_submission_components[\s\S]*select=id,workflow_id,workflow_generation,component_kind,state/);
+  assert.match(handler, /candidate_submission_workflows[\s\S]*select=id,generation,state,route,manager_approved_at_utc/);
+  assert.match(handler, /candidate_approval_requests[\s\S]*state=eq\.APPROVED[\s\S]*select=workflow_id,workflow_generation,state/);
+  assert.match(handler, /approvedCandidateWorkflowGenerations\.has\(`\$\{workflowId\}:\$\{generation\}`\)/);
+  assert.match(handler, /'CANCELLED', 'SUPERSEDED', 'REFUSED', 'REJECTED', 'EXPIRED'/);
+  assert.match(handler, /const candidateManagerApprovalConfirmed = candidateManagerApprovalConfirmedFor/);
   assert.match(handler, /label === 'OFFICIAL ELECTRONICALLY SIGNED TIMESHEET'/);
-  assert.match(handler, /candidateManagerApprovalConfirmed \|\| !isOfficialCandidateSignedTimesheetEvidence\(row\)/);
+  assert.match(handler, /String\(workflow\?\.route \|\| ''\)[\s\S]*!== 'PAPER'/);
+  assert.match(handler, /if \(!isElectronicCandidateSignedTimesheetEvidence\(row\)\) return true/);
+  assert.match(handler, /candidateManagerApprovalConfirmedFor\(component\?\.workflow_id, component\?\.workflow_generation\)/);
   assert.match(handler, /if \(candidateManagerApprovalConfirmed && hasSignatureArtefacts\)/);
 });
 

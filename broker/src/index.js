@@ -80307,6 +80307,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             'r2_auth_key',
             'auth_name',
             'auth_job_title',
+            'candidate_workflow_id',
+            'candidate_workflow_generation',
             'candidate_manager_approved_at_utc',
             'authorised_at_server',
 
@@ -80449,19 +80451,117 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       );
       return Array.isArray(rows) ? rows : [];
     };
-    const candidateManagerApprovalConfirmed = !!ts?.candidate_manager_approved_at_utc;
-    const isOfficialCandidateSignedTimesheetEvidence = (row) => {
+    const rawEvRows = await fetchTimesheetEvidenceRows();
+    const candidateComponentById = new Map();
+    const candidateWorkflowById = new Map();
+    const approvedCandidateWorkflowGenerations = new Set();
+    const candidateComponentIds = Array.from(new Set(
+      rawEvRows.map((row) => asUuidStringOrNull(row?.candidate_component_id)).filter(Boolean)
+    ));
+    const candidateWorkflowIds = new Set();
+    const timesheetCandidateWorkflowId = asUuidStringOrNull(ts?.candidate_workflow_id);
+    if (timesheetCandidateWorkflowId) candidateWorkflowIds.add(timesheetCandidateWorkflowId);
+
+    if (candidateComponentIds.length) {
+      try {
+        const { rows: componentRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/candidate_submission_components` +
+            `?id=in.(${candidateComponentIds.map(enc).join(',')})` +
+            `&select=id,workflow_id,workflow_generation,component_kind,state` +
+            `&limit=1000`
+        );
+        for (const component of (componentRows || [])) {
+          const componentId = asUuidStringOrNull(component?.id);
+          const workflowId = asUuidStringOrNull(component?.workflow_id);
+          if (componentId) candidateComponentById.set(componentId, component);
+          if (workflowId) candidateWorkflowIds.add(workflowId);
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] Candidate component approval lineage unavailable (fail closed)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    if (candidateWorkflowIds.size) {
+      const workflowIds = Array.from(candidateWorkflowIds);
+      try {
+        const [{ rows: workflowRows }, { rows: approvalRows }] = await Promise.all([
+          sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
+              `?id=in.(${workflowIds.map(enc).join(',')})` +
+              `&environment=eq.${enc(String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase())}` +
+              `&select=id,generation,state,route,manager_approved_at_utc` +
+              `&limit=1000`
+          ),
+          sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidate_approval_requests` +
+              `?workflow_id=in.(${workflowIds.map(enc).join(',')})` +
+              `&state=eq.APPROVED` +
+              `&select=workflow_id,workflow_generation,state` +
+              `&limit=1000`
+          )
+        ]);
+        for (const workflow of (workflowRows || [])) {
+          const workflowId = asUuidStringOrNull(workflow?.id);
+          if (workflowId) candidateWorkflowById.set(workflowId, workflow);
+        }
+        for (const approval of (approvalRows || [])) {
+          const workflowId = asUuidStringOrNull(approval?.workflow_id);
+          const generation = Number(approval?.workflow_generation);
+          if (workflowId && Number.isInteger(generation) && generation > 0) {
+            approvedCandidateWorkflowGenerations.add(`${workflowId}:${generation}`);
+          }
+        }
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] Candidate approval lineage unavailable (fail closed)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
+    const candidateManagerApprovalConfirmedFor = (workflowIdInput, generationInput) => {
+      const workflowId = asUuidStringOrNull(workflowIdInput);
+      const generation = Number(generationInput);
+      if (!workflowId || !Number.isInteger(generation) || generation < 1) return false;
+      const workflow = candidateWorkflowById.get(workflowId);
+      const state = String(workflow?.state || '').trim().toUpperCase();
+      if (!workflow?.manager_approved_at_utc || [
+        'CANCELLED', 'SUPERSEDED', 'REFUSED', 'REJECTED', 'EXPIRED'
+      ].includes(state)) return false;
+      return approvedCandidateWorkflowGenerations.has(`${workflowId}:${generation}`);
+    };
+    const candidateManagerApprovalConfirmed = candidateManagerApprovalConfirmedFor(
+      timesheetCandidateWorkflowId,
+      ts?.candidate_workflow_generation
+    );
+    const isElectronicCandidateSignedTimesheetEvidence = (row) => {
       const kind = String(row?.kind || '').trim().toUpperCase();
       const role = String(row?.document_role || '').trim().toUpperCase();
       const label = String(row?.display_name || '').trim().toUpperCase();
-      return kind === 'TIMESHEET' && (
-        role === 'SIGNED_TIMESHEET'
-        || label === 'OFFICIAL ELECTRONICALLY SIGNED TIMESHEET'
-      );
+      if (kind !== 'TIMESHEET') return false;
+      const componentId = asUuidStringOrNull(row?.candidate_component_id);
+      const component = componentId ? candidateComponentById.get(componentId) : null;
+      if (component && role === 'SIGNED_TIMESHEET') {
+        const workflowId = asUuidStringOrNull(component?.workflow_id);
+        const workflow = workflowId ? candidateWorkflowById.get(workflowId) : null;
+        return String(workflow?.route || '').trim().toUpperCase() !== 'PAPER';
+      }
+      return label === 'OFFICIAL ELECTRONICALLY SIGNED TIMESHEET';
     };
-    const evRows = (await fetchTimesheetEvidenceRows()).filter((row) => (
-      candidateManagerApprovalConfirmed || !isOfficialCandidateSignedTimesheetEvidence(row)
-    ));
+    const evRows = rawEvRows.filter((row) => {
+      if (!isElectronicCandidateSignedTimesheetEvidence(row)) return true;
+      const componentId = asUuidStringOrNull(row?.candidate_component_id);
+      const component = componentId ? candidateComponentById.get(componentId) : null;
+      return component
+        ? candidateManagerApprovalConfirmedFor(component?.workflow_id, component?.workflow_generation)
+        : candidateManagerApprovalConfirmed;
+    });
     const assetIds = Array.from(new Set(
       evRows.map(row => asUuidStringOrNull(row?.document_asset_id)).filter(Boolean)
     ));

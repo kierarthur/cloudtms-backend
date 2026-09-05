@@ -136,6 +136,23 @@ test('Office projection SQL preserves DAILY timesheet-only identity without weak
   assert.match(officeSql, /'additional_seq',v_week\.additional_seq/);
 });
 
+test('Office projection keeps accepted hours separate from a later active expense claim', async () => {
+  const [officeSql, openapi] = await Promise.all([
+    readFile(officeSqlUrl, 'utf8'),
+    readFile(openapiUrl, 'utf8')
+  ]);
+  assert.match(officeSql, /v_current\.candidate_workflow_id is distinct from v_workflow\.id/);
+  assert.match(officeSql, /retained_workflow\.manager_approved_at_utc is not null/);
+  assert.match(officeSql, /retained_workflow\.state not in \('CANCELLED','SUPERSEDED','REFUSED','REJECTED','EXPIRED'\)/);
+  assert.match(officeSql, /retained_approval\.workflow_generation=v_current\.candidate_workflow_generation/);
+  assert.match(officeSql, /retained_approval\.state='APPROVED'/);
+  assert.match(officeSql, /retained_approval\.approved_at_utc is not null/);
+  assert.match(officeSql, /'retained_manager_approval',case when v_retained_approval\.id is null then null else jsonb_build_object/);
+  assert.match(officeSql, /when v_retained_workflow\.workflow_kind='CONTRACT_EXPENSE' then 'EXPENSE'/);
+  assert.match(openapi, /retained_manager_approval:\s*\{\$ref: '#\/components\/schemas\/RetainedManagerApproval'\}/);
+  assert.match(openapi, /keeps approved hours separate from a pending expense-only claim/i);
+});
+
 test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {
   const [officeSql, openapi] = await Promise.all([
     readFile(officeSqlUrl, 'utf8'),

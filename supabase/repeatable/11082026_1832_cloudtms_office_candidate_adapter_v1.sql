@@ -379,6 +379,8 @@ declare
   v_fin public.timesheets_financials%rowtype;
   v_workflow public.candidate_submission_workflows%rowtype;
   v_approval public.candidate_approval_requests%rowtype;
+  v_retained_workflow public.candidate_submission_workflows%rowtype;
+  v_retained_approval public.candidate_approval_requests%rowtype;
   v_capabilities jsonb;
   v_signature text;
   v_manager_first_accepted timestamptz;
@@ -460,6 +462,40 @@ begin
     select ar.* into v_approval from public.candidate_approval_requests ar
     where ar.workflow_id=v_workflow.id and ar.workflow_generation=v_workflow.generation
     order by ar.request_generation desc,ar.updated_at_utc desc,ar.id desc limit 1;
+  end if;
+
+  -- The active workflow and the Timesheet's already-accepted workflow can be
+  -- different.  A common example is approved hours followed by a later
+  -- expense-only claim.  Preserve the exact accepted lineage as a separate,
+  -- read-only fact so Office does not either hide the hours approval or apply
+  -- it to the still-pending expense claim.
+  if v_current.candidate_workflow_id is not null
+     and v_current.candidate_workflow_generation is not null
+     and v_current.candidate_manager_approved_at_utc is not null
+     and v_current.candidate_workflow_id is distinct from v_workflow.id then
+    select retained_workflow.* into v_retained_workflow
+    from public.candidate_submission_workflows retained_workflow
+    where retained_workflow.id=v_current.candidate_workflow_id
+      and retained_workflow.environment=v_environment
+      and retained_workflow.manager_approved_at_utc is not null
+      and retained_workflow.state not in ('CANCELLED','SUPERSEDED','REFUSED','REJECTED','EXPIRED')
+      and (
+        retained_workflow.target_timesheet_id=v_current.timesheet_id
+        or retained_workflow.anchor_timesheet_id=v_current.timesheet_id
+        or retained_workflow.contract_week_id=v_week.id
+      )
+    limit 1;
+    if v_retained_workflow.id is not null then
+      select retained_approval.* into v_retained_approval
+      from public.candidate_approval_requests retained_approval
+      where retained_approval.workflow_id=v_retained_workflow.id
+        and retained_approval.workflow_generation=v_current.candidate_workflow_generation
+        and retained_approval.state='APPROVED'
+        and retained_approval.approved_at_utc is not null
+      order by retained_approval.request_generation desc,
+        retained_approval.updated_at_utc desc,retained_approval.id desc
+      limit 1;
+    end if;
   end if;
 
   if v_approval.id is not null and v_approval.method='EMAIL' then
@@ -795,6 +831,19 @@ begin
       'next_reminder_at_utc',case when v_manager_accepted is not null then v_manager_accepted+interval '24 hours' else null end,
       'reminder_eligible',v_reminder_eligible,'renewal_eligible',v_renewal_eligible,
       'cancel_eligible',v_cancel_eligible
+    ) end,
+    'retained_manager_approval',case when v_retained_approval.id is null then null else jsonb_build_object(
+      'workflow_id',v_retained_workflow.id,
+      'workflow_generation',v_retained_approval.workflow_generation,
+      'current_generation',v_retained_workflow.generation,
+      'workflow_kind',v_retained_workflow.workflow_kind,
+      'scope',case when v_retained_workflow.workflow_kind='CONTRACT_EXPENSE' then 'EXPENSE'
+        when v_retained_workflow.workflow_kind='CONTRACT_COMBINED' then 'COMBINED'
+        else 'HOURS' end,
+      'route',v_retained_workflow.route,
+      'state',v_retained_workflow.state,
+      'method',v_retained_approval.method,
+      'approved_at_utc',v_retained_approval.approved_at_utc
     ) end,
     'paper_pack',jsonb_build_object(
       'state',v_paper_state,'lifecycle_code',v_workflow.state,
