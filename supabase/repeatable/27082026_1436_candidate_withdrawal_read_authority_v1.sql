@@ -45,3 +45,9 @@
 -- transition bundle so changing any dependency in this closure can never
 -- restore the pre-history-anchor implementation on an UPGRADE database.
 \ir 04092026_1952_candidate_expense_history_anchor_recovery_v1.sql
+
+-- The effective-payment History reader is newer again and owns the current
+-- candidate_app_timesheet_detail_v1 definition.  Reapply it last so the older
+-- detail reader embedded in the compatibility chain cannot move paid
+-- Timesheets back to Current or disagree with the already-current page reader.
+\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1.sql
