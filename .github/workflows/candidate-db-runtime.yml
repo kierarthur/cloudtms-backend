@@ -48,6 +48,7 @@ on:
       - 'supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql'
       - 'tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql'
       - 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
+      - 'supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql'
       - 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql'
       - 'supabase/verification/02092026_1106_candidate_paper_cancel_lookup_indexes_verification.sql'
       - 'supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql'
@@ -215,6 +216,7 @@ jobs:
             supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql
             supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql
             supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql
+            supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql
             supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql
           )
           for file in "${install_files[@]}"; do apply_sql "$file"; done
