@@ -3,18 +3,25 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const source = fs.readFileSync(new URL(
-  '../supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
+  '../supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql',
   import.meta.url,
 ), 'utf8');
 const verification = fs.readFileSync(new URL(
   '../supabase/verification/02092026_1920_candidate_finalised_hours_primary_action_verification.sql',
   import.meta.url,
 ), 'utf8');
+const protectedVerification = fs.readFileSync(new URL(
+  '../supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql',
+  import.meta.url,
+), 'utf8');
 
-test('finalised submitted hours cannot fall through to Enter Timesheet', () => {
+test('finalised submitted hours cannot fall through or open expenses before Office protection', () => {
   assert.match(source, /v_has_finalised_hours[\s\S]*state'='FINALISED'[\s\S]*CONTRACT_HOURS'[\s\S]*CONTRACT_COMBINED'[\s\S]*DAILY'/i);
-  assert.match(source, /if v_has_finalised_hours then[\s\S]*can_edit_expenses'[\s\S]*'ADD_EXPENSES'[\s\S]*return null/i);
-  assert.match(verification, /AWAITING_MANUAL_SIGNATURE[\s\S]*CONTRACT_COMBINED[\s\S]*FINALISED[\s\S]*ADD_EXPENSES/i);
+  assert.match(source, /v_hours_office_protected[\s\S]*authorised_at_utc is not null[\s\S]*locked_by_invoice_id is not null[\s\S]*paid_at_utc is not null/i);
+  assert.match(source, /if v_hours_office_protected[\s\S]*can_edit_expenses'[\s\S]*'ADD_EXPENSES'[\s\S]*return null/i);
+  assert.match(verification, /AWAITING_MANUAL_SIGNATURE[\s\S]*CONTRACT_COMBINED[\s\S]*FINALISED[\s\S]*v_action is not null/i);
+  assert.match(protectedVerification, /PENDING_AUTH[\s\S]*v_action is not null[\s\S]*AUTHORISED[\s\S]*INVOICED_NOT_PAID[\s\S]*PAID/i);
+  assert.match(protectedVerification, /CONTRACT_HOURS[\s\S]*PENDING_AUTH[\s\S]*v_action is not null/i);
   assert.match(verification, /CONTRACT_EXPENSE[\s\S]*FINALISED[\s\S]*CONTINUE_EXPENSE_CLAIM/i);
   assert.doesNotMatch(source, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
