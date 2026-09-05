@@ -343,6 +343,109 @@ begin
 end;
 $function$;
 
+create or replace function private._candidate_workflow_cancel_authority_v1(
+  p_workflow_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_subject_timesheet_id uuid;
+  v_terminal boolean:=false;
+  v_paid boolean:=false;
+  v_authorised boolean:=false;
+  v_invoice_locked boolean:=false;
+  v_reason_code text;
+begin
+  select workflow_row.* into v_workflow
+  from public.candidate_submission_workflows workflow_row
+  where workflow_row.id=p_workflow_id;
+  if not found then
+    return jsonb_build_object(
+      'eligible',false,'reason_code','CANDIDATE_WORKFLOW_NOT_FOUND'
+    );
+  end if;
+
+  v_terminal:=v_workflow.state in ('CANCELLED','REJECTED','SUPERSEDED','EXPIRED');
+  v_subject_timesheet_id:=case
+    when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      then v_workflow.target_timesheet_id
+    else coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+  end;
+
+  if v_subject_timesheet_id is not null then
+    select
+      exists(
+        select 1 from public.timesheets_financials financial
+        where financial.timesheet_id=v_subject_timesheet_id
+          and financial.is_current=true
+          and financial.paid_at_utc is not null
+      ) or exists(
+        select 1 from public.timesheet_pay_state pay_state
+        where pay_state.timesheet_id=v_subject_timesheet_id
+          and (
+            upper(coalesce(pay_state.summary_pay_status_code,''))='PAID'
+            or pay_state.last_settled_at_utc is not null
+          )
+      ) or exists(
+        select 1 from public.timesheet_summary_pay_state_cache pay_cache
+        where pay_cache.timesheet_id=v_subject_timesheet_id
+          and coalesce(pay_cache.summary_state_applies,false)
+          and upper(coalesce(pay_cache.summary_pay_status_code,''))='PAID'
+      ),
+      exists(
+        select 1 from public.timesheets subject_timesheet
+        where subject_timesheet.timesheet_id=v_subject_timesheet_id
+          and subject_timesheet.authorised_at_server is not null
+      ) or exists(
+        select 1 from public.timesheets_financials financial
+        where financial.timesheet_id=v_subject_timesheet_id
+          and financial.is_current=true
+          and financial.authorised_at_utc is not null
+      ),
+      exists(
+        select 1 from public.timesheets subject_timesheet
+        where subject_timesheet.timesheet_id=v_subject_timesheet_id
+          and upper(coalesce(subject_timesheet.status::text,''))='INVOICED'
+      ) or exists(
+        select 1 from public.timesheets_financials financial
+        where financial.timesheet_id=v_subject_timesheet_id
+          and financial.is_current=true
+          and financial.locked_by_invoice_id is not null
+      ) or exists(
+        select 1 from public.invoice_lines invoice_line
+        where invoice_line.timesheet_id=v_subject_timesheet_id
+      )
+    into v_paid,v_authorised,v_invoice_locked;
+  end if;
+
+  v_reason_code:=case
+    when v_terminal then 'CANDIDATE_WORKFLOW_NOT_CANCELLABLE'
+    when v_workflow.state='FINALISED' and v_subject_timesheet_id is null
+      then 'CANDIDATE_WORKFLOW_TARGET_NOT_READY'
+    when v_paid then 'CANDIDATE_WORKFLOW_PAID'
+    when v_invoice_locked then 'CANDIDATE_WORKFLOW_INVOICE_LOCKED'
+    when v_authorised then 'CANDIDATE_WORKFLOW_OFFICE_AUTHORISED'
+    else null
+  end;
+
+  return jsonb_build_object(
+    'eligible',v_reason_code is null,
+    'reason_code',v_reason_code,
+    'workflow_kind',v_workflow.workflow_kind,
+    'workflow_state',v_workflow.state,
+    'subject_timesheet_id',v_subject_timesheet_id,
+    'paid',v_paid,
+    'authorised',v_authorised,
+    'invoice_locked',v_invoice_locked
+  );
+end;
+$function$;
+
 create or replace function public.candidate_workflow_cancel_atomic_v2(
   p_session_id uuid,
   p_environment text,
@@ -362,7 +465,37 @@ declare
   v_error_detail text;
   v_error_detail_json jsonb;
   v_prepare_result jsonb;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_subject_timesheet_id uuid;
+  v_cancel_authority jsonb;
 begin
+  select workflow_row.* into v_workflow
+  from public.candidate_submission_workflows workflow_row
+  where workflow_row.id=p_workflow_id
+    and workflow_row.environment=private._candidate_assert_environment(p_environment)
+  for update;
+  if found then
+    v_subject_timesheet_id:=case
+      when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then v_workflow.target_timesheet_id
+      else coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+    end;
+    if v_subject_timesheet_id is not null then
+      perform 1 from public.timesheets subject_timesheet
+      where subject_timesheet.timesheet_id=v_subject_timesheet_id
+      for update;
+      perform 1 from public.timesheets_financials financial
+      where financial.timesheet_id=v_subject_timesheet_id
+        and financial.is_current=true
+      for update;
+    end if;
+    v_cancel_authority:=private._candidate_workflow_cancel_authority_v1(v_workflow.id);
+    if not coalesce((v_cancel_authority->>'eligible')::boolean,false) then
+      raise exception 'CANDIDATE_WORKFLOW_NOT_CANCELLABLE'
+        using errcode='55000',detail=v_cancel_authority::text;
+    end if;
+  end if;
+
   begin
     return public.candidate_workflow_transition_atomic_v1(
       p_session_id,p_environment,p_workflow_id,'CANCEL',
@@ -419,6 +552,7 @@ $function$;
 alter function private._candidate_legacy_paper_orphan_prepare_v1(
   text,uuid,integer,timestamptz
 ) owner to postgres;
+alter function private._candidate_workflow_cancel_authority_v1(uuid) owner to postgres;
 alter function public.candidate_workflow_cancel_atomic_v2(
   uuid,text,uuid,integer,jsonb,text,timestamptz
 ) owner to postgres;
@@ -426,6 +560,8 @@ alter function public.candidate_workflow_cancel_atomic_v2(
 revoke all on function private._candidate_legacy_paper_orphan_prepare_v1(
   text,uuid,integer,timestamptz
 ) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_workflow_cancel_authority_v1(uuid)
+  from public,anon,authenticated,service_role;
 revoke all on function public.candidate_workflow_cancel_atomic_v2(
   uuid,text,uuid,integer,jsonb,text,timestamptz
 ) from public,anon,authenticated;

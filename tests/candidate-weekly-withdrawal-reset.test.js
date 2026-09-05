@@ -15,6 +15,8 @@ const officeReject = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql'), 'utf8');
 const candidateRead = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql'), 'utf8');
+const cancelAuthority = fs.readFileSync(path.join(root,
+  'supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql'), 'utf8');
 const routeCapabilities = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_0244_candidate_processed_action_projection_v1.sql'), 'utf8');
 const dailyVerification = fs.readFileSync(path.join(root,
@@ -25,6 +27,8 @@ const finalAuthority = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql'), 'utf8');
 const currentDetail = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql'), 'utf8');
+const cancelAuthorityVerification = fs.readFileSync(path.join(root,
+  'supabase/verification/05092026_0735_candidate_expense_cancel_authority_verification.sql'), 'utf8');
 
 test('withdrawal authority restores the final Timesheet-card expense projection', () => {
   assert.match(finalAuthority,
@@ -51,7 +55,22 @@ test('manager-approved finalised submissions remain withdrawable until Office pr
   assert.match(actionContract,
     /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'/i);
   assert.match(actionContract,
-    /p_candidate_status_code[\s\S]*not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
+    /_candidate_workflow_cancel_authority_v1\(v_workflow\.id\)[\s\S]*v_cancel_eligible:=coalesce/i);
+  assert.doesNotMatch(actionContract,
+    /p_candidate_status_code[\s\S]{0,300}not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
+});
+
+test('expense-only cancellation follows its own carrier protection rather than imported anchor status', () => {
+  assert.match(cancelAuthority,
+    /workflow_kind='CONTRACT_EXPENSE'[\s\S]*then v_workflow\.target_timesheet_id[\s\S]*else coalesce\(v_workflow\.target_timesheet_id,v_workflow\.anchor_timesheet_id\)/i);
+  assert.match(cancelAuthority,
+    /authorised_at_server is not null[\s\S]*authorised_at_utc is not null[\s\S]*locked_by_invoice_id is not null[\s\S]*invoice_lines/i);
+  assert.match(cancelAuthority,
+    /summary_pay_status_code[\s\S]*='PAID'[\s\S]*last_settled_at_utc is not null/i);
+  assert.match(cancelAuthority,
+    /candidate_workflow_cancel_atomic_v2[\s\S]*for update[\s\S]*_candidate_workflow_cancel_authority_v1[\s\S]*CANDIDATE_WORKFLOW_NOT_CANCELLABLE/i);
+  assert.match(cancelAuthorityVerification,
+    /begin;[\s\S]*CONTRACT_EXPENSE[\s\S]*DISCARD_EXPENSE_CLAIM[\s\S]*authorised_at_utc=now\(\)[\s\S]*CANDIDATE_WORKFLOW_NOT_CANCELLABLE[\s\S]*rollback;/i);
 });
 
 test('import-authoritative timesheets remain view-only and can never enter the withdrawal path', () => {

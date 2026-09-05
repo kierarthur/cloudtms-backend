@@ -615,6 +615,7 @@ declare
   v_disabled_reason text;
   v_action jsonb;
   v_cancel_code text;
+  v_cancel_authority jsonb;
   v_rejection jsonb;
   v_paper_pack jsonb;
 begin
@@ -674,9 +675,8 @@ begin
   end if;
 
   if v_workflow.id is not null then
-    v_cancel_eligible:=upper(coalesce(p_candidate_status_code,''))
-      not in ('PAID','AUTHORISED','INVOICED_NOT_PAID')
-      and v_workflow.state not in ('CANCELLED','REJECTED','SUPERSEDED','EXPIRED');
+    v_cancel_authority:=private._candidate_workflow_cancel_authority_v1(v_workflow.id);
+    v_cancel_eligible:=coalesce((v_cancel_authority->>'eligible')::boolean,false);
     v_cancel_code:=case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
       then 'DISCARD_EXPENSE_CLAIM' else 'CANCEL_ENTIRE_CLAIM_AND_START_AGAIN' end;
     if v_cancel_eligible then
