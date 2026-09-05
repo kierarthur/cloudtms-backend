@@ -34,6 +34,20 @@ test('Candidate Submission sort stays server-bounded and exposes the exact displ
   assert.match(source, /candidate_office_summary_status_label = candidateOfficeSummaryStatusLabel/);
 });
 
+test('Timesheet Route sort uses the final display label without projecting every scanned row', () => {
+  const timesheetHandler = source.slice(
+    source.indexOf('async function handleTimesheetsSummary'),
+    source.indexOf('async function scheduleBankingPayOperationDrain')
+  );
+  assert.match(timesheetHandler, /const routeDisplaySort = orderByParam === 'route_type' \|\| orderByParam === 'route_display'/);
+  assert.match(timesheetHandler, /candidateSubmissionSort \|\| routeDisplaySort/);
+  assert.match(timesheetHandler, /const compareRows = routeDisplaySort[\s\S]*createTimesheetRouteComparator\(orderDir\)/);
+  assert.match(timesheetHandler, /if \(keptRows\.length > keepCount\) keptRows\.length = keepCount/);
+  assert.match(timesheetHandler, /const selectedRows = keptRows\.slice\(effOffset, effOffset \+ effLimit\)/);
+  assert.match(timesheetHandler, /routeDisplaySort && includeCandidateProjection[\s\S]*attachCandidateOfficeSummaryProjections\(env, user\.id, selectedRows\)/);
+  assert.match(source, /sectionKey === 'timesheets' && \(sortKey === 'route_type' \|\| sortKey === 'route_display'\)[\s\S]*\? 'route_display'/);
+});
+
 test('Outbox membership is count-only until full selection membership is requested', () => {
   assert.match(source, /if \(!explicitFullMembership\) \{/);
   assert.match(source, /limit: 1,[\s\S]*membership_deferred: true/);

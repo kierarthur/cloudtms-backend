@@ -51,6 +51,10 @@ import {
   classifyExpenseTimesheetPresentation,
   isExplicitOfficeCreatedExpenseRecord
 } from './timesheet-expense-presentation.js';
+import {
+  createTimesheetRouteComparator,
+  displayedTimesheetRouteLabel
+} from './timesheet-route-sort.js';
 import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
 import { createCandidateDailySpecialist } from './candidate-daily-specialist.js';
 import {
@@ -86683,6 +86687,7 @@ async function handleTimesheetsSummary(env, req) {
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
   const candidateSubmissionSort = orderByParam === 'candidate_submission';
+  const routeDisplaySort = orderByParam === 'route_type' || orderByParam === 'route_display';
 
   const allowedSort = {
     week_ending_date:          'week_ending_date',
@@ -86692,6 +86697,7 @@ async function handleTimesheetsSummary(env, req) {
     processing_status:         'processing_status_display',
     processing_status_display: 'processing_status_display',
     route_type:                'route_type',
+    route_display:             'route_display',
     sheet_scope:               'sheet_scope',
     total_pay_ex_vat:          'total_pay_ex_vat',
     total_charge_ex_vat:       'total_charge_ex_vat',
@@ -87041,7 +87047,7 @@ async function handleTimesheetsSummary(env, req) {
     const candidateSummaryCursor = includeCandidateProjection
       ? await readCandidateTimesheetSummaryCursor(env)
       : null;
-    if (candidateSubmissionSort) {
+    if (candidateSubmissionSort || routeDisplaySort) {
       const collator = new Intl.Collator('en-GB', { sensitivity: 'base', numeric: true });
       const descending = orderDir === 'desc';
       const scanPageSize = 200;
@@ -87052,7 +87058,7 @@ async function handleTimesheetsSummary(env, req) {
       let knownTotal = null;
       let payBatchTotals = null;
 
-      const compareRows = (left, right) => {
+      const compareCandidateSubmissionRows = (left, right) => {
         const leftLabel = String(left?.candidate_office_summary_status_label || '');
         const rightLabel = String(right?.candidate_office_summary_status_label || '');
         if (!leftLabel && rightLabel) return 1;
@@ -87061,8 +87067,11 @@ async function handleTimesheetsSummary(env, req) {
         if (labelCompared) return descending ? -labelCompared : labelCompared;
         const candidateCompared = collator.compare(String(left?.candidate_name || ''), String(right?.candidate_name || ''));
         if (candidateCompared) return candidateCompared;
-        return Number(left?.__candidate_submission_stable_ordinal || 0) - Number(right?.__candidate_submission_stable_ordinal || 0);
+        return Number(left?.__timesheet_display_sort_ordinal || 0) - Number(right?.__timesheet_display_sort_ordinal || 0);
       };
+      const compareRows = routeDisplaySort
+        ? createTimesheetRouteComparator(orderDir)
+        : compareCandidateSubmissionRows;
 
       while (knownTotal == null || scanOffset < knownTotal) {
         let rawRows = [];
@@ -87099,23 +87108,25 @@ async function handleTimesheetsSummary(env, req) {
 
         const normalizedRows = normalizeSummaryRows(rawRows);
         const presentedRows = await attachCandidateDailyOfficePresentation(env, normalizedRows);
-        const projectedRows = attachTimesheetExpensePresentation(
-          await attachCandidateOfficeSummaryProjections(env, user.id, presentedRows)
+        const displayRows = attachTimesheetExpensePresentation(
+          candidateSubmissionSort
+            ? await attachCandidateOfficeSummaryProjections(env, user.id, presentedRows)
+            : presentedRows
         );
 
-        for (const row of projectedRows) {
-          if (
+        for (const row of displayRows) {
+          if (candidateSubmissionSort && (
             candidateOfficeApplicability(row) !== false
             && String(row?.timesheet_id || '').trim()
             && !row?.candidate_office_projection
-          ) {
+          )) {
             throw new Error(row?.candidate_office_projection_error?.code || 'CANDIDATE_OFFICE_PROJECTION_FAILED');
           }
-          row.__candidate_submission_stable_ordinal = stableOrdinal;
+          row.__timesheet_display_sort_ordinal = stableOrdinal;
           stableOrdinal += 1;
         }
 
-        keptRows.push(...projectedRows);
+        keptRows.push(...displayRows);
         keptRows.sort(compareRows);
         if (keptRows.length > keepCount) keptRows.length = keepCount;
 
@@ -87149,9 +87160,13 @@ async function handleTimesheetsSummary(env, req) {
         if (includeTotals) totals = totalRow || { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
       }
 
-      const outRows = keptRows.slice(effOffset, effOffset + effLimit).map((row) => {
+      const selectedRows = keptRows.slice(effOffset, effOffset + effLimit);
+      const responseRows = routeDisplaySort && includeCandidateProjection
+        ? await attachCandidateOfficeSummaryProjections(env, user.id, selectedRows)
+        : selectedRows;
+      const outRows = responseRows.map((row) => {
         const clean = { ...row };
-        delete clean.__candidate_submission_stable_ordinal;
+        delete clean.__timesheet_display_sort_ordinal;
         return clean;
       });
 
@@ -128588,10 +128603,14 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       }));
     }
 
+    const lookupSortKey = sectionKey === 'timesheets' && (sortKey === 'route_type' || sortKey === 'route_display')
+      ? 'route_display'
+      : sortKey;
+
     const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
       p_section: sectionKey,
       p_filters: normalizedFilters,
-      p_sort_key: sortKey,
+      p_sort_key: lookupSortKey,
       p_sort_dir: sortDir,
       p_prefix: prefix,
       p_page_size: (pageSize === 'ALL') ? null : Number(pageSize)
@@ -197568,6 +197587,10 @@ export const candidateOfficeSummaryInternals = Object.freeze({
   attachCandidateOfficeSummaryProjections,
   reconcileCandidateOwnedProcessingStatus,
   candidateTimesheetSummaryCompactPatch
+});
+export const timesheetRouteSortInternals = Object.freeze({
+  createTimesheetRouteComparator,
+  displayedTimesheetRouteLabel
 });
 export const candidateWeeklyScheduleInternals = Object.freeze({
   candidateScheduleLocalTimeAliases
