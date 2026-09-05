@@ -20910,6 +20910,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "outbox_unified_list_v2(p_status text, p_channel text, p_search text, p_queue_state text, p_operation_type text, p_entity_id uuid, p_requires_user_action boolean, p_limit integer, p_offset integer, p_sort_by text, p_sort_dir text, p_snapshot_at_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "a68a7266205ee9e72d94776a4ba743da5dbf889d08604ec6937257ce82cfe788"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public"
       ],
       "schema": "public",
