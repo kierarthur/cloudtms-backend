@@ -19,3 +19,14 @@ test('Related Timesheet series uses the supported server-owned Summary reader', 
   assert.match(reader, /ids: chunk/);
   assert.match(reader, /limit: chunk\.length/);
 });
+
+test('Related Timesheet routes expose an expired-session 401 to the browser', () => {
+  for (const marker of ['async function handleRelatedList', 'async function handleRelatedCounts']) {
+    const start = worker.indexOf(marker);
+    const end = worker.indexOf('\n\n', start);
+    assert.notEqual(start, -1);
+    assert.notEqual(end, -1);
+    const opening = worker.slice(start, end);
+    assert.match(opening, /if \(!user\) return withCORS\(env, req, unauthorized\(\)\);/);
+  }
+});

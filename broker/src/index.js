@@ -159471,7 +159471,9 @@ async function fetchUnifiedDefaultWindow(env, { client_id, role, band, date }) {
 
 async function handleRelatedList(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  // The browser must be able to observe an expired-session 401 so authFetch can
+  // refresh once and replay this otherwise read-only request.
+  if (!user) return withCORS(env, req, unauthorized());
 
   const url = new URL(req.url);
   const type = (matchPath(url.pathname, '/api/related/:entity/:id/:type') || {}).type;
@@ -160565,7 +160567,9 @@ async function handleRelatedList(env, req, entity, id) {
 // UPDATED: handleRelatedCounts — now uses related_counts_v2 RPC for UUID-like ids (segment-safe) and falls back to legacy for remittance/non-UUID ids
 async function handleRelatedCounts(env, req, entity, id) {
   const user = await requireUser(env, req, ['admin']);
-  if (!user) return unauthorized();
+  // Keep the counts route aligned with the related-list route: a missing or
+  // expired session is a visible 401, never an opaque browser network failure.
+  if (!user) return withCORS(env, req, unauthorized());
 
   const enc = encodeURIComponent;
   const countOrLen = (res) => (typeof res.count === 'number' ? res.count : (res.rows?.length || 0));
