@@ -170,7 +170,8 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
     '30082026_0125_candidate_submitted_weekly_card_linkage.sql',
     '30082026_1903_candidate_expense_carrier_anchor_route_v1.sql',
     '31082026_0557_candidate_empty_expense_carrier_action_v1.sql',
-    '02092026_1918_candidate_finalised_hours_primary_action_v1.sql'
+    '02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
+    '04092026_1952_candidate_expense_history_anchor_recovery_v1.sql'
   ]) {
     assert.ok(finalAuthority.includes(`\\ir ${currentAuthority}`),
       `Final authority must replay ${currentAuthority}`);
@@ -178,6 +179,9 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
   assert.match(finalAuthority,
     /\\ir 31082026_0557_candidate_empty_expense_carrier_action_v1\.sql[\s\S]*\\ir 02092026_1918_candidate_finalised_hours_primary_action_v1\.sql/i,
     'The current submitted-hours primary action must remain the final helper owner during UPGRADE replay');
+  assert.match(finalAuthority,
+    /\\ir 02092026_1918_candidate_finalised_hours_primary_action_v1\.sql[\s\S]*\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql/i,
+    'The current expense-history transition must remain the final workflow owner during UPGRADE replay');
   assert.match(dailyVerification,
     /search_path=""[\s\S]*draft_week\.id[\s\S]*final_signed_document_ready/i);
 });

@@ -39,3 +39,9 @@
 -- of the primary action helper.  Keep it last so replaying this dependency
 -- closure during an UPGRADE cannot restore the older 31 August definition.
 \ir 02092026_1918_candidate_finalised_hours_primary_action_v1.sql
+
+-- The 4 September expense-history authority is the current complete owner of
+-- candidate_workflow_transition_atomic_v1.  Keep it after every older
+-- transition bundle so changing any dependency in this closure can never
+-- restore the pre-history-anchor implementation on an UPGRADE database.
+\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1.sql
