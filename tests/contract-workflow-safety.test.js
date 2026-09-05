@@ -103,3 +103,30 @@ test('override-off clears nullable governed values and override-on seeds the com
   ]) assert.match(sql, new RegExp(`cs\\.${clientField}`), `ON must seed ${clientField}`);
   assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)/i);
 });
+
+test('final closure restores the exact current definitions after every legacy extras replay', async () => {
+  const relativeOwner = 'supabase/repeatable/05092026_1712_legacy_extras_current_authority_repair_v1.sql';
+  const sql = await readFile(new URL(`../${relativeOwner}`, import.meta.url), 'utf8');
+  const expectedIncludes = [
+    '\\ir 19012026_extras.sql',
+    '\\ir 19072026_1722_audit_events_list.sql',
+    '\\ir 27082026_1946_contract_override_inheritance_v2.sql',
+  ];
+  let previousIndex = -1;
+  for (const include of expectedIncludes) {
+    const index = sql.indexOf(include);
+    assert.ok(index > previousIndex, `missing or misordered current authority: ${include}`);
+    previousIndex = index;
+    assert.equal(sql.split(include).length - 1, 1, `duplicate current authority: ${include}`);
+  }
+  assert.doesNotMatch(sql, /create\s+(?:or\s+replace\s+)?function/i);
+
+  const { closureFor } = await import('../scripts/cloudtms-db-release-lib.mjs');
+  const closure = closureFor(relativeOwner);
+  assert.deepEqual(closure.paths, [
+    relativeOwner,
+    'supabase/repeatable/19012026_extras.sql',
+    'supabase/repeatable/19072026_1722_audit_events_list.sql',
+    'supabase/repeatable/27082026_1946_contract_override_inheritance_v2.sql',
+  ]);
+});
