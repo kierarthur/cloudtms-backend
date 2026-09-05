@@ -139,12 +139,13 @@ begin
   -- SECURITY DEFINER RPCs. The row-backed Draft V8 consumer then adds thirteen
   -- exact service-only RPCs. The later Candidate and expense-carrier releases
   -- remain additive. The pending-expense Timesheet deletion boundary adds its
-  -- service-only preview and confirmed-apply RPCs. The owner-internal reference
-  -- issuer and established shared-session opener remain withheld, so browser
-  -- execution stays zero.
+  -- service-only preview and confirmed-apply RPCs. The unified Outbox projection
+  -- adds one service-only RPC for complete cross-source sorting and membership.
+  -- The owner-internal reference issuer and established shared-session opener
+  -- remain withheld, so browser execution stays zero.
   -- The combined hash is sealed from the clean dual-engine candidate below.
-  if v_count<>689 or v_service_missing<>74 or v_browser_executable<>0
-     or v_hash<>'90f0a040daf55d8afb1fb61d4776cef0' then
+  if v_count<>690 or v_service_missing<>74 or v_browser_executable<>0
+     or v_hash<>'eb2e346231dc5e0fc6be4d1a4cf2546b' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;
