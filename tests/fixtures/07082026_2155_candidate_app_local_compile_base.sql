@@ -515,6 +515,42 @@ create table public.timesheets_financials (
   external_source_rows_json jsonb
 );
 
+-- Candidate current/history projection reads the authoritative settlement
+-- markers, but the compact compile fixture deliberately omits the wider
+-- Banking schema.  Keep the two read-owned tables structurally faithful so
+-- Candidate runtime tests cover paid/history precedence without installing
+-- the payment mutation system.
+create table public.timesheet_pay_state (
+  timesheet_id uuid primary key references public.timesheets(timesheet_id),
+  last_settled_snapshot_json jsonb not null,
+  last_settled_signature text not null,
+  last_settled_pay_batch_id uuid,
+  last_settled_at_utc timestamptz,
+  summary_pay_status_code text,
+  summary_pay_icon_code text,
+  summary_pay_paid_at_utc timestamptz,
+  summary_net_delta_ex_vat numeric(12,2)
+);
+
+create table public.timesheet_summary_pay_state_cache (
+  timesheet_id uuid primary key references public.timesheets(timesheet_id),
+  paid_to_date_ex_vat numeric not null default 0,
+  last_paid_at_utc timestamptz,
+  reserved_ex_vat numeric not null default 0,
+  outstanding_ex_vat numeric not null default 0,
+  net_delta_ex_vat numeric not null default 0,
+  active_advance boolean not null default false,
+  active_processing boolean not null default false,
+  summary_state_applies boolean not null default false,
+  advance_override_created_at_utc timestamptz,
+  advance_authorisation_consumed_at_utc timestamptz,
+  summary_pay_status_code text not null default 'UNPAID',
+  summary_pay_icon_code text not null default 'NONE',
+  summary_badge_codes text[] not null default array[]::text[],
+  refreshed_at_utc timestamptz not null default now(),
+  refreshed_by_user_id uuid
+);
+
 create table public.nhsp_shifts (
   id uuid primary key default gen_random_uuid(),
   timesheet_id uuid references public.timesheets(timesheet_id)
