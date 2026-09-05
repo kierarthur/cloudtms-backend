@@ -130,7 +130,8 @@ test('Office broker previews the Daily adapter first and falls back for every ot
   assert.match(broker, /TIMESHEET_DELETE_PREVIEW_DAILY_RECEIPT/);
   assert.match(broker, /TIMESHEET_DELETE_PREVIEW_STANDARD/);
   assert.match(broker, /if \(!preview \|\| preview\.applicable !== true\)/);
-  assert.match(broker, /TIMESHEET_DAILY_ABANDONED_RECEIPT_DELETE_APPLY/);
+  assert.match(broker, /TIMESHEET_DELETE_WITH_PENDING_EXPENSE_APPLY/);
+  assert.match(broker, /p_delete_kind: previewKind/);
   assert.match(broker, /\['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'\]\.includes\(previewKind\)/);
 });
 

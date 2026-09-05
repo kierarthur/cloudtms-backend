@@ -209,7 +209,8 @@ as $function$
     where p_timesheet_id is not null
       and (
         workflow_row.target_timesheet_id=p_timesheet_id
-        or workflow_row.anchor_timesheet_id=p_timesheet_id
+        or (workflow_row.workflow_kind<>'CONTRACT_EXPENSE'
+          and workflow_row.anchor_timesheet_id=p_timesheet_id)
       )
       and workflow_row.state not in ('CREATED','CANCELLED','EXPIRED','SUPERSEDED')
       and workflow_row.issue_codes ? 'DUPLICATE_EXPENSE_REVIEW'
@@ -509,7 +510,7 @@ begin
     and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
       'COMPONENT_PREPARE','COMPONENT_COMPLETE'))
   or (v_is_office_service_action
-    and v_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
+    and v_action in ('CANCEL','REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
       'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
       'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM',

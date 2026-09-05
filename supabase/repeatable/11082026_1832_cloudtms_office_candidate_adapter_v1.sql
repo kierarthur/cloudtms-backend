@@ -171,7 +171,11 @@ begin
   from public.candidate_submission_workflows w
   where w.environment=v_environment and (
     (w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
-      and (w.target_timesheet_id=v_timesheet.timesheet_id or w.anchor_timesheet_id=v_timesheet.timesheet_id))
+      and (
+        w.target_timesheet_id=v_timesheet.timesheet_id
+        or (w.workflow_kind<>'CONTRACT_EXPENSE'
+          and w.anchor_timesheet_id=v_timesheet.timesheet_id)
+      ))
     or (w.state='FINALISED' and w.target_timesheet_id=v_timesheet.timesheet_id)
   );
   v_permitted:=coalesce((v_capabilities->>'can_reject_candidate_submission')::boolean,false)
@@ -453,8 +457,10 @@ begin
   from public.candidate_submission_workflows w
   where w.environment=v_environment and (
     w.target_timesheet_id=v_current.timesheet_id
-    or w.anchor_timesheet_id=v_current.timesheet_id
-    or w.contract_week_id=v_week.id
+    or (w.workflow_kind<>'CONTRACT_EXPENSE' and (
+      w.anchor_timesheet_id=v_current.timesheet_id
+      or w.contract_week_id=v_week.id
+    ))
   )
   order by (w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')) desc,
     w.updated_at_utc desc,w.id desc limit 1;
@@ -597,8 +603,13 @@ begin
     limit 1
   ) replacement on true
   where w.environment=v_environment and w.state in ('REFUSED','REJECTED')
-    and (w.contract_week_id=v_week.id or w.target_timesheet_id=v_current.timesheet_id
-      or w.anchor_timesheet_id=v_current.timesheet_id);
+    and (
+      w.target_timesheet_id=v_current.timesheet_id
+      or (w.workflow_kind<>'CONTRACT_EXPENSE' and (
+        w.contract_week_id=v_week.id
+        or w.anchor_timesheet_id=v_current.timesheet_id
+      ))
+    );
   select exists(
     select 1 from jsonb_array_elements(v_rejections) rejection
     where rejection->>'state'='REJECTED'

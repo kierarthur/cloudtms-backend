@@ -485,7 +485,9 @@ components:
       description: >-
         Exact manager-approved submission lineage retained by the current
         Timesheet when a different, later Candidate workflow is active. This
-        keeps approved hours separate from a pending expense-only claim.
+        preserves separate accepted lineage only when another workflow legitimately
+        owns the same materialised Timesheet. An unfinished standalone expense claim
+        has no Timesheet yet and is not projected onto the worked Timesheet row.
       type: [object, 'null']
       additionalProperties: false
       required: [workflow_id, workflow_generation, current_generation, workflow_kind, scope, route, state, method, approved_at_utc]

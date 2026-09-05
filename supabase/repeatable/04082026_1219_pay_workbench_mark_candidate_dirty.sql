@@ -129,7 +129,11 @@ BEGIN
     ELSIF NULLIF(v_old_row->>'candidate_id','')~*v_uuid_re THEN
       v_delete_owner_candidate_id:=(v_old_row->>'candidate_id')::uuid;
     ELSIF NULLIF(COALESCE(v_old_row->>'timesheet_id',v_old_row->>'linked_timesheet_id'),'')~*v_uuid_re THEN
-      SELECT COALESCE(financial.candidate_id,contract_row.candidate_id)
+      SELECT COALESCE(
+        financial.candidate_id,
+        contract_row.candidate_id,
+        deleted_timesheet_contract.candidate_id
+      )
       INTO v_delete_owner_candidate_id
       FROM (SELECT COALESCE(NULLIF(v_old_row->>'timesheet_id','')::uuid,
              NULLIF(v_old_row->>'linked_timesheet_id','')::uuid) AS timesheet_id) owner_key
@@ -137,6 +141,8 @@ BEGIN
         ON financial.timesheet_id=owner_key.timesheet_id AND financial.is_current
       LEFT JOIN public.timesheets timesheet_row ON timesheet_row.timesheet_id=owner_key.timesheet_id
       LEFT JOIN public.contracts contract_row ON contract_row.id=timesheet_row.contract_id
+      LEFT JOIN public.contracts deleted_timesheet_contract
+        ON deleted_timesheet_contract.id=NULLIF(v_old_row->>'contract_id','')::uuid
       LIMIT 1;
     ELSIF NULLIF(v_old_row->>'contract_id','')~*v_uuid_re THEN
       SELECT contract_row.candidate_id INTO v_delete_owner_candidate_id

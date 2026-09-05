@@ -198,6 +198,7 @@
     "supabase/verification/05092026_1331_banking_pay_bank_event_movement_classification_verification.sql",
     "supabase/verification/05092026_1415_banking_pay_no_money_unwind_result_arity_verification.sql",
     "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
-    "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql"
+    "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
+    "supabase/verification/05092026_1530_pending_expense_timesheet_delete_verification.sql"
   ]
 }

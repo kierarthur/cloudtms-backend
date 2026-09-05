@@ -4127,7 +4127,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6d3254c47531d330cd790f318a498572c5a9dd22c6459d04f9465ee75814097a"
+      "definition_sha256": "9b2be942cab3305fa8086662056348e7a9aaff61cc332b9c9a1737bfe74a5d83"
     },
     {
       "acl": [
@@ -4165,7 +4165,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3e85488ee8940556a36814130bf39a970a7189de573fe8374f406fba7fb8b0b4"
+      "definition_sha256": "8df682c91264a55b9a44f71015c2fc45297427444c926aacc79b71bb87feecb8"
     },
     {
       "acl": [
@@ -4203,7 +4203,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c70f2bca3911be422004bf735f04988fdcde5e71899d2c5f90045b40cca01769"
+      "definition_sha256": "a15e48d0eae8b59ae9eb66e847d156edd6acdfab91c096c4586e2f46c4e021fe"
     },
     {
       "acl": [
@@ -6670,7 +6670,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e5390162bf80cf5764ddfa9158e51d1ec9f8513b166ec0cb352ae96403fc4d34"
+      "definition_sha256": "8a5f9fc39ab9f1e08c1d3f12b926e78c5ab08fcb239b5b772da82d4a485038ad"
     },
     {
       "acl": [
@@ -6690,6 +6690,44 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "19b2ba77d0c536a0c2cefe247955bec13956ccb795800e0634292edb29ae879c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_expense_anchor_follow_current_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "bcc7f6a8e52238d28207b31ce37184084909468cce3b2c0c3e91ddc5bf425111"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_pending_expense_delete_context_v1(p_environment text, p_timesheet_ids uuid[], p_lock_workflows boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "15a0e284711191c6a5d694c58d8337b35e6525371dcc7a2b3e63878128c45034"
     },
     {
       "acl": [
@@ -16354,7 +16392,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "eae714d7eb5adba7dcd6f0eb40e2aca78a22950da75b8d65324e804cf3ddf73c"
+      "definition_sha256": "df0f9129e82a20d82d93384c1e0bbc036fd0ed8f10a6c5f0f6dd7b163ba2b8ba"
     },
     {
       "acl": [
@@ -25582,7 +25620,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a837cb8db96a68f1f1ee8394f392456db7f7cf92f3ebe59fc8faa0d19d501f74"
+      "definition_sha256": "62e25d7548b7c2488b76aa2d189bc07fc986364de5837f775bed3a3a364243e7"
     },
     {
       "acl": [
@@ -28671,6 +28709,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_delete_with_pending_expense_apply_v1(p_environment text, p_delete_kind text, p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_expected_timesheet_ids uuid[], p_expected_contract_week_ids uuid[], p_expected_nhsp_shift_ids uuid[], p_expected_preserved_source_timesheet_ids uuid[], p_expected_preserved_source_contract_week_ids uuid[], p_expected_pending_expense_context_sha256 text, p_delete_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "60dba205f9e85a794b4833326158179c3f0b47550b6b550a2c0330ef7610041c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public"
       ],
       "schema": "public",
@@ -28702,7 +28764,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "86e751ed19001d2899e9c5a3fbeb9f8ea3c3e0e0af2fbb3e063247b8bfde53d7"
+      "definition_sha256": "b39a28c35c21458a84a13456b2174d2dca2b54bef706d582855e2cc0cfd38c2a"
     },
     {
       "acl": [
@@ -29128,6 +29190,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "6df1ed2039a72b9367ec183d82e2edf72ee948b2107dc148f818c1841cae9568"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_pending_expense_delete_preview_v1(p_environment text, p_timesheet_ids uuid[])",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "05e732a3313be837f89588c9c82f9531057393c9200f40bb6a55393f05a844de"
     },
     {
       "acl": [
@@ -32863,6 +32949,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()"
+    },
+    {
+      "name": "timesheets_expense_anchor_follow_current_trg",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER timesheets_expense_anchor_follow_current_trg AFTER INSERT OR UPDATE OF is_current, archived_at_utc ON timesheets FOR EACH ROW WHEN (new.is_current = true AND new.archived_at_utc IS NULL) EXECUTE FUNCTION private._timesheet_expense_anchor_follow_current_v1()"
     },
     {
       "name": "trg_cc_timesheets",

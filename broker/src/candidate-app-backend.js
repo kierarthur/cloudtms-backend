@@ -7592,7 +7592,8 @@ const CANDIDATE_NOTIFICATION_COPY = Object.freeze({
   SUBMISSION_RECEIVED: 'Your submission has been received.',
   OFFICE_REJECTED: 'Your submission needs changes. Open it to review what to do next.',
   PAPER_PACK_READY: 'Your printed signing documents are ready.',
-  RESUBMISSION_REQUIRED: 'A timesheet needs to be submitted again.'
+  RESUBMISSION_REQUIRED: 'A timesheet needs to be submitted again.',
+  EXPENSE_CLAIM_CANCELLED: 'Your pending expense claim was cancelled because its Timesheet was deleted.'
 });
 
 function optionalUuid(value) {

@@ -106953,8 +106953,130 @@ async function handleContractsTruncateTailSafely(env, req, contractId) {
  * after the RPC response proves a committed PERMANENT_DELETE outcome.
  */
 
+async function loadTimesheetPendingExpenseDeleteContext(env, timesheetIds, routeClass, purpose) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sha256Re = /^[0-9a-f]{64}$/i;
+  const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
+  const ids = Array.from(new Set(
+    (Array.isArray(timesheetIds) ? timesheetIds : [])
+      .map((value) => String(value || '').trim())
+      .filter((value) => uuidRe.test(value))
+  )).sort();
+  if (!['TEST', 'LIVE'].includes(environment) || ids.length < 1 || ids.length > 64) {
+    throw new Error('PENDING_EXPENSE_DELETE_CONTEXT_INVALID');
+  }
+  let result = await sbRpc(env, 'timesheet_pending_expense_delete_preview_v1', {
+    p_environment: environment,
+    p_timesheet_ids: ids
+  }, {
+    routeClass,
+    purpose,
+    timeoutMs: 8000
+  });
+  if (Array.isArray(result)) result = result[0] || null;
+  if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'data')) {
+    result = Array.isArray(result.data) ? (result.data[0] || null) : result.data;
+  }
+  if (!result || typeof result !== 'object' || Array.isArray(result)
+      || result.ok !== true
+      || result.contract_version !== 'TIMESHEET_PENDING_EXPENSE_DELETE_CONTEXT_V1'
+      || !sha256Re.test(String(result.context_sha256 || ''))
+      || !Array.isArray(result.pending_expense_claims)
+      || !Array.isArray(result.blocking_claims)) {
+    throw new Error('PENDING_EXPENSE_DELETE_CONTEXT_INVALID');
+  }
+  const normaliseClaims = (claims, label) => claims.map((claim) => {
+    const workflowId = String(claim?.workflow_id || '').trim();
+    const generation = Number(claim?.generation);
+    const state = String(claim?.state || '').trim().toUpperCase();
+    if (!uuidRe.test(workflowId) || !Number.isInteger(generation) || generation < 1 || !state) {
+      throw new Error(`PENDING_EXPENSE_DELETE_${label}_INVALID`);
+    }
+    return {
+      workflow_id: workflowId,
+      generation,
+      state,
+      route: String(claim?.route || '').trim().toUpperCase() || null,
+      blocker_code: String(claim?.blocker_code || '').trim().toUpperCase() || null
+    };
+  });
+  const pendingClaims = normaliseClaims(result.pending_expense_claims, 'CLAIMS');
+  const blockingClaims = normaliseClaims(result.blocking_claims, 'BLOCKERS');
+  if (Number(result.pending_expense_claim_count) !== pendingClaims.length
+      || Number(result.blocking_claim_count) !== blockingClaims.length
+      || result.cancellation_required !== (pendingClaims.length > 0)
+      || result.delete_blocked !== (blockingClaims.length > 0)) {
+    throw new Error('PENDING_EXPENSE_DELETE_CONTEXT_INVALID');
+  }
+  return {
+    contract_version: result.contract_version,
+    context_sha256: String(result.context_sha256).toLowerCase(),
+    pending_expense_claim_count: pendingClaims.length,
+    pending_expense_claims: pendingClaims,
+    blocking_claim_count: blockingClaims.length,
+    blocking_claims: blockingClaims,
+    cancellation_required: pendingClaims.length > 0,
+    delete_blocked: blockingClaims.length > 0
+  };
+}
 
-async function handleTimesheetDelete(env, req, timesheetId) {
+async function loadCandidateManagerRouteTicketsForWorkflows(env, workflowIds) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const ids = Array.from(new Set(
+    (Array.isArray(workflowIds) ? workflowIds : [])
+      .map((value) => String(value || '').trim())
+      .filter((value) => uuidRe.test(value))
+  )).sort();
+  if (!ids.length) return [];
+  const response = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/candidate_manager_email_route_receipts`
+      + `?workflow_id=in.(${ids.map((value) => encodeURIComponent(value)).join(',')})`
+      + '&state=eq.CURRENT&select=workflow_id,manager_route_ticket_id,route_revision&limit=100',
+    { headers: sbHeaders(env) }
+  );
+  const text = await response.text();
+  if (!response.ok) throw new Error(`PENDING_EXPENSE_MANAGER_ROUTE_READ_FAILED:${response.status}`);
+  let rows;
+  try { rows = text ? JSON.parse(text) : []; } catch { rows = null; }
+  if (!Array.isArray(rows) || rows.length > 100) {
+    throw new Error('PENDING_EXPENSE_MANAGER_ROUTE_READ_INVALID');
+  }
+  return rows.map((row) => {
+    const workflowId = String(row?.workflow_id || '').trim();
+    const ticketId = String(row?.manager_route_ticket_id || '').trim();
+    const revision = Number(row?.route_revision);
+    if (!ids.includes(workflowId) || !uuidRe.test(ticketId)
+        || !Number.isSafeInteger(revision) || revision < 1) {
+      throw new Error('PENDING_EXPENSE_MANAGER_ROUTE_READ_INVALID');
+    }
+    return {
+      workflow_id: workflowId,
+      manager_route_ticket_id: ticketId,
+      route_revision: revision
+    };
+  });
+}
+
+function retireCandidateManagerRoutesAfterTimesheetDelete(env, routes, ctx) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  const retirement = Promise.allSettled(routes.map((route) => managerControlPlaneRpc(
+    env,
+    'control',
+    'manager_email_route_transition_v1',
+    {
+      p_transition: {
+        manager_route_ticket_id: route.manager_route_ticket_id,
+        expected_route_revision: route.route_revision,
+        target_state: 'RETIRED'
+      }
+    }
+  )));
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(retirement);
+  else retirement.catch(() => null);
+}
+
+
+async function handleTimesheetDelete(env, req, timesheetId, ctx) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -107097,6 +107219,10 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     'DELETE_RECLASSIFIED',
     'ARCHIVE_REQUIRED',
     'DELETE_BLOCKED',
+    'PENDING_EXPENSE_DELETE_CONTEXT_CHANGED',
+    'PENDING_EXPENSE_DELETE_BLOCKED',
+    'PENDING_EXPENSE_CANCELLATION_NOT_PROVEN',
+    'TIMESHEET_DELETE_AFTER_EXPENSE_CANCELLATION_NOT_PROVEN',
     'LOCK_TIMEOUT',
     'DEADLOCK_DETECTED'
   ];
@@ -107170,7 +107296,8 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     'delete_operation_id', 'operation_id', 'expected_delete_kind', 'expected_timesheet_id',
     'expected_row_signature', 'expected_timesheet_ids', 'expected_contract_week_ids',
     'expected_nhsp_shift_ids', 'expected_preserved_source_timesheet_ids',
-    'expected_preserved_source_contract_week_ids', 'reason'
+    'expected_preserved_source_contract_week_ids',
+    'expected_pending_expense_context_sha256', 'reason'
   ]);
   const unsupportedKeys = Object.keys(body).filter((key) => !allowedKeys.has(key));
   if (unsupportedKeys.length) {
@@ -107185,6 +107312,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   const expectedKind = firstText(body.expected_delete_kind).toUpperCase();
   const expectedTimesheetId = firstText(body.expected_timesheet_id);
   const expectedRowSignature = firstText(body.expected_row_signature);
+  const expectedPendingExpenseContextSha256 = firstText(
+    body.expected_pending_expense_context_sha256
+  ).toLowerCase();
   const reason = firstText(body.reason, 'USER_CONFIRMED_PERMANENT_DELETE');
 
   if (!uuidRe.test(operationId)) {
@@ -107198,6 +107328,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   }
   if (!expectedRowSignature) {
     return withCORS(env, req, badRequest('expected_row_signature is required'));
+  }
+  if (!/^[0-9a-f]{64}$/.test(expectedPendingExpenseContextSha256)) {
+    return withCORS(env, req, badRequest('expected_pending_expense_context_sha256 is required'));
   }
 
   let expectedTimesheetIds;
@@ -107355,6 +107488,13 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       throw new Error('DELETE_PREVIEW_STALE');
     }
 
+    const pendingExpenseContext = await loadTimesheetPendingExpenseDeleteContext(
+      env,
+      timesheetIds,
+      'OPERATION_NUDGE',
+      'TIMESHEET_DELETE_APPLY_REPREVIEW_PENDING_EXPENSE'
+    );
+
     return {
       ...preview,
       kind,
@@ -107365,6 +107505,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       nhsp_shift_ids: nhspShiftIds,
       preserved_source_timesheet_ids: preservedSourceTimesheetIds,
       preserved_source_contract_week_ids: preservedSourceContractWeekIds,
+      ...pendingExpenseContext,
       was_stale: resolved?.was_stale === true || currentTimesheetId !== requestedTimesheetId
     };
   };
@@ -107402,6 +107543,9 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   if (!sameIdSet(freshPreview.nhsp_shift_ids, expectedNhspShiftIds)) mismatchFields.push('expected_nhsp_shift_ids');
   if (!sameIdSet(freshPreview.preserved_source_timesheet_ids, expectedPreservedSourceTimesheetIds)) mismatchFields.push('expected_preserved_source_timesheet_ids');
   if (!sameIdSet(freshPreview.preserved_source_contract_week_ids, expectedPreservedSourceContractWeekIds)) mismatchFields.push('expected_preserved_source_contract_week_ids');
+  if (freshPreview.context_sha256 !== expectedPendingExpenseContextSha256) {
+    mismatchFields.push('expected_pending_expense_context_sha256');
+  }
 
   if (mismatchFields.length) {
     return jsonResponse(409, {
@@ -107425,6 +107569,18 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       current_timesheet_id: freshPreview.current_timesheet_id,
       current_delete_kind: previewKind,
       retention_reasons: Array.isArray(freshPreview.retention_reasons) ? freshPreview.retention_reasons : [],
+      refresh_required: true
+    });
+  }
+  if (freshPreview.delete_blocked === true) {
+    return jsonResponse(409, {
+      error: 'This Timesheet cannot be deleted while an approved expense claim is still being completed. Refresh and try again after the expense Timesheet appears.',
+      error_code: 'PENDING_EXPENSE_DELETE_BLOCKED',
+      delete_operation_id: operationId,
+      mutation_performed: false,
+      current_timesheet_id: freshPreview.current_timesheet_id,
+      current_delete_kind: previewKind,
+      blockers: freshPreview.blocking_claims,
       refresh_required: true
     });
   }
@@ -107455,6 +107611,8 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     expected_nhsp_shift_ids: expectedNhspShiftIds,
     expected_preserved_source_timesheet_ids: expectedPreservedSourceTimesheetIds,
     expected_preserved_source_contract_week_ids: expectedPreservedSourceContractWeekIds,
+    expected_pending_expense_context_sha256: expectedPendingExpenseContextSha256,
+    pending_expense_claims: freshPreview.pending_expense_claims,
     started_at_utc: operationStartedAtUtc
   };
   try {
@@ -107514,57 +107672,32 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   };
 
   let applyResult;
+  let managerRouteTickets = [];
   try {
-    if (previewKind === 'STANDARD_DELETE') {
-      applyResult = normaliseRpc(await sbRpc(env, 'timesheet_standard_delete_apply_v1', {
-        p_timesheet_id: freshPreview.current_timesheet_id,
-        p_actor_user_id: user.id,
-        p_expected_timesheet_id: expectedTimesheetId,
-        p_expected_row_signature: expectedRowSignature
-      }, {
-        routeClass: 'OPERATION_NUDGE',
-        purpose: 'TIMESHEET_STANDARD_DELETE_APPLY',
-        timeoutMs: 15000
-      }));
-    } else if (previewKind === 'DAILY_ABANDONED_RECEIPT_DELETE') {
-      applyResult = normaliseRpc(await sbRpc(env, 'timesheet_daily_abandoned_receipt_delete_apply_v1', {
-        p_timesheet_id: freshPreview.current_timesheet_id,
-        p_actor_user_id: user.id,
-        p_expected_timesheet_id: expectedTimesheetId,
-        p_expected_row_signature: expectedRowSignature
-      }, {
-        routeClass: 'OPERATION_NUDGE',
-        purpose: 'TIMESHEET_DAILY_ABANDONED_RECEIPT_DELETE_APPLY',
-        timeoutMs: 20000
-      }));
-    } else if (previewKind === 'WEEKLY_CHAIN_DELETE_PARENT') {
-      applyResult = normaliseRpc(await sbRpc(env, 'timesheet_weekly_chain_delete_apply', {
-        p_timesheet_id: freshPreview.current_timesheet_id,
-        p_actor_user_id: user.id,
-        p_expected_timesheet_ids: expectedTimesheetIds,
-        p_expected_contract_week_ids: expectedContractWeekIds,
-        p_expected_nhsp_shift_ids: expectedNhspShiftIds,
-        p_expected_row_signature: expectedRowSignature
-      }, {
-        routeClass: 'OPERATION_NUDGE',
-        purpose: 'TIMESHEET_WEEKLY_CHAIN_DELETE_APPLY',
-        timeoutMs: 20000
-      }));
-    } else {
-      applyResult = normaliseRpc(await sbRpc(env, 'timesheet_weekly_manual_adjustment_delete_apply', {
-        p_timesheet_id: freshPreview.current_timesheet_id,
-        p_actor_user_id: user.id,
-        p_expected_timesheet_ids: expectedTimesheetIds,
-        p_expected_contract_week_ids: expectedContractWeekIds,
-        p_expected_preserved_source_timesheet_ids: expectedPreservedSourceTimesheetIds,
-        p_expected_preserved_source_contract_week_ids: expectedPreservedSourceContractWeekIds,
-        p_expected_row_signature: expectedRowSignature
-      }, {
-        routeClass: 'OPERATION_NUDGE',
-        purpose: 'TIMESHEET_WEEKLY_MANUAL_ADJUSTMENT_DELETE_APPLY',
-        timeoutMs: 20000
-      }));
-    }
+    managerRouteTickets = await loadCandidateManagerRouteTicketsForWorkflows(
+      env,
+      freshPreview.pending_expense_claims.map((claim) => claim.workflow_id)
+    );
+    applyResult = normaliseRpc(await sbRpc(env, 'timesheet_delete_with_pending_expense_apply_v1', {
+      p_environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase(),
+      p_delete_kind: previewKind,
+      p_timesheet_id: freshPreview.current_timesheet_id,
+      p_actor_user_id: user.id,
+      p_expected_timesheet_id: expectedTimesheetId,
+      p_expected_row_signature: expectedRowSignature,
+      p_expected_timesheet_ids: expectedTimesheetIds,
+      p_expected_contract_week_ids: expectedContractWeekIds,
+      p_expected_nhsp_shift_ids: expectedNhspShiftIds,
+      p_expected_preserved_source_timesheet_ids: expectedPreservedSourceTimesheetIds,
+      p_expected_preserved_source_contract_week_ids: expectedPreservedSourceContractWeekIds,
+      p_expected_pending_expense_context_sha256: expectedPendingExpenseContextSha256,
+      p_delete_operation_id: operationId,
+      p_now_utc: operationStartedAtUtc
+    }, {
+      routeClass: 'OPERATION_NUDGE',
+      purpose: 'TIMESHEET_DELETE_WITH_PENDING_EXPENSE_APPLY',
+      timeoutMs: 20000
+    }));
   } catch (error) {
     const rpcCode = parseRpcCode(error);
     if (isOutcomeUncertain(error, rpcCode)) {
@@ -107668,6 +107801,8 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     });
   }
 
+  retireCandidateManagerRoutesAfterTimesheetDelete(env, managerRouteTickets, ctx);
+
   let deletedTimesheetIds;
   let deletedContractWeekIds;
   let returnedTimesheetIds = [];
@@ -107677,12 +107812,29 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   let returnedPreservedSourceContractWeekIds = [];
   let detachedContractWeekIds = [];
   let detachedNhspShiftIds = [];
+  let cancelledPendingExpenseClaims = [];
+  let candidateNotificationIds = [];
+  let bankingPayCandidateRefresh = null;
   let resultEvidenceValid = true;
   const resultMismatchFields = [];
 
   try {
     deletedTimesheetIds = parseCanonicalIdArray(applyResult.deleted_timesheet_ids, 'deleted_timesheet_ids', { maxCount: 64 });
     deletedContractWeekIds = parseCanonicalIdArray(applyResult.deleted_contract_week_ids, 'deleted_contract_week_ids', { maxCount: 64 });
+    cancelledPendingExpenseClaims = Array.isArray(applyResult.cancelled_pending_expense_claims)
+      ? applyResult.cancelled_pending_expense_claims.map((claim) => ({
+          workflow_id: firstText(claim?.workflow_id),
+          previous_generation: Number(claim?.previous_generation),
+          state: firstText(claim?.state).toUpperCase(),
+          notification_id: firstText(claim?.notification_id)
+        }))
+      : [];
+    candidateNotificationIds = parseCanonicalIdArray(
+      applyResult.candidate_notification_ids,
+      'candidate_notification_ids',
+      { maxCount: 20 }
+    );
+    bankingPayCandidateRefresh = applyResult.banking_pay_candidate_refresh;
 
     if (['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)) {
       returnedTimesheetIds = parseCanonicalIdArray(applyResult.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
@@ -107722,6 +107874,47 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   if (!sameIdSet(deletedTimesheetIds, expectedTimesheetIds)) {
     resultEvidenceValid = false;
     resultMismatchFields.push('deleted_timesheet_ids');
+  }
+
+  const expectedPendingWorkflowIds = freshPreview.pending_expense_claims
+    .map((claim) => claim.workflow_id)
+    .sort();
+  const returnedPendingWorkflowIds = cancelledPendingExpenseClaims
+    .map((claim) => claim.workflow_id)
+    .sort();
+  if (firstText(applyResult.pending_expense_context_sha256).toLowerCase() !== expectedPendingExpenseContextSha256) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('pending_expense_context_sha256');
+  }
+  if (!Number.isInteger(applyResult.cancelled_pending_expense_claim_count)
+      || applyResult.cancelled_pending_expense_claim_count !== expectedPendingWorkflowIds.length
+      || !sameIdSet(returnedPendingWorkflowIds, expectedPendingWorkflowIds)
+      || cancelledPendingExpenseClaims.some((claim) => (
+        claim.state !== 'CANCELLED'
+        || !uuidRe.test(claim.notification_id)
+        || !Number.isInteger(claim.previous_generation)
+        || claim.previous_generation < 1
+      ))) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('cancelled_pending_expense_claims');
+  }
+  if (candidateNotificationIds.length !== expectedPendingWorkflowIds.length
+      || !sameIdSet(
+        cancelledPendingExpenseClaims.map((claim) => claim.notification_id).sort(),
+        [...candidateNotificationIds].sort()
+      )) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('candidate_notification_ids');
+  }
+  if (!bankingPayCandidateRefresh
+      || typeof bankingPayCandidateRefresh !== 'object'
+      || Array.isArray(bankingPayCandidateRefresh)
+      || bankingPayCandidateRefresh.ok !== true
+      || firstText(bankingPayCandidateRefresh.scope_kind).toUpperCase() !== 'CANDIDATE'
+      || !uuidRe.test(firstText(bankingPayCandidateRefresh.candidate_id))
+      || Number(bankingPayCandidateRefresh.targeted_timesheet_count) !== 0) {
+    resultEvidenceValid = false;
+    resultMismatchFields.push('banking_pay_candidate_refresh');
   }
 
   if (['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)) {
@@ -107849,6 +108042,11 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     deleted_contract_week_ids: deletedContractWeekIds,
     detached_contract_week_ids: detachedContractWeekIds,
     detached_nhsp_shift_ids: detachedNhspShiftIds,
+    pending_expense_context_sha256: expectedPendingExpenseContextSha256,
+    cancelled_pending_expense_claim_count: expectedPendingWorkflowIds.length,
+    cancelled_pending_expense_workflow_ids: expectedPendingWorkflowIds,
+    candidate_notification_ids: candidateNotificationIds,
+    banking_pay_candidate_refresh_queued: true,
     r2_cleanup: r2Cleanup,
     reason
   }, reason);
@@ -107878,6 +108076,11 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     deleted_nhsp_shift_count: ['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)
       ? detachedNhspShiftIds.length
       : Number(applyResult.deleted_nhsp_shifts || 0),
+    pending_expense_context_sha256: expectedPendingExpenseContextSha256,
+    cancelled_pending_expense_claim_count: expectedPendingWorkflowIds.length,
+    cancelled_pending_expense_workflow_ids: expectedPendingWorkflowIds,
+    candidate_notification_ids: candidateNotificationIds,
+    banking_pay_candidate_refresh_queued: true,
     r2_cleanup: r2Cleanup,
     r2_cleanup_complete: r2Cleanup?.r2_cleanup_complete === true,
     r2_cleanup_deferred: Number(r2Cleanup?.deferred_key_count || 0) > 0,
@@ -195066,10 +195269,23 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       }
     }
 
-    const decision = String(preview.decision || 'BLOCKED').trim().toUpperCase();
+    const pendingExpenseContext = await loadTimesheetPendingExpenseDeleteContext(
+      env,
+      timesheetIds,
+      'PREVIEW_PROGRESS',
+      'TIMESHEET_DELETE_PREVIEW_PENDING_EXPENSE'
+    );
+    let decision = String(preview.decision || 'BLOCKED').trim().toUpperCase();
     const blockers = Array.isArray(preview.blockers)
       ? preview.blockers
       : (Array.isArray(preview.blocked_reasons) ? preview.blocked_reasons : []);
+    if (pendingExpenseContext.delete_blocked) {
+      decision = 'BLOCKED';
+      blockers.push({
+        code: 'PENDING_EXPENSE_DELETE_BLOCKED',
+        message: 'This Timesheet has an expense claim for which manager approval has already been recorded. Refresh and allow that approval to finish before deleting the Timesheet.'
+      });
+    }
 
     return withCORS(env, req, ok({
       ...preview,
@@ -195095,7 +195311,9 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       blocked_reasons: blockers,
       retention_reasons: Array.isArray(preview.retention_reasons) ? preview.retention_reasons : [],
       advance: preview.advance && typeof preview.advance === 'object' ? preview.advance : {},
-      delete_items: deleteItems
+      delete_items: deleteItems,
+      ...pendingExpenseContext,
+      expected_pending_expense_context_sha256: pendingExpenseContext.context_sha256
     }));
   } catch (error) {
     console.error('[TS][DELETE_PREVIEW] failed', {
@@ -199784,7 +200002,7 @@ if (req.method === 'POST' && p === '/auth/2fa/resend') {
       }
       {
         const m = matchPath(p, '/api/timesheets/:id');
-        if (m && req.method === 'DELETE') return handleTimesheetDelete(env, req, m.id);
+        if (m && req.method === 'DELETE') return handleTimesheetDelete(env, req, m.id, ctx);
       }
       {
         const m = matchPath(p, '/api/timesheets/:id/replace-manual-pdf');

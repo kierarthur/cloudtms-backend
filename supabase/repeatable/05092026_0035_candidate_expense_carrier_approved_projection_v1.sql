@@ -5,6 +5,52 @@
 
 \set ON_ERROR_STOP on
 
+-- A standalone expense claim starts against the current worked Timesheet but
+-- does not become a Timesheet itself until finalisation.  If Office rotates the
+-- worked row to a new Timesheet ID, carry only the still-live expense anchor to
+-- that one current version.  Terminal history remains bound to the version it
+-- actually used, and contradictory identities are never guessed.
+create or replace function private._timesheet_expense_anchor_follow_current_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+begin
+  if new.is_current is distinct from true
+     or new.archived_at_utc is not null
+     or nullif(btrim(coalesce(new.booking_id,'')),'') is null
+     or new.contract_id is null
+     or new.week_ending_date is null then
+    return new;
+  end if;
+
+  update public.candidate_submission_workflows workflow
+  set anchor_timesheet_id=new.timesheet_id
+  from public.timesheets prior_anchor
+  where workflow.workflow_kind='CONTRACT_EXPENSE'
+    and workflow.state not in ('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
+    and workflow.anchor_timesheet_id=prior_anchor.timesheet_id
+    and workflow.anchor_timesheet_id is distinct from new.timesheet_id
+    and prior_anchor.booking_id=new.booking_id
+    and workflow.contract_id=new.contract_id
+    and workflow.week_ending_date=new.week_ending_date;
+
+  return new;
+end;
+$function$;
+
+revoke all on function private._timesheet_expense_anchor_follow_current_v1()
+  from public,anon,authenticated,service_role;
+
+drop trigger if exists timesheets_expense_anchor_follow_current_trg
+  on public.timesheets;
+create trigger timesheets_expense_anchor_follow_current_trg
+after insert or update of is_current,archived_at_utc on public.timesheets
+for each row
+when (new.is_current=true and new.archived_at_utc is null)
+execute function private._timesheet_expense_anchor_follow_current_v1();
+
 create or replace function public.timesheet_expense_apply_atomic_v1(
   p_candidate_id uuid,
   p_environment text,
@@ -48,6 +94,8 @@ declare
   v_paper_page jsonb;
   v_materialised_storage_key text;
   v_expense_line_type text;
+  v_anchor_current_count integer:=0;
+  v_anchor_current_timesheet_id uuid;
   v_system_actor uuid;
   v_constraint_name text;
   v_apply_expected_row_signature text:=p_expected_row_signature;
@@ -146,8 +194,59 @@ begin
   select * into v_contract from public.contracts where id=v_week.contract_id and candidate_id=p_candidate_id for update;
   if not found then raise exception 'CANDIDATE_WORKFLOW_OWNERSHIP_MISMATCH' using errcode='28000'; end if;
   if v_workflow.anchor_timesheet_id is not null then
-    select * into v_anchor_timesheet from public.timesheets
-    where timesheet_id=v_workflow.anchor_timesheet_id and is_current=true;
+    select * into v_anchor_timesheet
+    from public.timesheets
+    where timesheet_id=v_workflow.anchor_timesheet_id;
+    if not found then
+      raise exception 'CANDIDATE_WORKFLOW_ANCHOR_NOT_FOUND' using errcode='P0002';
+    end if;
+
+    if v_anchor_timesheet.is_current is distinct from true
+       or v_anchor_timesheet.archived_at_utc is not null then
+      if v_workflow.workflow_kind<>'CONTRACT_EXPENSE'
+         or nullif(btrim(coalesce(v_anchor_timesheet.booking_id,'')),'') is null then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_NOT_CURRENT' using errcode='40001';
+      end if;
+
+      select count(*)::integer,
+        case when count(*)=1 then min(current_anchor.timesheet_id::text)::uuid end
+      into v_anchor_current_count,v_anchor_current_timesheet_id
+      from public.timesheets current_anchor
+      where current_anchor.booking_id=v_anchor_timesheet.booking_id
+        and current_anchor.is_current=true
+        and current_anchor.archived_at_utc is null
+        and current_anchor.contract_id=v_workflow.contract_id
+        and current_anchor.week_ending_date=v_workflow.week_ending_date;
+
+      if v_anchor_current_count=0 then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_CURRENT_VERSION_NOT_FOUND'
+          using errcode='40001';
+      elsif v_anchor_current_count<>1 then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_CURRENT_VERSION_AMBIGUOUS'
+          using errcode='40001';
+      end if;
+
+      select * into v_anchor_timesheet
+      from public.timesheets
+      where timesheet_id=v_anchor_current_timesheet_id
+        and is_current=true
+        and archived_at_utc is null
+      for share;
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_CURRENT_VERSION_CHANGED'
+          using errcode='40001';
+      end if;
+
+      update public.candidate_submission_workflows
+      set anchor_timesheet_id=v_anchor_timesheet.timesheet_id
+      where id=v_workflow.id
+        and generation=v_workflow.generation
+        and anchor_timesheet_id=v_workflow.anchor_timesheet_id;
+      if not found then
+        raise exception 'WORKFLOW_VERSION_MISMATCH' using errcode='40001';
+      end if;
+      v_workflow.anchor_timesheet_id:=v_anchor_timesheet.timesheet_id;
+    end if;
   end if;
   select candidate_app_system_actor_user_id into v_system_actor from public.settings_defaults where id=1;
   if v_system_actor is null then

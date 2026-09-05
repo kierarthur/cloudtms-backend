@@ -150,7 +150,7 @@ test('Office projection keeps accepted hours separate from a later active expens
   assert.match(officeSql, /'retained_manager_approval',case when v_retained_approval\.id is null then null else jsonb_build_object/);
   assert.match(officeSql, /when v_retained_workflow\.workflow_kind='CONTRACT_EXPENSE' then 'EXPENSE'/);
   assert.match(openapi, /retained_manager_approval:\s*\{\$ref: '#\/components\/schemas\/RetainedManagerApproval'\}/);
-  assert.match(openapi, /keeps approved hours separate from a pending expense-only claim/i);
+  assert.match(openapi, /unfinished standalone expense claim[\s\S]*has no Timesheet yet[\s\S]*not projected onto the worked Timesheet row/i);
 });
 
 test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {
