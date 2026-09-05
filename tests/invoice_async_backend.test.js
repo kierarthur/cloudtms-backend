@@ -210,6 +210,159 @@ test('unified outbox cursor is signed, filter-bound and preserves independent so
   );
 });
 
+test('alternate unified Outbox sorts use the database-wide v2 page and a signed continuation', async () => {
+  const calls = [];
+  const deps = {
+    requireUser: async () => v8Actor(),
+    rpc: async (name, args) => {
+      assert.equal(name, 'outbox_unified_list_v2');
+      calls.push(args);
+      const offset = Number(args.p_offset || 0);
+      return {
+        ok: true,
+        total_count: 4,
+        source_totals: { legacy: 2, invoice: 2 },
+        has_more: offset === 0,
+        snapshot_at_utc: args.p_snapshot_at_utc,
+        items: offset === 0
+          ? [
+              { channel: 'EMAIL', outbox_id: '10000000-0000-4000-8000-000000000001' },
+              { channel: 'INVOICE', outbox_id: '20000000-0000-4000-8000-000000000001' }
+            ]
+          : [
+              { channel: 'INVOICE', outbox_id: '20000000-0000-4000-8000-000000000002' },
+              { channel: 'SMS', outbox_id: '10000000-0000-4000-8000-000000000002' }
+            ]
+      };
+    }
+  };
+  const firstResponse = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/outbox?limit=2&offset=0&sort_by=channel&sort_dir=asc'),
+    v8Environment(),
+    {},
+    deps
+  );
+  const first = await firstResponse.json();
+  assert.equal(firstResponse.status, 200, JSON.stringify(first));
+  assert.equal(first.total_count, 4);
+  assert.equal(first.items.length, 2);
+  assert.equal(typeof first.next_cursor, 'string');
+  assert.equal(calls[0].p_sort_by, 'channel');
+  assert.equal(calls[0].p_sort_dir, 'asc');
+  assert.equal(calls[0].p_offset, 0);
+  const cursor = await invoiceAsyncHttpInternals.decodeUnifiedOutboxCursor(
+    v8Environment(),
+    first.next_cursor
+  );
+  assert.equal(cursor.v, 2);
+  assert.equal(cursor.offset, 2);
+  assert.equal(cursor.sort_by, 'channel');
+  assert.equal(cursor.sort_dir, 'asc');
+
+  const secondResponse = await handleInvoiceAsyncHttpRequest(
+    new Request(`https://example.test/api/outbox?limit=2&offset=0&sort_by=channel&sort_dir=asc&cursor=${encodeURIComponent(first.next_cursor)}`),
+    v8Environment(),
+    {},
+    deps
+  );
+  const second = await secondResponse.json();
+  assert.equal(secondResponse.status, 200, JSON.stringify(second));
+  assert.equal(second.items.length, 2);
+  assert.equal(second.has_more, false);
+  assert.equal(second.next_cursor, null);
+  assert.equal(calls[1].p_offset, 2);
+  assert.equal(calls[1].p_snapshot_at_utc, calls[0].p_snapshot_at_utc);
+});
+
+test('Outbox summary membership returns composite IDs from legacy and Invoice sources', async () => {
+  const calls = [];
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/summary-membership/outbox', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        section: 'outbox',
+        dataset_key: '{"section":"outbox","filters":{}}',
+        effective_filters: {},
+        include_ids: true,
+        explicit_full_membership: true,
+        membership_mode: 'ids'
+      })
+    }),
+    v8Environment(),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: async (name, args) => {
+        assert.equal(name, 'outbox_unified_list_v2');
+        calls.push(args);
+        return {
+          ok: true,
+          total_count: 4,
+          has_more: false,
+          snapshot_at_utc: args.p_snapshot_at_utc,
+          items: [
+            { channel: 'EMAIL', outbox_id: '10000000-0000-4000-8000-000000000001' },
+            { channel: 'INVOICE', outbox_id: '20000000-0000-4000-8000-000000000001' },
+            { channel: 'INVOICE', outbox_id: '20000000-0000-4000-8000-000000000002' },
+            { channel: 'SMS', outbox_id: '10000000-0000-4000-8000-000000000002' }
+          ]
+        };
+      }
+    }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.total_count, 4);
+  assert.deepEqual(body.row_ids, [
+    'EMAIL::10000000-0000-4000-8000-000000000001',
+    'INVOICE::20000000-0000-4000-8000-000000000001',
+    'INVOICE::20000000-0000-4000-8000-000000000002',
+    'SMS::10000000-0000-4000-8000-000000000002'
+  ]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].p_limit, 500);
+  assert.equal(calls[0].p_offset, 0);
+});
+
+test('Outbox summary membership count is deferred until Select All requests IDs', async () => {
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/summary-membership/outbox', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        section: 'outbox',
+        dataset_key: '{"section":"outbox","filters":{}}',
+        effective_filters: {},
+        include_ids: false,
+        explicit_full_membership: false,
+        membership_mode: 'deferred'
+      })
+    }),
+    v8Environment(),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: async (name, args) => {
+        assert.equal(name, 'outbox_unified_list_v2');
+        assert.equal(args.p_limit, 1);
+        return {
+          ok: true,
+          total_count: 448,
+          has_more: true,
+          snapshot_at_utc: args.p_snapshot_at_utc,
+          items: [{ channel: 'EMAIL', outbox_id: '10000000-0000-4000-8000-000000000001' }]
+        };
+      }
+    }
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(body.total_count, 448);
+  assert.deepEqual(body.row_ids, []);
+  assert.equal(body.membership_deferred, true);
+});
+
 test('database batch advances all claims through one RPC call', async () => {
   const calls = [];
   const claims = Array.from({ length: 100 }, (_, index) => ({
@@ -1096,39 +1249,37 @@ test('unfiltered unified outbox remains available without invoice-generation rea
   }
 });
 
-test('invoice Outbox queue filters never query chunk-only scheduling columns', async () => {
+test('invoice Outbox queue filters use the unified projection and never query raw scheduling columns', async () => {
   const originalFetch = globalThis.fetch;
   const observed = [];
-  globalThis.fetch = async request => {
-    const url = new URL(
-      typeof request === 'string'
-        ? request
-        : (request instanceof URL ? request.href : request.url)
-    );
-    assert.equal(url.pathname, '/rest/v1/invoice_operations');
-    const select = url.searchParams.get('select') || '';
-    const andExpression = url.searchParams.get('and') || '';
-    assert.doesNotMatch(select, /(?:^|,)run_after_utc(?:,|$)/);
-    assert.doesNotMatch(andExpression, /run_after_utc/);
-    observed.push(andExpression);
-    return new Response('[]', {
-      status: 200,
-      headers: {
-        'content-type': 'application/json',
-        'content-range': '*/0'
-      }
-    });
+  globalThis.fetch = async () => {
+    throw new Error('Invoice-channel Outbox listing must not query the raw table');
   };
   try {
-    for (const state of ['QUEUED', 'SCHEDULED']) {
+    for (const state of ['QUEUED', 'SCHEDULED', 'READY']) {
       const response = await handleInvoiceAsyncHttpRequest(
         new Request(`https://example.test/api/outbox?channel=INVOICE&queue_state=${state}&limit=50`),
         v8Environment(),
         {},
         {
           requireUser: async () => v8Actor(),
-          rpc: v8Rpc(async () => {
-            throw new Error('Invoice-channel Outbox listing must use its bounded table projection');
+          rpc: v8Rpc(async (name, args) => {
+            assert.equal(name, 'outbox_unified_list_v2');
+            observed.push({
+              channel: args.p_channel,
+              queueState: args.p_queue_state,
+              limit: args.p_limit,
+              sortBy: args.p_sort_by,
+              sortDir: args.p_sort_dir
+            });
+            return {
+              ok: true,
+              total_count: 0,
+              source_totals: { legacy: 0, invoice: 0 },
+              has_more: false,
+              snapshot_at_utc: args.p_snapshot_at_utc,
+              items: []
+            };
           })
         }
       );
@@ -1137,8 +1288,27 @@ test('invoice Outbox queue filters never query chunk-only scheduling columns', a
       assert.deepEqual(body.items, []);
     }
     assert.deepEqual(observed, [
-      '(status.in.(QUEUED,WAITING))',
-      '(status.eq.RETRY_WAIT)'
+      {
+        channel: 'INVOICE',
+        queueState: 'QUEUED',
+        limit: 50,
+        sortBy: 'created_at_utc',
+        sortDir: 'desc'
+      },
+      {
+        channel: 'INVOICE',
+        queueState: 'SCHEDULED',
+        limit: 50,
+        sortBy: 'created_at_utc',
+        sortDir: 'desc'
+      },
+      {
+        channel: 'INVOICE',
+        queueState: 'READY',
+        limit: 50,
+        sortBy: 'created_at_utc',
+        sortDir: 'desc'
+      }
     ]);
   } finally {
     globalThis.fetch = originalFetch;

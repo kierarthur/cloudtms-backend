@@ -2906,11 +2906,23 @@ async function decodeUnifiedOutboxCursor(env, value) {
   } catch {
     throw Object.assign(new Error('OUTBOX_CURSOR_INVALID'), { code: 'OUTBOX_CURSOR_INVALID' });
   }
-  if (
-    payload?.v !== 1
-    || payload?.sort !== 'created_at_utc_desc_channel_rank_id_desc'
-    || !Number.isFinite(Date.parse(payload?.snapshot_at_utc || ''))
-  ) throw Object.assign(new Error('OUTBOX_CURSOR_INVALID'), { code: 'OUTBOX_CURSOR_INVALID' });
+  const validSnapshot = Number.isFinite(Date.parse(payload?.snapshot_at_utc || ''));
+  const validV1 = payload?.v === 1
+    && payload?.sort === 'created_at_utc_desc_channel_rank_id_desc';
+  const validV2 = payload?.v === 2
+    && new Set([
+      'created_at_utc',
+      'scheduled_for_utc',
+      'effective_ready_at_utc',
+      'status',
+      'channel'
+    ]).has(payload?.sort_by)
+    && new Set(['asc', 'desc']).has(payload?.sort_dir)
+    && Number.isSafeInteger(payload?.offset)
+    && payload.offset >= 0;
+  if (!validSnapshot || (!validV1 && !validV2)) {
+    throw Object.assign(new Error('OUTBOX_CURSOR_INVALID'), { code: 'OUTBOX_CURSOR_INVALID' });
+  }
   return payload;
 }
 
@@ -3003,6 +3015,9 @@ function legacyOutboxQueueStateExpression(queueState, snapshotAt) {
   if (queueState === 'QUEUED') {
     return `and(read_at.is.null,delivered_at.is.null,sent_at.is.null,failed_at.is.null,status.eq.QUEUED,or(next_attempt_at_utc.lte.${snapshotAt},and(next_attempt_at_utc.is.null,scheduled_for_utc.lte.${snapshotAt}),and(next_attempt_at_utc.is.null,scheduled_for_utc.is.null,created_at_utc.lte.${snapshotAt})))`;
   }
+  if (queueState === 'READY') {
+    return 'and(read_at.is.null,delivered_at.is.null,sent_at.is.null,failed_at.is.null,status.eq.READY)';
+  }
   if (queueState === 'RUNNING' || queueState === 'ACTION_REQUIRED') {
     return 'outbox_id.is.null';
   }
@@ -3021,6 +3036,9 @@ function normaliseInvoiceOutboxQueueState(queueState, snapshotAt) {
   }
   if (state === 'RUNNING') {
     return { expression: 'status.eq.RUNNING', requiresAction: null, semantics: 'RUNNING' };
+  }
+  if (state === 'READY') {
+    return { expression: 'status.eq.READY', requiresAction: null, semantics: 'READY' };
   }
   if (state === 'SCHEDULED') {
     return {
@@ -3126,7 +3144,78 @@ async function loadUnifiedOutboxCursorPage(env, {
   };
 }
 
-async function handleUnifiedOutboxCursorList(env, {
+async function loadUnifiedOutboxSortedPage(env, deps, {
+  limit,
+  status,
+  queueState,
+  search,
+  sortBy,
+  sortDir,
+  operationType,
+  entityId,
+  requiresAction,
+  cursorPayload,
+  filtersHash
+}) {
+  const snapshotAt = cursorPayload?.snapshot_at_utc || new Date().toISOString();
+  const pageOffset = cursorPayload?.offset || 0;
+  const parsedRequiresAction = requiresAction === 'true'
+    ? true
+    : (requiresAction === 'false' ? false : null);
+  const page = normaliseUnifiedOutboxPayload(await deps.rpc(
+    'outbox_unified_list_v2',
+    {
+      p_status: status || null,
+      p_channel: null,
+      p_search: search || null,
+      p_queue_state: queueState || null,
+      p_operation_type: operationType || null,
+      p_entity_id: entityId || null,
+      p_requires_user_action: parsedRequiresAction,
+      p_limit: limit,
+      p_offset: pageOffset,
+      p_sort_by: sortBy,
+      p_sort_dir: sortDir,
+      p_snapshot_at_utc: snapshotAt
+    }
+  ));
+  const items = page.items;
+  const totalCount = Number(page.total_count || 0);
+  const hasMore = page.has_more === true || (pageOffset + items.length) < totalCount;
+  if (hasMore && items.length === 0) {
+    throw Object.assign(
+      new Error('UNIFIED_OUTBOX_CURSOR_STALLED'),
+      { code: 'UNIFIED_OUTBOX_CURSOR_STALLED' }
+    );
+  }
+  const nextOffset = pageOffset + items.length;
+  const nextPayload = {
+    v: 2,
+    snapshot_at_utc: snapshotAt,
+    filters_hash: filtersHash,
+    sort_by: sortBy,
+    sort_dir: sortDir,
+    offset: nextOffset,
+    total: totalCount
+  };
+  return jsonResponse({
+    ok: true,
+    channel: null,
+    total_count: totalCount,
+    source_totals: page.source_totals || null,
+    limit,
+    returned_count: items.length,
+    items,
+    has_more: hasMore,
+    next_cursor: hasMore
+      ? await encodeUnifiedOutboxCursor(env, nextPayload)
+      : null,
+    snapshot_at_utc: snapshotAt,
+    sort: { sort_by: sortBy, sort_dir: sortDir }
+  });
+}
+
+async function handleUnifiedOutboxCursorList(env, deps, {
   limit,
   offset,
   status,
@@ -3140,10 +3229,11 @@ async function handleUnifiedOutboxCursorList(env, {
   cursorToken
 }) {
   if (offset !== 0) return jsonResponse({ error: 'UNIFIED_OUTBOX_USE_CURSOR' }, 400);
-  if (sortBy !== 'created_at_utc' || sortDir !== 'desc') return jsonResponse({ error: 'UNIFIED_OUTBOX_SORT_UNSUPPORTED' }, 400);
   if (status && !/^[A-Z_]+$/.test(status)) return jsonResponse({ error: 'INVALID_OUTBOX_STATUS' }, 400);
-  if (queueState && !new Set(['SCHEDULED','QUEUED','RUNNING','ACTION_REQUIRED','SENT','DELIVERED','READ','FAILED']).has(queueState)) return jsonResponse({ error: 'INVALID_OUTBOX_QUEUE_STATE' }, 400);
+  if (queueState && !new Set(['SCHEDULED','QUEUED','READY','RUNNING','ACTION_REQUIRED','SENT','DELIVERED','READ','FAILED']).has(queueState)) return jsonResponse({ error: 'INVALID_OUTBOX_QUEUE_STATE' }, 400);
+  if (operationType && !/^[A-Z_]+$/.test(operationType)) return jsonResponse({ error: 'INVALID_OUTBOX_OPERATION_TYPE' }, 400);
   if (entityId && !UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
+  if (requiresAction != null && !['true', 'false'].includes(String(requiresAction))) return jsonResponse({ error: 'INVALID_OUTBOX_REQUIRES_ACTION' }, 400);
   if (search && !UUID_PATTERN.test(search) && !/^[a-z0-9 _-]{1,80}$/i.test(search)) return jsonResponse({ error: 'INVALID_OUTBOX_SEARCH' }, 400);
 
   const filterIdentity = JSON.stringify({ status, queue_state: queueState, search, operation_type: operationType, entity_id: entityId, requires_user_action: requiresAction });
@@ -3152,6 +3242,34 @@ async function handleUnifiedOutboxCursorList(env, {
   if (cursorToken) {
     cursorPayload = await decodeUnifiedOutboxCursor(env, cursorToken);
     if (cursorPayload.filters_hash !== filtersHash) return jsonResponse({ error: 'OUTBOX_CURSOR_FILTER_MISMATCH' }, 400);
+  }
+  const usesDefaultKeyset = sortBy === 'created_at_utc'
+    && sortDir === 'desc'
+    && (!cursorPayload || cursorPayload.v === 1);
+  if (!usesDefaultKeyset) {
+    if (
+      cursorPayload
+      && (
+        cursorPayload.v !== 2
+        || cursorPayload.sort_by !== sortBy
+        || cursorPayload.sort_dir !== sortDir
+      )
+    ) {
+      return jsonResponse({ error: 'OUTBOX_CURSOR_SORT_MISMATCH' }, 400);
+    }
+    return loadUnifiedOutboxSortedPage(env, deps, {
+      limit,
+      status,
+      queueState,
+      search,
+      sortBy,
+      sortDir,
+      operationType,
+      entityId,
+      requiresAction,
+      cursorPayload,
+      filtersHash
+    });
   }
   const page = await loadUnifiedOutboxCursorPage(env, { limit, status, queueState, search, operationType, entityId, requiresAction, cursorPayload });
   const tagged = [
@@ -3191,6 +3309,154 @@ async function handleUnifiedOutboxCursorList(env, {
   });
 }
 
+async function handleUnifiedOutboxSummaryMembership(env, req, deps) {
+  const body = await readInvoiceBatchJsonBody(req, {
+    maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES)
+      || INVOICE_BATCH_REQUEST_MAX_BYTES
+  });
+  const allowedBodyFields = new Set([
+    'section',
+    'dataset_key',
+    'effective_filters',
+    'include_ids',
+    'explicit_full_membership',
+    'membership_mode'
+  ]);
+  if (Object.keys(body).some(key => !allowedBodyFields.has(key))) {
+    throw invoiceBatchContractError('OUTBOX_MEMBERSHIP_REQUEST_INVALID');
+  }
+  if (String(body.section || '').trim().toLowerCase() !== 'outbox') {
+    throw invoiceBatchContractError('OUTBOX_MEMBERSHIP_REQUEST_INVALID');
+  }
+  const filters = body.effective_filters;
+  if (!filters || typeof filters !== 'object' || Array.isArray(filters)) {
+    throw invoiceBatchContractError('OUTBOX_MEMBERSHIP_FILTERS_INVALID');
+  }
+  const allowedFilterFields = new Set([
+    'q',
+    'search',
+    'channel',
+    'status',
+    'queue_state'
+  ]);
+  if (Object.keys(filters).some(key => !allowedFilterFields.has(key))) {
+    throw invoiceBatchContractError('OUTBOX_MEMBERSHIP_FILTERS_INVALID');
+  }
+  const search = String(filters.search || filters.q || '').trim().toLowerCase();
+  const channelValue = String(filters.channel || '').trim().toUpperCase();
+  const statusValue = String(filters.status || '').trim().toUpperCase();
+  const queueStateValue = String(filters.queue_state || '').trim().toUpperCase();
+  const channel = channelValue && channelValue !== 'ALL' ? channelValue : null;
+  const status = statusValue && statusValue !== 'ALL' ? statusValue : null;
+  const queueState = queueStateValue && queueStateValue !== 'ALL'
+    ? queueStateValue
+    : null;
+  const membershipMode = String(body.membership_mode || '').trim().toLowerCase();
+  const includeIds = boolValue(body.include_ids)
+    || boolValue(body.explicit_full_membership)
+    || ['ids', 'full', 'full_ids', 'membership_ids'].includes(membershipMode);
+  const datasetKey = String(body.dataset_key || '').trim().slice(0, 10000)
+    || JSON.stringify({
+      section: 'outbox',
+      filters: { search, channel, status, queue_state: queueState }
+    });
+  const snapshotAt = new Date().toISOString();
+  const loadPage = async (limit, offset) => normaliseUnifiedOutboxPayload(
+    await deps.rpc('outbox_unified_list_v2', {
+      p_status: status,
+      p_channel: channel,
+      p_search: search || null,
+      p_queue_state: queueState,
+      p_operation_type: null,
+      p_entity_id: null,
+      p_requires_user_action: null,
+      p_limit: limit,
+      p_offset: offset,
+      p_sort_by: 'created_at_utc',
+      p_sort_dir: 'desc',
+      p_snapshot_at_utc: snapshotAt
+    })
+  );
+
+  if (!includeIds) {
+    const page = await loadPage(1, 0);
+    const totalCount = Number(page.total_count || 0);
+    return jsonResponse({
+      ok: true,
+      section: 'outbox',
+      dataset_key: datasetKey,
+      row_ids: [],
+      ids: [],
+      total_count: totalCount,
+      total: totalCount,
+      count: totalCount,
+      membership_deferred: true,
+      deferred: true,
+      ids_deferred: true
+    });
+  }
+
+  const rowIds = [];
+  const seen = new Set();
+  let offset = 0;
+  let totalCount = null;
+  let pageNumber = 0;
+  while (totalCount == null || offset < totalCount) {
+    pageNumber += 1;
+    if (pageNumber > 10000) {
+      throw Object.assign(
+        new Error('OUTBOX_MEMBERSHIP_PAGE_LIMIT_EXCEEDED'),
+        { code: 'OUTBOX_MEMBERSHIP_PAGE_LIMIT_EXCEEDED' }
+      );
+    }
+    const page = await loadPage(500, offset);
+    const pageItems = page.items;
+    const reportedTotal = Number(page.total_count);
+    if (Number.isFinite(reportedTotal) && reportedTotal >= 0) {
+      totalCount = Math.trunc(reportedTotal);
+    }
+    for (const row of pageItems) {
+      const rowChannel = String(row?.channel || '').trim().toUpperCase();
+      const rowId = String(row?.outbox_id || row?.id || '').trim();
+      if (!rowChannel || !UUID_PATTERN.test(rowId)) {
+        throw Object.assign(
+          new Error('OUTBOX_MEMBERSHIP_ROW_INVALID'),
+          { code: 'OUTBOX_MEMBERSHIP_ROW_INVALID' }
+        );
+      }
+      const selectionKey = `${rowChannel}::${rowId}`;
+      if (seen.has(selectionKey)) {
+        throw Object.assign(
+          new Error('OUTBOX_MEMBERSHIP_DUPLICATE_ROW'),
+          { code: 'OUTBOX_MEMBERSHIP_DUPLICATE_ROW' }
+        );
+      }
+      seen.add(selectionKey);
+      rowIds.push(selectionKey);
+    }
+    if (!pageItems.length) break;
+    offset += pageItems.length;
+    if (pageItems.length < 500) break;
+  }
+  const resolvedTotal = totalCount == null ? rowIds.length : totalCount;
+  if (rowIds.length !== resolvedTotal) {
+    throw Object.assign(
+      new Error('OUTBOX_MEMBERSHIP_CARDINALITY_MISMATCH'),
+      { code: 'OUTBOX_MEMBERSHIP_CARDINALITY_MISMATCH' }
+    );
+  }
+  return jsonResponse({
+    ok: true,
+    section: 'outbox',
+    dataset_key: datasetKey,
+    row_ids: rowIds,
+    ids: rowIds.slice(),
+    total_count: resolvedTotal,
+    total: resolvedTotal,
+    count: resolvedTotal
+  });
+}
+
 async function handleInvoiceOutboxList(env, req, deps) {
   const url = new URL(req.url);
   const limit = Math.max(1, Math.min(500, Math.trunc(Number(url.searchParams.get('limit')) || 50)));
@@ -3202,8 +3468,6 @@ async function handleInvoiceOutboxList(env, req, deps) {
   const sortBy = String(url.searchParams.get('sort_by') || 'created_at_utc').trim();
   const sortDir = String(url.searchParams.get('sort_dir') || 'desc').trim().toLowerCase();
   if (!new Set(['created_at_utc','scheduled_for_utc','effective_ready_at_utc','status','channel']).has(sortBy) || !['asc','desc'].includes(sortDir)) return jsonResponse({ error: 'INVALID_OUTBOX_SORT' }, 400);
-  const query = new URL(`${env.SUPABASE_URL}/rest/v1/invoice_operations`);
-  query.searchParams.set('select', 'id,operation_type,entity_type,entity_id,status,phase,priority,total_units,completed_units,failed_units,progress_json,result_json,error_json,requires_user_action,change_seq,created_at_utc,updated_at_utc,parent_operation_id');
   const snapshotAt = new Date().toISOString();
   let invoiceQueue;
   try {
@@ -3211,25 +3475,20 @@ async function handleInvoiceOutboxList(env, req, deps) {
   } catch (error) {
     return jsonResponse({ error: String(error?.code || error?.message || 'INVALID_OUTBOX_QUEUE_STATE') }, 400);
   }
-  if (status && /^[A-Z_]+$/.test(status)) query.searchParams.set('status', `eq.${status}`);
+  if (status && !/^[A-Z_]+$/.test(status)) return jsonResponse({ error: 'INVALID_OUTBOX_STATUS' }, 400);
+  if (channel && !/^[A-Z_]+$/.test(channel)) return jsonResponse({ error: 'INVALID_OUTBOX_CHANNEL' }, 400);
   const operationType = String(url.searchParams.get('operation_type') || '').trim().toUpperCase();
-  if (operationType === 'OPERATION_CONTROL_REQUEST') {
+  if (operationType === 'OPERATION_CONTROL_REQUEST' || (operationType && !/^[A-Z_]+$/.test(operationType))) {
     return jsonResponse({ error: 'INVALID_OUTBOX_OPERATION_TYPE' }, 400);
   }
-  if (operationType && /^[A-Z_]+$/.test(operationType)) {
-    query.searchParams.set('operation_type', `eq.${operationType}`);
-  } else {
-    query.searchParams.set('operation_type', 'neq.OPERATION_CONTROL_REQUEST');
-  }
   const entityId = String(url.searchParams.get('entity_id') || '').trim().toLowerCase();
-  if (entityId) {
-    if (!UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
-    query.searchParams.set('entity_id', `eq.${entityId}`);
-  }
+  if (entityId && !UUID_PATTERN.test(entityId)) return jsonResponse({ error: 'INVALID_ENTITY_ID' }, 400);
   const requiresAction = url.searchParams.get('requires_user_action');
+  if (requiresAction != null && !['true', 'false'].includes(requiresAction)) return jsonResponse({ error: 'INVALID_OUTBOX_REQUIRES_ACTION' }, 400);
+  if (search && !UUID_PATTERN.test(search) && !/^[a-z0-9 _-]{1,80}$/i.test(search)) return jsonResponse({ error: 'INVALID_OUTBOX_SEARCH' }, 400);
   if (!channel) {
     try {
-      return await handleUnifiedOutboxCursorList(env, {
+      return await handleUnifiedOutboxCursorList(env, deps, {
         limit,
         offset,
         status,
@@ -3248,51 +3507,35 @@ async function handleInvoiceOutboxList(env, req, deps) {
       return jsonResponse({ error: code }, statusCode);
     }
   }
-  const invoiceRequiresAction = invoiceQueue.requiresAction ?? requiresAction;
-  if (invoiceRequiresAction === 'true' || invoiceRequiresAction === 'false') query.searchParams.set('requires_user_action', `eq.${invoiceRequiresAction}`);
-  if (invoiceQueue.expression) applyPostgrestAndExpressions(query, [invoiceQueue.expression]);
-  if (search) {
-    if (UUID_PATTERN.test(search)) query.searchParams.set('or', `(id.eq.${search},entity_id.eq.${search})`);
-    else if (/^[a-z0-9 _-]{1,80}$/i.test(search)) {
-      const term = search
-        .replace(/\\/g, '\\\\')
-        .replace(/_/g, '\\_')
-        .replace(/%/g, '\\%')
-        .replace(/ +/g, '%');
-      query.searchParams.set('or', `(operation_type.ilike.*${term}*,phase.ilike.*${term}*)`);
-    } else return jsonResponse({ error: 'INVALID_OUTBOX_SEARCH' }, 400);
-  }
-  query.searchParams.set('order', 'created_at_utc.desc,id.desc');
-  query.searchParams.set('limit', String(limit));
-  query.searchParams.set('offset', String(offset));
-  if (channel !== 'INVOICE') {
-    const legacy = normaliseUnifiedOutboxPayload(await deps.rpc('outbox_unified_list', {
-      p_status: status || null,
-      p_channel: channel || null,
-      p_search: search || null,
-      p_queue_state: queueState || null,
-      p_limit: limit,
-      p_offset: offset,
-      p_sort_by: sortBy,
-      p_sort_dir: sortDir
-    }));
-    return jsonResponse({ ok: true, channel, total_count: Number(legacy.total_count || 0), limit, offset, returned_count: legacy.items.length, items: legacy.items });
-  }
-  const invoicePromise = fetch(query, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, prefer: 'count=exact' } });
-  const response = await invoicePromise;
-  const invoiceRows = await response.json().catch(() => []);
-  if (!response.ok || !Array.isArray(invoiceRows)) return jsonResponse({ error: 'INVOICE_OPERATION_LIST_FAILED' }, 502);
-  const invoiceItems = invoiceRows.map(invoiceOperationOutboxRow);
-  const invoiceTotalRaw = Number((response.headers.get('content-range') || '').split('/')[1]);
-  const invoiceTotal = Number.isFinite(invoiceTotalRaw) ? invoiceTotalRaw : invoiceItems.length;
+  const parsedRequiresAction = requiresAction === 'true'
+    ? true
+    : (requiresAction === 'false' ? false : null);
+  const page = normaliseUnifiedOutboxPayload(await deps.rpc('outbox_unified_list_v2', {
+    p_status: status || null,
+    p_channel: channel,
+    p_search: search || null,
+    p_queue_state: queueState || null,
+    p_operation_type: operationType || null,
+    p_entity_id: entityId || null,
+    p_requires_user_action: parsedRequiresAction,
+    p_limit: limit,
+    p_offset: offset,
+    p_sort_by: sortBy,
+    p_sort_dir: sortDir,
+    p_snapshot_at_utc: snapshotAt
+  }));
   return jsonResponse({
     ok: true,
     channel,
-    total_count: invoiceTotal,
+    total_count: Number(page.total_count || 0),
+    source_totals: page.source_totals || null,
     limit,
     offset,
-    returned_count: invoiceItems.length,
-    items: invoiceItems,
+    returned_count: page.items.length,
+    has_more: page.has_more === true,
+    next_cursor: null,
+    snapshot_at_utc: page.snapshot_at_utc || snapshotAt,
+    items: page.items,
     queue_state_semantics: invoiceQueue.semantics
   });
 }
@@ -3898,6 +4141,8 @@ function invoiceErrorStatus(error) {
     'OPERATION_RESULT_PAGE_REQUEST_INVALID',
     'OPERATION_RESULT_ROOT_INVALID',
     'OUTBOX_CURSOR_INVALID',
+    'OUTBOX_MEMBERSHIP_FILTERS_INVALID',
+    'OUTBOX_MEMBERSHIP_REQUEST_INVALID',
     'READY_DOCUMENT_VERSION_NOT_FOUND',
     'RETRY_CHUNK_ID_INVALID',
     'VALID_UUID_ARRAY_REQUIRED'
@@ -3941,6 +4186,11 @@ function invoiceErrorStatus(error) {
     'DOCUMENT_GENERATION_UNAVAILABLE',
     'BATCH_CURSOR_SECRET_INVALID',
     'OUTBOX_CURSOR_SECRET_INVALID',
+    'OUTBOX_MEMBERSHIP_CARDINALITY_MISMATCH',
+    'OUTBOX_MEMBERSHIP_DUPLICATE_ROW',
+    'OUTBOX_MEMBERSHIP_PAGE_LIMIT_EXCEEDED',
+    'OUTBOX_MEMBERSHIP_ROW_INVALID',
+    'UNIFIED_OUTBOX_CURSOR_STALLED',
     'UNIFIED_OUTBOX_LIST_FAILED'
   ]);
   if (requestErrors.has(code)) return 400;
@@ -3975,6 +4225,7 @@ function isInvoiceAsyncRoute(req, url) {
   const method = req.method;
   if (method === 'GET' && path === '/api/invoice-documents/access') return true;
   if (method === 'GET' && path === '/api/invoice-async/capabilities') return true;
+  if (method === 'POST' && path === '/api/summary-membership/outbox') return true;
   if (['GET', 'POST'].includes(method) && [
     '/api/invoices/batch-generate/candidates',
     '/api/invoices/batch-issue/candidates',
@@ -4176,6 +4427,19 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     }
   }
 
+  if (req.method === 'POST' && path === '/api/summary-membership/outbox') {
+    const actorRole = String(user.role || user.user_role || user.user_type || '').trim().toLowerCase();
+    if (actorRole !== 'admin') return jsonResponse({ error: 'ADMIN_REQUIRED' }, 403);
+    try {
+      return await handleUnifiedOutboxSummaryMembership(env, req, deps);
+    } catch (error) {
+      const code = String(
+        error?.code || error?.message || error || 'OUTBOX_MEMBERSHIP_FAILED'
+      ).slice(0, 160);
+      return jsonResponse({ error: code }, invoiceErrorStatus(error));
+    }
+  }
+
   const generation = await evaluateInvoiceGenerationReadiness(env, deps);
   if (!generation.ready) {
     return jsonResponse({
@@ -4317,6 +4581,7 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   isRetiredInvoiceLegacyRoute,
   encodeUnifiedOutboxCursor,
   decodeUnifiedOutboxCursor,
+  handleUnifiedOutboxSummaryMembership,
   compareCursorOutboxRows,
   legacyQueueState,
   match
