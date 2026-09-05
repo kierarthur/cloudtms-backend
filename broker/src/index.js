@@ -84740,16 +84740,48 @@ function candidateOfficeApplicability(row) {
     return null;
   };
   const submissionMode = upper(row?.submission_mode || row?.submission_mode_snapshot);
-  // The exact row route wins over broad client settings and over a generic
-  // submission-mode snapshot. One client can legitimately have both import
-  // and Candidate-enabled rows, including DAILY ELECTRONIC.
-  for (const authority of [row?.route_type,row?.route_display,row?.route,row?.route_family]) {
+  // QR/Electronic route-family truth is more specific than the stored
+  // WEEKLY_MANUAL route used by a printed Candidate submission.
+  const routeFamilyClassification = classifyRoute(row?.route_family);
+  if (routeFamilyClassification === true) return true;
+
+  // A Manual/import route is not enough to prove that Candidate lifecycle is
+  // inapplicable. A separate expense-only carrier can retain that route while
+  // owning a real Candidate workflow. Only the canonical Office projection
+  // knows the record role and workflow, so ambiguous rows must be projected
+  // and allowed to render a blank when no Candidate lifecycle actually exists.
+  for (const authority of [row?.route_type,row?.route_display,row?.route]) {
     const classification = classifyRoute(authority);
-    if (classification !== null) return classification;
+    if (classification === true) return true;
   }
-  if (submissionMode === 'MANUAL') return false;
   if (['ELECTRONIC', 'QR'].includes(submissionMode)) return true;
   return null;
+}
+
+function reconcileCandidateOwnedProcessingStatus(rowInput) {
+  const row = rowInput && typeof rowInput === 'object' && !Array.isArray(rowInput)
+    ? rowInput
+    : null;
+  if (!row) return rowInput;
+
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const workflow = row.candidate_office_projection?.workflow;
+  const rawProcessing = upper(row.processing_status);
+  const paperWorkflow = upper(workflow?.route) === 'PAPER';
+  const currentCandidateAction = workflow?.is_current_action_workflow === true
+    && workflow?.historical !== true;
+  const completedCandidateAction = upper(workflow?.state) === 'FINALISED';
+
+  if (
+    paperWorkflow
+    && (currentCandidateAction || completedCandidateAction)
+    && ['AWAITING_MANUAL_SIGNATURE', 'AWAITING_SIGNED_QR'].includes(rawProcessing)
+  ) {
+    row.summary_stage = 'PROCESSED';
+    row.tools_stage = 'PROCESSED';
+    row.processing_status_display = 'Processed';
+  }
+  return row;
 }
 
 function markCandidateOfficeApplicability(rowInput, resolvedClassification = undefined) {
@@ -84894,6 +84926,7 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
           ? result.projection : null;
         output[item.index].candidate_office_projection_error = result?.ok === true
           ? null : candidateSummaryProjectionError(result?.error);
+        reconcileCandidateOwnedProcessingStatus(output[item.index]);
         byRowKey.delete(item.identity.row_key);
       }
       for (const item of byRowKey.values()) {
@@ -195624,6 +195657,7 @@ export const candidateOfficeSummaryInternals = Object.freeze({
   markCandidateOfficeApplicability,
   markCandidateOfficePayloadApplicability,
   attachCandidateOfficeSummaryProjections,
+  reconcileCandidateOwnedProcessingStatus,
   candidateTimesheetSummaryCompactPatch
 });
 export const candidateWeeklyScheduleInternals = Object.freeze({

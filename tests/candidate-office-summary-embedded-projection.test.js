@@ -73,7 +73,7 @@ test('Timesheet Summary embeds bounded exact Candidate projections before return
     'a planned row without a concrete timesheet keeps the established no-projection boundary');
 });
 
-test('Timesheet Summary resolves Manual and import-authoritative routes as immediate blanks without projection work', async () => {
+test('Timesheet Summary projects Manual and import-authoritative rows because they can own QR or expense-only workflows', async () => {
   const rows = [
     { id: 'manual', timesheet_id: uuid(1), route_type: 'WEEKLY_MANUAL', submission_mode: 'MANUAL' },
     { id: 'manual-adjustment', timesheet_id: uuid(2), route_display: 'Weekly Manual Adjustment' },
@@ -100,17 +100,17 @@ test('Timesheet Summary resolves Manual and import-authoritative routes as immed
   );
 
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].map((identity) => identity.row_key), ['electronic']);
-  for (const row of result.slice(0, 4)) {
+  assert.deepEqual(calls[0].map((identity) => identity.row_key), [
+    'manual','manual-adjustment','nhsp','healthroster','electronic'
+  ]);
+  for (const row of result) {
     assert.equal(row.candidate_office_projection_loaded, true);
-    assert.equal(row.candidate_office_projection_not_applicable, true);
-    assert.equal(row.candidate_office_projection, null);
+    assert.equal(row.candidate_office_projection?.ok, true);
     assert.equal(row.candidate_office_projection_error, null);
   }
-  assert.equal(result[4].candidate_office_projection?.ok, true);
 });
 
-test('Candidate Office applicability trusts the exact row route before contradictory broad route-family hints', () => {
+test('Candidate Office applicability never lets a Manual/import label suppress a QR or expense-only possibility', () => {
   assert.equal(candidateOfficeSummaryInternals.candidateOfficeApplicability({
     route_type: 'DAILY_ELECTRONIC',
     route_display: 'Daily Electronic',
@@ -121,10 +121,20 @@ test('Candidate Office applicability trusts the exact row route before contradic
     route_type: 'WEEKLY_NHSP',
     route_family: 'ELECTRONIC',
     submission_mode: 'ELECTRONIC'
-  }), false);
+  }), true);
+  assert.equal(candidateOfficeSummaryInternals.candidateOfficeApplicability({
+    route_type: 'WEEKLY_MANUAL',
+    route_family: 'QR',
+    submission_mode: 'MANUAL'
+  }), true);
+  assert.equal(candidateOfficeSummaryInternals.candidateOfficeApplicability({
+    route_type: 'WEEKLY_NHSP_ADJUSTMENT',
+    route_family: 'MANUAL',
+    submission_mode: 'MANUAL'
+  }), null, 'the canonical projection must decide whether this is imported hours or an expense-only carrier');
 });
 
-test('Candidate Office marks Manual and import rows across nested non-Summary response shapes', () => {
+test('Candidate Office leaves Manual and import rows unresolved until the canonical projection identifies their record role', () => {
   for (const routeType of ['DAILY_MANUAL', 'WEEKLY_MANUAL', 'WEEKLY_MANUAL_ADJUSTMENT', 'WEEKLY_NHSP', 'WEEKLY_HEALTHROSTER']) {
     const payload = candidateOfficeSummaryInternals.markCandidateOfficePayloadApplicability({
       row: { route_type: routeType },
@@ -133,9 +143,9 @@ test('Candidate Office marks Manual and import rows across nested non-Summary re
       timesheet: { route_type: routeType },
       contract_week: { route_type: routeType }
     });
-    assert.equal(payload.candidate_office_projection_not_applicable, true, routeType);
+    assert.equal(Object.hasOwn(payload, 'candidate_office_projection_not_applicable'), false, routeType);
     for (const key of ['row', 'data_row', 'effective', 'timesheet', 'contract_week']) {
-      assert.equal(payload[key].candidate_office_projection_not_applicable, true, `${routeType}:${key}`);
+      assert.equal(Object.hasOwn(payload[key], 'candidate_office_projection_not_applicable'), false, `${routeType}:${key}`);
     }
   }
 
@@ -151,6 +161,41 @@ test('Candidate Office marks Manual and import rows across nested non-Summary re
   });
   assert.equal(Object.hasOwn(unknown, 'candidate_office_projection_not_applicable'), false,
     'unknown routes remain fail-closed instead of being silently suppressed');
+});
+
+test('Candidate-owned paper waiting is shown as Processed while its exact Candidate status owns the outstanding action', () => {
+  const active = {
+    processing_status: 'AWAITING_MANUAL_SIGNATURE',
+    processing_status_display: 'Processing Delayed',
+    tools_stage: 'PROCESSING_DELAYED',
+    summary_stage: 'PROCESSING_DELAYED',
+    candidate_office_projection: {
+      workflow: {
+        route: 'PAPER', state: 'AWAITING_PAPER_RETURN', historical: false,
+        is_current_action_workflow: true
+      }
+    }
+  };
+  candidateOfficeSummaryInternals.reconcileCandidateOwnedProcessingStatus(active);
+  assert.equal(active.processing_status, 'AWAITING_MANUAL_SIGNATURE', 'the source fact remains available');
+  assert.equal(active.processing_status_display, 'Processed');
+  assert.equal(active.tools_stage, 'PROCESSED');
+  assert.equal(active.summary_stage, 'PROCESSED');
+
+  for (const untouched of [
+    {
+      processing_status: 'CLIENT_UNRESOLVED', processing_status_display: 'Processing Delayed',
+      tools_stage: 'PROCESSING_DELAYED', candidate_office_projection: active.candidate_office_projection
+    },
+    {
+      processing_status: 'AWAITING_MANUAL_SIGNATURE', processing_status_display: 'Processing Delayed',
+      tools_stage: 'PROCESSING_DELAYED', candidate_office_projection: { workflow: null }
+    }
+  ]) {
+    candidateOfficeSummaryInternals.reconcileCandidateOwnedProcessingStatus(untouched);
+    assert.equal(untouched.processing_status_display, 'Processing Delayed');
+    assert.equal(untouched.tools_stage, 'PROCESSING_DELAYED');
+  }
 });
 
 test('Timesheet Summary embeds a safe row-level error and never starts browser hydration', async () => {
