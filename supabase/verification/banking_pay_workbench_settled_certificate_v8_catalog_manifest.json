@@ -638,7 +638,7 @@
       "schema": "public",
       "name": "pay_workbench_session_open",
       "identity_arguments": "p_actor_user_id uuid, p_pay_date date, p_week_ending_cutoff date, p_filters_json jsonb, p_session_signature text, p_force_new_session boolean, p_discard_source_session boolean, p_source_session_id uuid, p_obsolete_session_ids jsonb, p_mutation_context text, p_created_pay_batch_ids jsonb, p_dirty_candidate_ids jsonb, p_refresh_job_ids jsonb",
-      "definition_sha256": "a095777dc9c95f60ca638000286bd9b64ddaf5e635b2673631f8220ca3e6708b",
+      "definition_sha256": "14550058b91a4739563d83a2cd8ea655f93f236943b57959a06dff3cf04b0dbb",
       "owner": "postgres",
       "security_definer": true,
       "volatility": "v",
@@ -655,7 +655,7 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/02092026_2304_banking_pay_workbench_session_authority_fence_v1.sql"
+        "supabase/repeatable/05092026_1652_banking_pay_workbench_session_open_current_owner_v8.sql"
       ]
     },
     {

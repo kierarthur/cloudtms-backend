@@ -270,6 +270,16 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
     if (/^(?:ALTER\s+FUNCTION\s+[\s\S]+?\)\s+)?SET\s+"?plpgsql_check\./i.test(trimmed)) {
       fail('only the seven exact disabled/off plpgsql_check settings are portable');
     }
+    if (/^REVOKE\b/i.test(trimmed)) {
+      const adapted = raw.replace(/,\s*authenticator(?=\s*[,;])/gi, '');
+      if (/\bauthenticator\b/i.test(adapted)) {
+        fail('authenticator may be omitted only from an exact comma-delimited REVOKE role list');
+      }
+      if (adapted !== raw) {
+        replacements.push({ ...statement, adapted, identity: 'OMIT ABSENT MIGET AUTHENTICATOR REVOKE' });
+      }
+      continue;
+    }
     const match = ownerStatement.exec(raw);
     if (!match) {
       if (/^ALTER\s+[A-Za-z_]+[\s\S]+\bOWNER\s+TO\s+postgres\b/i.test(trimmed)) {
@@ -304,7 +314,9 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
   }
 
   return {
-    mode: 'MAPPED_LOGICAL_POSTGRES_TO_CURRENT_USER',
+    mode: replacements.some(({ identity }) => identity === 'OMIT ABSENT MIGET AUTHENTICATOR REVOKE')
+      ? 'MAPPED_PROVIDER_PORTABLE_AUTHORITY'
+      : 'MAPPED_LOGICAL_POSTGRES_TO_CURRENT_USER',
     sourceSql: adaptedSource,
     mappedIdentities: replacements
       .map(({ identity }) => identity)

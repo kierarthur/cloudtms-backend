@@ -405,3 +405,22 @@ test('the release seals the exact H1 catalogue and rollback-contained first-use 
     assert.equal(release.newVerificationFiles.filter(file => file === proof).length, 1, proof);
   }
 });
+
+test('the Workbench session-open catalogue owner contains the sole exact current definition', () => {
+  const entry = catalogManifest.functions.find(item =>
+    item.schema === 'public'
+    && item.name === 'pay_workbench_session_open'
+    && item.identity_arguments.startsWith('p_actor_user_id uuid,'));
+  assert.ok(entry, 'missing pay_workbench_session_open catalogue entry');
+  assert.deepEqual(entry.source_files, [
+    'supabase/repeatable/05092026_1652_banking_pay_workbench_session_open_current_owner_v8.sql',
+  ]);
+  const owner = read(entry.source_files[0]);
+  assert.equal((owner.match(/CREATE OR REPLACE FUNCTION public\.pay_workbench_session_open\(/g) || []).length, 1);
+  assert.match(owner, /\\set ON_ERROR_STOP on[\s\S]*begin;[\s\S]*Exact current-owner marker only; established session-open decisions are unchanged\.[\s\S]*commit;/i);
+  assert.match(owner, /p_refresh_job_ids jsonb DEFAULT '\[\]'::jsonb\)\s*\n RETURNS jsonb/i);
+  assert.match(owner, /SECURITY DEFINER\s*\n SET search_path TO 'public'/i);
+  assert.match(owner, /ALTER FUNCTION public\.pay_workbench_session_open\(uuid,date,date,jsonb,text,boolean,boolean,uuid,jsonb,text,jsonb,jsonb,jsonb\) OWNER TO postgres/i);
+  assert.match(owner, /REVOKE ALL ON FUNCTION public\.pay_workbench_session_open\(uuid,date,date,jsonb,text,boolean,boolean,uuid,jsonb,text,jsonb,jsonb,jsonb\) FROM PUBLIC, anon, authenticated, service_role, authenticator, supabase_admin/i);
+  assert.match(owner, /GRANT EXECUTE ON FUNCTION public\.pay_workbench_session_open\(uuid,date,date,jsonb,text,boolean,boolean,uuid,jsonb,text,jsonb,jsonb,jsonb\) TO postgres/i);
+});

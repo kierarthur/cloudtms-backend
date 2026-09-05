@@ -87,6 +87,9 @@ test('TEST contract proof is dispatch-only, read-only, and search-path invariant
   assert.doesNotMatch(workflow, /\npush:/);
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
   assert.match(workflow, /secrets\.MIGET_DATABASE_URL_TEST/);
+  assert.match(workflow, /vars\.MIGET_DATABASE_NAME_TEST/);
+  assert.match(workflow, /CLOUDTMS_EXPECTED_DATABASE/);
+  assert.match(workflow, /Missing protected exact database name/);
   assert.match(workflow, /db:plan -- --environment=TEST --mode=UPGRADE/);
   assert.doesNotMatch(workflow, /db:apply|wrangler\s+deploy|email.*drain/i);
   for (const callerPath of [

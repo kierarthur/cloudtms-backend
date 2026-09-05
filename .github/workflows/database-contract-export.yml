@@ -28,6 +28,7 @@ jobs:
     env:
       CLOUDTMS_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_TEST }}
       CLOUDTMS_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_TEST }}
+      CLOUDTMS_EXPECTED_DATABASE: ${{ vars.MIGET_DATABASE_NAME_TEST }}
       CLOUDTMS_ENVIRONMENT: TEST
       CLOUDTMS_RELEASE_MODE: UPGRADE
     steps:
@@ -59,6 +60,7 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact database name"; exit 1; }
           npm run db:plan -- --environment=TEST --mode=UPGRADE
       - name: Preserve repository contract
         shell: bash
