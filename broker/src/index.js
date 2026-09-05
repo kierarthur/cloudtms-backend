@@ -9945,6 +9945,7 @@ async function handleContractsList(env, req) {
 
   const orderByParam = (q('order_by') || '').toLowerCase();
   const orderDirParam = (q('order_dir') || '').toLowerCase();
+  const candidateSubmissionSort = orderByParam === 'candidate_submission';
 
   const sortMap = {
     candidate_display:             'candidate_id',
@@ -86324,6 +86325,96 @@ function markCandidateOfficePayloadApplicability(payloadInput) {
   return payload;
 }
 
+const CANDIDATE_OFFICE_SUMMARY_STATUS_LABELS = Object.freeze({
+  AWAITING_CANDIDATE_SUBMISSION: 'Awaiting Candidate Submission',
+  CANDIDATE_SUBMITTED: 'Candidate Submitted',
+  AWAITING_MANAGER_APPROVAL: 'Awaiting Manager Approval',
+  MANAGER_APPROVED: 'Manager Approved',
+  QR_AWAITING_SIGNED_RETURN: 'QR Awaiting Signed Return',
+  QR_PACK_PREPARING: 'QR Pack Preparing',
+  FINALISING_SUBMISSION: 'Finalising Submission',
+  FINALISATION_NEEDS_ATTENTION: 'Finalisation Needs Attention',
+  QR_PACK_NEEDS_ATTENTION: 'QR Pack Needs Attention',
+  QR_PACK_OUT_OF_DATE: 'QR Pack Out of Date',
+  REFUSED_BY_CLIENT: 'Refused by Client',
+  REJECTED_BY_AGENCY: 'Rejected by Agency',
+  CANDIDATE_SUBMISSION_CANCELLED: 'Candidate Submission Cancelled',
+  CANDIDATE_SUBMISSION_COMPLETE: 'Candidate Submission Complete',
+  STATUS_UNAVAILABLE: 'Status unavailable'
+});
+
+function candidateOfficeSummaryStatusLabel(projection) {
+  if (!projection || typeof projection !== 'object') return '';
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const routeFamily = upper(projection?.current_identity?.route_family);
+  const recordRole = upper(projection?.current_identity?.record_role);
+  const workflowRoute = upper(projection?.workflow?.route);
+  const workflowState = upper(projection?.workflow?.state);
+  const workflowKind = upper(projection?.workflow?.workflow_kind);
+  const historicalWorkflow = projection?.workflow?.historical === true
+    && projection?.workflow?.is_current_action_workflow !== true;
+  const applies = !(historicalWorkflow && workflowState !== 'FINALISED') && (
+    ['ELECTRONIC', 'QR'].includes(routeFamily)
+    || (!!workflowState && (
+      recordRole === 'EXPENSE_ONLY'
+      || workflowRoute === 'PAPER'
+      || workflowKind === 'CONTRACT_EXPENSE'
+    ))
+  );
+  if (!applies) return '';
+
+  const knownSourceCodes = new Set([
+    'CREATED', 'WORKER_DRAFT', 'WORKER_SUBMITTED', 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+    'READY_FOR_MANAGER_APPROVAL', 'AWAITING_MANAGER_APPROVAL', 'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+    'MANAGER_APPROVED', 'READY_TO_FINALISE', 'AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED',
+    'REFUSED', 'REJECTED', 'CANCELLED', 'SUPERSEDED', 'EXPIRED', 'INVOICED_NOT_PAID',
+    'AUTHORISED', 'PAID', 'MANUAL', 'UNASSIGNED', 'CLIENT_UNRESOLVED', 'RATE_MISSING',
+    'PAY_CHANNEL_MISSING', 'READY_FOR_HR', 'READY_FOR_INVOICE', 'PENDING_AUTH',
+    'AWAITING_MANUAL_SIGNATURE', 'UNPROCESSED', 'PLANNED', 'OPEN', 'SUBMITTED',
+    'INVOICED', 'AVAILABLE', 'DRAFT'
+  ]);
+  const sourceCodeRaw = upper(projection?.candidate_status?.code);
+  const sourceCode = knownSourceCodes.has(sourceCodeRaw) ? sourceCodeRaw : 'UNAVAILABLE';
+  const lifecycleCode = workflowState || sourceCode;
+  const paperState = upper(projection?.paper_pack?.state || 'NOT_APPLICABLE');
+  const enabledActionCodes = new Set((Array.isArray(projection.available_actions) ? projection.available_actions : [])
+    .filter((action) => action?.enabled === true)
+    .map((action) => upper(action?.code)));
+  const status = (code) => CANDIDATE_OFFICE_SUMMARY_STATUS_LABELS[code] || CANDIDATE_OFFICE_SUMMARY_STATUS_LABELS.STATUS_UNAVAILABLE;
+
+  if (sourceCode === 'UNAVAILABLE' && !workflowState) return status('STATUS_UNAVAILABLE');
+  if (lifecycleCode === 'REJECTED') return status('REJECTED_BY_AGENCY');
+  if (lifecycleCode === 'REFUSED') return status('REFUSED_BY_CLIENT');
+  if (['CANCELLED', 'SUPERSEDED', 'EXPIRED'].includes(lifecycleCode)) return status('CANDIDATE_SUBMISSION_CANCELLED');
+  if (workflowState === 'FINALISED') return status('CANDIDATE_SUBMISSION_COMPLETE');
+
+  const manager = projection?.manager_approval || null;
+  const receivedDaily = routeFamily === 'ELECTRONIC'
+    && workflowKind === 'DAILY'
+    && workflowState === 'RECEIVED'
+    && workflowRoute === 'PHONE'
+    && projection?.workflow?.is_current_action_workflow === true
+    && projection?.workflow?.historical === false
+    && upper(manager?.method) === 'PHONE'
+    && upper(manager?.state) === 'APPROVED'
+    && upper(projection?.paper_pack?.state) === 'NOT_APPLICABLE';
+  if (receivedDaily) return status('CANDIDATE_SUBMISSION_COMPLETE');
+  if (!workflowState && ['FINALISED', 'AUTHORISED', 'INVOICED_NOT_PAID', 'PAID'].includes(sourceCode)) return '';
+  if (enabledActionCodes.has('RETRY_FINALISATION')) return status('FINALISATION_NEEDS_ATTENTION');
+  if (paperState === 'STALE') return status('QR_PACK_OUT_OF_DATE');
+  if (['FAILED_RETRYABLE', 'FAILED_TERMINAL', 'RETIRED'].includes(paperState)) return status('QR_PACK_NEEDS_ATTENTION');
+  if (paperState === 'RETURN_RECEIVED' || ['RECEIVED', 'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE'].includes(lifecycleCode)) return status('FINALISING_SUBMISSION');
+  if (paperState === 'READY' && lifecycleCode === 'AWAITING_PAPER_RETURN') return status('QR_AWAITING_SIGNED_RETURN');
+  if (['PREPARING', 'BACKOFF'].includes(paperState)) return status('QR_PACK_PREPARING');
+  if (['CREATED', 'WORKER_DRAFT'].includes(lifecycleCode)) return status('AWAITING_CANDIDATE_SUBMISSION');
+  if (['WORKER_SUBMITTED', 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT', 'READY_FOR_MANAGER_APPROVAL'].includes(lifecycleCode)) return status('CANDIDATE_SUBMITTED');
+  if (lifecycleCode === 'AWAITING_MANAGER_APPROVAL') return status('AWAITING_MANAGER_APPROVAL');
+  if (lifecycleCode === 'MANAGER_APPROVED' || upper(manager?.state) === 'APPROVED') return status('MANAGER_APPROVED');
+  if (!projection.workflow && ['QR', 'ELECTRONIC'].includes(routeFamily)) return status('AWAITING_CANDIDATE_SUBMISSION');
+  if (projection.workflow || ['QR', 'ELECTRONIC'].includes(routeFamily)) return status('STATUS_UNAVAILABLE');
+  return '';
+}
+
 async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpc) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
@@ -86357,7 +86448,10 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
     pending.push({ index, identity });
   }
 
-  if (!pending.length) return output;
+  if (!pending.length) {
+    output.forEach((row) => { row.candidate_office_summary_status_label = ''; });
+    return output;
+  }
   if (!['TEST', 'LIVE'].includes(environment)) {
     for (const item of pending) {
       output[item.index].candidate_office_projection_loaded = true;
@@ -86426,6 +86520,9 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
       }
     }
   }));
+  output.forEach((row) => {
+    row.candidate_office_summary_status_label = candidateOfficeSummaryStatusLabel(row.candidate_office_projection);
+  });
   return output;
 }
 
@@ -86944,6 +87041,131 @@ async function handleTimesheetsSummary(env, req) {
     const candidateSummaryCursor = includeCandidateProjection
       ? await readCandidateTimesheetSummaryCursor(env)
       : null;
+    if (candidateSubmissionSort) {
+      const collator = new Intl.Collator('en-GB', { sensitivity: 'base', numeric: true });
+      const descending = orderDir === 'desc';
+      const scanPageSize = 200;
+      const keepCount = effOffset + effLimit;
+      const keptRows = [];
+      let scanOffset = 0;
+      let stableOrdinal = 0;
+      let knownTotal = null;
+      let payBatchTotals = null;
+
+      const compareRows = (left, right) => {
+        const leftLabel = String(left?.candidate_office_summary_status_label || '');
+        const rightLabel = String(right?.candidate_office_summary_status_label || '');
+        if (!leftLabel && rightLabel) return 1;
+        if (leftLabel && !rightLabel) return -1;
+        const labelCompared = collator.compare(leftLabel, rightLabel);
+        if (labelCompared) return descending ? -labelCompared : labelCompared;
+        const candidateCompared = collator.compare(String(left?.candidate_name || ''), String(right?.candidate_name || ''));
+        if (candidateCompared) return candidateCompared;
+        return Number(left?.__candidate_submission_stable_ordinal || 0) - Number(right?.__candidate_submission_stable_ordinal || 0);
+      };
+
+      while (knownTotal == null || scanOffset < knownTotal) {
+        let rawRows = [];
+
+        if (hasPayBatchFilter) {
+          const batchFilters = {
+            ...baseFilters,
+            order_by: 'week_ending_date',
+            order_dir: 'desc',
+            pay_batch_id: payBatchId,
+            limit: scanPageSize,
+            offset: scanOffset
+          };
+          const scanResponse = await sbRpc(env, 'pay_batch_timesheet_summary_lightweight_v1', { p_filters: batchFilters });
+          const scanPayload = unwrapRpcPayload(scanResponse, 'pay_batch_timesheet_summary_lightweight_v1');
+          const scanObject = (scanPayload && typeof scanPayload === 'object' && !Array.isArray(scanPayload)) ? scanPayload : {};
+          rawRows = Array.isArray(scanObject.rows) ? scanObject.rows : rpcRows(scanPayload, 'pay_batch_timesheet_summary_lightweight_v1');
+          const totalRaw = Number(scanObject.total_count ?? scanObject.total ?? scanObject.count ?? scanObject.totals?.count_all);
+          if (Number.isFinite(totalRaw) && totalRaw >= 0) knownTotal = Math.trunc(totalRaw);
+          if (!payBatchTotals && scanObject.totals && typeof scanObject.totals === 'object') payBatchTotals = scanObject.totals;
+        } else {
+          const scanFilters = {
+            ...baseFilters,
+            order_by: 'week_ending_date',
+            order_dir: 'desc',
+            limit: scanPageSize,
+            offset: scanOffset
+          };
+          const scanResponse = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: scanFilters });
+          rawRows = rpcRows(scanResponse, 'timesheet_summary_lightweight_rows_v1');
+        }
+
+        if (!rawRows.length) break;
+
+        const normalizedRows = normalizeSummaryRows(rawRows);
+        const presentedRows = await attachCandidateDailyOfficePresentation(env, normalizedRows);
+        const projectedRows = attachTimesheetExpensePresentation(
+          await attachCandidateOfficeSummaryProjections(env, user.id, presentedRows)
+        );
+
+        for (const row of projectedRows) {
+          if (
+            candidateOfficeApplicability(row) !== false
+            && String(row?.timesheet_id || '').trim()
+            && !row?.candidate_office_projection
+          ) {
+            throw new Error(row?.candidate_office_projection_error?.code || 'CANDIDATE_OFFICE_PROJECTION_FAILED');
+          }
+          row.__candidate_submission_stable_ordinal = stableOrdinal;
+          stableOrdinal += 1;
+        }
+
+        keptRows.push(...projectedRows);
+        keptRows.sort(compareRows);
+        if (keptRows.length > keepCount) keptRows.length = keepCount;
+
+        scanOffset += rawRows.length;
+        if (rawRows.length < scanPageSize) break;
+      }
+
+      let totalCount = Number.isFinite(knownTotal) ? knownTotal : scanOffset;
+      let totals = null;
+
+      if (hasPayBatchFilter) {
+        if (includeTotals) {
+          totals = {
+            count_all: totalCount,
+            total_pay_ex_vat_sum: Number(payBatchTotals?.total_pay_ex_vat_sum || 0),
+            total_charge_ex_vat_sum: Number(payBatchTotals?.total_charge_ex_vat_sum || 0),
+            margin_ex_vat_sum: Number(payBatchTotals?.margin_ex_vat_sum || 0)
+          };
+        }
+      } else if (includeTotals || includeCount) {
+        const totalFilters = {
+          ...baseFilters,
+          purpose: 'totals',
+          disable_paging: true,
+          no_paging: true,
+          apply_paging: false
+        };
+        const totalResponse = await sbRpc(env, 'timesheet_list_totals', { p_filters: totalFilters });
+        const totalRow = firstRpcRow(totalResponse, 'timesheet_list_totals') || null;
+        totalCount = Number(totalRow?.count_all || 0);
+        if (includeTotals) totals = totalRow || { count_all: 0, total_pay_ex_vat_sum: 0, margin_ex_vat_sum: 0 };
+      }
+
+      const outRows = keptRows.slice(effOffset, effOffset + effLimit).map((row) => {
+        const clean = { ...row };
+        delete clean.__candidate_submission_stable_ordinal;
+        return clean;
+      });
+
+      return withCORS(env, req, ok({
+        items: outRows,
+        page,
+        page_size: pageSize,
+        count: totalCount,
+        total: totalCount,
+        totals: totals || undefined,
+        candidate_timesheet_summary_cursor: candidateSummaryCursor
+      }));
+    }
+
     if (hasPayBatchFilter) {
       const batchFilters = {
         ...baseFilters,
@@ -128184,6 +128406,7 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       if (s === 'timesheet' || s === 'timesheets') return 'timesheets';
       if (s === 'invoice' || s === 'invoices') return 'invoices';
       if (s === 'umbrella' || s === 'umbrellas') return 'umbrellas';
+      if (s === 'outbox') return 'outbox';
       return '';
     };
 
@@ -128277,6 +128500,92 @@ async function handleSummaryTypeAheadLookup(env, req, section) {
       } catch {
         normalizedRequestDatasetKey = requestDatasetKey;
       }
+    }
+
+    if (sectionKey === 'outbox') {
+      if (normalizedRequestDatasetKey && normalizedRequestDatasetKey !== serverDatasetKey) {
+        return withCORS(env, req, ok({
+          row_id: null,
+          ordinal_index: null,
+          target_page: (pageSize === 'ALL') ? 1 : null,
+          matched_value: '',
+          dataset_key: serverDatasetKey,
+          section: sectionKey,
+          dataset_key_mismatch: true,
+          requested_dataset_key: requestDatasetKey
+        }));
+      }
+
+      const allowedSortKeys = new Set(['created_at_utc', 'scheduled_for_utc', 'effective_ready_at_utc', 'status', 'channel']);
+      if (!allowedSortKeys.has(sortKey)) {
+        return withCORS(env, req, badRequest('Unsupported Outbox sort key'));
+      }
+
+      const normalizedPrefix = prefix.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const batchSize = 500;
+      let offset = 0;
+      let totalCount = null;
+
+      while (totalCount == null || offset < totalCount) {
+        const base = new URL(req.url);
+        const query = new URLSearchParams();
+        query.set('limit', String(batchSize));
+        query.set('offset', String(offset));
+        query.set('sort_by', sortKey);
+        query.set('sort_dir', sortDir);
+        const search = trimStr(normalizedFilters.search || normalizedFilters.q || '');
+        const channel = trimStr(normalizedFilters.channel || '');
+        const status = trimStr(normalizedFilters.status || '');
+        const queueState = trimStr(normalizedFilters.queue_state || '');
+        if (search) query.set('search', search);
+        if (channel) query.set('channel', channel);
+        if (status) query.set('status', status);
+        if (queueState) query.set('queue_state', queueState);
+
+        const internalReq = new Request(`${base.origin}/api/outbox?${query.toString()}`, {
+          method: 'GET',
+          headers: req.headers
+        });
+        const response = await handleOutboxUnifiedList(env, internalReq);
+        const payload = await response.clone().json().catch(() => null);
+        if (!response.ok) throw new Error(`Outbox type-ahead list failed (${response.status})`);
+
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        const matchedIndex = items.findIndex((row) => String(row?.[sortKey] ?? '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .startsWith(normalizedPrefix));
+
+        if (matchedIndex >= 0) {
+          const row = items[matchedIndex] || {};
+          const channelValue = trimStr(row.channel).toUpperCase();
+          const idValue = trimStr(row.outbox_id || row.id);
+          const ordinalIndex = offset + matchedIndex;
+          return withCORS(env, req, ok({
+            row_id: channelValue && idValue ? `${channelValue}::${idValue}` : null,
+            ordinal_index: ordinalIndex,
+            target_page: pageSize === 'ALL' ? 1 : Math.floor(ordinalIndex / Number(pageSize)) + 1,
+            matched_value: trimStr(row?.[sortKey]),
+            dataset_key: serverDatasetKey,
+            section: sectionKey
+          }));
+        }
+
+        const totalRaw = Number(payload?.total_count ?? payload?.total ?? payload?.count);
+        if (Number.isFinite(totalRaw) && totalRaw >= 0) totalCount = Math.trunc(totalRaw);
+        offset += items.length;
+        if (items.length < batchSize) break;
+      }
+
+      return withCORS(env, req, ok({
+        row_id: null,
+        ordinal_index: null,
+        target_page: pageSize === 'ALL' ? 1 : null,
+        matched_value: '',
+        dataset_key: serverDatasetKey,
+        section: sectionKey
+      }));
     }
 
     const rpcRes = await sbRpc(env, 'summary_typeahead_lookup', {
@@ -133875,7 +134184,7 @@ async function handleOutboxUnifiedList(env, req) {
     const statusOk = (status == null) || /^[A-Z_]+$/.test(status);
     if (!statusOk) return withCORS(env, req, badRequest('invalid_status'));
 
-    const allowedQueueState = new Set(['SCHEDULED', 'QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED']);
+    const allowedQueueState = new Set(['READY', 'SCHEDULED', 'QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED']);
     if (queueState != null && !allowedQueueState.has(queueState)) {
       return withCORS(env, req, badRequest('invalid_queue_state'));
     }
@@ -139453,6 +139762,7 @@ async function handleSummaryMembership(env, req, section) {
     else if (path === '/api/contracts') resp = await handleContractsList(env, internalReq);
     else if (path === '/api/timesheets/summary') resp = await handleTimesheetsSummary(env, internalReq);
     else if (path === '/api/invoices') resp = await handleListInvoices(env, internalReq);
+    else if (path === '/api/outbox') resp = await handleOutboxUnifiedList(env, internalReq);
     else throw new Error(`Unsupported summary membership path: ${path}`);
 
     let payload = null;
@@ -139473,7 +139783,7 @@ async function handleSummaryMembership(env, req, section) {
     return payload;
   };
 
-  const allowedSections = new Set(['candidates', 'clients', 'umbrellas', 'contracts', 'timesheets', 'invoices']);
+  const allowedSections = new Set(['candidates', 'clients', 'umbrellas', 'contracts', 'timesheets', 'invoices', 'outbox']);
   const rawSection =
     trimStr(section) ||
     trimStr(body && (body.section || body.entity || body.context_kind)) ||
@@ -139505,7 +139815,7 @@ async function handleSummaryMembership(env, req, section) {
   if (sectionKey === 'umbrellas') effectiveFilters = buildUmbrellaSummaryFilterSpec(rawFilters);
   if (sectionKey === 'contracts') effectiveFilters = buildContractSummaryFilterSpec(rawFilters);
   if (sectionKey === 'timesheets') effectiveFilters = buildTimesheetSummaryFilterSpec(rawFilters);
-  if (sectionKey === 'invoices') effectiveFilters = buildInvoiceSummaryFilterSpec(rawFilters);
+    if (sectionKey === 'invoices') effectiveFilters = buildInvoiceSummaryFilterSpec(rawFilters);
 
   if (Object.prototype.hasOwnProperty.call(effectiveFilters, 'ids')) {
     effectiveFilters.ids = normalizeIdArray(effectiveFilters.ids);
@@ -139584,13 +139894,66 @@ async function handleSummaryMembership(env, req, section) {
       }));
     }
 
+    if (sectionKey === 'outbox') {
+      const pageSize = 500;
+      const rowIds = [];
+      let offset = 0;
+      let totalCount = null;
+
+      while (totalCount == null || offset < totalCount) {
+        const payload = await invokeJsonHandler('/api/outbox', {
+          limit: pageSize,
+          offset,
+          search: trimStr(effectiveFilters.search || effectiveFilters.q || ''),
+          channel: trimStr(effectiveFilters.channel || ''),
+          status: effectiveFilters.status,
+          queue_state: trimStr(effectiveFilters.queue_state || ''),
+          sort_by: 'created_at_utc',
+          sort_dir: 'desc'
+        });
+
+        const items = Array.isArray(payload && payload.items) ? payload.items : [];
+        items.forEach((row) => {
+          const channel = trimStr(row && row.channel).toUpperCase();
+          const id = trimStr(row && (row.outbox_id || row.id));
+          if (channel && id) rowIds.push(`${channel}::${id}`);
+        });
+
+        const countRaw = Number(payload && (payload.total_count ?? payload.total ?? payload.count));
+        if (Number.isFinite(countRaw) && countRaw >= 0) totalCount = Math.trunc(countRaw);
+
+        offset += items.length;
+        if (items.length < pageSize) break;
+      }
+
+      const normalizedRowIds = normalizeIdArray(rowIds);
+      const resolvedTotal = Number.isFinite(totalCount) && totalCount >= 0
+        ? totalCount
+        : normalizedRowIds.length;
+
+      if (normalizedRowIds.length !== resolvedTotal) {
+        throw new Error('OUTBOX_MEMBERSHIP_CARDINALITY_MISMATCH');
+      }
+
+      return withCORS(env, req, ok({
+        section: sectionKey,
+        dataset_key: datasetKey,
+        row_ids: normalizedRowIds,
+        ids: normalizedRowIds.slice(),
+        total_count: resolvedTotal,
+        total: resolvedTotal,
+        count: resolvedTotal
+      }));
+    }
+
     const pathMap = {
       candidates: '/api/search/candidates',
       clients: '/api/search/clients',
       umbrellas: '/api/search/umbrellas',
       contracts: '/api/contracts',
       timesheets: '/api/timesheets/summary',
-      invoices: '/api/invoices'
+      invoices: '/api/invoices',
+      outbox: '/api/outbox'
     };
 
     const membershipParams = {
