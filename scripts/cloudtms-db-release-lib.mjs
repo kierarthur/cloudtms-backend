@@ -106,6 +106,99 @@ export function releaseVerifierVariables(file, mode, context = {}) {
   };
 }
 
+export function releaseAdmissionSql({ releaseId, gitCommit, expectedHash, mode }) {
+  const id = String(releaseId || '');
+  const commit = String(gitCommit || '');
+  const hash = String(expectedHash || '');
+  const installMode = String(mode || '');
+  if (!id || !/^[0-9a-f]{40}$/.test(commit) || !/^[0-9a-f]{64}$/.test(hash)
+      || !['NEW', 'UPGRADE', 'ADOPT'].includes(installMode)) {
+    throw new Error('Database release admission identity is incomplete or invalid');
+  }
+  const literal = value => `'${String(value).replaceAll("'", "''")}'`;
+  return `
+    begin;
+    set local lock_timeout='5s';
+    set local statement_timeout='15s';
+    select pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0)
+    );
+    with superseded as (
+      select applying.release_id,
+        later.release_id as superseding_verified_release_id,
+        later.git_commit as superseding_verified_git_commit
+      from private.cloudtms_database_releases applying
+      cross join lateral (
+        select verified.release_id, verified.git_commit
+        from private.cloudtms_database_releases verified
+        where verified.status='VERIFIED'
+          and verified.completed_at_utc is not null
+          and verified.started_at_utc>applying.started_at_utc
+        order by verified.started_at_utc,verified.release_id
+        limit 1
+      ) later
+      where applying.status='APPLYING'
+        and applying.completed_at_utc is null
+    )
+    update private.cloudtms_database_releases applying
+    set status='FAILED',
+        completed_at_utc=pg_catalog.clock_timestamp(),
+        evidence_json=coalesce(applying.evidence_json,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+          'failure','superseded_applying_release_reconciled',
+          'reconciliation_contract','CLOUDTMS_DATABASE_RELEASE_ADMISSION_V1',
+          'reconciled_by_release_id',${literal(id)},
+          'superseding_verified_release_id',superseded.superseding_verified_release_id,
+          'superseding_verified_git_commit',superseded.superseding_verified_git_commit
+        )
+    from superseded
+    where applying.release_id=superseded.release_id;
+    do $admission$
+    begin
+      if exists (
+        select 1
+        from private.cloudtms_database_releases
+        where status='APPLYING'
+          and completed_at_utc is null
+      ) then
+        raise exception 'CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING';
+      end if;
+    end
+    $admission$;
+    do $identity$
+    begin
+      if exists (
+        select 1
+        from private.cloudtms_database_releases existing
+        where existing.release_id=${literal(id)}
+          and (
+            existing.git_commit<>${literal(commit)}
+            or existing.repository_contract_sha256<>${literal(hash)}
+            or existing.install_mode<>${literal(installMode)}
+          )
+      ) then
+        raise exception 'CLOUDTMS_DATABASE_RELEASE_IDENTITY_MISMATCH';
+      end if;
+    end
+    $identity$;
+    insert into private.cloudtms_database_releases(
+      release_id,git_commit,repository_contract_sha256,installed_contract_sha256,
+      install_mode,status,completed_at_utc,evidence_json
+    ) values (
+      ${literal(id)},${literal(commit)},${literal(hash)},${literal(hash)},
+      ${literal(installMode)},'APPLYING',null,'{}'::jsonb
+    ) on conflict(release_id) do update set
+      git_commit=excluded.git_commit,
+      repository_contract_sha256=excluded.repository_contract_sha256,
+      installed_contract_sha256=excluded.installed_contract_sha256,
+      install_mode=excluded.install_mode,
+      status=excluded.status,
+      started_at_utc=pg_catalog.clock_timestamp(),
+      completed_at_utc=null,
+      evidence_json=excluded.evidence_json;
+    commit;
+  `;
+}
+
 export function deadlockRetryCountForFile(file) {
   const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
   const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/');

@@ -7,7 +7,7 @@ import {
   canonicalSqlBytes, closureFor, deadlockRetryCountForFile, inventory,
   formatPlanSection, legacyUpgradeInventory,
   mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
-  readJson, releaseVerifierVariables, repoRoot, sha256, sqlDateKey,
+  readJson, releaseAdmissionSql, releaseVerifierVariables, repoRoot, sha256, sqlDateKey,
   validateExpectedDatabase, validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
 
@@ -379,6 +379,56 @@ test('rollback fixture release context is capability-mapped to three NEW/UPGRADE
   }
   assert.deepEqual(releaseVerifierVariables('tests/unmapped.sql', 'NEW', context), {});
   assert.throws(() => releaseVerifierVariables(scopes.keys().next().value, 'NEW', {}), /release context is incomplete/);
+});
+
+test('release admission reconciles only provably superseded APPLYING history and still blocks concurrent release', () => {
+  const sql = releaseAdmissionSql({
+    releaseId: '20260822-test-authority-upgrade-0123456789ab',
+    gitCommit: '0123456789abcdef0123456789abcdef01234567',
+    expectedHash: 'a'.repeat(64),
+    mode: 'UPGRADE',
+  });
+  const assertSafetyContract = candidate => {
+    assert.match(candidate, /pg_advisory_xact_lock/);
+    assert.match(candidate, /lock_timeout='5s'/);
+    assert.match(candidate, /statement_timeout='15s'/);
+    assert.match(candidate, /applying\.status='APPLYING'/);
+    assert.match(candidate, /verified\.status='VERIFIED'/);
+    assert.match(candidate, /verified\.completed_at_utc is not null/);
+    assert.match(candidate, /verified\.started_at_utc>applying\.started_at_utc/);
+    assert.match(candidate, /order by verified\.started_at_utc,verified\.release_id/);
+    assert.match(candidate, /where status='APPLYING'/);
+    assert.match(candidate, /superseded_applying_release_reconciled/);
+    assert.match(candidate, /superseding_verified_release_id/);
+    assert.match(candidate, /superseding_verified_git_commit/);
+    assert.match(candidate, /CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING/);
+    assert.match(candidate, /CLOUDTMS_DATABASE_RELEASE_IDENTITY_MISMATCH/);
+    assert.match(candidate, /started_at_utc=pg_catalog\.clock_timestamp\(\)/);
+  };
+  assertSafetyContract(sql);
+  assert.ok(sql.indexOf('update private.cloudtms_database_releases applying')
+    < sql.indexOf('CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING'));
+  assert.ok(sql.indexOf('CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING')
+    < sql.indexOf('insert into private.cloudtms_database_releases'));
+  assert.throws(() => releaseAdmissionSql({
+    releaseId: 'x', gitCommit: 'not-a-commit', expectedHash: 'a'.repeat(64), mode: 'UPGRADE',
+  }), /admission identity/);
+  assert.throws(() => releaseAdmissionSql({
+    releaseId: 'x', gitCommit: '0'.repeat(40), expectedHash: 'a'.repeat(64), mode: 'LEGACY_UPGRADE',
+  }), /admission identity/);
+  for (const [label, unsafeMutation] of [
+    ['verified status', sql.replace("verified.status='VERIFIED'", "verified.status='FAILED'")],
+    ['verified completion', sql.replace('verified.completed_at_utc is not null', 'verified.completed_at_utc is null')],
+    ['verified ordering', sql.replace('verified.started_at_utc>applying.started_at_utc', 'verified.started_at_utc=applying.started_at_utc')],
+    ['deterministic superseding release', sql.replace('order by verified.started_at_utc,verified.release_id', 'order by verified.release_id')],
+    ['active release status', sql.replace("where status='APPLYING'", "where status='FAILED'")],
+    ['admission lock', sql.replace('pg_catalog.pg_advisory_xact_lock', 'pg_catalog.hashtextextended')],
+    ['release identity guard', sql.replace('CLOUDTMS_DATABASE_RELEASE_IDENTITY_MISMATCH', 'CLOUDTMS_DATABASE_RELEASE_ALREADY_APPLYING')],
+    ['retry start renewal', sql.replace('started_at_utc=pg_catalog.clock_timestamp()', 'started_at_utc=existing.started_at_utc')],
+  ]) {
+    assert.notEqual(unsafeMutation, sql, label);
+    assert.throws(() => assertSafetyContract(unsafeMutation), label);
+  }
 });
 
 test('shared rollback fixture is release-attested and every direct consumer stays rollback-contained', () => {

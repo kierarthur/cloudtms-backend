@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   canonicalContractHash, contractDifference, contractDifferenceDetails, databaseUrl, exportContract, inventory,
-  formatPlanSection, legacyUpgradeInventory, psql, readJson, releaseVerifierVariables,
+  formatPlanSection, legacyUpgradeInventory, psql, readJson, releaseAdmissionSql, releaseVerifierVariables,
   repoRoot, shellGitHead, validateExpectedDatabase, validateTarget,
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
@@ -174,6 +174,17 @@ function recordRelease({ releaseId, mode, status, expectedHash, installedHash, e
       completed_at_utc=excluded.completed_at_utc,
       evidence_json=excluded.evidence_json;
   ` });
+}
+
+function admitRelease({ releaseId, mode, expectedHash }) {
+  psql({
+    sql: releaseAdmissionSql({
+      releaseId,
+      gitCommit: shellGitHead(),
+      expectedHash,
+      mode,
+    }),
+  });
 }
 
 function ensureIdentity(environment, customerKey) {
@@ -345,7 +356,7 @@ function applyRelease() {
     psql({ file: release.controlPlaneMigration });
     ensureIdentity(environment, customerKey);
     psql({ file: release.bootstrapFile, variables: { cloudtms_environment: environment } });
-    recordRelease({ releaseId, mode, status: 'APPLYING', expectedHash, installedHash: expectedHash });
+    admitRelease({ releaseId, mode, expectedHash });
     activeReleaseId = releaseId;
     // The immutable baseline contains every migration before the release
     // control-plane anchor. Apply every later locked migration in chronological
@@ -374,7 +385,7 @@ function applyRelease() {
     const pre = compareExpected(release.contractPath);
     psql({ file: release.controlPlaneMigration });
     ensureIdentity(environment, customerKey);
-    recordRelease({ releaseId, mode, status: 'APPLYING', expectedHash, installedHash: pre.sha256 });
+    admitRelease({ releaseId, mode, expectedHash: pre.sha256 });
     activeReleaseId = releaseId;
     recordInventory(releaseId);
   } else {
@@ -383,7 +394,7 @@ function applyRelease() {
     const installedMigrations = assertUpgradeLedger(current);
     const installedRepeatables = new Map(JSON.parse(psql({ sql: `select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',closure_sha256)),'[]'::jsonb)::text from private.cloudtms_repeatable_ledger;` }) || '[]').map(x => [x.path, x.sha256]));
     const pendingRepeatables = current.repeatables.filter(item => installedRepeatables.get(item.path) !== item.sha256);
-    recordRelease({ releaseId, mode, status: 'APPLYING', expectedHash, installedHash: expectedHash });
+    admitRelease({ releaseId, mode, expectedHash });
     activeReleaseId = releaseId;
     for (const item of current.migrations) {
       if (installedMigrations.has(item.path)) continue;
