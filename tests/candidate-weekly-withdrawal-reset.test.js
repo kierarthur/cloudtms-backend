@@ -191,7 +191,8 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
     '31082026_0557_candidate_empty_expense_carrier_action_v1.sql',
     '02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
     '04092026_1952_candidate_expense_history_anchor_recovery_v1.sql',
-    '05092026_0420_candidate_timesheet_effective_pay_history_v1.sql'
+    '05092026_0420_candidate_timesheet_effective_pay_history_v1.sql',
+    '05092026_0941_candidate_protected_additional_expense_action_v1.sql'
   ]) {
     assert.ok(finalAuthority.includes(`\\ir ${currentAuthority}`),
       `Final authority must replay ${currentAuthority}`);
@@ -205,6 +206,9 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
   assert.match(finalAuthority,
     /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql/i,
     'The effective-payment History detail must remain the final Candidate detail owner during UPGRADE replay');
+  assert.match(finalAuthority,
+    /\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql[\s\S]*\\ir 05092026_0941_candidate_protected_additional_expense_action_v1\.sql/i,
+    'The manager-approved additional-expense contract must remain the final Candidate action owner during UPGRADE replay');
   assert.match(dailyVerification,
     /search_path=""[\s\S]*draft_week\.id[\s\S]*final_signed_document_ready/i);
 });

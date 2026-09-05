@@ -51,3 +51,9 @@
 -- detail reader embedded in the compatibility chain cannot move paid
 -- Timesheets back to Current or disagree with the already-current page reader.
 \ir 05092026_0420_candidate_timesheet_effective_pay_history_v1.sql
+
+-- The current action owner deliberately permits a separate expense-only claim
+-- after manager-approved hours have finalised, while keeping pre-approval work
+-- authoritative. Restore both action helpers after every older read bundle so
+-- an UPGRADE closure cannot reinstate the superseded Office-protection rule.
+\ir 05092026_0941_candidate_protected_additional_expense_action_v1.sql
