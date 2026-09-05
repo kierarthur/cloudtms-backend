@@ -96,7 +96,9 @@ begin
            current_window.current_week_ending_date,
            t.booking_id,t.parent_timesheet_id,t.status as timesheet_status,t.submission_mode,t.line_type,t.sheet_scope,t.is_current,
            t.additional_units_week,t.additional_units_per_day,
-           tf.additional_units_json,tf.total_hours,tf.processing_status,tf.authorised_at_utc,tf.paid_at_utc,tf.locked_by_invoice_id,
+           tf.additional_units_json,tf.total_hours,tf.processing_status,tf.authorised_at_utc,
+           case when effective_pay.pay_status_code='PAID' then effective_pay.paid_at_utc else null end as paid_at_utc,
+           tf.locked_by_invoice_id,
            tf.expenses_pay_ex_vat,tf.expenses_charge_ex_vat,
            tf.mileage_units,tf.mileage_pay_ex_vat,tf.mileage_charge_ex_vat,
            tf.travel_pay_ex_vat,tf.travel_charge_ex_vat,
@@ -130,6 +132,28 @@ begin
       where f.timesheet_id=t.timesheet_id and f.is_current=true
       order by f.computed_at_utc desc nulls last,f.updated_at desc,f.id desc limit 1
     ) tf on true
+    left join public.timesheet_summary_pay_state_cache summary_pay_cache
+      on summary_pay_cache.timesheet_id=t.timesheet_id
+    left join public.timesheet_pay_state pay_state
+      on pay_state.timesheet_id=t.timesheet_id
+    cross join lateral (
+      select
+        coalesce(
+          case when coalesce(summary_pay_cache.summary_state_applies,false)
+            then summary_pay_cache.summary_pay_status_code end,
+          pay_state.summary_pay_status_code,
+          case when pay_state.last_settled_at_utc is not null or tf.paid_at_utc is not null
+            then 'PAID' else 'UNPAID' end
+        )::text as pay_status_code,
+        case
+          when coalesce(summary_pay_cache.summary_state_applies,false)
+            then summary_pay_cache.last_paid_at_utc
+          when pay_state.summary_pay_status_code is not null
+            or pay_state.summary_pay_icon_code is not null
+            then pay_state.summary_pay_paid_at_utc
+          else coalesce(pay_state.last_settled_at_utc,tf.paid_at_utc)
+        end as paid_at_utc
+    ) effective_pay
     where t.timesheet_id is null or (t.is_current=true and t.archived_at_utc is null)
   ), current_version_resolution as materialized (
     -- Candidate workflow and parent anchors are immutable historical UUIDs.
@@ -634,7 +658,7 @@ begin
   with daily_candidates as materialized (
     select t.timesheet_id,t.week_ending_date,
       private._candidate_daily_work_date_v1(t.worked_start_iso,t.scheduled_start_iso,t.week_ending_date) as work_date,
-      f.paid_at_utc,
+      case when effective_pay.pay_status_code='PAID' then effective_pay.paid_at_utc else null end as paid_at_utc,
       ((v_snapshot_utc at time zone 'Europe/London')::date
         +mod(7-extract(dow from (v_snapshot_utc at time zone 'Europe/London')::date)::integer,7))::date as current_week
     from public.timesheets t
@@ -643,6 +667,28 @@ begin
       select fin.* from public.timesheets_financials fin where fin.timesheet_id=t.timesheet_id and fin.is_current
       order by fin.computed_at_utc desc nulls last,fin.updated_at desc,fin.id desc limit 1
     ) f on true
+    left join public.timesheet_summary_pay_state_cache summary_pay_cache
+      on summary_pay_cache.timesheet_id=t.timesheet_id
+    left join public.timesheet_pay_state pay_state
+      on pay_state.timesheet_id=t.timesheet_id
+    cross join lateral (
+      select
+        coalesce(
+          case when coalesce(summary_pay_cache.summary_state_applies,false)
+            then summary_pay_cache.summary_pay_status_code end,
+          pay_state.summary_pay_status_code,
+          case when pay_state.last_settled_at_utc is not null or f.paid_at_utc is not null
+            then 'PAID' else 'UNPAID' end
+        )::text as pay_status_code,
+        case
+          when coalesce(summary_pay_cache.summary_state_applies,false)
+            then summary_pay_cache.last_paid_at_utc
+          when pay_state.summary_pay_status_code is not null
+            or pay_state.summary_pay_icon_code is not null
+            then pay_state.summary_pay_paid_at_utc
+          else coalesce(pay_state.last_settled_at_utc,f.paid_at_utc)
+        end as paid_at_utc
+    ) effective_pay
     where t.sheet_scope='DAILY' and t.is_current and t.archived_at_utc is null
       and nullif(btrim(t.booking_id),'') is not null
       and (t.contract_id is null or exists(select 1 from public.contracts owned
