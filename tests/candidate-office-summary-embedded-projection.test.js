@@ -242,7 +242,7 @@ test('targeted Summary patch exposes only the agreed visible state and current i
   assert.deepEqual(Object.keys(patch).sort(), [
     'backend_row_signature','candidate_office_projection','candidate_office_projection_error',
     'candidate_office_projection_loaded','candidate_office_projection_not_applicable','contract_week_id',
-    'current_identity','expected_row_signature','id','margin_ex_vat','processing_status',
+    'current_identity','display_route_label','expected_row_signature','expense_route_kind','id','is_expense_only','margin_ex_vat','processing_status',
     'processing_status_display','route_display','route_family','route_type','row_signature','sheet_scope',
     'submission_mode','submission_mode_snapshot','timesheet_id','total_hours','total_pay_ex_vat'
   ].sort());

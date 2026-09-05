@@ -48,6 +48,10 @@ declare
   v_detail_source_timesheet_id uuid;
   v_effective_pay_status_code text:='UNPAID';
   v_effective_paid_at_utc timestamptz;
+  v_is_expense_only boolean:=false;
+  v_expense_route text;
+  v_expense_route_kind text:='UNKNOWN';
+  v_display_route_label text;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_reads');
   if num_nonnulls(p_timesheet_id,p_contract_week_id,p_workflow_id)<>1 then
@@ -361,8 +365,60 @@ begin
       else 'PREPARING_DOCUMENTS' end;
   end if;
 
+  v_is_expense_only:=
+    upper(coalesce(v_timesheet.line_type::text,'')) in ('EXPENSES','MILEAGE')
+    and v_fin.total_hours is not null
+    and v_fin.total_hours=0::numeric
+    and coalesce(v_timesheet.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb)
+    and coalesce(v_fin.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb)
+    and not jsonb_path_exists(coalesce(v_timesheet.additional_units_week,'{}'::jsonb),
+      'lax $.** ? (@.type() == "number" && @ != 0)')
+    and not jsonb_path_exists(coalesce(v_timesheet.additional_units_per_day,'{}'::jsonb),
+      'lax $.** ? (@.type() == "number" && @ != 0)')
+    and not jsonb_path_exists(coalesce(v_fin.additional_units_json,'{}'::jsonb),
+      'lax $.** ? (@.type() == "number" && @ != 0)')
+    and v_timesheet.worked_start_iso is null
+    and v_timesheet.worked_end_iso is null
+    and (
+      abs(coalesce(v_fin.expenses_pay_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.expenses_charge_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.mileage_units,0::numeric))
+      +abs(coalesce(v_fin.mileage_pay_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.mileage_charge_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.travel_pay_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.travel_charge_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.accommodation_pay_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.accommodation_charge_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.other_pay_ex_vat,0::numeric))
+      +abs(coalesce(v_fin.other_charge_ex_vat,0::numeric))
+    )>0::numeric;
+  if v_is_expense_only then
+    select upper(nullif(btrim(workflow_item->>'route'),'')) into v_expense_route
+    from jsonb_array_elements(coalesce(v_claims,'[]'::jsonb)) workflow_item
+    where workflow_item->>'workflow_id'=v_timesheet.candidate_workflow_id::text
+       or workflow_item->>'target_timesheet_id'=v_timesheet.timesheet_id::text
+    order by (workflow_item->>'workflow_id'=v_timesheet.candidate_workflow_id::text) desc,
+      workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+    limit 1;
+    v_expense_route_kind:=case
+      when v_expense_route='PAPER' then 'QR'
+      when v_expense_route in ('PHONE','EMAIL','ELECTRONIC') then 'ELECTRONIC'
+      when v_timesheet.submission_mode='MANUAL'::public.submission_mode_enum
+        and upper(coalesce(v_timesheet.status::text,''))='SUBMITTED'
+        and v_timesheet.candidate_workflow_id is null then 'MANUAL'
+      else 'UNKNOWN' end;
+    v_display_route_label:=case v_expense_route_kind
+      when 'QR' then 'QR Expense'
+      when 'ELECTRONIC' then 'Electronic Expense'
+      when 'MANUAL' then 'Manual Expense'
+      else 'Expense' end;
+  end if;
+
   return jsonb_build_object(
     'ok',true,
+    'is_expense_only',v_is_expense_only,
+    'expense_route_kind',v_expense_route_kind,
+    'display_route_label',v_display_route_label,
     'week_ending_label',private._candidate_week_ending_label_v1(v_week.week_ending_date),
     'candidate_status_code',v_candidate_status_code,
     'list_membership',jsonb_build_object(

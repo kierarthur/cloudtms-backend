@@ -827,6 +827,10 @@ begin
       'delivery_pending',coalesce(v_manager_pending,0)>0,
       'provider_handoff_in_progress',coalesce(v_manager_lease,false),
       'expires_at_utc',v_approval.expires_at_utc,'resend_count',v_approval.resend_count,
+      'manager_name',v_approval.manager_name,
+      'manager_position',v_approval.manager_position,
+      'manager_email',v_approval.manager_email_normalized,
+      'approved_at_utc',v_approval.approved_at_utc,
       'resends_remaining',v_resends_remaining,
       'next_reminder_at_utc',case when v_manager_accepted is not null then v_manager_accepted+interval '24 hours' else null end,
       'reminder_eligible',v_reminder_eligible,'renewal_eligible',v_renewal_eligible,
@@ -843,6 +847,9 @@ begin
       'route',v_retained_workflow.route,
       'state',v_retained_workflow.state,
       'method',v_retained_approval.method,
+      'manager_name',v_retained_approval.manager_name,
+      'manager_position',v_retained_approval.manager_position,
+      'manager_email',v_retained_approval.manager_email_normalized,
       'approved_at_utc',v_retained_approval.approved_at_utc
     ) end,
     'paper_pack',jsonb_build_object(

@@ -1,7 +1,9 @@
 -- Repeatable CloudTMS function authority: candidate_protected_additional_expense_action_v1
 -- A finalised Candidate hours/combined claim may start a later expense-only
--- claim only after the current hours carrier is Office-protected.  Until then,
--- cancellation/resubmission is the sole correction route.
+-- claim as soon as the manager-approved submission has safely finalised.  The
+-- later claim uses its own expense carrier and never changes the approved
+-- Timesheet.  While the original submission is still awaiting manager
+-- approval, cancellation/resubmission remains the sole correction route.
 
 \set ON_ERROR_STOP on
 
@@ -24,7 +26,6 @@ declare
   v_action text;
   v_draft_has_content boolean:=false;
   v_has_finalised_hours boolean:=false;
-  v_hours_office_protected boolean:=false;
 begin
   if upper(coalesce(p_candidate_status_code,'')) in ('PAID','AUTHORISED','INVOICED_NOT_PAID')
      and not coalesce((p_capabilities->>'can_edit_expenses')::boolean,false) then
@@ -141,21 +142,7 @@ begin
       and item->>'workflow_kind' in ('CONTRACT_HOURS','CONTRACT_COMBINED','DAILY')
   ) into v_has_finalised_hours;
   if v_has_finalised_hours then
-    v_hours_office_protected:=
-      upper(coalesce(p_candidate_status_code,'')) in ('PAID','AUTHORISED','INVOICED_NOT_PAID')
-      or exists(
-        select 1
-        from public.timesheets_financials hours_financial
-        where hours_financial.timesheet_id=p_timesheet_id
-          and hours_financial.is_current=true
-          and (
-            hours_financial.authorised_at_utc is not null
-            or hours_financial.locked_by_invoice_id is not null
-            or hours_financial.paid_at_utc is not null
-          )
-      );
-    if v_hours_office_protected
-       and coalesce((p_capabilities->>'can_edit_expenses')::boolean,false) then
+    if coalesce((p_capabilities->>'can_edit_expenses')::boolean,false) then
       return jsonb_build_object(
         'code','ADD_EXPENSES','label','Add Expenses',
         'method','POST','path','/candidate-app/v1/workflows',

@@ -7031,19 +7031,6 @@ BEGIN
       ON placed_member.timesheet_id = pair_member.timesheet_id
     WHERE placed_member.timesheet_id IS NULL
   ),
-  client_reference_settings AS MATERIALIZED (
-    SELECT
-      client_setting.client_id,
-      COALESCE(BOOL_OR(client_setting.reference_number_required_to_issue_invoice), FALSE)
-        AS issue_reference_required
-    FROM public.client_settings AS client_setting
-    WHERE EXISTS (
-      SELECT 1
-      FROM source_rows
-      WHERE source_rows.client_id = client_setting.client_id
-    )
-    GROUP BY client_setting.client_id
-  ),
   enriched_base AS MATERIALIZED (
     SELECT
       source_rows.timesheet_id,
@@ -7076,6 +7063,15 @@ BEGIN
 
       source_rows.route_type,
       CASE
+        WHEN expense_presentation_fact.is_expense_only THEN
+          CASE
+            WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) = 'PAPER' THEN 'QR Expense'
+            WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) IN ('PHONE', 'EMAIL', 'ELECTRONIC') THEN 'Electronic Expense'
+            WHEN timesheet_row.submission_mode = 'MANUAL'::public.submission_mode_enum
+              AND UPPER(COALESCE(timesheet_row.status::text, '')) = 'SUBMITTED'
+              AND timesheet_row.candidate_workflow_id IS NULL THEN 'Manual Expense'
+            ELSE 'Expense'
+          END
         WHEN (
           source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
           AND (
@@ -7113,6 +7109,17 @@ BEGIN
         WHEN COALESCE(source_rows.route_type, '') <> '' THEN INITCAP(REPLACE(source_rows.route_type, '_', ' '))
         ELSE 'Manual'
       END AS route_display,
+
+      expense_presentation_fact.is_expense_only,
+      CASE
+        WHEN NOT expense_presentation_fact.is_expense_only THEN 'UNKNOWN'
+        WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) = 'PAPER' THEN 'QR'
+        WHEN UPPER(COALESCE(candidate_expense_workflow.route::text, '')) IN ('PHONE', 'EMAIL', 'ELECTRONIC') THEN 'ELECTRONIC'
+        WHEN timesheet_row.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND UPPER(COALESCE(timesheet_row.status::text, '')) = 'SUBMITTED'
+          AND timesheet_row.candidate_workflow_id IS NULL THEN 'MANUAL'
+        ELSE 'UNKNOWN'
+      END AS expense_route_kind,
 
       CASE
         WHEN (
@@ -7244,7 +7251,6 @@ BEGIN
             OR COALESCE(source_rows.client_ts_reference_required, FALSE)
             OR COALESCE(source_rows.client_pay_reference_required, FALSE)
             OR COALESCE(source_rows.client_invoice_reference_required, FALSE)
-            OR COALESCE(client_reference_settings.issue_reference_required, FALSE)
           ) THEN FALSE
         WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN
           NULLIF(BTRIM(COALESCE(timesheet_row.reference_number, '')), '') IS NULL
@@ -7388,10 +7394,47 @@ BEGIN
     LEFT JOIN public.timesheets_financials AS financial_row
       ON financial_row.timesheet_id = source_rows.timesheet_id
      AND financial_row.is_current = TRUE
+    LEFT JOIN public.candidate_submission_workflows AS candidate_expense_workflow
+      ON candidate_expense_workflow.id = timesheet_row.candidate_workflow_id
     LEFT JOIN correction_pair_issue_timesheets
       ON correction_pair_issue_timesheets.timesheet_id = source_rows.timesheet_id
-    LEFT JOIN client_reference_settings
-      ON client_reference_settings.client_id = source_rows.client_id
+    LEFT JOIN LATERAL (
+      SELECT
+        (
+          UPPER(COALESCE(timesheet_row.line_type::text, '')) IN ('EXPENSES', 'MILEAGE')
+          AND financial_row.total_hours IS NOT NULL
+          AND financial_row.total_hours = 0::numeric
+          AND COALESCE(timesheet_row.actual_schedule_json, '[]'::jsonb) IN ('[]'::jsonb, '{}'::jsonb, 'null'::jsonb)
+          AND COALESCE(financial_row.actual_schedule_json, '[]'::jsonb) IN ('[]'::jsonb, '{}'::jsonb, 'null'::jsonb)
+          AND NOT jsonb_path_exists(
+            COALESCE(timesheet_row.additional_units_week, '{}'::jsonb),
+            'lax $.** ? (@.type() == "number" && @ != 0)'
+          )
+          AND NOT jsonb_path_exists(
+            COALESCE(timesheet_row.additional_units_per_day, '{}'::jsonb),
+            'lax $.** ? (@.type() == "number" && @ != 0)'
+          )
+          AND NOT jsonb_path_exists(
+            COALESCE(financial_row.additional_units_json, '{}'::jsonb),
+            'lax $.** ? (@.type() == "number" && @ != 0)'
+          )
+          AND NULLIF(BTRIM(COALESCE(timesheet_row.worked_start_iso::text, '')), '') IS NULL
+          AND NULLIF(BTRIM(COALESCE(timesheet_row.worked_end_iso::text, '')), '') IS NULL
+          AND (
+            ABS(COALESCE(financial_row.expenses_pay_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.expenses_charge_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.mileage_units, 0::numeric))
+            + ABS(COALESCE(financial_row.mileage_pay_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.mileage_charge_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.travel_pay_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.travel_charge_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.accommodation_pay_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.accommodation_charge_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.other_pay_ex_vat, 0::numeric))
+            + ABS(COALESCE(financial_row.other_charge_ex_vat, 0::numeric))
+          ) > 0::numeric
+        ) AS is_expense_only
+    ) AS expense_presentation_fact ON TRUE
     LEFT JOIN LATERAL (
       SELECT
         COUNT(timesheet_evidence_row.id) FILTER (
@@ -7518,6 +7561,25 @@ BEGIN
       )
       AND (
         v_route_type IS NULL
+        OR (
+          v_route_type = 'expense'
+          AND enriched_row.is_expense_only
+        )
+        OR (
+          v_route_type = 'manual_expense'
+          AND enriched_row.is_expense_only
+          AND enriched_row.expense_route_kind = 'MANUAL'
+        )
+        OR (
+          v_route_type = 'electronic_expense'
+          AND enriched_row.is_expense_only
+          AND enriched_row.expense_route_kind = 'ELECTRONIC'
+        )
+        OR (
+          v_route_type = 'qr_expense'
+          AND enriched_row.is_expense_only
+          AND enriched_row.expense_route_kind = 'QR'
+        )
         OR (
           v_route_type = 'electronic'
           AND UPPER(COALESCE(enriched_row.route_type, '')) IN ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC')
@@ -7820,8 +7882,7 @@ $function$;
 
 
 
-REVOKE ALL ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) TO service_role;
 
 COMMIT;

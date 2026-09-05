@@ -47,6 +47,10 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import {
+  classifyExpenseTimesheetPresentation,
+  isExplicitOfficeCreatedExpenseRecord
+} from './timesheet-expense-presentation.js';
 import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
 import { createCandidateDailySpecialist } from './candidate-daily-specialist.js';
 import {
@@ -74355,7 +74359,45 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       healthroster_compare
     };
     const presentedDetailsPayload = await attachCandidateDailyOfficeDetailPresentation(env, rawDetailsPayload);
-    const detailsPayload = markCandidateOfficePayloadApplicability(presentedDetailsPayload);
+    const expensePresentation = classifyExpenseTimesheetPresentation({
+      line_type: ts.line_type,
+      total_hours: tsfinRaw?.total_hours,
+      actual_schedule_json: ts.actual_schedule_json,
+      financial_schedule_json: tsfinRaw?.actual_schedule_json,
+      additional_units_week: ts.additional_units_week,
+      additional_units_per_day: ts.additional_units_per_day,
+      additional_units_json: tsfinRaw?.additional_units_json,
+      worked_start_iso: ts.worked_start_iso,
+      worked_end_iso: ts.worked_end_iso,
+      expense_values: {
+        expenses_pay_ex_vat: tsfinRaw?.expenses_pay_ex_vat,
+        expenses_charge_ex_vat: tsfinRaw?.expenses_charge_ex_vat,
+        mileage_units: tsfinRaw?.mileage_units,
+        mileage_pay_ex_vat: tsfinRaw?.mileage_pay_ex_vat,
+        mileage_charge_ex_vat: tsfinRaw?.mileage_charge_ex_vat,
+        travel_pay_ex_vat: tsfinRaw?.travel_pay_ex_vat,
+        travel_charge_ex_vat: tsfinRaw?.travel_charge_ex_vat,
+        accommodation_pay_ex_vat: tsfinRaw?.accommodation_pay_ex_vat,
+        accommodation_charge_ex_vat: tsfinRaw?.accommodation_charge_ex_vat,
+        other_pay_ex_vat: tsfinRaw?.other_pay_ex_vat,
+        other_charge_ex_vat: tsfinRaw?.other_charge_ex_vat
+      },
+      workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route,
+      routeFamily,
+      submissionMode: ts.submission_mode,
+      explicitOfficeCreated: isExplicitOfficeCreatedExpenseRecord({
+        line_type: ts.line_type,
+        submission_mode: ts.submission_mode,
+        status: ts.status,
+        candidate_workflow_id: ts.candidate_workflow_id,
+        workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route
+      }),
+      fallbackDisplayLabel: effective.route_display || null
+    });
+    const detailsPayload = markCandidateOfficePayloadApplicability({
+      ...presentedDetailsPayload,
+      ...expensePresentation
+    });
     return withCORS(env, req, ok(detailsPayload));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -84970,6 +85012,9 @@ function candidateTimesheetSummaryCompactPatch(row) {
     route_type: row?.route_type ?? null,
     route_display: row?.route_display ?? null,
     route_family: row?.route_family ?? null,
+    is_expense_only: row?.is_expense_only === true,
+    expense_route_kind: row?.expense_route_kind ?? 'UNKNOWN',
+    display_route_label: row?.display_route_label ?? row?.route_display ?? null,
     sheet_scope: row?.sheet_scope ?? null,
     submission_mode: row?.submission_mode ?? null,
     submission_mode_snapshot: row?.submission_mode_snapshot ?? null,
@@ -84987,6 +85032,28 @@ function candidateTimesheetSummaryCompactPatch(row) {
     candidate_office_projection: row?.candidate_office_projection || null,
     candidate_office_projection_error: row?.candidate_office_projection_error || null
   };
+}
+
+function attachTimesheetExpensePresentation(rows) {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map((row) => {
+    const label = String(row?.route_display || '').trim();
+    const expenseRouteKind = label === 'Manual Expense'
+      ? 'MANUAL'
+      : label === 'Electronic Expense'
+        ? 'ELECTRONIC'
+        : label === 'QR Expense'
+          ? 'QR'
+          : label === 'Expense'
+            ? 'UNKNOWN'
+            : null;
+    return {
+      ...row,
+      is_expense_only: expenseRouteKind !== null,
+      expense_route_kind: expenseRouteKind || 'UNKNOWN',
+      display_route_label: label || null
+    };
+  });
 }
 
 async function handleCandidateTimesheetSummaryPatches(env, req) {
@@ -85026,7 +85093,9 @@ async function handleCandidateTimesheetSummaryPatches(env, req) {
       ? raw
       : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.rows) ? raw.rows : []));
     const presentedRows = await attachCandidateDailyOfficePresentation(env,rows);
-    const projectedRows = await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows);
+    const projectedRows = attachTimesheetExpensePresentation(
+      await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
+    );
     const byTimesheetId = new Map();
     const byContractWeekId = new Map();
     for (const row of projectedRows) {
@@ -85448,9 +85517,11 @@ async function handleTimesheetsSummary(env, req) {
       const rawRows = Array.isArray(payloadObj.rows) ? payloadObj.rows : rpcRows(payload, 'pay_batch_timesheet_summary_lightweight_v1');
       const normalizedRows = normalizeSummaryRows(rawRows);
       const presentedRows = await attachCandidateDailyOfficePresentation(env,normalizedRows);
-      const outRows = includeCandidateProjection
-        ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
-        : presentedRows;
+      const outRows = attachTimesheetExpensePresentation(
+        includeCandidateProjection
+          ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
+          : presentedRows
+      );
 
       const payloadTotals = (payloadObj.totals && typeof payloadObj.totals === 'object' && !Array.isArray(payloadObj.totals))
         ? payloadObj.totals
@@ -85483,9 +85554,11 @@ async function handleTimesheetsSummary(env, req) {
       rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1')
     );
     const presentedRows = await attachCandidateDailyOfficePresentation(env,normalizedRows);
-    const outRows = includeCandidateProjection
-      ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
-      : presentedRows;
+    const outRows = attachTimesheetExpensePresentation(
+      includeCandidateProjection
+        ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
+        : presentedRows
+    );
 
     let totals = null;
     let totalCount = outRows.length;

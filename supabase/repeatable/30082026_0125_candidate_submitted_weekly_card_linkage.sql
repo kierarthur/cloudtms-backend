@@ -95,6 +95,7 @@ begin
            coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0) as effective_week_ending_weekday,
            current_window.current_week_ending_date,
            t.booking_id,t.parent_timesheet_id,t.status as timesheet_status,t.submission_mode,t.line_type,t.sheet_scope,t.is_current,
+           t.actual_schedule_json,t.worked_start_iso,t.worked_end_iso,t.candidate_workflow_id,
            t.additional_units_week,t.additional_units_per_day,
            tf.additional_units_json,tf.total_hours,tf.processing_status,tf.authorised_at_utc,
            case when effective_pay.pay_status_code='PAID' then effective_pay.paid_at_utc else null end as paid_at_utc,
@@ -209,7 +210,7 @@ begin
         when coalesce(workflow_anchor.timesheet_id,parent_anchor.timesheet_id,base_anchor.timesheet_id,additional_anchor.timesheet_id) is null
           and carrier.expense_value<>0 then 'EXPENSE_DISPLAY_ANCHOR_NOT_FOUND'
         else null end as conflict_code,
-      carrier.expenses_pay_ex_vat,carrier.mileage_pay_ex_vat,carrier.travel_pay_ex_vat,
+      carrier.expenses_pay_ex_vat,carrier.mileage_units,carrier.mileage_pay_ex_vat,carrier.travel_pay_ex_vat,
       carrier.accommodation_pay_ex_vat,carrier.other_pay_ex_vat,carrier.expense_value
     from expense_carriers carrier
     left join lateral (
@@ -277,6 +278,7 @@ begin
   ), expense_anchor_totals as materialized (
     select display_timesheet_id,
       sum(expenses_pay_ex_vat) expenses_pay_ex_vat,
+      sum(mileage_units) mileage_units,
       sum(mileage_pay_ex_vat) mileage_pay_ex_vat,
       sum(travel_pay_ex_vat) travel_pay_ex_vat,
       sum(accommodation_pay_ex_vat) accommodation_pay_ex_vat,
@@ -289,6 +291,7 @@ begin
       jsonb_agg(jsonb_build_object(
         'workflow_id',resolved.id,'workflow_kind',resolved.workflow_kind,'state',resolved.state,
         'claim_family',resolved.claim_family,
+        'route',resolved.route,
         'draft_has_content',case
           when resolved.state not in ('CREATED','WORKER_DRAFT') then null
           else exists(
@@ -333,6 +336,15 @@ begin
         'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
       ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}','') is not null))[1]
         as submitted_expenses_pay_ex_vat,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,mileage_units}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,mileage_units}','') is not null))[1]
+        as submitted_mileage_units,
       (array_agg(
         nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,mileage_pay_ex_vat}','')::numeric
         order by resolved.updated_at_utc desc,resolved.id
@@ -443,6 +455,8 @@ begin
         else coalesce(base.total_hours,0) end as overlay_total_hours,
       case when base.timesheet_id is null then coalesce(workflows.submitted_expenses_pay_ex_vat,totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0)
         else coalesce(totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0) end as overlay_expenses_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_mileage_units,totals.mileage_units,base.mileage_units,0)
+        else coalesce(totals.mileage_units,base.mileage_units,0) end as overlay_mileage_units,
       case when base.timesheet_id is null then coalesce(workflows.submitted_mileage_pay_ex_vat,totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0)
         else coalesce(totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0) end as overlay_mileage_pay_ex_vat,
       case when base.timesheet_id is null then coalesce(workflows.submitted_travel_pay_ex_vat,totals.travel_pay_ex_vat,base.travel_pay_ex_vat,0)
@@ -488,6 +502,9 @@ begin
     limit v_limit+1
   ), delivered as materialized (
     select page.*,
+      expense_presentation.is_expense_only,
+      expense_presentation.expense_route_kind,
+      expense_presentation.display_route_label,
       (
         select workflow_item->>'state'
         from jsonb_array_elements(page.workflows) workflow_item
@@ -515,6 +532,58 @@ begin
           and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
       ) as actionable_rejections
     from page
+    left join lateral (
+      select upper(nullif(btrim(workflow_item->>'route'),'')) as route
+      from jsonb_array_elements(page.workflows) workflow_item
+      where workflow_item->>'claim_family'='EXPENSES'
+      order by workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+      limit 1
+    ) expense_workflow on true
+    cross join lateral (
+      select (
+        coalesce(page.overlay_total_hours,0)=0::numeric
+        and (
+          upper(coalesce(page.line_type::text,'')) in ('EXPENSES','MILEAGE')
+          or expense_workflow.route is not null
+        )
+        and coalesce(page.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb,'null'::jsonb)
+        and not jsonb_path_exists(coalesce(page.additional_units_week,'{}'::jsonb),
+          'lax $.** ? (@.type() == "number" && @ != 0)')
+        and not jsonb_path_exists(coalesce(page.additional_units_per_day,'{}'::jsonb),
+          'lax $.** ? (@.type() == "number" && @ != 0)')
+        and not jsonb_path_exists(coalesce(page.additional_units_json,'{}'::jsonb),
+          'lax $.** ? (@.type() == "number" && @ != 0)')
+        and page.worked_start_iso is null
+        and page.worked_end_iso is null
+        and (
+          abs(coalesce(page.overlay_expenses_pay_ex_vat,0::numeric))
+          +abs(coalesce(page.overlay_mileage_units,0::numeric))
+          +abs(coalesce(page.overlay_mileage_pay_ex_vat,0::numeric))
+          +abs(coalesce(page.overlay_travel_pay_ex_vat,0::numeric))
+          +abs(coalesce(page.overlay_accommodation_pay_ex_vat,0::numeric))
+          +abs(coalesce(page.overlay_other_pay_ex_vat,0::numeric))
+        )>0::numeric
+      ) as is_expense_only
+    ) expense_fact
+    cross join lateral (
+      select expense_fact.is_expense_only,
+        case
+          when not expense_fact.is_expense_only then 'UNKNOWN'
+          when expense_workflow.route='PAPER' then 'QR'
+          when expense_workflow.route in ('PHONE','EMAIL','ELECTRONIC') then 'ELECTRONIC'
+          when page.submission_mode='MANUAL'::public.submission_mode_enum
+            and upper(coalesce(page.timesheet_status::text,''))='SUBMITTED'
+            and page.candidate_workflow_id is null then 'MANUAL'
+          else 'UNKNOWN' end as expense_route_kind,
+        case
+          when not expense_fact.is_expense_only then null
+          when expense_workflow.route='PAPER' then 'QR Expense'
+          when expense_workflow.route in ('PHONE','EMAIL','ELECTRONIC') then 'Electronic Expense'
+          when page.submission_mode='MANUAL'::public.submission_mode_enum
+            and upper(coalesce(page.timesheet_status::text,''))='SUBMITTED'
+            and page.candidate_workflow_id is null then 'Manual Expense'
+          else 'Expense' end as display_route_label
+    ) expense_presentation
     order by week_ending_date desc,contract_id desc,additional_seq desc,id desc
     limit v_limit
   )
@@ -538,9 +607,13 @@ begin
       'processing_status',d.processing_status,
       'paid',d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc,
       'authorised',d.authorised_at_utc is not null,
+      'is_expense_only',d.is_expense_only,
+      'expense_route_kind',d.expense_route_kind,
+      'display_route_label',d.display_route_label,
       'total_hours',coalesce(d.overlay_total_hours,0),
       'expenses',jsonb_build_object(
         'expenses_pay_ex_vat',coalesce(d.overlay_expenses_pay_ex_vat,0),
+        'mileage_units',coalesce(d.overlay_mileage_units,0),
         'mileage_pay_ex_vat',coalesce(d.overlay_mileage_pay_ex_vat,0),
         'travel_pay_ex_vat',coalesce(d.overlay_travel_pay_ex_vat,0),
         'accommodation_pay_ex_vat',coalesce(d.overlay_accommodation_pay_ex_vat,0),
@@ -739,8 +812,11 @@ begin
       'paid',coalesce(d.paid_at_utc<=v_snapshot_utc,false),
       'authorised',d.detail#>>'{lifecycle,authorised_at_utc}' is not null,
       'candidate_status_code',d.detail->>'candidate_status_code',
+      'is_expense_only',coalesce((d.detail->>'is_expense_only')::boolean,false),
+      'expense_route_kind',coalesce(d.detail->>'expense_route_kind','UNKNOWN'),
+      'display_route_label',d.detail->>'display_route_label',
       'total_hours',d.detail#>'{hours,total_hours}',
-      'expenses',jsonb_build_object('expenses_pay_ex_vat',0,'mileage_pay_ex_vat',0,
+      'expenses',jsonb_build_object('expenses_pay_ex_vat',0,'mileage_units',0,'mileage_pay_ex_vat',0,
         'travel_pay_ex_vat',0,'accommodation_pay_ex_vat',0,'other_pay_ex_vat',0),
       'expense_overlay_conflict_code',null,
       'workflows',d.detail->'workflows','rejections',d.detail->'rejections',

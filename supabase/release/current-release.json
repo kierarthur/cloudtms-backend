@@ -106,6 +106,7 @@
     "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
     "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
     "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+    "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
     "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql"
   ],
   "newVerificationFiles": [
@@ -177,6 +178,7 @@
     "supabase/verification/03092026_1642_contract_settings_effective_authority_verification.sql",
     "tests/04092026_1610_candidate_expense_email_admission_runtime_verification.sql",
     "tests/04092026_2005_candidate_expense_history_anchor_runtime_verification.sql",
+    "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
     "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql"
   ]
 }
