@@ -112,10 +112,11 @@ begin
   -- weekly paper-target preparation functions, the four QR signed-pack V2
   -- manifest/proof/component/whole-pack functions, and the exact service-only
   -- legacy one-page cancellation wrapper, manager-finalisation single-flight
-  -- wrapper and two reject-before-delete guard functions are present. Browser execution
-  -- remains exactly zero.
-  if v_count<>127 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'8eb227d347a976dee27ee3ea01c3a899' then
+  -- wrapper, two reject-before-delete guard functions, and the target-less
+  -- standalone expense PAPER pack helper are present. Browser execution remains
+  -- exactly zero.
+  if v_count<>128 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'60e0fe40114396d60e8957957f8019bc' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
