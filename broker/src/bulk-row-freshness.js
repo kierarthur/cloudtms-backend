@@ -1,7 +1,11 @@
 const SURFACES = new Set(['bulk_process', 'bulk_authorise']);
 const CLASSIFICATIONS = new Set(['TIMESHEETS', 'NHSP', 'HR']);
 const PROCESS_SECTIONS = new Set(['unprocessed_eligible', 'processed_eligible']);
-const AUTHORISE_SECTIONS = new Set(['processed_eligible', 'authorised_eligible']);
+const AUTHORISE_VISIBLE_SECTIONS = new Set([
+  'processed_eligible',
+  'authorised_eligible',
+  'processed_review_required'
+]);
 
 const FILTER_KEYS = [
   'q',
@@ -153,7 +157,7 @@ function membershipFromDataset(surface, raw, identity) {
 
   const row = (Array.isArray(payload.rows) ? payload.rows : []).find((candidate) => sameLogicalRow(candidate, identity));
   const section = trim(row?.bulk_authorise_section).toLowerCase();
-  return row && AUTHORISE_SECTIONS.has(section) ? { row, section } : { row: null, section: null };
+  return row && AUTHORISE_VISIBLE_SECTIONS.has(section) ? { row, section } : { row: null, section: null };
 }
 
 function removalReason(surface, patch) {
@@ -230,7 +234,7 @@ export async function resolveBulkRowFreshness(request, rpc) {
     };
   }
 
-  const allowedSections = request.surface === 'bulk_process' ? PROCESS_SECTIONS : AUTHORISE_SECTIONS;
+  const allowedSections = request.surface === 'bulk_process' ? PROCESS_SECTIONS : AUTHORISE_VISIBLE_SECTIONS;
   const currentSection = allowedSections.has(trim(request.current_section).toLowerCase())
     ? trim(request.current_section).toLowerCase()
     : null;

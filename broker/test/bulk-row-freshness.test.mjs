@@ -90,6 +90,29 @@ for (const transition of [
   });
 }
 
+test('duplicate-expense review row remains visible without becoming bulk-authorisable', async () => {
+  const reviewRow = row({
+    bulk_authorise_section: 'processed_review_required',
+    bulk_authorise_block_code: 'DUPLICATE_EXPENSE_REVIEW_REQUIRED',
+    can_bulk_authorise: false,
+    can_bulk_unauthorise: false
+  });
+  const result = await resolveBulkRowFreshness(
+    request({
+      surface: 'bulk_authorise',
+      classification: 'TIMESHEETS',
+      current_section: 'processed_review_required'
+    }),
+    rpcScenario({ patch: reviewRow, authoriseRows: [reviewRow] }).rpc
+  );
+  assert.equal(result.outcome, 'CURRENT');
+  assert.equal(result.changed, false);
+  assert.equal(result.eligible_for_surface, true);
+  assert.equal(result.target_section, 'processed_review_required');
+  assert.equal(result.row.can_bulk_authorise, false);
+  assert.equal(result.row.bulk_authorise_block_code, 'DUPLICATE_EXPENSE_REVIEW_REQUIRED');
+});
+
 for (const transition of [
   { name: 'unauthorised to authorised', from: 'processed_eligible', to: 'authorised_eligible', authorised: true },
   { name: 'authorised to unauthorised', from: 'authorised_eligible', to: 'processed_eligible', authorised: false }
