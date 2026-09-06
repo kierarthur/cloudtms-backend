@@ -223,7 +223,9 @@ begin
        'REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
        'PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE',
        'RETRY_FINALISATION','CANCEL'
-     ) then
+     )
+     or (v_permission='delete_timesheet' and v_action<>'CANCEL')
+     or (v_permission<>'delete_timesheet' and v_action='CANCEL') then
     raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
   end if;
   v_context:=jsonb_build_object(
