@@ -350,5 +350,6 @@ test('expense QR pages reserve a clear area without shrinking the physical code'
   assert.match(expensePage, /isPaperReturn \? 625 : 670/);
   assert.match(expensePage, /component_kind\) === 'EXPENSE_SUMMARY'[\s\S]*height: 96[\s\S]*y: 100[\s\S]*Manager name[\s\S]*y: 58[\s\S]*Manager signature/);
   assert.match(expensePage, /else if \(isPaperReturn\) \{[\s\S]*height: 68[\s\S]*y: 58[\s\S]*Manager signature[\s\S]*Date/);
+  assert.match(expensePage, /const displayOrdinal = isPaperReturn[\s\S]*\? contract\.review_ordinal[\s\S]*: component\.review_ordinal \|\| contract\.review_ordinal/);
   assert.doesNotMatch(expensePage, /CloudTMS workflow:|Page identity:/);
 });

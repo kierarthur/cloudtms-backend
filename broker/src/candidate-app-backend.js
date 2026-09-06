@@ -4325,7 +4325,10 @@ async function renderExpensePage(env, contract, state, phase) {
     : isMileageEvidence ? 'Mileage evidence' : 'Expense evidence', {
     x: 36, y: 812, size: 16, font: bold, color: rgb(1, 1, 1)
   });
-  page.drawText(`${branding.agency_name} | Page ${component.review_ordinal || contract.review_ordinal} | ${component.expense_category || 'General'}`, {
+  const displayOrdinal = isPaperReturn
+    ? contract.review_ordinal
+    : component.review_ordinal || contract.review_ordinal;
+  page.drawText(`${branding.agency_name} | Page ${displayOrdinal} | ${component.expense_category || 'General'}`, {
     x: 36, y: 797, size: 9, font: regular, color: rgb(0.86, 0.9, 0.96)
   });
   const hasSource = await embedExpenseSource(
