@@ -3,7 +3,7 @@
 -- A finalised hours/combined workflow is a manager-approved submitted
 -- Timesheet. It must never fall back to fresh hours entry. When expenses are
 -- permitted it may start a later, separate expense-only claim without waiting
--- for Office authorisation. Before manager approval the current workflow stays
+-- for agency authorisation. Before manager approval the current workflow stays
 -- authoritative and no parallel expense claim is offered.
 begin;
 
@@ -21,7 +21,7 @@ begin
   ))) into v_definition;
   if position('v_has_finalised_hours' in v_definition)=0
      or position('v_hours_office_protected' in v_definition)<>0
-     or position('expense_financial.authorised_at_utc is not null' in v_definition)=0
+     or position('expense_financial.authorised_at_utc is not null' in v_definition)<>0
      or v_definition~'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Finalised-hours primary-action authority is not installed safely';
   end if;
@@ -33,7 +33,7 @@ begin
       'state','FINALISED','generation',3,'detail_action_owner',true,
       'updated_at_utc',now()
     )),
-    jsonb_build_object('can_edit_hours',true,'can_edit_expenses',true),
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
     v_timesheet,v_week
   );
   if v_action->>'code'<>'ADD_EXPENSES' then
@@ -75,11 +75,11 @@ begin
       'state','FINALISED','generation',2,'detail_action_owner',true,
       'updated_at_utc',now()
     )),
-    jsonb_build_object('can_edit_hours',true,'can_edit_expenses',true),
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
     v_timesheet,v_week
   );
-  if v_action->>'code'<>'CONTINUE_EXPENSE_CLAIM' then
-    raise exception 'A finalised but not Office-authorised expense claim was not kept current: %',v_action;
+  if v_action->>'code'<>'ADD_EXPENSES' then
+    raise exception 'A finalised expense claim still blocked the next claim: %',v_action;
   end if;
 
   v_action:=private._candidate_timesheet_primary_action_v1(

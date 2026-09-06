@@ -100,6 +100,20 @@ begin
   end if;
 
   v_workflows:=jsonb_build_array(jsonb_build_object(
+    'workflow_id',v_workflow,'workflow_kind','CONTRACT_EXPENSE',
+    'state','FINALISED','generation',2,'detail_action_owner',true,
+    'updated_at_utc',now()
+  ));
+  v_action:=private._candidate_timesheet_primary_action_v1(
+    'PENDING_AUTH',v_workflows,
+    jsonb_build_object('can_edit_hours',false,'can_edit_expenses',true),
+    v_timesheet,v_week
+  );
+  if v_action->>'code'<>'ADD_EXPENSES' then
+    raise exception 'Manager-approved expense still blocked the next claim: %',v_action;
+  end if;
+
+  v_workflows:=jsonb_build_array(jsonb_build_object(
     'workflow_id',v_workflow,'workflow_kind','CONTRACT_COMBINED',
     'state','AWAITING_MANAGER_APPROVAL','generation',2,'detail_action_owner',true,
     'updated_at_utc',now()

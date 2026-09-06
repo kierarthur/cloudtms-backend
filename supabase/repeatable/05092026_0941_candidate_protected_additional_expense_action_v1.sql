@@ -1,8 +1,8 @@
 -- Repeatable CloudTMS function authority: candidate_protected_additional_expense_action_v1
--- A finalised Candidate hours/combined claim may start a later expense-only
--- claim as soon as the manager-approved submission has safely finalised.  The
--- later claim uses its own expense carrier and never changes the approved
--- Timesheet.  While the original submission is still awaiting manager
+-- A finalised Candidate hours/combined/expense claim may start a later
+-- expense-only claim as soon as the manager-approved submission has safely
+-- finalised. The later claim uses its own expense carrier and never changes
+-- an approved claim. While the current submission is still awaiting manager
 -- approval, cancellation/resubmission remains the sole correction route.
 
 \set ON_ERROR_STOP on
@@ -62,24 +62,8 @@ begin
     'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
     'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
-    and (
-      item->>'state'<>'FINALISED'
-      or (
-        item->>'workflow_kind'='CONTRACT_EXPENSE'
-        and (
-          nullif(item->>'target_timesheet_id','') is null
-          or not exists(
-            select 1
-            from public.timesheets_financials expense_financial
-            where expense_financial.timesheet_id=nullif(item->>'target_timesheet_id','')::uuid
-              and expense_financial.is_current=true
-              and expense_financial.authorised_at_utc is not null
-          )
-        )
-      )
-    )
     and (
       item->>'state'<>'REFUSED'
       or not private._candidate_rejection_replaced_v1(

@@ -1168,17 +1168,8 @@ begin
           and prior.contract_id=v_contract.id
           and prior.week_ending_date=v_canonical_week_ending_date
           and prior.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
-          and prior.state not in ('CANCELLED','REJECTED','REFUSED','EXPIRED','SUPERSEDED')
-          and (
-            prior.state<>'FINALISED'
-            or prior.target_timesheet_id is null
-            or not exists(
-              select 1
-              from public.timesheets_financials prior_fin
-              where prior_fin.timesheet_id=prior.target_timesheet_id
-                and prior_fin.is_current=true
-                and prior_fin.authorised_at_utc is not null
-            )
+          and prior.state not in (
+            'CANCELLED','REJECTED','REFUSED','EXPIRED','SUPERSEDED','FINALISED'
           )
       ) or exists(
         select 1
@@ -1193,6 +1184,16 @@ begin
         where prior_week.contract_id=v_contract.id
           and prior_week.week_ending_date=v_canonical_week_ending_date
           and prior_fin.authorised_at_utc is null
+          and not exists(
+            select 1
+            from public.candidate_submission_workflows approved_claim
+            where approved_claim.candidate_id=v_candidate_id
+              and approved_claim.contract_id=v_contract.id
+              and approved_claim.week_ending_date=v_canonical_week_ending_date
+              and approved_claim.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+              and approved_claim.state='FINALISED'
+              and approved_claim.target_timesheet_id=prior_timesheet.timesheet_id
+          )
           and (
             abs(coalesce(prior_fin.expenses_pay_ex_vat,0))
             +abs(coalesce(prior_fin.expenses_charge_ex_vat,0))
