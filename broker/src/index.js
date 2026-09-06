@@ -81986,7 +81986,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
               `?id=in.(${workflowIds.map(enc).join(',')})` +
               `&environment=eq.${enc(String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase())}` +
-              `&select=id,generation,state,route,manager_approved_at_utc` +
+              `&select=id,generation,state,route,manager_approved_at_utc,finalised_at_utc` +
               `&limit=1000`
           ),
           sbFetch(
@@ -82017,18 +82017,36 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       }
     }
 
-    const candidateManagerApprovalConfirmedFor = (workflowIdInput, generationInput) => {
+    const candidateSubmissionApprovalConfirmedFor = (workflowIdInput, generationInput) => {
       const workflowId = asUuidStringOrNull(workflowIdInput);
       const generation = Number(generationInput);
       if (!workflowId || !Number.isInteger(generation) || generation < 1) return false;
       const workflow = candidateWorkflowById.get(workflowId);
       const state = String(workflow?.state || '').trim().toUpperCase();
-      if (!workflow?.manager_approved_at_utc || [
+      if ([
         'CANCELLED', 'SUPERSEDED', 'REFUSED', 'REJECTED', 'EXPIRED'
       ].includes(state)) return false;
+      const route = String(workflow?.route || '').trim().toUpperCase();
+      if (route === 'PAPER') {
+        // PAPER is the signed-document manager route. It intentionally has no
+        // online approval-request row. Only finalisation of the exact returned
+        // pack generation proves that its materialised evidence was accepted.
+        const artifactGeneration = Math.max(Number(workflow?.generation || 0) - 1, 1);
+        return state === 'FINALISED'
+          && !!workflow?.finalised_at_utc
+          && generation === artifactGeneration;
+      }
+      if (!workflow?.manager_approved_at_utc) return false;
       return approvedCandidateWorkflowGenerations.has(`${workflowId}:${generation}`);
     };
-    const candidateManagerApprovalConfirmed = candidateManagerApprovalConfirmedFor(
+    const candidateSubmissionApprovalAtFor = (workflowIdInput) => {
+      const workflowId = asUuidStringOrNull(workflowIdInput);
+      const workflow = workflowId ? candidateWorkflowById.get(workflowId) : null;
+      return String(workflow?.route || '').trim().toUpperCase() === 'PAPER'
+        ? (workflow?.finalised_at_utc || null)
+        : (workflow?.manager_approved_at_utc || null);
+    };
+    const candidateManagerApprovalConfirmed = candidateSubmissionApprovalConfirmedFor(
       timesheetCandidateWorkflowId,
       ts?.candidate_workflow_generation
     );
@@ -82051,7 +82069,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       const componentId = asUuidStringOrNull(row?.candidate_component_id);
       const component = componentId ? candidateComponentById.get(componentId) : null;
       return component
-        ? candidateManagerApprovalConfirmedFor(component?.workflow_id, component?.workflow_generation)
+        ? candidateSubmissionApprovalConfirmedFor(component?.workflow_id, component?.workflow_generation)
         : candidateManagerApprovalConfirmed;
     });
     const assetIds = Array.from(new Set(
@@ -82170,7 +82188,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       if (candidateComponent) {
         const candidateWorkflowId = asUuidStringOrNull(candidateComponent.workflow_id);
         const candidateWorkflowGeneration = Number(candidateComponent.workflow_generation);
-        const candidateEvidenceApproved = candidateManagerApprovalConfirmedFor(
+        const candidateEvidenceApproved = candidateSubmissionApprovalConfirmedFor(
           candidateWorkflowId,
           candidateWorkflowGeneration
         );
@@ -82180,7 +82198,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           : null;
         out.approved = candidateEvidenceApproved;
         out.approved_at_utc = candidateEvidenceApproved
-          ? (candidateWorkflowById.get(candidateWorkflowId)?.manager_approved_at_utc || null)
+          ? candidateSubmissionApprovalAtFor(candidateWorkflowId)
           : null;
       }
       out.document_asset_id = assetId;
