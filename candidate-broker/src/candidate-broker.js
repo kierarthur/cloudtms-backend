@@ -1092,6 +1092,19 @@ function publicTestTransportDiagnostic(env, source) {
   return Object.keys(safe).length > 0 ? safe : null;
 }
 
+function publicDuplicateExpenseConfirmationDetails(source) {
+  if (!isObject(source)) return null;
+  const categories = Array.isArray(source.categories)
+    ? [...new Set(source.categories.map(upper))]
+    : [];
+  const allowedCategories = new Set(['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER']);
+  const confirmationDigest = text(source.confirmation_digest).toLowerCase();
+  if (categories.length < 1 || categories.length > allowedCategories.size
+      || categories.some(category => !allowedCategories.has(category))
+      || !/^[0-9a-f]{64}$/.test(confirmationDigest)) return null;
+  return { categories, confirmation_digest: confirmationDigest };
+}
+
 async function publicSafePrivateResponse(response, env = null) {
   if (response.status < 400) {
     const headers = new Headers();
@@ -1143,6 +1156,10 @@ async function publicSafePrivateResponse(response, env = null) {
         ? { retry_after_seconds: retryAfterSeconds } : {}),
       terminal: source.details.terminal === true
     };
+  }
+  if (errorCode === 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED') {
+    const duplicateDetails = publicDuplicateExpenseConfirmationDetails(source.details);
+    if (duplicateDetails) body.details = duplicateDetails;
   }
   return jsonResponse(status, body, headers);
 }

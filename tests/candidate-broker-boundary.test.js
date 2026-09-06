@@ -1571,3 +1571,39 @@ test('public broker exposes only closed transport diagnostics in TEST', async ()
   assert.equal((await liveResponse.json()).details, undefined);
 });
 
+test('public broker preserves only the closed duplicate-expense confirmation proof', async () => {
+  const digest = 'A'.repeat(64);
+  const response = await candidateBrokerInternals.publicSafePrivateResponse(Response.json({
+    ok: false,
+    error_code: 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED',
+    details: {
+      categories: ['mileage', 'MILEAGE', 'travel'],
+      confirmation_digest: digest,
+      prior_claim_count: 12,
+      client_name: 'must-not-be-exposed',
+      prior_claims: [{ claim_key: 'must-not-be-exposed' }]
+    }
+  }, { status: 409 }));
+
+  assert.equal(response.status, 409);
+  assert.deepEqual((await response.json()).details, {
+    categories: ['MILEAGE', 'TRAVEL'],
+    confirmation_digest: digest.toLowerCase()
+  });
+});
+
+test('public broker fails closed when duplicate-expense confirmation proof is malformed', async () => {
+  const response = await candidateBrokerInternals.publicSafePrivateResponse(Response.json({
+    ok: false,
+    error_code: 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED',
+    details: {
+      categories: ['MILEAGE'],
+      confirmation_digest: 'not-a-digest',
+      unsafe_private_detail: 'must-not-be-exposed'
+    }
+  }, { status: 409 }));
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).details, undefined);
+});
+
