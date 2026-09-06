@@ -219,9 +219,21 @@ begin
   end if;
 
   update public.candidate_submission_workflows
-  set issue_codes=v_finalisation_codes,state='FINALISED',generation=generation+1,
+  set issue_codes='[]'::jsonb,state='FINALISED',generation=generation+1,
       finalised_at_utc=now()
   where id=v_current_workflow;
+
+  v_review:=private._timesheet_duplicate_expense_review_v1(v_current_timesheet);
+  if coalesce((v_review->>'required')::boolean,false) is distinct from true
+     or v_review->'categories' is distinct from '["MILEAGE"]'::jsonb then
+    raise exception 'Finalised claim did not recover its earlier confirmed duplicate review: %',
+      v_review;
+  end if;
+  v_review:=private._timesheet_duplicate_expense_review_v1(v_prior_timesheet);
+  if coalesce((v_review->>'required')::boolean,false) then
+    raise exception 'A later claim incorrectly back-labelled the first claim as a duplicate: %',
+      v_review;
+  end if;
 
   begin
     perform public.timesheet_authorise_generic_atomic(

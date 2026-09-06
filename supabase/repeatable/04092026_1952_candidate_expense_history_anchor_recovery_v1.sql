@@ -219,7 +219,7 @@ as $function$
       workflow_row.updated_at_utc desc,
       workflow_row.id desc
     limit 1
-  ), categories as (
+  ), stored_categories as (
     select distinct replace(issue_code.value,'DUPLICATE_EXPENSE_','') as category
     from matched_workflow
     cross join lateral jsonb_array_elements_text(matched_workflow.issue_codes) issue_code(value)
@@ -227,17 +227,140 @@ as $function$
       and issue_code.value<>'DUPLICATE_EXPENSE_REVIEW'
       and replace(issue_code.value,'DUPLICATE_EXPENSE_','')
             in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+  ), target_workflow as (
+    select
+      workflow_row.id,workflow_row.candidate_id,workflow_row.anchor_timesheet_id,
+      workflow_row.target_timesheet_id,workflow_row.week_ending_date,
+      workflow_row.worker_submitted_at_utc,contract_row.client_id
+    from public.candidate_submission_workflows workflow_row
+    join public.contracts contract_row on contract_row.id=workflow_row.contract_id
+    where p_timesheet_id is not null
+      and workflow_row.target_timesheet_id=p_timesheet_id
+      and workflow_row.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+      and workflow_row.state='FINALISED'
+      and workflow_row.worker_submitted_at_utc is not null
+      and not exists(select 1 from matched_workflow)
+    order by workflow_row.updated_at_utc desc,workflow_row.id desc
+    limit 1
+  ), current_categories as (
+    select distinct case when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+      else upper(component.expense_category) end as category
+    from target_workflow
+    join public.candidate_submission_components component
+      on component.workflow_id=target_workflow.id
+    where component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+      and component.state not in ('SUPERSEDED','REJECTED')
+      and case when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+        else upper(component.expense_category) end
+          in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+    union
+    select category.category
+    from target_workflow
+    join public.timesheets_financials current_financial
+      on current_financial.timesheet_id=target_workflow.target_timesheet_id
+     and current_financial.is_current=true
+    cross join lateral (values
+      ('MILEAGE',abs(coalesce(current_financial.mileage_units,0))
+        +abs(coalesce(current_financial.mileage_pay_ex_vat,0))
+        +abs(coalesce(current_financial.mileage_charge_ex_vat,0))),
+      ('TRAVEL',abs(coalesce(current_financial.travel_pay_ex_vat,0))
+        +abs(coalesce(current_financial.travel_charge_ex_vat,0))),
+      ('ACCOMMODATION',abs(coalesce(current_financial.accommodation_pay_ex_vat,0))
+        +abs(coalesce(current_financial.accommodation_charge_ex_vat,0))),
+      ('OTHER',abs(coalesce(current_financial.other_pay_ex_vat,0))
+        +abs(coalesce(current_financial.other_charge_ex_vat,0))
+        +case when abs(coalesce(current_financial.expenses_pay_ex_vat,0))
+                       +abs(coalesce(current_financial.expenses_charge_ex_vat,0))>0
+                    and abs(coalesce(current_financial.travel_pay_ex_vat,0))
+                       +abs(coalesce(current_financial.travel_charge_ex_vat,0))
+                       +abs(coalesce(current_financial.accommodation_pay_ex_vat,0))
+                       +abs(coalesce(current_financial.accommodation_charge_ex_vat,0))
+                       +abs(coalesce(current_financial.other_pay_ex_vat,0))
+                       +abs(coalesce(current_financial.other_charge_ex_vat,0))=0
+          then 1 else 0 end)
+    ) category(category,amount)
+    where category.amount>0
+  ), prior_categories as (
+    select distinct case when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+      else upper(component.expense_category) end as category
+    from target_workflow
+    join public.candidate_submission_workflows prior_workflow
+      on prior_workflow.id<>target_workflow.id
+     and prior_workflow.candidate_id=target_workflow.candidate_id
+     and prior_workflow.week_ending_date=target_workflow.week_ending_date
+     and prior_workflow.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+     and prior_workflow.worker_submitted_at_utc is not null
+     and prior_workflow.worker_submitted_at_utc<target_workflow.worker_submitted_at_utc
+     and prior_workflow.state not in ('CREATED','WORKER_DRAFT','CANCELLED','EXPIRED','SUPERSEDED')
+    join public.contracts prior_contract on prior_contract.id=prior_workflow.contract_id
+     and prior_contract.client_id=target_workflow.client_id
+    join public.candidate_submission_components component
+      on component.workflow_id=prior_workflow.id
+    where coalesce(prior_workflow.target_timesheet_id,prior_workflow.anchor_timesheet_id)
+            is distinct from coalesce(target_workflow.target_timesheet_id,target_workflow.anchor_timesheet_id)
+      and component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+      and component.state not in ('SUPERSEDED','REJECTED')
+      and case when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+        else upper(component.expense_category) end
+          in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+    union
+    select category.category
+    from target_workflow
+    join public.timesheets prior_timesheet
+      on prior_timesheet.is_current=true
+     and prior_timesheet.archived_at_utc is null
+     and prior_timesheet.timesheet_id is distinct from target_workflow.target_timesheet_id
+     and prior_timesheet.timesheet_id is distinct from target_workflow.anchor_timesheet_id
+     and prior_timesheet.week_ending_date=target_workflow.week_ending_date
+    join public.timesheets_financials prior_financial
+      on prior_financial.timesheet_id=prior_timesheet.timesheet_id
+     and prior_financial.is_current=true
+     and prior_financial.candidate_id=target_workflow.candidate_id
+     and prior_financial.client_id=target_workflow.client_id
+     and coalesce(prior_financial.computed_at_utc,prior_financial.created_at,prior_timesheet.created_at)
+          <=target_workflow.worker_submitted_at_utc
+    cross join lateral (values
+      ('MILEAGE',abs(coalesce(prior_financial.mileage_units,0))
+        +abs(coalesce(prior_financial.mileage_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.mileage_charge_ex_vat,0))),
+      ('TRAVEL',abs(coalesce(prior_financial.travel_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.travel_charge_ex_vat,0))),
+      ('ACCOMMODATION',abs(coalesce(prior_financial.accommodation_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.accommodation_charge_ex_vat,0))),
+      ('OTHER',abs(coalesce(prior_financial.other_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.other_charge_ex_vat,0))
+        +case when abs(coalesce(prior_financial.expenses_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.expenses_charge_ex_vat,0))>0
+                    and abs(coalesce(prior_financial.travel_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.travel_charge_ex_vat,0))
+                       +abs(coalesce(prior_financial.accommodation_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.accommodation_charge_ex_vat,0))
+                       +abs(coalesce(prior_financial.other_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.other_charge_ex_vat,0))=0
+          then 1 else 0 end)
+    ) category(category,amount)
+    where category.amount>0
+  ), recovered_categories as (
+    select current_categories.category
+    from current_categories
+    join prior_categories using(category)
   )
   select jsonb_build_object(
-    'required',matched_workflow.id is not null,
-    'workflow_id',matched_workflow.id,
-    'categories',coalesce(
-      (select jsonb_agg(categories.category order by categories.category) from categories),
-      '[]'::jsonb
-    )
+    'required',matched_workflow.id is not null
+      or exists(select 1 from recovered_categories),
+    'workflow_id',case when matched_workflow.id is not null then matched_workflow.id
+      when exists(select 1 from recovered_categories) then target_workflow.id else null end,
+    'categories',case when matched_workflow.id is not null then coalesce(
+      (select jsonb_agg(stored_categories.category order by stored_categories.category)
+       from stored_categories),'[]'::jsonb
+    ) else coalesce(
+      (select jsonb_agg(recovered_categories.category order by recovered_categories.category)
+       from recovered_categories),'[]'::jsonb
+    ) end
   )
   from (select 1) singleton
-  left join matched_workflow on true;
+  left join matched_workflow on true
+  left join target_workflow on true;
 $function$;
 
 revoke all on function private._timesheet_duplicate_expense_review_v1(uuid)
