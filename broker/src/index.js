@@ -168128,7 +168128,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   };
 
   const mutationErrorResponse = (rawCode, detailObj, options = {}) => {
-    const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'AUTHORISE_FAILED').toUpperCase();
+    const code = firstString(detailObj?.error_code, detailObj?.error, detailObj?.code, rawCode, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
     if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {

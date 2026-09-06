@@ -2596,6 +2596,15 @@ BEGIN
     SELECT
       lightweight_rows.*,
       CASE
+        WHEN COALESCE((duplicate_expense_review.review_json->>'required')::boolean, FALSE)
+          AND NOT (
+            'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(lightweight_rows.issue_codes,ARRAY[]::text[]))
+          )
+        THEN COALESCE(lightweight_rows.issue_codes,ARRAY[]::text[])
+          || ARRAY['DUPLICATE_EXPENSE_REVIEW']::text[]
+        ELSE COALESCE(lightweight_rows.issue_codes,ARRAY[]::text[])
+      END AS effective_issue_codes_calc,
+      CASE
         WHEN lightweight_rows.timesheet_id IS NOT NULL THEN 'timesheet:' || lightweight_rows.timesheet_id::text
         WHEN lightweight_rows.contract_week_id IS NOT NULL THEN 'contract_week:' || lightweight_rows.contract_week_id::text
         ELSE NULL::text
@@ -2736,6 +2745,12 @@ BEGIN
         COALESCE(lightweight_rows.primary_artifact_storage_key, '')
       )) AS row_signature_calc
     FROM lightweight_rows
+    LEFT JOIN LATERAL (
+      SELECT private._timesheet_duplicate_expense_review_v1(
+        lightweight_rows.timesheet_id
+      ) AS review_json
+    ) AS duplicate_expense_review
+      ON lightweight_rows.timesheet_id IS NOT NULL
   ),
   decision_rows AS MATERIALIZED (
     SELECT
@@ -2748,7 +2763,7 @@ BEGIN
         AND classified_rows.has_unissued_invoice_calc = FALSE
         AND classified_rows.has_issued_invoice_calc = FALSE
         AND NOT (
-          'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(classified_rows.issue_codes,ARRAY[]::text[]))
+          'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(classified_rows.effective_issue_codes_calc,ARRAY[]::text[]))
         )
       ) AS can_bulk_authorise_calc,
       (
@@ -2911,7 +2926,7 @@ BEGIN
           WHEN decision_rows.timesheet_id IS NOT NULL
             AND decision_rows.requires_authorisation_calc = TRUE
             AND decision_rows.authorised_calc = FALSE
-            AND 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+            AND 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.effective_issue_codes_calc,ARRAY[]::text[]))
             THEN 'processed_review_required'
           WHEN decision_rows.timesheet_id IS NOT NULL
             AND decision_rows.authorised_calc = TRUE
@@ -2976,7 +2991,7 @@ BEGIN
         'invoice_segments_unlocked',
         COALESCE(decision_rows.invoice_segments_unlocked, 0),
         'issue_codes',
-        COALESCE(TO_JSONB(decision_rows.issue_codes), '[]'::jsonb),
+        COALESCE(TO_JSONB(decision_rows.effective_issue_codes_calc), '[]'::jsonb),
         'validation_status',
         decision_rows.validation_status,
         'validation_summary',
@@ -3106,10 +3121,10 @@ BEGIN
         'can_bulk_authorise',
         decision_rows.can_bulk_authorise_calc,
         'bulk_authorise_block_code',
-        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.effective_issue_codes_calc,ARRAY[]::text[]))
           THEN 'DUPLICATE_EXPENSE_REVIEW_REQUIRED' ELSE NULL::text END,
         'bulk_authorise_block_message',
-        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.effective_issue_codes_calc,ARRAY[]::text[]))
           THEN 'Not included in bulk authorisation because an expense category was already submitted for this Client and week ending.'
           ELSE NULL::text END,
         'can_bulk_unauthorise',

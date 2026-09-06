@@ -206,7 +206,9 @@ test('Office authorisation requires deliberate review and bulk authorisation exc
   assert.match(authoriseAuthority, /timesheet_authorise_reviewed_atomic[\s\S]*duplicate_expense_reviewed/i);
   assert.match(authoriseAuthority, /timesheet_authorise_bulk_work[\s\S]*DUPLICATE_EXPENSE_REVIEW_REQUIRED/i);
   assert.match(bulkDataset, /DUPLICATE_EXPENSE_REVIEW[\s\S]*can_bulk_authorise_calc/i);
+  assert.match(bulkDataset, /_timesheet_duplicate_expense_review_v1[\s\S]*effective_issue_codes_calc/i);
   assert.match(bulkDataset, /processed_review_required/i);
   assert.match(broker, /duplicate_expense_confirmation[\s\S]*timesheet_authorise_reviewed_atomic/i);
   assert.match(broker, /DUPLICATE_EXPENSE_REVIEW_REQUIRED[\s\S]*duplicate_expense_confirmation_required/i);
+  assert.match(broker, /firstString\(detailObj\?\.error_code, detailObj\?\.error, detailObj\?\.code, rawCode/);
 });

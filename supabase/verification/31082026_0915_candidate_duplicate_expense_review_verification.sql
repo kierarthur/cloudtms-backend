@@ -112,6 +112,8 @@ declare
   v_week date:=date '2026-08-30';
   v_review jsonb;
   v_bulk jsonb;
+  v_bulk_dataset jsonb;
+  v_bulk_dataset_row jsonb;
   v_authorised jsonb;
   v_finalisation_codes jsonb;
   v_error text;
@@ -233,6 +235,25 @@ begin
   if coalesce((v_review->>'required')::boolean,false) then
     raise exception 'A later claim incorrectly back-labelled the first claim as a duplicate: %',
       v_review;
+  end if;
+
+  v_bulk_dataset:=public.bulk_authorise_dataset_v1(jsonb_build_object(
+    'candidate_id',v_candidate,
+    'week_ending_date',v_week,
+    'classification','TIMESHEETS'
+  ));
+  select dataset_row.value
+    into v_bulk_dataset_row
+  from jsonb_array_elements(coalesce(v_bulk_dataset->'rows','[]'::jsonb)) dataset_row(value)
+  where dataset_row.value->>'timesheet_id'=v_current_timesheet::text
+  limit 1;
+  if v_bulk_dataset_row is null
+     or v_bulk_dataset_row->>'bulk_authorise_section' is distinct from 'processed_review_required'
+     or v_bulk_dataset_row->>'bulk_authorise_block_code' is distinct from 'DUPLICATE_EXPENSE_REVIEW_REQUIRED'
+     or coalesce((v_bulk_dataset_row->>'can_bulk_authorise')::boolean,true)
+     or not coalesce(v_bulk_dataset_row->'issue_codes','[]'::jsonb) ? 'DUPLICATE_EXPENSE_REVIEW' then
+    raise exception 'Bulk dataset did not present the recovered duplicate review: %',
+      v_bulk_dataset_row;
   end if;
 
   begin
