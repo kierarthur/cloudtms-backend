@@ -25,13 +25,14 @@ test('submitted Weekly workflows remain linked to their exact Contract Week befo
   assert.match(sql,/workflows\.display_timesheet_id=coalesce\(base\.timesheet_id,base\.id\)/i);
 });
 
-test('submitted Weekly cards show immutable hours and expenses before Timesheet materialisation',()=>{
+test('submitted Weekly cards show immutable hours and expenses before financial materialisation',()=>{
   assert.match(sql,/\{hours_submission,canonical_tsfin_snapshot,total_hours\}/i);
   for(const field of [
     'expenses_pay_ex_vat','mileage_pay_ex_vat','travel_pay_ex_vat',
     'accommodation_pay_ex_vat','other_pay_ex_vat'
   ]) assert.match(sql,new RegExp(`\\{expense_submission,canonical_tsfin_snapshot,${field}\\}`,'i'));
-  assert.match(sql,/case when base\.timesheet_id is null then coalesce\(workflows\.submitted_total_hours,base\.total_hours,0\)/i);
+  assert.match(sql,/coalesce\(nullif\(base\.total_hours,0\),workflows\.submitted_total_hours,base\.total_hours,0\)[\s\n]+as overlay_total_hours/i);
+  assert.doesNotMatch(sql,/case when base\.timesheet_id is null then coalesce\(workflows\.submitted_total_hours/i);
   assert.match(sql,/'total_hours',coalesce\(d\.overlay_total_hours,0\)/i);
   assert.match(sql,/case when base\.timesheet_id is null then coalesce\(workflows\.submitted_expenses_pay_ex_vat,/i);
   assert.match(sql,/else coalesce\(totals\.expenses_pay_ex_vat,base\.expenses_pay_ex_vat,0\) end as overlay_expenses_pay_ex_vat/i);

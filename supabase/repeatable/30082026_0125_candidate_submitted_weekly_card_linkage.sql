@@ -454,8 +454,12 @@ begin
     group by resolved.display_timesheet_id
   ), visible as materialized (
     select base.*,
-      case when base.timesheet_id is null then coalesce(workflows.submitted_total_hours,base.total_hours,0)
-        else coalesce(base.total_hours,0) end as overlay_total_hours,
+      -- A submitted Weekly workflow can already own a Timesheet identity while
+      -- its financial row still carries the empty pre-finalisation value. Show
+      -- the immutable submitted hours only for that empty gap; a populated
+      -- current financial value remains authoritative after processing.
+      coalesce(nullif(base.total_hours,0),workflows.submitted_total_hours,base.total_hours,0)
+        as overlay_total_hours,
       case when base.timesheet_id is null then coalesce(workflows.submitted_expenses_pay_ex_vat,totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0)
         else coalesce(totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0) end as overlay_expenses_pay_ex_vat,
       case when base.timesheet_id is null then coalesce(workflows.submitted_mileage_units,totals.mileage_units,base.mileage_units,0)

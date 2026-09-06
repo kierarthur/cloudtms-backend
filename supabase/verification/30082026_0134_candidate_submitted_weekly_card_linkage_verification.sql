@@ -36,7 +36,7 @@ begin
 
   if position('{hours_submission,canonical_tsfin_snapshot,total_hours}' in lower(v_definition))=0
      or position('{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}' in lower(v_definition))=0
-     or position('base.timesheet_id is null' in lower(v_definition))=0
+     or position('coalesce(nullif(base.total_hours,0),workflows.submitted_total_hours,base.total_hours,0)' in lower(v_definition))=0
      or position('overlay_total_hours' in lower(v_definition))=0 then
     raise exception 'CANDIDATE_SUBMITTED_WEEKLY_CARD_FACTUAL_OVERLAY_MISSING';
   end if;
