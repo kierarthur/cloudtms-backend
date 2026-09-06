@@ -6,6 +6,10 @@ const sql = readFileSync(new URL(
   '../supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
   import.meta.url
 ), 'utf8');
+const contextReassert = readFileSync(new URL(
+  '../supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql',
+  import.meta.url
+), 'utf8');
 const broker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
 const candidateBackend = readFileSync(new URL(
   '../broker/src/candidate-app-backend.js', import.meta.url
@@ -92,6 +96,9 @@ test('browser roles cannot call the new deletion authority', () => {
 });
 
 test('Office uses one context digest from preview through apply and retires manager routes after commit', () => {
+  assert.match(contextReassert, /'retry_finalisation','delete_timesheet'/i);
+  assert.match(contextReassert, /'RETRY_FINALISATION','CANCEL'/i);
+  assert.match(contextReassert, /revoke all on function private\._candidate_office_service_context_open_v1[\s\S]*from public,anon,authenticated,service_role/i);
   assert.match(broker, /timesheet_pending_expense_delete_preview_v1/);
   assert.match(broker, /expected_pending_expense_context_sha256/);
   assert.match(broker, /timesheet_delete_with_candidate_submission_guard_apply_v1/);
