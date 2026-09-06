@@ -82163,6 +82163,26 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
       out.can_reclassify = itemEvidenceEditable;
       out.can_return_to_queue = itemEvidenceEditable;
       out.source_badge = 'Attached';
+      const candidateComponentId = asUuidStringOrNull(out.candidate_component_id);
+      const candidateComponent = candidateComponentId
+        ? candidateComponentById.get(candidateComponentId)
+        : null;
+      if (candidateComponent) {
+        const candidateWorkflowId = asUuidStringOrNull(candidateComponent.workflow_id);
+        const candidateWorkflowGeneration = Number(candidateComponent.workflow_generation);
+        const candidateEvidenceApproved = candidateManagerApprovalConfirmedFor(
+          candidateWorkflowId,
+          candidateWorkflowGeneration
+        );
+        out.candidate_workflow_id = candidateWorkflowId;
+        out.candidate_workflow_generation = Number.isInteger(candidateWorkflowGeneration)
+          ? candidateWorkflowGeneration
+          : null;
+        out.approved = candidateEvidenceApproved;
+        out.approved_at_utc = candidateEvidenceApproved
+          ? (candidateWorkflowById.get(candidateWorkflowId)?.manager_approved_at_utc || null)
+          : null;
+      }
       out.document_asset_id = assetId;
       out.asset_state = asset?.status || out.processing_state || (assetId ? 'DISCOVERED' : 'NOT_REGISTERED');
       out.asset_operation_id = asset?.operation_id || null;

@@ -65,6 +65,10 @@ test('current electronic Candidate evidence requires its exact durable manager a
   assert.match(handler, /String\(workflow\?\.route \|\| ''\)[\s\S]*!== 'PAPER'/);
   assert.match(handler, /if \(!isElectronicCandidateSignedTimesheetEvidence\(row\)\) return true/);
   assert.match(handler, /candidateManagerApprovalConfirmedFor\(component\?\.workflow_id, component\?\.workflow_generation\)/);
+  assert.match(handler, /out\.candidate_workflow_id = candidateWorkflowId/);
+  assert.match(handler, /out\.candidate_workflow_generation = Number\.isInteger\(candidateWorkflowGeneration\)/);
+  assert.match(handler, /out\.approved = candidateEvidenceApproved/);
+  assert.match(handler, /out\.approved_at_utc = candidateEvidenceApproved/);
   assert.match(handler, /if \(candidateManagerApprovalConfirmed && hasSignatureArtefacts\)/);
 });
 

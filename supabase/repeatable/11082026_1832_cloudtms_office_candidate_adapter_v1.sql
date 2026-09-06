@@ -403,6 +403,8 @@ declare
   v_paper_state text:='NOT_APPLICABLE';
   v_paper_pack jsonb:='{}'::jsonb;
   v_paper_delivery_generation integer;
+  v_workflow_artifact_generation integer;
+  v_paper_returned_at_utc timestamptz;
   v_paper_outbox public.mail_outbox%rowtype;
   v_candidate_status_code text;
   v_candidate_status_label text;
@@ -465,8 +467,12 @@ begin
   order by (w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')) desc,
     w.updated_at_utc desc,w.id desc limit 1;
   if v_workflow.id is not null then
+    v_workflow_artifact_generation:=case
+      when v_workflow.state='FINALISED' then greatest(v_workflow.generation-1,1)
+      else v_workflow.generation
+    end;
     select ar.* into v_approval from public.candidate_approval_requests ar
-    where ar.workflow_id=v_workflow.id and ar.workflow_generation=v_workflow.generation
+    where ar.workflow_id=v_workflow.id and ar.workflow_generation=v_workflow_artifact_generation
     order by ar.request_generation desc,ar.updated_at_utc desc,ar.id desc limit 1;
   end if;
 
@@ -541,21 +547,33 @@ begin
     and not coalesce(v_manager_lease,false);
 
   if v_workflow.route='PAPER' then
-    v_paper_delivery_generation:=case
-      when v_workflow.state='FINALISED' then greatest(v_workflow.generation-1,1)
-      else v_workflow.generation
-    end;
+    v_paper_delivery_generation:=v_workflow_artifact_generation;
     select m.* into v_paper_outbox from public.mail_outbox m
     where m.type='TIMESHEET_QR'
       and m.context_kind='timesheets'
-      and m.context_id=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+      and (
+        m.context_id=v_workflow.target_timesheet_id
+        or m.context_id=v_workflow.anchor_timesheet_id
+      )
       and upper(coalesce(m.payment_scope_json->>'candidate_mail_authority',''))='CANDIDATE_PAPER_V1'
       and m.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and m.payment_scope_json->>'candidate_workflow_generation'=v_paper_delivery_generation::text
       and lower(coalesce(m.payment_scope_json->>'paper_return_manifest_sha256',''))
         =encode(v_workflow.paper_return_manifest_sha256,'hex')
     order by m.created_at_utc desc,m.id desc limit 1;
-    if v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED') then
+    select max(coalesce(
+      returned_page.paper_return_verified_at_utc,
+      returned_page.immutable_at_utc,
+      returned_page.created_at_utc
+    )) into v_paper_returned_at_utc
+    from public.candidate_submission_components returned_page
+    where returned_page.workflow_id=v_workflow.id
+      and returned_page.workflow_generation=v_paper_delivery_generation
+      and returned_page.component_kind='SIGNED_RETURN'
+      and returned_page.state='IMMUTABLE';
+    if v_workflow.state='FINALISED' then
+      v_paper_state:='RETURN_RECEIVED';
+    elsif v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED') then
       v_paper_pack:=private._candidate_paper_pack_readiness_v1(
         v_workflow.id,v_workflow.generation
       );
@@ -717,21 +735,21 @@ begin
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
       'VIEW_PAPER_PACK','View current paper pack','PAPER',v_paper_state='READY',
       'CANDIDATE_PAPER_PACK_NOT_READY','The current paper pack is not ready to view.',false,false,'GET',
-      '/api/candidate-app/workflows/'||v_workflow.id::text||'/paper-pack?generation='||v_workflow.generation::text,
-      jsonb_build_object('generation',v_workflow.generation),'[]'::jsonb,'NONE',false
+      '/api/candidate-app/workflows/'||v_workflow.id::text||'/paper-pack?generation='||v_paper_delivery_generation::text,
+      jsonb_build_object('generation',v_paper_delivery_generation),'[]'::jsonb,'NONE',false
     ));
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
       'REVIEW_PAPER_RETURN','Review returned paper documents','PAPER',v_paper_state='RETURN_RECEIVED',
       'CANDIDATE_PAPER_RETURN_NOT_RECEIVED','A complete paper return has not been received.',false,false,'GET',
-      '/api/candidate-app/workflows/'||v_workflow.id::text||'/paper-return-review?generation='||v_workflow.generation::text,
-      jsonb_build_object('generation',v_workflow.generation),'[]'::jsonb,'NONE',false
+      '/api/candidate-app/workflows/'||v_workflow.id::text||'/paper-return-review?generation='||v_paper_delivery_generation::text,
+      jsonb_build_object('generation',v_paper_delivery_generation),'[]'::jsonb,'NONE',false
     ));
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
       'RETRY_PAPER_PREPARATION','Retry paper pack preparation','PAPER',
       v_paper_enabled and v_paper_state='FAILED_RETRYABLE',
       'CANDIDATE_PAPER_PACK_RETRY_NOT_READY','Paper pack preparation is not currently retryable.',true,false,'POST',
       '/api/candidate-app/workflows/'||v_workflow.id::text||'/actions/retry-paper-preparation',
-      jsonb_build_object('generation',v_workflow.generation),'[]'::jsonb,'REQUIRED',false
+      jsonb_build_object('generation',v_paper_delivery_generation),'[]'::jsonb,'REQUIRED',false
     ));
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
       'ISSUE_REPLACEMENT_PAPER_PACK','Issue replacement paper pack','PAPER',v_route_enabled and v_paper_state in ('READY','FAILED_RETRYABLE','FAILED_TERMINAL','STALE'),
@@ -867,7 +885,11 @@ begin
       'state',v_paper_state,'lifecycle_code',v_workflow.state,
       'delivery_generation',v_paper_delivery_generation,
       'page_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)->>'candidate_complete_pack_page_count'~'^[1-9][0-9]*$'
-        then (v_paper_outbox.payment_scope_json->>'candidate_complete_pack_page_count')::integer else null end,
+        then (v_paper_outbox.payment_scope_json->>'candidate_complete_pack_page_count')::integer
+        when jsonb_typeof(v_workflow.paper_return_manifest_json->'pages')='array'
+          and jsonb_array_length(v_workflow.paper_return_manifest_json->'pages')>0
+        then jsonb_array_length(v_workflow.paper_return_manifest_json->'pages')
+        else null end,
       'reason_code',case when v_paper_state in ('FAILED_RETRYABLE','FAILED_TERMINAL')
         then coalesce(v_paper_pack->>'failure_code',
           v_paper_outbox.payment_scope_json->>'candidate_paper_pack_failure_code',
@@ -888,7 +910,8 @@ begin
       'operation_id',coalesce(v_paper_pack->>'operation_id',
         v_paper_outbox.payment_scope_json->>'candidate_paper_pack_operation_id'),
       'issued_at_utc',v_paper_outbox.sent_at,
-      'returned_at_utc',case when v_workflow.state='RECEIVED' then v_workflow.updated_at_utc else null end
+      'returned_at_utc',case when v_workflow.state in ('RECEIVED','FINALISED')
+        then coalesce(v_paper_returned_at_utc,v_workflow.updated_at_utc) else null end
     ),
     'rejections',v_rejections,
     'primary_action',v_primary_action,

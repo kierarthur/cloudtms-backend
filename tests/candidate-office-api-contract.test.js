@@ -153,6 +153,16 @@ test('Office projection keeps accepted hours separate from a later active expens
   assert.match(openapi, /unfinished standalone expense claim[\s\S]*has no Timesheet yet[\s\S]*not projected onto the worked Timesheet row/i);
 });
 
+test('Office projection keeps the exact approved generation and returned paper facts after finalisation', async () => {
+  const officeSql = await readFile(officeSqlUrl, 'utf8');
+  assert.match(officeSql, /v_workflow_artifact_generation:=case[\s\S]*when v_workflow\.state='FINALISED' then greatest\(v_workflow\.generation-1,1\)/);
+  assert.match(officeSql, /ar\.workflow_generation=v_workflow_artifact_generation/);
+  assert.match(officeSql, /m\.context_id=v_workflow\.target_timesheet_id[\s\S]*or m\.context_id=v_workflow\.anchor_timesheet_id/);
+  assert.match(officeSql, /when v_workflow\.state='FINALISED' then[\s\S]*v_paper_state:='RETURN_RECEIVED'/);
+  assert.match(officeSql, /returned_page\.paper_return_verified_at_utc[\s\S]*returned_page\.component_kind='SIGNED_RETURN'/);
+  assert.match(officeSql, /paper-return-review\?generation='\|\|v_paper_delivery_generation::text/);
+});
+
 test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {
   const [officeSql, openapi] = await Promise.all([
     readFile(officeSqlUrl, 'utf8'),

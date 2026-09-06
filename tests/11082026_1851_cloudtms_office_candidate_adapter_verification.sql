@@ -100,49 +100,64 @@ begin
   select pg_get_functiondef('private._candidate_office_timesheet_projection_v1(text,uuid,uuid,text,text,uuid,timestamptz)'::regprocedure)
   into v_definition;
   if position('v_workflow.generation-1' in v_definition)=0
+     or position('ar.workflow_generation=v_workflow_artifact_generation' in v_definition)=0
      or position('candidate_workflow_generation''=v_paper_delivery_generation::text' in v_definition)=0
+     or position('m.context_id=v_workflow.anchor_timesheet_id' in v_definition)=0
      or position('candidate_paper_generation_retired' in v_definition)=0
      or position('''delivery_generation'',v_paper_delivery_generation' in v_definition)=0 then
     raise exception 'office PAPER projection is not bound to the immutable delivery generation';
   end if;
 
+  insert into public.tms_users(id,email,role,password_hash)
+  values(v_actor,'office-adapter-admin@example.test','admin','test-only-hash');
   insert into public.clients(id,name) values(v_client,'Office adapter client');
   insert into public.client_settings(id,client_id,effective_from,default_submission_mode,week_ending_weekday)
   values(gen_random_uuid(),v_client,current_date-30,'ELECTRONIC',2);
   insert into public.candidates(id,email,active,key_norm)
   values(v_candidate,'office-adapter@example.test',true,'OFFICE-ADAPTER-CANDIDATE');
   insert into public.contracts(
-    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,default_submission_mode
-  ) values(v_contract,v_candidate,v_client,current_date-30,current_date+30,2,'ELECTRONIC');
-  insert into public.timesheets(timesheet_id,contract_id,week_ending_date,line_type,submission_mode)
-  values(v_timesheet,v_contract,current_date,'HOURS','MANUAL');
+    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
+    default_submission_mode,pay_method_snapshot
+  ) values(v_contract,v_candidate,v_client,current_date-30,current_date+30,2,'ELECTRONIC','PAYE');
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,submission_mode,sheet_scope,
+    occupant_key_norm,hospital_norm,ward_norm,job_title_norm
+  ) values(
+    v_timesheet,v_contract,'OFFICE-ADAPTER-BASE',current_date,'HOURS','MANUAL','WEEKLY',
+    'OFFICE-ADAPTER-BASE','OFFICE-ADAPTER-HOSPITAL','OFFICE-ADAPTER-WARD','OFFICE-ADAPTER-JOB'
+  );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_timesheet);
-  insert into public.timesheets_financials(timesheet_id,candidate_id,client_id,total_hours,processing_status)
-  values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
+  insert into public.timesheets_financials(timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status)
+  values(v_timesheet,1,v_candidate,v_client,8,'UNPROCESSED');
   insert into public.timesheets(
-    timesheet_id,contract_id,booking_id,week_ending_date,line_type,submission_mode
-  ) values(v_other_timesheet,v_contract,'OFFICE-ADAPTER-ADDITIONAL',current_date,'HOURS','MANUAL');
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,submission_mode,sheet_scope,
+    occupant_key_norm,hospital_norm,ward_norm,job_title_norm
+  ) values(
+    v_other_timesheet,v_contract,'OFFICE-ADAPTER-ADDITIONAL',current_date,'HOURS','MANUAL','WEEKLY',
+    'OFFICE-ADAPTER-ADDITIONAL','OFFICE-ADAPTER-HOSPITAL','OFFICE-ADAPTER-WARD','OFFICE-ADAPTER-JOB'
+  );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,additional_seq
   ) values(v_other_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_other_timesheet,1);
-  insert into public.timesheets_financials(timesheet_id,candidate_id,client_id,total_hours,processing_status)
-  values(v_other_timesheet,v_candidate,v_client,4,'UNPROCESSED');
+  insert into public.timesheets_financials(timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status)
+  values(v_other_timesheet,1,v_candidate,v_client,4,'UNPROCESSED');
   insert into public.timesheets(
     timesheet_id,contract_id,booking_id,week_ending_date,sheet_scope,
     submission_mode,line_type,status,scheduled_start_iso,scheduled_end_iso,
-    r2_nurse_key,r2_auth_key
+    r2_nurse_key,r2_auth_key,occupant_key_norm,hospital_norm,ward_norm,job_title_norm
   ) values(
     v_daily_timesheet,v_contract,'OFFICE-ADAPTER-DAILY',current_date,'DAILY',
     'ELECTRONIC','HOURS','RECEIVED',current_date::timestamptz+interval '8 hours',
     current_date::timestamptz+interval '16 hours',
     'candidate-office/daily/candidate-signature.png',
-    'candidate-office/daily/manager-signature.png'
+    'candidate-office/daily/manager-signature.png',
+    'OFFICE-ADAPTER-DAILY','OFFICE-ADAPTER-HOSPITAL','OFFICE-ADAPTER-WARD','OFFICE-ADAPTER-JOB'
   );
   insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,basis,processing_status,total_hours
-  ) values(v_daily_timesheet,v_candidate,v_client,'SELF_REPORTED','UNPROCESSED',8);
+    timesheet_id,timesheet_version,candidate_id,client_id,basis,processing_status,total_hours
+  ) values(v_daily_timesheet,1,v_candidate,v_client,'SELF_REPORTED','UNPROCESSED',8);
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','office-adapter@example.test','ACTIVE');
   insert into public.candidate_submission_workflows(
@@ -441,13 +456,11 @@ begin
     raise exception 'expense email semantic diagnostic incorrect: %',v_projection->'diagnostics';
   end if;
 
-  update public.timesheets_financials
-  set locked_by_invoice_id='ad510000-0000-4000-8000-000000000099'
-  where timesheet_id=v_timesheet;
+  update public.timesheets_financials set authorised_at_utc=v_now where timesheet_id=v_timesheet;
   v_projection:=public.cloudtms_office_candidate_adapter_v1(
     'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
   );
-  if v_projection#>>'{candidate_status,code}'<>'INVOICED_NOT_PAID'
+  if v_projection#>>'{candidate_status,code}'<>'AUTHORISED'
      or exists(
        select 1 from jsonb_array_elements(v_projection->'available_actions') action_item
        where coalesce((action_item->>'enabled')::boolean,false)
@@ -455,7 +468,7 @@ begin
      ) then
     raise exception 'invoice-locked office status/action precedence incorrect: %',v_projection;
   end if;
-  update public.timesheets_financials set locked_by_invoice_id=null where timesheet_id=v_timesheet;
+  update public.timesheets_financials set authorised_at_utc=null where timesheet_id=v_timesheet;
 
   -- Cancel the exact approval request/link, not the Candidate claim. Sent mail
   -- remains immutable history and only mutable manager delivery is retired.
@@ -690,14 +703,40 @@ begin
     raise exception 'expired PAPER backoff did not enable retry: %',v_projection;
   end if;
   update public.candidate_submission_workflows
-  set state='FINALISED',finalised_at_utc=v_now,updated_at_utc=v_now+interval '5 minutes'
+  set state='FINALISED',generation=2,manager_approved_at_utc=v_now,
+      finalised_at_utc=v_now,updated_at_utc=clock_timestamp()+interval '1 hour'
   where id=v_workflow;
+  update public.candidate_approval_requests
+  set state='APPROVED',approved_at_utc=v_now,manager_name='Office Adapter Manager',
+      manager_position='Ward Manager',updated_at_utc=v_now
+  where id=v_request;
+  update public.timesheets
+  set candidate_workflow_id=v_workflow,candidate_workflow_generation=1,
+      candidate_manager_approved_at_utc=v_now
+  where timesheet_id=v_timesheet;
+  update public.mail_outbox
+  set status='SENT',sent_at=v_now,payment_scope_json=payment_scope_json||jsonb_build_object(
+    'candidate_paper_pack_ready',true,'candidate_complete_pack_page_count',1
+  )
+  where id='ad510000-0000-4000-8000-000000000015';
   v_projection:=public.cloudtms_office_candidate_adapter_v1(
     'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now+interval '6 minutes'
   );
   if v_projection#>>'{candidate_status,code}'<>'UNPROCESSED'
      or v_projection#>>'{workflow,historical}'<>'true'
-     or v_projection#>>'{workflow,is_current_action_workflow}'<>'false' then
+     or v_projection#>>'{workflow,is_current_action_workflow}'<>'false'
+     or v_projection#>>'{workflow,approval_method}'<>'EMAIL'
+     or v_projection#>>'{manager_approval,state}'<>'APPROVED'
+     or v_projection#>>'{paper_pack,state}'<>'RETURN_RECEIVED'
+     or v_projection#>>'{paper_pack,delivery_generation}'<>'1'
+     or v_projection#>>'{paper_pack,page_count}'<>'1'
+     or nullif(v_projection#>>'{paper_pack,returned_at_utc}','') is null
+     or not (v_projection->'available_actions' @> jsonb_build_array(
+       jsonb_build_object('code','REVIEW_PAPER_RETURN','enabled',true)
+     ))
+     or (v_projection->'available_actions' @> jsonb_build_array(
+       jsonb_build_object('code','ISSUE_REPLACEMENT_PAPER_PACK','enabled',true)
+     )) then
     raise exception 'terminal workflow history was projected as current Office status: %',v_projection;
   end if;
 end;
