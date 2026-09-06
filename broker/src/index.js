@@ -75793,6 +75793,11 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       healthroster_compare
     };
     const presentedDetailsPayload = await attachCandidateDailyOfficeDetailPresentation(env, rawDetailsPayload);
+    const expenseWorkflowRoute = await resolveExpenseWorkflowRouteForPresentation(
+      env,
+      ts,
+      presentedDetailsPayload
+    );
     const expensePresentation = classifyExpenseTimesheetPresentation({
       line_type: ts.line_type,
       total_hours: tsfinRaw?.total_hours,
@@ -75818,7 +75823,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         other_pay_ex_vat: tsfinRaw?.other_pay_ex_vat,
         other_charge_ex_vat: tsfinRaw?.other_charge_ex_vat
       },
-      workflowRoute: presentedDetailsPayload?.candidate_office_projection?.workflow?.route,
+      workflowRoute: expenseWorkflowRoute,
       routeFamily,
       routeType: effectiveRouteType,
       submissionMode: ts.submission_mode,
@@ -86595,6 +86600,42 @@ function attachTimesheetExpensePresentation(rows) {
       display_route_label: label || null
     };
   });
+}
+
+async function resolveExpenseWorkflowRouteForPresentation(
+  env,
+  timesheet,
+  projectedPayload,
+  fetchRows = sbFetch
+) {
+  const projectedRoute = String(
+    projectedPayload?.candidate_office_projection?.workflow?.route || ''
+  ).trim().toUpperCase();
+  if (projectedRoute) return projectedRoute;
+
+  const lineType = String(timesheet?.line_type || '').trim().toUpperCase();
+  const workflowId = String(timesheet?.candidate_workflow_id || '').trim();
+  if (!['EXPENSES', 'MILEAGE'].includes(lineType)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workflowId)) {
+    return null;
+  }
+
+  try {
+    const { rows } = await fetchRows(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows`+
+        `?id=eq.${encodeURIComponent(workflowId)}`+
+        '&select=route&limit=1'
+    );
+    const route = String(rows?.[0]?.route || '').trim().toUpperCase();
+    return route || null;
+  } catch (error) {
+    console.warn('[TIMESHEET_EXPENSE_PRESENTATION] workflow route lookup failed', {
+      timesheet_id: timesheet?.timesheet_id || null,
+      message: error?.message || String(error)
+    });
+    return null;
+  }
 }
 
 async function handleCandidateTimesheetSummaryPatches(env, req) {

@@ -185,3 +185,21 @@ test('Timesheet Summary reuses the set-wise reader result without another data r
   const reader = summary.slice(readerStart, readerEnd);
   assert.doesNotMatch(reader, /client_reference_settings|FROM public\.client_settings/i);
 });
+
+test('Timesheet detail resolves a Candidate expense carrier route from its exact workflow', () => {
+  const broker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+  const helperStart = broker.indexOf('async function resolveExpenseWorkflowRouteForPresentation(');
+  const helperEnd = broker.indexOf('\nasync function handleCandidateTimesheetSummaryPatches', helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  const helper = broker.slice(helperStart, helperEnd);
+  assert.match(helper, /\['EXPENSES', 'MILEAGE'\]\.includes\(lineType\)/);
+  assert.match(helper, /candidate_submission_workflows/);
+  assert.match(helper, /\?id=eq\.\$\{encodeURIComponent\(workflowId\)\}/);
+  assert.match(helper, /&select=route&limit=1/);
+  assert.match(helper, /return route \|\| null/);
+
+  const resolveCall = broker.indexOf('const expenseWorkflowRoute = await resolveExpenseWorkflowRouteForPresentation(');
+  const classifyCall = broker.indexOf('const expensePresentation = classifyExpenseTimesheetPresentation({', resolveCall);
+  assert.ok(resolveCall >= 0 && classifyCall > resolveCall);
+  assert.match(broker.slice(classifyCall, classifyCall + 2500), /workflowRoute: expenseWorkflowRoute/);
+});
