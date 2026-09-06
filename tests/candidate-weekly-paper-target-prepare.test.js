@@ -38,14 +38,18 @@ test('printed target preparation cannot authorise, duplicate, or cross workflow 
   assert.doesNotMatch(sql, /\b(?:delete from|truncate|drop table)\b/i);
 });
 
-test('private Worker prepares the durable target before the existing PAPER transition', () => {
+test('private Worker prepares a durable worked target but preserves the established standalone expense PAPER path', () => {
   const prepare = backend.indexOf("if (dbAction === 'PAPER_PREPARE')");
   const transition = backend.indexOf("'candidate_workflow_transition_atomic_v1'", prepare);
   assert.ok(prepare > 0 && transition > prepare);
   const seam = backend.slice(prepare, transition);
+  assert.match(seam, /workflowRow\(env,\s*workflowId\)/i);
+  assert.match(seam, /workflow_kind\s*!==\s*'CONTRACT_EXPENSE'/i);
   assert.match(seam, /candidate_weekly_paper_target_prepare_v1/i);
   assert.match(seam, /p_expected_generation:\s*generation/i);
   assert.match(seam, /CANDIDATE_PAPER_TIMESHEET_NOT_READY/i);
+  assert.match(backend, /workflow\.target_timesheet_id\s*\|\|\s*workflow\.anchor_timesheet_id/i);
+  assert.match(backend, /candidatePaperReturnPackReceipts[\s\S]*finaliseWorkflow/i);
 });
 
 test('paper target preparation is service-only and its first-use proof is mandatory', () => {

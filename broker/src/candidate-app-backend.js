@@ -5935,14 +5935,21 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     };
   }
   if (dbAction === 'PAPER_PREPARE') {
-    const prepared = await rpcCall(deps, 'candidate_weekly_paper_target_prepare_v1',
-      candidateRpcArgs(access, env, {
-        p_workflow_id: workflowId,
-        p_expected_generation: generation,
-        p_now_utc: new Date().toISOString()
-      }));
-    if (prepared?.ok !== true || !UUID_RE.test(text(prepared?.timesheet_id))) {
-      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+    const paperWorkflow = await workflowRow(env, workflowId);
+    // A standalone expense claim deliberately has no target Timesheet until
+    // finalisation. Its established PAPER transition binds the printed pack
+    // to the current worked anchor, then moves the accepted return evidence
+    // onto the separate expense carrier created during finalisation.
+    if (paperWorkflow.workflow_kind !== 'CONTRACT_EXPENSE') {
+      const prepared = await rpcCall(deps, 'candidate_weekly_paper_target_prepare_v1',
+        candidateRpcArgs(access, env, {
+          p_workflow_id: workflowId,
+          p_expected_generation: generation,
+          p_now_utc: new Date().toISOString()
+        }));
+      if (prepared?.ok !== true || !UUID_RE.test(text(prepared?.timesheet_id))) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+      }
     }
   }
   const managerRoutesToRetire = dbAction === 'CANCEL'
