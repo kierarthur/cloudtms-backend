@@ -47,6 +47,9 @@ const managerRefusalResubmission = read(
 const refusedCardRecovery = read(
   'supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql'
 );
+const latestCandidateFinalisation = read(
+  'supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql'
+);
 
 test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
@@ -926,6 +929,8 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   assert.match(finalise, /_candidate_daily_work_date_v1/i);
 
   assert.match(sql.helpers, /_candidate_submission_issue_codes_v1\([\s\S]*p_policy_snapshot jsonb/i);
+  assert.match(latestCandidateFinalisation, /_candidate_finalisation_issue_codes_v1[\s\S]*DUPLICATE_EXPENSE_REVIEW[\s\S]*DUPLICATE_EXPENSE_MILEAGE/i);
+  assert.match(latestCandidateFinalisation, /v_workflow\.issue_codes:=private\._candidate_finalisation_issue_codes_v1\([\s\S]*v_workflow\.issue_codes[\s\S]*_candidate_submission_issue_codes_v1/i);
   assert.match(sql.helpers, /actual_days[\s\S]*sum\(net_minutes\)[\s\S]*planned_days[\s\S]*sum\(gross_minutes\)/i);
   assert.match(sql.helpers, /count\(explicit_break_minutes\)>0[\s\S]*when v_workflow\.workflow_kind='DAILY' then 60/i);
   assert.match(sql.helpers, /actual\.net_minutes,0\)>planned\.net_minutes\*\(1\+v_threshold\/100\.0\)/i);

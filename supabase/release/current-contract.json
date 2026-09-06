@@ -3624,6 +3624,25 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_finalisation_issue_codes_v1(p_existing_issue_codes jsonb, p_recomputed_issue_codes jsonb)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": true,
+      "definition_sha256": "a926e5a52a173ddcc285aa22a3a5a50400d8ce62c80eafcef13e853d532d2ef0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_financial_content_sha256_v1(p_financials_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -16281,7 +16300,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7e070b5582931c0157a9de64c7850fb40248c49fd2d7ce38fc54b98aedc06340"
+      "definition_sha256": "c9804cf48f33855efadca7391edbc46f9ea2db765cbce82d4a873bc6dd6cdaf7"
     },
     {
       "acl": [

@@ -113,6 +113,7 @@ declare
   v_review jsonb;
   v_bulk jsonb;
   v_authorised jsonb;
+  v_finalisation_codes jsonb;
   v_error text;
 begin
   if exists (
@@ -202,8 +203,24 @@ begin
     raise exception 'Duplicate review did not isolate Mileage from the official summary: %',v_review;
   end if;
 
+  v_finalisation_codes:=private._candidate_finalisation_issue_codes_v1(
+    jsonb_build_array(
+      'DUPLICATE_EXPENSE_REVIEW','DUPLICATE_EXPENSE_MILEAGE',
+      'DUPLICATE_EXPENSE_NOT_A_REAL_CATEGORY','STALE_POLICY_WARNING'
+    ),
+    jsonb_build_array('HEALTHROSTER_VALIDATION_REQUIRED')
+  );
+  if v_finalisation_codes is distinct from jsonb_build_array(
+      'DUPLICATE_EXPENSE_MILEAGE','DUPLICATE_EXPENSE_REVIEW',
+      'HEALTHROSTER_VALIDATION_REQUIRED'
+    ) then
+    raise exception 'Finalisation did not preserve the confirmed duplicate review exactly: %',
+      v_finalisation_codes;
+  end if;
+
   update public.candidate_submission_workflows
-  set issue_codes=jsonb_build_array('DUPLICATE_EXPENSE_REVIEW','DUPLICATE_EXPENSE_MILEAGE')
+  set issue_codes=v_finalisation_codes,state='FINALISED',generation=generation+1,
+      finalised_at_utc=now()
   where id=v_current_workflow;
 
   begin

@@ -1,6 +1,43 @@
 -- Daily unresolved receipt adapter. Existing financial save/process/authorise owners remain unchanged.
 begin;
 
+-- Finalisation recalculates policy-derived issue codes, but the Candidate has
+-- already explicitly confirmed any duplicate-expense warning at submission.
+-- Preserve only those server-owned duplicate markers so Office can require an
+-- individual review after the claim is materialised onto its final Timesheet.
+create or replace function private._candidate_finalisation_issue_codes_v1(
+  p_existing_issue_codes jsonb,
+  p_recomputed_issue_codes jsonb
+)
+returns jsonb
+language sql
+immutable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  with retained_codes as (
+    select recomputed_code.value as issue_code
+    from jsonb_array_elements_text(coalesce(p_recomputed_issue_codes,'[]'::jsonb))
+      recomputed_code(value)
+    union
+    select existing_code.value as issue_code
+    from jsonb_array_elements_text(coalesce(p_existing_issue_codes,'[]'::jsonb))
+      existing_code(value)
+    where existing_code.value in (
+      'DUPLICATE_EXPENSE_REVIEW',
+      'DUPLICATE_EXPENSE_MILEAGE',
+      'DUPLICATE_EXPENSE_TRAVEL',
+      'DUPLICATE_EXPENSE_ACCOMMODATION',
+      'DUPLICATE_EXPENSE_OTHER'
+    )
+  )
+  select coalesce(jsonb_agg(retained_codes.issue_code order by retained_codes.issue_code),'[]'::jsonb)
+  from retained_codes;
+$function$;
+
+revoke all on function private._candidate_finalisation_issue_codes_v1(jsonb,jsonb)
+  from public,anon,authenticated,service_role;
+
 create or replace function public.candidate_submission_finalize_atomic_v1(
   p_session_id uuid,
   p_environment text,
@@ -652,8 +689,11 @@ begin
      is distinct from v_workflow.immutable_submission_sha256 then
     raise exception 'CANDIDATE_IMMUTABLE_SUBMISSION_MISMATCH' using errcode='40001';
   end if;
-  v_workflow.issue_codes:=private._candidate_submission_issue_codes_v1(
-    v_workflow.id,v_input,v_current_policy
+  v_workflow.issue_codes:=private._candidate_finalisation_issue_codes_v1(
+    v_workflow.issue_codes,
+    private._candidate_submission_issue_codes_v1(
+      v_workflow.id,v_input,v_current_policy
+    )
   );
   v_effective_separation:=coalesce((v_current_policy->>'expenses_require_separate_timesheet')::boolean,false);
   if v_workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
