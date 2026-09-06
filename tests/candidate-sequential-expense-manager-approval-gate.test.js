@@ -45,7 +45,7 @@ test('manager-approved finalised expenses no longer block the next claim', () =>
 test('the current closure reapplies workflow creation before phone actions', () => {
   assert.match(
     closure,
-    /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*\\ir 05092026_0941_candidate_protected_additional_expense_action_v1\.sql/i,
+    /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*\\ir 05092026_0941_candidate_protected_additional_expense_action_v1\.sql[\s\S]*\\ir 06092026_0610_pending_expense_timesheet_delete_context_reassert_v1\.sql/i,
   );
 });
 

@@ -13,3 +13,7 @@
 -- owner and ACL contracts.
 \ir 04092026_1952_candidate_expense_history_anchor_recovery_v1.sql
 \ir 05092026_0941_candidate_protected_additional_expense_action_v1.sql
+-- The complete transition replacement can replay an older private Office
+-- context through its historical dependencies. Always restore the narrow
+-- delete_timesheet/CANCEL context last in this closure.
+\ir 06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql

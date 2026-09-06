@@ -25,6 +25,7 @@ declare
   v_action text:=upper(btrim(coalesce(p_action,'')));
   v_context jsonb;
 begin
+  -- delete_timesheet and CANCEL are one inseparable Office authority pair.
   if p_actor_user_id is null
      or v_permission not in (
        'change_route','reject_submission','send_manager_reminder',
