@@ -195,30 +195,18 @@ begin
     'FINALISED',2,v_contract,v_week,v_timesheet,v_timesheet,current_date,
     v_policy,'{}'::jsonb,'prior-finalised',now(),now()
   );
-  begin
-    perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_new_workflow,'CREATE',1,jsonb_build_object(
-        'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
-        'contract_id',v_contract,'contract_week_id',v_week,
-        'anchor_timesheet_id',v_timesheet,
-        'week_ending_date',current_date
-      ),'claim-before-authorised',now());
-    raise exception 'second expense claim was accepted before the first was authorised';
-  exception when sqlstate '55000' then
-    if sqlerrm<>'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE' then raise; end if;
-  end;
-  update public.timesheets_financials set authorised_at_utc=now()
-  where timesheet_id=v_timesheet and is_current=true;
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_new_workflow,'CREATE',1,jsonb_build_object(
       'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
       'contract_id',v_contract,'contract_week_id',v_week,
       'anchor_timesheet_id',v_timesheet,
       'week_ending_date',current_date
-    ),'claim-after-authorised',now());
+    ),'claim-after-manager-approved',now());
   if v_response->>'state'<>'WORKER_DRAFT' then
-    raise exception 'second expense claim did not open after authorisation: %',v_response;
+    raise exception 'second expense claim did not open after manager approval: %',v_response;
   end if;
+  update public.timesheets_financials set authorised_at_utc=now()
+  where timesheet_id=v_timesheet and is_current=true;
 
   -- An invoiced/paid hours record stays immutable, but it remains a truthful
   -- worked-week anchor for a later, separate expense-only carrier.
