@@ -4184,7 +4184,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3e85488ee8940556a36814130bf39a970a7189de573fe8374f406fba7fb8b0b4"
+      "definition_sha256": "8df682c91264a55b9a44f71015c2fc45297427444c926aacc79b71bb87feecb8"
     },
     {
       "acl": [
@@ -16349,6 +16349,30 @@
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_targetless_expense_paper_pack_enqueue_v1(p_environment text, p_workflow_id uuid, p_expected_generation integer, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c2483fe13aafdc2edcce5f5a56776c34a9cdc4dbe9250973064bd58fd5c898ab"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_timesheet_summary_cursor_v1()",
       "parallel": "u",
       "volatility": "s",
@@ -16377,7 +16401,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c9a3a73845d0ad85a443c332a3cfbd617ab4bbc2926678f824299bf68a1fa291"
+      "definition_sha256": "92cfbabd19fea80024197b7770537b19b51fe2262cffe74a321fc1c51b85568f"
     },
     {
       "acl": [
@@ -16449,7 +16473,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7922dca1250c6c06fd4728cb9df76912918383677e31999b2656f94b7d6d9a63"
+      "definition_sha256": "7b71a39a0711130763b78ba9a3e88fc0cd10f044381e1f51429fd831d0aec1a8"
     },
     {
       "acl": [

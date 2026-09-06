@@ -4,6 +4,9 @@ import test from 'node:test';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const sql = read('supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql');
+const stateAdapter = read('supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql');
+const transitionSql = read('supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql');
+const targetlessExpense = read('supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql');
 const backend = read('broker/src/candidate-app-backend.js');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const proofPath = 'supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql';
@@ -50,6 +53,32 @@ test('private Worker prepares a durable worked target but preserves the establis
   assert.match(seam, /CANDIDATE_PAPER_TIMESHEET_NOT_READY/i);
   assert.match(backend, /workflow\.target_timesheet_id\s*\|\|\s*workflow\.anchor_timesheet_id/i);
   assert.match(backend, /candidatePaperReturnPackReceipts[\s\S]*finaliseWorkflow/i);
+});
+
+test('a later standalone PAPER expense leaves its approved worked Timesheet unchanged', () => {
+  assert.match(stateAdapter,
+    /workflow_kind='CONTRACT_EXPENSE'[\s\S]*target_timesheet_id is null[\s\S]*CANDIDATE_PAPER_TARGET_AUTHORITY_FORBIDDEN/i);
+  assert.match(stateAdapter,
+    /not \([\s\S]*workflow_kind='CONTRACT_EXPENSE'[\s\S]*target_timesheet_id is null[\s\S]*update public\.timesheets[\s\S]*qr_status='PENDING'/i);
+  assert.match(transitionSql,
+    /workflow_kind='CONTRACT_EXPENSE'[\s\S]*target_timesheet_id is null[\s\S]*candidate_targetless_expense_paper_pack_enqueue_v1/i);
+  assert.match(targetlessExpense,
+    /workflow_kind<>'CONTRACT_EXPENSE'[\s\S]*target_timesheet_id is not null/i);
+  assert.match(targetlessExpense,
+    /reserved_week\.timesheet_id is not null[\s\S]*CANDIDATE_EXPENSE_CARRIER_INCONSISTENT/i);
+  assert.match(targetlessExpense,
+    /source_authority','WORKFLOW_IMMUTABLE_SUBMISSION'/i);
+  assert.doesNotMatch(targetlessExpense,
+    /update public\.timesheets|insert into public\.timesheets|update public\.timesheets_financials/i);
+});
+
+test('target-less expense pack assembly uses only the frozen claim as its source authority', () => {
+  assert.match(backend,
+    /targetlessExpense[\s\S]*pages\.some[\s\S]*HOURS_TIMESHEET[\s\S]*CANDIDATE_PAPER_PACK_IDENTITY_INVALID/i);
+  assert.match(backend,
+    /source_kind: 'WORKFLOW_IMMUTABLE_SUBMISSION'/i);
+  assert.match(backend,
+    /sourceReady[\s\S]*WORKFLOW_IMMUTABLE_SUBMISSION[\s\S]*assembleCandidatePaperPack/i);
 });
 
 test('paper target preparation is service-only and its first-use proof is mandatory', () => {

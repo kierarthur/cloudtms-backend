@@ -3497,19 +3497,22 @@ begin
     if v_workflow.scope='DAILY' then
       raise exception 'CANDIDATE_PAPER_ROUTE_NOT_ALLOWED' using errcode='55000';
     end if;
-    if v_workflow.workflow_kind='CONTRACT_EXPENSE' then
+    if v_workflow.workflow_kind='CONTRACT_EXPENSE'
+       and v_workflow.target_timesheet_id is null then
       select week_row.* into v_anchor_week
       from public.contract_weeks week_row
       where week_row.timesheet_id=v_workflow.anchor_timesheet_id
         and week_row.contract_id=v_workflow.contract_id
         and week_row.week_ending_date=v_workflow.week_ending_date;
       if not found then raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001'; end if;
-      v_route_authority:=private._candidate_route_family_v1(v_workflow.anchor_timesheet_id,v_anchor_week.id);
+      if not coalesce((v_policy->>'paper_submission_enabled')::boolean,false) then
+        raise exception 'CANDIDATE_PAPER_ROUTE_NOT_ALLOWED' using errcode='55000';
+      end if;
     else
       v_route_authority:=private._candidate_route_family_v1(v_workflow.target_timesheet_id,v_workflow.contract_week_id);
-    end if;
-    if not coalesce((v_route_authority->>'candidate_paper_submission_allowed')::boolean,false) then
-      raise exception 'CANDIDATE_PAPER_ROUTE_NOT_ALLOWED' using errcode='55000',detail=v_route_authority::text;
+      if not coalesce((v_route_authority->>'candidate_paper_submission_allowed')::boolean,false) then
+        raise exception 'CANDIDATE_PAPER_ROUTE_NOT_ALLOWED' using errcode='55000',detail=v_route_authority::text;
+      end if;
     end if;
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
@@ -3565,11 +3568,20 @@ begin
     -- The existing QR/document/email authority is composed inside this
     -- transaction. A PAPER workflow is not accepted unless its exact held
     -- email operation exists and is bound to this frozen manifest.
-    execute
-      'select public.timesheet_qr_send_enqueue_v1($1,$2,$3,$4,$5)'
-      into v_paper_pack_result
-      using v_paper_timesheet_id,v_paper_timesheet_id,null::uuid,
-        p_idempotency_key||':paper-pack',p_now_utc;
+    if v_workflow.workflow_kind='CONTRACT_EXPENSE'
+       and v_workflow.target_timesheet_id is null then
+      execute
+        'select public.candidate_targetless_expense_paper_pack_enqueue_v1($1,$2,$3,$4,$5)'
+        into v_paper_pack_result
+        using v_environment,v_workflow.id,v_workflow.generation,
+          p_idempotency_key||':paper-pack',p_now_utc;
+    else
+      execute
+        'select public.timesheet_qr_send_enqueue_v1($1,$2,$3,$4,$5)'
+        into v_paper_pack_result
+        using v_paper_timesheet_id,v_paper_timesheet_id,null::uuid,
+          p_idempotency_key||':paper-pack',p_now_utc;
+    end if;
 
     if not coalesce((v_paper_pack_result->>'ok')::boolean,false)
        or not coalesce((v_paper_pack_result->>'queued')::boolean,false)
@@ -4002,7 +4014,9 @@ begin
 
     v_paper_pack_attachment:=jsonb_build_array(jsonb_build_object(
       'r2_key',v_paper_pack_storage_key,
-      'filename','Timesheet_'||coalesce(v_workflow.week_ending_date::text,v_paper_timesheet_id::text)||'.pdf',
+      'filename',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        then 'Expense_' else 'Timesheet_' end
+        ||coalesce(v_workflow.week_ending_date::text,v_paper_timesheet_id::text)||'.pdf',
       'content_type','application/pdf','sha256',v_paper_pack_sha256,
       'size_bytes',v_paper_pack_byte_size,'page_count',v_paper_pack_page_count,
       'candidate_workflow_id',v_workflow.id,

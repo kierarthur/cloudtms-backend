@@ -97,21 +97,26 @@ begin
   if v_workflow.generation is distinct from p_expected_generation then
     raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
   end if;
-  if v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
-     or v_timesheet.submission_mode<>'MANUAL'::public.submission_mode_enum
-     or v_timesheet.authorised_at_server is not null
-     or v_timesheet.qr_scanned_at is not null
-     or nullif(btrim(coalesce(v_timesheet.qr_signed_hash,'')),'') is not null
-     or v_timesheet.qr_signed_at_utc is not null
-     or upper(coalesce(v_timesheet.qr_status::text,'')) not in ('','PENDING') then
-    raise exception 'CANDIDATE_PAPER_TARGET_AUTHORITY_FORBIDDEN' using errcode='55000';
-  end if;
+  if not (
+       v_workflow.workflow_kind='CONTRACT_EXPENSE'
+       and v_workflow.target_timesheet_id is null
+     ) then
+    if v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
+       or v_timesheet.submission_mode<>'MANUAL'::public.submission_mode_enum
+       or v_timesheet.authorised_at_server is not null
+       or v_timesheet.qr_scanned_at is not null
+       or nullif(btrim(coalesce(v_timesheet.qr_signed_hash,'')),'') is not null
+       or v_timesheet.qr_signed_at_utc is not null
+       or upper(coalesce(v_timesheet.qr_status::text,'')) not in ('','PENDING') then
+      raise exception 'CANDIDATE_PAPER_TARGET_AUTHORITY_FORBIDDEN' using errcode='55000';
+    end if;
 
-  update public.timesheets
-  set qr_status='PENDING'::public.timesheet_qr_status_enum,
-      updated_at=p_now_utc
-  where timesheet_id=v_timesheet_id
-    and is_current=true;
+    update public.timesheets
+    set qr_status='PENDING'::public.timesheet_qr_status_enum,
+        updated_at=p_now_utc
+    where timesheet_id=v_timesheet_id
+      and is_current=true;
+  end if;
 
   if v_workflow.state='READY_FOR_MANAGER_APPROVAL' then
     update public.candidate_submission_workflows

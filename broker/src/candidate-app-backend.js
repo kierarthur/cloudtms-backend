@@ -6985,14 +6985,24 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   if (!pages.length || !workflow.paper_return_manifest_sha256) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
   }
-  let base;
-  try {
-    base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
-  } catch (error) {
-    if (error instanceof CandidateHttpError) throw error;
-    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  const targetlessExpense = upper(workflow.workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflow.target_timesheet_id);
+  if (targetlessExpense
+      && pages.some((page) => upper(page.component_kind) === 'HOURS_TIMESHEET')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
   }
-  if (base.media_type !== 'application/pdf') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+  let base = null;
+  if (!targetlessExpense) {
+    try {
+      base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
+    } catch (error) {
+      if (error instanceof CandidateHttpError) throw error;
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+    }
+    if (base.media_type !== 'application/pdf') {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+    }
+  }
   let components;
   try {
     components = await restRows(env, 'candidate_submission_components',
@@ -7014,7 +7024,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
         ? await candidatePaperTimesheetPageBytes(
           env, workflow, timesheet, components, pageQrText
         )
-        : base.bytes);
+        : base?.bytes);
       continue;
     }
     let component = null;
@@ -7121,15 +7131,34 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
     + 'active_document_operation_id,manual_pdf_r2_key');
   const qrRoute = text(timesheet?.qr_token)
     && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
-  if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY' || !qrRoute) {
+  if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY') {
     throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
   }
   const workflows = await activePaperWorkflowsForTimesheet(env, id);
   if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
   if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+  const targetlessExpense = upper(workflows[0].workflow_kind) === 'CONTRACT_EXPENSE'
+    && !text(workflows[0].target_timesheet_id);
+  if (!qrRoute && !targetlessExpense) {
+    throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
+  }
 
   let version = null;
-  if (upper(timesheet.document_state) === 'READY' && UUID_RE.test(text(timesheet.current_document_version_id))) {
+  if (targetlessExpense) {
+    const sourceAuthoritySha256 = text(workflows[0].immutable_submission_sha256)
+      .replace(/^\\x/i, '').toLowerCase();
+    if (!SHA256_RE.test(sourceAuthoritySha256)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+    }
+    version = {
+      id: null,
+      r2_key: null,
+      sha256: sourceAuthoritySha256,
+      status: 'READY',
+      source_kind: 'WORKFLOW_IMMUTABLE_SUBMISSION'
+    };
+  } else if (upper(timesheet.document_state) === 'READY'
+      && UUID_RE.test(text(timesheet.current_document_version_id))) {
     version = await restOne(env, 'invoice_document_versions',
       `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
       + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
@@ -7155,7 +7184,7 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
       env, workflows[0], timesheet, outbox
     );
   }
-  if (!complete && version?.r2_key) {
+  if (!complete && version?.sha256) {
     const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
     if (verifiedPack?.ready === true) complete = verifiedPack;
   }
@@ -7170,7 +7199,10 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
 }
 
 async function resumeCandidatePaperPackFromStatus(env, deps, context) {
-  if (context.state !== 'PREPARING' || !context.version?.r2_key || !context.outbox) {
+  const sourceReady = !!context.version?.r2_key
+    || (context.version?.source_kind === 'WORKFLOW_IMMUTABLE_SUBMISSION'
+      && SHA256_RE.test(text(context.version?.sha256)));
+  if (context.state !== 'PREPARING' || !sourceReady || !context.outbox) {
     return { ok: true, skipped: true, reason: 'SOURCE_NOT_READY' };
   }
   const scope = parseJson(context.outbox.payment_scope_json, {}) || {};
@@ -7315,7 +7347,10 @@ async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null
     });
     if (deferred !== true) await deferred;
   }
-  if (context.state === 'PREPARING' && context.version?.r2_key && context.outbox) {
+  const sourceReady = !!context.version?.r2_key
+    || (context.version?.source_kind === 'WORKFLOW_IMMUTABLE_SUBMISSION'
+      && SHA256_RE.test(text(context.version?.sha256)));
+  if (context.state === 'PREPARING' && sourceReady && context.outbox) {
     const work = resumeCandidatePaperPackFromStatus(env, deps, context).then((result) => {
       console.log('[candidate-app] exact Paper pack continuation', {
         workflow_id: context.workflow.id,

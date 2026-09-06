@@ -76,7 +76,7 @@ test('pending PAPER status resumes the existing document then atomically complet
   assert.match(status, /UUID_RE\.test\(documentOperationId\)/i);
   assert.match(status, /document_operation_id: documentOperationId/i);
   assert.match(status, /current_timesheet_id: context\.id/i);
-  assert.match(status, /context\.version\?\.r2_key && context\.outbox/i);
+  assert.match(status, /sourceReady[\s\S]*WORKFLOW_IMMUTABLE_SUBMISSION[\s\S]*context\.outbox/i);
   assert.match(status, /resumeCandidatePaperPackFromStatus\(env, deps, context\)/i);
   assert.match(assembly, /claimCandidatePaperPackAttempt\(/i);
   assert.match(assembly, /claim\.claim_acquired_new !== true/i);
@@ -133,6 +133,6 @@ test('generated contract contains the exact PAPER adapter authority', () => {
   assert.deepEqual(routine.acl.map((item) => item.grantee), ['postgres', 'service_role']);
   assert.equal(
     routine.definition_sha256,
-    'c9a3a73845d0ad85a443c332a3cfbd617ab4bbc2926678f824299bf68a1fa291'
+    '92cfbabd19fea80024197b7770537b19b51fe2262cffe74a321fc1c51b85568f'
   );
 });
