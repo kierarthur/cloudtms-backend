@@ -158,7 +158,7 @@ test('repair targets only the two proved terminal dirty-apply failures and retai
     );
   }
   for (const hash of [
-    '930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3',
+    '88880fc433528df687f6eb83983679ad0afc0cc8e6913971de7848874e3a4e71',
     'ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19',
     '363aeab20aed70b8396793808f9a2263766e984d66914317bdf0a767e6e0f360',
     '7d622194f7bca877bf8420cb6f10f9ad46a69bad118c5f8fb9ed16810492d98c',

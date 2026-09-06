@@ -47,7 +47,7 @@ BEGIN
     VALUES
       ('public._pay_active_settled_components(uuid[])'::regprocedure,NULL::text,NULL::text[]),
       ('public.bulk_authorise_dataset_v1(jsonb)'::regprocedure,
-       '930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3'::text,
+       '88880fc433528df687f6eb83983679ad0afc0cc8e6913971de7848874e3a4e71'::text,
        ARRAY['search_path=public']::text[]),
       ('public.bulk_authorise_row_context_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.bulk_process_dataset_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
