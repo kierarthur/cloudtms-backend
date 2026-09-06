@@ -7,6 +7,7 @@ const sql = read('supabase/repeatable/30082026_0714_candidate_weekly_paper_targe
 const stateAdapter = read('supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql');
 const transitionSql = read('supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql');
 const targetlessExpense = read('supabase/repeatable/06092026_0540_candidate_targetless_expense_paper_pack_v1.sql');
+const targetlessProof = read('supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql');
 const backend = read('broker/src/candidate-app-backend.js');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const proofPath = 'supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql';
@@ -70,6 +71,12 @@ test('a later standalone PAPER expense leaves its approved worked Timesheet unch
     /source_authority','WORKFLOW_IMMUTABLE_SUBMISSION'/i);
   assert.doesNotMatch(targetlessExpense,
     /update public\.timesheets|insert into public\.timesheets|update public\.timesheets_financials/i);
+  assert.match(transitionSql,
+    /v_paper_mileage_only:=jsonb_array_length\(v_paper_source_pages\)>0[\s\S]*component_kind'<>'MILEAGE_FORM'[\s\S]*expense_category'<>'MILEAGE'/i);
+  assert.match(transitionSql,
+    /workflow_kind in \('CONTRACT_COMBINED','CONTRACT_EXPENSE'\)[\s\S]*and not v_paper_mileage_only[\s\S]*'EXPENSE_SUMMARY'/i);
+  assert.match(targetlessProof,
+    /v_component_three[\s\S]*'targetless-paper\/mileage-page-3\.jpg'[\s\S]*page_row->>'component_kind'<>'MILEAGE_FORM'/i);
 });
 
 test('target-less expense pack assembly uses only the frozen claim as its source authority', () => {

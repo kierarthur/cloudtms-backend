@@ -321,6 +321,7 @@ declare
   v_required_category text;
   v_paper_manifest jsonb;
   v_paper_source_pages jsonb;
+  v_paper_mileage_only boolean:=false;
   v_paper_page_key text;
   v_paper_timesheet_id uuid;
   v_paper_pack_result jsonb;
@@ -3544,6 +3545,14 @@ begin
         component.component_no,component.id
     ) source_component;
 
+    v_paper_mileage_only:=jsonb_array_length(v_paper_source_pages)>0
+      and not exists(
+        select 1
+        from jsonb_array_elements(v_paper_source_pages) source_page
+        where source_page->>'component_kind'<>'MILEAGE_FORM'
+           or source_page->>'expense_category'<>'MILEAGE'
+      );
+
     v_paper_manifest:=jsonb_build_object(
       'workflow_id',v_workflow.id,
       'workflow_generation',v_workflow.generation,
@@ -3554,6 +3563,7 @@ begin
             'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET'))
           else '[]'::jsonb end
         || case when v_workflow.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+                    and not v_paper_mileage_only
           then jsonb_build_array(jsonb_build_object(
             'page_key','EXPENSE_SUMMARY','component_kind','EXPENSE_SUMMARY'))
           else '[]'::jsonb end

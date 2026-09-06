@@ -33,6 +33,7 @@ declare
   v_workflow uuid:=gen_random_uuid();
   v_component_one uuid:=gen_random_uuid();
   v_component_two uuid:=gen_random_uuid();
+  v_component_three uuid:=gen_random_uuid();
   v_email text:='targetless-paper-'||gen_random_uuid()::text||'@example.test';
   v_submission jsonb;
   v_placement jsonb;
@@ -197,6 +198,12 @@ begin
     'MILEAGE_FORM','MILEAGE','MILEAGE_CLAIM_FORM',true,'IMMUTABLE',
     'targetless-paper/mileage-page-2.jpg','image/jpeg',100,
     decode(repeat('c2',32),'hex'),v_now,'PENDING','PENDING'
+  ),
+  (
+    v_component_three,v_workflow,1,3,3,v_anchor_timesheet,
+    'MILEAGE_FORM','MILEAGE','MILEAGE_CLAIM_FORM',true,'IMMUTABLE',
+    'targetless-paper/mileage-page-3.jpg','image/jpeg',100,
+    decode(repeat('c3',32),'hex'),v_now,'PENDING','PENDING'
   );
 
   select to_jsonb(anchor_row.*) into v_anchor_before
@@ -229,6 +236,16 @@ begin
   if v_prepare->>'state' is distinct from 'AWAITING_PAPER_RETURN'
      or v_prepare->>'paper_return_page_count' is distinct from '3'
      or v_replay->>'state' is distinct from 'AWAITING_PAPER_RETURN'
+     or (select count(*)
+         from jsonb_array_elements((select paper_return_manifest_json
+           from public.candidate_submission_workflows where id=v_workflow)->'pages'))<>3
+     or exists(
+       select 1
+       from jsonb_array_elements((select paper_return_manifest_json
+         from public.candidate_submission_workflows where id=v_workflow)->'pages') page_row
+       where page_row->>'component_kind'<>'MILEAGE_FORM'
+          or page_row->>'expense_category'<>'MILEAGE'
+     )
      or v_anchor_after is distinct from v_anchor_before
      or v_financial_after is distinct from v_financial_before
      or v_anchor_week_after is distinct from v_anchor_week_before
