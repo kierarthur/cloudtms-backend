@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const backendUrl = new URL('../broker/src/candidate-app-backend.js', import.meta.url);
 const openapiUrl = new URL('../docs/candidate-app/CLOUDTMS_OFFICE_CANDIDATE_API_V1.yaml', import.meta.url);
 const officeSqlUrl = new URL('../supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql', import.meta.url);
+const officeGuardReassertUrl = new URL('../supabase/repeatable/06092026_0710_candidate_office_guard_owner_reassert_v1.sql', import.meta.url);
 const invoiceGenerateRowsUrl = new URL('../supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql', import.meta.url);
 const invoiceIssueRowsUrl = new URL('../supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql', import.meta.url);
 
@@ -161,6 +162,11 @@ test('Office projection keeps the exact approved generation and returned paper f
   assert.match(officeSql, /when v_workflow\.state='FINALISED' then[\s\S]*v_paper_state:='RETURN_RECEIVED'/);
   assert.match(officeSql, /returned_page\.paper_return_verified_at_utc[\s\S]*returned_page\.component_kind='SIGNED_RETURN'/);
   assert.match(officeSql, /paper-return-review\?generation='\|\|v_paper_delivery_generation::text/);
+});
+
+test('the final Office guard owner remains later than the refreshed historical adapter', async () => {
+  const guardReassert = await readFile(officeGuardReassertUrl, 'utf8');
+  assert.match(guardReassert, /\\ir 05092026_2100_candidate_submission_delete_reject_guard_v1\.sql/);
 });
 
 test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {
