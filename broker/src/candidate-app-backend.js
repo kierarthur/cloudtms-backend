@@ -7492,11 +7492,18 @@ async function handleAdvancedExpenseWorkflowAction(
         text(result.error_code) || 'CANDIDATE_EXPENSE_OPERATION_NOT_COMMITTED');
     }
     if (result?.automatic_resubmission_required === true) {
+      // The database operation survives a lost HTTP response whereas the
+      // client-generated mutation key may not. Anchor every automatic submit,
+      // render and rebind retry to the durable operation so a refreshed app
+      // resumes the same work instead of creating a competing sequence.
+      const automaticMutationKey = `candidate-expense-operation:${requireUuid(
+        result.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+      )}`;
       const committed = upper(result?.state) === 'AWAITING_MANAGER_APPROVAL'
           && upper(result?.update_state) === 'NONE'
         ? result
         : await submitAutomaticPendingExpenseUpdate(
-          env, deps, access, result, mutationKey
+          env, deps, access, result, automaticMutationKey
         );
       return jsonResponse(200,
         candidateExpenseCategoryPendingUpdateResult(result, committed, dbAction));

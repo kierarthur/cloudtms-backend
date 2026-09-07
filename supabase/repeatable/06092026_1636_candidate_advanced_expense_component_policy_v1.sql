@@ -4049,6 +4049,7 @@ declare
   v_request jsonb;
   v_request_sha bytea;
   v_operation public.candidate_expense_operations%rowtype;
+  v_pending_update public.candidate_pending_expense_updates%rowtype;
   v_result jsonb;
   v_removal_context jsonb;
   v_direct_empty_pending boolean:=false;
@@ -4127,6 +4128,70 @@ begin
   end if;
   if v_component.agency_authorisation_state<>'NOT_AUTHORISED' then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+
+  -- A client can lose the first HTTP response after the exact pending-manager
+  -- update and its operation have already been durably created. A refreshed
+  -- client then has a new idempotency key and sees the advanced WORKER_DRAFT
+  -- generation. Resume only the one locked active update whose immutable
+  -- removal plan, candidate operation and progress receipt all identify this
+  -- exact component action. Never broaden recovery to another category,
+  -- component, candidate or operation.
+  if v_action='WITHDRAW_EXPENSE' then
+    select update_row.* into v_pending_update
+    from public.candidate_pending_expense_updates update_row
+    where update_row.workflow_id=v_workflow.id
+      and update_row.state='EDITING'
+      and update_row.update_mode='PENDING_MANAGER'
+      and update_row.actor_kind='CANDIDATE'
+      and update_row.actor_id=v_workflow.candidate_id
+      and update_row.current_workflow_generation=v_workflow.generation
+      and p_expected_generation in (
+        update_row.from_workflow_generation,
+        update_row.current_workflow_generation
+      )
+      and jsonb_strip_nulls(update_row.update_plan_json)=jsonb_build_array(
+        jsonb_build_object(
+          'update_kind','REMOVE_CATEGORY',
+          'expense_category',v_component.expense_category,
+          'expense_component_id',v_component.expense_component_id,
+          'component_generation',v_component.component_generation
+        )
+      )
+      and update_row.operation_id is not null
+    for update;
+    if found then
+      select operation.* into v_operation
+      from public.candidate_expense_operations operation
+      where operation.operation_id=v_pending_update.operation_id
+        and operation.environment=v_environment
+        and operation.account_id=v_workflow.account_id
+        and operation.candidate_id=v_workflow.candidate_id
+        and operation.actor_kind='CANDIDATE'
+        and operation.actor_id=v_workflow.candidate_id
+        and operation.action_code=v_action
+        and operation.workflow_id=v_workflow.id
+        and operation.expense_component_id=v_component.expense_component_id
+        and operation.state='RENDERING'
+      for update;
+      if found
+         and jsonb_typeof(v_operation.progress_json)='object'
+         and v_operation.progress_json->>'operation_id'=v_operation.operation_id::text
+         and v_operation.progress_json->>'update_id'=v_pending_update.update_id::text
+         and v_operation.progress_json->>'workflow_id'=v_workflow.id::text
+         and (v_operation.progress_json->>'generation')::integer
+           =v_pending_update.current_workflow_generation
+         and v_operation.progress_json->>'action_code'=v_action
+         and coalesce(
+           (v_operation.progress_json->>'automatic_resubmission_required')::boolean,
+           false
+         ) then
+        return v_operation.progress_json||jsonb_build_object(
+          'idempotent_replay',true
+        );
+      end if;
+      raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
+    end if;
   end if;
 
   if v_action='WITHDRAW_EXPENSE' and v_workflow.route='PAPER'

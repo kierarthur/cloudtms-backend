@@ -16,6 +16,10 @@ const finalWorkflowAuthority = readFileSync(
   ),
   'utf8'
 );
+const brokerSource = readFileSync(
+  new URL('../broker/src/candidate-app-backend.js', import.meta.url),
+  'utf8'
+);
 
 test('expense component values accept combined and later expense-only snapshots', () => {
   const componentValues = source.match(
@@ -101,5 +105,31 @@ test('final workflow authority preserves the protected pending-expense update co
   assert.match(
     finalWorkflowAuthority,
     /when v_is_pending_expense_update then nullif\([\s\S]*prior_workflow_snapshot_json->>'candidate_signed_at_utc'/
+  );
+});
+
+test('a refreshed client resumes only the exact active pending withdrawal', () => {
+  const recovery = source.indexOf("if v_action='WITHDRAW_EXPENSE' then");
+  const ordinaryEligibility = source.indexOf(
+    "if (v_action='REMOVE_EXPENSE' and v_component.lifecycle_state<>'DRAFT')"
+  );
+  assert.ok(recovery > 0 && recovery < ordinaryEligibility,
+    'lost-response recovery must run before ordinary mutable-state eligibility');
+  assert.match(source, /update_row\.state='EDITING'/);
+  assert.match(source, /update_row\.update_mode='PENDING_MANAGER'/);
+  assert.match(source, /jsonb_strip_nulls\(update_row\.update_plan_json\)=jsonb_build_array/);
+  assert.match(source, /operation\.state='RENDERING'/);
+  assert.match(source, /operation\.expense_component_id=v_component\.expense_component_id/);
+  assert.match(source, /v_operation\.progress_json->>'update_id'=v_pending_update\.update_id::text/);
+});
+
+test('automatic withdrawal retries use the durable database operation identity', () => {
+  assert.match(
+    brokerSource,
+    /const automaticMutationKey = `candidate-expense-operation:\$\{requireUuid\([\s\S]*?result\.operation_id[\s\S]*?submitAutomaticPendingExpenseUpdate\([\s\S]*?automaticMutationKey/
+  );
+  assert.match(
+    brokerSource,
+    /p_idempotency_key: `\$\{mutationKey\}:submit`[\s\S]*?renderAndRebindPendingExpenseUpdate\(env, deps, submitted, mutationKey\)/
   );
 });
