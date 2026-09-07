@@ -4210,6 +4210,7 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
       ...detail,
       hours_component_status: base.hours_component_status || null,
       whole_claim_action: null,
+      expense_category_context: { pending_categories: [], accepted_categories: [] },
       expenses: emptyCandidateExpenseProjection(),
       submitted_expense_totals: emptySubmittedExpenseTotals(),
       expense_claims: []
@@ -4219,10 +4220,14 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
   const totals = candidateCategoryTotals(categories);
   const hasAuthoritativeCategories = categories.length > 0;
   const existingExpenses = isObject(detail.expenses) ? detail.expenses : {};
+  const expenseCategoryContext = isObject(base.expense_category_context)
+    ? base.expense_category_context
+    : { pending_categories: [], accepted_categories: [] };
   return {
     ...detail,
     hours_component_status: base.hours_component_status || null,
     whole_claim_action: base.whole_claim_action || null,
+    expense_category_context: expenseCategoryContext,
     expenses: {
       ...existingExpenses,
       ...(hasAuthoritativeCategories ? totals : {}),
@@ -4240,9 +4245,7 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
         : (Array.isArray(existingExpenses.supporting_evidence_categories)
           ? existingExpenses.supporting_evidence_categories : []),
       category_statuses: categories,
-      expense_category_context: isObject(base.expense_category_context)
-        ? base.expense_category_context
-        : { pending_categories: [], accepted_categories: [] }
+      expense_category_context: expenseCategoryContext
     },
     submitted_expense_totals: hasAuthoritativeCategories
       ? totals

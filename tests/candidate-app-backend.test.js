@@ -158,6 +158,9 @@ test('Daily Timesheet cards and details never expose expense actions or totals',
   });
   assert.equal(detail.hours_component_status, 'MANAGER_APPROVED');
   assert.equal(detail.whole_claim_action, null);
+  assert.deepEqual(detail.expense_category_context, {
+    pending_categories: [], accepted_categories: []
+  });
   assert.deepEqual(detail.expenses, page.items[0].expenses);
   assert.deepEqual(detail.submitted_expense_totals, {
     mileage_units: 0,
@@ -169,6 +172,67 @@ test('Daily Timesheet cards and details never expose expense actions or totals',
     expenses_description: null
   });
   assert.deepEqual(detail.expense_claims, []);
+});
+
+test('Weekly Timesheet detail exposes the expense category context at the contract level', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000063';
+  const context = {
+    pending_categories: ['MILEAGE'],
+    accepted_categories: ['TRAVEL']
+  };
+  const detail = await enrichCandidateDetailAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' },
+    {
+      async rpc(name) {
+        assert.equal(name, 'candidate_expense_component_projection_v1');
+        return {
+          claims: [],
+          timesheets: [{
+            timesheet_id: timesheetId,
+            category_statuses: [],
+            expense_category_context: context,
+            hours_component_status: null,
+            whole_claim_action: null
+          }]
+        };
+      }
+    },
+    {
+      timesheet: { id: timesheetId, sheet_scope: 'WEEKLY' },
+      workflows: [],
+      expenses: {},
+      submitted_expense_totals: {},
+      expense_claims: []
+    }
+  );
+
+  assert.deepEqual(detail.expense_category_context, context);
+  assert.deepEqual(detail.expenses.expense_category_context, context);
+});
+
+test('Blank new Weekly Timesheet detail exposes empty expense category choices safely', async () => {
+  const detail = await enrichCandidateDetailAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' },
+    {
+      async rpc(name, args) {
+        assert.equal(name, 'candidate_expense_component_projection_v1');
+        assert.deepEqual(args.p_workflow_ids, []);
+        assert.deepEqual(args.p_timesheet_ids, []);
+        return { claims: [], timesheets: [] };
+      }
+    },
+    {
+      sheet_scope: 'WEEKLY',
+      workflows: [],
+      expenses: {},
+      submitted_expense_totals: {},
+      expense_claims: []
+    }
+  );
+
+  assert.deepEqual(detail.expense_category_context, {
+    pending_categories: [], accepted_categories: []
+  });
 });
 
 test('expense PAPER replacement finishes the held render before its atomic rebind', async () => {
