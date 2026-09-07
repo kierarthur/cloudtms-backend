@@ -82,11 +82,12 @@ test('advanced expense authority is coupled to both database release and Candida
   const migration = 'supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql';
   const policy = 'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql';
   const completion = 'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql';
+  const sentPaperFinal = 'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql';
   const verifier = 'supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql';
 
   assert.equal(release.verificationFiles.filter(file => file === verifier).length, 1);
   assert.equal(release.newVerificationFiles.filter(file => file === verifier).length, 1);
-  for (const file of [migration, policy, completion, verifier]) {
+  for (const file of [migration, policy, completion, sentPaperFinal, verifier]) {
     assert.match(runtime, new RegExp(file.replaceAll('.', '\\.')));
   }
   const migrationSource = await readFile(new URL(`../${migration}`, import.meta.url), 'utf8');
@@ -98,10 +99,10 @@ test('advanced expense authority is coupled to both database release and Candida
     migrationSource,
     /when authorised_at_utc is not null or authorised_at_server is not null/
   );
-  const [policySource, completionSource, deleteSource, contextSource, workflowSource,
+  const [policySource, completionSource, sentPaperFinalSource, deleteSource, contextSource, workflowSource,
     finalTransitionSource] =
     await Promise.all([
-      policy, completion,
+      policy, completion, sentPaperFinal,
       'supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
       'supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql',
       'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql',
@@ -117,6 +118,13 @@ test('advanced expense authority is coupled to both database release and Candida
   );
   assert.match(completionSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
   assert.match(completionSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
+  assert.match(sentPaperFinalSource, /CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_DRIFT/);
+  assert.match(
+    sentPaperFinalSource,
+    /WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED''[\s\S]*OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''/
+  );
+  assert.match(sentPaperFinalSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
+  assert.match(sentPaperFinalSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
   assert.match(finalTransitionSource, /v_paper_expense_update_active boolean:=false/);
   assert.match(finalTransitionSource,
     /update_mode='PAPER_REPLACEMENT'[\s\S]*current_workflow_generation=v_workflow\.generation[\s\S]*state in \('EDITING','RENDERING'\)/);
