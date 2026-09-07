@@ -16,8 +16,8 @@ declare
   v_definition text;
   v_old_guard text:=E'if v_mail.status=''SENT'' and not v_is_historical_replacement_retirement then\n      raise exception ''CANDIDATE_PAPER_OUTBOX_ALREADY_SENT''';
   v_new_guard text:=E'if v_mail.status=''SENT''\n       and not v_is_historical_replacement_retirement\n       and v_reason not in (\n         ''WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED'',\n         ''OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''\n       )\n       and v_reason not like ''ROUTE_INTERVENTION_%'' then\n      raise exception ''CANDIDATE_PAPER_OUTBOX_ALREADY_SENT''';
-  v_old_update text:=E'and (mail_row.status<>''SENT'' or v_is_historical_replacement_retirement)\n    and mail_row.payment_scope_json->>''candidate_workflow_id''=v_workflow.id::text';
-  v_new_update text:=E'and (\n      mail_row.status<>''SENT''\n      or v_is_historical_replacement_retirement\n      or v_reason in (\n        ''WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED'',\n        ''OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''\n      )\n      or v_reason like ''ROUTE_INTERVENTION_%''\n    )\n    and mail_row.payment_scope_json->>''candidate_workflow_id''=v_workflow.id::text';
+  v_old_update text:=E'and (\n      mail_row.status<>''SENT''\n      or v_is_historical_replacement_retirement\n      or v_reason in (\n        ''WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED'',\n        ''OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''\n      )\n      or v_reason like ''ROUTE_INTERVENTION_%''\n    )\n    and mail_row.payment_scope_json->>''candidate_workflow_id''=v_workflow.id::text';
+  v_new_update text:=E'and (mail_row.status<>''SENT'' or v_is_historical_replacement_retirement)\n    and mail_row.payment_scope_json->>''candidate_workflow_id''=v_workflow.id::text';
   v_guard_offset integer;
   v_update_offset integer;
 begin
@@ -31,18 +31,23 @@ begin
   end if;
   v_guard_offset:=pg_catalog.strpos(v_definition,v_old_guard);
   v_update_offset:=pg_catalog.strpos(v_definition,v_old_update);
-  if v_guard_offset=0 or v_update_offset=0
-     or pg_catalog.strpos(
+  if (v_guard_offset=0 and pg_catalog.strpos(v_definition,v_new_guard)=0)
+     or (v_update_offset=0 and pg_catalog.strpos(v_definition,v_new_update)=0)
+     or (v_guard_offset>0 and pg_catalog.strpos(
        pg_catalog.substr(v_definition,v_guard_offset+pg_catalog.length(v_old_guard)),v_old_guard
-     )>0
-     or pg_catalog.strpos(
+     )>0)
+     or (v_update_offset>0 and pg_catalog.strpos(
        pg_catalog.substr(v_definition,v_update_offset+pg_catalog.length(v_old_update)),v_old_update
-     )>0 then
+     )>0) then
     raise exception 'CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_DRIFT'
       using errcode='55000';
   end if;
-  v_definition:=pg_catalog.replace(v_definition,v_old_guard,v_new_guard);
-  v_definition:=pg_catalog.replace(v_definition,v_old_update,v_new_update);
+  if v_guard_offset>0 then
+    v_definition:=pg_catalog.replace(v_definition,v_old_guard,v_new_guard);
+  end if;
+  if v_update_offset>0 then
+    v_definition:=pg_catalog.replace(v_definition,v_old_update,v_new_update);
+  end if;
   execute v_definition;
 end;
 $candidate_sent_paper_retirement_final_authority$;

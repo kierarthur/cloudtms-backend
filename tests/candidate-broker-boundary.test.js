@@ -129,7 +129,10 @@ test('advanced expense authority is coupled to both database release and Candida
     /WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED''[\s\S]*OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''/
   );
   assert.match(sentPaperFinalSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
-  assert.match(sentPaperFinalSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
+  assert.match(
+    sentPaperFinalSource,
+    /v_new_update text:=E'and \(mail_row\.status<>''SENT'' or v_is_historical_replacement_retirement\)/
+  );
   assert.match(finalTransitionSource, /v_paper_expense_update_active boolean:=false/);
   assert.match(finalTransitionSource,
     /update_mode='PAPER_REPLACEMENT'[\s\S]*current_workflow_generation=v_workflow\.generation[\s\S]*state in \('EDITING','RENDERING'\)/);
