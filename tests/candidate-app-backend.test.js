@@ -7,7 +7,8 @@ import { PDFDocument } from 'pdf-lib';
 import {
   candidateAppBackendInternals,
   handleCandidateAppRequest,
-  processPendingCandidatePaperPacks
+  processPendingCandidatePaperPacks,
+  resumePendingCandidateExpenseUpdateRenders
 } from '../broker/src/candidate-app-backend.js';
 
 const {
@@ -2971,6 +2972,55 @@ test('document refresh loads independent record groups together', async () => {
   assert.ok(start >= 0 && end > start);
   assert.match(body, /const \[workflow, component\] = await Promise\.all\(\[/);
   assert.match(body, /const \[timesheet, financials, contractRow, candidate\] = await Promise\.all\(\[/);
+});
+
+test('scheduled recovery resumes the exact saved expense document update', async () => {
+  const updateId = '00000000-0000-4000-8000-0000000001c1';
+  const workflowId = '00000000-0000-4000-8000-0000000001c2';
+  const operationId = '00000000-0000-4000-8000-0000000001c3';
+  const submitted = {
+    update_id: updateId,
+    workflow_id: workflowId,
+    render_contract: { phase: 'REVIEW', components: [{ component_id: 'saved' }] }
+  };
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async input => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    assert.equal(url.pathname.endsWith('/candidate_pending_expense_updates'), true);
+    assert.equal(url.searchParams.get('state'), 'eq.RENDERING');
+    assert.equal(url.searchParams.get('limit'), '1');
+    return Response.json([{
+      update_id: updateId,
+      workflow_id: workflowId,
+      operation_id: operationId,
+      submit_result_json: submitted,
+      updated_at_utc: '2026-09-07T22:00:00.000Z'
+    }]);
+  };
+  try {
+    const result = await resumePendingCandidateExpenseUpdateRenders(
+      {
+        CANDIDATE_APP_ENVIRONMENT: 'TEST',
+        SUPABASE_URL: 'https://test.example.invalid',
+        SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+      },
+      { routeAudience: 'PRIVATE' },
+      1,
+      {
+        async renderUpdate(env, deps, receipt, mutationKey) {
+          calls.push({ env, deps, receipt, mutationKey });
+          return { ok: true };
+        }
+      }
+    );
+    assert.deepEqual(result, { scanned: 1, recovered: 1, failed: 0 });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].receipt, submitted);
+    assert.equal(calls[0].mutationKey, `candidate-expense-operation:${operationId}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {

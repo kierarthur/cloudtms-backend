@@ -5696,6 +5696,44 @@ export async function recoverPendingCandidateExpenseUpdates(env, deps, limit = 2
   });
 }
 
+export async function resumePendingCandidateExpenseUpdateRenders(
+  env, deps, limit = 1, options = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
+  const rows = await restRows(env, 'candidate_pending_expense_updates',
+    `state=eq.RENDERING&select=update_id,workflow_id,operation_id,submit_result_json,updated_at_utc`
+    + '&order=updated_at_utc.asc'
+    + `&limit=${boundedLimit}`);
+  const renderUpdate = options.renderUpdate || renderAndRebindPendingExpenseUpdate;
+  let recovered = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const updateId = requireUuid(row.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      const workflowId = requireUuid(row.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      const operationId = requireUuid(row.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND');
+      const submitted = parseJson(row.submit_result_json, {}) || {};
+      if (submitted.update_id !== updateId
+          || submitted.workflow_id !== workflowId
+          || !submitted.render_contract) {
+        throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
+      }
+      await renderUpdate(
+        env, deps, submitted, `candidate-expense-operation:${operationId}`
+      );
+      recovered += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[candidate-app] scheduled expense document refresh failed', {
+        update_id: text(row?.update_id) || null,
+        workflow_id: text(row?.workflow_id) || null,
+        error_code: knownErrorCode(error) || 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_FAILED'
+      });
+    }
+  }
+  return { scanned: rows.length, recovered, failed };
+}
+
 async function handleCandidateRead(request, env, deps, kind, params = {}) {
   const access = await verifyCandidateAccess(request, env);
   const url = new URL(request.url);

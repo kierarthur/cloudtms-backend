@@ -4,6 +4,7 @@ import {
   handleCandidateAppRequest,
   processPendingCandidatePaperPacks,
   recoverPendingCandidateExpenseUpdates,
+  resumePendingCandidateExpenseUpdateRenders,
   recoverPendingCandidateManagerFinalisations
 } from './candidate-app-backend.js';
 import {
@@ -548,12 +549,13 @@ export default {
   },
   async scheduled(controller, env, ctx) {
     if (!requiredConfigurationAvailable(env)) return;
+    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
     ctx.waitUntil(purgeExpiredServiceNonces(env));
     ctx.waitUntil(purgeCandidateDailySystemNonces(env));
     ctx.waitUntil(purgeMyTmsGoogleControlNonces(env));
     ctx.waitUntil(processPendingCandidatePaperPacks(
       env,
-      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      dependencies,
       10
     ));
     // This private data plane owns the agency database and R2 namespace.
@@ -561,19 +563,20 @@ export default {
     // normal Office Worker's database route.
     ctx.waitUntil(drainCandidateExpenseSummaries(
       env,
-      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      dependencies,
       { limit: 10 }
     ));
     ctx.waitUntil(recoverPendingCandidateManagerFinalisations(
       env,
-      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      dependencies,
       5
     ));
-    ctx.waitUntil(recoverPendingCandidateExpenseUpdates(
-      env,
-      createCandidatePrivateDependencies(env, 'PRIVATE'),
-      20
-    ));
+    // HTTP waitUntil work has a 30-second ceiling. Resume one durable review
+    // render inside this 15-minute scheduled invocation before expired-update
+    // cleanup is allowed to consider it abandoned.
+    ctx.waitUntil(resumePendingCandidateExpenseUpdateRenders(
+      env, dependencies, 1
+    ).then(() => recoverPendingCandidateExpenseUpdates(env, dependencies, 20)));
   }
 };
 
