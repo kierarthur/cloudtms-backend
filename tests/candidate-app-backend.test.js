@@ -316,6 +316,93 @@ test('Weekly cards and details keep linked expense Timesheets visible without mo
   });
 });
 
+test('Weekly cards and details include pending expense categories before they own a Timesheet', async () => {
+  const hoursTimesheetId = '00000000-0000-4000-8000-000000000070';
+  const approvedWorkflowId = '00000000-0000-4000-8000-000000000071';
+  const pendingWorkflowId = '00000000-0000-4000-8000-000000000072';
+  const approved = {
+    workflow_id: approvedWorkflowId,
+    expense_component_id: '00000000-0000-4000-8000-000000000073',
+    component_generation: 1,
+    owning_timesheet_id: hoursTimesheetId,
+    expense_category: 'TRAVEL',
+    amount: 15,
+    mileage_units: 0,
+    included_in_total: true,
+    supporting_evidence_count: 1,
+    status_code: 'MANAGER_APPROVED'
+  };
+  const pending = {
+    workflow_id: pendingWorkflowId,
+    expense_component_id: '00000000-0000-4000-8000-000000000074',
+    component_generation: 1,
+    owning_timesheet_id: null,
+    expense_category: 'OTHER',
+    amount: 8,
+    mileage_units: 0,
+    included_in_total: true,
+    supporting_evidence_count: 1,
+    status_code: 'SUBMITTED',
+    available_action: { code: 'WITHDRAW_EXPENSE_CATEGORY' }
+  };
+  const projection = {
+    claims: [{
+      workflow_id: approvedWorkflowId,
+      categories: [approved]
+    }, {
+      workflow_id: pendingWorkflowId,
+      target_timesheet_id: null,
+      categories: [pending]
+    }],
+    timesheets: [{
+      timesheet_id: hoursTimesheetId,
+      category_statuses: [approved],
+      expense_category_context: {
+        pending_categories: ['OTHER'], accepted_categories: ['TRAVEL']
+      },
+      hours_component_status: { status_code: 'MANAGER_APPROVED' },
+      whole_claim_action: { code: 'WITHDRAW_ENTIRE_CLAIM' }
+    }]
+  };
+  const deps = {
+    async rpc(name) {
+      assert.equal(name, 'candidate_expense_component_projection_v1');
+      return projection;
+    }
+  };
+  const base = {
+    timesheet_id: hoursTimesheetId,
+    sheet_scope: 'WEEKLY',
+    workflows: [{ workflow_id: approvedWorkflowId, target_timesheet_id: hoursTimesheetId }, {
+      workflow_id: pendingWorkflowId,
+      target_timesheet_id: null,
+      anchor_timesheet_id: hoursTimesheetId
+    }],
+    expenses: {}
+  };
+
+  const page = await enrichCandidatePageAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, { items: [base] }
+  );
+  assert.deepEqual(page.items[0].expenses.category_statuses, [approved, pending]);
+  assert.equal(page.items[0].expenses.travel_pay_ex_vat, 15);
+  assert.equal(page.items[0].expenses.other_pay_ex_vat, 8);
+  assert.equal(page.items[0].expenses.supporting_evidence_count, 2);
+
+  const detail = await enrichCandidateDetailAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, {
+      ...base,
+      timesheet: { id: hoursTimesheetId, sheet_scope: 'WEEKLY' },
+      submitted_expense_totals: {},
+      expense_claims: []
+    }
+  );
+  assert.deepEqual(detail.expenses.category_statuses, [approved, pending]);
+  assert.equal(detail.submitted_expense_totals.travel_pay_ex_vat, 15);
+  assert.equal(detail.submitted_expense_totals.other_pay_ex_vat, 8);
+  assert.equal(detail.expense_claims.length, 2);
+});
+
 test('Blank new Weekly Timesheet detail exposes empty expense category choices safely', async () => {
   const detail = await enrichCandidateDetailAdvancedExpenses(
     { CANDIDATE_APP_ENVIRONMENT: 'TEST' },

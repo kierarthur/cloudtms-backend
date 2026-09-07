@@ -4144,6 +4144,35 @@ function candidateCategoryTotals(categories) {
   return totals;
 }
 
+function candidateExpenseCategoryIdentity(category) {
+  const componentId = text(category?.expense_component_id);
+  if (UUID_RE.test(componentId)) {
+    return [
+      text(category?.workflow_id),
+      componentId,
+      Number(category?.component_generation) || 0
+    ].join(':');
+  }
+  return [
+    text(category?.workflow_id),
+    upper(category?.expense_category),
+    Number(category?.component_generation) || 0,
+    Number(category?.amount) || 0,
+    Number(category?.mileage_units) || 0
+  ].join(':');
+}
+
+function mergeCandidateExpenseCategories(...groups) {
+  const merged = new Map();
+  for (const group of groups) {
+    for (const category of Array.isArray(group) ? group : []) {
+      const identity = candidateExpenseCategoryIdentity(category);
+      if (!merged.has(identity)) merged.set(identity, category);
+    }
+  }
+  return [...merged.values()];
+}
+
 async function candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds) {
   const workflows = [...new Set((workflowIds || []).filter((id) => UUID_RE.test(text(id))))];
   const timesheets = [...new Set((timesheetIds || []).filter((id) => UUID_RE.test(text(id))))];
@@ -4197,9 +4226,15 @@ async function enrichCandidatePageAdvancedExpenses(env, deps, page) {
           expenses: emptyCandidateExpenseProjection()
         };
       }
-      const categories = linkedTimesheets.flatMap((row) => (
-        Array.isArray(row?.category_statuses) ? row.category_statuses : []
-      ));
+      const cardWorkflowIds = new Set((Array.isArray(card?.workflows) ? card.workflows : [])
+        .map((workflow) => text(workflow?.workflow_id)).filter((id) => UUID_RE.test(id)));
+      const categories = mergeCandidateExpenseCategories(
+        linkedTimesheets.flatMap((row) => (
+          Array.isArray(row?.category_statuses) ? row.category_statuses : []
+        )),
+        projection.claims.filter((claim) => cardWorkflowIds.has(text(claim?.workflow_id)))
+          .flatMap((claim) => Array.isArray(claim?.categories) ? claim.categories : [])
+      );
       const totals = candidateCategoryTotals(categories);
       const hasAuthoritativeCategories = categories.length > 0;
       const existingExpenses = isObject(card.expenses) ? card.expenses : {};
@@ -4257,9 +4292,14 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
       expense_claims: []
     };
   }
-  const categories = projection.timesheets.flatMap((row) => (
-    Array.isArray(row?.category_statuses) ? row.category_statuses : []
-  ));
+  const categories = mergeCandidateExpenseCategories(
+    projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.category_statuses) ? row.category_statuses : []
+    )),
+    projection.claims.flatMap((claim) => (
+      Array.isArray(claim?.categories) ? claim.categories : []
+    ))
+  );
   const totals = candidateCategoryTotals(categories);
   const hasAuthoritativeCategories = categories.length > 0;
   const existingExpenses = isObject(detail.expenses) ? detail.expenses : {};
