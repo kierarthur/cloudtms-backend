@@ -4097,6 +4097,25 @@ begin
       return v_operation.result_json||jsonb_build_object('idempotent_replay',true);
     end if;
     if v_operation.state='RENDERING' and v_operation.progress_json is not null then
+      select update_row.* into v_pending_update
+      from public.candidate_pending_expense_updates update_row
+      where update_row.operation_id=v_operation.operation_id
+        and update_row.workflow_id=v_operation.workflow_id
+        and update_row.actor_kind='CANDIDATE'
+        and update_row.actor_id=v_operation.candidate_id
+        and update_row.state in ('EDITING','RENDERING')
+      for update;
+      if found and v_pending_update.state='RENDERING'
+         and jsonb_typeof(v_pending_update.submit_result_json)='object'
+         and v_pending_update.submit_result_json->>'update_id'=v_pending_update.update_id::text
+         and v_pending_update.submit_result_json->>'workflow_id'=v_operation.workflow_id::text
+         and (v_pending_update.submit_result_json->>'generation')::integer
+           =v_pending_update.current_workflow_generation
+         and v_pending_update.submit_result_json->>'update_state'='UPDATING'
+         and jsonb_typeof(v_pending_update.submit_result_json->'render_contract')='object' then
+        return v_operation.progress_json||v_pending_update.submit_result_json
+          ||jsonb_build_object('idempotent_replay',true);
+      end if;
       return v_operation.progress_json||jsonb_build_object('idempotent_replay',true);
     end if;
     raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
@@ -4141,7 +4160,7 @@ begin
     select update_row.* into v_pending_update
     from public.candidate_pending_expense_updates update_row
     where update_row.workflow_id=v_workflow.id
-      and update_row.state='EDITING'
+      and update_row.state in ('EDITING','RENDERING')
       and update_row.update_mode='PENDING_MANAGER'
       and update_row.actor_kind='CANDIDATE'
       and update_row.actor_id=v_workflow.candidate_id
@@ -4179,16 +4198,30 @@ begin
          and v_operation.progress_json->>'operation_id'=v_operation.operation_id::text
          and v_operation.progress_json->>'update_id'=v_pending_update.update_id::text
          and v_operation.progress_json->>'workflow_id'=v_workflow.id::text
-         and (v_operation.progress_json->>'generation')::integer
-           =v_pending_update.current_workflow_generation
          and v_operation.progress_json->>'action_code'=v_action
          and coalesce(
            (v_operation.progress_json->>'automatic_resubmission_required')::boolean,
            false
          ) then
-        return v_operation.progress_json||jsonb_build_object(
-          'idempotent_replay',true
-        );
+        if v_pending_update.state='EDITING'
+           and (v_operation.progress_json->>'generation')::integer
+             =v_pending_update.current_workflow_generation then
+          return v_operation.progress_json||jsonb_build_object(
+            'idempotent_replay',true
+          );
+        end if;
+        if v_pending_update.state='RENDERING'
+           and jsonb_typeof(v_pending_update.submit_result_json)='object'
+           and v_pending_update.submit_result_json->>'update_id'=v_pending_update.update_id::text
+           and v_pending_update.submit_result_json->>'workflow_id'=v_workflow.id::text
+           and (v_pending_update.submit_result_json->>'generation')::integer
+             =v_pending_update.current_workflow_generation
+           and v_pending_update.submit_result_json->>'update_state'='UPDATING'
+           and jsonb_typeof(v_pending_update.submit_result_json->'render_contract')='object' then
+          return v_operation.progress_json||v_pending_update.submit_result_json
+            ||jsonb_build_object('idempotent_replay',true);
+        end if;
+        raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
       end if;
       raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
     end if;

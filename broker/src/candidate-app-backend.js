@@ -7167,6 +7167,63 @@ function candidateExpenseCategoryPendingUpdateResult(begin, committed, actionCod
   };
 }
 
+function candidateExpenseCategoryPendingUpdateAcceptedResult(begin, submitted, actionCode) {
+  const invalid = () => {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+  };
+  const requiredUuid = (value) => {
+    const result = text(value);
+    if (!UUID_RE.test(result)) invalid();
+    return result;
+  };
+  const generation = Number(submitted?.generation);
+  const approvalRequestGeneration = Number(submitted?.approval_request_generation);
+  const preservedComponentCount = Number(begin?.preserved_component_count);
+  const categoryChanges = candidateExpenseCategoryChanges(
+    begin?.category_changes, { allowRemove: true }
+  );
+  if (actionCode !== 'WITHDRAW_EXPENSE'
+      || begin?.ok !== true
+      || upper(begin?.contract_version) !== 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1'
+      || upper(begin?.action_code) !== actionCode
+      || begin?.automatic_resubmission_required !== true
+      || submitted?.ok !== true
+      || upper(submitted?.state) !== 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT'
+      || upper(submitted?.update_state) !== 'UPDATING'
+      || submitted?.manager_link_preserved !== true
+      || submitted?.paper_pack_replacement !== false
+      || submitted?.old_pack_recoverable !== false
+      || !Number.isSafeInteger(generation) || generation < 1
+      || !Number.isSafeInteger(approvalRequestGeneration) || approvalRequestGeneration < 1
+      || !Number.isSafeInteger(preservedComponentCount) || preservedComponentCount < 0
+      || categoryChanges.length !== 1
+      || categoryChanges[0].update_kind !== 'REMOVE_CATEGORY') {
+    invalid();
+  }
+  return {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_UPDATE_ACCEPTED_V1',
+    operation_id: requiredUuid(begin.operation_id),
+    action_code: actionCode,
+    workflow_id: requiredUuid(submitted.workflow_id),
+    state: 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+    generation,
+    update_state: 'UPDATING',
+    update_id: requiredUuid(submitted.update_id),
+    category_changes: categoryChanges,
+    approval_request_id: requiredUuid(submitted.approval_request_id),
+    approval_request_generation: approvalRequestGeneration,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    preserved_component_count: preservedComponentCount,
+    expense_component_id: requiredUuid(begin.expense_component_id),
+    automatic_resubmission_required: true,
+    review_rendering_accepted: true,
+    idempotent_replay: submitted.idempotent_replay === true
+  };
+}
+
 async function prepareAndRebindPaperExpenseUpdate(
   env, deps, access, submitted, mutationKey, ctx
 ) {
@@ -7367,6 +7424,12 @@ async function prepareAndRebindOfficePaperExpenseUpdate(
 }
 
 async function submitAutomaticPendingExpenseUpdate(env, deps, access, begin, mutationKey) {
+  if (begin?.ok === true
+      && upper(begin?.state) === 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT'
+      && upper(begin?.update_state) === 'UPDATING'
+      && begin?.render_contract) {
+    return begin;
+  }
   const workflow = await workflowRow(env, begin.workflow_id);
   const immutableSubmission = parseJson(workflow.immutable_submission_json, {}) || {};
   const payload = {
@@ -7388,7 +7451,7 @@ async function submitAutomaticPendingExpenseUpdate(env, deps, access, begin, mut
     approval_route: upper(workflow.route),
     renderer_contract_version: RENDERER_CONTRACT_VERSION
   };
-  const submitted = await rpcCall(deps, 'candidate_expense_update_submit_atomic_v1', {
+  return rpcCall(deps, 'candidate_expense_update_submit_atomic_v1', {
     p_session_id: access.session_id,
     p_environment: access.environment || environmentName(env),
     p_workflow_id: workflow.id,
@@ -7398,11 +7461,10 @@ async function submitAutomaticPendingExpenseUpdate(env, deps, access, begin, mut
     p_idempotency_key: `${mutationKey}:submit`,
     p_now_utc: new Date().toISOString()
   });
-  return renderAndRebindPendingExpenseUpdate(env, deps, submitted, mutationKey);
 }
 
 async function handleAdvancedExpenseWorkflowAction(
-  request, env, deps, access, workflowId, dbAction, body, mutationKey
+  request, env, deps, access, workflowId, dbAction, body, mutationKey, ctx
 ) {
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   if (dbAction === 'BEGIN_EXPENSE_UPDATE') {
@@ -7499,14 +7561,30 @@ async function handleAdvancedExpenseWorkflowAction(
       const automaticMutationKey = `candidate-expense-operation:${requireUuid(
         result.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
       )}`;
-      const committed = upper(result?.state) === 'AWAITING_MANAGER_APPROVAL'
-          && upper(result?.update_state) === 'NONE'
-        ? result
-        : await submitAutomaticPendingExpenseUpdate(
-          env, deps, access, result, automaticMutationKey
-        );
-      return jsonResponse(200,
-        candidateExpenseCategoryPendingUpdateResult(result, committed, dbAction));
+      if (upper(result?.state) === 'AWAITING_MANAGER_APPROVAL'
+          && upper(result?.update_state) === 'NONE') {
+        return jsonResponse(200,
+          candidateExpenseCategoryPendingUpdateResult(result, result, dbAction));
+      }
+      const submitted = await submitAutomaticPendingExpenseUpdate(
+        env, deps, access, result, automaticMutationKey
+      );
+      const work = renderAndRebindPendingExpenseUpdate(
+        env, deps, submitted, automaticMutationKey
+      );
+      const deferred = deferBackground(ctx, work, 'automatic-expense-update-render-rebind', {
+        workflow_id: workflowId,
+        update_id: submitted.update_id,
+        operation_id: result.operation_id,
+        generation: submitted.generation
+      });
+      if (deferred !== true) {
+        const committed = await deferred;
+        return jsonResponse(200,
+          candidateExpenseCategoryPendingUpdateResult(result, committed, dbAction));
+      }
+      return jsonResponse(202,
+        candidateExpenseCategoryPendingUpdateAcceptedResult(result, submitted, dbAction));
     }
     // A stale per-category PAPER action is non-mutating guidance, not an API
     // failure. The server returns the unchanged component receipt with the
@@ -7559,7 +7637,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     'RESUBMIT_EXPENSE_CATEGORY', 'CREATE_UPDATED_DOCUMENTS'
   ].includes(dbAction)) {
     return handleAdvancedExpenseWorkflowAction(
-      request, env, deps, access, workflowId, dbAction, body, mutationKey
+      request, env, deps, access, workflowId, dbAction, body, mutationKey, ctx
     );
   }
   if (dbAction === 'MILEAGE_FORM_PREPARE' || dbAction === 'MILEAGE_FORM_EMAIL') {

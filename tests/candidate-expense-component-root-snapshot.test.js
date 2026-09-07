@@ -115,12 +115,14 @@ test('a refreshed client resumes only the exact active pending withdrawal', () =
   );
   assert.ok(recovery > 0 && recovery < ordinaryEligibility,
     'lost-response recovery must run before ordinary mutable-state eligibility');
-  assert.match(source, /update_row\.state='EDITING'/);
+  assert.match(source, /update_row\.state in \('EDITING','RENDERING'\)/);
   assert.match(source, /update_row\.update_mode='PENDING_MANAGER'/);
   assert.match(source, /jsonb_strip_nulls\(update_row\.update_plan_json\)=jsonb_build_array/);
   assert.match(source, /operation\.state='RENDERING'/);
   assert.match(source, /operation\.expense_component_id=v_component\.expense_component_id/);
   assert.match(source, /v_operation\.progress_json->>'update_id'=v_pending_update\.update_id::text/);
+  assert.match(source, /v_pending_update\.submit_result_json->>'update_id'=v_pending_update\.update_id::text/);
+  assert.match(source, /v_operation\.progress_json\|\|v_pending_update\.submit_result_json/);
 });
 
 test('automatic withdrawal retries use the durable database operation identity', () => {
@@ -130,6 +132,14 @@ test('automatic withdrawal retries use the durable database operation identity',
   );
   assert.match(
     brokerSource,
-    /p_idempotency_key: `\$\{mutationKey\}:submit`[\s\S]*?renderAndRebindPendingExpenseUpdate\(env, deps, submitted, mutationKey\)/
+    /p_idempotency_key: `\$\{mutationKey\}:submit`[\s\S]*?renderAndRebindPendingExpenseUpdate\([\s\S]*?automaticMutationKey/
+  );
+  assert.match(
+    brokerSource,
+    /deferBackground\(ctx, work, 'automatic-expense-update-render-rebind'/
+  );
+  assert.match(
+    brokerSource,
+    /jsonResponse\(202,[\s\S]*candidateExpenseCategoryPendingUpdateAcceptedResult/
   );
 });

@@ -2860,6 +2860,195 @@ test('Candidate workflow mutation requires a caller key and an exact WORKER_SUBM
   }
 });
 
+test('pending-manager withdrawal returns an accepted receipt before background document refresh', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000001a1';
+  const accountId = '00000000-0000-4000-8000-0000000001a2';
+  const candidateId = '00000000-0000-4000-8000-0000000001a3';
+  const workflowId = '00000000-0000-4000-8000-0000000001a4';
+  const operationId = '00000000-0000-4000-8000-0000000001a5';
+  const updateId = '00000000-0000-4000-8000-0000000001a6';
+  const componentId = '00000000-0000-4000-8000-0000000001a7';
+  const reviewComponentId = '00000000-0000-4000-8000-0000000001a8';
+  const approvalRequestId = '00000000-0000-4000-8000-0000000001a9';
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const background = [];
+  const calls = [];
+  const categoryChanges = [{
+    update_kind: 'REMOVE_CATEGORY', expense_category: 'OTHER',
+    expense_component_id: componentId, component_generation: 2
+  }];
+  const begin = {
+    ok: true, contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId, action_code: 'WITHDRAW_EXPENSE', workflow_id: workflowId,
+    generation: 3, state: 'WORKER_DRAFT', update_state: 'UPDATING', update_id: updateId,
+    category_changes: categoryChanges, manager_link_preserved: true,
+    paper_pack_replacement: false, old_pack_recoverable: false,
+    preserved_component_count: 1, candidate_signature_component_id: null,
+    expense_component_id: componentId, automatic_resubmission_required: true,
+    idempotent_replay: false
+  };
+  const submitted = {
+    ok: true, workflow_id: workflowId, generation: 4,
+    state: 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT', update_state: 'UPDATING',
+    update_id: updateId, approval_request_id: approvalRequestId,
+    approval_request_generation: 2, manager_link_preserved: true,
+    paper_pack_replacement: false, old_pack_recoverable: false,
+    idempotent_replay: false,
+    render_contract: { components: [{
+      workflow_id: workflowId, workflow_generation: 4,
+      component_id: reviewComponentId, render_input_sha256: '0'.repeat(64)
+    }] }
+  };
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, generation: 3, route: 'PHONE',
+      immutable_submission_json: {}, candidate_signature_component_id: null,
+      candidate_signed_at_utc: null
+    }]);
+    throw new Error('synthetic render dependency unavailable');
+  };
+  console.error = () => {};
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/withdraw-expense`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        }, body: JSON.stringify({
+          generation: 3, expense_component_id: componentId,
+          component_generation: 2, idempotency_key: 'pending-withdraw-async-1'
+        })
+      }
+    ), env, { waitUntil(promise) { background.push(promise); } }, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_expense_component_action_atomic_v1') return begin;
+        if (name === 'candidate_expense_update_submit_atomic_v1') return submitted;
+        if (name === 'candidate_expense_update_abort_atomic_v1') return { ok: true };
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    });
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.contract_version, 'CANDIDATE_EXPENSE_CATEGORY_UPDATE_ACCEPTED_V1');
+    assert.equal(body.review_rendering_accepted, true);
+    assert.equal(body.update_state, 'UPDATING');
+    assert.equal(body.operation_id, operationId);
+    assert.equal(body.render_contract, undefined);
+    assert.equal(background.length, 1);
+    assert.equal(calls.filter(call => call.name ===
+      'candidate_expense_update_submit_atomic_v1').length, 1);
+    await background[0];
+    assert.equal(calls.filter(call => call.name ===
+      'candidate_expense_update_abort_atomic_v1').length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
+
+test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000001b1';
+  const accountId = '00000000-0000-4000-8000-0000000001b2';
+  const candidateId = '00000000-0000-4000-8000-0000000001b3';
+  const workflowId = '00000000-0000-4000-8000-0000000001b4';
+  const operationId = '00000000-0000-4000-8000-0000000001b5';
+  const updateId = '00000000-0000-4000-8000-0000000001b6';
+  const componentId = '00000000-0000-4000-8000-0000000001b7';
+  const reviewComponentId = '00000000-0000-4000-8000-0000000001b8';
+  const approvalRequestId = '00000000-0000-4000-8000-0000000001b9';
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const background = [];
+  const calls = [];
+  const recovered = {
+    ok: true, contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId, action_code: 'WITHDRAW_EXPENSE', workflow_id: workflowId,
+    generation: 4, state: 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+    update_state: 'UPDATING', update_id: updateId,
+    category_changes: [{
+      update_kind: 'REMOVE_CATEGORY', expense_category: 'OTHER',
+      expense_component_id: componentId, component_generation: 2
+    }],
+    approval_request_id: approvalRequestId, approval_request_generation: 2,
+    manager_link_preserved: true, paper_pack_replacement: false,
+    old_pack_recoverable: false, preserved_component_count: 1,
+    candidate_signature_component_id: null, expense_component_id: componentId,
+    automatic_resubmission_required: true, idempotent_replay: true,
+    render_contract: { components: [{
+      workflow_id: workflowId, workflow_generation: 4,
+      component_id: reviewComponentId, render_input_sha256: '0'.repeat(64)
+    }] }
+  };
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error('synthetic render dependency unavailable');
+  };
+  console.error = () => {};
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/withdraw-expense`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        }, body: JSON.stringify({
+          generation: 4, expense_component_id: componentId,
+          component_generation: 2, idempotency_key: 'pending-withdraw-resume-render-1'
+        })
+      }
+    ), env, { waitUntil(promise) { background.push(promise); } }, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_expense_component_action_atomic_v1') return recovered;
+        if (name === 'candidate_expense_update_abort_atomic_v1') return { ok: true };
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    });
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.contract_version, 'CANDIDATE_EXPENSE_CATEGORY_UPDATE_ACCEPTED_V1');
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.render_contract, undefined);
+    assert.equal(background.length, 1);
+    assert.equal(calls.some(call => call.name ===
+      'candidate_expense_update_submit_atomic_v1'), false);
+    await background[0];
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
+
 test('pending WORKER_SUBMIT replay resumes review rendering without exposing the internal contract', async () => {
   const sessionId = '00000000-0000-4000-8000-0000000000b1';
   const accountId = '00000000-0000-4000-8000-0000000000b2';
