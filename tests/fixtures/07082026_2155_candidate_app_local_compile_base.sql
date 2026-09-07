@@ -511,6 +511,8 @@ create table public.timesheets_financials (
   authorised_at_utc timestamptz,
   authorised_by_user_id uuid,
   paid_at_utc timestamptz,
+  paid_by_user_id uuid,
+  payment_reference text,
   locked_by_invoice_id uuid,
   locked_at_utc timestamptz,
   nhsp_import_id uuid,
