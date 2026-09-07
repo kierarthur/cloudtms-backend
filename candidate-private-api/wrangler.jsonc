@@ -33,6 +33,25 @@
       "preview_bucket_name": "test-cloudtms-preview"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CANDIDATE_DOCUMENT_RENDER_QUEUE",
+        "queue": "test-cloudtms-candidate-document-render-recovery"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "test-cloudtms-candidate-document-render-recovery",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "dead_letter_queue": "test-cloudtms-candidate-document-render-recovery-dlq",
+        "max_concurrency": 1,
+        "retry_delay": 10
+      }
+    ]
+  },
   "services": [
     {
       "binding": "MYTMS_MANAGER_CONTROL_ADAPTER",

@@ -16651,6 +16651,30 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_expense_update_render_recovery_list_v1(p_environment text, p_limit integer, p_update_id uuid, p_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "65cdc1ef6f08fb6d38c902de263fb9cdbbf5391c5c8f58518d096902c56779be"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_expense_update_submit_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_update_id uuid, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",
@@ -17395,6 +17419,30 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "a9de43df4310c6234536a6bab5ed4b854912cc2f34b7a5e416f3701fbe22bf48"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_review_render_recovery_list_v1(p_environment text, p_limit integer, p_workflow_id uuid, p_workflow_generation integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e4d211d7edd7fdb3ba396446f516f0ec006196600d9d2ac2b7aa0f180786cbfb"
     },
     {
       "acl": [

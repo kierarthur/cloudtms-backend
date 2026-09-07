@@ -8,6 +8,7 @@ import {
   candidateAppBackendInternals,
   handleCandidateAppRequest,
   processPendingCandidatePaperPacks,
+  resumePendingCandidateReviewRenders,
   resumePendingCandidateExpenseUpdateRenders
 } from '../broker/src/candidate-app-backend.js';
 
@@ -2887,6 +2888,7 @@ test('pending-manager withdrawal returns an accepted receipt before background d
   const originalFetch = globalThis.fetch;
   const originalConsoleError = console.error;
   const background = [];
+  const queueMessages = [];
   const calls = [];
   const categoryChanges = [{
     update_kind: 'REMOVE_CATEGORY', expense_category: 'OTHER',
@@ -2958,6 +2960,36 @@ test('pending-manager withdrawal returns an accepted receipt before background d
     await background[0];
     assert.equal(calls.filter(call => call.name ===
       'candidate_expense_update_abort_atomic_v1').length, 1);
+
+    env.CANDIDATE_DOCUMENT_RENDER_QUEUE = {
+      async send(message) { queueMessages.push(message); }
+    };
+    const queuedResponse = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/withdraw-expense`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        }, body: JSON.stringify({
+          generation: 3, expense_component_id: componentId,
+          component_generation: 2, idempotency_key: 'pending-withdraw-queued-1'
+        })
+      }
+    ), env, { waitUntil(promise) { background.push(promise); } }, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_expense_component_action_atomic_v1') return begin;
+        if (name === 'candidate_expense_update_submit_atomic_v1') return submitted;
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    });
+    assert.equal(queuedResponse.status, 202);
+    assert.equal(background.length, 1, 'a queued render must not use HTTP waitUntil');
+    assert.deepEqual(queueMessages, [{
+      contract_version: 'CANDIDATE_EXPENSE_RENDER_QUEUE_MESSAGE_V1',
+      workflow_id: workflowId,
+      update_id: updateId,
+      operation_id: operationId
+    }]);
   } finally {
     globalThis.fetch = originalFetch;
     console.error = originalConsoleError;
@@ -2983,44 +3015,80 @@ test('scheduled recovery resumes the exact saved expense document update', async
     workflow_id: workflowId,
     render_contract: { phase: 'REVIEW', components: [{ component_id: 'saved' }] }
   };
-  const originalFetch = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async input => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    assert.equal(url.pathname.endsWith('/candidate_pending_expense_updates'), true);
-    assert.equal(url.searchParams.get('state'), 'eq.RENDERING');
-    assert.equal(url.searchParams.get('limit'), '1');
-    return Response.json([{
-      update_id: updateId,
-      workflow_id: workflowId,
-      operation_id: operationId,
-      submit_result_json: submitted,
-      updated_at_utc: '2026-09-07T22:00:00.000Z'
-    }]);
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_expense_update_render_recovery_list_v1');
+      assert.equal(args.p_environment, 'TEST');
+      assert.equal(args.p_limit, 1);
+      return {
+        ok: true,
+        contract_version: 'CANDIDATE_EXPENSE_RENDER_RECOVERY_LIST_V1',
+        count: 1,
+        items: [{
+          update_id: updateId,
+          workflow_id: workflowId,
+          operation_id: operationId,
+          submit_result_json: submitted,
+          updated_at_utc: '2026-09-07T22:00:00.000Z'
+        }]
+      };
+    }
   };
-  try {
-    const result = await resumePendingCandidateExpenseUpdateRenders(
-      {
-        CANDIDATE_APP_ENVIRONMENT: 'TEST',
-        SUPABASE_URL: 'https://test.example.invalid',
-        SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-      },
-      { routeAudience: 'PRIVATE' },
-      1,
-      {
-        async renderUpdate(env, deps, receipt, mutationKey) {
-          calls.push({ env, deps, receipt, mutationKey });
-          return { ok: true };
-        }
+  const result = await resumePendingCandidateExpenseUpdateRenders(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, 1,
+    {
+      async renderUpdate(env, receivedDeps, receipt, mutationKey) {
+        calls.push({ env, deps: receivedDeps, receipt, mutationKey });
+        return { ok: true };
       }
-    );
-    assert.deepEqual(result, { scanned: 1, recovered: 1, failed: 0 });
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].receipt, submitted);
-    assert.equal(calls[0].mutationKey, `candidate-expense-operation:${operationId}`);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+    }
+  );
+  assert.deepEqual(result, { scanned: 1, recovered: 1, failed: 0 });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].receipt, submitted);
+  assert.equal(calls[0].mutationKey, `candidate-expense-operation:${operationId}`);
+});
+
+test('scheduled recovery requests only bounded pending review documents', async () => {
+  const calls = [];
+  const result = await resumePendingCandidateReviewRenders({
+    CANDIDATE_APP_ENVIRONMENT: 'TEST'
+  }, {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return {
+        ok: true,
+        contract_version: 'CANDIDATE_REVIEW_RENDER_RECOVERY_LIST_V1',
+        items: [],
+        count: 0
+      };
+    }
+  }, 1);
+  assert.deepEqual(result, { scanned: 0, recovered: 0, failed: 0 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'candidate_review_render_recovery_list_v1');
+  assert.equal(calls[0].args.p_environment, 'TEST');
+  assert.equal(calls[0].args.p_limit, 1);
+  assert.equal(calls[0].args.p_workflow_id, null);
+  assert.equal(calls[0].args.p_workflow_generation, null);
+});
+
+test('scheduled expense recovery is service-only and precedes expired-update cleanup', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/07092026_2230_candidate_expense_render_recovery_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  const worker = await readFile(new URL(
+    '../broker/src/candidate-private-worker.js', import.meta.url
+  ), 'utf8');
+  assert.match(sql, /security definer/i);
+  assert.match(sql, /update_row\.updated_at_utc<=p_now_utc-interval '30 seconds'/i);
+  assert.match(sql, /revoke all on function[\s\S]*from public,anon,authenticated,service_role/i);
+  assert.match(sql, /grant execute on function[\s\S]*to service_role/i);
+  assert.match(worker,
+    /resumePendingCandidateExpenseUpdateRenders\([\s\S]*?\.then\(\(\) => recoverPendingCandidateExpenseUpdates/);
 });
 
 test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {
@@ -3131,6 +3199,10 @@ test('pending WORKER_SUBMIT replay resumes review rendering without exposing the
   const originalFetch = globalThis.fetch;
   const originalConsoleError = console.error;
   const background = [];
+  const queueMessages = [];
+  env.CANDIDATE_DOCUMENT_RENDER_QUEUE = {
+    async send(message) { queueMessages.push(message); }
+  };
   globalThis.fetch = async url => {
     if (String(url).includes('candidate_app_sessions')) return Response.json([session]);
     throw new Error('synthetic render dependency unavailable');
@@ -3174,8 +3246,12 @@ test('pending WORKER_SUBMIT replay resumes review rendering without exposing the
     assert.equal(body.idempotent_replay, true);
     assert.equal(body.review_rendering_accepted, true);
     assert.equal(body.render_contract, undefined);
-    assert.equal(background.length, 1);
-    assert.deepEqual(await background[0], { ok: false, error_code: 'CANDIDATE_REQUEST_FAILED' });
+    assert.equal(background.length, 0);
+    assert.deepEqual(queueMessages, [{
+      contract_version: 'CANDIDATE_REVIEW_RENDER_QUEUE_MESSAGE_V1',
+      workflow_id: workflowId,
+      generation: 2
+    }]);
   } finally {
     globalThis.fetch = originalFetch;
     console.error = originalConsoleError;

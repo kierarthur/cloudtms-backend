@@ -4,6 +4,7 @@ import {
   handleCandidateAppRequest,
   processPendingCandidatePaperPacks,
   recoverPendingCandidateExpenseUpdates,
+  resumePendingCandidateReviewRenders,
   resumePendingCandidateExpenseUpdateRenders,
   recoverPendingCandidateManagerFinalisations
 } from './candidate-app-backend.js';
@@ -571,12 +572,72 @@ export default {
       dependencies,
       5
     ));
+    ctx.waitUntil(resumePendingCandidateReviewRenders(
+      env, dependencies, 1
+    ));
     // HTTP waitUntil work has a 30-second ceiling. Resume one durable review
     // render inside this 15-minute scheduled invocation before expired-update
     // cleanup is allowed to consider it abandoned.
     ctx.waitUntil(resumePendingCandidateExpenseUpdateRenders(
       env, dependencies, 1
     ).then(() => recoverPendingCandidateExpenseUpdates(env, dependencies, 20)));
+  },
+  async queue(batch, env) {
+    if (!requiredConfigurationAvailable(env)) {
+      batch.retryAll({ delaySeconds: 10 });
+      return;
+    }
+    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
+    for (const message of batch.messages) {
+      const body = message.body;
+      try {
+        let result;
+        if (body?.contract_version === 'CANDIDATE_EXPENSE_RENDER_QUEUE_MESSAGE_V1') {
+          result = await resumePendingCandidateExpenseUpdateRenders(
+            env, dependencies, 1, {
+              target: {
+                update_id: body.update_id,
+                operation_id: body.operation_id
+              }
+            }
+          );
+        } else if (body?.contract_version === 'CANDIDATE_REVIEW_RENDER_QUEUE_MESSAGE_V1') {
+          result = await resumePendingCandidateReviewRenders(
+            env, dependencies, 1, {
+              target: {
+                workflow_id: body.workflow_id,
+                generation: body.generation
+              }
+            }
+          );
+        } else if (body?.contract_version === 'CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1') {
+          result = await recoverPendingCandidateManagerFinalisations(
+            env, dependencies, 1, {
+              target: {
+                workflow_id: body.workflow_id,
+                generation: body.generation
+              }
+            }
+          );
+        } else {
+          console.error('[candidate-private] invalid document render queue message', {
+            error_code: 'CANDIDATE_DOCUMENT_RENDER_QUEUE_MESSAGE_INVALID'
+          });
+          message.ack();
+          continue;
+        }
+        if (result.failed > 0) message.retry({ delaySeconds: 10 });
+        else message.ack();
+      } catch (error) {
+        console.error('[candidate-private] document render queue retry required', {
+          update_id: String(body.update_id || '') || null,
+          operation_id: String(body.operation_id || '') || null,
+          error_code: String(error?.code || error?.message ||
+            'CANDIDATE_DOCUMENT_RENDER_QUEUE_FAILED').slice(0, 120)
+        });
+        message.retry({ delaySeconds: 10 });
+      }
+    }
   }
 };
 

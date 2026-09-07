@@ -69,7 +69,7 @@ test('manager finalisation uses a non-waiting database single-flight wrapper and
 });
 
 test('private scheduler retries only bounded manager finalisations through the service contract', () => {
-  assert.match(backendSource, /recoverPendingCandidateManagerFinalisations\(env, deps, limit = 5\)/);
+  assert.match(backendSource, /recoverPendingCandidateManagerFinalisations\([\s\S]*env, deps, limit = 5, options = \{\}/);
   assert.match(backendSource, /Math\.max\(1, Math\.min\(Number\(limit\) \|\| 5, 10\)\)/);
   assert.match(backendSource, /state=in\.\(MANAGER_APPROVED_PENDING_FINAL_DOCUMENT,READY_TO_FINALISE\)/);
   assert.match(backendSource, /candidate_manager_finalisation_recovery_v1/);
@@ -79,6 +79,8 @@ test('private scheduler retries only bounded manager finalisations through the s
   assert.match(backendSource, /completion\?\.ok !== true/);
   assert.match(backendSource, /CANDIDATE_MANAGER_FINALISATION_INCOMPLETE/);
   assert.match(privateWorkerSource, /ctx\.waitUntil\(recoverPendingCandidateManagerFinalisations\([\s\S]*,\s*5\s*\)\)/);
+  assert.match(privateWorkerSource, /CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1/);
+  assert.match(backendSource, /queueCandidateManagerFinalisation\(env, result\)/);
 });
 
 test('expense finalisation signs the authoritative anchor without pairing it to an unmaterialised carrier week', async () => {

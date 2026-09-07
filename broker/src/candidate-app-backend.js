@@ -5635,10 +5635,18 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     ));
 }
 
-export async function recoverPendingCandidateManagerFinalisations(env, deps, limit = 5) {
+export async function recoverPendingCandidateManagerFinalisations(
+  env, deps, limit = 5, options = {}
+) {
   const boundedLimit = Math.max(1, Math.min(Number(limit) || 5, 10));
   const environment = environmentName(env);
-  const rows = await restRows(env, 'candidate_submission_workflows',
+  const target = options.target || null;
+  const rows = target ? [{
+    id: requireUuid(target.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(
+      target.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+    )
+  }] : await restRows(env, 'candidate_submission_workflows',
     `environment=eq.${encodeURIComponent(environment)}`
     + '&state=in.(MANAGER_APPROVED_PENDING_FINAL_DOCUMENT,READY_TO_FINALISE)'
     + '&route=in.(PHONE,EMAIL)'
@@ -5648,6 +5656,7 @@ export async function recoverPendingCandidateManagerFinalisations(env, deps, lim
   let recovered = 0;
   let deferred = 0;
   let failed = 0;
+  let skipped = 0;
   for (const row of rows) {
     try {
       const completion = await withManagerFinalisationLease(
@@ -5679,12 +5688,65 @@ export async function recoverPendingCandidateManagerFinalisations(env, deps, lim
       if (completion?.single_flight_deferred === true) deferred += 1;
       else recovered += 1;
     } catch (error) {
+      const errorCode = knownErrorCode(error);
+      if (target && [
+        'CANDIDATE_MANAGER_FINALISATION_RECOVERY_NOT_ALLOWED',
+        'WORKFLOW_GENERATION_CONFLICT',
+        'CANDIDATE_WORKFLOW_NOT_FOUND'
+      ].includes(errorCode)) {
+        skipped += 1;
+        continue;
+      }
       failed += 1;
       console.error('[candidate-app] manager finalisation recovery failed',
         safeCandidateTransportDiagnostic(error));
     }
   }
-  return { scanned: rows.length, recovered, deferred, failed };
+  return { scanned: rows.length, recovered, deferred, skipped, failed };
+}
+
+export async function resumePendingCandidateReviewRenders(
+  env, deps, limit = 1, options = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
+  const target = options.target || null;
+  const receipt = await rpcCall(deps, 'candidate_review_render_recovery_list_v1', {
+    p_environment: environmentName(env),
+    p_limit: boundedLimit,
+    p_workflow_id: target?.workflow_id || null,
+    p_workflow_generation: target?.generation == null ? null : Number(target.generation),
+    p_now_utc: new Date().toISOString()
+  });
+  if (receipt?.ok !== true
+      || receipt?.contract_version !== 'CANDIDATE_REVIEW_RENDER_RECOVERY_LIST_V1'
+      || !Array.isArray(receipt?.items)
+      || Number(receipt?.count) !== receipt.items.length) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED');
+  }
+  let recovered = 0;
+  let failed = 0;
+  for (const row of receipt.items) {
+    try {
+      const workflowId = requireUuid(row.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+      const generation = requireInteger(
+        row.workflow_generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+      );
+      const contract = row.render_contract;
+      if (contract?.workflow_id !== workflowId
+          || Number(contract?.workflow_generation) !== generation) {
+        throw new CandidateHttpError(409, 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED');
+      }
+      await renderAndRegister(env, deps, contract, 'REVIEW');
+      recovered += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[candidate-app] scheduled review document refresh failed', {
+        workflow_id: text(row?.workflow_id) || null,
+        error_code: knownErrorCode(error) || 'CANDIDATE_REVIEW_RENDER_RECOVERY_FAILED'
+      });
+    }
+  }
+  return { scanned: receipt.items.length, recovered, failed };
 }
 
 export async function recoverPendingCandidateExpenseUpdates(env, deps, limit = 20) {
@@ -5700,11 +5762,27 @@ export async function resumePendingCandidateExpenseUpdateRenders(
   env, deps, limit = 1, options = {}
 ) {
   const boundedLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
-  const rows = await restRows(env, 'candidate_pending_expense_updates',
-    `state=eq.RENDERING&select=update_id,workflow_id,operation_id,submit_result_json,updated_at_utc`
-    + '&order=updated_at_utc.asc'
-    + `&limit=${boundedLimit}`);
-  const renderUpdate = options.renderUpdate || renderAndRebindPendingExpenseUpdate;
+  const target = options.target || null;
+  const receipt = await rpcCall(deps, 'candidate_expense_update_render_recovery_list_v1', {
+    p_environment: environmentName(env),
+    p_limit: boundedLimit,
+    p_update_id: target?.update_id
+      ? requireUuid(target.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY') : null,
+    p_operation_id: target?.operation_id
+      ? requireUuid(target.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND') : null,
+    p_now_utc: new Date().toISOString()
+  });
+  if (receipt?.ok !== true
+      || receipt?.contract_version !== 'CANDIDATE_EXPENSE_RENDER_RECOVERY_LIST_V1'
+      || !Array.isArray(receipt?.items)
+      || Number(receipt?.count) !== receipt.items.length) {
+    throw new CandidateHttpError(503, 'CANDIDATE_EXPENSE_UPDATE_RECOVERY_FAILED');
+  }
+  const rows = receipt.items;
+  const renderUpdate = options.renderUpdate || ((renderEnv, renderDeps, submitted, key) =>
+    renderAndRebindPendingExpenseUpdate(
+      renderEnv, renderDeps, submitted, key, { abortOnFailure: false }
+    ));
   let recovered = 0;
   let failed = 0;
   for (const row of rows) {
@@ -6428,7 +6506,9 @@ async function abortPendingExpenseUpdate(env, deps, workflowId, updateId, failur
   });
 }
 
-async function renderAndRebindPendingExpenseUpdate(env, deps, result, mutationKey) {
+async function renderAndRebindPendingExpenseUpdate(
+  env, deps, result, mutationKey, { abortOnFailure = true } = {}
+) {
   const workflowId = requireUuid(result?.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
   const updateId = requireUuid(result?.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
   try {
@@ -6441,6 +6521,7 @@ async function renderAndRebindPendingExpenseUpdate(env, deps, result, mutationKe
       p_now_utc: new Date().toISOString()
     });
   } catch (error) {
+    if (!abortOnFailure) throw error;
     try {
       await abortPendingExpenseUpdate(
         env, deps, workflowId, updateId,
@@ -7510,6 +7591,46 @@ async function submitAutomaticPendingExpenseUpdate(env, deps, access, begin, mut
   });
 }
 
+async function queuePendingExpenseDocumentRefresh(env, submitted, operationId) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_EXPENSE_RENDER_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(
+      submitted?.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY'
+    ),
+    update_id: requireUuid(
+      submitted?.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY'
+    ),
+    operation_id: operationId == null ? null : requireUuid(
+      operationId, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND'
+    )
+  });
+  return true;
+}
+
+async function queueCandidateReviewDocumentRefresh(env, result) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_REVIEW_RENDER_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(result?.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(result?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  });
+  return true;
+}
+
+async function queueCandidateManagerFinalisation(env, result) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1',
+    workflow_id: requireUuid(result?.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation: requireInteger(result?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  });
+  return true;
+}
+
 async function handleAdvancedExpenseWorkflowAction(
   request, env, deps, access, workflowId, dbAction, body, mutationKey, ctx
 ) {
@@ -7616,6 +7737,22 @@ async function handleAdvancedExpenseWorkflowAction(
       const submitted = await submitAutomaticPendingExpenseUpdate(
         env, deps, access, result, automaticMutationKey
       );
+      try {
+        if (await queuePendingExpenseDocumentRefresh(env, submitted, result.operation_id)) {
+          return jsonResponse(202,
+            candidateExpenseCategoryPendingUpdateAcceptedResult(result, submitted, dbAction));
+        }
+      } catch (error) {
+        // The database operation is already durable. If queue dispatch is
+        // temporarily unavailable, preserve the existing immediate attempt;
+        // the scheduled recovery remains a second durable wake-up.
+        console.error('[candidate-app] expense document queue dispatch failed', {
+          workflow_id: workflowId,
+          update_id: submitted.update_id,
+          operation_id: result.operation_id,
+          error_code: knownErrorCode(error) || 'CANDIDATE_EXPENSE_RENDER_QUEUE_UNAVAILABLE'
+        });
+      }
       const work = renderAndRebindPendingExpenseUpdate(
         env, deps, submitted, automaticMutationKey
       );
@@ -7748,6 +7885,20 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     );
     if (replay) {
       if (replay.render_contract) {
+        try {
+          if (await queueCandidateReviewDocumentRefresh(env, replay)) {
+            return jsonResponse(202, {
+              ...withoutInternalRenderContracts(replay),
+              review_rendering_accepted: true
+            });
+          }
+        } catch (error) {
+          console.error('[candidate-app] review document queue dispatch failed', {
+            workflow_id: workflowId,
+            generation,
+            error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+          });
+        }
         const work = renderAndRegister(env, deps, replay.render_contract, 'REVIEW');
         const deferred = deferBackground(ctx, work, 'review-render-replay', {
           workflow_id: workflowId, generation
@@ -8070,6 +8221,26 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   }
   if (dbAction === 'WORKER_SUBMIT' && result?.render_contract) {
     if (pendingExpenseUpdateId) {
+      try {
+        if (await queuePendingExpenseDocumentRefresh(
+          env, result, result?.operation_id || null
+        )) {
+          return jsonResponse(202, {
+            ...withoutInternalRenderContracts(result),
+            update_id: pendingExpenseUpdateId,
+            update_state: 'UPDATING',
+            manager_link_preserved: true,
+            review_rendering_accepted: true
+          });
+        }
+      } catch (error) {
+        console.error('[candidate-app] expense document queue dispatch failed', {
+          workflow_id: workflowId,
+          update_id: pendingExpenseUpdateId,
+          operation_id: result?.operation_id || null,
+          error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+        });
+      }
       const work = renderAndRebindPendingExpenseUpdate(env, deps, result, mutationKey);
       const deferred = deferBackground(ctx, work, 'expense-update-render-rebind', {
         workflow_id: workflowId,
@@ -8083,6 +8254,20 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
         update_state: 'UPDATING',
         manager_link_preserved: true,
         review_rendering_accepted: true
+      });
+    }
+    try {
+      if (await queueCandidateReviewDocumentRefresh(env, result)) {
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(result),
+          review_rendering_accepted: true
+        });
+      }
+    } catch (error) {
+      console.error('[candidate-app] review document queue dispatch failed', {
+        workflow_id: workflowId,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
       });
     }
     const work = renderAndRegister(env, deps, result.render_contract, 'REVIEW');
@@ -8323,6 +8508,17 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
     completeManagerEmailRoute(env, deps, routeAuthority, ctx);
   }
   if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
+    try {
+      if (await queueCandidateManagerFinalisation(env, result)) {
+        return jsonResponse(202, managerTerminalResult(result, action));
+      }
+    } catch (error) {
+      console.error('[candidate-app] manager finalisation queue dispatch failed', {
+        workflow_id: workflowId,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+      });
+    }
     const work = withManagerFinalisationLease(env, workflowId, result.generation, async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL');
       return finaliseWorkflow(env, deps, workflowId, result.generation, `${mutationKey}:finalise`);
@@ -10309,6 +10505,21 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
   }
   if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
+    try {
+      if (await queueCandidateManagerFinalisation(env, result)) {
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(result),
+          final_rendering_accepted: true,
+          finalisation_pending: true
+        });
+      }
+    } catch (error) {
+      console.error('[candidate-app] manager finalisation queue dispatch failed', {
+        workflow_id: workflow.id,
+        generation: result.generation,
+        error_code: knownErrorCode(error) || 'CANDIDATE_DOCUMENT_RENDER_QUEUE_UNAVAILABLE'
+      });
+    }
     const work = withManagerFinalisationLease(env, workflow.id, result.generation, async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL', user.id);
       return finaliseWorkflow(env, deps, workflow.id, result.generation,
