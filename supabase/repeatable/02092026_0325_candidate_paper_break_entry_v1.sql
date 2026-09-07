@@ -2,6 +2,8 @@
 -- authority as editable Electronic claims. Reassert the later Daily projection
 -- first: changing the historical 23082026 owner must never restore its older
 -- Contract-only detail reader over the no-contract Daily authority.
+-- 07092026 Daily expense-isolation replay: reinstall this current detail-v2
+-- and paper break-entry owner after the changed 28082026 Daily authority.
 
 \set ON_ERROR_STOP on
 

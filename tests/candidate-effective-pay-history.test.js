@@ -22,6 +22,7 @@ test('Candidate Current and History use the established effective payment preced
   }
   assert.match(pageSql, /case when effective_pay\.pay_status_code='PAID' then effective_pay\.paid_at_utc else null end as paid_at_utc/i);
   assert.match(detailSql, /if upper\(coalesce\(v_effective_pay_status_code,'UNPAID'\)\)<>'PAID' then[\s\S]*v_effective_paid_at_utc:=null;/i);
+  assert.match(detailSql, /'expenses',case when v_daily then jsonb_build_object\([\s\S]*'mileage_units',0[\s\S]*'other_pay_ex_vat',0[\s\S]*else jsonb_build_object/i);
 });
 
 test('Candidate effective payment readers retain least-privilege ACLs', () => {

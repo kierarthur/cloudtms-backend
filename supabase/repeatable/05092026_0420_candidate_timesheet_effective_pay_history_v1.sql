@@ -446,13 +446,22 @@ begin
     ) end,
     'hours',jsonb_build_object('total_hours',case when v_daily then (v_daily_projection->>'hours')::numeric else coalesce(v_fin.total_hours,0) end,
       'actual_schedule_json',coalesce(v_fin.actual_schedule_json,v_timesheet.actual_schedule_json)),
-    'expenses',jsonb_build_object(
+    -- Daily Timesheets are hours-only.  The current detail authority must
+    -- preserve that rule even when an old financial row contains expense-like
+    -- values from legacy data.
+    'expenses',case when v_daily then jsonb_build_object(
+      'expenses_pay_ex_vat',0,'expenses_description',null,
+      'mileage_units',0,'mileage_pay_ex_vat',0,
+      'travel_pay_ex_vat',0,
+      'accommodation_pay_ex_vat',0,
+      'other_pay_ex_vat',0
+    ) else jsonb_build_object(
       'expenses_pay_ex_vat',coalesce(v_fin.expenses_pay_ex_vat,0),'expenses_description',v_fin.expenses_description,
       'mileage_units',coalesce(v_fin.mileage_units,0),'mileage_pay_ex_vat',coalesce(v_fin.mileage_pay_ex_vat,0),
       'travel_pay_ex_vat',coalesce(v_fin.travel_pay_ex_vat,0),
       'accommodation_pay_ex_vat',coalesce(v_fin.accommodation_pay_ex_vat,0),
       'other_pay_ex_vat',coalesce(v_fin.other_pay_ex_vat,0)
-    ),
+    ) end,
     'lifecycle',jsonb_build_object(
       'processing_status',v_fin.processing_status,'authorised_at_utc',coalesce(v_fin.authorised_at_utc,case when v_daily then v_timesheet.authorised_at_server else null end),
       'paid_at_utc',v_effective_paid_at_utc,'invoice_locked',v_fin.locked_by_invoice_id is not null

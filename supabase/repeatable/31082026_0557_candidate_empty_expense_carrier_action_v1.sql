@@ -1,5 +1,7 @@
 -- Repeatable CloudTMS function/view authority: candidate_empty_expense_carrier_action_v1
 -- Use CREATE OR REPLACE and preserve owner, security, search_path, and ACL contracts.
+-- 07092026 Daily expense-isolation replay: reinstall this current action
+-- invocation owner after the changed 28082026 Daily detail authority.
 
 \set ON_ERROR_STOP on
 

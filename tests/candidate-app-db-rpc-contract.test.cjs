@@ -150,15 +150,15 @@ test('Candidate runtime gate finishes with every current authority', () => {
     'repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
   ]);
   assert.deepEqual(installPaths.slice(-9), [
-    settingsAuthorityBarrier,
-    qrRefuseServiceAcl,
-    'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql',
-    'supabase/repeatable/05092026_0025_candidate_expense_carrier_manager_projection_v1.sql',
-    'supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql',
-    'supabase/repeatable/30082026_0125_candidate_submitted_weekly_card_linkage.sql',
-    'supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql',
-    'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql',
-    'supabase/repeatable/06092026_0337_candidate_sequential_expense_manager_approval_gate_v1.sql',
+    'supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
+    'supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql',
+    'supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql',
+    'supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql',
+    'supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql',
+    'supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql',
+    'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql',
+    'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql',
+    'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql',
   ]);
 
   const suitesBlock = candidateRuntimeWorkflow.match(/suites=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
@@ -169,9 +169,9 @@ test('Candidate runtime gate finishes with every current authority', () => {
     'break-entry verifier must run after the migration and authority install phase'
   );
   assert.deepEqual(suitePaths.slice(-3), [
-    'supabase/verification/05092026_0735_candidate_expense_cancel_authority_verification.sql',
     'supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql',
     'supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql',
+    'supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql',
   ]);
 });
 

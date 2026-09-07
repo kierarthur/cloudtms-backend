@@ -6,6 +6,8 @@
 -- protected/import-authoritative/unrelated route remains inapplicable.
 -- Dedicated NHSP Weekly is import-authoritative and therefore cannot expose a
 -- Candidate hours/break editor even if a stale caller capability says editable.
+-- 07092026 Daily expense-isolation replay: reinstall this current Weekly
+-- break-entry core after the 02092026 detail-v2 authority is replayed.
 
 \set ON_ERROR_STOP on
 

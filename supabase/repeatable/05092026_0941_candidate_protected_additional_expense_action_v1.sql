@@ -4,6 +4,8 @@
 -- finalised. The later claim uses its own expense carrier and never changes
 -- an approved claim. While the current submission is still awaiting manager
 -- approval, cancellation/resubmission remains the sole correction route.
+-- 07092026 Daily expense-isolation replay: reinstall this current primary
+-- action owner after the 31082026 action-invocation authority is replayed.
 
 \set ON_ERROR_STOP on
 

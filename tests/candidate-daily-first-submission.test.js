@@ -46,3 +46,18 @@ test('Daily receipt distinguishes successful receipt from financial finalisation
   assert.match(finalise, /CANDIDATE_DAILY_FACTUAL_RECEIPT_V1/);
   assert.match(sql, /pg_advisory_xact_lock/);
 });
+
+test('Daily expense isolation replays every current shared authority after the changed historical owner', () => {
+  const replayOwners = [
+    'supabase/repeatable/31082026_0557_candidate_empty_expense_carrier_action_v1.sql',
+    'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
+    'supabase/repeatable/03092026_1215_candidate_weekly_preroute_break_entry_v1.sql',
+    'supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql',
+    'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql'
+  ];
+  for (const owner of replayOwners) {
+    const source = read(owner);
+    assert.match(source, /07092026 Daily expense-isolation replay|Daily Timesheets are hours-only/i,
+      `${owner} must be changed so UPGRADE reinstalls the current authority`);
+  }
+});
