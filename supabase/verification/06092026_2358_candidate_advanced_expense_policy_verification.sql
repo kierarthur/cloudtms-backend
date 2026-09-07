@@ -427,6 +427,22 @@ begin
   insert into public.timesheet_financial_retention(timesheet_id)
   values(v_archive_timesheet);
 
+  -- Daily Timesheets are hours-only.  Deliberately malformed legacy expense
+  -- rows must not leak expense categories, category context, or a whole-claim
+  -- action into the Candidate Daily display.
+  v_result:=public.candidate_expense_component_projection_v1(
+    'TEST',array[v_daily_workflow],array[v_daily_timesheet]
+  );
+  if v_result->'claims' is distinct from '[]'::jsonb
+     or v_result#>'{timesheets,0,category_statuses}' is distinct from '[]'::jsonb
+     or v_result#>'{timesheets,0,expense_category_context,pending_categories}'
+       is distinct from '[]'::jsonb
+     or v_result#>'{timesheets,0,expense_category_context,accepted_categories}'
+       is distinct from '[]'::jsonb
+     or v_result#>'{timesheets,0,whole_claim_action}' is distinct from 'null'::jsonb then
+    raise exception 'DAILY Timesheet exposed expense or whole-claim presentation: %',v_result;
+  end if;
+
   -- Cancelling one approved category changes only that category.  Surviving
   -- Travel and an offset-pay/charge Other category prove the exact absolute
   -- emptiness predicate cannot misclassify this carrier as zero.
@@ -747,17 +763,66 @@ begin
     raise exception 'Zero-carrier deletion rewrote terminal workflow history: %',v_result;
   end if;
 
-  v_result:=public.candidate_expense_component_action_atomic_v1(
-    v_session,'TEST',v_daily_workflow,1,v_daily_component,1,'CANCEL_EXPENSE',
-    'advanced-expense:daily-retained',now()
-  );
-  if coalesce((v_result->>'zero_expense_carrier')::boolean,true)
-     or coalesce((v_result->>'owning_timesheet_deleted')::boolean,true)
+  begin
+    perform public.candidate_expense_component_action_atomic_v1(
+      v_session,'TEST',v_daily_workflow,1,v_daily_component,1,'CANCEL_EXPENSE',
+      'advanced-expense:daily-refused',now()
+    );
+    raise exception 'DAILY expense category action was incorrectly accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'CANDIDATE_EXPENSE_COMPONENT_CHANGED' then raise; end if;
+  end;
+  begin
+    perform public.candidate_expense_update_begin_atomic_v1(
+      v_session,'TEST',v_daily_workflow,1,
+      jsonb_build_array(jsonb_build_object(
+        'update_kind','REMOVE_CATEGORY',
+        'expense_category','ACCOMMODATION',
+        'expense_component_id',v_daily_component,
+        'component_generation',1
+      )),'advanced-expense:daily-update-refused',now()
+    );
+    raise exception 'DAILY expense update was incorrectly accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' then raise; end if;
+  end;
+  begin
+    perform public.candidate_whole_claim_action_atomic_v1(
+      v_session,'TEST',v_daily_workflow,1,v_daily_timesheet,repeat('0',64),
+      'CANCEL_ENTIRE_CLAIM','Daily safeguard verification',
+      'advanced-expense:daily-whole-refused',now()
+    );
+    raise exception 'DAILY whole-claim action was incorrectly accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm not in (
+      'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED',
+      'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED'
+    ) then raise; end if;
+  end;
+  v_result:=private._candidate_expense_summary_queue_v1(v_daily_timesheet,now());
+  if coalesce(v_result->>'summary_state','')<>'REMOVED'
+     or coalesce((v_result#>>'{totals,total_pay_ex_vat}')::numeric,-1)<>0
      or not exists(select 1 from public.timesheets row
        where row.timesheet_id=v_daily_timesheet and row.is_current)
      or (select accommodation_pay_ex_vat from public.timesheets_financials
-         where timesheet_id=v_daily_timesheet and is_current) is distinct from 0::numeric then
-    raise exception 'DAILY expense carrier was deleted or cancellation failed: %',v_result;
+         where timesheet_id=v_daily_timesheet and is_current) is distinct from 7::numeric
+     or (select lifecycle_state from public.candidate_expense_components
+         where expense_component_id=v_daily_component) is distinct from 'MANAGER_APPROVED'
+     or exists(select 1 from public.candidate_expense_operations operation
+       where operation.idempotency_key in (
+         'advanced-expense:daily-refused',
+         'advanced-expense:daily-whole-refused'
+       ))
+     or exists(select 1 from public.candidate_pending_expense_updates update_row
+       where update_row.idempotency_key='advanced-expense:daily-update-refused') then
+    raise exception 'DAILY expense safeguards changed data or left a summary: %',v_result;
+  end if;
+  v_result:=public.candidate_office_expense_category_projection_v1(
+    'TEST',v_daily_timesheet,now()
+  );
+  if v_result->'expense_claims' is distinct from '[]'::jsonb
+     or v_result->'route_family' is distinct from 'null'::jsonb then
+    raise exception 'DAILY Timesheet exposed Office expense claims: %',v_result;
   end if;
 
   v_result:=public.candidate_expense_component_action_atomic_v1(

@@ -11,6 +11,8 @@ import {
 } from '../broker/src/candidate-app-backend.js';
 
 const {
+  enrichCandidatePageAdvancedExpenses,
+  enrichCandidateDetailAdvancedExpenses,
   deferBackground,
   derivePasswordVerifier,
   deterministicOpaqueToken,
@@ -85,6 +87,89 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('Daily Timesheet cards and details never expose expense actions or totals', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000061';
+  const workflowId = '00000000-0000-4000-8000-000000000062';
+  const deps = {
+    async rpc(name) {
+      assert.equal(name, 'candidate_expense_component_projection_v1');
+      return {
+        claims: [{ workflow_id: workflowId, category_statuses: [{ expense_category: 'MILEAGE' }] }],
+        timesheets: [{
+          timesheet_id: timesheetId,
+          category_statuses: [{
+            expense_category: 'MILEAGE',
+            amount: 25,
+            mileage_units: 25,
+            included_in_total: true,
+            supporting_evidence_count: 3
+          }],
+          expense_category_context: {
+            pending_categories: ['MILEAGE'],
+            accepted_categories: []
+          },
+          hours_component_status: 'MANAGER_APPROVED',
+          whole_claim_action: { action_kind: 'WITHDRAW_WHOLE_CLAIM' }
+        }]
+      };
+    }
+  };
+  const malformedExpenses = {
+    mileage_units: 25,
+    mileage_pay_ex_vat: 25,
+    travel_pay_ex_vat: 12.5,
+    expenses_pay_ex_vat: 12.5,
+    supporting_evidence_count: 3,
+    supporting_evidence_categories: ['MILEAGE'],
+    category_statuses: [{ expense_category: 'MILEAGE' }],
+    expense_category_context: { pending_categories: ['MILEAGE'], accepted_categories: [] }
+  };
+  const page = await enrichCandidatePageAdvancedExpenses({ CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, {
+    items: [{
+      timesheet_id: timesheetId,
+      sheet_scope: 'DAILY',
+      workflows: [{ workflow_id: workflowId, target_timesheet_id: timesheetId }],
+      expenses: malformedExpenses
+    }]
+  });
+  assert.equal(page.items[0].hours_component_status, 'MANAGER_APPROVED');
+  assert.equal(page.items[0].whole_claim_action, null);
+  assert.deepEqual(page.items[0].expenses, {
+    mileage_units: 0,
+    mileage_pay_ex_vat: 0,
+    travel_pay_ex_vat: 0,
+    accommodation_pay_ex_vat: 0,
+    other_pay_ex_vat: 0,
+    expenses_pay_ex_vat: 0,
+    expenses_description: null,
+    supporting_evidence_count: 0,
+    supporting_evidence_categories: [],
+    category_statuses: [],
+    expense_category_context: { pending_categories: [], accepted_categories: [] }
+  });
+
+  const detail = await enrichCandidateDetailAdvancedExpenses({ CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, {
+    timesheet: { id: timesheetId, sheet_scope: 'DAILY' },
+    workflows: [{ workflow_id: workflowId, target_timesheet_id: timesheetId }],
+    expenses: malformedExpenses,
+    submitted_expense_totals: malformedExpenses,
+    expense_claims: [{ workflow_id: workflowId }]
+  });
+  assert.equal(detail.hours_component_status, 'MANAGER_APPROVED');
+  assert.equal(detail.whole_claim_action, null);
+  assert.deepEqual(detail.expenses, page.items[0].expenses);
+  assert.deepEqual(detail.submitted_expense_totals, {
+    mileage_units: 0,
+    mileage_pay_ex_vat: 0,
+    travel_pay_ex_vat: 0,
+    accommodation_pay_ex_vat: 0,
+    other_pay_ex_vat: 0,
+    expenses_pay_ex_vat: 0,
+    expenses_description: null
+  });
+  assert.deepEqual(detail.expense_claims, []);
+});
 
 test('expense PAPER replacement finishes the held render before its atomic rebind', async () => {
   const sequence = [];

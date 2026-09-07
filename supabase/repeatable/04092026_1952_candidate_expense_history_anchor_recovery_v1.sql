@@ -1107,6 +1107,7 @@ begin
         from public.contract_weeks cw
         join public.timesheets t on t.timesheet_id=cw.timesheet_id
           and t.is_current=true and t.archived_at_utc is null
+          and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
         where cw.timesheet_id=(v_payload->>'anchor_timesheet_id')::uuid
           and cw.contract_id=v_contract.id
           and cw.week_ending_date=v_canonical_week_ending_date;
@@ -1141,6 +1142,7 @@ begin
           from public.contract_weeks cw
           join public.timesheets t on t.timesheet_id=cw.timesheet_id
             and t.is_current=true and t.archived_at_utc is null
+            and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
           where cw.timesheet_id=v_anchor_week_id
             and cw.contract_id=v_contract.id
             and cw.week_ending_date=v_canonical_week_ending_date;
@@ -1161,6 +1163,7 @@ begin
           from public.contract_weeks worked
           join public.timesheets t on t.timesheet_id=worked.timesheet_id
             and t.is_current=true and t.archived_at_utc is null
+            and t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
           join public.timesheets_financials tf on tf.timesheet_id=t.timesheet_id and tf.is_current=true
           where worked.contract_id=v_contract.id
             and worked.week_ending_date=v_canonical_week_ending_date
@@ -1203,6 +1206,9 @@ begin
           and is_current=true
           and archived_at_utc is null;
         if not found then raise exception 'CANDIDATE_WORKFLOW_TARGET_NOT_CURRENT' using errcode='55000'; end if;
+        if v_anchor_timesheet.sheet_scope is distinct from 'WEEKLY'::public.timesheet_scope_enum then
+          raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='22023';
+        end if;
         if v_workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED') then
           v_target_capabilities:=private._candidate_record_capabilities_v1(
             v_week.timesheet_id,v_week.id,'{}'::jsonb
@@ -1990,7 +1996,26 @@ begin
         raise exception 'CANDIDATE_DAILY_SHIFT_IDENTITY_MISMATCH' using errcode='22023';
       end if;
     elsif v_workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED') then
-      select * into v_week from public.contract_weeks where id=v_workflow.contract_week_id for update;
+      select * into v_week
+      from public.contract_weeks
+      where id=v_workflow.contract_week_id
+        and contract_id=v_workflow.contract_id
+        and week_ending_date=v_workflow.week_ending_date
+      for update;
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+      end if;
+      select * into v_anchor_timesheet
+      from public.timesheets
+      where timesheet_id=v_workflow.target_timesheet_id
+        and timesheet_id=v_week.timesheet_id
+        and is_current=true
+        and archived_at_utc is null
+        and sheet_scope='WEEKLY'::public.timesheet_scope_enum
+      for update;
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+      end if;
       v_target_capabilities:=private._candidate_record_capabilities_v1(v_workflow.target_timesheet_id,v_week.id,'{}'::jsonb);
       v_route_authority:=private._candidate_route_family_v1(v_workflow.target_timesheet_id,v_week.id);
       if not coalesce((v_target_capabilities->>'can_edit_hours')::boolean,false)
@@ -2001,10 +2026,15 @@ begin
     elsif v_workflow.workflow_kind='CONTRACT_EXPENSE' then
       select week_row.* into v_anchor_week
       from public.contract_weeks week_row
+      join public.timesheets anchor_timesheet
+        on anchor_timesheet.timesheet_id=week_row.timesheet_id
+       and anchor_timesheet.is_current=true
+       and anchor_timesheet.archived_at_utc is null
+       and anchor_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
       where week_row.timesheet_id=v_workflow.anchor_timesheet_id
         and week_row.contract_id=v_workflow.contract_id
         and week_row.week_ending_date=v_workflow.week_ending_date
-      for update;
+      for update of week_row,anchor_timesheet;
       if not found then raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001'; end if;
       v_route_authority:=private._candidate_route_family_v1(v_workflow.anchor_timesheet_id,v_anchor_week.id);
       if not coalesce((v_route_authority->>'candidate_expenses_allowed')::boolean,false)

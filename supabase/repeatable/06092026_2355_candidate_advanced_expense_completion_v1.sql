@@ -135,6 +135,7 @@ set search_path = pg_catalog, public, private, extensions, pg_temp
 as $function$
 declare
   v_fin public.timesheets_financials%rowtype;
+  v_is_daily boolean:=false;
   v_total numeric;
   v_has_summary boolean;
   v_totals jsonb;
@@ -163,10 +164,16 @@ begin
     return jsonb_build_object('ok',true,'timesheet_id',p_timesheet_id,
       'summary_state','NOT_REQUIRED');
   end if;
-  v_total:=coalesce(v_fin.mileage_pay_ex_vat,0)
-    +coalesce(v_fin.travel_pay_ex_vat,0)
-    +coalesce(v_fin.accommodation_pay_ex_vat,0)
-    +coalesce(v_fin.other_pay_ex_vat,0);
+  select exists(
+    select 1 from public.timesheets timesheet
+    where timesheet.timesheet_id=p_timesheet_id
+      and timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) into v_is_daily;
+  v_total:=case when v_is_daily then 0 else
+    coalesce(v_fin.mileage_pay_ex_vat,0)
+      +coalesce(v_fin.travel_pay_ex_vat,0)
+      +coalesce(v_fin.accommodation_pay_ex_vat,0)
+      +coalesce(v_fin.other_pay_ex_vat,0) end;
   select jsonb_build_object(
     'candidate_name',nullif(btrim(coalesce(candidate.display_name,
       concat_ws(' ',candidate.first_name,candidate.last_name))),''),
@@ -249,20 +256,21 @@ begin
       (3,'ACCOMMODATION',coalesce(v_fin.accommodation_pay_ex_vat,0),0::numeric),
       (4,'OTHER',coalesce(v_fin.other_pay_ex_vat,0),0::numeric)
   ) category(ordinal,expense_category,amount,mileage_units)
-  where category.amount<>0 or category.mileage_units<>0;
+  where not v_is_daily and (category.amount<>0 or category.mileage_units<>0);
   v_has_summary:=jsonb_array_length(v_categories)>0;
   v_totals:=jsonb_build_object(
     'identity',coalesce(v_identity,'{}'::jsonb),
     'evidence_counts',coalesce(v_evidence_counts,'{}'::jsonb),
     'categories',v_categories,
-    'mileage_units',coalesce(v_fin.mileage_units,0),
-    'mileage_pay_ex_vat',coalesce(v_fin.mileage_pay_ex_vat,0),
-    'travel_pay_ex_vat',coalesce(v_fin.travel_pay_ex_vat,0),
-    'accommodation_pay_ex_vat',coalesce(v_fin.accommodation_pay_ex_vat,0),
-    'other_pay_ex_vat',coalesce(v_fin.other_pay_ex_vat,0),
-    'expenses_pay_ex_vat',coalesce(v_fin.travel_pay_ex_vat,0)
-      +coalesce(v_fin.accommodation_pay_ex_vat,0)
-      +coalesce(v_fin.other_pay_ex_vat,0),
+    'mileage_units',case when v_is_daily then 0 else coalesce(v_fin.mileage_units,0) end,
+    'mileage_pay_ex_vat',case when v_is_daily then 0 else coalesce(v_fin.mileage_pay_ex_vat,0) end,
+    'travel_pay_ex_vat',case when v_is_daily then 0 else coalesce(v_fin.travel_pay_ex_vat,0) end,
+    'accommodation_pay_ex_vat',case when v_is_daily then 0 else coalesce(v_fin.accommodation_pay_ex_vat,0) end,
+    'other_pay_ex_vat',case when v_is_daily then 0 else coalesce(v_fin.other_pay_ex_vat,0) end,
+    'expenses_pay_ex_vat',case when v_is_daily then 0 else
+      coalesce(v_fin.travel_pay_ex_vat,0)
+        +coalesce(v_fin.accommodation_pay_ex_vat,0)
+        +coalesce(v_fin.other_pay_ex_vat,0) end,
     'total_pay_ex_vat',v_total
   );
   v_digest:=extensions.digest(pg_catalog.convert_to(v_totals::text,'UTF8'),'sha256');
@@ -1329,6 +1337,15 @@ begin
      or v_workflow.workflow_kind not in ('CONTRACT_EXPENSE','CONTRACT_COMBINED') then
     raise exception 'CANDIDATE_PAPER_DOCUMENT_UPDATE_NOT_ALLOWED' using errcode='55000';
   end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED'
+      using errcode='40001';
+  end if;
   insert into public.candidate_expense_operations(
     environment,account_id,candidate_id,actor_kind,actor_id,action_code,
     workflow_id,timesheet_id,request_sha256,idempotency_key,state,
@@ -1506,6 +1523,16 @@ begin
   end if;
   if v_source.generation<>p_expected_generation
      or v_component.component_generation<>p_expected_component_generation then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
+  end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_component.owning_timesheet_id,
+      v_source.target_timesheet_id,
+      v_source.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
   end if;
   if v_component.lifecycle_state not in ('MANAGER_REFUSED','OFFICE_REJECTED')

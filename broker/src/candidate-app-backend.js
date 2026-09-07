@@ -3782,6 +3782,16 @@ function emptySubmittedExpenseTotals() {
   };
 }
 
+function emptyCandidateExpenseProjection() {
+  return {
+    ...emptySubmittedExpenseTotals(),
+    supporting_evidence_count: 0,
+    supporting_evidence_categories: [],
+    category_statuses: [],
+    expense_category_context: { pending_categories: [], accepted_categories: [] }
+  };
+}
+
 function immutableMileageUnits(workflow) {
   const immutable = parseJson(workflow?.immutable_submission_json, {}) || {};
   const submission = parseJson(immutable.expense_submission, {}) || {};
@@ -4139,6 +4149,14 @@ async function enrichCandidatePageAdvancedExpenses(env, deps, page) {
         hours_component_status: null,
         whole_claim_action: null
       };
+      if (upper(card?.sheet_scope) === 'DAILY') {
+        return {
+          ...card,
+          hours_component_status: projected.hours_component_status || null,
+          whole_claim_action: null,
+          expenses: emptyCandidateExpenseProjection()
+        };
+      }
       const categories = Array.isArray(projected.category_statuses)
         ? projected.category_statuses : [];
       const totals = candidateCategoryTotals(categories);
@@ -4178,14 +4196,25 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
   if (!isObject(detail)) return detail;
   const workflows = Array.isArray(detail.workflows) ? detail.workflows : [];
   const workflowIds = workflows.map((workflow) => workflow?.workflow_id);
-  const timesheetIds = [detail.timesheet_id,
+  const detailTimesheetId = detail.timesheet_id || detail.timesheet?.id;
+  const timesheetIds = [detailTimesheetId,
     ...workflows.map((workflow) => workflow?.target_timesheet_id)].filter(Boolean);
   const projection = await candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds);
   const timesheetById = new Map(projection.timesheets.map((row) => [text(row?.timesheet_id), row]));
-  const base = timesheetById.get(text(detail.timesheet_id))
+  const base = timesheetById.get(text(detailTimesheetId))
     || { category_statuses: [], expense_category_context: {
       pending_categories: [], accepted_categories: []
     }, hours_component_status: null, whole_claim_action: null };
+  if (upper(detail?.timesheet?.sheet_scope || detail?.sheet_scope) === 'DAILY') {
+    return {
+      ...detail,
+      hours_component_status: base.hours_component_status || null,
+      whole_claim_action: null,
+      expenses: emptyCandidateExpenseProjection(),
+      submitted_expense_totals: emptySubmittedExpenseTotals(),
+      expense_claims: []
+    };
+  }
   const categories = Array.isArray(base.category_statuses) ? base.category_statuses : [];
   const totals = candidateCategoryTotals(categories);
   const hasAuthoritativeCategories = categories.length > 0;
@@ -10938,6 +10967,8 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 }
 
 export const candidateAppBackendInternals = Object.freeze({
+  enrichCandidatePageAdvancedExpenses,
+  enrichCandidateDetailAdvancedExpenses,
   safeCandidateTransportDiagnostic,
   testTransportDiagnosticDetails,
   derivePasswordVerifier,

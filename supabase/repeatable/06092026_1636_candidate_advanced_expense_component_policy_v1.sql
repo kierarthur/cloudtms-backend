@@ -196,6 +196,12 @@ begin
     order by financial.computed_at_utc desc nulls last,financial.updated_at desc,financial.id desc limit 1;
     select * into v_timesheet from public.timesheets timesheet
     where timesheet.timesheet_id=v_workflow.target_timesheet_id and timesheet.is_current;
+    if not found
+       or v_timesheet.archived_at_utc is not null
+       or v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+      raise exception 'CANDIDATE_EXPENSE_COMPONENT_OWNER_SCOPE_INVALID'
+        using errcode='23514';
+    end if;
   end if;
   select * into v_approval from public.candidate_approval_requests request
   where request.workflow_id=v_workflow.id
@@ -644,6 +650,7 @@ begin
     select 1 from public.timesheets current_row
     where current_row.timesheet_id=v_workflow.target_timesheet_id
       and current_row.is_current and current_row.archived_at_utc is null
+      and current_row.sheet_scope='WEEKLY'::public.timesheet_scope_enum
   ) then
     return v_workflow.target_timesheet_id;
   end if;
@@ -651,13 +658,16 @@ begin
     select 1 from public.timesheets current_row
     where current_row.timesheet_id=p_stored_timesheet_id
       and current_row.is_current and current_row.archived_at_utc is null
+      and current_row.sheet_scope='WEEKLY'::public.timesheet_scope_enum
   ) then
     return p_stored_timesheet_id;
   end if;
   select * into v_stored from public.timesheets old_row
   where old_row.timesheet_id=coalesce(p_stored_timesheet_id,v_workflow.target_timesheet_id,
     v_workflow.anchor_timesheet_id);
-  if found and nullif(btrim(coalesce(v_stored.booking_id,'')),'') is not null then
+  if found
+     and v_stored.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+     and nullif(btrim(coalesce(v_stored.booking_id,'')),'') is not null then
     select count(*)::integer,
       case when count(*)=1 then min(candidate.timesheet_id::text)::uuid end
     into v_count,v_result
@@ -665,6 +675,7 @@ begin
     where candidate.booking_id=v_stored.booking_id
       and candidate.contract_id is not distinct from v_workflow.contract_id
       and candidate.week_ending_date is not distinct from v_workflow.week_ending_date
+      and candidate.sheet_scope='WEEKLY'::public.timesheet_scope_enum
       and candidate.is_current and candidate.archived_at_utc is null;
     if v_count=1 then return v_result; end if;
   end if;
@@ -698,6 +709,7 @@ begin
   select * into v_stored from public.timesheets old_row
   where old_row.timesheet_id=p_stored_timesheet_id;
   if not found then return null; end if;
+  if v_stored.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then return null; end if;
   if v_stored.is_current and v_stored.archived_at_utc is null then
     return v_stored.timesheet_id;
   end if;
@@ -711,6 +723,7 @@ begin
   where candidate.booking_id=v_stored.booking_id
     and candidate.contract_id is not distinct from v_workflow.contract_id
     and candidate.week_ending_date is not distinct from v_workflow.week_ending_date
+    and candidate.sheet_scope='WEEKLY'::public.timesheet_scope_enum
     and candidate.is_current and candidate.archived_at_utc is null;
   if v_count=1 then return v_result; end if;
   return null;
@@ -1152,6 +1165,16 @@ begin
   select * into v_workflow from public.candidate_submission_workflows
   where id=p_component.workflow_id;
   if not found then return null; end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      p_component.owning_timesheet_id,
+      v_workflow.target_timesheet_id,
+      v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    return null;
+  end if;
   -- A refused/rejected category is immutable history.  Its only corrective
   -- action starts a blank category claim; it never reactivates or copies the
   -- rejected values/evidence, and it remains available after an otherwise
@@ -1384,6 +1407,14 @@ begin
   select * into v_workflow from public.candidate_submission_workflows
   where id=p_workflow_id;
   if not found then return null; end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    return null;
+  end if;
   if not p_conflicted
      and v_workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
      and v_workflow.route='PAPER'
@@ -1538,6 +1569,12 @@ declare
 begin
   select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
   if not found then return null; end if;
+  -- Daily Timesheets are hours-only.  Never project a contract-week expense
+  -- or whole-claim action onto a Daily record, even if legacy data happens to
+  -- share the same contract and week-ending identity.
+  if v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then
+    return null;
+  end if;
   select financial.candidate_id into v_candidate_id
   from public.timesheets_financials financial
   where financial.timesheet_id=p_timesheet_id and financial.is_current
@@ -1759,6 +1796,12 @@ begin
     where workflow.environment=v_environment
       and workflow.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
       and (p_workflow_ids is null or workflow.id=any(p_workflow_ids))
+      and not exists(
+        select 1 from public.timesheets owner
+        where owner.timesheet_id in (
+          workflow.target_timesheet_id,workflow.anchor_timesheet_id
+        ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+      )
   ), category_rows as (
     select component.workflow_id,
       private._candidate_expense_component_json_v1(
@@ -1888,7 +1931,8 @@ begin
         )) order by component.created_at_utc,component.expense_component_id)
       from public.candidate_expense_components component
       join public.candidate_submission_workflows workflow on workflow.id=component.workflow_id
-       where workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
+       where timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum
+         and workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
          and workflow.contract_id=timesheet.contract_id
         and workflow.week_ending_date=timesheet.week_ending_date
         and private._candidate_expense_owned_timesheet_id_v1(
@@ -1900,7 +1944,8 @@ begin
         order by component.expense_category)
         from public.candidate_expense_components component
         join public.candidate_submission_workflows workflow on workflow.id=component.workflow_id
-        where workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
+        where timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum
+          and workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
           and workflow.contract_id=timesheet.contract_id
           and workflow.week_ending_date=timesheet.week_ending_date
           and component.manager_approval_state='PENDING'
@@ -1909,7 +1954,8 @@ begin
         order by component.expense_category)
         from public.candidate_expense_components component
         join public.candidate_submission_workflows workflow on workflow.id=component.workflow_id
-        where workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
+        where timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum
+          and workflow.environment=v_environment and workflow.candidate_id=timesheet_financial.candidate_id
           and workflow.contract_id=timesheet.contract_id
           and workflow.week_ending_date=timesheet.week_ending_date
           and component.manager_approval_state='APPROVED'
@@ -2018,6 +2064,15 @@ begin
     for update;
   end if;
   if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED'
+      using errcode='40001';
+  end if;
   v_begin_request_sha256:=private._candidate_sha256_jsonb_v1(jsonb_build_object(
     'contract_version','CANDIDATE_EXPENSE_UPDATE_BEGIN_REQUEST_V1',
     'workflow_id',p_workflow_id,'expected_generation',p_expected_generation,
@@ -4001,6 +4056,16 @@ begin
      or v_component.component_generation<>p_expected_component_generation then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
   end if;
+  if exists(
+    select 1 from public.timesheets owner
+    where owner.timesheet_id in (
+      v_component.owning_timesheet_id,
+      v_workflow.target_timesheet_id,
+      v_workflow.anchor_timesheet_id
+    ) and owner.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
+  end if;
   if v_component.agency_authorisation_state<>'NOT_AUTHORISED' then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
   end if;
@@ -4369,6 +4434,9 @@ begin
   select row.* into v_requested_anchor from public.timesheets row
   where row.timesheet_id=p_timesheet_id;
   if not found then raise exception 'TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  if v_requested_anchor.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_WHOLE_CLAIM_ACTION_CHANGED' using errcode='40001';
+  end if;
   v_current_anchor_id:=private._candidate_expense_current_timesheet_id_v1(
     v_owner.id,p_timesheet_id
   );
@@ -4379,6 +4447,7 @@ begin
   where row.timesheet_id=v_current_anchor_id and row.is_current
     and row.archived_at_utc is null for update;
   if not found
+     or v_anchor.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum
      or v_anchor.contract_id is distinct from v_owner.contract_id
      or v_anchor.week_ending_date is distinct from v_owner.week_ending_date
      or (p_timesheet_id<>v_current_anchor_id and (
@@ -5042,6 +5111,18 @@ declare
 begin
   if p_timesheet_id is null then
     raise exception 'TIMESHEET_NOT_FOUND' using errcode='22023';
+  end if;
+  if exists(
+    select 1 from public.timesheets timesheet
+    where timesheet.timesheet_id=p_timesheet_id
+      and timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
+  ) then
+    return jsonb_build_object(
+      'contract_version','OFFICE_EXPENSE_CATEGORY_PROJECTION_V2',
+      'timesheet_id',p_timesheet_id,
+      'route_family',null,
+      'expense_claims','[]'::jsonb
+    );
   end if;
   select case when count(distinct context#>>'{basis,route_family}')=1
       then min(context#>>'{basis,route_family}') end
