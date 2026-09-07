@@ -3088,7 +3088,20 @@ test('scheduled expense recovery is service-only and precedes expired-update cle
   assert.match(sql, /revoke all on function[\s\S]*from public,anon,authenticated,service_role/i);
   assert.match(sql, /grant execute on function[\s\S]*to service_role/i);
   assert.match(worker,
-    /resumePendingCandidateExpenseUpdateRenders\([\s\S]*?\.then\(\(\) => recoverPendingCandidateExpenseUpdates/);
+    /await run\('expense-update-renders',[\s\S]*?await run\('expired-expense-updates'/);
+  assert.match(worker,
+    /ctx\.waitUntil\(\(async \(\) => \{[\s\S]*await run\('paper-packs'[\s\S]*await run\('expense-summaries'[\s\S]*await run\('manager-finalisations'/);
+});
+
+test('expense update recovery validates the embedded manager manifest identity', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql,
+    /prior_review_manifest_json->>'manifest_sha256'[\s\S]*decode\(lower\(v_update\.prior_review_manifest_json->>'manifest_sha256'\),'hex'\)/i);
+  assert.doesNotMatch(sql,
+    /prior_review_manifest_sha256 is distinct from\s*private\._candidate_sha256_jsonb_v1\(v_update\.prior_review_manifest_json\)/i);
 });
 
 test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {

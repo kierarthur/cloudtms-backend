@@ -78,7 +78,8 @@ test('private scheduler retries only bounded manager finalisations through the s
   assert.match(backendSource, /candidate-system-finalise-recovery:/);
   assert.match(backendSource, /completion\?\.ok !== true/);
   assert.match(backendSource, /CANDIDATE_MANAGER_FINALISATION_INCOMPLETE/);
-  assert.match(privateWorkerSource, /ctx\.waitUntil\(recoverPendingCandidateManagerFinalisations\([\s\S]*,\s*5\s*\)\)/);
+  assert.match(privateWorkerSource,
+    /await run\('manager-finalisations', \(\) => recoverPendingCandidateManagerFinalisations\([\s\S]*,\s*5\s*\)\)/);
   assert.match(privateWorkerSource, /CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1/);
   assert.match(backendSource, /queueCandidateManagerFinalisation\(env, result\)/);
 });

@@ -551,36 +551,48 @@ export default {
   async scheduled(controller, env, ctx) {
     if (!requiredConfigurationAvailable(env)) return;
     const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
-    ctx.waitUntil(purgeExpiredServiceNonces(env));
-    ctx.waitUntil(purgeCandidateDailySystemNonces(env));
-    ctx.waitUntil(purgeMyTmsGoogleControlNonces(env));
-    ctx.waitUntil(processPendingCandidatePaperPacks(
-      env,
-      dependencies,
-      10
-    ));
-    // This private data plane owns the agency database and R2 namespace.
-    // Running the drain here keeps federated agencies independent of the
-    // normal Office Worker's database route.
-    ctx.waitUntil(drainCandidateExpenseSummaries(
-      env,
-      dependencies,
-      { limit: 10 }
-    ));
-    ctx.waitUntil(recoverPendingCandidateManagerFinalisations(
-      env,
-      dependencies,
-      5
-    ));
-    ctx.waitUntil(resumePendingCandidateReviewRenders(
-      env, dependencies, 1
-    ));
-    // HTTP waitUntil work has a 30-second ceiling. Resume one durable review
-    // render inside this 15-minute scheduled invocation before expired-update
-    // cleanup is allowed to consider it abandoned.
-    ctx.waitUntil(resumePendingCandidateExpenseUpdateRenders(
-      env, dependencies, 1
-    ).then(() => recoverPendingCandidateExpenseUpdates(env, dependencies, 20)));
+    // Keep the small agency TEST PostgREST pool bounded. A single scheduled
+    // invocation performs its independent maintenance jobs in order, and a
+    // failed job is reported without preventing the remaining jobs from
+    // running. Queue delivery remains the immediate document-render path.
+    const run = async (name, task) => {
+      try {
+        await task();
+      } catch (error) {
+        console.error('[candidate-private] scheduled maintenance task failed', {
+          task: name,
+          error_code: String(error?.code || error?.message ||
+            'CANDIDATE_SCHEDULED_MAINTENANCE_FAILED').slice(0, 120)
+        });
+      }
+    };
+    ctx.waitUntil((async () => {
+      await run('purge-service-nonces', () => purgeExpiredServiceNonces(env));
+      await run('purge-daily-nonces', () => purgeCandidateDailySystemNonces(env));
+      await run('purge-google-control-nonces', () => purgeMyTmsGoogleControlNonces(env));
+      await run('paper-packs', () => processPendingCandidatePaperPacks(
+        env, dependencies, 10
+      ));
+      // This private data plane owns the agency database and R2 namespace.
+      // Running the drain here keeps federated agencies independent of the
+      // normal Office Worker's database route.
+      await run('expense-summaries', () => drainCandidateExpenseSummaries(
+        env, dependencies, { limit: 10 }
+      ));
+      await run('manager-finalisations', () => recoverPendingCandidateManagerFinalisations(
+        env, dependencies, 5
+      ));
+      await run('review-renders', () => resumePendingCandidateReviewRenders(
+        env, dependencies, 1
+      ));
+      // Resume the exact saved render before considering the update expired.
+      await run('expense-update-renders', () => resumePendingCandidateExpenseUpdateRenders(
+        env, dependencies, 1
+      ));
+      await run('expired-expense-updates', () => recoverPendingCandidateExpenseUpdates(
+        env, dependencies, 20
+      ));
+    })());
   },
   async queue(batch, env) {
     if (!requiredConfigurationAvailable(env)) {

@@ -3442,8 +3442,14 @@ begin
      or v_prior.state is distinct from v_update.prior_workflow_state
      or v_update.prior_immutable_submission_sha256 is distinct from
         private._candidate_sha256_jsonb_v1(v_update.prior_immutable_submission_json)
-     or v_update.prior_review_manifest_sha256 is distinct from
-        private._candidate_sha256_jsonb_v1(v_update.prior_review_manifest_json)
+     or v_update.prior_review_manifest_sha256 is distinct from (case
+        when v_update.prior_review_manifest_json='{}'::jsonb
+          then private._candidate_sha256_jsonb_v1('{}'::jsonb)
+        when coalesce(v_update.prior_review_manifest_json->>'manifest_sha256','')
+          ~ '^[0-9a-fA-F]{64}$'
+          then decode(lower(v_update.prior_review_manifest_json->>'manifest_sha256'),'hex')
+        else null
+        end)
      or v_prior.immutable_submission_json is distinct from
         v_update.prior_immutable_submission_json
      or v_prior.immutable_submission_sha256 is distinct from
