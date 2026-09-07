@@ -49,6 +49,11 @@ test('editable Weekly Timesheets expose stable break authority before route sele
   assert.match(verification, /CANDIDATE_IMPORT_BREAK_ENTRY_BROADENED/);
   assert.match(verification, /CANDIDATE_UNRELATED_ROUTE_BREAK_ENTRY_BROADENED/);
   assert.match(verification, /CANDIDATE_AUTHORITATIVE_ROSTER_BREAK_ENTRY_BROADENED/);
+  const finalAuthority = readFileSync(new URL(
+    '../supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(finalAuthority, /\\ir 03092026_1215_candidate_weekly_preroute_break_entry_v1\.sql/);
 });
 
 test('TSQ1 lower-level verifier accepts only the exact signed v1 token payload', async () => {
