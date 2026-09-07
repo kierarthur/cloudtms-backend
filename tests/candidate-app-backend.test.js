@@ -226,13 +226,25 @@ test('Weekly cards and details keep linked expense Timesheets visible without mo
     supporting_evidence_count: 1,
     status_code: 'SUBMITTED'
   };
+  const mileage = {
+    workflow_id: '00000000-0000-4000-8000-000000000068',
+    expense_component_id: '00000000-0000-4000-8000-000000000069',
+    component_generation: 1,
+    owning_timesheet_id: hoursTimesheetId,
+    expense_category: 'MILEAGE',
+    amount: 5,
+    mileage_units: 10,
+    included_in_total: true,
+    supporting_evidence_count: 2,
+    status_code: 'MANAGER_APPROVED'
+  };
   const projection = {
     claims: [{ workflow_id: workflowId, target_timesheet_id: expenseTimesheetId }],
     timesheets: [{
       timesheet_id: hoursTimesheetId,
-      category_statuses: [],
+      category_statuses: [mileage],
       expense_category_context: {
-        pending_categories: ['TRAVEL'], accepted_categories: []
+        pending_categories: ['TRAVEL'], accepted_categories: ['MILEAGE']
       },
       hours_component_status: { status_code: 'MANAGER_APPROVED' },
       whole_claim_action: { code: 'CANCEL_ENTIRE_CLAIM' }
@@ -240,7 +252,7 @@ test('Weekly cards and details keep linked expense Timesheets visible without mo
       timesheet_id: expenseTimesheetId,
       category_statuses: [travel],
       expense_category_context: {
-        pending_categories: ['TRAVEL'], accepted_categories: []
+        pending_categories: ['TRAVEL'], accepted_categories: ['MILEAGE']
       },
       hours_component_status: null,
       whole_claim_action: null
@@ -278,9 +290,10 @@ test('Weekly cards and details keep linked expense Timesheets visible without mo
   const page = await enrichCandidatePageAdvancedExpenses(
     { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, { items: [base] }
   );
-  assert.deepEqual(page.items[0].expenses.category_statuses, [travel]);
+  assert.deepEqual(page.items[0].expenses.category_statuses, [mileage, travel]);
   assert.equal(page.items[0].expenses.travel_pay_ex_vat, 15);
-  assert.equal(page.items[0].expenses.supporting_evidence_count, 1);
+  assert.equal(page.items[0].expenses.mileage_pay_ex_vat, 5);
+  assert.equal(page.items[0].expenses.supporting_evidence_count, 3);
   assert.equal(page.items[0].hours_component_status.status_code, 'MANAGER_APPROVED');
 
   const detail = await enrichCandidateDetailAdvancedExpenses(
@@ -291,14 +304,15 @@ test('Weekly cards and details keep linked expense Timesheets visible without mo
       expense_claims: []
     }
   );
-  assert.deepEqual(detail.expenses.category_statuses, [travel]);
+  assert.deepEqual(detail.expenses.category_statuses, [mileage, travel]);
   assert.equal(detail.expenses.travel_pay_ex_vat, 15);
+  assert.equal(detail.expenses.mileage_pay_ex_vat, 5);
   assert.equal(detail.submitted_expense_totals.travel_pay_ex_vat, 15);
   assert.equal(detail.expense_claims[0].target_timesheet_id, expenseTimesheetId);
   assert.equal(detail.hours_component_status.status_code, 'MANAGER_APPROVED');
   assert.equal(detail.whole_claim_action.code, 'CANCEL_ENTIRE_CLAIM');
   assert.deepEqual(detail.expense_category_context, {
-    pending_categories: ['TRAVEL'], accepted_categories: []
+    pending_categories: ['TRAVEL'], accepted_categories: ['MILEAGE']
   });
 });
 
