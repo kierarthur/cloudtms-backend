@@ -25,7 +25,7 @@ create type public.mail_status_enum as enum ('QUEUED','SENT','FAILED');
 create type public.invoice_consolidation_mode_enum as enum ('NONE','BY_WEEK','ANY_WEEK');
 create type public.correction_financials_date_basis_enum as enum ('PAID_DATE','NOW');
 create type public.hr_source_enum as enum ('HEALTHROSTER','NHSP');
-create type public.ts_fin_reason_enum as enum ('FIXTURE','CONTEXT_CHANGED');
+create type public.ts_fin_reason_enum as enum ('FIXTURE','CONTEXT_CHANGED','REVOKED');
 create type public.timesheet_fin_basis_enum as enum (
   'SELF_REPORTED','HR_VALIDATED','OVERRIDDEN','NHSP','NHSP_ADJUSTMENT',
   'CONTRACT_WEEKLY','HEALTHROSTER_ADJUSTMENT','HEALTHROSTER_SELF_BILL'
