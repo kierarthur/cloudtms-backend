@@ -80,6 +80,7 @@ test('advanced expense authority is coupled to both database release and Candida
     new URL('../.github/workflows/candidate-db-runtime.yml', import.meta.url), 'utf8'
   );
   const migration = 'supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql';
+  const deletedWeeklyAuditShape = 'supabase/migrations/05092026_2345_candidate_weekly_deleted_submission_audit_shape.sql';
   const policy = 'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql';
   const completion = 'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql';
   const sentPaperFinal = 'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql';
@@ -89,7 +90,7 @@ test('advanced expense authority is coupled to both database release and Candida
 
   assert.equal(release.verificationFiles.filter(file => file === verifier).length, 1);
   assert.equal(release.newVerificationFiles.filter(file => file === verifier).length, 1);
-  for (const file of [migration, policy, completion, sentPaperFinal, verifier]) {
+  for (const file of [migration, deletedWeeklyAuditShape, policy, completion, sentPaperFinal, verifier]) {
     assert.match(runtime, new RegExp(file.replaceAll('.', '\\.')));
   }
   assert.ok(runtime.lastIndexOf(emptyCarrierAction) < runtime.lastIndexOf(protectedAdditionalExpense));
@@ -116,13 +117,20 @@ test('advanced expense authority is coupled to both database release and Candida
   const summaryOwner = /create\s+or\s+replace\s+function\s+private\._candidate_expense_summary_queue_v1\s*\(/gi;
   assert.equal((policySource.match(summaryOwner) || []).length, 0);
   assert.equal((completionSource.match(summaryOwner) || []).length, 1);
+  assert.equal((completionSource.match(
+    /where refresh\.timesheet_id_snapshot=p_timesheet_id/g
+  ) || []).length, 3);
   assert.match(completionSource, /CANDIDATE_SENT_PAPER_RETIREMENT_CLOSURE_DRIFT/);
   assert.match(
     completionSource,
     /WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED''[\s\S]*OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''/
   );
   assert.match(completionSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
-  assert.match(completionSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
+  assert.match(completionSource, /preceding policy closure may already have installed the widened[\s\S]*immutable-SENT update predicate/);
+  assert.doesNotMatch(
+    completionSource,
+    /pg_catalog\.replace\(v_definition,v_old_update,v_new_update\)/
+  );
   assert.match(sentPaperFinalSource, /CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_DRIFT/);
   assert.match(
     sentPaperFinalSource,

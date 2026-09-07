@@ -189,6 +189,7 @@ jobs:
             supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql
             supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql
             supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql
+            supabase/migrations/05092026_2345_candidate_weekly_deleted_submission_audit_shape.sql
             supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql

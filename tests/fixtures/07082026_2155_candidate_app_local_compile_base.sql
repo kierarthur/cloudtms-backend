@@ -41,6 +41,8 @@ create type public.ts_fin_processing_status_enum as enum (
 create table public.tms_users (
   id uuid primary key default gen_random_uuid(),
   email text not null default 'candidate-runtime@example.invalid',
+  password_hash text not null default 'UNUSABLE_CANDIDATE_RUNTIME_FIXTURE',
+  role text not null default 'admin',
   is_active boolean not null default true
 );
 
@@ -459,6 +461,7 @@ create table public.timesheets_financials (
   is_current boolean not null default true,
   timesheet_version integer not null default 1,
   is_stale boolean not null default false,
+  stale_reason text,
   basis public.timesheet_fin_basis_enum,
   invoice_breakdown_json jsonb not null default '{}'::jsonb,
   policy_snapshot_json jsonb not null default '{}'::jsonb,
@@ -482,6 +485,16 @@ create table public.timesheets_financials (
   hours_sat numeric not null default 0,
   hours_sun numeric not null default 0,
   hours_bh numeric not null default 0,
+  pay_day numeric not null default 0,
+  pay_night numeric not null default 0,
+  pay_sat numeric not null default 0,
+  pay_sun numeric not null default 0,
+  pay_bh numeric not null default 0,
+  charge_day numeric not null default 0,
+  charge_night numeric not null default 0,
+  charge_sat numeric not null default 0,
+  charge_sun numeric not null default 0,
+  charge_bh numeric not null default 0,
   total_hours numeric not null default 0,
   additional_units_json jsonb not null default '{}'::jsonb,
   additional_pay_ex_vat numeric not null default 0,
@@ -508,6 +521,8 @@ create table public.timesheets_financials (
   total_pay_ex_vat numeric not null default 0,
   total_charge_ex_vat numeric not null default 0,
   margin_ex_vat numeric not null default 0,
+  pay_vat_amount_snapshot numeric not null default 0,
+  pay_total_inc_vat_snapshot numeric not null default 0,
   authorised_at_utc timestamptz,
   authorised_by_user_id uuid,
   paid_at_utc timestamptz,
@@ -557,7 +572,11 @@ create table public.timesheet_summary_pay_state_cache (
 
 create table public.nhsp_shifts (
   id uuid primary key default gen_random_uuid(),
-  timesheet_id uuid references public.timesheets(timesheet_id)
+  timesheet_id uuid references public.timesheets(timesheet_id),
+  contract_id uuid references public.contracts(id),
+  week_ending_date date,
+  source_system public.hr_source_enum,
+  updated_at timestamptz not null default now()
 );
 
 create table public.invoices (
@@ -641,7 +660,8 @@ create table public.timesheet_evidence (
   created_at timestamptz not null default now(),
   created_by uuid,
   document_asset_id uuid,
-  processing_state text not null default 'DISCOVERED'
+  processing_state text not null default 'DISCOVERED',
+  source_revision text
 );
 
 create sequence public.invoice_operation_change_seq as bigint start with 1;
@@ -807,6 +827,31 @@ create table public.manual_timesheet_queue (
   meta_json jsonb not null default '{}'::jsonb
 );
 
+create table public.pay_item_snoozes (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid
+);
+
+create table public.timesheet_validations (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid
+);
+
+create table public.hr_issue_emails (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid
+);
+
+create table public.hr_results (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid
+);
+
+create table public.ts_pdfs_outbox (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid
+);
+
 create table public.mail_outbox (
   id uuid primary key default gen_random_uuid(),
   type text not null,
@@ -933,12 +978,57 @@ revoke all on function public.timesheet_route_version_rotate(uuid,uuid,text,uuid
 grant execute on function public.timesheet_route_version_rotate(uuid,uuid,text,uuid,boolean)
   to authenticated,service_role;
 
+create table public.timesheet_financial_retention (
+  timesheet_id uuid primary key references public.timesheets(timesheet_id)
+    on update restrict on delete restrict,
+  first_retained_at_utc timestamptz not null default clock_timestamp()
+);
+
+create function public.cloudtms_jsonb_storage_keys_v1(
+  p_document jsonb,p_max_depth integer default 8
+) returns text[] language sql immutable parallel safe
+set search_path to 'public','pg_temp' as $function$
+  with recursive walk(value,edge_key,depth) as (
+    select coalesce(p_document,'null'::jsonb),null::text,0
+    union all
+    select child.value,child.edge_key,walk.depth+1
+    from walk
+    cross join lateral (
+      select object_entry.key as edge_key,object_entry.value
+      from jsonb_each(case when jsonb_typeof(walk.value)='object'
+        then walk.value else '{}'::jsonb end) object_entry(key,value)
+      union all
+      select null::text,array_entry.value
+      from jsonb_array_elements(case when jsonb_typeof(walk.value)='array'
+        then walk.value else '[]'::jsonb end) array_entry(value)
+    ) child
+    where walk.depth<greatest(1,least(coalesce(p_max_depth,8),12))
+  ), storage_values as (
+    select distinct nullif(btrim(walk.value#>>'{}'),'') as storage_key
+    from walk
+    where lower(coalesce(walk.edge_key,'')) in (
+      'r2_key','storage_key','file_key','canonical_key','object_key'
+    ) and jsonb_typeof(walk.value)='string'
+  )
+  select coalesce(array_agg(storage_values.storage_key order by storage_values.storage_key),
+    array[]::text[])
+  from storage_values
+  where storage_values.storage_key is not null
+$function$;
+
 create function public.timesheet_removal_financial_history_v1(
   p_timesheet_ids uuid[],p_booking_ids text[] default null,
   p_contract_week_ids uuid[] default null
 ) returns jsonb language sql stable security definer set search_path to 'public','pg_temp' as $$
   select jsonb_build_object('ok',true,'blocked',false,'blockers','[]'::jsonb,
-    'archive_required',false,'retention_reasons','[]'::jsonb)
+    'archive_required',exists(
+      select 1 from public.timesheet_financial_retention retention
+      where retention.timesheet_id=any(coalesce(p_timesheet_ids,array[]::uuid[]))
+    ),
+    'retention_reasons',case when exists(
+      select 1 from public.timesheet_financial_retention retention
+      where retention.timesheet_id=any(coalesce(p_timesheet_ids,array[]::uuid[]))
+    ) then jsonb_build_array('FINANCIAL_RETENTION') else '[]'::jsonb end)
 $$;
 revoke all on function public.timesheet_removal_financial_history_v1(uuid[],text[],uuid[])
   from public,anon,authenticated,service_role;
@@ -1089,8 +1179,35 @@ returns jsonb language sql as $$ select '{"decision":"PERMANENT_DELETE"}'::jsonb
 create function public.timesheet_standard_delete_apply_v1(uuid,uuid,uuid,text)
 returns jsonb language sql as $$ select '{"ok":true}'::jsonb $$;
 
-create function public.timesheet_archive_transition_v1(uuid,text,text,uuid,uuid,text,timestamptz)
-returns jsonb language sql as $$ select '{"ok":true}'::jsonb $$;
+create function public.timesheet_archive_transition_v1(
+  p_timesheet_id uuid,p_action text,p_removal_kind text,p_actor_user_id uuid,
+  p_expected_timesheet_id uuid,p_expected_row_signature text,p_now_utc timestamptz
+) returns jsonb language plpgsql as $$
+declare
+  v_contract_week_ids uuid[];
+begin
+  select coalesce(array_agg(week.id order by week.id),array[]::uuid[])
+  into v_contract_week_ids
+  from public.contract_weeks week
+  where week.timesheet_id=p_timesheet_id;
+  update public.timesheets set
+    archived_at_utc=coalesce(p_now_utc,now()),
+    archived_by_user_id=p_actor_user_id,
+    archived_reason_code='FINANCIAL_HISTORY_PREVENTED_DELETE'
+  where timesheet_id=p_timesheet_id;
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,reason
+  ) values(
+    p_actor_user_id,'timesheets',p_timesheet_id::text,'TIMESHEET_ARCHIVED',
+    '{}'::jsonb,jsonb_build_object('archived',true),p_removal_kind
+  );
+  return jsonb_build_object(
+    'ok',true,'action',upper(coalesce(p_action,'')),'decision','ARCHIVED',
+    'timesheet_ids',jsonb_build_array(p_timesheet_id),
+    'contract_week_ids',to_jsonb(v_contract_week_ids)
+  );
+end;
+$$;
 
 insert into public.settings_defaults(id) values (1);
 

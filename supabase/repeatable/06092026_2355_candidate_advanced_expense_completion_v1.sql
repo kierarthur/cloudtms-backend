@@ -64,24 +64,37 @@ begin
     'private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamptz)'::regprocedure
   ) into v_definition;
   v_definition:=pg_catalog.replace(v_definition,E'\r\n',E'\n');
+  -- The preceding policy closure may already have installed the widened
+  -- guard while deliberately retaining the immutable-SENT update predicate.
+  -- Accept either reviewed update shape here; the final authority repeatable
+  -- below this file always restores immutable sent-mail history.
   if pg_catalog.strpos(v_definition,v_new_guard)>0
-     and pg_catalog.strpos(v_definition,v_new_update)>0 then
+     and (
+       pg_catalog.strpos(v_definition,v_old_update)>0
+       or pg_catalog.strpos(v_definition,v_new_update)>0
+     ) then
     return;
   end if;
   v_guard_offset:=pg_catalog.strpos(v_definition,v_old_guard);
   v_update_offset:=pg_catalog.strpos(v_definition,v_old_update);
-  if v_guard_offset=0 or v_update_offset=0
+  if v_guard_offset=0
+     or (
+       v_update_offset=0
+       and pg_catalog.strpos(v_definition,v_new_update)=0
+     )
      or pg_catalog.strpos(
        pg_catalog.substr(v_definition,v_guard_offset+pg_catalog.length(v_old_guard)),v_old_guard
      )>0
-     or pg_catalog.strpos(
-       pg_catalog.substr(v_definition,v_update_offset+pg_catalog.length(v_old_update)),v_old_update
-     )>0 then
+     or (
+       v_update_offset>0
+       and pg_catalog.strpos(
+         pg_catalog.substr(v_definition,v_update_offset+pg_catalog.length(v_old_update)),v_old_update
+       )>0
+     ) then
     raise exception 'CANDIDATE_SENT_PAPER_RETIREMENT_CLOSURE_DRIFT'
       using errcode='55000';
   end if;
   v_definition:=pg_catalog.replace(v_definition,v_old_guard,v_new_guard);
-  v_definition:=pg_catalog.replace(v_definition,v_old_update,v_new_update);
   execute v_definition;
 end;
 $candidate_sent_paper_retirement_closure$;
@@ -256,7 +269,7 @@ begin
 
   select refresh.* into v_refresh
   from public.candidate_expense_summary_refreshes refresh
-  where refresh.timesheet_id=p_timesheet_id
+  where refresh.timesheet_id_snapshot=p_timesheet_id
     and refresh.state in ('PENDING','RENDERING','READY','REMOVED')
   order by refresh.summary_generation desc
   limit 1 for update;
@@ -281,12 +294,12 @@ begin
     claimed_at_utc=case when refresh.state='RENDERING' then refresh.claimed_at_utc end,
     lease_expires_at_utc=case when refresh.state='RENDERING'
       then refresh.lease_expires_at_utc end
-  where refresh.timesheet_id=p_timesheet_id
+  where refresh.timesheet_id_snapshot=p_timesheet_id
     and refresh.state in ('PENDING','RENDERING');
 
   select coalesce(max(refresh.summary_generation),0)+1 into v_generation
   from public.candidate_expense_summary_refreshes refresh
-  where refresh.timesheet_id=p_timesheet_id;
+  where refresh.timesheet_id_snapshot=p_timesheet_id;
   insert into public.candidate_expense_summary_refreshes(
     timesheet_id,timesheet_id_snapshot,summary_generation,state,totals_json,totals_sha256,
     source_financials_id,idempotency_key,requested_at_utc,completed_at_utc,
