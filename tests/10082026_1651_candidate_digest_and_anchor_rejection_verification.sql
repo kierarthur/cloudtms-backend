@@ -55,8 +55,8 @@ begin
       values($1,$2,$3,$4,$5)'
     using v_actor,'anchor-rejection-actor@example.test','runtime-not-used','admin',true;
   else
-    insert into public.tms_users(id,email,role,is_active)
-    values(v_actor,'anchor-rejection-actor@example.test','admin',true);
+    insert into public.tms_users(id,email,is_active)
+    values(v_actor,'anchor-rejection-actor@example.test',true);
   end if;
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.candidates(id,email,active)
