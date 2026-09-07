@@ -100,6 +100,7 @@ create table public.clients (
 
 create table public.candidates (
   id uuid primary key default gen_random_uuid(),
+  tms_ref text,
   email text,
   display_name text,
   first_name text,
