@@ -33,6 +33,7 @@ on:
       - 'supabase/repeatable/06092026_0337_candidate_sequential_expense_manager_approval_gate_v1.sql'
       - 'supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql'
       - 'supabase/verification/06092026_0345_candidate_sequential_expense_manager_approval_gate_verification.sql'
+      - 'supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql'
       - 'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql'
       - 'supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql'
       - 'supabase/repeatable/05092026_2100_candidate_submission_delete_reject_guard_v1.sql'

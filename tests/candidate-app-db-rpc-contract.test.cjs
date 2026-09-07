@@ -123,6 +123,11 @@ test('Candidate runtime gate finishes with every current authority', () => {
     'frozen-settings evaluation barrier must follow every generated Candidate/invoice consumer'
   );
   assert.ok(installPaths.includes(qrRefuseServiceAcl), 'QR refusal service-only ACL convergence is missing');
+  assert.equal(
+    candidateRuntimeWorkflow.split(qrRefuseServiceAcl).length - 1,
+    2,
+    'QR refusal ACL changes must both trigger and install the Candidate runtime matrix'
+  );
   assert.ok(
     installPaths.indexOf(settingsAuthorityBarrier) < installPaths.indexOf(qrRefuseServiceAcl),
     'QR refusal service-only ACL convergence must follow every historical QR owner'
