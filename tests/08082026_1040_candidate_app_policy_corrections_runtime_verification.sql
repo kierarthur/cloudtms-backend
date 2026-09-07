@@ -641,7 +641,10 @@ begin
          and r2_nurse_key is null and r2_auth_key is null)
      or not exists(select 1 from public.timesheets_financials
        where timesheet_id=v_timesheet and is_current and total_hours=8 and other_pay_ex_vat=10)
-     or (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>3
+     -- Only the two signed return pages materialise here. The unsigned
+     -- Expense Summary is queued and rendered through its separate automatic
+     -- refresh authority after the financial content is settled.
+     or (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>2
      or not exists(select 1 from public.timesheet_evidence
        where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET') then
     raise exception 'complete paper pack did not materialise atomically: %',v_response;
