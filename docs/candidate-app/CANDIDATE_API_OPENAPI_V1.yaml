@@ -342,8 +342,29 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/actions/{action}
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
-        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation]}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation, remove-expense, withdraw-expense, cancel-expense, withdraw-entire-claim, cancel-entire-claim, begin-expense-update, abort-expense-update, resubmit-expense-category, create-updated-documents]}}
       requestBody: {$ref: '#/components/requestBodies/WorkflowActionBody'}
+      x-cloudtms-advanced-expense-action-contracts:
+        begin-expense-update: {$ref: '#/components/schemas/CandidateExpenseUpdateBeginRequestV1'}
+        abort-expense-update: {$ref: '#/components/schemas/CandidateExpenseUpdateAbortRequestV1'}
+        remove-expense: {$ref: '#/components/schemas/CandidateExpenseCategoryActionRequestV1'}
+        withdraw-expense: {$ref: '#/components/schemas/CandidateExpenseCategoryActionRequestV1'}
+        cancel-expense: {$ref: '#/components/schemas/CandidateExpenseCategoryActionRequestV1'}
+        withdraw-entire-claim: {$ref: '#/components/schemas/CandidateWholeClaimActionRequestV1'}
+        cancel-entire-claim: {$ref: '#/components/schemas/CandidateWholeClaimActionRequestV1'}
+        resubmit-expense-category: {$ref: '#/components/schemas/CandidateExpenseCategoryResubmissionRequestV1'}
+        create-updated-documents: {$ref: '#/components/schemas/CandidatePaperDocumentUpdateRequestV1'}
+      x-cloudtms-advanced-expense-response-contracts:
+        begin-expense-update: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseUpdateBeginResultV1'}}
+        abort-expense-update: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseUpdateAbortResultV1'}}
+        remove-expense: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseCategoryActionResultV1'}}
+        withdraw-expense: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseCategoryActionResultV1'}}
+        cancel-expense: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseCategoryActionResultV1'}}
+        withdraw-entire-claim: {status: 200, schema: {$ref: '#/components/schemas/CandidateWholeClaimActionResultV1'}}
+        cancel-entire-claim: {status: 200, schema: {$ref: '#/components/schemas/CandidateWholeClaimActionResultV1'}}
+        resubmit-expense-category: {status: 200, schema: {$ref: '#/components/schemas/CandidateExpenseCategoryResubmissionResultV1'}}
+        create-updated-documents: {status: 200, schema: {$ref: '#/components/schemas/CandidatePaperDocumentUpdateEditingResultV1'}}
+        worker-submit-paper-update: {status: 202, schema: {$ref: '#/components/schemas/CandidatePaperDocumentUpdateCompleteResultV1'}}
       responses: *standardResponses
   /candidate-app/v1/workflows/{workflowId}/resubmit:
     post:
@@ -414,7 +435,15 @@ paths:
       description: Email uses the approval bearer token. Same-phone approval uses the broker-sealed PHONE handoff bearer plus x-candidate-session-token and, where bound, x-candidate-device-id.
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/start
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      responses: *standardResponses
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '202': {$ref: '#/components/responses/ManagerReviewUpdating'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
   /candidate-manager/v1/workflows/{workflowId}/progress:
     post:
       tags: [Manager]
@@ -424,7 +453,15 @@ paths:
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/progress
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
-      responses: *standardResponses
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '202': {$ref: '#/components/responses/ManagerReviewUpdating'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
   /candidate-manager/v1/workflows/{workflowId}/signature/prepare:
     post:
       tags: [Manager]
@@ -434,7 +471,15 @@ paths:
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/signature/prepare
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
-      responses: *standardResponses
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '202': {$ref: '#/components/responses/ManagerReviewUpdating'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
   /candidate-manager/v1/workflows/{workflowId}/approve:
     post:
       tags: [Manager]
@@ -444,7 +489,15 @@ paths:
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/approve
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
-      responses: *standardResponses
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '202': {$ref: '#/components/responses/ManagerReviewApproveAccepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
   /candidate-manager/v1/workflows/{workflowId}/refuse:
     post:
       tags: [Manager]
@@ -454,7 +507,15 @@ paths:
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/refuse
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
-      responses: *standardResponses
+      responses:
+        '200': {$ref: '#/components/responses/Success'}
+        '202': {$ref: '#/components/responses/ManagerReviewUpdating'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
   /candidate-manager/v1/workflows/{workflowId}/components/{componentId}/document:
     get:
       tags: [Manager]
@@ -465,13 +526,19 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
         - {$ref: '#/components/parameters/ComponentId'}
-      responses: *binaryResponses
+      responses:
+        '200': {$ref: '#/components/responses/Binary'}
+        '202': {$ref: '#/components/responses/ManagerReviewUpdating'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     CandidateAccess: {type: http, scheme: bearer, bearerFormat: OpaqueBrokerEnvelope}
     ManagerToken: {type: http, scheme: bearer, bearerFormat: OpaqueApprovalToken}
   schemas:
     Uuid: {type: string, format: uuid}
+    Sha256Hex: {type: string, pattern: '^[a-f0-9]{64}$'}
     JsonObject: {type: object, additionalProperties: true}
     Error:
       type: object
@@ -515,6 +582,15 @@ components:
         - RESUBMIT_EXPENSE_CLAIM
         - NO_WORK_THIS_WEEK
         - RETRY_FINALISATION
+        - REMOVE_EXPENSE
+        - WITHDRAW_EXPENSE
+        - CANCEL_EXPENSE
+        - WITHDRAW_ENTIRE_CLAIM
+        - CANCEL_ENTIRE_CLAIM
+        - BEGIN_EXPENSE_UPDATE
+        - ABORT_EXPENSE_UPDATE
+        - RESUBMIT_EXPENSE_CATEGORY
+        - CREATE_UPDATED_DOCUMENTS
     TimesheetAvailableAction:
       type: object
       required: [code, label, requires_confirmation, enabled, invocation]
@@ -588,7 +664,7 @@ components:
         path: {type: string}
     TimesheetCard:
       type: object
-      required: [contract_week_id, contract_id, week_ending_date, week_ending_label, tab_bucket, candidate_status_code, detail_target]
+      required: [contract_week_id, contract_id, week_ending_date, week_ending_label, tab_bucket, candidate_status_code, hours_component_status, whole_claim_action, expenses, detail_target]
       properties:
         contract_week_id: {$ref: '#/components/schemas/Uuid'}
         contract_id: {$ref: '#/components/schemas/Uuid'}
@@ -607,6 +683,11 @@ components:
         invoice_state: {type: string}
         route_family: {type: [string, 'null']}
         record_role: {type: [string, 'null']}
+        hours_component_status:
+          oneOf: [{$ref: '#/components/schemas/CandidateHoursComponentStatus'}, {type: 'null'}]
+        whole_claim_action:
+          oneOf: [{$ref: '#/components/schemas/TimesheetAvailableAction'}, {type: 'null'}]
+        expenses: {$ref: '#/components/schemas/JsonObject'}
         primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
         detail_target: {$ref: '#/components/schemas/TimesheetDetailTarget'}
     TimesheetPage:
@@ -626,7 +707,7 @@ components:
         absolute_expires_at_utc: {type: string, format: date-time}
     TimesheetDetail:
       type: object
-      required: [ok, week_ending_label, candidate_status_code, list_membership, available_actions, contract_week, hours, expenses, lifecycle, capabilities, manager_review, evidence, components, workflows, rejections]
+      required: [ok, week_ending_label, candidate_status_code, list_membership, available_actions, contract_week, hours, hours_component_status, whole_claim_action, expenses, expense_claims, lifecycle, capabilities, manager_review, evidence, components, workflows, rejections]
       properties:
         ok: {const: true}
         week_ending_label: {type: string, example: Week Ending 1 January 2025}
@@ -645,7 +726,12 @@ components:
         contract_week: {$ref: '#/components/schemas/JsonObject'}
         timesheet: {oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]}
         hours: {$ref: '#/components/schemas/JsonObject'}
+        hours_component_status:
+          oneOf: [{$ref: '#/components/schemas/CandidateHoursComponentStatus'}, {type: 'null'}]
+        whole_claim_action:
+          oneOf: [{$ref: '#/components/schemas/TimesheetAvailableAction'}, {type: 'null'}]
         expenses: {$ref: '#/components/schemas/JsonObject'}
+        expense_claims: {type: array, items: {$ref: '#/components/schemas/CandidateExpenseClaimSummary'}}
         lifecycle: {$ref: '#/components/schemas/JsonObject'}
         capabilities: {$ref: '#/components/schemas/JsonObject'}
         manager_review: {$ref: '#/components/schemas/JsonObject'}
@@ -668,6 +754,604 @@ components:
         attempt_count: {type: integer, minimum: 0}
         next_retry_at_utc: {type: [string, 'null'], format: date-time}
         operation_id: {type: [string, 'null']}
+    CandidateExpenseCategory:
+      type: string
+      enum: [MILEAGE, TRAVEL, ACCOMMODATION, OTHER]
+    CandidateExpenseRefusal:
+      type: object
+      additionalProperties: false
+      required: [kind, decision_id, reason, at_utc]
+      properties:
+        kind: {type: string, enum: [MANAGER_REFUSAL, AGENCY_REJECTION]}
+        decision_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        reason: {type: string, minLength: 1, maxLength: 1000}
+        at_utc: {type: string, format: date-time}
+      allOf:
+        - if: {properties: {kind: {const: MANAGER_REFUSAL}}, required: [kind]}
+          then: {properties: {decision_id: {$ref: '#/components/schemas/Uuid'}}, required: [decision_id]}
+        - if: {properties: {kind: {const: AGENCY_REJECTION}}, required: [kind]}
+          then: {properties: {decision_id: {type: 'null'}}, required: [decision_id]}
+    CandidateHoursComponentStatus:
+      type: object
+      additionalProperties: false
+      required: [component_kind, workflow_id, workflow_generation, state, status_code, manager_approval_state, manager_decision_id, agency_authorisation_state, submitted_at_utc, manager_approved_at_utc, refusal, protected]
+      properties:
+        component_kind: {const: TIMESHEET_HOURS}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        workflow_generation: {type: integer, minimum: 1}
+        state: {type: string, enum: [DRAFT, SUBMITTED, MANAGER_APPROVED, MANAGER_REFUSED, OFFICE_REJECTED, CANCELLED, SUPERSEDED]}
+        status_code: {type: string, enum: [DRAFT, MANAGER_APPROVAL_REQUIRED, SUBMITTED, MANAGER_APPROVED, MANAGER_REFUSED, AGENCY_REJECTED, AGENCY_AUTHORISED, INVOICED, PAID, CANCELLED, SUPERSEDED]}
+        manager_approval_state: {type: string, enum: [NOT_REQUESTED, PENDING, APPROVED, REFUSED]}
+        manager_decision_id:
+          description: Stable component-specific manager decision identity. Null until a decision exists.
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        agency_authorisation_state: {type: string, enum: [NOT_AUTHORISED, AUTHORISED, INVOICED, PAID]}
+        submitted_at_utc: {type: [string, 'null'], format: date-time}
+        manager_approved_at_utc: {type: [string, 'null'], format: date-time}
+        refusal:
+          oneOf: [{$ref: '#/components/schemas/CandidateExpenseRefusal'}, {type: 'null'}]
+        protected: {type: boolean}
+    CandidateExpenseClaimTotals:
+      type: object
+      additionalProperties: false
+      required: [expenses_pay_ex_vat, expenses_description, mileage_units, mileage_pay_ex_vat, travel_pay_ex_vat, accommodation_pay_ex_vat, other_pay_ex_vat, amount]
+      properties:
+        expenses_pay_ex_vat: {type: number}
+        expenses_description: {type: [string, 'null']}
+        mileage_units: {type: number, minimum: 0}
+        mileage_pay_ex_vat: {type: number}
+        travel_pay_ex_vat: {type: number}
+        accommodation_pay_ex_vat: {type: number}
+        other_pay_ex_vat: {type: number}
+        amount: {type: number}
+    CandidateExpenseCategorySummary:
+      type: object
+      additionalProperties: false
+      required: [workflow_id, expense_component_id, component_generation, expense_category, amount, mileage_units, supporting_evidence_count, state, status_code, manager_approval_state, manager_decision_id, agency_authorisation_state, owning_timesheet_id, submitted_at_utc, manager_approved_at_utc, refusal, protected, included_in_total, available_action]
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+        amount: {type: number, minimum: 0}
+        mileage_units: {type: number, minimum: 0}
+        supporting_evidence_count: {type: integer, minimum: 0}
+        state: {type: string, enum: [DRAFT, SUBMITTED, MANAGER_APPROVED, MANAGER_REFUSED, OFFICE_REJECTED, WITHDRAWN, CANCELLED, SUPERSEDED]}
+        status_code: {type: string, enum: [DRAFT, SUBMITTED, MANAGER_APPROVAL_REQUIRED, MANAGER_APPROVED, AGENCY_AUTHORISED, INVOICED, PAID, MANAGER_REFUSED, AGENCY_REJECTED, WITHDRAWN, CANCELLED, SUPERSEDED]}
+        manager_approval_state: {type: string, enum: [NOT_REQUESTED, PENDING, APPROVED, REFUSED]}
+        manager_decision_id:
+          description: Stable component-specific manager decision identity. Null until a decision exists.
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        agency_authorisation_state: {type: string, enum: [NOT_AUTHORISED, AUTHORISED, INVOICED, PAID]}
+        owning_timesheet_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        submitted_at_utc: {type: [string, 'null'], format: date-time}
+        manager_approved_at_utc: {type: [string, 'null'], format: date-time}
+        refusal:
+          oneOf: [{$ref: '#/components/schemas/CandidateExpenseRefusal'}, {type: 'null'}]
+        protected: {type: boolean}
+        included_in_total: {type: boolean}
+        available_action:
+          oneOf: [{$ref: '#/components/schemas/TimesheetAvailableAction'}, {type: 'null'}]
+    CandidateExpenseClaimSummary:
+      type: object
+      additionalProperties: false
+      required: [workflow_id, generation, document_generation, state, status_code, manager_approval_state, agency_authorisation_state, target_timesheet_id, submitted_at_utc, updated_at_utc, protected, can_withdraw, totals, categories, begin_update_action, update_state, attention_code, supporting_evidence_count, supporting_evidence_categories]
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        document_generation: {type: integer, minimum: 1}
+        state: {type: string}
+        status_code: {type: string, enum: [DRAFT, SUBMITTED, MANAGER_APPROVAL_REQUIRED, MANAGER_APPROVED, AGENCY_AUTHORISED, INVOICED, PAID, MANAGER_REFUSED, AGENCY_REJECTED, WITHDRAWN, CANCELLED, SUPERSEDED, MIXED]}
+        manager_approval_state: {type: string, enum: [NOT_REQUESTED, PENDING, APPROVED, REFUSED, MIXED]}
+        agency_authorisation_state: {type: string, enum: [NOT_AUTHORISED, AUTHORISED, INVOICED, PAID, MIXED]}
+        target_timesheet_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        submitted_at_utc: {type: [string, 'null'], format: date-time}
+        updated_at_utc: {type: string, format: date-time}
+        protected: {type: boolean}
+        can_withdraw: {type: boolean}
+        totals: {$ref: '#/components/schemas/CandidateExpenseClaimTotals'}
+        categories: {type: array, items: {$ref: '#/components/schemas/CandidateExpenseCategorySummary'}}
+        begin_update_action:
+          oneOf: [{$ref: '#/components/schemas/TimesheetAvailableAction'}, {type: 'null'}]
+        update_state: {type: string, enum: [NONE, UPDATING]}
+        attention_code:
+          oneOf: [{type: string, enum: [MULTIPLE_PENDING_EXPENSE_CLAIMS]}, {type: 'null'}]
+        supporting_evidence_count: {type: integer, minimum: 0}
+        supporting_evidence_categories:
+          type: array
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+    CandidateExpenseCategoryChange:
+      type: object
+      additionalProperties: false
+      required: [update_kind, expense_category]
+      properties:
+        update_kind: {type: string, enum: [ADD_CATEGORY, REPLACE_CATEGORY]}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+      allOf:
+        - if: {properties: {update_kind: {const: REPLACE_CATEGORY}}, required: [update_kind]}
+          then: {required: [expense_component_id, component_generation]}
+        - if: {properties: {update_kind: {const: ADD_CATEGORY}}, required: [update_kind]}
+          then:
+            not: {anyOf: [{required: [expense_component_id]}, {required: [component_generation]}]}
+    CandidatePaperExpenseCategoryChange:
+      type: object
+      additionalProperties: false
+      required: [update_kind, expense_category]
+      properties:
+        update_kind: {type: string, enum: [ADD_CATEGORY, REPLACE_CATEGORY, REMOVE_CATEGORY]}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+      allOf:
+        - if: {properties: {update_kind: {enum: [REPLACE_CATEGORY, REMOVE_CATEGORY]}}, required: [update_kind]}
+          then: {required: [expense_component_id, component_generation]}
+        - if: {properties: {update_kind: {const: ADD_CATEGORY}}, required: [update_kind]}
+          then:
+            not: {anyOf: [{required: [expense_component_id]}, {required: [component_generation]}]}
+    CandidateExpenseCategoryRemovalChangeV1:
+      type: object
+      additionalProperties: false
+      required: [update_kind, expense_category, expense_component_id, component_generation]
+      properties:
+        update_kind: {const: REMOVE_CATEGORY}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+    CandidateExpenseCategoryResubmissionChangeV1:
+      type: object
+      additionalProperties: false
+      required: [update_kind, expense_category]
+      properties:
+        update_kind: {const: ADD_CATEGORY}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+    CandidateExpenseUpdateBeginRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, category_changes, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        category_changes: {type: array, minItems: 1, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/CandidateExpenseCategoryChange'}}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidateExpenseUpdateAbortRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, update_id, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidateExpenseCategoryActionRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, expense_component_id, component_generation, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidateWholeClaimActionRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, timesheet_id, claim_scope_sha256, reason_note, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        claim_scope_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        reason_note: {type: string, minLength: 1, maxLength: 1000}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidateExpenseCategoryResubmissionRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, expense_component_id, component_generation, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidatePaperDocumentUpdateRequestV1:
+      type: object
+      additionalProperties: false
+      required: [generation, category_changes, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        category_changes: {type: array, minItems: 1, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/CandidatePaperExpenseCategoryChange'}}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    CandidateExpenseUpdateBeginResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, action_code, workflow_id, state, generation, update_state, update_id, category_changes, approval_request_id, approval_request_generation, manager_link_preserved, paper_pack_replacement, old_pack_recoverable, preserved_component_count, candidate_signature_component_id, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_EXPENSE_UPDATE_BEGIN_RESULT_V1}
+        action_code: {const: BEGIN_EXPENSE_UPDATE}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        state: {const: WORKER_DRAFT}
+        generation: {type: integer, minimum: 1}
+        update_state: {const: UPDATING}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        category_changes: {type: array, minItems: 1, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/CandidateExpenseCategoryChange'}}
+        approval_request_id: {$ref: '#/components/schemas/Uuid'}
+        approval_request_generation: {type: integer, minimum: 1}
+        manager_link_preserved: {const: true}
+        paper_pack_replacement: {const: false}
+        old_pack_recoverable: {const: false}
+        preserved_component_count: {type: integer, minimum: 0}
+        candidate_signature_component_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        idempotent_replay: {type: boolean}
+    CandidateExpenseUpdateAbortResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, action_code, workflow_id, state, generation, update_state, update_id, manager_link_preserved, paper_pack_restored, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_EXPENSE_UPDATE_ABORT_RESULT_V1}
+        action_code: {const: ABORT_EXPENSE_UPDATE}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        state: {type: string, enum: [AWAITING_MANAGER_APPROVAL, AWAITING_PAPER_RETURN]}
+        generation: {type: integer, minimum: 1}
+        update_state: {const: NONE}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        manager_link_preserved: {type: boolean}
+        paper_pack_restored: {type: boolean}
+        idempotent_replay: {type: boolean}
+      allOf:
+        - if: {properties: {state: {const: AWAITING_MANAGER_APPROVAL}}, required: [state]}
+          then: {properties: {manager_link_preserved: {const: true}, paper_pack_restored: {const: false}}}
+        - if: {properties: {state: {const: AWAITING_PAPER_RETURN}}, required: [state]}
+          then: {properties: {manager_link_preserved: {const: false}, paper_pack_restored: {const: true}}}
+    CandidateExpenseFinancialNoChangeV1:
+      type: object
+      additionalProperties: false
+      required: [ok, timesheet_id, financial_changed, zero_expense_carrier]
+      properties:
+        ok: {const: true}
+        timesheet_id: {type: 'null'}
+        financial_changed: {const: false}
+        zero_expense_carrier: {const: false}
+    CandidateExpenseFinancialChangedV1:
+      type: object
+      additionalProperties: false
+      required: [ok, timesheet_id, financial_changed, remaining_expense_value, remaining_total_hours, remaining_additional_value, zero_expense_carrier]
+      properties:
+        ok: {const: true}
+        timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        financial_changed: {const: true}
+        remaining_expense_value: {type: number, minimum: 0}
+        remaining_total_hours: {type: number}
+        remaining_additional_value: {type: number, minimum: 0}
+        zero_expense_carrier: {type: boolean}
+    CandidateExpenseFinancialResultV1:
+      oneOf:
+        - {$ref: '#/components/schemas/CandidateExpenseFinancialNoChangeV1'}
+        - {$ref: '#/components/schemas/CandidateExpenseFinancialChangedV1'}
+    CandidateEmptyTimesheetConsequence:
+      type: string
+      enum: [NONE, PERMANENT_REMOVE, REMOVE_FROM_CURRENT_KEEP_HISTORY]
+    CandidateEmptyTimesheetResultV1:
+      type: object
+      additionalProperties: false
+      required: [timesheet_id, empty_timesheet_consequence, owning_timesheet_deleted, deleted_timesheet_ids, retained_timesheet_ids, removed_from_current_timesheet_ids]
+      properties:
+        timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        empty_timesheet_consequence: {$ref: '#/components/schemas/CandidateEmptyTimesheetConsequence'}
+        owning_timesheet_deleted: {type: boolean}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+    CandidateExpenseCategoryCommittedResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, operation_id, workflow_id, generation, expense_component_id, component_generation, state, update_state, action_code, financial_result, zero_expense_carrier, empty_timesheet_consequence, owning_timesheet_deleted, deleted_timesheet_ids, retained_timesheet_ids, affected_timesheet_ids, removed_from_current_timesheet_ids, r2_cleanup_keys, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        state: {type: string, enum: [SUPERSEDED, WITHDRAWN, CANCELLED]}
+        update_state: {const: NONE}
+        action_code: {type: string, enum: [REMOVE_EXPENSE, WITHDRAW_EXPENSE, CANCEL_EXPENSE]}
+        financial_result: {$ref: '#/components/schemas/CandidateExpenseFinancialResultV1'}
+        zero_expense_carrier: {type: boolean}
+        empty_timesheet_consequence: {$ref: '#/components/schemas/CandidateEmptyTimesheetConsequence'}
+        owning_timesheet_deleted: {type: boolean}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        affected_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        r2_cleanup_keys: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        idempotent_replay: {type: boolean}
+    CandidateExpenseCategoryPendingUpdateResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, operation_id, action_code, workflow_id, state, generation, update_state, update_id, category_changes, approval_request_id, approval_request_generation, manager_link_preserved, paper_pack_replacement, old_pack_recoverable, old_pack_retired, preserved_component_count, candidate_signature_component_id, previous_owning_timesheet_id, empty_timesheet_consequence, owning_timesheet_deleted, deleted_timesheet_ids, retained_timesheet_ids, affected_timesheet_ids, removed_from_current_timesheet_ids, expense_component_id, automatic_resubmission_required, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {const: WITHDRAW_EXPENSE}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        state: {const: AWAITING_MANAGER_APPROVAL}
+        generation: {type: integer, minimum: 1}
+        update_state: {const: NONE}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        category_changes: {type: array, minItems: 1, maxItems: 1, items: {$ref: '#/components/schemas/CandidateExpenseCategoryRemovalChangeV1'}}
+        approval_request_id: {$ref: '#/components/schemas/Uuid'}
+        approval_request_generation: {type: integer, minimum: 1}
+        manager_link_preserved: {const: true}
+        paper_pack_replacement: {const: false}
+        old_pack_recoverable: {const: false}
+        old_pack_retired: {const: false}
+        preserved_component_count: {type: integer, minimum: 0}
+        candidate_signature_component_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        previous_owning_timesheet_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        empty_timesheet_consequence: {$ref: '#/components/schemas/CandidateEmptyTimesheetConsequence'}
+        owning_timesheet_deleted: {type: boolean}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        affected_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        automatic_resubmission_required: {const: true}
+        idempotent_replay: {type: boolean}
+    CandidateExpenseCategoryPaperGuidanceResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, operation_id, workflow_id, generation, expense_component_id, component_generation, state, update_state, action_code, paper_replacement_required, empty_timesheet_consequence, removed_from_current_timesheet_ids, paper_replacement_action, paper_replacement_category_changes, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1}
+        operation_id: {type: 'null'}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        state: {const: SUBMITTED}
+        update_state: {const: NONE}
+        action_code: {const: WITHDRAW_EXPENSE}
+        paper_replacement_required: {const: true}
+        empty_timesheet_consequence: {const: NONE}
+        removed_from_current_timesheet_ids: {type: array, maxItems: 0}
+        paper_replacement_action: {const: CREATE_UPDATED_DOCUMENTS}
+        paper_replacement_category_changes:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: {$ref: '#/components/schemas/CandidateExpenseCategoryRemovalChangeV1'}
+        idempotent_replay: {const: false}
+    CandidateExpenseCategoryActionResultV1:
+      oneOf:
+        - {$ref: '#/components/schemas/CandidateExpenseCategoryCommittedResultV1'}
+        - {$ref: '#/components/schemas/CandidateExpenseCategoryPendingUpdateResultV1'}
+        - {$ref: '#/components/schemas/CandidateExpenseCategoryPaperGuidanceResultV1'}
+    CandidateWorkflowCancellationResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, workflow_id, state, generation, cancellation_reason, cancellation_reason_code, submission_withdrawal_reset, manager_withdrawal_count, manager_mail_retirement]
+      properties:
+        ok: {const: true}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        state: {const: CANCELLED}
+        generation: {type: integer, minimum: 1}
+        cancellation_reason: {type: [string, 'null'], maxLength: 1000}
+        cancellation_reason_code: {type: [string, 'null']}
+        submission_withdrawal_reset:
+          oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]
+        manager_withdrawal_count: {type: integer, minimum: 0}
+        manager_mail_retirement:
+          oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]
+    CandidateWholeClaimActionResultV1:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, operation_id, action_code, state, workflow_results, zero_expense_carrier_timesheet_ids, empty_timesheet_results, deleted_timesheet_ids, retained_timesheet_ids, removed_from_current_timesheet_ids, r2_cleanup_keys, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: CANDIDATE_WHOLE_CLAIM_ACTION_RESULT_V1}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {type: string, enum: [WITHDRAW_ENTIRE_CLAIM, CANCEL_ENTIRE_CLAIM]}
+        state: {const: CANCELLED}
+        workflow_results: {type: array, minItems: 1, items: {$ref: '#/components/schemas/CandidateWorkflowCancellationResultV1'}}
+        zero_expense_carrier_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        empty_timesheet_results: {type: array, items: {$ref: '#/components/schemas/CandidateEmptyTimesheetResultV1'}}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        r2_cleanup_keys: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        idempotent_replay: {type: boolean}
+    CandidateExpenseCategoryResubmissionResultV1:
+      type: object
+      additionalProperties: false
+      required: [contract_version, ok, operation_id, action_code, source_workflow_id, source_expense_component_id, source_component_generation, expense_category, category_changes, editor_mode, workflow_id, generation, state, update_state, update_id, blank_claim, route_selection_required, route, paper_pack_replacement, old_pack_recoverable, manager_link_preserved, idempotent_replay]
+      properties:
+        contract_version: {const: CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1}
+        ok: {const: true}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {const: RESUBMIT_EXPENSE_CATEGORY}
+        source_workflow_id: {$ref: '#/components/schemas/Uuid'}
+        source_expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        source_component_generation: {type: integer, minimum: 1}
+        expense_category: {$ref: '#/components/schemas/CandidateExpenseCategory'}
+        category_changes:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: {$ref: '#/components/schemas/CandidateExpenseCategoryResubmissionChangeV1'}
+        editor_mode: {type: string, enum: [NEW_EXPENSE_CLAIM, PENDING_MANAGER_UPDATE, PAPER_REPLACEMENT]}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        state: {const: WORKER_DRAFT}
+        update_state: {type: string, enum: [NONE, UPDATING]}
+        update_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        blank_claim: {const: true}
+        route_selection_required: {type: boolean}
+        route:
+          oneOf: [{type: string, enum: [ELECTRONIC, PAPER]}, {type: 'null'}]
+        paper_pack_replacement: {type: boolean}
+        old_pack_recoverable: {type: boolean}
+        manager_link_preserved: {type: boolean}
+        idempotent_replay: {type: boolean}
+      allOf:
+        - if: {properties: {editor_mode: {const: NEW_EXPENSE_CLAIM}}, required: [editor_mode]}
+          then:
+            properties:
+              update_state: {const: NONE}
+              update_id: {type: 'null'}
+              route_selection_required: {const: true}
+              route: {type: 'null'}
+              paper_pack_replacement: {const: false}
+              old_pack_recoverable: {const: false}
+              manager_link_preserved: {const: false}
+        - if: {properties: {editor_mode: {const: PENDING_MANAGER_UPDATE}}, required: [editor_mode]}
+          then:
+            properties:
+              update_state: {const: UPDATING}
+              update_id: {$ref: '#/components/schemas/Uuid'}
+              route_selection_required: {const: false}
+              route: {const: ELECTRONIC}
+              paper_pack_replacement: {const: false}
+              old_pack_recoverable: {const: false}
+              manager_link_preserved: {const: true}
+        - if: {properties: {editor_mode: {const: PAPER_REPLACEMENT}}, required: [editor_mode]}
+          then:
+            properties:
+              update_state: {const: UPDATING}
+              update_id: {$ref: '#/components/schemas/Uuid'}
+              route_selection_required: {const: false}
+              route: {const: PAPER}
+              paper_pack_replacement: {const: true}
+              old_pack_recoverable: {const: true}
+              manager_link_preserved: {const: false}
+    CandidatePaperPackStateV1:
+      type: object
+      additionalProperties: false
+      required: [queued, send_state, document_state, document_operation_id, current_timesheet_id, timesheet_version, recipient_available]
+      properties:
+        queued: {type: boolean}
+        send_state: {type: [string, 'null']}
+        document_state: {type: [string, 'null']}
+        document_operation_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        current_timesheet_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        timesheet_version: {type: [integer, 'null'], minimum: 1}
+        recipient_available: {type: boolean}
+    CandidatePaperReturnPageV2:
+      type: object
+      additionalProperties: false
+      required: [ordinal, page_key, component_kind, expense_category, source_component_id, qr_required, display_name, manifest_version, qr_contract_version, category_occurrence, page_kind_code, category_code, page_key_sha256_16]
+      properties:
+        ordinal: {type: integer, minimum: 1}
+        page_key: {type: string, minLength: 1}
+        component_kind: {type: string, enum: [HOURS_TIMESHEET, MILEAGE_FORM, EXPENSE_EVIDENCE]}
+        expense_category:
+          oneOf: [{$ref: '#/components/schemas/CandidateExpenseCategory'}, {type: 'null'}]
+        source_component_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        qr_required: {const: true}
+        display_name: {type: string, minLength: 1}
+        manifest_version: {const: 2}
+        qr_contract_version: {const: CANDIDATE_PAPER_PAGE_QR_V2}
+        category_occurrence: {type: integer, minimum: 1}
+        page_kind_code: {type: string, enum: [T, M, E]}
+        category_code: {type: string, enum: ['', A, M, O, T]}
+        page_key_sha256_16: {type: string, pattern: '^[a-f0-9]{16}$'}
+    CandidatePaperDocumentUpdateEditingResultV1:
+      type: object
+      additionalProperties: false
+      required: [contract_version, ok, operation_id, action_code, stage, workflow_id, generation, state, update_state, update_id, category_changes, route, route_selection_required, upload_mode, submission_requires_update_id, paper_pack_replacement, old_pack_recoverable, manager_link_preserved, idempotent_replay]
+      properties:
+        contract_version: {const: CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1}
+        ok: {const: true}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {const: CREATE_UPDATED_DOCUMENTS}
+        stage: {const: EDITING}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        state: {const: WORKER_DRAFT}
+        update_state: {const: UPDATING}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        category_changes: {type: array, minItems: 1, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/CandidatePaperExpenseCategoryChange'}}
+        route: {const: PAPER}
+        route_selection_required: {const: false}
+        upload_mode: {const: EXISTING_WORKFLOW_DELTA}
+        submission_requires_update_id: {const: true}
+        paper_pack_replacement: {const: true}
+        old_pack_recoverable: {const: true}
+        manager_link_preserved: {const: false}
+        idempotent_replay: {type: boolean}
+    CandidatePaperDocumentUpdateCompleteResultV1:
+      type: object
+      additionalProperties: false
+      required: [contract_version, ok, operation_id, action_code, stage, workflow_id, generation, state, update_state, update_id, category_changes, route, route_selection_required, upload_mode, submission_requires_update_id, approval_request_id, approval_request_generation, paper_pack_replacement, old_pack_recoverable, old_pack_retired, manager_link_preserved, previous_owning_timesheet_id, empty_timesheet_consequence, owning_timesheet_deleted, deleted_timesheet_ids, retained_timesheet_ids, affected_timesheet_ids, removed_from_current_timesheet_ids, expense_component_id, paper_return_manifest_sha256, paper_return_page_count, paper_return_manifest_version, paper_return_qr_contract_version, paper_pack_queued, paper_pack, paper_pack_email_bound, paper_return_pages, idempotent_replay]
+      properties:
+        contract_version: {const: CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1}
+        ok: {const: true}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {const: CREATE_UPDATED_DOCUMENTS}
+        stage: {const: COMPLETE}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        state: {const: AWAITING_PAPER_RETURN}
+        update_state: {const: NONE}
+        update_id: {$ref: '#/components/schemas/Uuid'}
+        category_changes: {type: array, minItems: 1, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/CandidatePaperExpenseCategoryChange'}}
+        route: {const: PAPER}
+        route_selection_required: {const: false}
+        upload_mode: {const: EXISTING_WORKFLOW_DELTA}
+        submission_requires_update_id: {const: true}
+        approval_request_id: {type: 'null'}
+        approval_request_generation: {type: 'null'}
+        paper_pack_replacement: {const: true}
+        old_pack_recoverable: {const: false}
+        old_pack_retired: {const: true}
+        manager_link_preserved: {const: false}
+        previous_owning_timesheet_id:
+          oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]
+        empty_timesheet_consequence: {$ref: '#/components/schemas/CandidateEmptyTimesheetConsequence'}
+        owning_timesheet_deleted: {type: boolean}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        affected_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        expense_component_id: {type: 'null'}
+        paper_return_manifest_sha256: {$ref: '#/components/schemas/Sha256Hex'}
+        paper_return_page_count: {type: integer, minimum: 1}
+        paper_return_manifest_version: {const: 2}
+        paper_return_qr_contract_version: {const: CANDIDATE_PAPER_PAGE_QR_V2}
+        paper_pack_queued: {const: true}
+        paper_pack: {$ref: '#/components/schemas/CandidatePaperPackStateV1'}
+        paper_pack_email_bound: {const: true}
+        paper_return_pages: {type: array, minItems: 1, items: {$ref: '#/components/schemas/CandidatePaperReturnPageV2'}}
+        idempotent_replay: {type: boolean}
+    CandidatePaperDocumentUpdateResultV1:
+      oneOf:
+        - {$ref: '#/components/schemas/CandidatePaperDocumentUpdateEditingResultV1'}
+        - {$ref: '#/components/schemas/CandidatePaperDocumentUpdateCompleteResultV1'}
+    ManagerReviewUpdatingSuccess:
+      type: object
+      additionalProperties: false
+      required: [ok, state, status_code, message, retry_after_seconds, workflow_id, approval_request_id, approval_request_generation]
+      properties:
+        ok: {const: true}
+        state: {const: UPDATING}
+        status_code: {const: MANAGER_APPROVAL_REQUEST_UPDATING}
+        message: {const: This claim is being updated. It will open automatically when ready.}
+        retry_after_seconds: {const: 2}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        approval_request_id: {$ref: '#/components/schemas/Uuid'}
+        approval_request_generation: {type: integer, minimum: 1}
     WorkflowActionRequest:
       type: object
       required: [generation, idempotency_key]
@@ -800,6 +1484,27 @@ components:
     Accepted:
       description: Durable asynchronous work or enumeration-safe challenge accepted.
       content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    ManagerReviewUpdating:
+      description: The exact approval request is held while its claim documents are atomically replaced.
+      headers:
+        Retry-After:
+          required: true
+          schema: {type: integer, const: 2}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ManagerReviewUpdatingSuccess'}
+    ManagerReviewApproveAccepted:
+      description: Either the ordinary durable manager-finalisation acceptance or the same update hold.
+      headers:
+        Retry-After:
+          description: Present with value 2 only for the update-hold branch.
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema:
+            anyOf:
+              - {$ref: '#/components/schemas/ManagerReviewUpdatingSuccess'}
+              - {$ref: '#/components/schemas/JsonObject'}
     Session:
       description: Public broker session.
       content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}

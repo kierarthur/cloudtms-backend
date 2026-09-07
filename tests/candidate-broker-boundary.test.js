@@ -54,15 +54,67 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
   );
 });
 
-test('synthetic private Git build compatibility config cannot drift from its canonical config', async () => {
+test('synthetic private Git build uses only the canonical config', async () => {
   const canonical = JSON.parse(await readFile(
     new URL('../candidate-synthetic-private-api/wrangler.jsonc', import.meta.url), 'utf8'
   ));
-  const gitBuild = JSON.parse(await readFile(
-    new URL('../candidate-private-api/wrangler.synthetic.jsonc', import.meta.url), 'utf8'
+  const packageConfig = JSON.parse(await readFile(
+    new URL('../package.json', import.meta.url), 'utf8'
   ));
-  assert.deepEqual({ ...gitBuild, main: 'src/index.js' }, canonical);
-  assert.equal(gitBuild.main, '../candidate-synthetic-private-api/src/index.js');
+  assert.equal(canonical.main, 'src/index.js');
+  assert.equal(
+    packageConfig.scripts['check:candidate-synthetic-private-api'],
+    'wrangler deploy --dry-run --config candidate-synthetic-private-api/wrangler.jsonc'
+  );
+  await assert.rejects(
+    readFile(new URL('../candidate-private-api/wrangler.synthetic.jsonc', import.meta.url), 'utf8'),
+    error => error?.code === 'ENOENT'
+  );
+});
+
+test('advanced expense authority is coupled to both database release and Candidate runtime verification', async () => {
+  const release = JSON.parse(await readFile(
+    new URL('../supabase/release/current-release.json', import.meta.url), 'utf8'
+  ));
+  const runtime = await readFile(
+    new URL('../.github/workflows/candidate-db-runtime.yml', import.meta.url), 'utf8'
+  );
+  const migration = 'supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql';
+  const policy = 'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql';
+  const completion = 'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql';
+  const verifier = 'supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql';
+
+  assert.equal(release.verificationFiles.filter(file => file === verifier).length, 1);
+  assert.equal(release.newVerificationFiles.filter(file => file === verifier).length, 1);
+  for (const file of [migration, policy, completion, verifier]) {
+    assert.match(runtime, new RegExp(file.replaceAll('.', '\\.')));
+  }
+  const migrationSource = await readFile(new URL(`../${migration}`, import.meta.url), 'utf8');
+  assert.match(migrationSource, /approval\.state as approval_state/);
+  assert.match(migrationSource, /when approval_state='PENDING' then 'PENDING'/);
+  assert.doesNotMatch(migrationSource, /when approval_request_id is not null then 'PENDING'/);
+  assert.match(migrationSource, /timesheet\.authorised_at_server/);
+  assert.match(
+    migrationSource,
+    /when authorised_at_utc is not null or authorised_at_server is not null/
+  );
+  const [policySource, completionSource, deleteSource, contextSource, workflowSource] =
+    await Promise.all([
+      policy, completion,
+      'supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
+      'supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql',
+      'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
+    ].map(file => readFile(new URL(`../${file}`, import.meta.url), 'utf8')));
+  const summaryOwner = /create\s+or\s+replace\s+function\s+private\._candidate_expense_summary_queue_v1\s*\(/gi;
+  assert.equal((policySource.match(summaryOwner) || []).length, 0);
+  assert.equal((completionSource.match(summaryOwner) || []).length, 1);
+  for (const source of [deleteSource, contextSource, workflowSource]) {
+    assert.match(source, /'retry_finalisation','delete_timesheet'/);
+    assert.match(source, /'RETRY_FINALISATION'(?:,'CANCEL','REJECT_EXPENSE_CATEGORY'|,'REJECT_EXPENSE_CATEGORY','CANCEL')/);
+    assert.match(source, /v_permission='delete_timesheet' and v_action<>'CANCEL'/);
+    assert.match(source, /v_permission<>'delete_timesheet' and v_action='CANCEL'/);
+    assert.match(source, /v_action='REJECT_EXPENSE_CATEGORY' and v_permission<>'reject_submission'/);
+  }
 });
 
 function limiter(success = true) {

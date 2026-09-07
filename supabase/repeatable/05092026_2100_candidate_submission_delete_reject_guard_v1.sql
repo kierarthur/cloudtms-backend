@@ -438,6 +438,8 @@ declare
   v_contract_week_ids uuid[];
   v_excluded_workflow_ids uuid[];
   v_workflow public.candidate_submission_workflows%rowtype;
+  v_expense_component public.candidate_expense_components%rowtype;
+  v_expense_before jsonb;
   v_retired_workflow_ids uuid[]:=array[]::uuid[];
   v_previous_state text;
 begin
@@ -496,6 +498,61 @@ begin
     where approval.workflow_id=v_workflow.id
       and approval.state='PENDING';
 
+    -- The stable category ledger must be retired before the owning Timesheet
+    -- FK is released.  Otherwise a draft component can survive the generic
+    -- Office delete with no owner and still project a Candidate Remove action.
+    -- Only components proved to belong to this deletion unit (or an unowned
+    -- component on the exact deleted workflow anchor) are affected.
+    for v_expense_component in
+      select component.*
+      from public.candidate_expense_components component
+      where component.workflow_id=v_workflow.id
+        and component.lifecycle_state not in (
+          'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+        )
+        and (
+          component.owning_timesheet_id=any(v_timesheet_ids)
+          or (
+            component.owning_timesheet_id is null
+            and (
+              v_workflow.target_timesheet_id=any(v_timesheet_ids)
+              or v_workflow.anchor_timesheet_id=any(v_timesheet_ids)
+            )
+          )
+        )
+      order by component.expense_component_id
+      for update
+    loop
+      v_expense_before:=to_jsonb(v_expense_component);
+      update public.candidate_expense_components component set
+        component_generation=component.component_generation+1,
+        owning_timesheet_id=null,
+        lifecycle_state='CANCELLED',
+        manager_approval_state=case
+          when component.manager_approval_state in ('APPROVED','REFUSED')
+            then component.manager_approval_state
+          else 'NOT_REQUESTED' end,
+        approval_request_id=case
+          when component.manager_approval_state in ('APPROVED','REFUSED')
+            then component.approval_request_id
+          else null end,
+        removed_at_utc=coalesce(component.removed_at_utc,p_now_utc),
+        updated_at_utc=p_now_utc
+      where component.expense_component_id=v_expense_component.expense_component_id
+      returning component.* into v_expense_component;
+      insert into public.candidate_expense_component_events(
+        expense_component_id,workflow_id,component_generation,event_type,
+        actor_kind,actor_id,before_state_json,after_state_json,idempotency_key,
+        occurred_at_utc
+      ) values (
+        v_expense_component.expense_component_id,v_workflow.id,
+        v_expense_component.component_generation,'CANCELLED','OFFICE',
+        p_actor_user_id,v_expense_before,to_jsonb(v_expense_component),
+        'office-timesheet-delete:'||p_delete_operation_id::text||':'
+          ||v_expense_component.expense_component_id::text,p_now_utc
+      ) on conflict(expense_component_id,idempotency_key) do nothing;
+    end loop;
+
     update public.candidate_submission_components component
     set timesheet_id=null,
         state=case
@@ -517,7 +574,12 @@ begin
         deep_link_json=(coalesce(notification.deep_link_json,'{}'::jsonb)
           -'timesheet_id'-'contract_week_id')||jsonb_build_object(
             'type','workflow','workflow_id',v_workflow.id
-          )
+          ),
+        state='DISMISSED',
+        dismissed_at_utc=coalesce(notification.dismissed_at_utc,p_now_utc),
+        push_state=case
+          when notification.push_state in ('PENDING','FAILED','CLAIMED') then 'SKIPPED'
+          else notification.push_state end
     where notification.workflow_id=v_workflow.id;
 
     update public.candidate_submission_workflows workflow_row

@@ -22,6 +22,8 @@ set search_path = pg_catalog, public, private, extensions, pg_temp
 as $function$
 declare
   v_session jsonb;
+  v_office_context jsonb;
+  v_office_actor_user_id uuid;
   v_candidate_id uuid;
   v_workflow public.candidate_submission_workflows%rowtype;
   v_timesheet public.timesheets%rowtype;
@@ -38,10 +40,30 @@ begin
      or lower(coalesce(p_expected_v1_manifest_sha256_hex,'')) !~ '^[0-9a-f]{64}$' then
     raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='22023';
   end if;
-  v_session:=private._candidate_session_context_v1(
-    p_session_id,p_environment,null,p_now_utc,true
-  );
-  v_candidate_id:=nullif(v_session->>'selected_candidate_id','')::uuid;
+  if p_session_id is null then
+    begin
+      v_office_context:=nullif(current_setting(
+        'cloudtms.office_candidate_context',true
+      ),'')::jsonb;
+    exception when others then
+      v_office_context:=null;
+    end;
+    v_office_actor_user_id:=nullif(v_office_context->>'actor_user_id','')::uuid;
+    if not private._candidate_office_service_context_valid_v1(
+      p_environment,v_office_actor_user_id,'PAPER_MANIFEST_PROMOTE'
+    ) then
+      raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
+    end if;
+    select workflow.candidate_id into v_candidate_id
+    from public.candidate_submission_workflows workflow
+    where workflow.id=p_workflow_id
+      and workflow.environment=private._candidate_assert_environment(p_environment);
+  else
+    v_session:=private._candidate_session_context_v1(
+      p_session_id,p_environment,null,p_now_utc,true
+    );
+    v_candidate_id:=nullif(v_session->>'selected_candidate_id','')::uuid;
+  end if;
   select * into v_workflow
   from public.candidate_submission_workflows
   where id=p_workflow_id and candidate_id=v_candidate_id
@@ -58,8 +80,15 @@ begin
   end if;
 
   if coalesce((v_workflow.paper_return_manifest_json->>'manifest_version')::integer,1)=2 then
-    if v_workflow.paper_return_manifest_json->>'qr_contract_version'
-         <>'CANDIDATE_PAPER_PAGE_QR_V2' then
+    if coalesce(v_workflow.paper_return_manifest_json->>'qr_contract_version','')
+         <>'CANDIDATE_PAPER_PAGE_QR_V2'
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') page
+         where upper(coalesce(page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
       raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
     end if;
     return jsonb_build_object(
@@ -93,6 +122,7 @@ begin
       )::integer as category_count
     from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages')
       with ordinality source(page,ordinality)
+    where upper(coalesce(page->>'component_kind',''))<>'EXPENSE_SUMMARY'
   )
   select jsonb_agg(
     page || jsonb_build_object(
@@ -126,7 +156,8 @@ begin
     ) order by ordinal
   ) into v_new_pages
   from manifest_pages;
-  if jsonb_typeof(v_new_pages)<>'array' or jsonb_array_length(v_new_pages)<1 then
+  if jsonb_typeof(v_new_pages) is distinct from 'array'
+     or coalesce(jsonb_array_length(v_new_pages),0)<1 then
     raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='40001';
   end if;
 
@@ -255,8 +286,15 @@ begin
      or v_workflow.route<>'PAPER'
      or v_workflow.state<>'AWAITING_PAPER_RETURN'
      or coalesce((v_workflow.paper_return_manifest_json->>'manifest_version')::integer,0)<>2
-     or v_workflow.paper_return_manifest_json->>'qr_contract_version'
+     or coalesce(v_workflow.paper_return_manifest_json->>'qr_contract_version','')
        <>'CANDIDATE_PAPER_PAGE_QR_V2'
+     or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+     or exists(
+       select 1
+       from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+       where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+          or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+     )
      or v_workflow.paper_return_manifest_sha256 is null
      or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
        is distinct from v_workflow.paper_return_manifest_sha256 then
@@ -269,7 +307,9 @@ begin
   select page into v_page
   from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') page
   where page->>'page_key'=p_page_key;
-  if v_page is null then
+  if v_page is null
+     or upper(coalesce(v_page->>'component_kind',''))='EXPENSE_SUMMARY'
+     or upper(coalesce(v_page->>'page_key',''))='EXPENSE_SUMMARY' then
     raise exception 'CANDIDATE_PAPER_RETURN_PAGE_NOT_EXPECTED' using errcode='22023';
   end if;
   select * into v_timesheet

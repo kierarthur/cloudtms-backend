@@ -883,6 +883,10 @@
       "sha256": "fa5748cad3ab7208eaab13e6e235e6ad6afe4fca2564d89237111648175a964c"
     },
     {
+      "path": "supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql",
+      "sha256": "038cd79c1798e4d27fd22e328abe9ac3df8ce3f4da4a2e8139688cb8e803e77d"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

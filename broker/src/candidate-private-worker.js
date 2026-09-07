@@ -1,7 +1,9 @@
 import {
   candidateAppBackendInternals,
+  drainCandidateExpenseSummaries,
   handleCandidateAppRequest,
   processPendingCandidatePaperPacks,
+  recoverPendingCandidateExpenseUpdates,
   recoverPendingCandidateManagerFinalisations
 } from './candidate-app-backend.js';
 import {
@@ -554,10 +556,23 @@ export default {
       createCandidatePrivateDependencies(env, 'PRIVATE'),
       10
     ));
+    // This private data plane owns the agency database and R2 namespace.
+    // Running the drain here keeps federated agencies independent of the
+    // normal Office Worker's database route.
+    ctx.waitUntil(drainCandidateExpenseSummaries(
+      env,
+      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      { limit: 10 }
+    ));
     ctx.waitUntil(recoverPendingCandidateManagerFinalisations(
       env,
       createCandidatePrivateDependencies(env, 'PRIVATE'),
       5
+    ));
+    ctx.waitUntil(recoverPendingCandidateExpenseUpdates(
+      env,
+      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      20
     ));
   }
 };

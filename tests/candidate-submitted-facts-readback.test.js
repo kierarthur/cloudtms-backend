@@ -128,8 +128,9 @@ test('the detail route loads immutable facts through the signed-in Candidate and
     ), env, {}, {
       routeAudience: 'PRIVATE',
       async rpc(name) {
-        assert.equal(name, 'candidate_app_timesheet_detail_v2');
-        return detail();
+        if (name === 'candidate_app_timesheet_detail_v2') return detail();
+        assert.equal(name, 'candidate_expense_component_projection_v1');
+        return { claims: [], timesheets: [] };
       }
     });
     assert.equal(response.status, 200);

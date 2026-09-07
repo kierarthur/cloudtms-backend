@@ -120,7 +120,8 @@
     "supabase/verification/06092026_0600_candidate_targetless_expense_paper_after_approval_verification.sql",
     "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
     "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
-    "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql"
+    "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+    "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -207,6 +208,7 @@
     "supabase/verification/05092026_1456_candidate_route_capability_fast_path_verification.sql",
     "supabase/verification/05092026_1530_pending_expense_timesheet_delete_verification.sql",
     "supabase/verification/05092026_2109_unified_outbox_list_v2_verification.sql",
-    "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql"
+    "supabase/verification/05092026_2110_candidate_submission_delete_reject_guard_verification.sql",
+    "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql"
   ]
 }

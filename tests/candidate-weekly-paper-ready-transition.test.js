@@ -28,7 +28,10 @@ test('state adaptation and authoritative PAPER transition share one transaction'
   assert.match(sql, /return public\.candidate_workflow_transition_atomic_v1\([\s\S]*p_action=>'PAPER_PREPARE'/i);
   assert.ok(sql.indexOf('pg_advisory_xact_lock') < sql.indexOf('from public.timesheets timesheet_row'));
   assert.ok(sql.indexOf('from public.timesheets timesheet_row') < sql.lastIndexOf('from public.candidate_submission_workflows workflow_row'));
-  assert.doesNotMatch(sql, /exception when others/i);
+  assert.match(sql,
+    /v_office_context:=nullif\(current_setting\([\s\S]*exception when others then[\s\S]*v_office_context:=null/i);
+  const lockedMutation = sql.slice(sql.indexOf('pg_advisory_xact_lock'), sql.indexOf('revoke all'));
+  assert.doesNotMatch(lockedMutation, /exception when others/i);
 });
 
 test('PAPER dispatch uses the bounded adapter without changing other actions', () => {
@@ -133,6 +136,6 @@ test('generated contract contains the exact PAPER adapter authority', () => {
   assert.deepEqual(routine.acl.map((item) => item.grantee), ['postgres', 'service_role']);
   assert.equal(
     routine.definition_sha256,
-    '92cfbabd19fea80024197b7770537b19b51fe2262cffe74a321fc1c51b85568f'
+    '3481dad51df66b9e1e5bc3d34c3c9a3d232f07756033b7a01e4ec8906e7d592d'
   );
 });

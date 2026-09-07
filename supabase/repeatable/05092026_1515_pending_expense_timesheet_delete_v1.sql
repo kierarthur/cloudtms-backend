@@ -222,9 +222,10 @@ begin
        'MANAGER_REFUSE','REGISTER_REVIEW_COMPONENT',
        'REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
        'PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE',
-       'RETRY_FINALISATION','CANCEL'
+       'RETRY_FINALISATION','REJECT_EXPENSE_CATEGORY','CANCEL'
      )
      or (v_permission='delete_timesheet' and v_action<>'CANCEL')
+     or (v_action='REJECT_EXPENSE_CATEGORY' and v_permission<>'reject_submission')
      or (v_permission<>'delete_timesheet' and v_action='CANCEL') then
     raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
   end if;

@@ -295,6 +295,8 @@ declare
   v_qr_invalidated boolean:=false;
   v_qr_already_invalidated boolean:=false;
   v_current_source_count integer:=0;
+  v_is_historical_replacement_retirement boolean:=false;
+  v_current_generation_token_owned boolean:=false;
 begin
   if p_workflow_id is null or coalesce(p_expected_generation,0)<1 or v_reason='' then
     raise exception 'CANDIDATE_PAPER_RETIREMENT_CONTEXT_INVALID' using errcode='22023';
@@ -308,7 +310,18 @@ begin
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
   if v_workflow.generation<>p_expected_generation then
-    raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+    select exists(
+      select 1
+      from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.update_mode='PAPER_REPLACEMENT'
+        and update_row.from_workflow_generation=p_expected_generation
+        and update_row.current_workflow_generation=v_workflow.generation
+        and update_row.state='COMMITTED'
+    ) into v_is_historical_replacement_retirement;
+    if not v_is_historical_replacement_retirement then
+      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+    end if;
   end if;
   if v_workflow.route<>'PAPER'
      or v_workflow.state not in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
@@ -323,9 +336,9 @@ begin
   -- while canonical finalisation is retryable; FINALISED owns the immediately
   -- preceding generation.
   v_delivery_generation:=case
+    when v_is_historical_replacement_retirement then p_expected_generation
     when v_workflow.state='FINALISED' then greatest(v_workflow.generation-1,1)
-    else v_workflow.generation
-  end;
+    else v_workflow.generation end;
 
   v_rejected_target_timesheet_id:=coalesce(
     v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
@@ -364,6 +377,14 @@ begin
           'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
           'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
           'reason','MULTIPLE_MAIL_CONTEXTS'
+        )::text;
+    end if;
+    if v_mail.status='SENT' and not v_is_historical_replacement_retirement then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT'
+        using errcode='55000',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_OUTBOX_ALREADY_SENT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'mail_outbox_id',v_mail.id
         )::text;
     end if;
     if v_mail.status<>'SENT'
@@ -486,9 +507,12 @@ begin
   end if;
 
   update public.mail_outbox mail_row
-  set attachments='[]'::jsonb,
-      scheduled_for_utc='infinity'::timestamptz,
-      next_attempt_at_utc='infinity'::timestamptz,
+  set attachments=case when mail_row.status='SENT' then mail_row.attachments
+        else '[]'::jsonb end,
+      scheduled_for_utc=case when mail_row.status='SENT' then mail_row.scheduled_for_utc
+        else 'infinity'::timestamptz end,
+      next_attempt_at_utc=case when mail_row.status='SENT' then mail_row.next_attempt_at_utc
+        else 'infinity'::timestamptz end,
       attempt_lease_token=null,
       attempt_leased_at_utc=null,
       attempt_lease_expires_at_utc=null,
@@ -517,7 +541,7 @@ begin
         )
   where mail_row.type='TIMESHEET_QR'
     and mail_row.context_kind='timesheets'
-    and mail_row.status<>'SENT'
+    and (mail_row.status<>'SENT' or v_is_historical_replacement_retirement)
     and mail_row.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
     and mail_row.payment_scope_json->>'candidate_workflow_generation'=v_delivery_generation::text;
   get diagnostics v_mail_retired_count=row_count;
@@ -550,6 +574,15 @@ begin
   -- the existing document invalidation trigger preserves historical bytes and
   -- makes the old printable document non-current.
   if nullif(btrim(coalesce(v_qr_current.qr_token,'')),'') is null then
+    if v_is_historical_replacement_retirement then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','CURRENT_REPLACEMENT_QR_TOKEN_MISSING',
+          'qr_source_timesheet_id',v_qr_current.timesheet_id
+        )::text;
+    end if;
     v_qr_already_invalidated:=true;
   elsif cardinality(v_qr_token_hashes)<1 or v_qr_token_hash_missing_count>0 then
     raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
@@ -563,40 +596,72 @@ begin
     v_current_qr_token_hash:=encode(extensions.digest(
       convert_to(v_qr_current.qr_token,'UTF8'),'sha256'
     ),'hex');
-    if not (v_current_qr_token_hash=any(v_qr_token_hashes)) then
+    if v_current_qr_token_hash=any(v_qr_token_hashes) then
+      update public.timesheets timesheet_row
+      set qr_token=null,
+          qr_payload_json='{}'::jsonb,
+          qr_generated_at=null,
+          qr_scanned_at=null,
+          qr_scan_info_json=null,
+          qr_r2_key=null,
+          qr_last_sent_hash=null,
+          qr_last_sent_at_utc=null,
+          qr_signed_hash=null,
+          qr_signed_at_utc=null,
+          updated_at=p_now_utc
+      where timesheet_row.timesheet_id=v_qr_current.timesheet_id
+        and timesheet_row.is_current=true
+        and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
+        and encode(extensions.digest(
+          convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
+        ),'hex')=v_current_qr_token_hash;
+      v_qr_invalidated:=found;
+      if not v_qr_invalidated then
+        raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+            'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+            'reason','QR_TOKEN_INVALIDATION_LOST_RACE',
+            'qr_source_timesheet_id',v_qr_current.timesheet_id
+          )::text;
+      end if;
+    elsif v_is_historical_replacement_retirement then
+      select exists(
+        select 1
+        from public.mail_outbox current_mail
+        where current_mail.type='TIMESHEET_QR'
+          and current_mail.context_kind='timesheets'
+          and current_mail.context_id=v_qr_current.timesheet_id
+          and current_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+          and current_mail.payment_scope_json->>'candidate_workflow_generation'=
+            v_workflow.generation::text
+          and lower(coalesce(current_mail.payment_scope_json->>'qr_token_hash',''))=
+            v_current_qr_token_hash
+          and lower(coalesce(
+            current_mail.payment_scope_json->>'paper_return_manifest_sha256',''
+          ))=encode(v_workflow.paper_return_manifest_sha256,'hex')
+          and lower(coalesce(
+            current_mail.payment_scope_json->>'candidate_paper_generation_retired','false'
+          )) in ('false','f','0','no')
+      ) into v_current_generation_token_owned;
+      if not v_current_generation_token_owned then
+        raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+            'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+            'reason','CURRENT_QR_TOKEN_HASH_MISMATCH',
+            'qr_source_timesheet_id',v_qr_current.timesheet_id
+          )::text;
+      end if;
+      -- The newly rendered pack already rotated the source token.  The old
+      -- pages are therefore invalid while the new token remains untouched.
+      v_qr_already_invalidated:=true;
+    else
       raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
         using errcode='40001',detail=jsonb_build_object(
           'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
           'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
           'reason','CURRENT_QR_TOKEN_HASH_MISMATCH',
-          'qr_source_timesheet_id',v_qr_current.timesheet_id
-        )::text;
-    end if;
-    update public.timesheets timesheet_row
-    set qr_token=null,
-        qr_payload_json='{}'::jsonb,
-        qr_generated_at=null,
-        qr_scanned_at=null,
-        qr_scan_info_json=null,
-        qr_r2_key=null,
-        qr_last_sent_hash=null,
-        qr_last_sent_at_utc=null,
-        qr_signed_hash=null,
-        qr_signed_at_utc=null,
-        updated_at=p_now_utc
-    where timesheet_row.timesheet_id=v_qr_current.timesheet_id
-      and timesheet_row.is_current=true
-      and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
-      and encode(extensions.digest(
-        convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
-      ),'hex')=v_current_qr_token_hash;
-    v_qr_invalidated:=found;
-    if not v_qr_invalidated then
-      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
-        using errcode='40001',detail=jsonb_build_object(
-          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
-          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
-          'reason','QR_TOKEN_INVALIDATION_LOST_RACE',
           'qr_source_timesheet_id',v_qr_current.timesheet_id
         )::text;
     end if;
@@ -1438,7 +1503,7 @@ begin
        'change_route','reject_submission','send_manager_reminder',
        'send_manager_reminder_batch','renew_manager_request',
        'cancel_manager_request','manage_phone_approval','manage_paper',
-       'retry_finalisation'
+       'retry_finalisation','delete_timesheet'
      )
      or v_action not in (
        'ROUTE_CONFIRM','REJECT_CONFIRM','REMIND','RENEW',
@@ -1447,8 +1512,11 @@ begin
        'MANAGER_REFUSE','REGISTER_REVIEW_COMPONENT',
        'REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
        'PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE',
-       'RETRY_FINALISATION'
-     ) then
+       'RETRY_FINALISATION','CANCEL','REJECT_EXPENSE_CATEGORY'
+     )
+     or (v_permission='delete_timesheet' and v_action<>'CANCEL')
+     or (v_permission<>'delete_timesheet' and v_action='CANCEL')
+     or (v_action='REJECT_EXPENSE_CATEGORY' and v_permission<>'reject_submission') then
     raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
   end if;
   v_context:=jsonb_build_object(
@@ -1488,7 +1556,16 @@ begin
       or v_context->>'environment'=private._candidate_assert_environment(p_environment))
     and (p_actor_user_id is null
       or v_context->>'actor_user_id'=p_actor_user_id::text)
-    and v_context->>'action'=upper(btrim(coalesce(p_action,'')));
+    and (
+      v_context->>'action'=upper(btrim(coalesce(p_action,'')))
+      or (
+        v_context->>'permission'='reject_submission'
+        and v_context->>'action'='REJECT_EXPENSE_CATEGORY'
+        and upper(btrim(coalesce(p_action,''))) in (
+          'WORKER_SUBMIT','PAPER_PREPARE','PAPER_MANIFEST_PROMOTE'
+        )
+      )
+    );
 end;
 $function$;
 
@@ -1691,6 +1768,7 @@ declare
   v_paper_pack_attachment jsonb;
   v_paper_notification_id uuid;
   v_paper_release_idempotent boolean:=false;
+  v_paper_expense_update_active boolean:=false;
   v_paper_outbox_count integer:=0;
   v_paper_base_document_sha256 text;
   v_paper_branding_contract_sha256 text;
@@ -1759,6 +1837,9 @@ declare
   v_mutation_request_sha256 text;
   v_mutation_receipt jsonb;
   v_mutation_replay_probe_only boolean:=false;
+  v_expense_update_context jsonb;
+  v_pending_expense_update public.candidate_pending_expense_updates%rowtype;
+  v_is_pending_expense_update boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_workflow_id is null or jsonb_typeof(v_payload)<>'object' then
@@ -1865,9 +1946,9 @@ begin
   or (v_is_office_service_action
     and v_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
-      'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
-      'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM',
-      'PAPER_PACK_MARK_FAILURE'));
+       'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
+       'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM',
+       'PAPER_PACK_MARK_FAILURE','PAPER_PREPARE'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
@@ -2594,6 +2675,38 @@ begin
      or (not v_is_service_action and not v_is_public_manager_action and v_workflow.candidate_id<>v_candidate_id) then
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
+  if v_action='WORKER_SUBMIT' and nullif(v_payload->>'update_id','') is not null then
+    begin
+      v_expense_update_context:=nullif(current_setting(
+        'cloudtms.candidate_expense_update_submit_context',true
+      ),'')::jsonb;
+    exception when others then
+      v_expense_update_context:=null;
+    end;
+    if coalesce(v_expense_update_context->>'contract_version','')
+         <>'CANDIDATE_EXPENSE_UPDATE_SUBMIT_CONTEXT_V1'
+       or v_expense_update_context->>'workflow_id'<>v_workflow.id::text
+       or v_expense_update_context->>'workflow_generation'<>v_workflow.generation::text
+       or v_expense_update_context->>'update_id'<>v_payload->>'update_id'
+       or v_expense_update_context->>'idempotency_key'<>btrim(coalesce(p_idempotency_key,'')) then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID' using errcode='28000';
+    end if;
+    select update_row.* into v_pending_expense_update
+    from public.candidate_pending_expense_updates update_row
+    where update_row.update_id=(v_payload->>'update_id')::uuid
+      and update_row.workflow_id=v_workflow.id
+      and update_row.current_workflow_generation=v_workflow.generation
+      and update_row.state='EDITING'
+      and update_row.actor_kind=v_expense_update_context->>'actor_kind'
+      and update_row.actor_id is not distinct from nullif(
+        v_expense_update_context->>'actor_id',''
+      )::uuid
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+    v_is_pending_expense_update:=true;
+  end if;
   if nullif(btrim(coalesce(p_idempotency_key,'')),'') is not null then
     if nullif(btrim(coalesce(v_workflow.idempotency_key,'')),'')=btrim(p_idempotency_key) then
       raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
@@ -2692,9 +2805,11 @@ begin
         v_workflow.id,v_workflow.generation,'WORKFLOW_AMENDED',p_now_utc
       );
     end if;
-    update public.candidate_approval_requests set
-      state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
-    where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');
+    if not v_is_pending_expense_update then
+      update public.candidate_approval_requests set
+        state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
+      where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');
+    end if;
     v_component_no:=0;
     for v_source_component in
       select source_component.*
@@ -3279,6 +3394,25 @@ begin
             v_workflow.immutable_submission_sha256 is null
             or v_workflow.immutable_submission_sha256=v_submission_hash
             or (
+              v_is_pending_expense_update
+              and id=v_workflow.candidate_signature_component_id
+              and exists(
+                select 1
+                from public.candidate_submission_components current_hours
+                join public.candidate_submission_components prior_hours
+                  on prior_hours.workflow_id=current_hours.workflow_id
+                  and prior_hours.workflow_generation=
+                    v_pending_expense_update.from_workflow_generation
+                  and prior_hours.component_kind='HOURS_TIMESHEET'
+                  and prior_hours.state='IMMUTABLE'
+                  and prior_hours.source_content_sha256=current_hours.source_content_sha256
+                where current_hours.workflow_id=v_workflow.id
+                  and current_hours.workflow_generation=v_workflow.generation
+                  and current_hours.component_kind='HOURS_TIMESHEET'
+                  and current_hours.state='IMMUTABLE'
+              )
+            )
+            or (
               source_component_id is null
               and created_at_utc>=coalesce(v_workflow.worker_submitted_at_utc,'-infinity'::timestamptz)
             )
@@ -3304,7 +3438,6 @@ begin
           false,null,'NOT_REQUIRED','NOT_REQUIRED',p_now_utc
         ) returning * into v_signature_component;
         v_component_no:=v_component_no+1;
-        v_review_ordinal:=v_review_ordinal+1;
         insert into public.candidate_submission_components(
           workflow_id,workflow_generation,component_no,timesheet_id,component_kind,document_role,state,
           immutable_at_utc,required,review_ordinal,review_render_state,final_signed_render_state,created_at_utc
@@ -3347,8 +3480,8 @@ begin
           immutable_at_utc,required,review_ordinal,review_render_state,final_signed_render_state,created_at_utc
         ) values (
           v_workflow.id,v_next_generation,v_component_no,v_workflow.target_timesheet_id,'EXPENSE_SUMMARY',
-          'EXPENSE_MILEAGE_APPROVAL_SUMMARY','IMMUTABLE',p_now_utc,true,v_review_ordinal,
-          'PENDING','PENDING',p_now_utc
+          'EXPENSE_MILEAGE_APPROVAL_SUMMARY','IMMUTABLE',p_now_utc,false,null,
+          'NOT_REQUIRED','NOT_REQUIRED',p_now_utc
         );
 
         for v_source_component in
@@ -3398,6 +3531,9 @@ begin
         candidate_signature_component_id=case when workflow_kind='CONTRACT_EXPENSE' then null else v_signature_component.id end,
         candidate_signature_sha256=case when workflow_kind='CONTRACT_EXPENSE' then null else v_signature_component.source_content_sha256 end,
         candidate_signed_at_utc=case when workflow_kind='CONTRACT_EXPENSE' then null
+          when v_is_pending_expense_update then nullif(
+            v_pending_expense_update.prior_workflow_snapshot_json->>'candidate_signed_at_utc',''
+          )::timestamptz
           else coalesce(nullif(v_payload->>'candidate_signed_at_utc','')::timestamptz,p_now_utc) end,
         renderer_contract_version=coalesce(nullif(btrim(v_payload->>'renderer_contract_version'),''),'TIMESHEET_OFFICIAL_PDF_V1'),
         review_manifest_json=null,review_manifest_sha256=null,
@@ -4475,8 +4611,22 @@ begin
     if v_workflow.route<>'PAPER'
        or v_workflow.state<>'AWAITING_PAPER_RETURN'
        or v_workflow.paper_return_manifest_sha256 is null
-       or encode(v_workflow.paper_return_manifest_sha256,'hex')<>v_paper_manifest_sha256 then
+       or encode(v_workflow.paper_return_manifest_sha256,'hex')<>v_paper_manifest_sha256
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+         where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
       raise exception 'CANDIDATE_PAPER_PROVIDER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    if exists(
+      select 1 from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.state in ('EDITING','RENDERING')
+    ) then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_IN_PROGRESS' using errcode='40001';
     end if;
     select candidate_mail.* into v_paper_mail
     from public.mail_outbox candidate_mail
@@ -4490,7 +4640,9 @@ begin
       )
       and candidate_mail.attempt_lease_token=v_provider_lease_token
       and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
-      and candidate_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and candidate_mail.payment_scope_json->>'candidate_mail_authority' in (
+        'CANDIDATE_PAPER_V1','CANDIDATE_PAPER_PACK_EMAIL_V1'
+      )
       and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
       and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
@@ -4853,6 +5005,13 @@ begin
          in ('true','t','1','yes') then
       raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
     end if;
+    select exists(
+      select 1 from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.update_mode='PAPER_REPLACEMENT'
+        and update_row.current_workflow_generation=v_workflow.generation
+        and update_row.state in ('EDITING','RENDERING')
+    ) into v_paper_expense_update_active;
     if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_pack_ready','false'))
          in ('true','t','1','yes') then
       v_response:=jsonb_build_object(
@@ -5068,9 +5227,28 @@ begin
     end if;
     if v_workflow.paper_return_manifest_sha256 is null
        or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
-          is distinct from v_workflow.paper_return_manifest_sha256 then
+          is distinct from v_workflow.paper_return_manifest_sha256
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+         where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
       raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='55000';
     end if;
+    -- RELEASE is a separate transaction from ATTEMPT_CLAIM. Recompute the
+    -- update hold while the workflow row is locked; a PL/pgSQL local set by
+    -- the earlier action cannot carry across calls. Rebind/abort take the same
+    -- workflow lock, so this truth cannot change between the check and outbox
+    -- write in this transaction.
+    select exists(
+      select 1 from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.update_mode='PAPER_REPLACEMENT'
+        and update_row.current_workflow_generation=v_workflow.generation
+        and update_row.state in ('EDITING','RENDERING')
+    ) into v_paper_expense_update_active;
 
     v_paper_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
     v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
@@ -5206,8 +5384,10 @@ begin
     else
       update public.mail_outbox candidate_paper_mail
       set attachments=v_paper_pack_attachment,
-          scheduled_for_utc=p_now_utc,
-          next_attempt_at_utc=p_now_utc,
+          scheduled_for_utc=case when v_paper_expense_update_active
+            then 'infinity'::timestamptz else p_now_utc end,
+          next_attempt_at_utc=case when v_paper_expense_update_active
+            then 'infinity'::timestamptz else p_now_utc end,
           payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
             'candidate_paper_pack_ready',true,
             'candidate_paper_pack_retryable',false,
@@ -5223,9 +5403,11 @@ begin
               candidate_paper_mail.payment_scope_json->>'candidate_paper_pack_operation_id'
             ),
             'candidate_paper_pack_operation_state','READY',
-            'mail_held_until_pdf_rendered',false,
-            'mail_delayed_for_pdf_render',false,
-            'mail_hold_reason',null,
+            'mail_held_until_pdf_rendered',v_paper_expense_update_active,
+            'mail_delayed_for_pdf_render',v_paper_expense_update_active,
+            'mail_hold_reason',case when v_paper_expense_update_active
+              then 'CANDIDATE_EXPENSE_UPDATE_PENDING' end,
+            'candidate_expense_update_hold',v_paper_expense_update_active,
             'candidate_complete_pack_storage_key',v_paper_pack_storage_key,
             'candidate_complete_pack_sha256',v_paper_pack_sha256,
             'candidate_complete_pack_size_bytes',v_paper_pack_byte_size,
@@ -5248,26 +5430,28 @@ begin
       end if;
     end if;
 
-    insert into public.candidate_notifications(
-      account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
-      template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
-    ) values (
-      v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_paper_timesheet_id,
-      'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
-      jsonb_build_object('page_count',v_paper_pack_page_count,'workflow_generation',v_workflow.generation),
-      jsonb_build_object('type','paper_pack','timesheet_id',v_paper_timesheet_id,
-        'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation),
-      'UNREAD','PENDING',
-      'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
-        ||v_workflow.generation::text||':'||v_paper_manifest_sha256,
-      p_now_utc
-    ) on conflict(dedupe_key) do nothing
-    returning id into v_paper_notification_id;
-    if v_paper_notification_id is null then
-      select notification.id into v_paper_notification_id
-      from public.candidate_notifications notification
-      where notification.dedupe_key='CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
-        ||v_workflow.generation::text||':'||v_paper_manifest_sha256;
+    if not v_paper_expense_update_active then
+      insert into public.candidate_notifications(
+        account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
+        template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
+      ) values (
+        v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_paper_timesheet_id,
+        'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
+        jsonb_build_object('page_count',v_paper_pack_page_count,'workflow_generation',v_workflow.generation),
+        jsonb_build_object('type','paper_pack','timesheet_id',v_paper_timesheet_id,
+          'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation),
+        'UNREAD','PENDING',
+        'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
+          ||v_workflow.generation::text||':'||v_paper_manifest_sha256,
+        p_now_utc
+      ) on conflict(dedupe_key) do nothing
+      returning id into v_paper_notification_id;
+      if v_paper_notification_id is null then
+        select notification.id into v_paper_notification_id
+        from public.candidate_notifications notification
+        where notification.dedupe_key='CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
+          ||v_workflow.generation::text||':'||v_paper_manifest_sha256;
+      end if;
     end if;
 
     update public.candidate_submission_workflows
@@ -5293,6 +5477,7 @@ begin
       'complete_pack_sha256',v_paper_pack_sha256,
       'complete_pack_byte_size',v_paper_pack_byte_size,
       'complete_pack_page_count',v_paper_pack_page_count,
+      'paper_pack_held_for_expense_update',v_paper_expense_update_active,
       'idempotent_replay',v_paper_release_idempotent
     );
 

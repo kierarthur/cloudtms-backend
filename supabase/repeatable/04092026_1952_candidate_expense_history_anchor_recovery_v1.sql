@@ -638,7 +638,7 @@ begin
       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
       'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
       'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM',
-      'PAPER_PACK_MARK_FAILURE'));
+      'PAPER_PACK_MARK_FAILURE','WORKER_SUBMIT'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
@@ -1180,20 +1180,16 @@ begin
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.timesheet_id else v_week.timesheet_id end,
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.id else v_week.id end
       );
-      -- A separate expense workflow is requested before the Candidate chooses
-      -- the approval route.  Preserve that immutable ELECTRONIC request receipt,
-      -- but follow an already QR-backed worked anchor into its server-owned PAPER
-      -- family so the empty MANUAL carrier cannot cause a false route conflict.
-      if v_workflow_kind='CONTRACT_EXPENSE'
-         and v_route_authority->>'route_family'='QR' then
-        v_route:='PAPER';
-      end if;
+      -- A later separate expense starts on the neutral ELECTRONIC draft route.
+      -- Its approval-method step may then select PHONE, EMAIL or PAPER even
+      -- when the completed worked Timesheet used the QR/PAPER family.
       if v_route_authority->>'route_family'='MANUAL_NON_QR'
          or (v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'
            and v_workflow_kind<>'CONTRACT_EXPENSE') then
         raise exception 'CANDIDATE_RECORD_VIEW_ONLY' using errcode='55000',detail=v_route_authority::text;
       end if;
-      if (v_route_authority->>'route_family'='QR' and v_route<>'PAPER')
+      if (v_route_authority->>'route_family'='QR' and v_route<>'PAPER'
+            and v_workflow_kind<>'CONTRACT_EXPENSE')
          or (v_route_authority->>'route_family'='ELECTRONIC' and v_route='PAPER'
            and not coalesce((v_route_authority->>'candidate_paper_submission_allowed')::boolean,false))
          or (v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE' and v_route='PAPER') then
@@ -2012,7 +2008,7 @@ begin
       v_route_authority:=private._candidate_route_family_v1(v_workflow.anchor_timesheet_id,v_anchor_week.id);
       if not coalesce((v_route_authority->>'candidate_expenses_allowed')::boolean,false)
          or (v_workflow.route='PAPER' and not coalesce((v_route_authority->>'candidate_paper_submission_allowed')::boolean,false))
-         or (v_workflow.route<>'PAPER' and v_route_authority->>'route_family' not in ('ELECTRONIC','IMPORT_AUTHORITATIVE')) then
+         or (v_workflow.route<>'PAPER' and v_route_authority->>'route_family' not in ('ELECTRONIC','IMPORT_AUTHORITATIVE','QR')) then
         raise exception 'CANDIDATE_ROUTE_FAMILY_MISMATCH' using errcode='55000',detail=v_route_authority::text;
       end if;
     end if;
@@ -2159,7 +2155,12 @@ begin
     end if;
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
-    where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');
+    where workflow_id=v_workflow.id and state in ('PENDING','APPROVED')
+      and not exists (
+        select 1 from public.candidate_pending_expense_updates pending_update
+        where pending_update.workflow_id=v_workflow.id
+          and pending_update.state in ('EDITING','RENDERING')
+      );
 
     if v_is_electronic then
       v_component_no:=0;
@@ -2237,14 +2238,13 @@ begin
           using errcode='22023',detail=jsonb_build_object('category','MILEAGE')::text; end if;
 
         v_component_no:=v_component_no+1;
-        v_review_ordinal:=v_review_ordinal+1;
         insert into public.candidate_submission_components(
           workflow_id,workflow_generation,component_no,timesheet_id,component_kind,document_role,state,
           immutable_at_utc,required,review_ordinal,review_render_state,final_signed_render_state,created_at_utc
         ) values (
           v_workflow.id,v_next_generation,v_component_no,v_workflow.target_timesheet_id,'EXPENSE_SUMMARY',
-          'EXPENSE_MILEAGE_APPROVAL_SUMMARY','IMMUTABLE',p_now_utc,true,v_review_ordinal,
-          'PENDING','PENDING',p_now_utc
+          'EXPENSE_MILEAGE_APPROVAL_SUMMARY','IMMUTABLE',p_now_utc,false,null,
+          'NOT_REQUIRED','NOT_REQUIRED',p_now_utc
         );
 
         for v_source_component in
@@ -2295,7 +2295,12 @@ begin
         review_render_state=case when review_render_state='NOT_REQUIRED' then review_render_state else 'SUPERSEDED' end,
         final_signed_render_state=case when final_signed_render_state='NOT_REQUIRED' then final_signed_render_state else 'SUPERSEDED' end
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and (required=true or document_role='MANAGER_SIGNATURE') and state<>'SUPERSEDED';
+        and (required=true or document_role='MANAGER_SIGNATURE') and state<>'SUPERSEDED'
+        and not exists(
+          select 1 from public.candidate_pending_expense_updates pending_update
+          where pending_update.workflow_id=v_workflow.id
+            and pending_update.state in ('EDITING','RENDERING')
+        );
 
       update public.candidate_submission_workflows set
         state='WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',generation=v_next_generation,
@@ -2393,7 +2398,12 @@ begin
         review_render_state=case when review_render_state='NOT_REQUIRED' then review_render_state else 'SUPERSEDED' end,
         final_signed_render_state=case when final_signed_render_state='NOT_REQUIRED' then final_signed_render_state else 'SUPERSEDED' end
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and (required=true or document_role='MANAGER_SIGNATURE') and state<>'SUPERSEDED';
+        and (required=true or document_role='MANAGER_SIGNATURE') and state<>'SUPERSEDED'
+        and not exists(
+          select 1 from public.candidate_pending_expense_updates pending_update
+          where pending_update.workflow_id=v_workflow.id
+            and pending_update.state in ('EDITING','RENDERING')
+        );
       update public.candidate_submission_workflows set
         state='WORKER_SUBMITTED',generation=v_next_generation,route='PAPER',
         input_snapshot_json=v_immutable_submission,immutable_submission_json=v_immutable_submission,
@@ -3685,11 +3695,9 @@ begin
           then jsonb_build_array(jsonb_build_object(
             'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET'))
           else '[]'::jsonb end
-        || case when v_workflow.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
-                    and not v_paper_mileage_only
-          then jsonb_build_array(jsonb_build_object(
-            'page_key','EXPENSE_SUMMARY','component_kind','EXPENSE_SUMMARY'))
-          else '[]'::jsonb end
+        -- The expense summary is an internal, automatically regenerated aid;
+        -- it is never a manager-decision or signed-return page.
+        || '[]'::jsonb
         || v_paper_source_pages
     );
     update public.candidate_submission_workflows set

@@ -31,6 +31,8 @@ as $function$
 declare
   v_environment text;
   v_context jsonb;
+  v_office_context jsonb;
+  v_office_actor_user_id uuid;
   v_candidate_id uuid;
   v_workflow public.candidate_submission_workflows%rowtype;
   v_week public.contract_weeks%rowtype;
@@ -53,10 +55,29 @@ begin
     raise exception 'CANDIDATE_WORKFLOW_PAYLOAD_INVALID' using errcode='22023';
   end if;
 
-  v_context:=private._candidate_session_context_v1(
-    p_session_id,v_environment,null,p_now_utc,true
-  );
-  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  if p_session_id is null then
+    begin
+      v_office_context:=nullif(current_setting(
+        'cloudtms.office_candidate_context',true
+      ),'')::jsonb;
+    exception when others then
+      v_office_context:=null;
+    end;
+    v_office_actor_user_id:=nullif(v_office_context->>'actor_user_id','')::uuid;
+    if not private._candidate_office_service_context_valid_v1(
+      v_environment,v_office_actor_user_id,'PAPER_PREPARE'
+    ) then
+      raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
+    end if;
+    select workflow.candidate_id into v_candidate_id
+    from public.candidate_submission_workflows workflow
+    where workflow.id=p_workflow_id and workflow.environment=v_environment;
+  else
+    v_context:=private._candidate_session_context_v1(
+      p_session_id,v_environment,null,p_now_utc,true
+    );
+    v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  end if;
   if v_candidate_id is null then
     raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000';
   end if;

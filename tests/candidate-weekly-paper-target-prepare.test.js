@@ -73,8 +73,13 @@ test('a later standalone PAPER expense leaves its approved worked Timesheet unch
     /update public\.timesheets|insert into public\.timesheets|update public\.timesheets_financials/i);
   assert.match(transitionSql,
     /v_paper_mileage_only:=jsonb_array_length\(v_paper_source_pages\)>0[\s\S]*component_kind'<>'MILEAGE_FORM'[\s\S]*expense_category'<>'MILEAGE'/i);
-  assert.match(transitionSql,
-    /workflow_kind in \('CONTRACT_COMBINED','CONTRACT_EXPENSE'\)[\s\S]*and not v_paper_mileage_only[\s\S]*'EXPENSE_SUMMARY'/i);
+  const manifestStart = transitionSql.indexOf('v_paper_manifest:=jsonb_build_object');
+  const manifestEnd = transitionSql.indexOf('update public.candidate_submission_workflows', manifestStart);
+  const activeManifest = transitionSql.slice(manifestStart, manifestEnd);
+  assert.ok(manifestStart > 0 && manifestEnd > manifestStart);
+  assert.doesNotMatch(activeManifest, /'EXPENSE_SUMMARY'/i);
+  assert.match(activeManifest,
+    /expense summary is an internal, automatically regenerated aid[\s\S]*never a manager-decision or signed-return page[\s\S]*\|\| '\[\]'::jsonb[\s\S]*\|\| v_paper_source_pages/i);
   assert.match(targetlessProof,
     /v_component_three[\s\S]*'targetless-paper\/mileage-page-3\.jpg'[\s\S]*page_row->>'component_kind'<>'MILEAGE_FORM'/i);
 });

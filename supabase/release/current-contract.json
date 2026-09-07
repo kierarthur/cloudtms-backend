@@ -1216,6 +1216,58 @@
         "postgres",
         "service_role"
       ],
+      "table": "candidate_expense_component_events",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "candidate_expense_components",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "candidate_expense_operations",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "candidate_expense_summary_refreshes",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
       "table": "candidate_home_announcement_versions",
       "using": "true",
       "schema": "public",
@@ -1282,6 +1334,19 @@
         "service_role"
       ],
       "table": "candidate_notifications",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "candidate_pending_expense_updates",
       "using": "true",
       "schema": "public",
       "command": "ALL",
@@ -2749,7 +2814,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4027e81749579873c41baa16bb85b2861bf32ec97319414529720e4806c6610d"
+      "definition_sha256": "01ced46c7bff1f8fd40236be1b76d1358d977cf983fb55c8bf91d66ac383d2be"
     },
     {
       "acl": [
@@ -3567,11 +3632,429 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_empty_manager_request_cancel_v1(p_workflow_id uuid, p_expected_generation integer, p_reason_code text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7ad5a3a74436c348a0096974207ff6d6ec3e769e4356b41e4bcf4bdbddf4539a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_evidence_lineage_guard_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "82fff7cb6d2202643cd081b036ec32651f6ba4eb1cdc7735da86a5fe2b3b729e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_begin_update_action_v1(p_workflow_id uuid, p_conflicted boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "ff9ecd29c6538fa19fecef5d8da2090b69a52b6d74d5735fcaad6fdb34a6d8ac"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_component_action_v1(p_component candidate_expense_components)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7c22536bf70f091637c2e4bc055f0e2854ca40b2adde956354927643f620bee2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_component_json_v1(p_component candidate_expense_components, p_actions_allowed boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7a230daa50f5b64376d918d74627d6c9027d6f90ddc712efac1dfee98ad476d2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_component_status_v1(p_lifecycle_state text, p_manager_state text, p_agency_state text)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "945d6ea1c95c7de6d28fd0be6336fe142f2fcdd8f5d1933918744d0e3ee529f6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_component_values_v1(p_workflow_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "548e5909a0c99f8a2235d20aed404ae8c9041c8cd91ceff36f107a09d3daa61a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_components_sync_financial_v1(p_timesheet_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6cdf0456653c293bc785aef28d552c9c3e66f8d3f7126561b948830887f4124b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_components_sync_v1(p_workflow_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7b8549d5846862d5bdd5992dcb14977b707cbc7a1ed28ef8d1bfda6f712fb9e9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_current_timesheet_id_v1(p_workflow_id uuid, p_stored_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "4c3fb5fdb34d4abae2ac773bf6b6620bc16c33a5e950a1fd24058142c9175e37"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_evidence_summary_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e0b25bd317462aa69564d5a8ded708ca86e18959f8b56519cc7cf100f2a7c52f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_financial_remove_v1(p_expense_component_id uuid, p_expected_component_generation integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c4746fa70adf8f962838df0f5ccded5efc706c97456d499084051efbb6a54192"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_financial_sync_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "936cf7a30bb249bdb822feb6b0b13759740a1a8b9e1ed7d65b0d1a6242a91747"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_identity_summary_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ec38c4b57ed78fad5ffb13a8558b90f63466467ce15b92aace7d7610218dd8f2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_number_v1(p_value jsonb, p_key text)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "a65d9ce50f5d02ace343b9f8a5d42f97ec5a363dc6d703a75a40ebf96da7f75d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_owned_timesheet_id_v1(p_workflow_id uuid, p_stored_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e7dcf78e075d404f3814c44f1e079db7c782132155a25aca6e76e1a2ca9efca3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_owner_context_lock_v1(p_expense_component_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "44d932c67ec4e601b5cee91aeecdf2a1060181a84fff35a960477cefae8221a0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_payload_without_category_v1(p_payload jsonb, p_expense_category text)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "7afc774334ba4a012ad3da1346dcf5cd6938e3a461c9bceacba2f3e0909fcf28"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_submission_without_category_v1(p_submission jsonb, p_expense_category text)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "cd428dad3f31c21d516d45e56ec5cc589920a2da21156d3a391d362fdd2eea11"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_summary_queue_v1(p_timesheet_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2cd0a13257f4c78c6ebd7dd4bd39735f7874693e8d173dda9b27d58ce244d21e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_timesheet_sync_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "60b2ccf03e3724b330c2a1551a6da50a5dee99b9528ab533fbc1bbb91eb56830"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_unmaterialised_prior_v1(p_expense_component_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "1c756479dd12193a753d0ca63c3e3ed9a8b09e8b1036c1e1d1f975e3f0f7ba54"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_workflow_sync_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "65cbfb46de39392667f111d5b7bbd8dcf330d8bb3d7be9ea244bebd4b941a0e9"
     },
     {
       "acl": [
@@ -3716,6 +4199,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_hours_component_json_v1(p_environment text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7ade18eeb2e25cfcb196b81aa96e4ed0c9822692cfd1cf64b66e8bbf8d0a07da"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
@@ -3838,6 +4340,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "8cccd93fc8999d4943f7463121b45b07bfd1f09fdc9ee60de82216c2cef448d1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_manager_decision_id_v1(p_workflow_id uuid, p_workflow_generation integer, p_approval_request_id uuid, p_manager_state text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "3f80235f6d5bbc9a91821accedce4448f144c50642d0443a5e5d6176ff0b7c67"
     },
     {
       "acl": [
@@ -4104,6 +4625,25 @@
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_office_expense_rejection_context_v1(p_environment text, p_expense_component_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "da8921e12005965fb3c2d906d66f44e3873d630c99acca3010211003135c584c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_office_paper_retry_receipt_v1(p_actor_user_id uuid, p_workflow_id uuid, p_generation integer, p_idempotency_key text, p_http_status integer, p_result jsonb, p_reconstruct boolean, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",
@@ -4203,7 +4743,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a77de96cba715e7343cd08779fdfb7b1ab14dde11c3b0b2be035b0cc2e1b5e19"
+      "definition_sha256": "2bb8c2b027436179e91008e56191e82216abd2f1dd13b2b25a309736110e44c6"
     },
     {
       "acl": [
@@ -4222,7 +4762,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c6860e853529256d79ef9c9c4baea1d6fdddb966021d7d18a6dd95138da58d51"
+      "definition_sha256": "273329f8d0fc7c9734a0069444eb47d36c6a603d010f12ff11118732130a612d"
     },
     {
       "acl": [
@@ -4279,7 +4819,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3bd9a68fc7e0e5fd980ede124ced9c510a51e3ad5802685fc180d2d5bf508057"
+      "definition_sha256": "0576782586795a6314744ff98adf9ab89228e2b68a361c928692f5397595cba6"
     },
     {
       "acl": [
@@ -4678,7 +5218,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b5c21cd24b7109c7f6c976c608ba04c225ec69629b5fe9937ed8007bd05270ee"
+      "definition_sha256": "2b041bff4e0fcee585eb93ec1f14f2af351f15ee1c77873dd35021480582d243"
     },
     {
       "acl": [
@@ -4697,7 +5237,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "2d0462a13bd4304b2cdfd3f3862ebe02b1be3114e4eb4f11ad5549b72ca1c5a1"
+      "definition_sha256": "40e9512976fa6e2b10e66131d9a107a178c6ff6ea16f997a1652f21233749dab"
     },
     {
       "acl": [
@@ -4907,6 +5447,44 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_whole_claim_action_v1(p_environment text, p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "eb7207bb04a71d164a6720db1ac3458b2fca3a4beb67a7027a7250c9cf30c43d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_whole_claim_scope_v1(p_environment text, p_candidate_id uuid, p_contract_id uuid, p_week_ending date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "c7234e9bae559c2f6233c6f9492f73317754628fb5ce3454ed357d32d9f76619"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_workflow_cancel_authority_v1(p_workflow_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -4988,6 +5566,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "0b760f91253cbca4b4d918fa1325bf96131b573d73e042fc2e57e84fd4d23861"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_zero_expense_carrier_delete_v1(p_environment text, p_timesheet_id uuid, p_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6bcad09cab7863e69eb09e7aff8330ebc581f155a1ab7ce8250f304f59caace6"
     },
     {
       "acl": [
@@ -15715,6 +16312,366 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_category_resubmit_atomic_v1(p_session_id uuid, p_environment text, p_source_workflow_id uuid, p_expected_generation integer, p_expense_component_id uuid, p_expected_component_generation integer, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b1749f63bdaf31ee5161cec1a8e609a9f5c9e52a99122dd109e7381e7c6bee15"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_component_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expense_component_id uuid, p_expected_component_generation integer, p_action text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4a84a14c2f2c0700f30ca78cb5c03c551d046ea957615ad23f55d28a76dd100a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_component_projection_v1(p_environment text, p_workflow_ids uuid[], p_timesheet_ids uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "90564b03c877fdd00a002869cd7bf8bb204592534e2b7c53e163c769b3dfac9c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_paper_update_begin_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_category_changes jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7ae45da48c46d4d8cf0e4ff4d1a42defcb6b628b0cf3980c8ae5d2e9bfa95c3c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_paper_update_receipt_commit_v1(p_environment text, p_operation_id uuid, p_update_id uuid, p_result jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6189da5c3bf4493cc877e2b3ef43b4be57adcf36346732ca86a18465529cbac3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_summary_claim_v1(p_limit integer, p_lease_seconds integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6f3bf27a95bcb074bf6cfd741e2a0fc6bd51238e2240449af9150308fa52621c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_summary_complete_v1(p_refresh_id uuid, p_claim_token uuid, p_expected_totals_sha256 text, p_storage_key text, p_summary_sha256 text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "dd9f953c9e35844806aa2fd0c425fc5d6194ee74d9c15a737864760af13dd1f4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_summary_fail_v1(p_refresh_id uuid, p_claim_token uuid, p_failure_code text, p_storage_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "43e2c4c1edb7201b446560a309593b39ff82a9cf9aad14e78f856f2eb404af3c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_summary_render_begin_v1(p_refresh_id uuid, p_claim_token uuid, p_expected_totals_sha256 text, p_storage_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "bc0eae2b0f2285900a347da60cfa20f8fa3c3ee8ee5040335e36e9271952bfce"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_abort_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_update_id uuid, p_service_recovery boolean, p_failure_code text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "96f1154bf3cac2f9e3e83a09dbf9a0d0637f0572f3b1dea37328d28ac0fc9f7d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_begin_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_category_changes jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9e7aa7bfabf8a6722117f438e5d2e82c18772099d6ffb71c62e6b4a0b18fc218"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_manager_hold_v1(p_environment text, p_workflow_id uuid, p_approval_token_hash_hex text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "30fb6e0a07f6728cab2e5af04a4fc4a688fcbb72ba0e26f29877a2cac98cdff9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_rebind_atomic_v1(p_environment text, p_workflow_id uuid, p_update_id uuid, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "cde281d42bdbb2944465175f5574a6ed3f7482069a16440f97c869fe16c2a003"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_recover_expired_v1(p_environment text, p_limit integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "839e6e4ac3af8a4bdec9d7190db4a68ec22b20280c877d6aebd5bb85a55cafa6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_update_submit_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_update_id uuid, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "81fcc994233e6292a63d780a01c0cd0376daf26b79b116f77f8dd077be1fd367"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=\"\""
       ],
       "schema": "public",
@@ -16099,6 +17056,169 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_category_adapter_v1(p_actor_user_id uuid, p_environment text, p_payload jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ddba0c4b2ead7b8e586986e8273d0f813add541d3e7b7bc09d11863e6170b314"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_category_projection_batch_v1(p_environment text, p_timesheet_ids uuid[], p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "eda77225218ea24b9677e83409c8baa7176ef113ea3863107e7200f96b6ebbd4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_category_projection_v1(p_environment text, p_timesheet_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "8b044052ff4874f50edb27be8df5482881d181be11ef657649f0770bf089f837"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_category_reject_atomic_v1(p_actor_user_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expense_component_id uuid, p_expected_component_generation integer, p_confirmation_sha256 text, p_reason_note text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "361c32b0506b6d535955fed43c9679d3a2521a2f55898fc913a481df98fee13f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_category_reject_commit_v1(p_environment text, p_operation_id uuid, p_update_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a5e3d69a214f3bc4d1334b54513ac6c1c1e718d47e35e388e9f3a0b4def7d173"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_paper_prepare_v1(p_actor_user_id uuid, p_environment text, p_operation_id uuid, p_update_id uuid, p_workflow_id uuid, p_expected_generation integer, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8bb3e77bb1a78264c202fcd684c08b48aecb6a9d44bc4d5a784c72d80beb6bd0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_paper_promote_v1(p_actor_user_id uuid, p_environment text, p_operation_id uuid, p_update_id uuid, p_workflow_id uuid, p_expected_generation integer, p_expected_v1_manifest_sha256_hex text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "be727184d9d368d902b77753083546e7055bd66bf46af53a6c3654cba4e3fa1a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
@@ -16106,7 +17226,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e8335af91af4766bd636508878bd9d1c769b19ecf30161b497ec48fc7b0334c0"
+      "definition_sha256": "f244557bad3c77e8d1d293e0298307542d06506a3fade8b6bae12a31be5d0806"
     },
     {
       "acl": [
@@ -16202,7 +17322,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7ae0417308035a16a6103f25b5dc790e71d636dd538fefd60923d5e29e1b86a7"
+      "definition_sha256": "9d5b4e9f333ff7181481b01e6ccc393b8faf5d90e067231fbd2ba47abf54558a"
     },
     {
       "acl": [
@@ -16420,7 +17540,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "92cfbabd19fea80024197b7770537b19b51fe2262cffe74a321fc1c51b85568f"
+      "definition_sha256": "3481dad51df66b9e1e5bc3d34c3c9a3d232f07756033b7a01e4ec8906e7d592d"
     },
     {
       "acl": [
@@ -16444,7 +17564,55 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "bfe88e8b597f33e05fd031f6f39d90bfbfb3d8715af973511c6bbed235e5eb9a"
+      "definition_sha256": "2f59a395f4882a115e86bc747e026c575d4a0b0433a8f5b3ffb1cd5966d75edf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_whole_claim_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_timesheet_id uuid, p_action text, p_reason_note text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "34b1e70418ff1af0da6c98b030b3fef450c0b246057abbe5cc0e7a2c68987e55"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_whole_claim_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_timesheet_id uuid, p_claim_scope_sha256 text, p_action text, p_reason_note text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "af0566be266dbfa71adab93ffa7b730016bd58a7e7c8852b35b10f7f07b6d083"
     },
     {
       "acl": [
@@ -16492,7 +17660,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f55a7a5877ce88fa10c8aca171773d56a4dafc925d2c6e59c01aafa2ee8c96dc"
+      "definition_sha256": "75502b7c431b03d4c6b0ee7a3206c76df4c85eeddd0fc9e7662b87242b5c64ab"
     },
     {
       "acl": [
@@ -29841,6 +31009,35 @@
     {
       "acl": [
         {
+          "grantee": "PUBLIC",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "identity": "timesheet_weekly_chain_delete_apply(p_timesheet_id uuid, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "abbcf45b6feecde1abecc57e7021ec36e55f3e29adb0ebf800b84554c0e2fbdf"
+    },
+    {
+      "acl": [
+        {
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
@@ -29884,7 +31081,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f97d4a133684a95e82dd37b9befa28fca389fe75f4152cc41af893884693123f"
+      "definition_sha256": "5e750f501b2a8844bfb9481fe07d1414016770fcf0ada61eb8f32bbae9f08c0f"
     },
     {
       "acl": [
@@ -29932,7 +31129,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "29a2ac6b05144d944aba608b783480d998e0835b95703f61f78fb0d3215fcc5a"
+      "definition_sha256": "b5427f7ff5eb01cc5b2e01b7a6e008206beeb3667511a6d35c115ff91af702bb"
     },
     {
       "acl": [
@@ -31646,6 +32843,13 @@
       "definition": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()"
     },
     {
+      "name": "candidate_expense_workflow_component_sync",
+      "table": "candidate_submission_workflows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_workflow_component_sync AFTER INSERT OR UPDATE OF state, generation, target_timesheet_id, immutable_submission_json, manager_approved_at_utc, rejection_reason ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_workflow_sync_trigger_v1()"
+    },
+    {
       "name": "candidate_timesheet_summary_workflow_revision_trg",
       "table": "candidate_submission_workflows",
       "schema": "public",
@@ -31665,6 +32869,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()"
+    },
+    {
+      "name": "candidate_expense_candidate_identity_summary_refresh",
+      "table": "candidates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_candidate_identity_summary_refresh AFTER UPDATE OF display_name, first_name, last_name, tms_ref ON candidates FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
     },
     {
       "name": "set_tms_ref",
@@ -31800,6 +33011,13 @@
       "definition": "CREATE TRIGGER trg_touch_client_from_client_settings AFTER INSERT OR DELETE OR UPDATE ON client_settings FOR EACH ROW EXECUTE FUNCTION _trg_touch_client_from_client_settings()"
     },
     {
+      "name": "candidate_expense_client_identity_summary_refresh",
+      "table": "clients",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_client_identity_summary_refresh AFTER UPDATE OF name, cli_ref ON clients FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
+    },
+    {
       "name": "set_cli_ref",
       "table": "clients",
       "schema": "public",
@@ -31903,6 +33121,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_u AFTER UPDATE ON contract_weeks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+    },
+    {
+      "name": "candidate_expense_contract_identity_summary_refresh",
+      "table": "contracts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_contract_identity_summary_refresh AFTER UPDATE OF role, display_site ON contracts FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_identity_summary_trigger_v1()"
     },
     {
       "name": "contract_settings_authority_after_contract_insert_v1",
@@ -32927,6 +34152,13 @@
       "definition": "CREATE TRIGGER trg_sheets_outbox_updated_at BEFORE UPDATE ON sheets_outbox FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
     },
     {
+      "name": "candidate_expense_evidence_summary_refresh",
+      "table": "timesheet_evidence",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_evidence_summary_refresh AFTER INSERT OR DELETE OR UPDATE OF timesheet_id, kind, document_role, candidate_component_id, processing_state ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_evidence_summary_trigger_v1()"
+    },
+    {
       "name": "timesheet_evidence_candidate_lineage_guard",
       "table": "timesheet_evidence",
       "schema": "public",
@@ -33109,6 +34341,13 @@
       "definition": "CREATE TRIGGER trg_tsfin_timesheet_validations_wakeup AFTER INSERT OR UPDATE ON timesheet_validations FOR EACH ROW EXECUTE FUNCTION trg_tsfin_timesheet_validations_wakeup()"
     },
     {
+      "name": "candidate_expense_timesheet_component_sync",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_timesheet_component_sync AFTER INSERT OR UPDATE OF status, authorised_at_server, is_current, archived_at_utc, booking_id, contract_id, week_ending_date ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_timesheet_sync_trigger_v1()"
+    },
+    {
       "name": "timesheet_settings_authority_before_v1",
       "table": "timesheets",
       "schema": "public",
@@ -33219,6 +34458,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_tsfin_au AFTER UPDATE OF is_current, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION trg_tsfin_after_update()"
+    },
+    {
+      "name": "candidate_expense_financial_component_sync",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_financial_component_sync AFTER INSERT OR UPDATE OF is_current, mileage_units, mileage_pay_ex_vat, travel_pay_ex_vat, accommodation_pay_ex_vat, other_pay_ex_vat, candidate_id, client_id, authorised_at_utc, locked_by_invoice_id, paid_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_financial_sync_trigger_v1()"
     },
     {
       "name": "daily_timesheet_settings_authority_after_fin_v1",
@@ -67114,6 +68360,1402 @@
       ],
       "rls": true,
       "kind": "r",
+      "name": "candidate_expense_component_events",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "after_state_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "before_state_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_type",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expense_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "occurred_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_expense_component_e_expense_component_id_idempote_key",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_component_e_expense_component_id_idempote_key ON public.candidate_expense_component_events USING btree (expense_component_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_component_events_component_idx",
+          "definition": "CREATE INDEX candidate_expense_component_events_component_idx ON public.candidate_expense_component_events USING btree (expense_component_id, occurred_at_utc, event_id)"
+        },
+        {
+          "name": "candidate_expense_component_events_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_component_events_pkey ON public.candidate_expense_component_events USING btree (event_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_expense_component_e_expense_component_id_idempote_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (expense_component_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_component_events_actor_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_kind = ANY (ARRAY['SYSTEM'::text, 'CANDIDATE'::text, 'MANAGER'::text, 'OFFICE'::text]))"
+        },
+        {
+          "name": "candidate_expense_component_events_after_state_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(after_state_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_expense_component_events_before_state_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(before_state_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_expense_component_events_component_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_generation >= 1)"
+        },
+        {
+          "name": "candidate_expense_component_events_event_type_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_type = ANY (ARRAY['CREATED'::text, 'SUBMITTED'::text, 'MANAGER_APPROVED'::text, 'MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text, 'REPLACED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text, 'AUTHORISED'::text, 'INVOICED'::text, 'PAID'::text, 'AGENCY_PROTECTION_CLEARED'::text]))"
+        },
+        {
+          "name": "candidate_expense_component_events_expense_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (expense_component_id) REFERENCES candidate_expense_components(expense_component_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_expense_component_events_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_expense_component_events_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (event_id)"
+        },
+        {
+          "name": "candidate_expense_component_events_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason IS NULL OR char_length(reason) >= 1 AND char_length(reason) <= 1000)"
+        },
+        {
+          "name": "candidate_expense_component_events_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_expense_components",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "agency_authorisation_state",
+          "type": "text",
+          "default": "'NOT_AUTHORISED'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "amount",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "component_generation",
+          "type": "integer",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expense_category",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expense_component_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "lifecycle_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manager_approval_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "manager_approved_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "mileage_units",
+          "type": "numeric",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "owning_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "refusal_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "refusal_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "refused_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "removed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "submitted_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "workflow_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_expense_components_approval_idx",
+          "definition": "CREATE INDEX candidate_expense_components_approval_idx ON public.candidate_expense_components USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_components_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_components_pkey ON public.candidate_expense_components USING btree (expense_component_id)"
+        },
+        {
+          "name": "candidate_expense_components_timesheet_state_idx",
+          "definition": "CREATE INDEX candidate_expense_components_timesheet_state_idx ON public.candidate_expense_components USING btree (owning_timesheet_id, lifecycle_state, expense_category)"
+        },
+        {
+          "name": "candidate_expense_components_workflow_id_expense_category_key",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_components_workflow_id_expense_category_key ON public.candidate_expense_components USING btree (workflow_id, expense_category)"
+        },
+        {
+          "name": "candidate_expense_components_workflow_state_idx",
+          "definition": "CREATE INDEX candidate_expense_components_workflow_state_idx ON public.candidate_expense_components USING btree (workflow_id, lifecycle_state, expense_category)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_expense_components_agency_authorisation_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (agency_authorisation_state = ANY (ARRAY['NOT_AUTHORISED'::text, 'AUTHORISED'::text, 'INVOICED'::text, 'PAID'::text]))"
+        },
+        {
+          "name": "candidate_expense_components_amount_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (amount >= 0::numeric)"
+        },
+        {
+          "name": "candidate_expense_components_approval_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_request_id) REFERENCES candidate_approval_requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_expense_components_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expense_category = 'MILEAGE'::text OR mileage_units = 0::numeric)"
+        },
+        {
+          "name": "candidate_expense_components_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = ANY (ARRAY['MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text])) = (refusal_kind IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_components_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_kind IS DISTINCT FROM 'MANAGER_REFUSAL'::text OR approval_request_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_components_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = ANY (ARRAY['OFFICE_REJECTED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text])) = (removed_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_components_component_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_generation >= 1)"
+        },
+        {
+          "name": "candidate_expense_components_expense_category_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expense_category = ANY (ARRAY['MILEAGE'::text, 'TRAVEL'::text, 'ACCOMMODATION'::text, 'OTHER'::text]))"
+        },
+        {
+          "name": "candidate_expense_components_lifecycle_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (lifecycle_state = ANY (ARRAY['DRAFT'::text, 'SUBMITTED'::text, 'MANAGER_APPROVED'::text, 'MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text]))"
+        },
+        {
+          "name": "candidate_expense_components_manager_approval_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (manager_approval_state = ANY (ARRAY['NOT_REQUESTED'::text, 'PENDING'::text, 'APPROVED'::text, 'REFUSED'::text]))"
+        },
+        {
+          "name": "candidate_expense_components_manager_refusal_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = 'MANAGER_REFUSED'::text) = (refusal_kind = 'MANAGER_REFUSAL'::text))"
+        },
+        {
+          "name": "candidate_expense_components_mileage_units_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (mileage_units >= 0::numeric)"
+        },
+        {
+          "name": "candidate_expense_components_office_refusal_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = 'OFFICE_REJECTED'::text) = (refusal_kind = 'AGENCY_REJECTION'::text))"
+        },
+        {
+          "name": "candidate_expense_components_owning_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (owning_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "candidate_expense_components_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (expense_component_id)"
+        },
+        {
+          "name": "candidate_expense_components_refusal_facts_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = ANY (ARRAY['MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text])) = (refusal_reason IS NOT NULL AND refused_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_components_refusal_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_kind IS NULL OR (refusal_kind = ANY (ARRAY['MANAGER_REFUSAL'::text, 'AGENCY_REJECTION'::text])))"
+        },
+        {
+          "name": "candidate_expense_components_refusal_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_reason IS NULL OR char_length(refusal_reason) >= 1 AND char_length(refusal_reason) <= 1000)"
+        },
+        {
+          "name": "candidate_expense_components_workflow_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (workflow_generation >= 1)"
+        },
+        {
+          "name": "candidate_expense_components_workflow_id_expense_category_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (workflow_id, expense_category)"
+        },
+        {
+          "name": "candidate_expense_components_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_expense_operations",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "account_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "action_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "environment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expense_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "failure_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "operation_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "progress_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_expense_operations_environment_actor_kind_actor_i_key",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_operations_environment_actor_kind_actor_i_key ON public.candidate_expense_operations USING btree (environment, actor_kind, actor_id, idempotency_key) NULLS NOT DISTINCT"
+        },
+        {
+          "name": "candidate_expense_operations_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_operations_pkey ON public.candidate_expense_operations USING btree (operation_id)"
+        },
+        {
+          "name": "candidate_expense_operations_workflow_idx",
+          "definition": "CREATE INDEX candidate_expense_operations_workflow_idx ON public.candidate_expense_operations USING btree (workflow_id, created_at_utc, operation_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_expense_operations_account_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (account_id) REFERENCES candidate_app_accounts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_expense_operations_action_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action_code = ANY (ARRAY['REMOVE_EXPENSE'::text, 'WITHDRAW_EXPENSE'::text, 'CANCEL_EXPENSE'::text, 'WITHDRAW_ENTIRE_CLAIM'::text, 'CANCEL_ENTIRE_CLAIM'::text, 'REJECT_EXPENSE_CATEGORY'::text, 'RESUBMIT_EXPENSE_CATEGORY'::text, 'CREATE_UPDATED_DOCUMENTS'::text]))"
+        },
+        {
+          "name": "candidate_expense_operations_actor_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_kind = ANY (ARRAY['CANDIDATE'::text, 'OFFICE'::text, 'SYSTEM'::text]))"
+        },
+        {
+          "name": "candidate_expense_operations_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_expense_operations_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) = (completed_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_operations_environment_actor_kind_actor_i_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE NULLS NOT DISTINCT (environment, actor_kind, actor_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_operations_environment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (environment = ANY (ARRAY['TEST'::text, 'LIVE'::text]))"
+        },
+        {
+          "name": "candidate_expense_operations_expense_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (expense_component_id) REFERENCES candidate_expense_components(expense_component_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_expense_operations_failure_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{2,99}$'::text)"
+        },
+        {
+          "name": "candidate_expense_operations_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_expense_operations_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (operation_id)"
+        },
+        {
+          "name": "candidate_expense_operations_progress_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (progress_json IS NULL OR jsonb_typeof(progress_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_expense_operations_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(request_sha256) = 32)"
+        },
+        {
+          "name": "candidate_expense_operations_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (result_json IS NULL OR jsonb_typeof(result_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_expense_operations_result_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state <> 'COMMITTED'::text OR result_json IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_operations_result_terminal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (result_json IS NULL OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])))"
+        },
+        {
+          "name": "candidate_expense_operations_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['PREPARING'::text, 'RENDERING'::text, 'COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "candidate_expense_operations_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "candidate_expense_operations_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_expense_summary_refreshes",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "attempt_count",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "attempt_storage_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "claim_token",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "claimed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "failure_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "lease_expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "refresh_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "requested_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_financials_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "summary_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "summary_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "summary_storage_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id_snapshot",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "totals_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "totals_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_expense_summary_ref_snapshot_generation_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_snapshot_generation_uq ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, summary_generation)"
+        },
+        {
+          "name": "candidate_expense_summary_ref_snapshot_idempotency_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_snapshot_idempotency_uq ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_one_pending_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_refreshes_one_pending_uq ON public.candidate_expense_summary_refreshes USING btree (timesheet_id) WHERE (state = ANY (ARRAY['PENDING'::text, 'RENDERING'::text]))"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_refreshes_pkey ON public.candidate_expense_summary_refreshes USING btree (refresh_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_expense_summary_ref_snapshot_generation_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (timesheet_id_snapshot, summary_generation)"
+        },
+        {
+          "name": "candidate_expense_summary_ref_snapshot_idempotency_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (timesheet_id_snapshot, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_attempt_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (attempt_count >= 0 AND attempt_count <= 5)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((state = ANY (ARRAY['READY'::text, 'REMOVED'::text, 'FAILED'::text, 'SUPERSEDED'::text])) = (completed_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state <> 'RENDERING'::text OR claim_token IS NOT NULL AND claimed_at_utc IS NOT NULL AND lease_expires_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((state = 'READY'::text) = (summary_storage_key IS NOT NULL AND summary_sha256 IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_failure_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{2,99}$'::text)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (refresh_id)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['PENDING'::text, 'RENDERING'::text, 'READY'::text, 'REMOVED'::text, 'FAILED'::text, 'SUPERSEDED'::text]))"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_summary_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (summary_generation >= 1)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_summary_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (summary_sha256 IS NULL OR octet_length(summary_sha256) = 32)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_totals_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(totals_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_expense_summary_refreshes_totals_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(totals_sha256) = 32)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
       "name": "candidate_home_announcement_versions",
       "owner": "postgres",
       "schema": "public",
@@ -68552,6 +71194,724 @@
         },
         {
           "name": "candidate_notifications_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_pending_expense_updates",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "abort_idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "abort_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "abort_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "default": "'CANDIDATE'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "begin_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "begin_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "current_workflow_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "failure_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "from_workflow_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_immutable_submission_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_immutable_submission_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_paper_source_snapshot_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_paper_source_snapshot_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_paper_source_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_paper_source_timesheet_id_snapshot",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_review_manifest_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_review_manifest_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_workflow_snapshot_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_workflow_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason_note",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "rebind_idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "rebind_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "rebind_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "started_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "submit_idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "submit_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "submit_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "terminal_lifecycle_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "update_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "update_mode",
+          "type": "text",
+          "default": "'PENDING_MANAGER'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "update_plan_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_pending_expense_updat_workflow_id_idempotency_key_key",
+          "definition": "CREATE UNIQUE INDEX candidate_pending_expense_updat_workflow_id_idempotency_key_key ON public.candidate_pending_expense_updates USING btree (workflow_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_one_active_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_pending_expense_updates_one_active_uq ON public.candidate_pending_expense_updates USING btree (workflow_id) WHERE (state = ANY (ARRAY['EDITING'::text, 'RENDERING'::text]))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_pending_expense_updates_pkey ON public.candidate_pending_expense_updates USING btree (update_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_pending_expense_up_prior_immutable_submission_j_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(prior_immutable_submission_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_up_prior_immutable_submission_s_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(prior_immutable_submission_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_up_prior_paper_source_snapshot__check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_paper_source_snapshot_json IS NULL OR jsonb_typeof(prior_paper_source_snapshot_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_up_prior_paper_source_snapshot_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_paper_source_snapshot_sha256 IS NULL OR octet_length(prior_paper_source_snapshot_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_up_prior_review_manifest_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(prior_review_manifest_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_up_prior_workflow_snapshot_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(prior_workflow_snapshot_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_upd_current_workflow_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (current_workflow_generation >= 1)"
+        },
+        {
+          "name": "candidate_pending_expense_upd_prior_paper_source_timesheet_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_paper_source_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE SET NULL"
+        },
+        {
+          "name": "candidate_pending_expense_upda_prior_review_manifest_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(prior_review_manifest_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_updat_workflow_id_idempotency_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (workflow_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_pending_expense_update_from_workflow_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (from_workflow_generation >= 1)"
+        },
+        {
+          "name": "candidate_pending_expense_update_terminal_lifecycle_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (terminal_lifecycle_state IS NULL OR (terminal_lifecycle_state = ANY (ARRAY['WITHDRAWN'::text, 'OFFICE_REJECTED'::text])))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_abort_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (abort_idempotency_key IS NULL OR char_length(btrim(abort_idempotency_key)) >= 1 AND char_length(btrim(abort_idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_abort_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (abort_request_sha256 IS NULL OR octet_length(abort_request_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_abort_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (abort_result_json IS NULL OR jsonb_typeof(abort_result_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_actor_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_kind = ANY (ARRAY['CANDIDATE'::text, 'OFFICE'::text]))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_approval_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_request_id) REFERENCES candidate_approval_requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_pending_expense_updates_begin_receipt_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((begin_request_sha256 IS NULL) = (begin_result_json IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expires_at_utc > started_at_utc)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((submit_idempotency_key IS NULL) = (submit_request_sha256 IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((update_mode = 'PAPER_REPLACEMENT'::text) = (prior_paper_source_timesheet_id_snapshot IS NOT NULL AND prior_paper_source_snapshot_json IS NOT NULL AND prior_paper_source_snapshot_sha256 IS NOT NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) = (completed_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((abort_idempotency_key IS NULL) = (abort_request_sha256 IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((abort_idempotency_key IS NULL) = (abort_result_json IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_failure_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{2,99}$'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_operation_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (operation_id) REFERENCES candidate_expense_operations(operation_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_pending_expense_updates_paper_active_source_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (update_mode <> 'PAPER_REPLACEMENT'::text OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) OR prior_paper_source_timesheet_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (update_id)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_reason_note_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_note IS NULL OR char_length(reason_note) >= 1 AND char_length(reason_note) <= 1000)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_rebind_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rebind_idempotency_key IS NULL OR char_length(btrim(rebind_idempotency_key)) >= 1 AND char_length(btrim(rebind_idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_rebind_pair_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((rebind_idempotency_key IS NULL) = (rebind_request_sha256 IS NULL) AND (rebind_idempotency_key IS NULL) = (rebind_result_json IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_rebind_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rebind_request_sha256 IS NULL OR octet_length(rebind_request_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_rebind_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rebind_result_json IS NULL OR jsonb_typeof(rebind_result_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['EDITING'::text, 'RENDERING'::text, 'COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_submit_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (submit_idempotency_key IS NULL OR char_length(btrim(submit_idempotency_key)) >= 1 AND char_length(btrim(submit_idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_submit_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (submit_request_sha256 IS NULL OR octet_length(submit_request_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_submit_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (submit_result_json IS NULL OR jsonb_typeof(submit_result_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_update_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (update_mode = ANY (ARRAY['PENDING_MANAGER'::text, 'PAPER_REPLACEMENT'::text]))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_update_plan_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(update_plan_json) = 'array'::text AND jsonb_array_length(update_plan_json) >= 1 AND jsonb_array_length(update_plan_json) <= 4)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_workflow_id_fkey",
           "type": "f",
           "deferred": false,
           "validated": true,

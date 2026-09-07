@@ -160,6 +160,29 @@ paths:
         '202': {$ref: '#/components/responses/Mutation'}
         '401': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
+  /api/candidate-app/workflows/{workflowId}/actions/reject-expense-category:
+    post:
+      tags: [Lifecycle]
+      operationId: rejectOfficeCandidateExpenseCategory
+      summary: Reject one Candidate expense category
+      description: >-
+        Rejects exactly one complete Mileage, Travel, Accommodation or Other
+        category using the action and confirmation projected for that category.
+        The action is available only for an eligible Candidate Electronic or QR
+        record; ordinary Manual, imported and financially protected records do
+        not receive this authority. A changed generation, component generation,
+        category context or deletion scope fails without mutation as
+        CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED.
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OfficeExpenseCategoryRejectionRequest'}}}}
+      responses:
+        '200': {description: Durable category rejection and exact Timesheet reconciliation receipt., content: {application/json: {schema: {$ref: '#/components/schemas/OfficeExpenseCategoryRejectionResultV2'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {description: CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED. The projected category or deletion context changed; no mutation occurred., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        default: {$ref: '#/components/responses/Error'}
   /api/candidate-app/manager-reminder-eligibility:
     get:
       tags: [Batch]
@@ -302,6 +325,168 @@ components:
   schemas:
     Uuid: {type: string, format: uuid}
     Sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+    OfficeExpenseCategoryName:
+      type: string
+      enum: [MILEAGE, TRAVEL, ACCOMMODATION, OTHER]
+    OfficeExpenseCategoryRejectionReasonInput:
+      type: object
+      additionalProperties: false
+      required: [name, type, required, max_length]
+      properties:
+        name: {const: reason_note}
+        type: {const: string}
+        required: {const: true}
+        max_length: {const: 1000}
+    OfficeExpenseCategoryRejectionAction:
+      type: object
+      additionalProperties: false
+      required: [contract_version, code, label, group, prominent, enabled, disabled_reason_code, disabled_reason, requires_confirmation, requires_reason, invocation]
+      properties:
+        contract_version: {const: OFFICE_CANDIDATE_ACTION_V1}
+        code: {const: REJECT_EXPENSE_CATEGORY}
+        label: {const: 'Reject expense'}
+        group: {const: EXPENSES}
+        prominent: {const: false}
+        enabled: {const: true}
+        disabled_reason_code: {type: 'null'}
+        disabled_reason: {type: 'null'}
+        requires_confirmation: {const: true}
+        requires_reason: {const: true}
+        invocation:
+          type: object
+          additionalProperties: false
+          required: [version, kind, method, path, fixed_body, required_user_inputs, idempotency]
+          properties:
+            version: {const: 1}
+            kind: {const: HTTP}
+            method: {const: POST}
+            path:
+              type: string
+              pattern: '^/api/candidate-app/workflows/[0-9a-fA-F-]{36}/actions/reject-expense-category$'
+            fixed_body:
+              type: object
+              additionalProperties: false
+              required: [generation, expense_component_id, component_generation, confirmation_sha256]
+              properties:
+                generation: {type: integer, minimum: 1}
+                expense_component_id: {$ref: '#/components/schemas/Uuid'}
+                component_generation: {type: integer, minimum: 1}
+                confirmation_sha256: {$ref: '#/components/schemas/Sha256'}
+            required_user_inputs:
+              type: array
+              minItems: 1
+              maxItems: 1
+              items: {$ref: '#/components/schemas/OfficeExpenseCategoryRejectionReasonInput'}
+            idempotency: {const: REQUIRED}
+    OfficeEmptyTimesheetConsequence:
+      type: string
+      enum: [NONE, PERMANENT_REMOVE, REMOVE_FROM_CURRENT_KEEP_HISTORY]
+      description: >-
+        Exact consequence for the owning Timesheet after the complete category is
+        rejected. PERMANENT_REMOVE is a physical deletion;
+        REMOVE_FROM_CURRENT_KEEP_HISTORY removes it from current Office records
+        while preserving the Timesheet in History.
+    OfficeExpenseCategoryRejectionConfirmation:
+      type: object
+      additionalProperties: false
+      required: [contract_version, confirmation_sha256, expense_category, amount, mileage_units, supporting_evidence_count, owning_timesheet_id, empty_timesheet_consequence, will_delete_timesheet, remaining_hours, remaining_expense_total, route_family]
+      properties:
+        contract_version: {const: OFFICE_EXPENSE_CATEGORY_REJECTION_CONFIRMATION_V1}
+        confirmation_sha256: {$ref: '#/components/schemas/Sha256'}
+        expense_category: {$ref: '#/components/schemas/OfficeExpenseCategoryName'}
+        amount: {type: number, minimum: 0}
+        mileage_units: {type: number, minimum: 0}
+        supporting_evidence_count: {type: integer, minimum: 0}
+        owning_timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        empty_timesheet_consequence: {$ref: '#/components/schemas/OfficeEmptyTimesheetConsequence'}
+        will_delete_timesheet: {type: boolean}
+        remaining_hours: {type: number, minimum: 0}
+        remaining_expense_total: {type: number, minimum: 0}
+        route_family: {type: string, enum: [ELECTRONIC, QR]}
+    OfficeExpenseCategory:
+      type: object
+      additionalProperties: true
+      description: >-
+        The two Office rejection siblings are both null when the category is not
+        eligible and are both present when rejection is available. They never
+        expose Candidate-side whole-claim, withdrawal or replacement authority.
+      required: [expense_component_id, component_generation, expense_category, amount, mileage_units, supporting_evidence_count, owning_timesheet_id, office_rejection_action, office_rejection_confirmation]
+      properties:
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        expense_category: {$ref: '#/components/schemas/OfficeExpenseCategoryName'}
+        amount: {type: number, minimum: 0}
+        mileage_units: {type: number, minimum: 0}
+        supporting_evidence_count: {type: integer, minimum: 0}
+        owning_timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        office_rejection_action:
+          oneOf: [{$ref: '#/components/schemas/OfficeExpenseCategoryRejectionAction'}, {type: 'null'}]
+        office_rejection_confirmation:
+          oneOf: [{$ref: '#/components/schemas/OfficeExpenseCategoryRejectionConfirmation'}, {type: 'null'}]
+    OfficeExpenseClaim:
+      type: object
+      additionalProperties: true
+      required: [workflow_id, generation, categories]
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        categories: {type: array, items: {$ref: '#/components/schemas/OfficeExpenseCategory'}}
+    OfficeExpenseCategoryRejectionRequest:
+      type: object
+      additionalProperties: false
+      required: [generation, expense_component_id, component_generation, confirmation_sha256, reason_note, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation: {type: integer, minimum: 1}
+        confirmation_sha256: {$ref: '#/components/schemas/Sha256'}
+        reason_note: {type: string, minLength: 1, maxLength: 1000}
+        idempotency_key: {$ref: '#/components/schemas/Uuid'}
+    OfficeExpenseCategoryRejectionRefusal:
+      type: object
+      additionalProperties: false
+      required: [kind, reason, at_utc]
+      properties:
+        kind: {const: AGENCY_REJECTION}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+        at_utc: {type: string, format: date-time}
+    OfficeExpenseCategoryRejectionRefreshHints:
+      type: object
+      additionalProperties: false
+      required: [summary, simple_timesheet, bulk_process, bulk_authorise, refetch]
+      properties:
+        summary: {const: true}
+        simple_timesheet: {const: true}
+        bulk_process: {const: true}
+        bulk_authorise: {const: true}
+        refetch: {const: AFFECTED_ROWS}
+    OfficeExpenseCategoryRejectionResultV2:
+      type: object
+      additionalProperties: false
+      required: [ok, contract_version, operation_id, action_code, workflow_id, expense_component_id, component_generation, state, refusal, previous_owning_timesheet_id, empty_timesheet_consequence, owning_timesheet_deleted, deleted_timesheet_ids, retained_timesheet_ids, affected_timesheet_ids, removed_from_current_timesheet_ids, refresh_timesheet_ids, refresh_hints, idempotent_replay]
+      properties:
+        ok: {const: true}
+        contract_version: {const: OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2}
+        operation_id: {$ref: '#/components/schemas/Uuid'}
+        action_code: {const: REJECT_EXPENSE_CATEGORY}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        expense_component_id: {$ref: '#/components/schemas/Uuid'}
+        component_generation:
+          type: integer
+          minimum: 1
+          description: Authoritative post-rejection generation; it is not the request precondition generation.
+        state: {const: OFFICE_REJECTED}
+        refusal: {$ref: '#/components/schemas/OfficeExpenseCategoryRejectionRefusal'}
+        previous_owning_timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        empty_timesheet_consequence: {$ref: '#/components/schemas/OfficeEmptyTimesheetConsequence'}
+        owning_timesheet_deleted: {type: boolean}
+        deleted_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        retained_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        affected_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        removed_from_current_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        refresh_timesheet_ids: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/Uuid'}}
+        refresh_hints: {$ref: '#/components/schemas/OfficeExpenseCategoryRejectionRefreshHints'}
+        idempotent_replay: {type: boolean}
     Surface:
       type: string
       enum: [SIMPLE_TIMESHEET, TIMESHEET_SUMMARY, BULK_PROCESS, BULK_AUTHORISE, INVOICE_GENERATOR, INVOICE_ISSUER]
@@ -388,6 +573,11 @@ components:
           description: >-
             Canonical current identity. contract_week_id is null for a DAILY
             timesheet-owned row and present for a WEEKLY contract-week-owned row.
+          properties:
+            route_family:
+              description: Present as ELECTRONIC or QR only when the expense projection has one unambiguous eligible route family.
+              type: [string, 'null']
+              enum: [ELECTRONIC, QR, null]
         candidate_status:
           type: object
           additionalProperties: true
@@ -400,6 +590,7 @@ components:
         retained_manager_approval: {$ref: '#/components/schemas/RetainedManagerApproval'}
         paper_pack: {$ref: '#/components/schemas/PaperPack'}
         rejections: {type: array, items: {$ref: '#/components/schemas/RejectionHistory'}}
+        expense_claims: {type: array, items: {$ref: '#/components/schemas/OfficeExpenseClaim'}}
         available_actions: {type: array, items: {$ref: '#/components/schemas/TypedAction'}}
         diagnostics: {type: array, items: {$ref: '#/components/schemas/Diagnostic'}}
         refresh_hints: {$ref: '#/components/schemas/RefreshHints'}
@@ -742,6 +933,7 @@ components:
         - CANDIDATE_CONTEXT_STALE
         - CANDIDATE_TIMESHEET_MOVED
         - CANDIDATE_ACTION_NOT_ELIGIBLE
+        - CANDIDATE_EXPENSE_CATEGORY_CONTEXT_CHANGED
         - CANDIDATE_REASON_REQUIRED
         - CANDIDATE_REASON_INVALID
         - CANDIDATE_REQUEST_GENERATION_STALE

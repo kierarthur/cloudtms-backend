@@ -186,7 +186,7 @@ begin
     v_route_family:=private._candidate_route_family_v1(v_week.timesheet_id,v_week.id)->>'route_family';
     v_fixed:=jsonb_build_object('workflow',jsonb_strip_nulls(jsonb_build_object(
       'workflow_kind',case when v_code='ADD_EXPENSES' then 'CONTRACT_EXPENSE' else 'CONTRACT_HOURS' end,
-      'scope','WEEKLY','route',case when v_route_family='QR' then 'PAPER' else 'ELECTRONIC' end,
+      'scope','WEEKLY','route','ELECTRONIC',
       'contract_id',v_week.contract_id,'contract_week_id',v_week.id,
       'week_ending_date',v_week.week_ending_date,
       'timesheet_id',case when v_code='ADD_EXPENSES' then p_action->'timesheet_id' else null end

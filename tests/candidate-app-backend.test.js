@@ -36,6 +36,15 @@ const {
   requireCandidatePaperOutbox,
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
+  renderHeldPaperPackThenRebind,
+  prepareAndRebindPaperExpenseUpdate,
+  candidateExpenseCategoryActionResult,
+  candidateWholeClaimActionResult,
+  officeExpenseCategoryRejectionResult,
+  candidateExpenseCategoryResubmissionResult,
+  candidatePaperDocumentUpdateCompleteResult,
+  candidatePaperDocumentUpdateStoredCompleteResult,
+  candidateExpenseCategoryPendingUpdateResult,
   assembleCandidatePaperPack,
   candidatePaperTimesheetPageBytes,
   candidatePaperPackComponentForPage,
@@ -76,6 +85,498 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('expense PAPER replacement finishes the held render before its atomic rebind', async () => {
+  const sequence = [];
+  let releaseRender;
+  const renderBlocked = new Promise(resolve => { releaseRender = resolve; });
+  const operation = renderHeldPaperPackThenRebind({
+    async nudgeQrPack({ pack, timesheetId }) {
+      sequence.push(['render-start', pack.operation_id, timesheetId]);
+      await renderBlocked;
+      sequence.push(['render-ready', pack.operation_id, timesheetId]);
+    }
+  }, { operation_id: 'paper-pack-operation' },
+  '00000000-0000-4000-8000-000000000090', async () => {
+    sequence.push(['rebind']);
+    return { ok: true, state: 'AWAITING_PAPER_RETURN' };
+  });
+
+  await Promise.resolve();
+  assert.deepEqual(sequence, [[
+    'render-start', 'paper-pack-operation',
+    '00000000-0000-4000-8000-000000000090'
+  ]]);
+  releaseRender();
+  assert.deepEqual(await operation, { ok: true, state: 'AWAITING_PAPER_RETURN' });
+  assert.deepEqual(sequence, [
+    ['render-start', 'paper-pack-operation', '00000000-0000-4000-8000-000000000090'],
+    ['render-ready', 'paper-pack-operation', '00000000-0000-4000-8000-000000000090'],
+    ['rebind']
+  ]);
+});
+
+test('PAPER completion emits one closed receipt and strips resubmission provenance', () => {
+  const operationId = '00000000-0000-4000-8000-000000000071';
+  const workflowId = '00000000-0000-4000-8000-000000000072';
+  const updateId = '00000000-0000-4000-8000-000000000073';
+  const sourceWorkflowId = '00000000-0000-4000-8000-000000000074';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000075';
+  const timesheetId = '00000000-0000-4000-8000-000000000076';
+  const documentOperationId = '00000000-0000-4000-8000-000000000077';
+  const page = {
+    ordinal: 1,
+    page_key: 'EXPENSE_EVIDENCE:TRAVEL:1',
+    component_kind: 'EXPENSE_EVIDENCE',
+    expense_category: 'TRAVEL',
+    source_component_id: sourceComponentId,
+    qr_required: true,
+    display_name: 'Travel receipt',
+    manifest_version: 2,
+    qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+    category_occurrence: 1,
+    page_kind_code: 'E',
+    category_code: 'T',
+    page_key_sha256_16: 'a'.repeat(16)
+  };
+  const receipt = candidatePaperDocumentUpdateCompleteResult({
+    ok: true,
+    operation_id: operationId,
+    workflow_id: workflowId,
+    generation: 9,
+    state: 'AWAITING_PAPER_RETURN',
+    update_state: 'NONE',
+    update_id: updateId,
+    category_changes: [{
+      update_kind: 'ADD_CATEGORY', expense_category: 'TRAVEL'
+    }],
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    idempotent_replay: false,
+    // These belong only to the original RESUBMIT receipt. They must never
+    // leak through the closed CREATE_UPDATED_DOCUMENTS completion contract.
+    source_workflow_id: sourceWorkflowId,
+    source_expense_component_id: sourceComponentId,
+    source_component_generation: 4,
+    expense_category: 'TRAVEL',
+    editor_mode: 'PAPER_REPLACEMENT',
+    blank_claim: true
+  }, {
+    paper_return_manifest_sha256: 'b'.repeat(64),
+    paper_return_page_count: 1
+  }, {
+    queued: true,
+    send_state: 'QUEUED',
+    document_state: 'READY',
+    document_operation_id: documentOperationId,
+    current_timesheet_id: timesheetId,
+    timesheet_version: 2,
+    recipient_available: true
+  }, { bound: true }, [page]);
+
+  assert.deepEqual(receipt, {
+    contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+    ok: true,
+    operation_id: operationId,
+    action_code: 'CREATE_UPDATED_DOCUMENTS',
+    stage: 'COMPLETE',
+    workflow_id: workflowId,
+    generation: 9,
+    state: 'AWAITING_PAPER_RETURN',
+    update_state: 'NONE',
+    update_id: updateId,
+    category_changes: [{ update_kind: 'ADD_CATEGORY', expense_category: 'TRAVEL' }],
+    route: 'PAPER',
+    route_selection_required: false,
+    upload_mode: 'EXISTING_WORKFLOW_DELTA',
+    submission_requires_update_id: true,
+    approval_request_id: null,
+    approval_request_generation: null,
+    paper_pack_replacement: true,
+    old_pack_recoverable: false,
+    old_pack_retired: true,
+    manager_link_preserved: false,
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    expense_component_id: null,
+    paper_return_manifest_sha256: 'b'.repeat(64),
+    paper_return_page_count: 1,
+    paper_return_manifest_version: 2,
+    paper_return_qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+    paper_pack_queued: true,
+    paper_pack: {
+      queued: true,
+      send_state: 'QUEUED',
+      document_state: 'READY',
+      document_operation_id: documentOperationId,
+      current_timesheet_id: timesheetId,
+      timesheet_version: 2,
+      recipient_available: true
+    },
+    paper_pack_email_bound: true,
+    paper_return_pages: [page],
+    idempotent_replay: false
+  });
+  assert.equal(candidatePaperDocumentUpdateStoredCompleteResult({
+    ...receipt, idempotent_replay: true
+  }).idempotent_replay, true);
+  assert.throws(() => candidatePaperDocumentUpdateStoredCompleteResult({
+    ...receipt, paper_pack_email_bound: false
+  }), error => error?.status === 409
+    && error?.code === 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+});
+
+test('PAPER first-call receipt commit is validated before it can reach the client', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000171';
+  const updateId = '00000000-0000-4000-8000-000000000172';
+  const operationId = '00000000-0000-4000-8000-000000000173';
+  const timesheetId = '00000000-0000-4000-8000-000000000174';
+  const componentId = '00000000-0000-4000-8000-000000000175';
+  const outboxId = '00000000-0000-4000-8000-000000000176';
+  const documentOperationId = '00000000-0000-4000-8000-000000000177';
+  const manifestSha = 'c'.repeat(64);
+  const page = {
+    ordinal: 1, page_key: 'EXPENSE_EVIDENCE:ACCOMMODATION:1',
+    component_kind: 'EXPENSE_EVIDENCE', expense_category: 'ACCOMMODATION',
+    source_component_id: componentId, source_content_sha256: 'd'.repeat(64),
+    qr_required: true, display_name: 'Accommodation receipt', manifest_version: 2,
+    qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2', category_occurrence: 1,
+    page_kind_code: 'E', category_code: 'A', page_key_sha256_16: 'e'.repeat(16)
+  };
+  const workflow = {
+    id: workflowId, workflow_kind: 'CONTRACT_EXPENSE', generation: 9,
+    target_timesheet_id: timesheetId, anchor_timesheet_id: timesheetId,
+    paper_return_manifest_sha256: manifestSha,
+    paper_return_manifest_json: {
+      manifest_version: 2, qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+      pages: [page]
+    }
+  };
+  const pack = {
+    queued: true, send_state: 'QUEUED', document_state: 'READY',
+    document_operation_id: documentOperationId, current_timesheet_id: timesheetId,
+    timesheet_version: 2, recipient_available: true, mail_outbox_id: outboxId
+  };
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async input => {
+    const target = new URL(input instanceof Request ? input.url : String(input));
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([workflow]);
+    }
+    if (target.pathname.endsWith('/mail_outbox')) {
+      return Response.json([{
+        id: outboxId, type: 'TIMESHEET_QR', context_kind: 'timesheets',
+        context_id: timesheetId, status: 'QUEUED', attachments: [],
+        scheduled_for_utc: 'infinity', next_attempt_at_utc: 'infinity',
+        attempt_lease_token: null, attempt_lease_expires_at_utc: null,
+        payment_scope_json: {
+          candidate_workflow_id: workflowId, candidate_workflow_generation: 9,
+          paper_return_manifest_sha256: manifestSha,
+          candidate_paper_pack_ready: false, mail_held_until_pdf_rendered: true,
+          mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+        }
+      }]);
+    }
+    throw new Error(`unexpected fetch ${target.pathname}`);
+  };
+  try {
+    await assert.rejects(prepareAndRebindPaperExpenseUpdate({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.example.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      async nudgeQrPack() {},
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_weekly_paper_prepare_atomic_v1') {
+          return { state: 'AWAITING_PAPER_RETURN', paper_return_manifest_sha256: manifestSha,
+            paper_pack: pack };
+        }
+        if (name === 'candidate_paper_manifest_v2_promote_v1') {
+          return { ok: true, manifest_version: 2,
+            qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+            paper_return_manifest_sha256: manifestSha, paper_return_page_count: 1 };
+        }
+        if (name === 'candidate_expense_update_rebind_atomic_v1') {
+          return {
+            ok: true, operation_id: operationId, workflow_id: workflowId, generation: 10,
+            state: 'AWAITING_PAPER_RETURN', update_state: 'NONE', update_id: updateId,
+            category_changes: [{ update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+              expense_component_id: componentId, component_generation: 3 }],
+            previous_owning_timesheet_id: timesheetId,
+            empty_timesheet_consequence: 'NONE', owning_timesheet_deleted: false,
+            deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+            removed_from_current_timesheet_ids: [], affected_timesheet_ids: [timesheetId],
+            idempotent_replay: false
+          };
+        }
+        if (name === 'candidate_expense_paper_update_receipt_commit_v1') {
+          return { ok: true, contract_version: 'MALFORMED' };
+        }
+        if (name === 'candidate_expense_update_abort_atomic_v1') return { ok: true };
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    }, { session_id: '00000000-0000-4000-8000-000000000178', environment: 'TEST' }, {
+      workflow_id: workflowId, update_id: updateId, generation: 9
+    }, 'paper-commit-validation-1'), error => error?.status === 409
+      && error?.code === 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID');
+    assert.equal(calls.some(call => call.name ===
+      'candidate_expense_paper_update_receipt_commit_v1'), true);
+    assert.equal(calls.some(call => call.name ===
+      'candidate_expense_update_abort_atomic_v1'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('automatic pending-manager withdrawal emits the exact closed committed receipt', () => {
+  const operationId = '00000000-0000-4000-8000-000000000081';
+  const workflowId = '00000000-0000-4000-8000-000000000082';
+  const updateId = '00000000-0000-4000-8000-000000000083';
+  const approvalRequestId = '00000000-0000-4000-8000-000000000084';
+  const componentId = '00000000-0000-4000-8000-000000000085';
+  const signatureId = '00000000-0000-4000-8000-000000000086';
+  const timesheetId = '00000000-0000-4000-8000-000000000087';
+  const categoryChanges = [{
+    update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+    expense_component_id: componentId, component_generation: 4
+  }];
+  const receipt = candidateExpenseCategoryPendingUpdateResult({
+    preserved_component_count: 3,
+    candidate_signature_component_id: signatureId
+  }, {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId,
+    action_code: 'WITHDRAW_EXPENSE',
+    workflow_id: workflowId,
+    state: 'AWAITING_MANAGER_APPROVAL',
+    generation: 8,
+    update_state: 'NONE',
+    update_id: updateId,
+    category_changes: categoryChanges,
+    approval_request_id: approvalRequestId,
+    approval_request_generation: 2,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    old_pack_retired: false,
+    preserved_component_count: 3,
+    candidate_signature_component_id: signatureId,
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    expense_component_id: componentId,
+    automatic_resubmission_required: true,
+    idempotent_replay: false,
+    // A database-side render contract is deliberately not part of the public receipt.
+    render_contract: { documents: [{ storage_key: 'private/review.pdf' }] }
+  }, 'WITHDRAW_EXPENSE');
+
+  assert.deepEqual(receipt, {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId,
+    action_code: 'WITHDRAW_EXPENSE',
+    workflow_id: workflowId,
+    state: 'AWAITING_MANAGER_APPROVAL',
+    generation: 8,
+    update_state: 'NONE',
+    update_id: updateId,
+    category_changes: categoryChanges,
+    approval_request_id: approvalRequestId,
+    approval_request_generation: 2,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    old_pack_retired: false,
+    preserved_component_count: 3,
+    candidate_signature_component_id: signatureId,
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    expense_component_id: componentId,
+    automatic_resubmission_required: true,
+    idempotent_replay: false
+  });
+});
+
+test('expense category resubmission receipts carry one exact blank ADD plan in every mode', () => {
+  const sourceWorkflowId = '00000000-0000-4000-8000-000000000111';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000112';
+  const workflowId = '00000000-0000-4000-8000-000000000113';
+  const operationId = '00000000-0000-4000-8000-000000000114';
+  const updateId = '00000000-0000-4000-8000-000000000115';
+  const base = {
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RESULT_V1',
+    ok: true,
+    operation_id: operationId,
+    action_code: 'RESUBMIT_EXPENSE_CATEGORY',
+    source_workflow_id: sourceWorkflowId,
+    source_expense_component_id: sourceComponentId,
+    source_component_generation: 4,
+    expense_category: 'TRAVEL',
+    category_changes: [{ update_kind: 'ADD_CATEGORY', expense_category: 'TRAVEL' }],
+    workflow_id: workflowId,
+    generation: 2,
+    state: 'WORKER_DRAFT',
+    blank_claim: true,
+    idempotent_replay: false,
+    internal_refused_amount: 125.5
+  };
+  const modes = [{
+    editor_mode: 'NEW_EXPENSE_CLAIM', update_state: 'NONE', update_id: null,
+    route_selection_required: true, route: null, paper_pack_replacement: false,
+    old_pack_recoverable: false, manager_link_preserved: false
+  }, {
+    editor_mode: 'PENDING_MANAGER_UPDATE', update_state: 'UPDATING', update_id: updateId,
+    route_selection_required: false, route: 'ELECTRONIC', paper_pack_replacement: false,
+    old_pack_recoverable: false, manager_link_preserved: true
+  }, {
+    editor_mode: 'PAPER_REPLACEMENT', update_state: 'UPDATING', update_id: updateId,
+    route_selection_required: false, route: 'PAPER', paper_pack_replacement: true,
+    old_pack_recoverable: true, manager_link_preserved: false
+  }];
+  for (const mode of modes) {
+    const receipt = candidateExpenseCategoryResubmissionResult({ ...base, ...mode });
+    assert.deepEqual(receipt.category_changes, [
+      { update_kind: 'ADD_CATEGORY', expense_category: 'TRAVEL' }
+    ]);
+    assert.equal(receipt.editor_mode, mode.editor_mode);
+    assert.equal('internal_refused_amount' in receipt, false);
+  }
+  assert.throws(() => candidateExpenseCategoryResubmissionResult({
+    ...base,
+    ...modes[1],
+    category_changes: [{
+      update_kind: 'REPLACE_CATEGORY', expense_category: 'TRAVEL',
+      expense_component_id: sourceComponentId, component_generation: 4
+    }]
+  }), error => error?.status === 409
+    && error?.code === 'CANDIDATE_EXPENSE_CATEGORY_RESUBMISSION_RECEIPT_INVALID');
+});
+
+test('category and whole-claim receipts distinguish permanent, current-only and no removal', () => {
+  const operationId = '00000000-0000-4000-8000-000000000121';
+  const workflowId = '00000000-0000-4000-8000-000000000122';
+  const componentId = '00000000-0000-4000-8000-000000000123';
+  const timesheetId = '00000000-0000-4000-8000-000000000124';
+  const category = candidateExpenseCategoryActionResult({
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId,
+    workflow_id: workflowId,
+    generation: 6,
+    expense_component_id: componentId,
+    component_generation: 3,
+    state: 'CANCELLED',
+    update_state: 'NONE',
+    action_code: 'CANCEL_EXPENSE',
+    financial_result: {
+      ok: true, timesheet_id: timesheetId, financial_changed: true,
+      remaining_expense_value: 0, remaining_total_hours: 0,
+      remaining_additional_value: 0, zero_expense_carrier: true
+    },
+    zero_expense_carrier: true,
+    empty_timesheet_consequence: 'REMOVE_FROM_CURRENT_KEEP_HISTORY',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    affected_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [timesheetId],
+    r2_cleanup_keys: [],
+    idempotent_replay: false,
+    internal_delete_preview: { decision: 'ARCHIVE_REQUIRED' }
+  });
+  assert.equal(category.empty_timesheet_consequence, 'REMOVE_FROM_CURRENT_KEEP_HISTORY');
+  assert.deepEqual(category.removed_from_current_timesheet_ids, [timesheetId]);
+  assert.deepEqual(category.deleted_timesheet_ids, []);
+  assert.equal('internal_delete_preview' in category, false);
+
+  const whole = candidateWholeClaimActionResult({
+    ok: true,
+    contract_version: 'CANDIDATE_WHOLE_CLAIM_ACTION_RESULT_V1',
+    operation_id: operationId,
+    action_code: 'CANCEL_ENTIRE_CLAIM',
+    state: 'CANCELLED',
+    workflow_results: [{
+      ok: true, workflow_id: workflowId, state: 'CANCELLED', generation: 7,
+      cancellation_reason: 'Start again', cancellation_reason_code: 'CANCEL_ENTIRE_CLAIM',
+      submission_withdrawal_reset: null, manager_withdrawal_count: 1,
+      manager_mail_retirement: { retired: true }
+    }],
+    zero_expense_carrier_timesheet_ids: [timesheetId],
+    empty_timesheet_results: [{
+      timesheet_id: timesheetId,
+      empty_timesheet_consequence: 'REMOVE_FROM_CURRENT_KEEP_HISTORY',
+      owning_timesheet_deleted: false,
+      deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+      removed_from_current_timesheet_ids: [timesheetId]
+    }],
+    deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [timesheetId],
+    r2_cleanup_keys: [], idempotent_replay: false
+  });
+  assert.deepEqual(whole.empty_timesheet_results, [{
+    timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'REMOVE_FROM_CURRENT_KEEP_HISTORY',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [timesheetId]
+  }]);
+  const currentOnly = candidateWholeClaimActionResult({
+    ...whole,
+    zero_expense_carrier_timesheet_ids: [timesheetId],
+    empty_timesheet_results: [{
+      timesheet_id: timesheetId,
+      empty_timesheet_consequence: 'NONE',
+      owning_timesheet_deleted: false,
+      deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+      removed_from_current_timesheet_ids: []
+    }],
+    deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: []
+  });
+  assert.equal(currentOnly.empty_timesheet_results[0].empty_timesheet_consequence, 'NONE');
+  assert.throws(() => candidateExpenseCategoryActionResult({
+    ...category,
+    retained_timesheet_ids: [],
+    removed_from_current_timesheet_ids: [timesheetId]
+  }), error => error?.status === 409
+    && error?.code === 'CANDIDATE_EXPENSE_CATEGORY_RECEIPT_INVALID');
+  assert.throws(() => candidateExpenseCategoryActionResult({
+    ...category,
+    deleted_timesheet_ids: [timesheetId],
+    retained_timesheet_ids: [timesheetId]
+  }), error => error?.status === 409
+    && error?.code === 'CANDIDATE_EXPENSE_CATEGORY_RECEIPT_INVALID');
+  assert.throws(() => candidateWholeClaimActionResult({
+    ...whole,
+    empty_timesheet_results: [
+      ...whole.empty_timesheet_results,
+      structuredClone(whole.empty_timesheet_results[0])
+    ]
+  }), error => error?.status === 409
+    && error?.code === 'CANDIDATE_WHOLE_CLAIM_RECEIPT_INVALID');
+});
 
 test('current paper-pack email delivery restores the photograph stage only for the exact workflow generation and manifest', async () => {
   const workflow = {
@@ -535,6 +1036,131 @@ test('existing linked expense rejection rows also receive the accurate cancellat
     notification.payload_json.message,
     'Your pending expense claim was cancelled because its linked Timesheet was rejected before deletion.'
   );
+});
+
+test('expense withdrawal and cancellation notifications use the exact category and safe next step', () => {
+  const workflowId = '00000000-0000-4000-8000-000000000076';
+  const timesheetId = '00000000-0000-4000-8000-000000000077';
+  for (const [eventType, category, expected] of [
+    ['EXPENSE_WITHDRAWN', 'ACCOMMODATION',
+      'Accommodation was withdrawn. You can add it again as a new expense if needed.'],
+    ['EXPENSE_CANCELLED', 'TRAVEL',
+      'Travel was cancelled. You can add it again as a new expense if needed.']
+  ]) {
+    const notification = safeCandidateNotification({
+      id: '00000000-0000-4000-8000-000000000078',
+      workflow_id: workflowId,
+      timesheet_id: timesheetId,
+      event_type: eventType,
+      template_key: 'candidate-expense-category-state-v1',
+      template_params: { workflow_id: workflowId, expense_category: category },
+      deep_link_json: { type: 'workflow', workflow_id: workflowId },
+      state: 'UNREAD', created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+    });
+    assert.equal(notification.payload_json.message, expected);
+    assert.equal(notification.deep_link_json.destination, 'WORKFLOW_DETAIL');
+    assert.equal(notification.deep_link_json.workflow_id, workflowId);
+    assert.equal(notification.payload_json.timesheet_id, timesheetId);
+  }
+});
+
+test('single-category Office rejection gives a bounded reason and blank-resubmission instruction', () => {
+  const workflowId = '00000000-0000-4000-8000-000000000079';
+  const reason = `  Missing   receipt details ${'x'.repeat(300)}  `;
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000080',
+    workflow_id: workflowId,
+    timesheet_id: null,
+    event_type: 'OFFICE_REJECTED',
+    template_key: 'candidate-expense-category-rejected-v1',
+    template_params: {
+      workflow_id: workflowId,
+      expense_category: 'MILEAGE',
+      reason,
+      resubmission_scope: 'EXPENSE_CATEGORY'
+    },
+    deep_link_json: { type: 'workflow', workflow_id: workflowId },
+    state: 'UNREAD', created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+  });
+  assert.match(notification.payload_json.message,
+    /^Mileage was rejected by your agency\. Reason: Missing receipt details /);
+  assert.match(notification.payload_json.message,
+    /Start a new expense for this category to resubmit it\.$/);
+  assert.equal(notification.payload_json.message.includes('in MyTMS'), false);
+  assert.ok(notification.payload_json.message.length < 380);
+  assert.equal(notification.deep_link_json.destination, 'WORKFLOW_DETAIL');
+});
+
+test('unknown notification copy remains neutral and never names an app', () => {
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000081',
+    event_type: 'FUTURE_EVENT',
+    template_params: { provider_error: 'must not be returned' },
+    deep_link_json: {},
+    state: 'UNREAD', created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+  });
+  assert.equal(notification.payload_json.message, 'There is a new update.');
+  assert.equal(JSON.stringify(notification).includes('provider_error'), false);
+  assert.equal(notification.deep_link_json.destination, 'HOME');
+});
+
+test('whole-claim notifications identify the complete action without exposing workflow facts', () => {
+  for (const [eventType, expected] of [
+    ['CLAIM_WITHDRAWN',
+      'Your whole claim was withdrawn. Reason: Candidate request. Start again if you need to submit it.'],
+    ['CLAIM_CANCELLED',
+      'Your whole claim was cancelled. Reason: Candidate request. Start again if you need to submit it.']
+  ]) {
+    const notification = safeCandidateNotification({
+      id: '00000000-0000-4000-8000-000000000082',
+      workflow_id: '00000000-0000-4000-8000-000000000083',
+      event_type: eventType,
+      template_key: 'candidate-whole-claim-state-v1',
+      template_params: { reason: 'Candidate request', affected_workflow_count: 4 },
+      deep_link_json: { type: 'workflow', workflow_id: '00000000-0000-4000-8000-000000000083' },
+      state: 'UNREAD', created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+    });
+    assert.equal(notification.payload_json.message, expected);
+    assert.equal(notification.payload_json.message.includes('4'), false);
+    assert.equal(notification.payload_json.message.includes('00000000'), false);
+    assert.equal(notification.deep_link_json.destination, 'WORKFLOW_DETAIL');
+  }
+});
+
+test('manager refusal and whole Office rejection include only a bounded policy reason and blank restart', () => {
+  for (const [eventType, expectedStart, expectedEnd] of [
+    ['MANAGER_REFUSED', 'Your claim was refused by the manager. Reason: Hours do not match.',
+      'Start a new claim to submit it again.'],
+    ['OFFICE_REJECTED', 'Your claim was rejected by your agency. Reason: Hours do not match.',
+      'Start a new claim to submit it again.']
+  ]) {
+    const notification = safeCandidateNotification({
+      id: '00000000-0000-4000-8000-000000000084',
+      workflow_id: '00000000-0000-4000-8000-000000000085',
+      event_type: eventType,
+      template_key: 'candidate-refusal-v1',
+      template_params: {
+        reason: `Hours\u0000 do   not match ${'z'.repeat(300)}`,
+        provider_error: 'database password invalid'
+      },
+      deep_link_json: { type: 'workflow', workflow_id: '00000000-0000-4000-8000-000000000085' },
+      state: 'UNREAD', created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+    });
+    assert.ok(notification.payload_json.message.startsWith(expectedStart.replace(/\.$/, '')));
+    assert.ok(notification.payload_json.message.endsWith(expectedEnd));
+    assert.ok(notification.payload_json.message.length < 360);
+    assert.equal(JSON.stringify(notification).includes('database password'), false);
+  }
+  const malformed = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000086',
+    event_type: 'MANAGER_REFUSED',
+    template_params: { reason: { technical: 'must not render' } },
+    deep_link_json: {}, state: 'UNREAD',
+    created_at_utc: '2026-09-06T10:00:00.000Z', read_at_utc: null
+  });
+  assert.equal(malformed.payload_json.message,
+    'Your claim was refused by the manager. Start a new claim to submit it again.');
+  assert.equal(JSON.stringify(malformed).includes('technical'), false);
 });
 
 test('Candidate notification feed is scoped to the selected candidate and reads template_params', async () => {
@@ -1006,12 +1632,21 @@ test('timesheet detail aliases pass one exact server identity to the shared deta
       }), env, {}, deps);
       assert.equal(response.status, 200);
     }
-    assert.equal(rpcCalls.length, 2);
+    assert.deepEqual(rpcCalls.map((call) => call.name), [
+      'candidate_app_timesheet_detail_v2',
+      'candidate_expense_component_projection_v1',
+      'candidate_app_timesheet_detail_v2',
+      'candidate_expense_component_projection_v1'
+    ]);
     assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_detail_v2');
     assert.equal(rpcCalls[0].args.p_contract_week_id, contractWeekId);
     assert.equal(rpcCalls[0].args.p_workflow_id, null);
-    assert.equal(rpcCalls[1].args.p_contract_week_id, null);
-    assert.equal(rpcCalls[1].args.p_workflow_id, workflowId);
+    assert.deepEqual(rpcCalls[1].args.p_workflow_ids, []);
+    assert.deepEqual(rpcCalls[1].args.p_timesheet_ids, []);
+    assert.equal(rpcCalls[2].args.p_contract_week_id, null);
+    assert.equal(rpcCalls[2].args.p_workflow_id, workflowId);
+    assert.deepEqual(rpcCalls[3].args.p_workflow_ids, []);
+    assert.deepEqual(rpcCalls[3].args.p_timesheet_ids, []);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1198,6 +1833,465 @@ test('rejected resubmission is a thin adapter over the atomic source-bound datab
     assert.equal(calls.length, 2);
     assert.equal(calls[1].args.p_action, 'RESUBMIT_REJECTED');
     assert.equal(calls[1].args.p_workflow_id, workflowId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('unfinished PAPER category withdrawal returns closed 200 replacement guidance', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000c1';
+  const accountId = '00000000-0000-4000-8000-0000000000c2';
+  const candidateId = '00000000-0000-4000-8000-0000000000c3';
+  const workflowId = '00000000-0000-4000-8000-0000000000c4';
+  const componentId = '00000000-0000-4000-8000-0000000000c5';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  const calls = [];
+  const result = {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: null,
+    workflow_id: workflowId,
+    generation: 7,
+    expense_component_id: componentId,
+    component_generation: 3,
+    state: 'SUBMITTED',
+    update_state: 'NONE',
+    action_code: 'WITHDRAW_EXPENSE',
+    paper_replacement_required: true,
+    empty_timesheet_consequence: 'NONE',
+    removed_from_current_timesheet_ids: [],
+    paper_replacement_action: 'CREATE_UPDATED_DOCUMENTS',
+    paper_replacement_category_changes: [{
+      update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+      expense_component_id: componentId, component_generation: 3
+    }],
+    idempotent_replay: false
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/withdraw-expense`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 7,
+          expense_component_id: componentId,
+          component_generation: 3,
+          idempotency_key: 'paper-withdraw-guidance-1'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return result;
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), result);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_expense_component_action_atomic_v1');
+    assert.equal(calls[0].args.p_action, 'WITHDRAW_EXPENSE');
+    assert.equal(calls[0].args.p_expense_component_id, componentId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('committed pending-manager withdrawal replay returns the closed receipt without rerendering', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000b1';
+  const accountId = '00000000-0000-4000-8000-0000000000b2';
+  const candidateId = '00000000-0000-4000-8000-0000000000b3';
+  const workflowId = '00000000-0000-4000-8000-0000000000b4';
+  const operationId = '00000000-0000-4000-8000-0000000000b5';
+  const updateId = '00000000-0000-4000-8000-0000000000b6';
+  const componentId = '00000000-0000-4000-8000-0000000000b7';
+  const approvalRequestId = '00000000-0000-4000-8000-0000000000b8';
+  const timesheetId = '00000000-0000-4000-8000-0000000000b9';
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  let calls = 0;
+  const receipt = {
+    ok: true,
+    contract_version: 'CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+    operation_id: operationId,
+    action_code: 'WITHDRAW_EXPENSE',
+    workflow_id: workflowId,
+    state: 'AWAITING_MANAGER_APPROVAL',
+    generation: 9,
+    update_state: 'NONE',
+    update_id: updateId,
+    category_changes: [{
+      update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+      expense_component_id: componentId, component_generation: 4
+    }],
+    approval_request_id: approvalRequestId,
+    approval_request_generation: 2,
+    manager_link_preserved: true,
+    paper_pack_replacement: false,
+    old_pack_recoverable: false,
+    old_pack_retired: false,
+    preserved_component_count: 2,
+    candidate_signature_component_id: null,
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    expense_component_id: componentId,
+    automatic_resubmission_required: true,
+    idempotent_replay: true
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/withdraw-expense`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        }, body: JSON.stringify({
+          generation: 7, expense_component_id: componentId,
+          component_generation: 3, idempotency_key: 'pending-withdraw-replay-1'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name) {
+        calls += 1;
+        assert.equal(name, 'candidate_expense_component_action_atomic_v1');
+        return { ...receipt, render_contract: { must_not_render: true } };
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), receipt);
+    assert.equal(calls, 1, 'a committed operation replay must not submit or render again');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('public BEGIN expense update maps the PAPER document-authority fence to HTTP 409', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000f1';
+  const accountId = '00000000-0000-4000-8000-0000000000f2';
+  const candidateId = '00000000-0000-4000-8000-0000000000f3';
+  const workflowId = '00000000-0000-4000-8000-0000000000f4';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  const calls = [];
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/begin-expense-update`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 7,
+          category_changes: [{ update_kind: 'ADD_CATEGORY', expense_category: 'OTHER' }],
+          idempotency_key: 'paper-direct-begin-denied-1'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        throw new Error('CANDIDATE_PAPER_DOCUMENT_UPDATE_REQUIRED');
+      }
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error_code,
+      'CANDIDATE_PAPER_DOCUMENT_UPDATE_REQUIRED');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_expense_update_begin_atomic_v1');
+    assert.equal(calls[0].args.p_workflow_id, workflowId);
+    assert.equal(calls[0].args.p_expected_generation, 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('unfinished PAPER withdrawal guidance can start the exact remove-category pack replacement', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000d1';
+  const accountId = '00000000-0000-4000-8000-0000000000d2';
+  const candidateId = '00000000-0000-4000-8000-0000000000d3';
+  const workflowId = '00000000-0000-4000-8000-0000000000d4';
+  const componentId = '00000000-0000-4000-8000-0000000000d5';
+  const updateId = '00000000-0000-4000-8000-0000000000d6';
+  const operationId = '00000000-0000-4000-8000-0000000000d7';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const value = String(input);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  const calls = [];
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/create-updated-documents`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 7,
+          category_changes: [{
+            update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+            expense_component_id: componentId, component_generation: 3
+          }],
+          idempotency_key: 'paper-withdraw-replacement-1'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return {
+          ok: true, contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+          action_code: 'CREATE_UPDATED_DOCUMENTS', stage: 'EDITING',
+          operation_id: operationId, workflow_id: workflowId, generation: 8,
+          state: 'WORKER_DRAFT', update_state: 'UPDATING', update_id: updateId,
+          category_changes: args.p_category_changes, route: 'PAPER',
+          route_selection_required: false, upload_mode: 'EXISTING_WORKFLOW_DELTA',
+          submission_requires_update_id: true, paper_pack_replacement: true,
+          old_pack_recoverable: true, manager_link_preserved: false,
+          idempotent_replay: false
+        };
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).stage, 'EDITING');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_expense_paper_update_begin_atomic_v1');
+    assert.deepEqual(calls[0].args.p_category_changes, [{
+      update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+      expense_component_id: componentId, component_generation: 3
+    }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('combined PAPER removal submit restores frozen hours, untouched expenses and signature server-side', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000e1';
+  const accountId = '00000000-0000-4000-8000-0000000000e2';
+  const candidateId = '00000000-0000-4000-8000-0000000000e3';
+  const workflowId = '00000000-0000-4000-8000-0000000000e4';
+  const updateId = '00000000-0000-4000-8000-0000000000e5';
+  const timesheetId = '00000000-0000-4000-8000-0000000000e6';
+  const contractId = '00000000-0000-4000-8000-0000000000e7';
+  const clientId = '00000000-0000-4000-8000-0000000000e8';
+  const signatureId = '00000000-0000-4000-8000-0000000000e9';
+  const operationId = '00000000-0000-4000-8000-0000000000eb';
+  const documentOperationId = '00000000-0000-4000-8000-0000000000ec';
+  const signedAt = '2026-09-01T08:15:00.000Z';
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const retainedSchedule = [{
+    date: '2026-08-31', start: '09:00', end: '17:00', break_minutes: 30
+  }];
+  const workflow = {
+    id: workflowId, account_id: accountId, candidate_id: candidateId,
+    workflow_kind: 'CONTRACT_COMBINED', scope: 'WEEKLY', route: 'PAPER',
+    state: 'WORKER_DRAFT', generation: 8, target_timesheet_id: timesheetId,
+    anchor_timesheet_id: timesheetId, contract_id: contractId,
+    candidate_signature_component_id: signatureId,
+    candidate_signed_at_utc: signedAt,
+    immutable_submission_json: {
+      hours_submission: {
+        timesheet_patch_json: { actual_schedule_json: retainedSchedule }
+      },
+      expense_submission: {
+        canonical_tsfin_snapshot: { accommodation_pay_ex_vat: 25 }
+      },
+      break_entry_context: {
+        context_version: 'CANDIDATE_BREAK_ENTRY_CONTEXT_V1',
+        context_token: 'server-frozen-context', mode: 'DURATION_MINUTES'
+      }
+    }
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(input instanceof Request ? input.url : String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/timesheets')) return Response.json([{
+      timesheet_id: timesheetId, sheet_scope: 'WEEKLY', hospital_norm: 'Hospital',
+      ward_norm: 'Ward', job_title_norm: 'Nurse', band: '6'
+    }]);
+    if (target.pathname.endsWith('/contracts')) return Response.json([{
+      id: contractId, client_id: clientId, role: 'Nurse', display_site: 'Hospital',
+      ward_hint: 'Ward', band: '6'
+    }]);
+    if (target.pathname.endsWith('/candidates')) return Response.json([{
+      id: candidateId, first_name: 'Test', last_name: 'Candidate'
+    }]);
+    if (target.pathname.endsWith('/timesheets_financials')) return Response.json([{
+      client_id: clientId
+    }]);
+    if (target.pathname.endsWith('/clients')) return Response.json([{
+      id: clientId, name: 'Verification Client'
+    }]);
+    if (target.pathname.endsWith('/settings_defaults')) return Response.json([{
+      agency_name: 'Verification Agency', agency_logo: null
+    }]);
+    throw new Error(`unexpected fetch ${target.pathname}`);
+  };
+  const calls = [];
+  let builtFacts = null;
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/worker-submit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 8, update_id: updateId,
+          idempotency_key: 'paper-remove-worker-submit-1', immutable_submission: {}
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async buildWeeklySubmission({ factualSubmission }) {
+        builtFacts = structuredClone(factualSubmission);
+        return structuredClone(factualSubmission);
+      },
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_break_entry_context_get_v1') {
+          throw new Error('unchanged frozen hours requested a new break context');
+        }
+        if (name === 'candidate_expense_update_submit_atomic_v1') {
+          return {
+            ok: true, contract_version: 'CANDIDATE_PAPER_DOCUMENT_UPDATE_RESULT_V1',
+            action_code: 'CREATE_UPDATED_DOCUMENTS', stage: 'COMPLETE',
+            operation_id: operationId, workflow_id: workflowId, generation: 9,
+            state: 'AWAITING_PAPER_RETURN', update_state: 'NONE', update_id: updateId,
+            category_changes: [{
+              update_kind: 'REMOVE_CATEGORY', expense_category: 'TRAVEL',
+              expense_component_id: '00000000-0000-4000-8000-0000000000ea',
+              component_generation: 3
+            }], route: 'PAPER', route_selection_required: false,
+            upload_mode: 'EXISTING_WORKFLOW_DELTA', submission_requires_update_id: true,
+            approval_request_id: null, approval_request_generation: null,
+            paper_pack_replacement: true, old_pack_recoverable: false,
+            old_pack_retired: true, manager_link_preserved: false,
+            previous_owning_timesheet_id: timesheetId,
+            empty_timesheet_consequence: 'NONE', owning_timesheet_deleted: false,
+            deleted_timesheet_ids: [], retained_timesheet_ids: [timesheetId],
+            removed_from_current_timesheet_ids: [], affected_timesheet_ids: [timesheetId],
+            expense_component_id: null,
+            paper_return_manifest_sha256: 'a'.repeat(64),
+            paper_return_page_count: 1, paper_return_manifest_version: 2,
+            paper_return_qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+            paper_pack_queued: true,
+            paper_pack: {
+              queued: true, send_state: 'QUEUED', document_state: 'READY',
+              document_operation_id: documentOperationId,
+              current_timesheet_id: timesheetId, timesheet_version: 2,
+              recipient_available: true
+            },
+            paper_pack_email_bound: true,
+            paper_return_pages: [{
+              ordinal: 1, page_key: 'EXPENSE_EVIDENCE:ACCOMMODATION:1',
+              component_kind: 'EXPENSE_EVIDENCE', expense_category: 'ACCOMMODATION',
+              source_component_id: signatureId, qr_required: true,
+              display_name: 'Accommodation receipt', manifest_version: 2,
+              qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+              category_occurrence: 1, page_kind_code: 'E', category_code: 'A',
+              page_key_sha256_16: 'b'.repeat(16)
+            }],
+            idempotent_replay: false
+          };
+        }
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    });
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).stage, 'COMPLETE');
+    assert.deepEqual(builtFacts.actual_schedule_json, retainedSchedule);
+    assert.equal(builtFacts.expense_claim.accommodation_amount, 25);
+    assert.equal(Object.hasOwn(builtFacts.expense_claim, 'travel_amount'), false);
+    const submit = calls.find(call => call.name === 'candidate_expense_update_submit_atomic_v1');
+    assert.ok(submit);
+    assert.deepEqual(submit.args.p_payload.submission_request_identity.factual_submission,
+      builtFacts);
+    assert.equal(submit.args.p_payload.candidate_signature_component_id, signatureId);
+    assert.equal(submit.args.p_payload.candidate_signed_at_utc, signedAt);
+    assert.equal(submit.args.p_payload.submission_request_identity
+      .candidate_signature_component_id, signatureId);
+    assert.equal(submit.args.p_payload.submission_request_identity
+      .candidate_signed_at_utc, signedAt);
+    assert.equal(calls.some(call => call.name === 'candidate_break_entry_context_get_v1'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1543,12 +2637,14 @@ test('normal office Candidate endpoints enforce exact methods and use one servic
     { method: 'GET' }
   ), env, {}, deps);
   assert.equal(detail.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
   assert.equal(calls[0].args.p_action, 'PROJECT_ONE');
   assert.equal(calls[0].args.p_actor_user_id, actorId);
   assert.equal(calls[0].args.p_payload.timesheet_id, timesheetId);
   assert.equal(calls[0].args.p_payload.row_key, 'row-1');
+  assert.equal(calls[1].name, 'candidate_office_expense_category_projection_v1');
+  assert.equal(calls[1].args.p_timesheet_id, timesheetId);
 
   const wrongMethod = await handleCandidateAppRequest(new Request(
     `https://office.test/api/candidate-app/timesheets/${timesheetId}/office-detail`,
@@ -1556,7 +2652,7 @@ test('normal office Candidate endpoints enforce exact methods and use one servic
   ), env, {}, deps);
   assert.equal(wrongMethod.status, 405);
   assert.equal((await wrongMethod.json()).error_code, 'METHOD_NOT_ALLOWED');
-  assert.equal(calls.length, 1, 'wrong method must not reach an RPC');
+  assert.equal(calls.length, 2, 'wrong method must not reach an RPC');
 });
 
 test('office batch projection is bounded and never fans out into per-row RPC calls', async () => {
@@ -1660,6 +2756,189 @@ test('office rejection requires a bounded reason before the canonical confirmati
   assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
   assert.equal(calls[0].args.p_action, 'REJECT_CONFIRM');
   assert.equal(calls[0].args.p_payload.reason, 'The candidate must correct the submitted hours.');
+});
+
+test('office PAPER category rejection resumes once and returns the durable V2 receipt', async () => {
+  const actorId = '00000000-0000-4000-8000-0000000002a1';
+  const workflowId = '00000000-0000-4000-8000-0000000002a2';
+  const updateId = '00000000-0000-4000-8000-0000000002a3';
+  const operationId = '00000000-0000-4000-8000-0000000002a4';
+  const componentId = '00000000-0000-4000-8000-0000000002a5';
+  const timesheetId = '00000000-0000-4000-8000-0000000002a6';
+  const mailOutboxId = '00000000-0000-4000-8000-0000000002a7';
+  const confirmationSha256 = 'a'.repeat(64);
+  const manifestSha256 = 'b'.repeat(64);
+  const reason = 'The Travel receipt does not support the claimed amount.';
+  const page = {
+    ordinal: 1,
+    page_key: 'EXPENSE_EVIDENCE:ACCOMMODATION:1',
+    component_kind: 'EXPENSE_EVIDENCE',
+    expense_category: 'ACCOMMODATION',
+    source_component_id: '00000000-0000-4000-8000-0000000002a8',
+    qr_required: true,
+    display_name: 'Accommodation receipt',
+    manifest_version: 2,
+    qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+    category_occurrence: 1,
+    page_kind_code: 'E',
+    category_code: 'A',
+    page_key_sha256_16: 'c'.repeat(16)
+  };
+  const workflow = {
+    id: workflowId,
+    generation: 8,
+    state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: timesheetId,
+    anchor_timesheet_id: timesheetId,
+    paper_return_manifest_sha256: `\\x${manifestSha256}`,
+    paper_return_manifest_json: { pages: [page] }
+  };
+  const pack = {
+    queued: true,
+    recipient_available: true,
+    mail_outbox_id: mailOutboxId,
+    operation_id: '00000000-0000-4000-8000-0000000002a9'
+  };
+  const finalReceipt = {
+    ok: true,
+    contract_version: 'OFFICE_EXPENSE_CATEGORY_REJECTION_RESULT_V2',
+    operation_id: operationId,
+    action_code: 'REJECT_EXPENSE_CATEGORY',
+    workflow_id: workflowId,
+    expense_component_id: componentId,
+    component_generation: 5,
+    state: 'OFFICE_REJECTED',
+    refusal: {
+      kind: 'AGENCY_REJECTION', reason, at_utc: '2026-09-07T10:00:00.000Z'
+    },
+    previous_owning_timesheet_id: timesheetId,
+    empty_timesheet_consequence: 'NONE',
+    owning_timesheet_deleted: false,
+    deleted_timesheet_ids: [],
+    retained_timesheet_ids: [timesheetId],
+    removed_from_current_timesheet_ids: [],
+    affected_timesheet_ids: [timesheetId],
+    refresh_timesheet_ids: [timesheetId],
+    refresh_hints: {
+      summary: true, simple_timesheet: true, bulk_process: true,
+      bulk_authorise: true, refetch: 'AFFECTED_ROWS'
+    },
+    idempotent_replay: false
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const sequence = [];
+  let adapterCalls = 0;
+  globalThis.fetch = async input => {
+    const target = new URL(input instanceof Request ? input.url : String(input));
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([workflow]);
+    }
+    if (target.pathname.endsWith('/mail_outbox')) {
+      return Response.json([{
+        id: mailOutboxId,
+        type: 'TIMESHEET_QR',
+        context_kind: 'timesheets',
+        context_id: timesheetId,
+        status: 'QUEUED',
+        payment_scope_json: {
+          candidate_workflow_id: workflowId,
+          candidate_workflow_generation: 8,
+          paper_return_manifest_sha256: manifestSha256,
+          candidate_paper_pack_ready: false,
+          mail_held_until_pdf_rendered: true,
+          mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+        },
+        attachments: [],
+        scheduled_for_utc: 'infinity',
+        next_attempt_at_utc: 'infinity',
+        attempt_lease_token: null,
+        attempt_lease_expires_at_utc: null
+      }]);
+    }
+    throw new Error(`unexpected fetch ${target.pathname}`);
+  };
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async nudgeQrPack({ timesheetId: renderedTimesheetId }) {
+      assert.equal(renderedTimesheetId, timesheetId);
+      sequence.push('render-ready');
+    },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      if (name === 'candidate_office_expense_category_adapter_v1') {
+        adapterCalls += 1;
+        if (adapterCalls === 1) {
+          return {
+            ok: true, state: 'RENDERING', operation_id: operationId,
+            workflow_id: workflowId, generation: 8, update_id: updateId,
+            paper_prepare_required: true
+          };
+        }
+        return { ...finalReceipt, idempotent_replay: true };
+      }
+      if (name === 'candidate_office_expense_paper_prepare_v1') {
+        sequence.push('prepare');
+        return {
+          ok: true, state: 'AWAITING_PAPER_RETURN',
+          paper_return_manifest_sha256: manifestSha256, paper_pack: pack
+        };
+      }
+      if (name === 'candidate_office_expense_paper_promote_v1') {
+        sequence.push('promote');
+        assert.equal(args.p_expected_v1_manifest_sha256_hex, manifestSha256);
+        return {
+          ok: true, manifest_version: 2,
+          qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+          paper_return_manifest_sha256: manifestSha256,
+          paper_return_page_count: 1
+        };
+      }
+      if (name === 'candidate_expense_update_rebind_atomic_v1') {
+        sequence.push('rebind');
+        return { ok: true, state: 'AWAITING_PAPER_RETURN' };
+      }
+      if (name === 'candidate_office_expense_category_reject_commit_v1') {
+        sequence.push('commit');
+        return finalReceipt;
+      }
+      throw new Error(`unexpected RPC ${name}`);
+    }
+  };
+  const request = () => new Request(
+    `https://office.test/api/candidate-app/workflows/${workflowId}/actions/reject-expense-category`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        generation: 7,
+        expense_component_id: componentId,
+        component_generation: 4,
+        confirmation_sha256: confirmationSha256,
+        reason_note: reason,
+        idempotency_key: '00000000-0000-4000-8000-0000000002aa'
+      })
+    }
+  );
+  try {
+    const first = await handleCandidateAppRequest(request(), env, {}, deps);
+    const firstBody = await first.json();
+    assert.equal(first.status, 200, JSON.stringify(firstBody));
+    assert.deepEqual(firstBody, finalReceipt);
+    assert.deepEqual(sequence, ['prepare', 'promote', 'render-ready', 'rebind', 'commit']);
+    const replay = await handleCandidateAppRequest(request(), env, {}, deps);
+    assert.equal(replay.status, 200);
+    assert.deepEqual(await replay.json(), { ...finalReceipt, idempotent_replay: true });
+    assert.deepEqual(sequence, ['prepare', 'promote', 'render-ready', 'rebind', 'commit'],
+      'the durable V2 replay must not render, rebind, or commit twice');
+    assert.equal(adapterCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('office errors use stable aliases without changing underlying lifecycle codes', () => {
@@ -2638,6 +3917,26 @@ test('paper return page projection fails closed for malformed manifest members',
     () => safePaperReturnPages({ pages: [{ page_key: 'HOURS_TIMESHEET' }] }),
     error => error?.code === 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE'
   );
+});
+
+test('paper return page projection rejects the internal Expense Summary in legacy and V2 manifests', () => {
+  for (const manifest of [{
+    pages: [{ page_key: 'EXPENSE_SUMMARY', component_kind: 'EXPENSE_SUMMARY' }]
+  }, {
+    manifest_version: 2,
+    qr_contract_version: 'CANDIDATE_PAPER_PAGE_QR_V2',
+    pages: [{
+      ordinal: 1, page_key: 'EXPENSE_SUMMARY', component_kind: 'EXPENSE_SUMMARY',
+      display_name: 'Expense summary', category_occurrence: 1,
+      page_kind_code: 'S', category_code: '', page_key_sha256_16: 'a'.repeat(16),
+      qr_required: true
+    }]
+  }]) {
+    assert.throws(
+      () => safePaperReturnPages(manifest),
+      error => error?.code === 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE'
+    );
+  }
 });
 
 test('component upload tickets are encrypted and do not disclose the R2 key', async () => {
@@ -4089,7 +5388,13 @@ test('complete paper pack retry reuses the same deterministic object and digest'
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
     paper_return_manifest_sha256: 'b'.repeat(64),
     paper_return_manifest_json: { pages: [{ page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' }] },
-    immutable_submission_json: { official_presentation: { branding } }
+    immutable_submission_json: {
+      official_presentation: { branding },
+      expense_submission: { canonical_tsfin_snapshot: {
+        accommodation_pay_ex_vat: 25,
+        expenses_pay_ex_vat: 25
+      } }
+    }
   };
   const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000027' };
   const version = { r2_key: 'base.pdf', sha256: baseHash };
@@ -4340,7 +5645,13 @@ test('complete paper pack assembles cloned expense evidence referenced by its du
         source_content_sha256: evidenceHash
       }
     ] },
-    immutable_submission_json: { official_presentation: { branding } }
+    immutable_submission_json: {
+      official_presentation: { branding },
+      expense_submission: { canonical_tsfin_snapshot: {
+        accommodation_pay_ex_vat: 25,
+        expenses_pay_ex_vat: 25
+      } }
+    }
   };
   const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000524' };
   const version = { r2_key: 'base.pdf', sha256: baseHash };
@@ -4394,7 +5705,7 @@ test('paper pack readiness uses the durable receipt and advances only the exact 
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
     paper_return_manifest_sha256: 'a'.repeat(64),
     paper_return_manifest_json: { pages: [
-      { page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_SUMMARY' },
+      { page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_EVIDENCE:TRAVEL:1' },
       { page_key: 'MILEAGE_FORM:1' }, { page_key: 'EXPENSE_EVIDENCE:1' }
     ] },
     immutable_submission_json: {
@@ -4643,7 +5954,7 @@ test('Paper status polling never requeues after the exact released pack is compl
     paper_return_manifest_sha256: manifestHash,
     paper_return_manifest_json: { pages: [
       { page_key: 'hours', component_kind: 'HOURS_TIMESHEET' },
-      { page_key: 'summary', component_kind: 'EXPENSE_SUMMARY' },
+      { page_key: 'travel', component_kind: 'EXPENSE_EVIDENCE', expense_category: 'TRAVEL' },
       { page_key: 'other', component_kind: 'EXPENSE_EVIDENCE', expense_category: 'OTHER' }
     ] }
   };
@@ -4705,7 +6016,7 @@ test('paper pack receipt rejects malformed hashes, generation and page-count met
     id: '00000000-0000-4000-8000-000000000032', generation: 3,
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
     paper_return_manifest_sha256: 'a'.repeat(64),
-    paper_return_manifest_json: { pages: [{ page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_SUMMARY' }] },
+    paper_return_manifest_json: { pages: [{ page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_EVIDENCE:TRAVEL:1' }] },
     immutable_submission_json: {
       official_presentation: { branding: { branding_contract_sha256: 'f'.repeat(64) } }
     }
@@ -6388,7 +7699,92 @@ test('manager approval authority is matched to the current request before a deci
   assert.ok(decisiveTransition > authorityCheck);
 });
 
-test('manager document reads validate the pending token and immutable manifest without a workflow mutation', async () => {
+test('every manager review surface short-circuits to the same update hold receipt', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000061';
+  const componentId = '00000000-0000-4000-8000-000000000062';
+  const approvalId = '00000000-0000-4000-8000-000000000063';
+  const managerToken = 'manager-update-hold-token';
+  const managerTokenHash = createHash('sha256').update(managerToken).digest('hex');
+  const hold = {
+    ok: true,
+    state: 'UPDATING',
+    status_code: 'MANAGER_APPROVAL_REQUEST_UPDATING',
+    message: 'This claim is being updated. It will open automatically when ready.',
+    retry_after_seconds: 2,
+    workflow_id: workflowId,
+    approval_request_id: approvalId,
+    approval_request_generation: 4
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'manager-hold-upload-secret-material'
+  };
+  const ticket = await uploadTicket(env, {
+    owner: 'manager',
+    owner_id: managerTokenHash,
+    authority_kind: 'MANAGER_PHONE',
+    workflow_id: workflowId,
+    media_type: 'image/png',
+    byte_size: 8
+  });
+  const requests = [
+    new Request(`https://private.test/candidate-manager/v1/workflows/${workflowId}/start`, {
+      headers: { authorization: `Bearer ${managerToken}` }
+    }),
+    ...['progress', 'approve', 'refuse'].map(action => new Request(
+      `https://private.test/candidate-manager/v1/workflows/${workflowId}/${action}`, {
+        method: 'POST', headers: { authorization: `Bearer ${managerToken}` }
+      }
+    )),
+    new Request(
+      `https://private.test/candidate-manager/v1/workflows/${workflowId}`
+      + `/components/${componentId}/document`, {
+        headers: { authorization: `Bearer ${managerToken}` }
+      }
+    ),
+    new Request(
+      `https://private.test/candidate-manager/v1/workflows/${workflowId}/signature/prepare`, {
+        method: 'POST', headers: { authorization: `Bearer ${managerToken}` }
+      }
+    ),
+    new Request(`https://private.test/candidate-app/v1/uploads/${encodeURIComponent(ticket)}`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${managerToken}`,
+        'x-cloudtms-manager-route-authority': 'MANAGER_PHONE',
+        'content-type': 'image/png'
+      },
+      body: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+    })
+  ];
+  const rpcCalls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    throw new Error(`manager update hold performed an unexpected read: ${String(input)}`);
+  };
+  try {
+    for (const request of requests) {
+      const response = await handleCandidateAppRequest(request, env, {}, {
+        routeAudience: 'PRIVATE',
+        async rpc(name, args) {
+          rpcCalls.push({ name, args });
+          assert.equal(name, 'candidate_expense_update_manager_hold_v1');
+          assert.equal(args.p_workflow_id, workflowId);
+          assert.equal(args.p_approval_token_hash_hex, managerTokenHash);
+          return hold;
+        }
+      });
+      assert.equal(response.status, 202, request.url);
+      assert.equal(response.headers.get('retry-after'), '2');
+      assert.deepEqual(await response.json(), hold);
+    }
+    assert.equal(rpcCalls.length, requests.length);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('manager document reads continue on the same link after its update hold is released', async () => {
   const workflowId = '00000000-0000-4000-8000-000000000051';
   const componentId = '00000000-0000-4000-8000-000000000052';
   const approvalId = '00000000-0000-4000-8000-000000000053';
@@ -6398,7 +7794,7 @@ test('manager document reads validate the pending token and immutable manifest w
   const documentHash = createHash('sha256').update(documentBytes).digest('hex');
   const manifestHash = 'a'.repeat(64);
   const requested = [];
-  let rpcCalls = 0;
+  const rpcCalls = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
@@ -6448,11 +7844,13 @@ test('manager document reads validate the pending token and immutable manifest w
       }
     }, {}, {
       routeAudience: 'PRIVATE',
-      async rpc() { rpcCalls += 1; return {}; }
+      async rpc(name, args) { rpcCalls.push({ name, args }); return {}; }
     });
     assert.equal(response.status, 200);
     assert.deepEqual(new Uint8Array(await response.arrayBuffer()), documentBytes);
-    assert.equal(rpcCalls, 0);
+    assert.equal(rpcCalls.length, 1);
+    assert.equal(rpcCalls[0].name, 'candidate_expense_update_manager_hold_v1');
+    assert.equal(rpcCalls[0].args.p_workflow_id, workflowId);
     const approvalRequest = requested.find(url => url.includes('/candidate_approval_requests?')) || '';
     assert.match(approvalRequest, new RegExp(`token_hash=eq\\.%5Cx${tokenHash}`, 'i'));
   } finally {

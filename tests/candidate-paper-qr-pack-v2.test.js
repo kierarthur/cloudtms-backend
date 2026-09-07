@@ -342,13 +342,19 @@ test('expense QR pages reserve a clear area without shrinking the physical code'
   const backend = read('broker/src/candidate-app-backend.js');
   const expensePage = backend.slice(
     backend.indexOf('async function renderExpensePage('),
-    backend.indexOf('function candidateRpcArgs(')
+    backend.indexOf('async function renderCandidateExpenseSummaryPdf(')
   );
-  assert.match(expensePage, /isPaperReturn \? 650 : 760/);
-  assert.match(expensePage, /isPaperReturn \? 510 : 570/);
+  assert.match(expensePage,
+    /isMileageEvidence \? \(isPaperReturn \? 642 : 704\) : \(isPaperReturn \? 650 : 748\)/);
+  assert.match(expensePage,
+    /isMileageEvidence \? \(isPaperReturn \? 502 : 514\) : \(isPaperReturn \? 510 : 558\)/);
   assert.match(expensePage, /x: page\.getWidth\(\) - 124,[\s\S]*y: 688,[\s\S]*size: 88/);
   assert.match(expensePage, /isPaperReturn \? 625 : 670/);
-  assert.match(expensePage, /component_kind\) === 'EXPENSE_SUMMARY'[\s\S]*height: 96[\s\S]*y: 100[\s\S]*Manager name[\s\S]*y: 58[\s\S]*Manager signature/);
+  const summaryFooter = expensePage.slice(expensePage.lastIndexOf('if (isExpenseSummary) {'));
+  assert.match(summaryFooter,
+    /Automatically generated summary\. No manager signature is required\.[\s\S]*else if \(phase === 'FINAL'\)/);
+  assert.doesNotMatch(summaryFooter.slice(0, summaryFooter.indexOf("else if (phase === 'FINAL')")),
+    /Approved by|Approval date|Manager signature|\bDate\b/);
   assert.match(expensePage, /else if \(isPaperReturn\) \{[\s\S]*height: 68[\s\S]*y: 58[\s\S]*Manager signature[\s\S]*Date/);
   assert.match(expensePage, /const displayOrdinal = isPaperReturn[\s\S]*\? contract\.review_ordinal[\s\S]*: component\.review_ordinal \|\| contract\.review_ordinal/);
   assert.doesNotMatch(expensePage, /CloudTMS workflow:|Page identity:/);

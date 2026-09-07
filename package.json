@@ -15,7 +15,7 @@
     "test:candidate-boundary": "node --test tests/candidate-app-backend.test.js tests/candidate-broker-boundary.test.js",
     "check:candidate-broker": "wrangler deploy --dry-run --config candidate-broker/wrangler.jsonc",
     "check:candidate-private-api": "wrangler deploy --dry-run --config candidate-private-api/wrangler.jsonc",
-    "check:candidate-synthetic-private-api": "wrangler deploy --dry-run --config candidate-private-api/wrangler.synthetic.jsonc",
+    "check:candidate-synthetic-private-api": "wrangler deploy --dry-run --config candidate-synthetic-private-api/wrangler.jsonc",
     "test:invoice-async": "node --test tests/invoice_async_backend.test.js",
     "db:check": "node scripts/cloudtms-db-release.mjs check",
     "db:new:migration": "node scripts/cloudtms-db-release.mjs new --kind=migration",
