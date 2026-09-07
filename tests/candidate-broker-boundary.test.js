@@ -98,12 +98,14 @@ test('advanced expense authority is coupled to both database release and Candida
     migrationSource,
     /when authorised_at_utc is not null or authorised_at_server is not null/
   );
-  const [policySource, completionSource, deleteSource, contextSource, workflowSource] =
+  const [policySource, completionSource, deleteSource, contextSource, workflowSource,
+    finalTransitionSource] =
     await Promise.all([
       policy, completion,
       'supabase/repeatable/05092026_1515_pending_expense_timesheet_delete_v1.sql',
       'supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql',
-      'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
+      'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql',
+      'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql'
     ].map(file => readFile(new URL(`../${file}`, import.meta.url), 'utf8')));
   const summaryOwner = /create\s+or\s+replace\s+function\s+private\._candidate_expense_summary_queue_v1\s*\(/gi;
   assert.equal((policySource.match(summaryOwner) || []).length, 0);
@@ -115,6 +117,15 @@ test('advanced expense authority is coupled to both database release and Candida
   );
   assert.match(completionSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
   assert.match(completionSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
+  assert.match(finalTransitionSource, /v_paper_expense_update_active boolean:=false/);
+  assert.match(finalTransitionSource,
+    /update_mode='PAPER_REPLACEMENT'[\s\S]*current_workflow_generation=v_workflow\.generation[\s\S]*state in \('EDITING','RENDERING'\)/);
+  assert.match(finalTransitionSource,
+    /scheduled_for_utc=case when v_paper_expense_update_active[\s\S]*candidate_expense_update_hold',v_paper_expense_update_active/);
+  assert.match(finalTransitionSource,
+    /if not v_paper_expense_update_active then[\s\S]*'PAPER_PACK_READY'/);
+  assert.match(finalTransitionSource,
+    /v_action='PAPER_PROVIDER_SUBMIT_PERMIT'[\s\S]*CANDIDATE_EXPENSE_UPDATE_IN_PROGRESS/);
   for (const source of [deleteSource, contextSource, workflowSource]) {
     assert.match(source, /'retry_finalisation','delete_timesheet'/);
     assert.match(source, /'RETRY_FINALISATION'(?:,'CANCEL','REJECT_EXPENSE_CATEGORY'|,'REJECT_EXPENSE_CATEGORY','CANCEL')/);

@@ -460,6 +460,7 @@ declare
   v_paper_pack_attachment jsonb;
   v_paper_notification_id uuid;
   v_paper_release_idempotent boolean:=false;
+  v_paper_expense_update_active boolean:=false;
   v_paper_outbox_count integer:=0;
   v_paper_base_document_sha256 text;
   v_paper_branding_contract_sha256 text;
@@ -3424,8 +3425,22 @@ begin
     if v_workflow.route<>'PAPER'
        or v_workflow.state<>'AWAITING_PAPER_RETURN'
        or v_workflow.paper_return_manifest_sha256 is null
-       or encode(v_workflow.paper_return_manifest_sha256,'hex')<>v_paper_manifest_sha256 then
+       or encode(v_workflow.paper_return_manifest_sha256,'hex')<>v_paper_manifest_sha256
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+         where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
       raise exception 'CANDIDATE_PAPER_PROVIDER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    if exists(
+      select 1 from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.state in ('EDITING','RENDERING')
+    ) then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_IN_PROGRESS' using errcode='40001';
     end if;
     select candidate_mail.* into v_paper_mail
     from public.mail_outbox candidate_mail
@@ -4048,9 +4063,26 @@ begin
     end if;
     if v_workflow.paper_return_manifest_sha256 is null
        or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
-          is distinct from v_workflow.paper_return_manifest_sha256 then
+          is distinct from v_workflow.paper_return_manifest_sha256
+       or jsonb_typeof(v_workflow.paper_return_manifest_json->'pages') is distinct from 'array'
+       or exists(
+         select 1
+         from jsonb_array_elements(v_workflow.paper_return_manifest_json->'pages') manifest_page
+         where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+            or upper(coalesce(manifest_page->>'page_key',''))='EXPENSE_SUMMARY'
+       ) then
       raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='55000';
     end if;
+    -- RELEASE is a separate transaction from ATTEMPT_CLAIM. Recompute the
+    -- update hold while the workflow row is locked; rebind/abort take the
+    -- same lock, so this truth cannot change before the outbox update.
+    select exists(
+      select 1 from public.candidate_pending_expense_updates update_row
+      where update_row.workflow_id=v_workflow.id
+        and update_row.update_mode='PAPER_REPLACEMENT'
+        and update_row.current_workflow_generation=v_workflow.generation
+        and update_row.state in ('EDITING','RENDERING')
+    ) into v_paper_expense_update_active;
 
     v_paper_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
     v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
@@ -4188,8 +4220,10 @@ begin
     else
       update public.mail_outbox candidate_paper_mail
       set attachments=v_paper_pack_attachment,
-          scheduled_for_utc=p_now_utc,
-          next_attempt_at_utc=p_now_utc,
+          scheduled_for_utc=case when v_paper_expense_update_active
+            then 'infinity'::timestamptz else p_now_utc end,
+          next_attempt_at_utc=case when v_paper_expense_update_active
+            then 'infinity'::timestamptz else p_now_utc end,
           payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
             'candidate_paper_pack_ready',true,
             'candidate_paper_pack_retryable',false,
@@ -4205,9 +4239,11 @@ begin
               candidate_paper_mail.payment_scope_json->>'candidate_paper_pack_operation_id'
             ),
             'candidate_paper_pack_operation_state','READY',
-            'mail_held_until_pdf_rendered',false,
-            'mail_delayed_for_pdf_render',false,
-            'mail_hold_reason',null,
+            'mail_held_until_pdf_rendered',v_paper_expense_update_active,
+            'mail_delayed_for_pdf_render',v_paper_expense_update_active,
+            'mail_hold_reason',case when v_paper_expense_update_active
+              then 'CANDIDATE_EXPENSE_UPDATE_PENDING' end,
+            'candidate_expense_update_hold',v_paper_expense_update_active,
             'candidate_complete_pack_storage_key',v_paper_pack_storage_key,
             'candidate_complete_pack_sha256',v_paper_pack_sha256,
             'candidate_complete_pack_size_bytes',v_paper_pack_byte_size,
@@ -4230,26 +4266,28 @@ begin
       end if;
     end if;
 
-    insert into public.candidate_notifications(
-      account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
-      template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
-    ) values (
-      v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_paper_timesheet_id,
-      'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
-      jsonb_build_object('page_count',v_paper_pack_page_count,'workflow_generation',v_workflow.generation),
-      jsonb_build_object('type','paper_pack','timesheet_id',v_paper_timesheet_id,
-        'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation),
-      'UNREAD','PENDING',
-      'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
-        ||v_workflow.generation::text||':'||v_paper_manifest_sha256,
-      p_now_utc
-    ) on conflict(dedupe_key) do nothing
-    returning id into v_paper_notification_id;
-    if v_paper_notification_id is null then
-      select notification.id into v_paper_notification_id
-      from public.candidate_notifications notification
-      where notification.dedupe_key='CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
-        ||v_workflow.generation::text||':'||v_paper_manifest_sha256;
+    if not v_paper_expense_update_active then
+      insert into public.candidate_notifications(
+        account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
+        template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
+      ) values (
+        v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_paper_timesheet_id,
+        'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
+        jsonb_build_object('page_count',v_paper_pack_page_count,'workflow_generation',v_workflow.generation),
+        jsonb_build_object('type','paper_pack','timesheet_id',v_paper_timesheet_id,
+          'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation),
+        'UNREAD','PENDING',
+        'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
+          ||v_workflow.generation::text||':'||v_paper_manifest_sha256,
+        p_now_utc
+      ) on conflict(dedupe_key) do nothing
+      returning id into v_paper_notification_id;
+      if v_paper_notification_id is null then
+        select notification.id into v_paper_notification_id
+        from public.candidate_notifications notification
+        where notification.dedupe_key='CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'
+          ||v_workflow.generation::text||':'||v_paper_manifest_sha256;
+      end if;
     end if;
 
     update public.candidate_submission_workflows
@@ -4275,6 +4313,7 @@ begin
       'complete_pack_sha256',v_paper_pack_sha256,
       'complete_pack_byte_size',v_paper_pack_byte_size,
       'complete_pack_page_count',v_paper_pack_page_count,
+      'paper_pack_held_for_expense_update',v_paper_expense_update_active,
       'idempotent_replay',v_paper_release_idempotent
     );
 
