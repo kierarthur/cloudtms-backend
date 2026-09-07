@@ -1546,6 +1546,10 @@ begin
   if v_candidate_id is null then return null; end if;
   v_contract_id:=v_timesheet.contract_id;
   v_week_ending:=v_timesheet.week_ending_date;
+  -- Legacy and manual Timesheets can legitimately have no contract identity.
+  -- They still belong in Candidate read results, but cannot have one linked
+  -- whole-claim action because that action is contract-week scoped.
+  if v_contract_id is null then return null; end if;
   v_scope:=private._candidate_whole_claim_scope_v1(
     p_environment,v_candidate_id,v_contract_id,v_week_ending
   );

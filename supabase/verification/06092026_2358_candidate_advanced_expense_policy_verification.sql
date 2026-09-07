@@ -291,6 +291,19 @@ begin
     9,9,0,0,0,0,9,9,9,9,'Tombstone accommodation','UNPROCESSED'
   );
 
+  -- A legacy/manual Timesheet without a contract identity must remain
+  -- readable.  It has no safe whole-claim action, so the projection
+  -- returns a null action instead of rejecting the complete Candidate list.
+  update public.timesheets set contract_id=null where timesheet_id=v_timesheet;
+  v_result:=public.candidate_expense_component_projection_v1(
+    'TEST',null,array[v_timesheet]
+  );
+  if coalesce(v_result->>'ok','')<>'true'
+     or v_result#>'{timesheets,0,whole_claim_action}' is distinct from 'null'::jsonb then
+    raise exception 'Contract-less legacy Timesheet was not safely readable: %',v_result;
+  end if;
+  update public.timesheets set contract_id=v_contract where timesheet_id=v_timesheet;
+
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','advanced-expense-'||v_candidate::text||'@example.test','ACTIVE');
   insert into public.candidate_app_sessions(
