@@ -1,6 +1,7 @@
 -- Supersedes the execution of the historical v2 verifier without rewriting it.
 -- Adds the service-only Candidate Timesheet Summary cursor, automatic manager
--- finalisation recovery, and reject-before-delete guard RPCs to the exact public
+-- finalisation recovery, reject-before-delete guard RPCs, and the two durable
+-- Candidate document-render recovery readers to the exact public
 -- Candidate RPC inventory; browser execution remains zero.
 
 do $candidate_named_security_verification_v3$
@@ -118,8 +119,8 @@ begin
   -- category-rejection atomic remains deliberately inaccessible to service_role
   -- because only its guarded Office adapter may invoke it. Browser execution
   -- remains exactly zero.
-  if v_count<>151 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'9a51fdb7e95957b76078bfa2563088f5' then
+  if v_count<>153 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'09776a03e437813978671677fa90a4e0' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
