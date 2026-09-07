@@ -286,15 +286,19 @@ begin
   select encode(paper_return_manifest_sha256,'hex') into v_manifest_hash
   from public.candidate_submission_workflows where id=v_workflow;
   if v_response->>'state'<>'AWAITING_PAPER_RETURN'
-     or jsonb_array_length(v_manifest->'pages')<>3
+     or jsonb_array_length(v_manifest->'pages')<>2
      or v_manifest->>'manifest_version'<>'2'
      or v_manifest->>'qr_contract_version'<>'CANDIDATE_PAPER_PAGE_QR_V2'
-     or v_manifest#>>'{pages,1,display_name}'<>'Expense summary'
-     or v_manifest#>>'{pages,2,display_name}'<>'Other 1'
+     or v_manifest#>>'{pages,0,display_name}'<>'Timesheet'
+     or v_manifest#>>'{pages,1,display_name}'<>'Other 1'
+     or exists(
+       select 1 from jsonb_array_elements(v_manifest->'pages') manifest_page
+       where upper(coalesce(manifest_page->>'component_kind',''))='EXPENSE_SUMMARY'
+     )
      or not coalesce((v_response->'paper_pack'->>'queued')::boolean,false)
      or not coalesce((v_response->'paper_pack'->>'recipient_available')::boolean,false)
      or nullif(v_response->'paper_pack'->>'mail_outbox_id','') is null then
-    raise exception 'paper manifest was not the complete three-page pack: %',v_response;
+    raise exception 'paper manifest was not the complete two-page unsigned-summary pack: %',v_response;
   end if;
   if not exists(
     select 1 from public.mail_outbox mail
@@ -447,8 +451,8 @@ begin
       and r2_nurse_key is null and r2_auth_key is null) then
     raise exception 'PAPER finalisation did not preserve the expected unsigned MANUAL Timesheet';
   end if;
-  if (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>3 then
-    raise exception 'PAPER finalisation did not attach exactly three evidence rows: %',
+  if (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>2 then
+    raise exception 'PAPER finalisation did not attach exactly two returned evidence rows: %',
       (select jsonb_agg(jsonb_build_object(
         'kind',kind,'document_role',document_role,'display_name',display_name,
         'candidate_component_id',candidate_component_id
@@ -458,34 +462,24 @@ begin
     where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET') then
     raise exception 'PAPER finalisation did not attach the signed Timesheet evidence';
   end if;
-  if not exists(
+  if exists(
        select 1
        from public.timesheet_evidence evidence
        join public.candidate_submission_components component
          on component.id=evidence.candidate_component_id
-       join lateral jsonb_array_elements(v_manifest->'pages') manifest_page
-         on manifest_page->>'page_key'=component.paper_return_page_key
        where evidence.timesheet_id=v_timesheet
-         and manifest_page->>'component_kind'='EXPENSE_SUMMARY'
-         and manifest_page->>'display_name'='Expense summary'
-         and evidence.display_name=manifest_page->>'display_name'
+         and component.component_kind='EXPENSE_SUMMARY'
      ) then
-    raise exception 'PAPER finalisation did not attach the Expense summary manifest label: %',
+    raise exception 'PAPER finalisation attached the internal Expense summary as a returned page: %',
       (select jsonb_agg(jsonb_build_object(
         'display_name',evidence.display_name,
         'candidate_component_id',evidence.candidate_component_id,
         'component_kind',component.component_kind,
-        'paper_return_page_key',component.paper_return_page_key,
-        'matched_manifest_page',manifest_page.page
+        'paper_return_page_key',component.paper_return_page_key
       ))
        from public.timesheet_evidence evidence
        left join public.candidate_submission_components component
          on component.id=evidence.candidate_component_id
-       left join lateral (
-         select page
-         from jsonb_array_elements(v_manifest->'pages') page
-         where page->>'page_key'=component.paper_return_page_key
-       ) manifest_page on true
        where evidence.timesheet_id=v_timesheet);
   end if;
   if not exists(
