@@ -75,6 +75,107 @@ begin
 end;
 $lifecycle_signature_fixture$;
 
+-- The reduced Candidate catalogue does not install the very large Office
+-- Timesheet-list projection.  Supply its exact return contract from the
+-- fixture's real Timesheet, Contract Week and financial rows so the genuine
+-- bulk-authorise owner below can classify the duplicate-review record.
+do $lightweight_rows_fixture$
+begin
+  if to_regprocedure('public.timesheet_summary_lightweight_rows_v1(jsonb)') is null then
+    execute $sql$
+      create function public.timesheet_summary_lightweight_rows_v1(
+        p_filters jsonb default '{}'::jsonb
+      ) returns table(
+        timesheet_id uuid,contract_week_id uuid,contract_id uuid,candidate_id uuid,
+        candidate_name text,candidate_display_name text,client_id uuid,client_name text,
+        booking_id text,occupant_key_norm text,hospital_norm text,candidate_hint_text jsonb,
+        week_ending_date date,work_date date,sheet_scope text,submission_mode text,
+        submission_mode_snapshot text,basis text,route_type text,route_display text,
+        route_family text,route_subfamily text,underlying_channel_family text,
+        summary_stage text,tools_stage text,processing_status text,
+        processing_status_display text,authorised_at_utc timestamptz,
+        authorised_at_server timestamptz,processed_at_utc timestamptz,
+        is_authorised boolean,total_hours numeric,total_pay_ex_vat numeric,
+        total_charge_ex_vat numeric,margin_ex_vat numeric,net_delta_ex_vat numeric,
+        paid_at_utc timestamptz,pay_icon_code text,pay_status_code text,
+        pay_paid_at_utc timestamptz,invoice_is_paid boolean,invoice_issue_stage text,
+        invoice_segment_stage text,invoice_segments_total integer,
+        invoice_segments_locked integer,invoice_segments_unlocked integer,
+        issue_codes text[],validation_status text,validation_summary text,
+        hr_crosscheck_status text,hr_crosscheck_issues text[],qr_status text,
+        is_qr boolean,is_adjusted boolean,needs_attention boolean,
+        has_rate_issue boolean,has_pay_channel_issue boolean,
+        client_no_timesheet_required boolean,client_autoprocess_hr boolean,
+        client_is_nhsp boolean,has_any_evidence boolean,
+        attached_evidence_count integer,primary_artifact_storage_key text,
+        primary_artifact_display_name text,primary_artifact_preview_mode text
+      ) language sql stable as $body$
+        select
+          timesheet.timesheet_id,week.id,timesheet.contract_id,financial.candidate_id,
+          coalesce(candidate.display_name,candidate.email),candidate.display_name,
+          financial.client_id,client.name,timesheet.booking_id,
+          timesheet.occupant_key_norm,timesheet.hospital_norm,
+          coalesce(timesheet.candidate_hint_text,'{}'::jsonb),
+          timesheet.week_ending_date,null::date,timesheet.sheet_scope::text,
+          timesheet.submission_mode::text,week.submission_mode_snapshot::text,
+          coalesce(financial.basis::text,'MANUAL'),'WEEKLY_MANUAL','Manual',
+          'MANUAL','MANUAL_NON_QR','MANUAL_NON_QR','PROCESSED','PROCESSED',
+          financial.processing_status::text,financial.processing_status::text,
+          financial.authorised_at_utc,timesheet.authorised_at_server,
+          null::timestamptz,
+          (financial.authorised_at_utc is not null
+            or timesheet.authorised_at_server is not null),
+          financial.total_hours,financial.total_pay_ex_vat,
+          financial.total_charge_ex_vat,financial.margin_ex_vat,
+          financial.total_charge_ex_vat-financial.total_pay_ex_vat,
+          financial.paid_at_utc,'UNPAID','UNPAID',financial.paid_at_utc,
+          false,'NOT_ISSUED','UNLOCKED',0,0,0,array[]::text[],'','',
+          '',array[]::text[],timesheet.qr_status::text,false,
+          coalesce(timesheet.is_adjustment,false),false,false,false,
+          false,false,false,false,0,null::text,null::text,null::text
+        from public.timesheets timesheet
+        join public.timesheets_financials financial
+          on financial.timesheet_id=timesheet.timesheet_id
+         and financial.is_current=true
+        left join public.contract_weeks week
+          on week.timesheet_id=timesheet.timesheet_id
+        left join public.candidates candidate on candidate.id=financial.candidate_id
+        left join public.clients client on client.id=financial.client_id
+        where timesheet.is_current=true and timesheet.archived_at_utc is null
+          and (
+            nullif(p_filters->>'candidate_id','') is null
+            or financial.candidate_id=(p_filters->>'candidate_id')::uuid
+          )
+          and (
+            nullif(p_filters->>'week_ending_date','') is null
+            or timesheet.week_ending_date=(p_filters->>'week_ending_date')::date
+          )
+      $body$
+    $sql$;
+  end if;
+end;
+$lightweight_rows_fixture$;
+
+-- Keep the compact proof on the bulk-authorise decision owner.  Its canonical
+-- status-patch reader belongs to the much larger Office list catalogue, so
+-- replace only that read helper inside this rollback transaction with stable
+-- signatures for the exact row keys supplied by the genuine dataset owner.
+create or replace function public.bulk_timesheet_row_patch_v1(
+  p_filters jsonb default '{}'::jsonb
+) returns table(row_json jsonb)
+language sql stable
+as $fixture$
+  select jsonb_build_object(
+    'row_key',row_key.value,
+    'row_signature',md5(row_key.value),
+    'backend_row_signature',md5(row_key.value),
+    'mutation_row_signature',md5(row_key.value),
+    'has_retained_financial_history',false
+  )
+  from jsonb_array_elements_text(coalesce(p_filters->'row_keys','[]'::jsonb))
+    row_key(value)
+$fixture$;
+
 -- The same reduced catalogue omits the optional HR-validation history read by
 -- the Office authorisation owners.  The duplicate-expense fixture has no HR
 -- validation, so an empty rollback-only relation preserves that truthful

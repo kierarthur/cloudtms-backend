@@ -528,9 +528,14 @@ create table public.timesheets_financials (
   paid_at_utc timestamptz,
   paid_by_user_id uuid,
   payment_reference text,
+  pay_on_hold boolean not null default false,
+  pay_on_hold_reason text,
+  pay_on_hold_since_utc timestamptz,
   locked_by_invoice_id uuid,
   locked_at_utc timestamptz,
   nhsp_import_id uuid,
+  hr_crosscheck_status text,
+  hr_crosscheck_issues text[],
   external_source_rows_json jsonb
 );
 
@@ -575,6 +580,7 @@ create table public.nhsp_shifts (
   timesheet_id uuid references public.timesheets(timesheet_id),
   contract_id uuid references public.contracts(id),
   week_ending_date date,
+  invoice_status text not null default 'UNINVOICED',
   source_system public.hr_source_enum,
   updated_at timestamptz not null default now()
 );
@@ -592,6 +598,7 @@ create table public.invoices (
   do_not_send boolean not null default false,
   document_revision bigint not null default 1,
   issued_document_version_id uuid,
+  issued_at_utc timestamptz,
   on_hold_reason text,
   updated_at timestamptz not null default now()
 );
@@ -834,7 +841,13 @@ create table public.pay_item_snoozes (
 
 create table public.timesheet_validations (
   id uuid primary key default gen_random_uuid(),
-  timesheet_id uuid
+  timesheet_id uuid,
+  booking_id text,
+  status public.validation_status_enum not null default 'PENDING',
+  reason_code text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  pre_validated boolean not null default false
 );
 
 create table public.hr_issue_emails (

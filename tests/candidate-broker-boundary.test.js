@@ -81,6 +81,8 @@ test('advanced expense authority is coupled to both database release and Candida
   );
   const migration = 'supabase/migrations/06092026_1636_candidate_advanced_expense_component_authority.sql';
   const deletedWeeklyAuditShape = 'supabase/migrations/05092026_2345_candidate_weekly_deleted_submission_audit_shape.sql';
+  const verifiedPaperReturnReceipts = 'supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql';
+  const dailyReceiptFinalisation = 'supabase/repeatable/28082026_1925_candidate_daily_receipt_finalisation_v1.sql';
   const policy = 'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql';
   const completion = 'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql';
   const sentPaperFinal = 'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql';
@@ -90,7 +92,10 @@ test('advanced expense authority is coupled to both database release and Candida
 
   assert.equal(release.verificationFiles.filter(file => file === verifier).length, 1);
   assert.equal(release.newVerificationFiles.filter(file => file === verifier).length, 1);
-  for (const file of [migration, deletedWeeklyAuditShape, policy, completion, sentPaperFinal, verifier]) {
+  for (const file of [
+    migration, deletedWeeklyAuditShape, verifiedPaperReturnReceipts,
+    dailyReceiptFinalisation, policy, completion, sentPaperFinal, verifier
+  ]) {
     assert.match(runtime, new RegExp(file.replaceAll('.', '\\.')));
   }
   assert.ok(runtime.lastIndexOf(emptyCarrierAction) < runtime.lastIndexOf(protectedAdditionalExpense));
