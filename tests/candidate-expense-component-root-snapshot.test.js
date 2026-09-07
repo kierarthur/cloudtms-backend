@@ -123,6 +123,14 @@ test('a refreshed client resumes only the exact active pending withdrawal', () =
   assert.match(source, /v_operation\.progress_json->>'update_id'=v_pending_update\.update_id::text/);
   assert.match(source, /v_pending_update\.submit_result_json->>'update_id'=v_pending_update\.update_id::text/);
   assert.match(source, /v_operation\.progress_json\|\|v_pending_update\.submit_result_json/);
+  assert.match(
+    source,
+    /'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',[\s\S]*?'expense_component_id',v_operation\.expense_component_id/
+  );
+  assert.match(
+    source,
+    /'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',[\s\S]*?'expense_component_id',v_component\.expense_component_id/
+  );
 });
 
 test('automatic withdrawal retries use the durable database operation identity', () => {

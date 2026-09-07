@@ -4114,9 +4114,19 @@ begin
          and v_pending_update.submit_result_json->>'update_state'='UPDATING'
          and jsonb_typeof(v_pending_update.submit_result_json->'render_contract')='object' then
         return v_operation.progress_json||v_pending_update.submit_result_json
-          ||jsonb_build_object('idempotent_replay',true);
+          ||jsonb_build_object(
+            'ok',true,
+            'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+            'expense_component_id',v_operation.expense_component_id,
+            'idempotent_replay',true
+          );
       end if;
-      return v_operation.progress_json||jsonb_build_object('idempotent_replay',true);
+      return v_operation.progress_json||jsonb_build_object(
+        'ok',true,
+        'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+        'expense_component_id',v_operation.expense_component_id,
+        'idempotent_replay',true
+      );
     end if;
     raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
   end if;
@@ -4207,6 +4217,9 @@ begin
            and (v_operation.progress_json->>'generation')::integer
              =v_pending_update.current_workflow_generation then
           return v_operation.progress_json||jsonb_build_object(
+            'ok',true,
+            'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+            'expense_component_id',v_component.expense_component_id,
             'idempotent_replay',true
           );
         end if;
@@ -4219,7 +4232,12 @@ begin
            and v_pending_update.submit_result_json->>'update_state'='UPDATING'
            and jsonb_typeof(v_pending_update.submit_result_json->'render_contract')='object' then
           return v_operation.progress_json||v_pending_update.submit_result_json
-            ||jsonb_build_object('idempotent_replay',true);
+            ||jsonb_build_object(
+              'ok',true,
+              'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
+              'expense_component_id',v_component.expense_component_id,
+              'idempotent_replay',true
+            );
         end if;
         raise exception 'CANDIDATE_EXPENSE_OPERATION_IN_PROGRESS' using errcode='55000';
       end if;
@@ -4316,12 +4334,18 @@ begin
       end if;
       update public.candidate_expense_operations set state='RENDERING',
         progress_json=v_begin||jsonb_build_object(
+          'ok',true,
+          'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
           'operation_id',v_operation.operation_id,'action_code',v_action,
+          'expense_component_id',v_component.expense_component_id,
           'automatic_resubmission_required',true
         ),updated_at_utc=p_now_utc
       where operation_id=v_operation.operation_id and state='PREPARING';
       return v_begin||jsonb_build_object(
+        'ok',true,
+        'contract_version','CANDIDATE_EXPENSE_CATEGORY_ACTION_RESULT_V1',
         'operation_id',v_operation.operation_id,'action_code',v_action,
+        'expense_component_id',v_component.expense_component_id,
         'automatic_resubmission_required',true,'idempotent_replay',false
       );
     end if;
