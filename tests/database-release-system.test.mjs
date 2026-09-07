@@ -33,6 +33,21 @@ test('date ordering distinguishes valid ISO from UK filenames', () => {
   assert.ok(sqlDateKey('32132026_invalid.sql').startsWith('ZZZZZZZZ_'));
 });
 
+test('cross-month Candidate authorities replay in release date order', () => {
+  const ordered = inventory().repeatables.map(item => item.path);
+  const augustPrimary = 'supabase/repeatable/31082026_0557_candidate_empty_expense_carrier_action_v1.sql';
+  const septemberPrimary = 'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql';
+  const augustDetail = 'supabase/repeatable/28082026_2002_candidate_daily_detail_projection_v1.sql';
+  const septemberDetail = 'supabase/repeatable/05092026_0420_candidate_timesheet_effective_pay_history_v1.sql';
+
+  assert.match(read(augustPrimary), /create or replace function private\._candidate_timesheet_primary_action_v1/i);
+  assert.match(read(septemberPrimary), /create or replace function private\._candidate_timesheet_primary_action_v1/i);
+  assert.match(read(augustDetail), /create or replace function public\.candidate_app_timesheet_detail_v1/i);
+  assert.match(read(septemberDetail), /create or replace function public\.candidate_app_timesheet_detail_v1/i);
+  assert.ok(ordered.indexOf(augustPrimary) < ordered.indexOf(septemberPrimary));
+  assert.ok(ordered.indexOf(augustDetail) < ordered.indexOf(septemberDetail));
+});
+
 test('inventory covers uppercase legacy SQL and recursive repeatable closures', () => {
   const current = inventory();
   assert.ok(current.migrations.some(x => x.path.endsWith('13072026_1648_MIGRATION.SQL')));
@@ -157,6 +172,10 @@ test('contract-bearing SQL is coupled to a fast local PostgreSQL 17 contract sea
   assert.match(localSeal, /local proof release owner/);
   assert.match(localSeal, /exportContract\(\)/);
   assert.match(localSeal, /writeJson\(outputPath, contract\)/);
+  assert.match(localSeal, /--replay-from=<exact 40-character ancestor commit>/);
+  assert.match(localSeal, /const current = inventory\(\)/);
+  assert.match(localSeal, /for \(const repeatable of repeatables\) psql\(\{ file: repeatable\.path \}\)/);
+  assert.doesNotMatch(localSeal, /repeatables\.sort\(/);
   assert.match(coupling, /supabase\\\/\(\?:migrations\|repeatable\)/);
   assert.match(coupling, /Contract-bearing database source changed without/);
   assert.match(coupling, /diff-tree.*--root.*HEAD/s);
