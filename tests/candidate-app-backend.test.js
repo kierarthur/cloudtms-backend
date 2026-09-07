@@ -2963,6 +2963,16 @@ test('pending-manager withdrawal returns an accepted receipt before background d
   }
 });
 
+test('document refresh loads independent record groups together', async () => {
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function loadRenderState(env, contract)');
+  const end = source.indexOf('\nasync function buildOfficialCandidateModel', start);
+  const body = source.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(body, /const \[workflow, component\] = await Promise\.all\(\[/);
+  assert.match(body, /const \[timesheet, financials, contractRow, candidate\] = await Promise\.all\(\[/);
+});
+
 test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {
   const sessionId = '00000000-0000-4000-8000-0000000001b1';
   const accountId = '00000000-0000-4000-8000-0000000001b2';

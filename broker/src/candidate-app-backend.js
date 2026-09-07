@@ -3437,19 +3437,28 @@ async function buildOfficialPresentationSnapshot(env, workflow) {
 async function loadRenderState(env, contract) {
   const workflowId = requireUuid(contract.workflow_id, 'CANDIDATE_RENDER_CONTRACT_INVALID');
   const generation = requireInteger(contract.workflow_generation, 'CANDIDATE_RENDER_CONTRACT_INVALID', 1);
-  const workflow = await restOne(env, 'candidate_submission_workflows',
-    `id=eq.${encodeURIComponent(workflowId)}&generation=eq.${generation}&select=*`);
+  const [workflow, component] = await Promise.all([
+    restOne(env, 'candidate_submission_workflows',
+      `id=eq.${encodeURIComponent(workflowId)}&generation=eq.${generation}&select=*`),
+    restOne(env, 'candidate_submission_components',
+      `id=eq.${encodeURIComponent(contract.component_id)}&workflow_id=eq.${encodeURIComponent(workflowId)}&workflow_generation=eq.${generation}&select=*`)
+  ]);
   if (!workflow) throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
-  const component = await restOne(env, 'candidate_submission_components',
-    `id=eq.${encodeURIComponent(contract.component_id)}&workflow_id=eq.${encodeURIComponent(workflowId)}&workflow_generation=eq.${generation}&select=*`);
   if (!component) throw new CandidateHttpError(404, 'CANDIDATE_COMPONENT_NOT_FOUND');
   const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
-  const timesheet = timesheetId ? await restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`) : null;
-  const financials = timesheetId ? await restOne(env, 'timesheets_financials',
-    `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=client_id,candidate_id,worked_start_iso,worked_end_iso`) : null;
-  const contractRow = workflow.contract_id
-    ? await restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=*`) : null;
-  const candidate = await restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=*`);
+  const [timesheet, financials, contractRow, candidate] = await Promise.all([
+    timesheetId
+      ? restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&select=*`)
+      : Promise.resolve(null),
+    timesheetId
+      ? restOne(env, 'timesheets_financials',
+        `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=client_id,candidate_id,worked_start_iso,worked_end_iso`)
+      : Promise.resolve(null),
+    workflow.contract_id
+      ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=*`)
+      : Promise.resolve(null),
+    restOne(env, 'candidates', `id=eq.${encodeURIComponent(workflow.candidate_id)}&select=*`)
+  ]);
   const clientId = contractRow?.client_id || financials?.client_id || timesheet?.client_id;
   const client = clientId ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=*`) : null;
   return { workflow, component, timesheet, financials, contract: contractRow, candidate, client };
