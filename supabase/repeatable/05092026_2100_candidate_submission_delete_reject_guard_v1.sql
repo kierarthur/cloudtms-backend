@@ -1093,6 +1093,14 @@ begin
   for v_workflow in
     select w.id,w.account_id,w.candidate_id,w.generation,w.state as captured_state,
       w.workflow_kind,
+      coalesce((
+        select (target->>'linked_pending_expense')::boolean
+        from jsonb_array_elements(
+          coalesce(v_target_context->'target_workflows','[]'::jsonb)
+        ) target
+        where target->>'workflow_id'=w.id::text
+        limit 1
+      ),false) as linked_pending_expense,
       case when w.state='FINALISED' then greatest(w.generation-1,1) else w.generation end as artifact_generation
     from public.candidate_submission_workflows w
     where w.id=any(v_rejected_workflow_ids)
@@ -1123,28 +1131,28 @@ begin
     end if;
     perform private._candidate_notification_insert_v1(
       v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then null else v_new_timesheet_id end,
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then 'EXPENSE_CLAIM_CANCELLED' else 'OFFICE_REJECTED' end,
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then 'timesheet_expense_attention' else 'office_rejection' end,
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then 'candidate-expense-claim-cancelled-timesheet-rejection-v1'
         else 'candidate-office-rejected-v1' end,
       jsonb_build_object(
         'reason',btrim(p_reason),
-        'reason_code',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        'reason_code',case when v_workflow.linked_pending_expense
           then 'LINKED_TIMESHEET_REJECTED_FOR_DELETE'
           else 'OFFICE_REJECTED' end,
         'workflow_id',v_workflow.id,
         'resubmission_scope',case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
           then 'COMPLETE_EXPENSE_CLAIM' else v_reject_scope end
       ),
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then jsonb_build_object('type','workflow','workflow_id',v_workflow.id)
         else jsonb_build_object('type','timesheet','timesheet_id',v_new_timesheet_id) end,
-      case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+      case when v_workflow.linked_pending_expense
         then 'CANDIDATE_EXPENSE_CLAIM_CANCELLED_TIMESHEET_REJECTION_V1:'
         else 'CANDIDATE_OFFICE_REJECTED_V1:' end
         ||v_workflow.id::text||':'||(v_workflow.generation+1)::text,

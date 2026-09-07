@@ -109,7 +109,7 @@ test('direct pending-expense cancellation records the same safe deleted-week tom
 });
 
 test('linked expense rejection emits its own accurate push-ready notification', () => {
-  assert.match(sql, /workflow_kind='CONTRACT_EXPENSE'[\s\S]*?'EXPENSE_CLAIM_CANCELLED'[\s\S]*?'timesheet_expense_attention'/i);
+  assert.match(sql, /linked_pending_expense[\s\S]*?'EXPENSE_CLAIM_CANCELLED'[\s\S]*?'timesheet_expense_attention'/i);
   assert.match(sql, /candidate-expense-claim-cancelled-timesheet-rejection-v1/i);
   assert.match(sql, /LINKED_TIMESHEET_REJECTED_FOR_DELETE/i);
   assert.match(sql, /jsonb_build_object\('type','workflow','workflow_id',v_workflow\.id\)/i);
