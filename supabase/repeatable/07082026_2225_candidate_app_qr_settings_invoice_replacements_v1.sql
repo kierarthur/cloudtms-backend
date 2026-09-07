@@ -168,7 +168,7 @@ begin
     null,
     null,
     v_current.contract_id,
-    v_current.submission_mode,
+    'MANUAL'::public.submission_mode_enum,
     v_current.line_type,
     v_current.sheet_scope,
 
@@ -330,7 +330,7 @@ begin
   old_version := v_current.version;
   new_version := v_new_version;
   sheet_scope := v_current.sheet_scope::text;
-  submission_mode := v_current.submission_mode::text;
+  submission_mode := 'MANUAL';
   qr_status := 'PENDING';
   qr_token := null;
   processing_status := CASE WHEN v_candidate_rejection_enabled THEN 'UNPROCESSED' ELSE 'UNASSIGNED' END;

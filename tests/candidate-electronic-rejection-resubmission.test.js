@@ -6,6 +6,9 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const correction = read(
   'supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql'
 );
+const qrReset = read(
+  'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql'
+);
 const expenseAnchorCorrection = read(
   'supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql'
 );
@@ -47,6 +50,13 @@ test('electronic rejection creates an editable electronic replacement without we
   assert.doesNotMatch(correction, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(correction, /revoke all on function private\._candidate_timesheet_reject_rotate_v1/);
   assert.doesNotMatch(correction, /grant execute on function private\._candidate_timesheet_reject_rotate_v1/);
+});
+
+test('QR and paper rejection creates a valid unsigned draft', () => {
+  assert.match(
+    qrReset,
+    /insert into public\.timesheets[\s\S]*?'MANUAL'::public\.submission_mode_enum[\s\S]*?submission_mode := 'MANUAL'/i
+  );
 });
 
 test('expenses-only rejection keeps the original worked Timesheet as its resubmission anchor', () => {

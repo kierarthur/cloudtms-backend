@@ -46,7 +46,10 @@ declare
   v_scope jsonb;
   v_attachments jsonb;
 begin
-  insert into public.tms_users(id) values(v_actor);
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(
+    v_actor,'anchor-rejection-actor@example.test','runtime-not-used','admin',true
+  );
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.candidates(id,email,active)
   values(v_candidate,'anchor-rejection@example.test',true);
@@ -55,22 +58,26 @@ begin
   values(gen_random_uuid(),v_client,current_date-1,'ELECTRONIC');
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,
-    week_ending_weekday_snapshot,default_submission_mode
+    week_ending_weekday_snapshot,default_submission_mode,pay_method_snapshot
   ) values(v_contract,v_candidate,v_client,current_date-30,current_date+30,
-    extract(dow from current_date)::integer,'ELECTRONIC');
+    extract(dow from current_date)::integer,'ELECTRONIC','PAYE');
   insert into public.timesheets(
     timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
-    submission_mode,r2_nurse_key,r2_auth_key
+    submission_mode,r2_nurse_key,r2_auth_key,
+    occupant_key_norm,hospital_norm,ward_norm,job_title_norm
   ) values(
     v_timesheet,v_contract,'ANCHOR-REJECTION-1',current_date,'HOURS','WEEKLY',
-    'ELECTRONIC','anchor/candidate-signature','anchor/manager-signature'
+    'ELECTRONIC','anchor/candidate-signature','anchor/manager-signature',
+    'ANCHOR-REJECTION-CANDIDATE','ANCHOR-REJECTION-CLIENT',
+    'ANCHOR-REJECTION-WARD','ANCHOR-REJECTION-ROLE'
   );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,is_current,processing_status,total_hours
-  ) values(v_timesheet,v_candidate,v_client,true,'UNPROCESSED',8);
+    timesheet_id,timesheet_version,candidate_id,client_id,is_current,
+    processing_status,total_hours
+  ) values(v_timesheet,1,v_candidate,v_client,true,'UNPROCESSED',8);
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','anchor-rejection@example.test','ACTIVE');
   insert into public.candidate_app_sessions(
