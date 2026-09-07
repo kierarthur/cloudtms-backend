@@ -244,6 +244,7 @@ jobs:
             supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql
             supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql
             supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql
+            supabase/repeatable/09022026_delete_adjustment_timesheets_safely.sql
             supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql
             supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql
             supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql
