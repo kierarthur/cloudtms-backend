@@ -24,6 +24,8 @@ const invoiceGenerationFinal = readFileSync(new URL('../supabase/repeatable/0309
 const invoiceEvaluationBarrier = readFileSync(new URL('../supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql', import.meta.url), 'utf8');
 const bankingFrozenAuthority = readFileSync(new URL('../supabase/repeatable/03092026_1643_banking_pay_frozen_settings_authority_v1.sql', import.meta.url), 'utf8');
 const qrRefuseServiceAcl = readFileSync(new URL('../supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql', import.meta.url), 'utf8');
+const candidateInvoiceCurrentAuthorityClosurePath = 'supabase/repeatable/07092026_0611_candidate_invoice_current_authority_closure_v1.sql';
+const candidateInvoiceCurrentAuthorityClosure = readFileSync(new URL(`../${candidateInvoiceCurrentAuthorityClosurePath}`, import.meta.url), 'utf8');
 
 test('one dated resolver owns Client and Contract settings derivation', () => {
   assert.match(resolver, /_contract_settings_effective_core_v1/);
@@ -202,6 +204,35 @@ test('the historical QR refusal helper is reachable only through its guarded ser
   assert.match(qrRefuseServiceAcl, /has_function_privilege\([\s\S]*?'anon'[\s\S]*?'authenticated'[\s\S]*?'service_role'[\s\S]*?TIMESHEET_QR_REFUSE_SERVICE_ACL_INVALID/);
   assert.doesNotMatch(qrRefuseServiceAcl, /create or replace function|update |insert |delete |total_pay|pay_method|settle|provider|Policy\.X/i);
   assert.match(worker, /requireUser\(env, req, \['admin'\]\)[\s\S]*?timesheet_qr_refuse_and_reset/);
+});
+
+test('the Candidate bundle always finishes with the exact current routine owners', async () => {
+  const expectedIncludes = [
+    '\\ir 07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql',
+    '\\ir 22082026_1706_daily_validation_compatibility_authorities_v1.sql',
+    '\\ir 02092026_1834_candidate_expense_separation_delivery_v1.sql',
+    '\\ir 03092026_1645_invoice_generation_frozen_settings_authority_v1.sql',
+    '\\ir 04092026_1710_timesheet_qr_refuse_service_acl_v1.sql',
+  ];
+  let previousIndex = -1;
+  for (const include of expectedIncludes) {
+    const index = candidateInvoiceCurrentAuthorityClosure.indexOf(include);
+    assert.ok(index > previousIndex, `missing or misordered current authority: ${include}`);
+    previousIndex = index;
+    assert.equal(candidateInvoiceCurrentAuthorityClosure.split(include).length - 1, 1, `duplicate current authority: ${include}`);
+  }
+  assert.doesNotMatch(candidateInvoiceCurrentAuthorityClosure, /create\s+(?:or\s+replace\s+)?function/i);
+
+  const { closureFor } = await import('../scripts/cloudtms-db-release-lib.mjs');
+  const closure = closureFor(candidateInvoiceCurrentAuthorityClosurePath);
+  assert.deepEqual(closure.paths, [
+    candidateInvoiceCurrentAuthorityClosurePath,
+    'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql',
+    'supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql',
+    'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
+    'supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql',
+    'supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql',
+  ]);
 });
 
 test('Worker consumers use the central resolver and fail closed', () => {
