@@ -6,6 +6,8 @@
 -- order so an incremental release and a clean replay both finish with the
 -- locked cancellation/refusal behaviour.  Sent mail remains immutable audit
 -- history; only the current QR/document generation is retired.
+-- Advance this final authority whenever an earlier workflow owner is replayed,
+-- so the managed repeatable ledger re-applies the final guard afterwards.
 
 \set ON_ERROR_STOP on
 
