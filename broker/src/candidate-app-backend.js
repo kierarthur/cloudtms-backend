@@ -725,6 +725,30 @@ function safeCandidateTransportDiagnostic(error) {
   const message = text(error?.json?.message);
   const localMessage = text(error?.message);
   const sqlstate = text(error?.json?.code).toUpperCase();
+  let databaseFinalState = null;
+  const allowedRoles = new Set(['EXPENSE_ONLY', 'IMPORT_HOURS', 'HOURS_ONLY', 'COMBINED_ALLOWED', 'FLEXIBLE']);
+  const allowedLineTypes = new Set(['HOURS', 'EXPENSES', 'MILEAGE']);
+  for (const source of [error?.json?.details, error?.json?.detail, error?.details]) {
+    try {
+      const parsed = typeof source === 'string' ? JSON.parse(source) : source;
+      if (!isObject(parsed)) continue;
+      const recordRole = upper(parsed.record_role);
+      const expectedLineType = upper(parsed.expected_line_type);
+      const requestedLineType = upper(parsed.requested_line_type);
+      if (allowedRoles.has(recordRole)
+          && allowedLineTypes.has(expectedLineType)
+          && allowedLineTypes.has(requestedLineType)) {
+        databaseFinalState = {
+          record_role: recordRole,
+          expected_line_type: expectedLineType,
+          requested_line_type: requestedLineType
+        };
+        break;
+      }
+    } catch {
+      // Provider detail is optional and must never widen the diagnostic shape.
+    }
+  }
   let databaseErrorClass = null;
   let databaseObject = null;
   const classifiers = [
@@ -750,6 +774,7 @@ function safeCandidateTransportDiagnostic(error) {
     transport_status: Number.isInteger(Number(error?.status)) ? Number(error.status) : null,
     database_sqlstate: /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
     database_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(message) ? message : null,
+    database_final_state: databaseFinalState,
     database_error_class: databaseErrorClass,
     database_object: databaseObject,
     local_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(localMessage)

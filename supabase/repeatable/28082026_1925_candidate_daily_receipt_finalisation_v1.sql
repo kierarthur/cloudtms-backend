@@ -767,6 +767,13 @@ begin
           and c.required=true and c.state<>'SUPERSEDED' and c.component_kind<>'HOURS_TIMESHEET';
       end if;
       update public.candidate_submission_workflows set
+        -- A first combined weekly submission has no anchor until its hours row
+        -- is materialised above. Bind that worked row before expense apply so
+        -- SAME_RECORD stays a combined HOURS Timesheet. A genuinely separate
+        -- expense carrier still has a different target and remains EXPENSES.
+        anchor_timesheet_id=case when v_workflow.workflow_kind='CONTRACT_COMBINED'
+          then coalesce(anchor_timesheet_id,v_hours_timesheet_id)
+          else anchor_timesheet_id end,
         contract_week_id=nullif(v_placement->>'target_contract_week_id','')::uuid,
         target_timesheet_id=nullif(v_placement->>'target_timesheet_id','')::uuid,
         updated_at_utc=p_now_utc

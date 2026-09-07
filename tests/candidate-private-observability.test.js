@@ -72,6 +72,49 @@ test('Candidate transport diagnostics retain safe gateway status without respons
   assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
 });
 
+test('Candidate final-state diagnostics retain only closed record and line types', () => {
+  const error = new Error('must-not-appear');
+  error.status = 400;
+  error.fn = 'candidate_submission_finalize_single_flight_v1';
+  error.body = 'must-not-appear';
+  error.json = {
+    code: '22023',
+    message: 'CANDIDATE_LINE_TYPE_FINAL_STATE_INVALID',
+    details: JSON.stringify({
+      record_role: 'COMBINED_ALLOWED',
+      expected_line_type: 'HOURS',
+      requested_line_type: 'EXPENSES',
+      candidate_email: 'must-not-appear'
+    })
+  };
+  const result = candidateAppBackendInternals.safeCandidateTransportDiagnostic(error);
+  assert.deepEqual(result.database_final_state, {
+    record_role: 'COMBINED_ALLOWED',
+    expected_line_type: 'HOURS',
+    requested_line_type: 'EXPENSES'
+  });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
+});
+
+test('Candidate final-state diagnostics accept PostgREST singular detail', () => {
+  const error = new Error('private response omitted');
+  error.status = 400;
+  error.fn = 'candidate_submission_finalize_single_flight_v1';
+  error.json = {
+    code: '22023',
+    message: 'CANDIDATE_LINE_TYPE_FINAL_STATE_INVALID',
+    detail: JSON.stringify({
+      record_role: 'EXPENSE_ONLY',
+      expected_line_type: 'EXPENSES',
+      requested_line_type: 'HOURS'
+    })
+  };
+  assert.deepEqual(
+    candidateAppBackendInternals.safeCandidateTransportDiagnostic(error).database_final_state,
+    { record_role: 'EXPENSE_ONLY', expected_line_type: 'EXPENSES', requested_line_type: 'HOURS' }
+  );
+});
+
 test('TEST exposes only the closed transport diagnostic needed to isolate Candidate failures', () => {
   const diagnostic = {
     error_code: 'CANDIDATE_WORKFLOW_CANCEL_ATOMIC_V2',
