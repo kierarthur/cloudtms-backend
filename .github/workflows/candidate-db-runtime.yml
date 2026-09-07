@@ -249,7 +249,13 @@ jobs:
             supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql
             supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql
           )
-          for file in "${install_files[@]}"; do apply_sql "$file"; done
+          for file in "${install_files[@]}"; do
+            if [[ "$file" == "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql" ]]; then
+              node scripts/extract-candidate-weekly-adjustment-delete-apply.mjs |
+                psql -X -v ON_ERROR_STOP=1 -q
+            fi
+            apply_sql "$file"
+          done
 
           apply_sql supabase/verification/03092026_0016_candidate_paper_pack_email_authority_verification.sql
 
