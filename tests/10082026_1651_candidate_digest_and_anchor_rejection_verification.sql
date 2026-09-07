@@ -46,10 +46,18 @@ declare
   v_scope jsonb;
   v_attachments jsonb;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(
-    v_actor,'anchor-rejection-actor@example.test','runtime-not-used','admin',true
-  );
+  if exists(
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='tms_users'
+      and column_name='password_hash'
+  ) then
+    execute 'insert into public.tms_users(id,email,password_hash,role,is_active)
+      values($1,$2,$3,$4,$5)'
+    using v_actor,'anchor-rejection-actor@example.test','runtime-not-used','admin',true;
+  else
+    insert into public.tms_users(id,email,role,is_active)
+    values(v_actor,'anchor-rejection-actor@example.test','admin',true);
+  end if;
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.candidates(id,email,active)
   values(v_candidate,'anchor-rejection@example.test',true);
