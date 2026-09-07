@@ -531,6 +531,9 @@ declare
   v_mutation_request_sha256 text;
   v_mutation_receipt jsonb;
   v_mutation_replay_probe_only boolean:=false;
+  v_expense_update_context jsonb;
+  v_pending_expense_update public.candidate_pending_expense_updates%rowtype;
+  v_is_pending_expense_update boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_workflow_id is null or jsonb_typeof(v_payload)<>'object' then
@@ -1441,6 +1444,38 @@ begin
      or (not v_is_service_action and not v_is_public_manager_action and v_workflow.candidate_id<>v_candidate_id) then
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
+  if v_action='WORKER_SUBMIT' and nullif(v_payload->>'update_id','') is not null then
+    begin
+      v_expense_update_context:=nullif(current_setting(
+        'cloudtms.candidate_expense_update_submit_context',true
+      ),'')::jsonb;
+    exception when others then
+      v_expense_update_context:=null;
+    end;
+    if coalesce(v_expense_update_context->>'contract_version','')
+         <>'CANDIDATE_EXPENSE_UPDATE_SUBMIT_CONTEXT_V1'
+       or v_expense_update_context->>'workflow_id'<>v_workflow.id::text
+       or v_expense_update_context->>'workflow_generation'<>v_workflow.generation::text
+       or v_expense_update_context->>'update_id'<>v_payload->>'update_id'
+       or v_expense_update_context->>'idempotency_key'<>btrim(coalesce(p_idempotency_key,'')) then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_RECEIPT_INVALID' using errcode='28000';
+    end if;
+    select update_row.* into v_pending_expense_update
+    from public.candidate_pending_expense_updates update_row
+    where update_row.update_id=(v_payload->>'update_id')::uuid
+      and update_row.workflow_id=v_workflow.id
+      and update_row.current_workflow_generation=v_workflow.generation
+      and update_row.state='EDITING'
+      and update_row.actor_kind=v_expense_update_context->>'actor_kind'
+      and update_row.actor_id is not distinct from nullif(
+        v_expense_update_context->>'actor_id',''
+      )::uuid
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
+    end if;
+    v_is_pending_expense_update:=true;
+  end if;
   if nullif(btrim(coalesce(p_idempotency_key,'')),'') is not null then
     if nullif(btrim(coalesce(v_workflow.idempotency_key,'')),'')=btrim(p_idempotency_key) then
       raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
@@ -2175,10 +2210,11 @@ begin
       )
     end;
     if coalesce((v_duplicate_expense_review->>'required')::boolean,false) then
-      if lower(coalesce(v_payload#>>'{duplicate_expense_confirmation,confirmed}','false'))
+      if not v_is_pending_expense_update and (
+         lower(coalesce(v_payload#>>'{duplicate_expense_confirmation,confirmed}','false'))
            not in ('true','t','1','yes')
          or nullif(v_payload#>>'{duplicate_expense_confirmation,confirmation_digest}','')
-              is distinct from v_duplicate_expense_review->>'confirmation_digest' then
+              is distinct from v_duplicate_expense_review->>'confirmation_digest') then
         raise exception 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED'
           using errcode='PT409',detail=v_duplicate_expense_review::text;
       end if;
@@ -2215,6 +2251,25 @@ begin
           and (
             v_workflow.immutable_submission_sha256 is null
             or v_workflow.immutable_submission_sha256=v_submission_hash
+            or (
+              v_is_pending_expense_update
+              and id=v_workflow.candidate_signature_component_id
+              and exists(
+                select 1
+                from public.candidate_submission_components current_hours
+                join public.candidate_submission_components prior_hours
+                  on prior_hours.workflow_id=current_hours.workflow_id
+                  and prior_hours.workflow_generation=
+                    v_pending_expense_update.from_workflow_generation
+                  and prior_hours.component_kind='HOURS_TIMESHEET'
+                  and prior_hours.state='IMMUTABLE'
+                  and prior_hours.source_content_sha256=current_hours.source_content_sha256
+                where current_hours.workflow_id=v_workflow.id
+                  and current_hours.workflow_generation=v_workflow.generation
+                  and current_hours.component_kind='HOURS_TIMESHEET'
+                  and current_hours.state='IMMUTABLE'
+              )
+            )
             or (
               source_component_id is null
               and created_at_utc>=coalesce(v_workflow.worker_submitted_at_utc,'-infinity'::timestamptz)
@@ -2352,6 +2407,9 @@ begin
         candidate_signature_component_id=case when workflow_kind='CONTRACT_EXPENSE' then null else v_signature_component.id end,
         candidate_signature_sha256=case when workflow_kind='CONTRACT_EXPENSE' then null else v_signature_component.source_content_sha256 end,
         candidate_signed_at_utc=case when workflow_kind='CONTRACT_EXPENSE' then null
+          when v_is_pending_expense_update then nullif(
+            v_pending_expense_update.prior_workflow_snapshot_json->>'candidate_signed_at_utc',''
+          )::timestamptz
           else coalesce(nullif(v_payload->>'candidate_signed_at_utc','')::timestamptz,p_now_utc) end,
         renderer_contract_version=coalesce(nullif(btrim(v_payload->>'renderer_contract_version'),''),'TIMESHEET_OFFICIAL_PDF_V1'),
         review_manifest_json=null,review_manifest_sha256=null,

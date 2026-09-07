@@ -114,6 +114,14 @@ begin
       v_result:=pg_catalog.jsonb_set(v_result,array[v_key],v_value,true);
     end if;
   end loop;
+  if pg_catalog.jsonb_typeof(v_result->'canonical_tsfin_snapshot')='object' then
+    v_snapshot:=private._candidate_expense_payload_without_category_v1(
+      v_result->'canonical_tsfin_snapshot',p_expense_category
+    );
+    v_result:=pg_catalog.jsonb_set(
+      v_result,'{canonical_tsfin_snapshot}',v_snapshot,true
+    );
+  end if;
   return private._candidate_expense_payload_without_category_v1(v_result,p_expense_category);
 end;
 $function$;
@@ -2423,6 +2431,7 @@ declare
   v_prior_units numeric;
   v_submit_request_sha bytea;
   v_submit_context jsonb;
+  v_change jsonb;
 begin
   if p_workflow_id is null or p_expected_generation is null or p_update_id is null
      or jsonb_typeof(coalesce(p_payload,'{}'::jsonb))<>'object'
@@ -2516,6 +2525,18 @@ begin
   if jsonb_typeof(v_new_submission)<>'object' then
     raise exception 'CANDIDATE_IMMUTABLE_SUBMISSION_REQUIRED' using errcode='22023';
   end if;
+  -- REMOVE and Office-reject plans are already locked to an exact component
+  -- at BEGIN. Reapply that server-owned removal here so a retry can safely
+  -- recover an update opened by an older definition which left a root-level
+  -- canonical snapshot unchanged.
+  for v_change in
+    select value from jsonb_array_elements(v_update.update_plan_json) item(value)
+    where value->>'update_kind' in ('REMOVE_CATEGORY','OFFICE_REJECT_CATEGORY')
+  loop
+    v_new_submission:=private._candidate_expense_submission_without_category_v1(
+      v_new_submission,v_change->>'expense_category'
+    );
+  end loop;
   v_new_claim:=coalesce(
     v_new_submission#>'{expense_submission,canonical_tsfin_snapshot}',
     v_new_submission->'expense_submission',
@@ -2663,7 +2684,9 @@ begin
   v_response:=public.candidate_workflow_transition_atomic_v1(
     p_session_id,v_environment,v_workflow.id,'WORKER_SUBMIT',
     p_expected_generation,
-    coalesce(p_payload,'{}'::jsonb)||jsonb_build_object(
+    pg_catalog.jsonb_set(
+      coalesce(p_payload,'{}'::jsonb),'{immutable_submission}',v_new_submission,true
+    )||jsonb_build_object(
       'update_id',v_update.update_id,
       'candidate_signature_component_id',v_workflow.candidate_signature_component_id,
       'service_office_action',p_session_id is null,
