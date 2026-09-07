@@ -483,11 +483,14 @@ begin
   select encode(paper_return_manifest_sha256,'hex') into v_manifest_hash
   from public.candidate_submission_workflows where id=v_workflow;
   if v_response->>'state'<>'AWAITING_PAPER_RETURN'
-     or jsonb_array_length(v_manifest->'pages')<>3
+     -- The unsigned Expense Summary is regenerated internally and is not a
+     -- Candidate return or manager-signature page. This fixture therefore
+     -- returns the hours page plus its one expense-evidence page.
+     or jsonb_array_length(v_manifest->'pages')<>2
      or not coalesce((v_response->'paper_pack'->>'queued')::boolean,false)
      or not coalesce((v_response->'paper_pack'->>'recipient_available')::boolean,false)
      or nullif(v_response->'paper_pack'->>'mail_outbox_id','') is null then
-    raise exception 'paper manifest was not the complete three-page pack: %',v_response;
+    raise exception 'paper manifest did not contain the complete two return pages: %',v_response;
   end if;
   if not exists(
     select 1 from public.mail_outbox mail
