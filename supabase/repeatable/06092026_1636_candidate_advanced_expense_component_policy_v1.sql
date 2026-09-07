@@ -139,6 +139,7 @@ begin
     v_submission->'expense_submission',
     v_submission#>'{expense_claim,canonical_tsfin_snapshot}',
     v_submission->'expense_claim',
+    v_submission->'canonical_tsfin_snapshot',
     '{}'::jsonb
   );
   return query
@@ -360,6 +361,41 @@ after insert or update of state,generation,target_timesheet_id,immutable_submiss
   manager_approved_at_utc,rejection_reason
 on public.candidate_submission_workflows
 for each row execute function private._candidate_expense_workflow_sync_trigger_v1();
+
+-- Reconcile only the later expense-only shape that older versions of the
+-- component reader missed.  Combined submissions and legacy shapes are left
+-- untouched, and an already-correct component is an idempotent no-op.
+do $reconcile_later_expense_components$
+declare
+  v_workflow_id uuid;
+begin
+  for v_workflow_id in
+    select distinct workflow.id
+    from public.candidate_submission_workflows workflow
+    join public.candidate_expense_components component
+      on component.workflow_id=workflow.id
+    join lateral private._candidate_expense_component_values_v1(workflow.id) value
+      on value.expense_category=component.expense_category
+    where workflow.workflow_kind='CONTRACT_EXPENSE'
+      and pg_catalog.jsonb_typeof(
+        workflow.immutable_submission_json->'canonical_tsfin_snapshot'
+      )='object'
+      and workflow.immutable_submission_json->'expense_submission' is null
+      and workflow.immutable_submission_json->'expense_claim' is null
+      and component.lifecycle_state not in (
+        'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+      )
+      and (
+        component.amount is distinct from value.amount
+        or component.mileage_units is distinct from value.mileage_units
+      )
+  loop
+    perform private._candidate_expense_components_sync_v1(
+      v_workflow_id,pg_catalog.transaction_timestamp()
+    );
+  end loop;
+end;
+$reconcile_later_expense_components$;
 
 -- Financial recalculation is not a safe category-edit authority: several
 -- independently approved workflows may legitimately resolve to one displayed
