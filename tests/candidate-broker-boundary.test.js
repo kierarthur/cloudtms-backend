@@ -108,6 +108,13 @@ test('advanced expense authority is coupled to both database release and Candida
   const summaryOwner = /create\s+or\s+replace\s+function\s+private\._candidate_expense_summary_queue_v1\s*\(/gi;
   assert.equal((policySource.match(summaryOwner) || []).length, 0);
   assert.equal((completionSource.match(summaryOwner) || []).length, 1);
+  assert.match(completionSource, /CANDIDATE_SENT_PAPER_RETIREMENT_CLOSURE_DRIFT/);
+  assert.match(
+    completionSource,
+    /WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED''[\s\S]*OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''/
+  );
+  assert.match(completionSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
+  assert.match(completionSource, /mail_row\.status<>''SENT''[\s\S]*v_reason like ''ROUTE_INTERVENTION_%''/);
   for (const source of [deleteSource, contextSource, workflowSource]) {
     assert.match(source, /'retry_finalisation','delete_timesheet'/);
     assert.match(source, /'RETRY_FINALISATION'(?:,'CANCEL','REJECT_EXPENSE_CATEGORY'|,'REJECT_EXPENSE_CATEGORY','CANCEL')/);

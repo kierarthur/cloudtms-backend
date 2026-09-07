@@ -281,8 +281,14 @@ begin
        or (select status from public.mail_outbox where id=v_mail)<>'SENT'
        or (p_manifest_version='2' and p_matching_receipt_token
            and (select status from public.mail_outbox where id=v_second_mail)<>'SENT')
-       or coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
-                    from public.mail_outbox where id=v_mail),false) then
+       or not coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+                        from public.mail_outbox where id=v_mail),false)
+       or (p_manifest_version='2' and p_matching_receipt_token
+           and not coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+                             from public.mail_outbox where id=v_second_mail),false))
+       or (p_include_pack_email_copy
+           and not coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+                             from public.mail_outbox where id=v_pack_email_mail),false)) then
       raise exception 'Exact legacy one-page orphan cancellation failed: result=%, failure=%',
         v_result,v_failed_message;
     end if;
