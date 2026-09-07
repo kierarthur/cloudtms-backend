@@ -162710,15 +162710,34 @@ async function handleRelatedList(env, req, entity, id) {
       }
 
       if (typeU === 'timesheets') {
-        // All TS/contract-weeks for this contract via v_timesheets_summary
-        const tsUrl =
-          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?select=*` +
-          `&contract_id=eq.${enc(id)}` +
-          `&order=week_ending_date.desc,client_name.asc,candidate_name.asc` +
-          `&limit=${limit}&offset=${offset}`;
-        const { rows, total } = await sbFetch(env, tsUrl, true);
-        return okList(rows || [], total ?? (rows || []).length);
+        // Resolve every Contract week/Timesheet identity first, then use the
+        // supported server-owned summary projection. Browser roles no longer
+        // read the legacy summary view directly.
+        const contractWeeksUrl =
+          `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
+          `?contract_id=eq.${enc(id)}` +
+          `&select=id,timesheet_id`;
+        const timesheetsUrl =
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?contract_id=eq.${enc(id)}` +
+          `&select=timesheet_id`;
+
+        const [contractWeeksResult, timesheetsResult] = await Promise.all([
+          sbFetch(env, contractWeeksUrl),
+          sbFetch(env, timesheetsUrl)
+        ]);
+        const identityIds = new Set();
+        for (const row of (contractWeeksResult.rows || [])) {
+          if (row?.id) identityIds.add(String(row.id));
+          if (row?.timesheet_id) identityIds.add(String(row.timesheet_id));
+        }
+        for (const row of (timesheetsResult.rows || [])) {
+          if (row?.timesheet_id) identityIds.add(String(row.timesheet_id));
+        }
+
+        const allRows = await fetchTimesheetSummaryByIds([...identityIds]);
+        const contractRows = allRows.filter(row => String(row?.contract_id || '') === String(id));
+        return okList(contractRows.slice(offset, offset + limit), contractRows.length);
       }
 
       if (typeU === 'umbrella') {

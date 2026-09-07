@@ -30,3 +30,18 @@ test('Related Timesheet routes expose an expired-session 401 to the browser', ()
     assert.match(opening, /if \(!user\) return withCORS\(env, req, unauthorized\(\)\);/);
   }
 });
+
+test('Contract Related Timesheets resolves exact identities through the supported Summary reader', () => {
+  const contractStart = worker.indexOf("if (entity === 'contract')", worker.indexOf('async function handleRelatedList'));
+  const contractEnd = worker.indexOf("// ───────────────────────── UMBRELLA", contractStart);
+  assert.notEqual(contractStart, -1);
+  assert.notEqual(contractEnd, -1);
+  const contractReader = worker.slice(contractStart, contractEnd);
+
+  assert.match(contractReader, /\/rest\/v1\/contract_weeks/);
+  assert.match(contractReader, /\/rest\/v1\/timesheets/);
+  assert.match(contractReader, /fetchTimesheetSummaryByIds\(\[\.\.\.identityIds\]\)/);
+  assert.match(contractReader, /String\(row\?\.contract_id \|\| ''\) === String\(id\)/);
+  assert.match(contractReader, /contractRows\.slice\(offset, offset \+ limit\)/);
+  assert.doesNotMatch(contractReader, /\/rest\/v1\/v_timesheets_summary/);
+});
