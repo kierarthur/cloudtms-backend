@@ -910,6 +910,15 @@ test('invoice delivery sends expense stream to the expense email without self-bi
   assert.match(replacements.invoiceDelivery, /INVOICE_DELIVERY_ROUTE_V6/);
 });
 
+test('first electronic weekly submission can enter manager review before a Timesheet exists', () => {
+  const workflow = definition(latestExpenseDuplicateReview, 'candidate_workflow_transition_atomic_v1');
+
+  assert.match(workflow, /if v_week\.timesheet_id is null then[\s\S]*if v_workflow\.target_timesheet_id is not null then[\s\S]*CANDIDATE_WORKFLOW_ANCHOR_MISMATCH/i);
+  assert.match(workflow, /else[\s\S]*from public\.timesheets[\s\S]*timesheet_id=v_workflow\.target_timesheet_id[\s\S]*timesheet_id=v_week\.timesheet_id[\s\S]*is_current=true[\s\S]*sheet_scope='WEEKLY'/i);
+  assert.match(workflow, /_candidate_record_capabilities_v1\(v_workflow\.target_timesheet_id,v_week\.id,'\{\}'::jsonb\)/i);
+  assert.match(workflow, /_candidate_route_family_v1\(v_workflow\.target_timesheet_id,v_week\.id\)/i);
+});
+
 test('route, DAILY and auto-authorisation authority is enforced at every mutation boundary', () => {
   const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const finalise = definition(sql.final, 'candidate_submission_finalize_atomic_v1');

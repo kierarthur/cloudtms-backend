@@ -2005,16 +2005,25 @@ begin
       if not found then
         raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
       end if;
-      select * into v_anchor_timesheet
-      from public.timesheets
-      where timesheet_id=v_workflow.target_timesheet_id
-        and timesheet_id=v_week.timesheet_id
-        and is_current=true
-        and archived_at_utc is null
-        and sheet_scope='WEEKLY'::public.timesheet_scope_enum
-      for update;
-      if not found then
-        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+      if v_week.timesheet_id is null then
+        -- A first electronic submission is reviewed before its Timesheet is
+        -- materialised.  Its frozen canonical create/snapshot payload is
+        -- applied only by the established manager-approved finalisation.
+        if v_workflow.target_timesheet_id is not null then
+          raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+        end if;
+      else
+        select * into v_anchor_timesheet
+        from public.timesheets
+        where timesheet_id=v_workflow.target_timesheet_id
+          and timesheet_id=v_week.timesheet_id
+          and is_current=true
+          and archived_at_utc is null
+          and sheet_scope='WEEKLY'::public.timesheet_scope_enum
+        for update;
+        if not found then
+          raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+        end if;
       end if;
       v_target_capabilities:=private._candidate_record_capabilities_v1(v_workflow.target_timesheet_id,v_week.id,'{}'::jsonb);
       v_route_authority:=private._candidate_route_family_v1(v_workflow.target_timesheet_id,v_week.id);
