@@ -25,6 +25,11 @@ begin
   select pg_catalog.pg_get_functiondef(
     'public.timesheet_weekly_manual_adjustment_delete_preview(uuid,uuid)'::regprocedure
   ) into v_definition;
+  -- Historical TEST installs retained CRLF inside this function body while a
+  -- clean PostgreSQL install stores LF. Normalise only the retrieved DDL text
+  -- before the exact single-occurrence closure check so both represent the
+  -- same reviewed function without weakening the drift guard.
+  v_definition:=pg_catalog.replace(v_definition,E'\r\n',E'\n');
   if pg_catalog.strpos(v_definition,v_new)>0 then
     return;
   end if;
