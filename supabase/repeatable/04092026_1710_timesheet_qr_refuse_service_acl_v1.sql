@@ -9,6 +9,8 @@ begin;
 
 alter function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
   owner to postgres;
+alter function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
+  set search_path = pg_catalog, public, private, extensions, pg_temp;
 
 revoke all on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
   from public,anon,authenticated,service_role;
@@ -30,5 +32,31 @@ $acl$;
 
 grant execute on function public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)
   to postgres,service_role;
+
+-- A later replay of the historical function definition can restore its old
+-- browser grant while this repeatable remains unchanged in the release
+-- ledger.  Reassert and prove the effective role privileges whenever this
+-- closure is selected for release.
+do $verify_acl$
+begin
+  if has_function_privilege(
+       'anon',
+       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',
+       'EXECUTE'
+     )
+     or has_function_privilege(
+       'authenticated',
+       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',
+       'EXECUTE'
+     )
+     or not has_function_privilege(
+       'service_role',
+       'public.timesheet_qr_refuse_and_reset(uuid,uuid,text,uuid)',
+       'EXECUTE'
+     ) then
+    raise exception 'TIMESHEET_QR_REFUSE_SERVICE_ACL_INVALID';
+  end if;
+end;
+$verify_acl$;
 
 commit;

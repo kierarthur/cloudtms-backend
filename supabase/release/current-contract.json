@@ -30546,14 +30546,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public"
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
       "identity": "timesheet_qr_refuse_and_reset(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_reason text, p_actor_user_id uuid)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "64f48ad324060baec036521b33696e32056fd73d99fd85dc138fe93003ec32fa"
+      "definition_sha256": "c86c1f6eb12b4b75ce109af12ef53eb5d0e7a9cae50a2325222284e4544b00e9"
     },
     {
       "acl": [
