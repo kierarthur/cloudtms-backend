@@ -253,6 +253,8 @@ jobs:
             if [[ "$file" == "supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql" ]]; then
               node scripts/extract-candidate-weekly-adjustment-delete-apply.mjs |
                 psql -X -v ON_ERROR_STOP=1 -q
+              node scripts/extract-candidate-r2-cleanup-record.mjs |
+                psql -X -v ON_ERROR_STOP=1 -q
             fi
             apply_sql "$file"
           done
