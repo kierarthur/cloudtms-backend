@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
-const repeatablePath = 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql';
+const repeatablePath = 'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql';
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
 const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
@@ -24,7 +24,7 @@ const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_co
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const runtime = read('.github/workflows/candidate-db-runtime.yml');
 
-test('expense workflow creation derives approval route from the worked anchor before carrier admission', () => {
+test('expense workflow creation derives eligibility from the worked anchor while preserving the new claim route', () => {
   const anchorResolution = repeatable.indexOf("if nullif(v_payload->>'anchor_timesheet_id','') is not null then");
   const routeResolution = repeatable.indexOf('v_route_authority:=private._candidate_route_family_v1(', anchorResolution);
   const workflowInsert = repeatable.indexOf('insert into public.candidate_submission_workflows(', routeResolution);
@@ -42,7 +42,11 @@ test('expense workflow creation derives approval route from the worked anchor be
   );
   assert.match(
     repeatable,
-    /v_workflow_kind='CONTRACT_EXPENSE'[\s\S]*route_family'='QR'[\s\S]*v_route:='PAPER'/i
+    /route_family'='QR' and v_route<>'PAPER'[\s\S]*v_workflow_kind<>'CONTRACT_EXPENSE'/i
+  );
+  assert.doesNotMatch(
+    repeatable,
+    /v_workflow_kind='CONTRACT_EXPENSE' and v_route_authority->>'route_family'='QR' then v_route:='PAPER'/i
   );
   assert.doesNotMatch(repeatable, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
@@ -138,7 +142,7 @@ test('rollback-contained proof reproduces the app carrier-first sequence and pro
   assert.match(verifier, /qr_status,qr_token[\s\S]*'PENDING','carrier-qr-route-token'/i);
   assert.match(
     verifier,
-    /creation_identity_json#>>'\{request,initial_route\}'='ELECTRONIC'[\s\S]*creation_identity_json#>>'\{derived,initial_route\}'='PAPER'/i
+    /creation_identity_json#>>'\{request,initial_route\}'='ELECTRONIC'[\s\S]*creation_identity_json#>>'\{derived,initial_route\}'='ELECTRONIC'/i
   );
   assert.match(verifier, /QR-backed expense replay created duplicate state/i);
   assert.match(verifier, /v_qr_after_financial is distinct from v_qr_before_financial/i);

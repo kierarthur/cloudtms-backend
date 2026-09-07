@@ -2,8 +2,9 @@
 
 -- First-use proof for the mobile sequence that allocates a separate expense
 -- carrier before it creates the Candidate workflow.  The carrier is MANUAL
--- storage, while approval-route authority remains the original worked
--- ELECTRONIC Timesheet.  Every fixture write is rolled back.
+-- storage, while the original worked Timesheet supplies eligibility only: a
+-- later separate expense keeps the Candidate's chosen approval route.  Every
+-- fixture write is rolled back.
 
 begin;
 
@@ -67,8 +68,8 @@ begin
      or position(
        'if v_workflow_kind=''contract_expense'' and v_route_authority->>''route_family''=''qr'' then v_route:=''paper'''
        in regexp_replace(v_definition,'\s+',' ','g')
-     )=0 then
-    raise exception 'Candidate expense creation does not derive route authority from its worked anchor';
+     )<>0 then
+    raise exception 'Candidate expense creation no longer preserves anchor eligibility and independent route choice';
   end if;
   if v_definition~'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Candidate workflow transition contains illegal qualified conditional syntax';
@@ -234,9 +235,10 @@ begin
     raise exception 'Expense workflow creation changed Timesheet financial authority';
   end if;
 
-  -- The real phone sequence can begin from a worked Timesheet whose QR pack is
-  -- already pending.  The Candidate still sends the immutable ELECTRONIC create
-  -- request, while the server derives and stores PAPER from that exact anchor.
+  -- A later expense may begin from a worked Timesheet whose QR pack is already
+  -- pending, but it is a new claim and may use a different approval route.  An
+  -- ELECTRONIC request therefore remains ELECTRONIC instead of being forced
+  -- back to the earlier QR/PAPER route.
   insert into public.timesheets(
     timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
     contract_id,week_ending_date,sheet_scope,line_type,submission_mode,
@@ -299,12 +301,12 @@ begin
     select 1 from public.candidate_submission_workflows
     where id=v_qr_workflow
       and workflow_kind='CONTRACT_EXPENSE'
-      and route='PAPER'
+      and route='ELECTRONIC'
       and contract_week_id=v_qr_carrier_week
       and anchor_timesheet_id=v_qr_anchor_timesheet
       and target_timesheet_id is null
       and creation_identity_json#>>'{request,initial_route}'='ELECTRONIC'
-      and creation_identity_json#>>'{derived,initial_route}'='PAPER'
+      and creation_identity_json#>>'{derived,initial_route}'='ELECTRONIC'
   ) then
     raise exception 'QR-backed expense workflow lost request/derived route authority';
   end if;
