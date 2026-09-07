@@ -11,7 +11,7 @@ begin;
 update public.settings_defaults
 set candidate_app_environment='TEST',
     candidate_app_feature_flags_json=coalesce(candidate_app_feature_flags_json,'{}'::jsonb)
-      ||'{"candidate_app_reads":true,"candidate_app_writes":true,"candidate_notifications":true,"candidate_expense_atomic_placement":true,"candidate_manager_approval":true,"candidate_paper_qr":true}'::jsonb
+      ||'{"candidate_app_reads":true,"candidate_app_writes":true,"candidate_notifications":true,"candidate_expense_atomic_placement":true,"candidate_manager_approval":true,"candidate_paper_qr":true,"candidate_record_role_capabilities":true}'::jsonb
 where id=1;
 
 do $catalog$

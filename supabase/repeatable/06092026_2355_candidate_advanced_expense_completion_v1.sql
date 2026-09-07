@@ -1145,6 +1145,26 @@ begin
     or workflow.contract_week_id=any(v_contract_week_ids)
   );
 
+  -- The Candidate lifecycle signature deliberately includes its enabled
+  -- record-role component. The controlled tombstones above can therefore
+  -- change that signature even though the locked Timesheet, financial row and
+  -- delete scope are unchanged. Re-read the exact post-tombstone signature
+  -- immediately before the established guarded delete; passing the earlier
+  -- signature would make the service reject its own authorised cleanup when
+  -- candidate_record_role_capabilities is enabled.
+  select public.timesheet_lifecycle_guard_signature_v1(
+    p_timesheet_id,
+    (select week.id from public.contract_weeks week
+      where week.timesheet_id=p_timesheet_id order by week.id limit 1),false
+  ) into v_signature;
+  v_row_signature:=nullif(btrim(coalesce(
+    v_signature->>'backend_row_signature',v_signature->>'row_signature',
+    v_signature->>'signature',''
+  )), '');
+  if v_row_signature is null then
+    raise exception 'CANDIDATE_EXPENSE_CARRIER_SIGNATURE_UNAVAILABLE' using errcode='55000';
+  end if;
+
   perform set_config('cloudtms.candidate_expense_summary_suppressed','true',true);
   v_result:=public.timesheet_weekly_manual_adjustment_delete_apply(
     p_timesheet_id,v_system_actor,v_timesheet_ids,v_contract_week_ids,
