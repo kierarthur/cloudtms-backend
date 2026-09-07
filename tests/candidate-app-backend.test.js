@@ -210,6 +210,98 @@ test('Weekly Timesheet detail exposes the expense category context at the contra
   assert.deepEqual(detail.expenses.expense_category_context, context);
 });
 
+test('Weekly cards and details keep linked expense Timesheets visible without moving their ownership', async () => {
+  const hoursTimesheetId = '00000000-0000-4000-8000-000000000064';
+  const expenseTimesheetId = '00000000-0000-4000-8000-000000000065';
+  const workflowId = '00000000-0000-4000-8000-000000000066';
+  const travel = {
+    workflow_id: workflowId,
+    expense_component_id: '00000000-0000-4000-8000-000000000067',
+    component_generation: 1,
+    owning_timesheet_id: expenseTimesheetId,
+    expense_category: 'TRAVEL',
+    amount: 15,
+    mileage_units: 0,
+    included_in_total: true,
+    supporting_evidence_count: 1,
+    status_code: 'SUBMITTED'
+  };
+  const projection = {
+    claims: [{ workflow_id: workflowId, target_timesheet_id: expenseTimesheetId }],
+    timesheets: [{
+      timesheet_id: hoursTimesheetId,
+      category_statuses: [],
+      expense_category_context: {
+        pending_categories: ['TRAVEL'], accepted_categories: []
+      },
+      hours_component_status: { status_code: 'MANAGER_APPROVED' },
+      whole_claim_action: { code: 'CANCEL_ENTIRE_CLAIM' }
+    }, {
+      timesheet_id: expenseTimesheetId,
+      category_statuses: [travel],
+      expense_category_context: {
+        pending_categories: ['TRAVEL'], accepted_categories: []
+      },
+      hours_component_status: null,
+      whole_claim_action: null
+    }]
+  };
+  const deps = {
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_expense_component_projection_v1');
+      assert.deepEqual(new Set(args.p_timesheet_ids), new Set([
+        hoursTimesheetId, expenseTimesheetId
+      ]));
+      return projection;
+    }
+  };
+  const base = {
+    timesheet_id: hoursTimesheetId,
+    sheet_scope: 'WEEKLY',
+    workflows: [{
+      workflow_id: workflowId,
+      target_timesheet_id: expenseTimesheetId,
+      anchor_timesheet_id: hoursTimesheetId
+    }],
+    expenses: {
+      expenses_pay_ex_vat: 0,
+      mileage_units: 0,
+      mileage_pay_ex_vat: 0,
+      travel_pay_ex_vat: 0,
+      accommodation_pay_ex_vat: 0,
+      other_pay_ex_vat: 0,
+      supporting_evidence_count: 0,
+      supporting_evidence_categories: []
+    }
+  };
+
+  const page = await enrichCandidatePageAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, { items: [base] }
+  );
+  assert.deepEqual(page.items[0].expenses.category_statuses, [travel]);
+  assert.equal(page.items[0].expenses.travel_pay_ex_vat, 15);
+  assert.equal(page.items[0].expenses.supporting_evidence_count, 1);
+  assert.equal(page.items[0].hours_component_status.status_code, 'MANAGER_APPROVED');
+
+  const detail = await enrichCandidateDetailAdvancedExpenses(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, deps, {
+      ...base,
+      timesheet: { id: hoursTimesheetId, sheet_scope: 'WEEKLY' },
+      submitted_expense_totals: {},
+      expense_claims: []
+    }
+  );
+  assert.deepEqual(detail.expenses.category_statuses, [travel]);
+  assert.equal(detail.expenses.travel_pay_ex_vat, 15);
+  assert.equal(detail.submitted_expense_totals.travel_pay_ex_vat, 15);
+  assert.equal(detail.expense_claims[0].target_timesheet_id, expenseTimesheetId);
+  assert.equal(detail.hours_component_status.status_code, 'MANAGER_APPROVED');
+  assert.equal(detail.whole_claim_action.code, 'CANCEL_ENTIRE_CLAIM');
+  assert.deepEqual(detail.expense_category_context, {
+    pending_categories: ['TRAVEL'], accepted_categories: []
+  });
+});
+
 test('Blank new Weekly Timesheet detail exposes empty expense category choices safely', async () => {
   const detail = await enrichCandidateDetailAdvancedExpenses(
     { CANDIDATE_APP_ENVIRONMENT: 'TEST' },

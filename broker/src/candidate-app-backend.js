@@ -4137,12 +4137,27 @@ async function enrichCandidatePageAdvancedExpenses(env, deps, page) {
   if (!isObject(page) || !Array.isArray(page.items) || !page.items.length) return page;
   const workflowIds = page.items.flatMap((card) => Array.isArray(card?.workflows)
     ? card.workflows.map((workflow) => workflow?.workflow_id) : []);
-  const timesheetIds = page.items.map((card) => card?.timesheet_id);
+  const timesheetIds = page.items.flatMap((card) => [
+    card?.timesheet_id,
+    ...(Array.isArray(card?.workflows) ? card.workflows.flatMap((workflow) => [
+      workflow?.target_timesheet_id,
+      workflow?.anchor_timesheet_id
+    ]) : [])
+  ]);
   const projection = await candidateAdvancedExpenseProjection(env, deps, workflowIds, timesheetIds);
   const timesheetById = new Map(projection.timesheets.map((row) => [text(row?.timesheet_id), row]));
   return {
     ...page,
     items: page.items.map((card) => {
+      const linkedTimesheetIds = new Set([
+        card?.timesheet_id,
+        ...(Array.isArray(card?.workflows) ? card.workflows.flatMap((workflow) => [
+          workflow?.target_timesheet_id,
+          workflow?.anchor_timesheet_id
+        ]) : [])
+      ].map(text).filter((id) => UUID_RE.test(id)));
+      const linkedTimesheets = [...linkedTimesheetIds]
+        .map((id) => timesheetById.get(id)).filter(Boolean);
       const projected = timesheetById.get(text(card?.timesheet_id)) || {
         category_statuses: [],
         expense_category_context: { pending_categories: [], accepted_categories: [] },
@@ -4157,8 +4172,9 @@ async function enrichCandidatePageAdvancedExpenses(env, deps, page) {
           expenses: emptyCandidateExpenseProjection()
         };
       }
-      const categories = Array.isArray(projected.category_statuses)
-        ? projected.category_statuses : [];
+      const categories = linkedTimesheets.flatMap((row) => (
+        Array.isArray(row?.category_statuses) ? row.category_statuses : []
+      ));
       const totals = candidateCategoryTotals(categories);
       const hasAuthoritativeCategories = categories.length > 0;
       const existingExpenses = isObject(card.expenses) ? card.expenses : {};
@@ -4216,13 +4232,22 @@ async function enrichCandidateDetailAdvancedExpenses(env, deps, detail) {
       expense_claims: []
     };
   }
-  const categories = Array.isArray(base.category_statuses) ? base.category_statuses : [];
+  const categories = projection.timesheets.flatMap((row) => (
+    Array.isArray(row?.category_statuses) ? row.category_statuses : []
+  ));
   const totals = candidateCategoryTotals(categories);
   const hasAuthoritativeCategories = categories.length > 0;
   const existingExpenses = isObject(detail.expenses) ? detail.expenses : {};
-  const expenseCategoryContext = isObject(base.expense_category_context)
-    ? base.expense_category_context
-    : { pending_categories: [], accepted_categories: [] };
+  const expenseCategoryContext = {
+    pending_categories: [...new Set(projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.expense_category_context?.pending_categories)
+        ? row.expense_category_context.pending_categories : []
+    )))],
+    accepted_categories: [...new Set(projection.timesheets.flatMap((row) => (
+      Array.isArray(row?.expense_category_context?.accepted_categories)
+        ? row.expense_category_context.accepted_categories : []
+    )))]
+  };
   return {
     ...detail,
     hours_component_status: base.hours_component_status || null,
