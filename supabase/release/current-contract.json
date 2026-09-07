@@ -5237,7 +5237,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "40e9512976fa6e2b10e66131d9a107a178c6ff6ea16f997a1652f21233749dab"
+      "definition_sha256": "2d0462a13bd4304b2cdfd3f3862ebe02b1be3114e4eb4f11ad5549b72ca1c5a1"
     },
     {
       "acl": [
@@ -30985,35 +30985,6 @@
     {
       "acl": [
         {
-          "grantee": "PUBLIC",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "service_role",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=public"
-      ],
-      "schema": "public",
-      "identity": "timesheet_weekly_chain_delete_apply(p_timesheet_id uuid, p_actor_user_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "abbcf45b6feecde1abecc57e7021ec36e55f3e29adb0ebf800b84554c0e2fbdf"
-    },
-    {
-      "acl": [
-        {
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
@@ -31057,7 +31028,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5e750f501b2a8844bfb9481fe07d1414016770fcf0ada61eb8f32bbae9f08c0f"
+      "definition_sha256": "f97d4a133684a95e82dd37b9befa28fca389fe75f4152cc41af893884693123f"
     },
     {
       "acl": [
@@ -68500,7 +68471,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (event_type = ANY (ARRAY['CREATED'::text, 'SUBMITTED'::text, 'MANAGER_APPROVED'::text, 'MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text, 'REPLACED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text, 'AUTHORISED'::text, 'INVOICED'::text, 'PAID'::text, 'AGENCY_PROTECTION_CLEARED'::text]))"
+          "definition": "CHECK (event_type = ANY (ARRAY['CREATED'::text, 'SUBMITTED'::text, 'MANAGER_APPROVED'::text, 'MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text, 'REPLACED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text, 'AUTHORISED'::text, 'INVOICED'::text, 'PAID'::text, 'AGENCY_PROTECTION_CLEARED'::text, 'OWNER_ROTATED'::text]))"
         },
         {
           "name": "candidate_expense_component_events_expense_component_id_fkey",
@@ -68826,10 +68797,34 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (refusal_kind IS DISTINCT FROM 'MANAGER_REFUSAL'::text OR approval_request_id IS NOT NULL)"
+          "definition": "CHECK ((lifecycle_state = 'MANAGER_REFUSED'::text) = (refusal_kind = 'MANAGER_REFUSAL'::text))"
         },
         {
           "name": "candidate_expense_components_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = 'OFFICE_REJECTED'::text) = (refusal_kind = 'AGENCY_REJECTION'::text))"
+        },
+        {
+          "name": "candidate_expense_components_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_state = ANY (ARRAY['MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text])) = (refusal_reason IS NOT NULL AND refused_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "candidate_expense_components_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (refusal_kind IS DISTINCT FROM 'MANAGER_REFUSAL'::text OR approval_request_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_components_check6",
           "type": "c",
           "deferred": false,
           "validated": true,
@@ -68869,28 +68864,12 @@
           "definition": "CHECK (manager_approval_state = ANY (ARRAY['NOT_REQUESTED'::text, 'PENDING'::text, 'APPROVED'::text, 'REFUSED'::text]))"
         },
         {
-          "name": "candidate_expense_components_manager_refusal_kind_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK ((lifecycle_state = 'MANAGER_REFUSED'::text) = (refusal_kind = 'MANAGER_REFUSAL'::text))"
-        },
-        {
           "name": "candidate_expense_components_mileage_units_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (mileage_units >= 0::numeric)"
-        },
-        {
-          "name": "candidate_expense_components_office_refusal_kind_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK ((lifecycle_state = 'OFFICE_REJECTED'::text) = (refusal_kind = 'AGENCY_REJECTION'::text))"
         },
         {
           "name": "candidate_expense_components_owning_timesheet_id_fkey",
@@ -68907,14 +68886,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (expense_component_id)"
-        },
-        {
-          "name": "candidate_expense_components_refusal_facts_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK ((lifecycle_state = ANY (ARRAY['MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text])) = (refusal_reason IS NOT NULL AND refused_at_utc IS NOT NULL))"
         },
         {
           "name": "candidate_expense_components_refusal_kind_check",
@@ -69219,6 +69190,22 @@
           "definition": "CHECK ((state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) = (completed_at_utc IS NOT NULL))"
         },
         {
+          "name": "candidate_expense_operations_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state <> 'COMMITTED'::text OR result_json IS NOT NULL)"
+        },
+        {
+          "name": "candidate_expense_operations_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (result_json IS NULL OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])))"
+        },
+        {
           "name": "candidate_expense_operations_environment_actor_kind_actor_i_key",
           "type": "u",
           "deferred": false,
@@ -69289,22 +69276,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (result_json IS NULL OR jsonb_typeof(result_json) = 'object'::text)"
-        },
-        {
-          "name": "candidate_expense_operations_result_state_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (state <> 'COMMITTED'::text OR result_json IS NOT NULL)"
-        },
-        {
-          "name": "candidate_expense_operations_result_terminal_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (result_json IS NULL OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])))"
         },
         {
           "name": "candidate_expense_operations_state_check",
@@ -69545,12 +69516,12 @@
       ],
       "indexes": [
         {
-          "name": "candidate_expense_summary_ref_snapshot_generation_uq",
-          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_snapshot_generation_uq ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, summary_generation)"
+          "name": "candidate_expense_summary_ref_timesheet_id_snapshot_idempot_key",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_timesheet_id_snapshot_idempot_key ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, idempotency_key)"
         },
         {
-          "name": "candidate_expense_summary_ref_snapshot_idempotency_uq",
-          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_snapshot_idempotency_uq ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, idempotency_key)"
+          "name": "candidate_expense_summary_ref_timesheet_id_snapshot_summary_key",
+          "definition": "CREATE UNIQUE INDEX candidate_expense_summary_ref_timesheet_id_snapshot_summary_key ON public.candidate_expense_summary_refreshes USING btree (timesheet_id_snapshot, summary_generation)"
         },
         {
           "name": "candidate_expense_summary_refreshes_one_pending_uq",
@@ -69565,20 +69536,20 @@
       "force_rls": true,
       "constraints": [
         {
-          "name": "candidate_expense_summary_ref_snapshot_generation_uq",
-          "type": "u",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "UNIQUE (timesheet_id_snapshot, summary_generation)"
-        },
-        {
-          "name": "candidate_expense_summary_ref_snapshot_idempotency_uq",
+          "name": "candidate_expense_summary_ref_timesheet_id_snapshot_idempot_key",
           "type": "u",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (timesheet_id_snapshot, idempotency_key)"
+        },
+        {
+          "name": "candidate_expense_summary_ref_timesheet_id_snapshot_summary_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (timesheet_id_snapshot, summary_generation)"
         },
         {
           "name": "candidate_expense_summary_refreshes_attempt_count_check",
@@ -71703,12 +71674,20 @@
           "definition": "FOREIGN KEY (approval_request_id) REFERENCES candidate_approval_requests(id) ON DELETE RESTRICT"
         },
         {
-          "name": "candidate_pending_expense_updates_begin_receipt_ck",
+          "name": "candidate_pending_expense_updates_begin_request_sha256_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((begin_request_sha256 IS NULL) = (begin_result_json IS NULL))"
+          "definition": "CHECK (begin_request_sha256 IS NULL OR octet_length(begin_request_sha256) = 32)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_begin_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (begin_result_json IS NULL OR jsonb_typeof(begin_result_json) = 'object'::text)"
         },
         {
           "name": "candidate_pending_expense_updates_check",
@@ -71732,7 +71711,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((update_mode = 'PAPER_REPLACEMENT'::text) = (prior_paper_source_timesheet_id_snapshot IS NOT NULL AND prior_paper_source_snapshot_json IS NOT NULL AND prior_paper_source_snapshot_sha256 IS NOT NULL))"
+          "definition": "CHECK ((rebind_idempotency_key IS NULL) = (rebind_request_sha256 IS NULL))"
         },
         {
           "name": "candidate_pending_expense_updates_check3",
@@ -71740,7 +71719,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) = (completed_at_utc IS NOT NULL))"
+          "definition": "CHECK ((rebind_idempotency_key IS NULL) = (rebind_result_json IS NULL))"
         },
         {
           "name": "candidate_pending_expense_updates_check4",
@@ -71748,7 +71727,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((abort_idempotency_key IS NULL) = (abort_request_sha256 IS NULL))"
+          "definition": "CHECK ((begin_request_sha256 IS NULL) = (begin_result_json IS NULL))"
         },
         {
           "name": "candidate_pending_expense_updates_check5",
@@ -71756,7 +71735,39 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
+          "definition": "CHECK ((abort_idempotency_key IS NULL) = (abort_request_sha256 IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
           "definition": "CHECK ((abort_idempotency_key IS NULL) = (abort_result_json IS NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((update_mode = 'PAPER_REPLACEMENT'::text) = (prior_paper_source_timesheet_id_snapshot IS NOT NULL AND prior_paper_source_snapshot_json IS NOT NULL AND prior_paper_source_snapshot_sha256 IS NOT NULL))"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (update_mode <> 'PAPER_REPLACEMENT'::text OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) OR prior_paper_source_timesheet_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_pending_expense_updates_check9",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) = (completed_at_utc IS NOT NULL))"
         },
         {
           "name": "candidate_pending_expense_updates_failure_code_check",
@@ -71783,14 +71794,6 @@
           "definition": "FOREIGN KEY (operation_id) REFERENCES candidate_expense_operations(operation_id) ON DELETE RESTRICT"
         },
         {
-          "name": "candidate_pending_expense_updates_paper_active_source_ck",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (update_mode <> 'PAPER_REPLACEMENT'::text OR (state = ANY (ARRAY['COMMITTED'::text, 'ABORTED'::text, 'FAILED'::text])) OR prior_paper_source_timesheet_id IS NOT NULL)"
-        },
-        {
           "name": "candidate_pending_expense_updates_pkey",
           "type": "p",
           "deferred": false,
@@ -71813,14 +71816,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (rebind_idempotency_key IS NULL OR char_length(btrim(rebind_idempotency_key)) >= 1 AND char_length(btrim(rebind_idempotency_key)) <= 200)"
-        },
-        {
-          "name": "candidate_pending_expense_updates_rebind_pair_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK ((rebind_idempotency_key IS NULL) = (rebind_request_sha256 IS NULL) AND (rebind_idempotency_key IS NULL) = (rebind_result_json IS NULL))"
         },
         {
           "name": "candidate_pending_expense_updates_rebind_request_sha256_check",

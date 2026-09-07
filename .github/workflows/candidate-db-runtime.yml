@@ -214,6 +214,7 @@ jobs:
             supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql
             supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql
             supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql
+            supabase/repeatable/31082026_0557_candidate_empty_expense_carrier_action_v1.sql
             supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
             supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
@@ -243,7 +244,6 @@ jobs:
             supabase/repeatable/06092026_0610_pending_expense_timesheet_delete_context_reassert_v1.sql
             supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql
             supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql
-            supabase/repeatable/31082026_0557_candidate_empty_expense_carrier_action_v1.sql
             supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql
             supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql
             supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql

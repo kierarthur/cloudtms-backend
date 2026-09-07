@@ -83,6 +83,8 @@ test('advanced expense authority is coupled to both database release and Candida
   const policy = 'supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql';
   const completion = 'supabase/repeatable/06092026_2355_candidate_advanced_expense_completion_v1.sql';
   const sentPaperFinal = 'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql';
+  const emptyCarrierAction = 'supabase/repeatable/31082026_0557_candidate_empty_expense_carrier_action_v1.sql';
+  const protectedAdditionalExpense = 'supabase/repeatable/05092026_0941_candidate_protected_additional_expense_action_v1.sql';
   const verifier = 'supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql';
 
   assert.equal(release.verificationFiles.filter(file => file === verifier).length, 1);
@@ -90,6 +92,9 @@ test('advanced expense authority is coupled to both database release and Candida
   for (const file of [migration, policy, completion, sentPaperFinal, verifier]) {
     assert.match(runtime, new RegExp(file.replaceAll('.', '\\.')));
   }
+  assert.ok(runtime.lastIndexOf(emptyCarrierAction) < runtime.lastIndexOf(protectedAdditionalExpense));
+  assert.ok(runtime.lastIndexOf(protectedAdditionalExpense) < runtime.lastIndexOf(policy));
+  assert.ok(runtime.lastIndexOf(completion) < runtime.lastIndexOf(sentPaperFinal));
   const migrationSource = await readFile(new URL(`../${migration}`, import.meta.url), 'utf8');
   assert.match(migrationSource, /approval\.state as approval_state/);
   assert.match(migrationSource, /when approval_state='PENDING' then 'PENDING'/);
