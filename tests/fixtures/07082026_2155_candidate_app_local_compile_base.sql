@@ -175,6 +175,7 @@ create table public.contracts (
   week_ending_weekday_snapshot integer not null default 0,
   std_schedule_json jsonb not null default '[]'::jsonb,
   role text,
+  display_site text,
   band text,
   pay_method_snapshot text not null default 'PAYE',
   default_submission_mode public.submission_mode_enum,
