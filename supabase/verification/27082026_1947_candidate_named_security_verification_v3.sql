@@ -110,13 +110,16 @@ begin
   -- its replaced-session candidate-owner
   -- repair, the three service-only MyTMS Places and contacts functions, the
   -- weekly paper-target preparation functions, the four QR signed-pack V2
-  -- manifest/proof/component/whole-pack functions, and the exact service-only
+  -- manifest/proof/component/whole-pack functions, the exact service-only
   -- legacy one-page cancellation wrapper, manager-finalisation single-flight
-  -- wrapper, two reject-before-delete guard functions, and the target-less
-  -- standalone expense PAPER pack helper are present. Browser execution remains
-  -- exactly zero.
-  if v_count<>128 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'60e0fe40114396d60e8957957f8019bc' then
+  -- wrapper, two reject-before-delete guard functions, the target-less
+  -- standalone expense PAPER pack helper, and the closed Advanced Expense
+  -- component/summary/Office authorities are present. The inner Office
+  -- category-rejection atomic remains deliberately inaccessible to service_role
+  -- because only its guarded Office adapter may invoke it. Browser execution
+  -- remains exactly zero.
+  if v_count<>151 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'9a51fdb7e95957b76078bfa2563088f5' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

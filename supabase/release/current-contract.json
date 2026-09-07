@@ -17584,30 +17584,6 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
-      "identity": "candidate_whole_claim_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_timesheet_id uuid, p_action text, p_reason_note text, p_idempotency_key text, p_now_utc timestamp with time zone)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "34b1e70418ff1af0da6c98b030b3fef450c0b246057abbe5cc0e7a2c68987e55"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "service_role",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
-      ],
-      "schema": "public",
       "identity": "candidate_whole_claim_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_timesheet_id uuid, p_claim_scope_sha256 text, p_action text, p_reason_note text, p_idempotency_key text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",
@@ -119493,5 +119469,5 @@
       "schema": "public"
     }
   ],
-  "contract_version" : 5
+  "contract_version": 5
 }

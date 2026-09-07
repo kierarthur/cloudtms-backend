@@ -46,6 +46,12 @@ end;
 $candidate_delete_preview_closure$;
 
 drop function if exists public.timesheet_weekly_manual_adjustment_delete_apply(uuid,uuid);
+-- Remove the provisional pre-policy whole-claim overload. The locked policy
+-- requires the exact claim-scope digest and no caller may bypass that check by
+-- resolving an older signature retained by an incremental database.
+drop function if exists public.candidate_whole_claim_action_atomic_v1(
+  uuid,text,uuid,integer,uuid,text,text,text,timestamptz
+);
 alter function public.timesheet_weekly_manual_adjustment_delete_preview(uuid,uuid) owner to postgres;
 revoke all on function public.timesheet_weekly_manual_adjustment_delete_preview(uuid,uuid)
   from public,anon,authenticated,service_role;
