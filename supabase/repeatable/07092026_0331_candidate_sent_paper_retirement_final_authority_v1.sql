@@ -11,6 +11,12 @@
 
 \set ON_ERROR_STOP on
 
+-- The 4 September workflow owner can be replayed by more than one recursive
+-- compatibility closure.  Reinstall that complete current owner here before
+-- applying the sent-PAPER correction, so every incremental release ends with
+-- both the latest weekly-submission rules and the immutable sent-mail guard.
+\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1.sql
+
 begin;
 
 do $candidate_sent_paper_retirement_final_authority$

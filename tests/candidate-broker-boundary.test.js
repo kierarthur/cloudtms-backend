@@ -139,6 +139,10 @@ test('advanced expense authority is coupled to both database release and Candida
   assert.match(sentPaperFinalSource, /CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_DRIFT/);
   assert.match(
     sentPaperFinalSource,
+    /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_DRIFT/
+  );
+  assert.match(
+    sentPaperFinalSource,
     /WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED''[\s\S]*OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''/
   );
   assert.match(sentPaperFinalSource, /v_reason not like ''ROUTE_INTERVENTION_%''/);
