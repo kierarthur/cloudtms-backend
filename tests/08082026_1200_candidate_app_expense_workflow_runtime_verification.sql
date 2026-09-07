@@ -504,16 +504,13 @@ begin
       )
     ),'combined:submit',now());
   if (select count(*) from public.candidate_submission_components
-      where workflow_id=v_workflow and workflow_generation=2 and required)<>3
+      where workflow_id=v_workflow and workflow_generation=2 and required)<>2
      or not exists(select 1 from public.candidate_submission_components
       where workflow_id=v_workflow and workflow_generation=2
         and component_kind='HOURS_TIMESHEET' and review_ordinal=1)
      or not exists(select 1 from public.candidate_submission_components
       where workflow_id=v_workflow and workflow_generation=2
-        and component_kind='EXPENSE_SUMMARY' and review_ordinal=2)
-     or not exists(select 1 from public.candidate_submission_components
-      where workflow_id=v_workflow and workflow_generation=2
-        and component_kind='EXPENSE_EVIDENCE' and review_ordinal=3
+        and component_kind='EXPENSE_EVIDENCE' and review_ordinal=2
         and source_component_id=v_evidence) then
     raise exception 'combined required-page manifest/order was incorrect: %',v_response;
   end if;
@@ -581,7 +578,7 @@ begin
      or exists(select 1 from public.candidate_submission_components
        where workflow_id=v_workflow and workflow_generation=2 and required and state<>'SUPERSEDED')
      or (select count(*) from public.candidate_submission_components
-       where workflow_id=v_workflow and workflow_generation=4 and required)<>3
+       where workflow_id=v_workflow and workflow_generation=4 and required)<>2
      or not exists(select 1 from public.candidate_submission_components
        where workflow_id=v_workflow and workflow_generation=4
          and component_kind='EXPENSE_EVIDENCE' and source_component_id=v_evidence) then
