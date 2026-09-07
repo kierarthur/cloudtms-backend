@@ -499,27 +499,46 @@ export function contractDifference(expected, actual) {
 }
 
 export function contractDifferenceDetails(expected, actual, changedSections = contractDifference(expected, actual)) {
-  if (!changedSections.includes('relations')) return [];
+  const details = [];
 
-  const relationKey = relation => `${relation.schema}.${relation.name}:${relation.kind}`;
-  const expectedByKey = new Map((expected.relations ?? []).map(relation => [relationKey(relation), relation]));
-  const actualByKey = new Map((actual.relations ?? []).map(relation => [relationKey(relation), relation]));
-  const keys = [...new Set([...expectedByKey.keys(), ...actualByKey.keys()])].sort();
+  const compareNamedEntries = ({ section, keyFor, label }) => {
+    if (!changedSections.includes(section)) return;
+    const expectedByKey = new Map((expected[section] ?? []).map(entry => [keyFor(entry), entry]));
+    const actualByKey = new Map((actual[section] ?? []).map(entry => [keyFor(entry), entry]));
+    const keys = [...new Set([...expectedByKey.keys(), ...actualByKey.keys()])].sort();
 
-  return keys.flatMap(key => {
-    if (!actualByKey.has(key)) return [`missing installed relation ${key}`];
-    if (!expectedByKey.has(key)) return [`unexpected installed relation ${key}`];
-    if (JSON.stringify(expectedByKey.get(key)) !== JSON.stringify(actualByKey.get(key))) {
-      const expectedRelation = expectedByKey.get(key);
-      const actualRelation = actualByKey.get(key);
+    for (const key of keys) {
+      if (!actualByKey.has(key)) {
+        details.push(`missing installed ${label} ${key}`);
+        continue;
+      }
+      if (!expectedByKey.has(key)) {
+        details.push(`unexpected installed ${label} ${key}`);
+        continue;
+      }
+      if (JSON.stringify(expectedByKey.get(key)) === JSON.stringify(actualByKey.get(key))) continue;
+      const expectedEntry = expectedByKey.get(key);
+      const actualEntry = actualByKey.get(key);
       const changedFields = [...new Set([
-        ...Object.keys(expectedRelation),
-        ...Object.keys(actualRelation),
-      ])].sort().filter(field => JSON.stringify(expectedRelation[field]) !== JSON.stringify(actualRelation[field]));
-      return [`changed installed relation ${key} fields=${changedFields.join(',')}`];
+        ...Object.keys(expectedEntry),
+        ...Object.keys(actualEntry),
+      ])].sort().filter(field => JSON.stringify(expectedEntry[field]) !== JSON.stringify(actualEntry[field]));
+      details.push(`changed installed ${label} ${key} fields=${changedFields.join(',')}`);
     }
-    return [];
+  };
+
+  compareNamedEntries({
+    section: 'relations',
+    keyFor: relation => `${relation.schema}.${relation.name}:${relation.kind}`,
+    label: 'relation',
   });
+  compareNamedEntries({
+    section: 'routines',
+    keyFor: routine => `${routine.schema}.${routine.identity}`,
+    label: 'routine',
+  });
+
+  return details;
 }
 
 export function shellGitHead() {

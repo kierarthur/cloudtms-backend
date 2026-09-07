@@ -479,11 +479,19 @@ test('contract drift diagnostics name relation additions, removals, and changed 
       { schema: 'public', name: 'alpha', kind: 'r', columns: [{ name: 'id', type: 'uuid' }] },
       { schema: 'public', name: 'removed', kind: 'v', columns: [] },
     ],
+    routines: [
+      { schema: 'public', identity: 'alpha(uuid)', owner: 'postgres', definition_sha256: 'old' },
+      { schema: 'private', identity: 'removed()', owner: 'postgres', definition_sha256: 'same' },
+    ],
   };
   const installed = {
     relations: [
       { schema: 'public', name: 'alpha', kind: 'r', columns: [{ name: 'id', type: 'text' }] },
       { schema: 'private', name: 'unexpected', kind: 'r', columns: [] },
+    ],
+    routines: [
+      { schema: 'public', identity: 'alpha(uuid)', owner: 'postgres', definition_sha256: 'new' },
+      { schema: 'public', identity: 'unexpected()', owner: 'postgres', definition_sha256: 'same' },
     ],
   };
 
@@ -492,7 +500,11 @@ test('contract drift diagnostics name relation additions, removals, and changed 
     'changed installed relation public.alpha:r fields=columns',
     'missing installed relation public.removed:v',
   ]);
-  assert.deepEqual(contractDifferenceDetails(base, installed, ['routines']), []);
+  assert.deepEqual(contractDifferenceDetails(base, installed, ['routines']), [
+    'missing installed routine private.removed()',
+    'changed installed routine public.alpha(uuid) fields=definition_sha256',
+    'unexpected installed routine public.unexpected()',
+  ]);
 });
 
 test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {
