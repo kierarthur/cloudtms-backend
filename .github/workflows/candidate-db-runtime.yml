@@ -6,6 +6,7 @@ on:
   push:
     branches: [test]
     paths:
+      - 'supabase/migrations/12072026_1400_table.sql'
       - 'supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql'
       - 'supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql'
       - 'supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql'
@@ -85,6 +86,9 @@ on:
       - 'tests/11082026_*candidate*_verification.sql'
       - 'tests/12082026_*candidate*_verification.sql'
       - 'tests/13082026_*candidate*_verification.sql'
+      - 'supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'
+      - 'scripts/extract-candidate-weekly-adjustment-delete-apply.mjs'
+      - 'scripts/extract-candidate-r2-cleanup-record.mjs'
       - '.github/workflows/candidate-db-runtime.yml'
 
 permissions:
@@ -166,6 +170,7 @@ jobs:
           apply_sql tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql
 
           install_files=(
+            supabase/migrations/12072026_1400_table.sql
             supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql
             supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql
             supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql
