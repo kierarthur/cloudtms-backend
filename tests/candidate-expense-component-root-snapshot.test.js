@@ -64,6 +64,26 @@ test('category removal clears a root-level canonical later-expense snapshot', ()
   );
 });
 
+test('pending expense submit validates root-level later-expense snapshots', () => {
+  const submit = source.match(
+    /create or replace function public\.candidate_expense_update_submit_atomic_v1\([\s\S]*?\n\$function\$;/
+  )?.[0] || '';
+
+  assert.match(
+    submit,
+    /v_new_submission->'canonical_tsfin_snapshot'/
+  );
+  assert.match(
+    submit,
+    /v_update\.prior_immutable_submission_json->'canonical_tsfin_snapshot'/
+  );
+  assert.ok(
+    submit.indexOf("v_new_submission->'canonical_tsfin_snapshot'") <
+      submit.indexOf("v_new_submission,'{}'::jsonb"),
+    'the new root-level canonical snapshot must be read before the outer object fallback'
+  );
+});
+
 test('release reconciliation is limited to mismatched live later-expense components', () => {
   const reconciliation = source.match(
     /do \$reconcile_later_expense_components\$[\s\S]*?\$reconcile_later_expense_components\$;/
