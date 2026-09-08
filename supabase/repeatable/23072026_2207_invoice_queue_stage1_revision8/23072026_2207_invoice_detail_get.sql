@@ -198,7 +198,8 @@ begin
     ) dv on true
   ),
   evidence_rows as materialized (
-    select e.id,e.timesheet_id,e.kind,e.display_name,e.storage_key,e.created_at,
+    select e.id,e.timesheet_id,e.kind,e.document_role,e.candidate_component_id,
+      e.display_name,e.storage_key,e.created_at,
       e.document_asset_id,e.processing_state,e.processing_error_json,
       a.status asset_status,a.normalised_r2_key,a.normalised_sha256,
       a.normalised_size_bytes,a.normalised_page_count,
@@ -461,6 +462,7 @@ begin
         order by l.created_at,l.id),'[]'::jsonb) from lines l) line_rows,
       (select coalesce(jsonb_agg(jsonb_build_object(
         'id',e.id,'timesheet_id',e.timesheet_id,'kind',e.kind,
+        'document_role',e.document_role,'candidate_component_id',e.candidate_component_id,
         'display_name',e.display_name,'storage_key',e.storage_key,
         'created_at',e.created_at,'document_asset_id',e.document_asset_id,
         'processing_state',e.processing_state,
@@ -473,6 +475,7 @@ begin
         '[]'::jsonb) from evidence_rows e) evidence,
       (select coalesce(jsonb_agg(jsonb_build_object(
         'id',e.id,'timesheet_id',e.timesheet_id,'kind',e.kind,
+        'document_role',e.document_role,'candidate_component_id',e.candidate_component_id,
         'display_name',e.display_name,'storage_key',e.storage_key,
         'created_at',e.created_at,'document_asset_id',e.document_asset_id,
         'processing_state',e.processing_state,'asset_status',e.asset_status,
@@ -485,6 +488,7 @@ begin
         where upper(coalesce(e.kind,''))='TIMESHEET') timesheet_evidence,
       (select coalesce(jsonb_agg(jsonb_build_object(
         'id',e.id,'timesheet_id',e.timesheet_id,'kind',e.kind,
+        'document_role',e.document_role,'candidate_component_id',e.candidate_component_id,
         'display_name',e.display_name,'storage_key',e.storage_key,
         'created_at',e.created_at,'document_asset_id',e.document_asset_id,
         'processing_state',e.processing_state,'asset_status',e.asset_status,
@@ -686,6 +690,7 @@ begin
 end;
 $function$;
 
-revoke all on function public.invoice_detail_get(uuid,uuid) from public,anon;
+revoke all on function public.invoice_detail_get(uuid,uuid)
+  from public,anon,authenticated,service_role,authenticator,supabase_admin;
 grant execute on function public.invoice_detail_get(uuid,uuid)
-  to authenticated,service_role;
+  to postgres,service_role;

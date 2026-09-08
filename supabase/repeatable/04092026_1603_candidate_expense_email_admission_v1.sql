@@ -35,6 +35,9 @@ declare
   v_other numeric:=0;
   v_import boolean:=false;
   v_protected boolean:=false;
+  v_paid boolean:=false;
+  v_effective_pay_status text:='UNPAID';
+  v_payment_only_expense_edit boolean:=false;
   v_candidate_mutation_locked boolean:=false;
   v_separate boolean:=false;
   v_expense_admission_ready boolean:=false;
@@ -168,9 +171,29 @@ begin
   end if;
 
   v_import:=coalesce((v_route->>'import_authoritative')::boolean,false);
+  if v_timesheet.timesheet_id is not null then
+    select coalesce(
+      case when coalesce(summary_pay_cache.summary_state_applies,false)
+        then summary_pay_cache.summary_pay_status_code end,
+      pay_state.summary_pay_status_code,
+      case when pay_state.last_settled_at_utc is not null
+          or v_fin.paid_at_utc is not null
+        then 'PAID' else 'UNPAID' end
+    )::text
+    into v_effective_pay_status
+    from (select 1) seed(seed_id)
+    left join public.timesheet_summary_pay_state_cache summary_pay_cache
+      on summary_pay_cache.timesheet_id=v_timesheet.timesheet_id
+    left join public.timesheet_pay_state pay_state
+      on pay_state.timesheet_id=v_timesheet.timesheet_id;
+  end if;
+  v_paid:=upper(coalesce(v_effective_pay_status,'UNPAID')) in ('PAID','PARTIALLY_PAID')
+    or coalesce(
+      (v_fin.policy_snapshot_json#>>'{candidate_expense_payment_edit_shell_v1,active}')::boolean,
+      false
+    );
   v_protected:=v_timesheet.archived_at_utc is not null
     or (v_timesheet.timesheet_id is not null and (not v_timesheet.is_current))
-    or v_fin.paid_at_utc is not null
     or v_fin.locked_by_invoice_id is not null
     or coalesce(v_week.status in (
       'INVOICED'::public.contract_week_status_enum,'CANCELLED'::public.contract_week_status_enum
@@ -181,6 +204,8 @@ begin
       'READY_FOR_HR'::public.ts_fin_processing_status_enum,
       'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
     ),false);
+  v_payment_only_expense_edit:=v_paid and not v_protected
+    and v_fin.authorised_at_utc is null and v_fin.locked_by_invoice_id is null;
   if v_candidate_mutation_locked then
     v_reasons:=v_reasons||'"CANDIDATE_MUTATION_LOCKED_AUTHORISED"'::jsonb;
   end if;
@@ -260,23 +285,27 @@ begin
     'route_family',v_route_family,
     'effective_submission_mode',v_route->'effective_submission_mode',
     'protected',v_protected,
+    'payment_only_expense_edit',v_payment_only_expense_edit,
     'candidate_mutation_locked',v_candidate_mutation_locked,
     'has_active_timesheet_evidence',v_has_timesheet,
     'has_active_claim_evidence',v_has_claim_evidence,
     'has_embedded_submission_evidence',v_has_embedded_submission_evidence,
     'has_worked_schedule',v_has_worked_schedule,
     'has_active_submission_workflow',v_has_active_submission_workflow,
-    'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected and not v_candidate_mutation_locked,
+    'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected
+      and not v_candidate_mutation_locked and not v_paid,
     'candidate_expenses_allowed',v_expense_route_allowed and v_expense_admission_ready and (
       not v_protected or v_hours<>0 or v_additional<>0 or v_import
     ),
     'candidate_paper_submission_allowed',v_paper_route_allowed and not v_protected and not v_candidate_mutation_locked,
-    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked
+    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected
+      and not v_candidate_mutation_locked and not v_paid
       and coalesce(v_week.additional_seq,0)=0 and not coalesce(v_week.is_adjustment,false)
       and v_hours=0 and v_additional=0 and v_expenses=0
       and not v_has_claim_evidence and not v_has_embedded_submission_evidence
       and not v_has_worked_schedule and not v_has_active_submission_workflow,
-    'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and not v_import,
+    'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE')
+      and not v_protected and not v_candidate_mutation_locked and not v_paid and not v_import,
     -- Imported hours remain immutable, but the Candidate may start the
     -- mandatory separate expense route against that worked-week anchor.
     -- Authorised hours remain immutable, but can still anchor the separately
@@ -286,24 +315,28 @@ begin
       (
         not v_protected and (
           v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS')
-          or (v_role='HOURS_ONLY' and (v_separate or v_candidate_mutation_locked))
+          or (v_role='HOURS_ONLY' and (v_separate or v_candidate_mutation_locked or v_paid))
         )
       )
       or (
         v_protected and (v_hours<>0 or v_additional<>0 or v_import)
       )
     ),
-    'can_attach_timesheet',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED') and not v_protected and not v_candidate_mutation_locked and not v_has_timesheet,
-    'can_attach_expense_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked,
-    'can_attach_mileage_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_mileage<>0,
-    'can_attach_travel_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_travel<>0,
-    'can_attach_accommodation_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_accommodation<>0,
-    'can_attach_other_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_other<>0,
-    'can_process',v_role not in ('PROTECTED','CONFLICT') and not v_protected and not v_candidate_mutation_locked,
-    'can_reject_candidate_submission',v_timesheet.timesheet_id is not null and not v_protected and v_fin.authorised_at_utc is null,
+    'can_attach_timesheet',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED')
+      and not v_protected and not v_candidate_mutation_locked and not v_paid and not v_has_timesheet,
+    'can_attach_expense_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and (not v_candidate_mutation_locked or v_payment_only_expense_edit),
+    'can_attach_mileage_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and (not v_candidate_mutation_locked or v_payment_only_expense_edit) and v_mileage<>0,
+    'can_attach_travel_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and (not v_candidate_mutation_locked or v_payment_only_expense_edit) and v_travel<>0,
+    'can_attach_accommodation_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and (not v_candidate_mutation_locked or v_payment_only_expense_edit) and v_accommodation<>0,
+    'can_attach_other_evidence',v_expense_route_allowed and v_expense_admission_ready and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and (not v_candidate_mutation_locked or v_payment_only_expense_edit) and v_other<>0,
+    'can_process',v_role not in ('PROTECTED','CONFLICT') and not v_protected
+      and not v_candidate_mutation_locked and not v_paid,
+    'can_reject_candidate_submission',v_timesheet.timesheet_id is not null
+      and not v_protected and not v_paid and v_fin.authorised_at_utc is null,
     'reject_scope',case when v_role='EXPENSE_ONLY' then 'COMPLETE_EXPENSE_CLAIM' else 'COMPLETE_TIMESHEET_RECORD' end,
     'requires_carrier',v_role='IMPORT_HOURS'
       or (v_role='HOURS_ONLY' and (v_separate or v_candidate_mutation_locked))
+      or (v_paid and (v_hours<>0 or v_additional<>0))
       or (v_protected and (v_hours<>0 or v_additional<>0 or v_import)),
     'expense_invoice_email_ready',coalesce((v_policy->>'expense_invoice_email_ready')::boolean,false),
     'policy',v_policy

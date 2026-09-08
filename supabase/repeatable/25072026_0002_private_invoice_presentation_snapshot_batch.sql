@@ -1365,30 +1365,65 @@ begin
     group by source_group.invoice_id
   ),
   supporting_manifest_agg as materialized (
-    select il.invoice_id,
-      jsonb_agg(distinct jsonb_build_object(
-        'timesheet_id',e.timesheet_id,
-        'evidence_id',e.id,
-        'kind',upper(coalesce(e.kind,'OTHER')),
-        'display_name',coalesce(e.display_name,e.kind,'Evidence'),
-        'storage_key',e.storage_key,
-        'asset_id',e.document_asset_id,
-        'source_kind',a.source_kind,
-        'source_revision',coalesce(a.source_revision,e.source_revision,encode(digest(concat_ws('|',e.id::text,e.storage_key,e.created_at::text),'sha256'),'hex')),
-        'original_r2_key',coalesce(a.original_r2_key,e.storage_key),
-        'asset_sha256',a.normalised_sha256,
-        'asset_manifest_hash',a.normalised_manifest_hash,
-        'asset_size_bytes',a.normalised_size_bytes,
-        'asset_page_count',a.normalised_page_count
-      )) supporting_manifest
-    from public.invoice_lines il
-    join public.timesheet_evidence e on e.timesheet_id=il.timesheet_id
-    left join public.invoice_document_assets a on a.id=e.document_asset_id
-    where il.invoice_id in(select invoice_id from requested_invoices)
-      and il.timesheet_id is not null
-      and nullif(coalesce(e.storage_key,''),'') is not null
-      and upper(coalesce(e.kind,''))<>'TIMESHEET'
-    group by il.invoice_id
+    select evidence.invoice_id,
+      jsonb_agg(jsonb_build_object(
+        'timesheet_id',evidence.timesheet_id,
+        'evidence_id',evidence.evidence_id,
+        'kind',evidence.kind,
+        'document_role',evidence.document_role,
+        'candidate_component_id',evidence.candidate_component_id,
+        'display_name',evidence.display_name,
+        'storage_key',evidence.storage_key,
+        'asset_id',evidence.asset_id,
+        'source_kind',evidence.source_kind,
+        'source_revision',evidence.source_revision,
+        'original_r2_key',evidence.original_r2_key,
+        'asset_sha256',evidence.asset_sha256,
+        'asset_manifest_hash',evidence.asset_manifest_hash,
+        'asset_size_bytes',evidence.asset_size_bytes,
+        'asset_page_count',evidence.asset_page_count
+      ) order by evidence.timesheet_id,
+        case when evidence.document_role='EXPENSE_MILEAGE_APPROVAL_SUMMARY' then 0 else 1 end,
+        case evidence.kind when 'MILEAGE' then 1 when 'TRAVEL' then 2
+          when 'ACCOMMODATION' then 3 else 4 end,
+        evidence.created_at,evidence.evidence_id) supporting_manifest
+    from (
+      select distinct il.invoice_id,e.timesheet_id,e.id evidence_id,
+        upper(coalesce(e.kind,'OTHER')) kind,
+        upper(coalesce(e.document_role,'')) document_role,
+        e.candidate_component_id,
+        coalesce(e.display_name,e.kind,'Evidence') display_name,
+        e.storage_key,e.document_asset_id asset_id,a.source_kind,
+        coalesce(a.source_revision,e.source_revision,encode(digest(concat_ws('|',
+          e.id::text,e.storage_key,e.created_at::text),'sha256'),'hex')) source_revision,
+        coalesce(a.original_r2_key,e.storage_key) original_r2_key,
+        a.normalised_sha256 asset_sha256,
+        a.normalised_manifest_hash asset_manifest_hash,
+        a.normalised_size_bytes asset_size_bytes,
+        a.normalised_page_count asset_page_count,e.created_at
+      from public.invoice_lines il
+      join public.timesheet_evidence e on e.timesheet_id=il.timesheet_id
+      left join public.invoice_document_assets a on a.id=e.document_asset_id
+      where il.invoice_id in(select invoice_id from requested_invoices)
+        and il.timesheet_id is not null
+        and nullif(coalesce(e.storage_key,''),'') is not null
+        and upper(coalesce(e.kind,''))<>'TIMESHEET'
+        and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+        and upper(coalesce(e.document_role,'')) not in(
+          'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
+        and upper(coalesce(e.kind,'')) not in(
+          'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
+        and exists(
+          select 1 from public.invoice_lines expense_line
+          where expense_line.invoice_id=il.invoice_id
+            and expense_line.timesheet_id=e.timesheet_id
+            and(
+              upper(coalesce(expense_line.meta_json->>'line_type','')) in('MILEAGE','EXPENSES')
+              or upper(coalesce(expense_line.meta_json->>'line_type','')) like '%EXPENSE%'
+              or upper(coalesce(expense_line.meta_json->>'line_type','')) like '%TRAVEL%'
+              or upper(coalesce(expense_line.meta_json->>'line_type','')) like '%ACCOMMODATION%'))
+    ) evidence
+    group by evidence.invoice_id
   ),
   higher_rate_agg as materialized (
     select il.invoice_id,

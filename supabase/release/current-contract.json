@@ -3693,7 +3693,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5d2ac6faf4ebe975e4c152a006d9b401e9c68616002b7fa740f25ecbfee2ed1c"
+      "definition_sha256": "85f431bd99ca1b45313bf231e9fc01c38c42836d2cfe8733eba24beb7545430e"
     },
     {
       "acl": [
@@ -3712,7 +3712,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7a230daa50f5b64376d918d74627d6c9027d6f90ddc712efac1dfee98ad476d2"
+      "definition_sha256": "cfc56f8f40bef9f25e1c42ea7fcfadd0feba0359fbc5ce451b6b81809635d409"
     },
     {
       "acl": [
@@ -3822,6 +3822,25 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_expense_effective_payment_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "4bd4b0da2b3b27aef96455245ddaa5c195b75d645c668a9f5a2b196fe559af12"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_expense_evidence_summary_trigger_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -3845,7 +3864,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c4746fa70adf8f962838df0f5ccded5efc706c97456d499084051efbb6a54192"
+      "definition_sha256": "14a57a6bb6358c64ff554f9f0e3266dfd743955c6f19f6cad0b6ff95f61bf094"
     },
     {
       "acl": [
@@ -3960,6 +3979,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "7afc774334ba4a012ad3da1346dcf5cd6938e3a461c9bceacba2f3e0909fcf28"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_payment_edit_shell_v1(p_timesheet_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "71f859c6eb49ad6965a4d5020e0037a46b6d20d0afada812cbc2dc343f532e51"
     },
     {
       "acl": [
@@ -4952,7 +4990,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "70dd0d0c3624189536703cc60b70ba8c3cc7eb3f92edf03ef9e74c005a4530e9"
+      "definition_sha256": "449d8af419cded7d29d52da55e5a2416a92cf9a3cde0b93da1560a63138eaaf8"
     },
     {
       "acl": [
@@ -5451,7 +5489,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "2ab5800efa7e0aebc3e5fdf5bc207831e1359ea16cdae8c9aae754050332fc2b"
+      "definition_sha256": "c408a7b1f8cc70a117a99529beee709d9d8731024fdf4bec0d874e5e2eb89d67"
     },
     {
       "acl": [
@@ -5584,7 +5622,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d3f1efd852c572516d156f9287698cc91d6662f0e702f98d00237d94fcb5ef6b"
+      "definition_sha256": "f153263fb5658823fc8e6367fe1171d4439d69d36d83a7e2cb2479ad95f975d0"
     },
     {
       "acl": [
@@ -6653,7 +6691,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e291286251764bfdb216bbce841fe24095fea2f1612f94078abf702168f60822"
+      "definition_sha256": "2206fd4a174ff33c3554e8370cde9d080694007289630286953ea2fa69baa3f2"
     },
     {
       "acl": [
@@ -7109,7 +7147,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b713e96b9cc0f2b71f5f7d3220e8c01470acecc3218a5ec67b5728c9f2a55d49"
+      "definition_sha256": "f99c16490fefbd35032e3c70241288fdc5d691f9334b13eaf5d3db8d55f7ed31"
     },
     {
       "acl": [
@@ -16343,7 +16381,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5cdd2bcc96c9393fb652914815588a9bd63bdad02b770dda895f82a654a3d3ed"
+      "definition_sha256": "9e8e246304d875782683e38c81b9b7342ac02bac30840866ca0e3a6c55149b12"
     },
     {
       "acl": [
@@ -16367,7 +16405,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "40e4e283c9e8ba863fa10a2a1077160eb4159958912e250975dfaad306636f95"
+      "definition_sha256": "bb408b88de71de04386509873752e634c729d4f8d45b04530a74cfc8807e6a28"
     },
     {
       "acl": [
@@ -17636,7 +17674,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "48fa8bf8342b731ea0ab4310a5242f41b9d7d9d26581c266080799923e778e9e"
+      "definition_sha256": "040a57beefea3605fef43e93e9be51b46e5f927ded0457c946f4de90869d1357"
     },
     {
       "acl": [
@@ -20372,7 +20410,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "1991ff1581aebffcbd7049a85941c1d3106f585a9d85427a7e68ae06fd84a818"
+      "definition_sha256": "734975802020310c7520c89c2dc5da720e5244fed83e9eef02a1af04bae99c5e"
     },
     {
       "acl": [

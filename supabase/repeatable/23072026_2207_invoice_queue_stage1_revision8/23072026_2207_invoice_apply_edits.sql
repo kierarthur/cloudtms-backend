@@ -3392,5 +3392,6 @@ end;
 $function$;
 
 revoke all on function public.invoice_apply_edits(uuid,jsonb,uuid)
-  from public,anon,authenticated;
-grant execute on function public.invoice_apply_edits(uuid,jsonb,uuid) to authenticated,service_role;
+  from public,anon,authenticated,service_role,authenticator,supabase_admin;
+grant execute on function public.invoice_apply_edits(uuid,jsonb,uuid)
+  to postgres,service_role;

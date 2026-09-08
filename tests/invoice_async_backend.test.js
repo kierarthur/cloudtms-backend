@@ -1111,6 +1111,44 @@ test('draft invoice view prepares required legacy accommodation evidence before 
   }
 });
 
+test('invoice evidence policy includes summaries and genuine Other evidence but excludes standalone signatures', () => {
+  const timesheetId = '00000000-0000-4000-8000-0000000000e1';
+  const expenseLine = { timesheet_id: timesheetId, line_type_norm: 'EXPENSES' };
+  const mileageLine = { timesheet_id: timesheetId, line_type_norm: 'MILEAGE' };
+  const summary = {
+    timesheet_id: timesheetId,
+    kind: 'OTHER',
+    document_role: 'EXPENSE_MILEAGE_APPROVAL_SUMMARY'
+  };
+  const genuineOther = {
+    timesheet_id: timesheetId,
+    kind: 'OTHER',
+    document_role: 'SOURCE_EVIDENCE'
+  };
+  const managerSignature = {
+    timesheet_id: timesheetId,
+    kind: 'OTHER',
+    document_role: 'MANAGER_SIGNATURE'
+  };
+  const candidateSignature = {
+    timesheet_id: timesheetId,
+    kind: 'OTHER',
+    document_role: 'CANDIDATE_SIGNATURE'
+  };
+  const supersededSummary = {
+    ...summary,
+    processing_state: 'SUPERSEDED'
+  };
+
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(summary, expenseLine), true);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(summary, mileageLine), true);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(genuineOther, expenseLine), true);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(genuineOther, mileageLine), true);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(managerSignature, expenseLine), false);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(candidateSignature, expenseLine), false);
+  assert.equal(invoiceAsyncHttpInternals.invoiceEvidenceRequiredByLine(supersededSummary, expenseLine), false);
+});
+
 test('draft invoice view fails closed when required expense evidence bytes are missing', async () => {
   const originalFetch = globalThis.fetch;
   const invoice = '00000000-0000-4000-8000-000000000051';

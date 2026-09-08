@@ -1926,12 +1926,24 @@ function invoiceEvidenceLineType(line = {}) {
 function invoiceEvidenceRequiredByLine(evidence = {}, line = {}) {
   if (String(evidence.timesheet_id || '') !== String(line.timesheet_id || '')) return false;
   const kind = String(evidence.kind || 'OTHER').trim().toUpperCase();
+  const documentRole = String(evidence.document_role || '').trim().toUpperCase();
+  const processingState = String(evidence.processing_state || '').trim().toUpperCase();
   const lineType = invoiceEvidenceLineType(line);
-  if (kind === 'TIMESHEET') return false;
+  const isExpenseLine = lineType === 'MILEAGE'
+    || lineType === 'EXPENSES'
+    || lineType.includes('EXPENSE')
+    || lineType.includes('TRAVEL')
+    || lineType.includes('ACCOMMODATION');
+  if (kind === 'TIMESHEET' || processingState === 'SUPERSEDED') return false;
+  if (['CANDIDATE_SIGNATURE', 'MANAGER_SIGNATURE', 'ELECTRONIC_SIGNATURES'].includes(documentRole)
+      || ['CANDIDATE_SIGNATURE', 'MANAGER_SIGNATURE', 'ELECTRONIC_SIGNATURES'].includes(kind)) {
+    return false;
+  }
+  if (documentRole === 'EXPENSE_MILEAGE_APPROVAL_SUMMARY') return isExpenseLine;
   if (kind === 'MILEAGE') return lineType === 'MILEAGE';
   if (kind === 'TRAVEL') return lineType.includes('TRAVEL');
   if (kind === 'ACCOMMODATION') return lineType.includes('ACCOMMODATION');
-  return lineType.includes('EXPENSE');
+  return isExpenseLine;
 }
 
 function requiredInvoiceEvidence(detail = {}) {
@@ -2259,7 +2271,7 @@ async function handleViewDocument(
       evidenceQuery.searchParams.set('id', `in.(${ids.join(',')})`);
       evidenceQuery.searchParams.set(
         'select',
-        'id,timesheet_id,kind,storage_key,source_revision,display_name,document_asset_id,processing_state,created_at'
+        'id,timesheet_id,kind,document_role,candidate_component_id,storage_key,source_revision,display_name,document_asset_id,processing_state,created_at'
       );
       evidenceQuery.searchParams.set('limit', String(ids.length));
       const evidenceResponse = await fetch(evidenceQuery, { headers: serviceHeaders });
@@ -4584,5 +4596,7 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   handleUnifiedOutboxSummaryMembership,
   compareCursorOutboxRows,
   legacyQueueState,
+  invoiceEvidenceRequiredByLine,
+  requiredInvoiceEvidence,
   match
 });

@@ -965,6 +965,149 @@ exception when invalid_text_representation or numeric_value_out_of_range then
 end;
 $function$;
 
+create or replace function private._candidate_expense_effective_payment_v1(
+  p_timesheet_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_fin public.timesheets_financials%rowtype;
+  v_status text;
+  v_edit_shell boolean:=false;
+begin
+  select row.* into v_fin
+  from public.timesheets_financials row
+  where row.timesheet_id=p_timesheet_id and row.is_current
+  order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc
+  limit 1;
+  if not found then
+    return jsonb_build_object(
+      'status_code','UNPAID','payment_protected',false,
+      'payment_only_eligible',false,'edit_shell',false
+    );
+  end if;
+  v_edit_shell:=coalesce(
+    (v_fin.policy_snapshot_json#>>'{candidate_expense_payment_edit_shell_v1,active}')::boolean,
+    false
+  );
+  select coalesce(
+    case when coalesce(summary_pay_cache.summary_state_applies,false)
+      then summary_pay_cache.summary_pay_status_code end,
+    pay_state.summary_pay_status_code,
+    case when pay_state.last_settled_at_utc is not null
+        or v_fin.paid_at_utc is not null
+      then 'PAID' else 'UNPAID' end
+  )::text
+  into v_status
+  from (select 1) seed(seed_id)
+  left join public.timesheet_summary_pay_state_cache summary_pay_cache
+    on summary_pay_cache.timesheet_id=p_timesheet_id
+  left join public.timesheet_pay_state pay_state
+    on pay_state.timesheet_id=p_timesheet_id;
+  return jsonb_build_object(
+    'status_code',upper(coalesce(v_status,'UNPAID')),
+    'payment_protected',upper(coalesce(v_status,'UNPAID')) in ('PAID','PARTIALLY_PAID')
+      or v_edit_shell,
+    'payment_only_eligible',upper(coalesce(v_status,'UNPAID')) in ('PAID','PARTIALLY_PAID')
+      or v_edit_shell,
+    'edit_shell',v_edit_shell
+  );
+exception when invalid_text_representation then
+  return jsonb_build_object(
+    'status_code','INVALID','payment_protected',true,
+    'payment_only_eligible',false,'edit_shell',false
+  );
+end;
+$function$;
+
+create or replace function private._candidate_expense_payment_edit_shell_v1(
+  p_timesheet_id uuid,
+  p_now_utc timestamptz default now()
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_timesheet public.timesheets%rowtype;
+  v_fin public.timesheets_financials%rowtype;
+  v_new public.timesheets_financials%rowtype;
+  v_payment jsonb;
+begin
+  select row.* into v_timesheet from public.timesheets row
+  where row.timesheet_id=p_timesheet_id and row.is_current
+    and row.archived_at_utc is null for update;
+  if not found or v_timesheet.sheet_scope<>'WEEKLY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_EXPENSE_OWNING_TIMESHEET_CHANGED' using errcode='40001';
+  end if;
+  select row.* into v_fin from public.timesheets_financials row
+  where row.timesheet_id=p_timesheet_id and row.is_current
+  order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc
+  limit 1 for update;
+  if not found then raise exception 'CANDIDATE_EXPENSE_FINANCIALS_NOT_FOUND' using errcode='P0002'; end if;
+  if v_timesheet.authorised_at_server is not null
+     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
+     or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+  v_payment:=private._candidate_expense_effective_payment_v1(p_timesheet_id);
+  if coalesce((v_payment->>'payment_protected')::boolean,false)
+     and not coalesce((v_payment->>'payment_only_eligible')::boolean,false) then
+    raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+  if coalesce((v_payment->>'edit_shell')::boolean,false)
+     or not coalesce((v_payment->>'payment_protected')::boolean,false) then
+    return v_fin.id;
+  end if;
+
+  -- Preserve the settled/part-settled row byte-for-byte apart from its current
+  -- marker. Candidate Expense corrections occur only on the new unpaid shell;
+  -- payment/remittance evidence and paid worked Hours remain historical truth.
+  update public.timesheets_financials row set is_current=false
+  where row.id=v_fin.id and row.is_current;
+  if not found then
+    raise exception 'CANDIDATE_EXPENSE_FINANCIALS_CHANGED' using errcode='40001';
+  end if;
+  v_new:=v_fin;
+  v_new.id:=gen_random_uuid();
+  v_new.is_current:=true;
+  v_new.is_stale:=true;
+  v_new.stale_reason:='CANDIDATE_EXPENSE_PAYMENT_EDIT_SHELL';
+  v_new.computed_at_utc:=p_now_utc;
+  v_new.created_at:=p_now_utc;
+  v_new.updated_at:=p_now_utc;
+  v_new.processing_status:='PENDING_AUTH'::public.ts_fin_processing_status_enum;
+  v_new.processed_by_user_id:=null;
+  v_new.processed_at_utc:=null;
+  v_new.authorised_at_utc:=null;
+  v_new.authorised_by_user_id:=null;
+  v_new.locked_by_invoice_id:=null;
+  v_new.locked_at_utc:=null;
+  v_new.unlocked_by_credit_note_id:=null;
+  v_new.invoice_breakdown_json:='{}'::jsonb;
+  v_new.paid_at_utc:=null;
+  v_new.paid_by_user_id:=null;
+  v_new.payment_reference:=null;
+  v_new.remittance_last_sent_at_utc:=null;
+  v_new.remittance_send_count:=0;
+  v_new.pay_vat_amount_snapshot:=0;
+  v_new.pay_total_inc_vat_snapshot:=0;
+  v_new.policy_snapshot_json:=coalesce(v_fin.policy_snapshot_json,'{}'::jsonb)
+    ||jsonb_build_object('candidate_expense_payment_edit_shell_v1',jsonb_build_object(
+      'active',true,'source_tsfin_id',v_fin.id,'source_payment_status',v_payment->>'status_code',
+      'created_at_utc',p_now_utc
+    ));
+  insert into public.timesheets_financials select v_new.*;
+  return v_new.id;
+end;
+$function$;
+
 create or replace function private._candidate_expense_financial_remove_v1(
   p_expense_component_id uuid,
   p_expected_component_generation integer,
@@ -1001,6 +1144,8 @@ declare
   v_unmaterialised_prior jsonb;
   v_prior_amount numeric;
   v_prior_units numeric;
+  v_payment jsonb;
+  v_edit_financial_id uuid;
 begin
   select * into v_component from public.candidate_expense_components component
   where component.expense_component_id=p_expense_component_id for update;
@@ -1068,10 +1213,20 @@ begin
       )::text;
   end if;
   if v_timesheet.authorised_at_server is not null
-     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
-     or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null
-     or v_fin.paid_at_utc is not null then
+     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
+     or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
+  end if;
+  v_payment:=private._candidate_expense_effective_payment_v1(v_timesheet_id);
+  if coalesce((v_payment->>'payment_protected')::boolean,false) then
+    v_edit_financial_id:=private._candidate_expense_payment_edit_shell_v1(
+      v_timesheet_id,p_now_utc
+    );
+    select row.* into v_fin from public.timesheets_financials row
+    where row.id=v_edit_financial_id and row.is_current for update;
+    if not found then
+      raise exception 'CANDIDATE_EXPENSE_FINANCIALS_CHANGED' using errcode='40001';
+    end if;
   end if;
   v_mileage_units:=case when v_component.expense_category='MILEAGE'
     then 0 else coalesce(v_fin.mileage_units,0) end;
@@ -1177,7 +1332,7 @@ begin
       and coalesce(v_fin.pay_total_inc_vat_snapshot,0)=0
       and v_timesheet.authorised_at_server is null
       and upper(coalesce(v_timesheet.status::text,'')) not in (
-        'AUTHORISED','AUTHORIZED','INVOICED','PAID'
+        'AUTHORISED','AUTHORIZED','INVOICED'
       )
       and v_timesheet.sheet_scope::text='WEEKLY'
       and coalesce(v_timesheet.is_adjustment,false)
@@ -1202,6 +1357,7 @@ declare
   v_timesheet_id uuid;
   v_timesheet public.timesheets%rowtype;
   v_fin public.timesheets_financials%rowtype;
+  v_payment jsonb;
   v_code text;
   v_slug text;
   v_label text;
@@ -1284,7 +1440,8 @@ begin
   v_timesheet_id:=private._candidate_expense_owned_timesheet_id_v1(
     p_component.workflow_id,p_component.owning_timesheet_id
   );
-  if coalesce(p_component.agency_authorisation_state,'NOT_AUTHORISED')<>'NOT_AUTHORISED'
+  if coalesce(p_component.agency_authorisation_state,'NOT_AUTHORISED')
+       not in ('NOT_AUTHORISED','PAID')
      or (p_component.owning_timesheet_id is not null and v_timesheet_id is null) then
     return null;
   end if;
@@ -1293,10 +1450,14 @@ begin
     select * into v_fin from public.timesheets_financials
     where timesheet_id=v_timesheet_id and is_current
     order by computed_at_utc desc nulls last,updated_at desc,id desc limit 1;
+    v_payment:=private._candidate_expense_effective_payment_v1(v_timesheet_id);
     if v_timesheet.authorised_at_server is not null
-       or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
-       or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null
-       or v_fin.paid_at_utc is not null then
+       or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
+       or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null then
+      return null;
+    end if;
+    if p_component.agency_authorisation_state='PAID'
+       and not coalesce((v_payment->>'payment_only_eligible')::boolean,false) then
       return null;
     end if;
   end if;
@@ -1361,6 +1522,9 @@ declare
   v_supporting_count integer;
   v_status text;
   v_included boolean;
+  v_action jsonb;
+  v_payment jsonb;
+  v_payment_only_actionable boolean:=false;
 begin
   v_timesheet_id:=private._candidate_expense_owned_timesheet_id_v1(
     p_component.workflow_id,p_component.owning_timesheet_id
@@ -1404,6 +1568,13 @@ begin
   v_included:=p_component.lifecycle_state not in (
     'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
   );
+  v_action:=case when p_actions_allowed
+    then private._candidate_expense_component_action_v1(p_component) else null end;
+  v_payment:=private._candidate_expense_effective_payment_v1(v_timesheet_id);
+  v_payment_only_actionable:=coalesce((v_payment->>'payment_only_eligible')::boolean,false)
+    and p_component.agency_authorisation_state not in ('AUTHORISED','INVOICED')
+    and not (p_component.owning_timesheet_id is not null and v_timesheet_id is null)
+    and v_action is not null;
   return jsonb_build_object(
     'workflow_id',p_component.workflow_id,
     'expense_component_id',p_component.expense_component_id,
@@ -1427,11 +1598,12 @@ begin
       'decision_id',case when p_component.refusal_kind='MANAGER_REFUSAL'
         then p_component.approval_request_id else null end
     ) end,
-    'protected',p_component.agency_authorisation_state<>'NOT_AUTHORISED'
+    'protected',p_component.agency_authorisation_state in ('AUTHORISED','INVOICED','PAID')
+      or coalesce((v_payment->>'payment_protected')::boolean,false)
       or (p_component.owning_timesheet_id is not null and v_timesheet_id is null),
+    'payment_only_actionable',v_payment_only_actionable,
     'included_in_total',v_included,
-    'available_action',case when p_actions_allowed
-      then private._candidate_expense_component_action_v1(p_component) else null end
+    'available_action',v_action
   );
 end;
 $function$;
@@ -1671,9 +1843,22 @@ begin
     and workflow.contract_id=v_contract_id and workflow.week_ending_date=v_week_ending
     and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REJECTED','REFUSED')
     and (linked_timesheet.authorised_at_server is not null
-      or upper(linked_timesheet.status::text) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
+      or upper(linked_timesheet.status::text) in ('AUTHORISED','AUTHORIZED','INVOICED')
       or financial.authorised_at_utc is not null or financial.locked_by_invoice_id is not null
-      or financial.paid_at_utc is not null);
+      or (coalesce((private._candidate_expense_effective_payment_v1(
+            linked_timesheet.timesheet_id
+          )->>'payment_protected')::boolean,false)
+        and (not coalesce((private._candidate_expense_effective_payment_v1(
+              linked_timesheet.timesheet_id
+            )->>'payment_only_eligible')::boolean,false)
+          or coalesce(financial.total_hours,0)<>0
+          or coalesce(financial.hours_day,0)<>0
+          or coalesce(financial.hours_night,0)<>0
+          or coalesce(financial.hours_sat,0)<>0
+          or coalesce(financial.hours_sun,0)<>0
+          or coalesce(financial.hours_bh,0)<>0
+          or coalesce(financial.additional_pay_ex_vat,0)<>0
+          or coalesce(financial.additional_charge_ex_vat,0)<>0)));
   if v_protected_count>0 then return null; end if;
   -- Component protection is independent of whether an historical/current
   -- expense owner can still be resolved.  A target-less protected component
@@ -1692,7 +1877,7 @@ begin
       and component.lifecycle_state not in (
         'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
       )
-      and component.agency_authorisation_state in ('AUTHORISED','INVOICED','PAID')
+      and component.agency_authorisation_state in ('AUTHORISED','INVOICED')
   ) then
     return null;
   end if;
@@ -1732,7 +1917,7 @@ begin
     )
     and component.owning_timesheet_id is not null
     and (
-      component.agency_authorisation_state<>'NOT_AUTHORISED'
+      component.agency_authorisation_state in ('AUTHORISED','INVOICED')
       or owner.timesheet_id is null or financial.id is null
       or (select count(*)
           from public.candidate_expense_components same_category
@@ -1920,7 +2105,7 @@ begin
     'protected',exists(
       select 1 from category_rows protected_category
       where protected_category.workflow_id=claim.id
-        and protected_category.agency_authorisation_state<>'NOT_AUTHORISED'
+        and protected_category.agency_authorisation_state in ('AUTHORISED','INVOICED')
         and protected_category.lifecycle_state not in (
           'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
         )
@@ -4174,7 +4359,7 @@ begin
   ) then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_CHANGED' using errcode='40001';
   end if;
-  if v_component.agency_authorisation_state<>'NOT_AUTHORISED' then
+  if v_component.agency_authorisation_state not in ('NOT_AUTHORISED','PAID') then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
   end if;
 
@@ -4724,7 +4909,7 @@ begin
       and component.lifecycle_state not in (
         'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
       )
-      and component.agency_authorisation_state<>'NOT_AUTHORISED'
+       and component.agency_authorisation_state in ('AUTHORISED','INVOICED')
   ) then
     raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
   end if;
@@ -4803,9 +4988,22 @@ begin
       order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc
       limit 1 for update;
       if v_timesheet.authorised_at_server is not null
-         or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
+         or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
          or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null
-         or v_fin.paid_at_utc is not null then
+         or (coalesce((private._candidate_expense_effective_payment_v1(
+               v_timesheet_id
+             )->>'payment_protected')::boolean,false)
+           and (not coalesce((private._candidate_expense_effective_payment_v1(
+                 v_timesheet_id
+               )->>'payment_only_eligible')::boolean,false)
+             or coalesce(v_fin.total_hours,0)<>0
+             or coalesce(v_fin.hours_day,0)<>0
+             or coalesce(v_fin.hours_night,0)<>0
+             or coalesce(v_fin.hours_sat,0)<>0
+             or coalesce(v_fin.hours_sun,0)<>0
+             or coalesce(v_fin.hours_bh,0)<>0
+             or coalesce(v_fin.additional_pay_ex_vat,0)<>0
+             or coalesce(v_fin.additional_charge_ex_vat,0)<>0)) then
         raise exception 'CANDIDATE_EXPENSE_COMPONENT_PROTECTED' using errcode='55000';
       end if;
     end if;
@@ -5951,6 +6149,8 @@ alter function private._candidate_expense_owner_context_lock_v1(uuid) owner to p
 alter function private._candidate_expense_component_status_v1(text,text,text) owner to postgres;
 alter function private._candidate_manager_decision_id_v1(uuid,integer,uuid,text) owner to postgres;
 alter function private._candidate_expense_unmaterialised_prior_v1(uuid) owner to postgres;
+alter function private._candidate_expense_effective_payment_v1(uuid) owner to postgres;
+alter function private._candidate_expense_payment_edit_shell_v1(uuid,timestamptz) owner to postgres;
 alter function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) owner to postgres;
 alter function private._candidate_expense_component_action_v1(public.candidate_expense_components) owner to postgres;
 alter function private._candidate_expense_component_json_v1(public.candidate_expense_components,boolean) owner to postgres;
@@ -5992,6 +6192,8 @@ revoke all on function private._candidate_expense_owner_context_lock_v1(uuid) fr
 revoke all on function private._candidate_expense_component_status_v1(text,text,text) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_manager_decision_id_v1(uuid,integer,uuid,text) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_expense_unmaterialised_prior_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_expense_effective_payment_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_expense_payment_edit_shell_v1(uuid,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_expense_financial_remove_v1(uuid,integer,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_expense_component_action_v1(public.candidate_expense_components) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_expense_component_json_v1(public.candidate_expense_components,boolean) from public,anon,authenticated,service_role;

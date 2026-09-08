@@ -410,8 +410,10 @@ begin
   ),
   evidence_candidates as materialized (
     select distinct it.chunk_id,it.document_version_id,it.operation_id,
-      te.id source_id,'TIMESHEET_EVIDENCE'::text source_kind,te.storage_key original_r2_key,
-      te.display_name,upper(coalesce(te.kind,'OTHER')) kind,
+      te.id source_id,te.timesheet_id,'TIMESHEET_EVIDENCE'::text source_kind,
+      te.storage_key original_r2_key,te.display_name,
+      upper(coalesce(te.kind,'OTHER')) kind,
+      upper(coalesce(te.document_role,'')) document_role,
       coalesce(nullif(te.source_revision,''),encode(digest(concat_ws('|',
         te.id::text,te.storage_key,te.created_at::text),'sha256'),'hex'))
         source_revision,te.document_asset_id,te.created_at
@@ -421,28 +423,23 @@ begin
     where not it.frozen_source
       and nullif(btrim(coalesce(te.storage_key,'')),'') is not null
       and upper(coalesce(te.kind,''))<>'TIMESHEET'
-      and(
-        upper(coalesce(te.kind,''))='MILEAGE' and exists(
-          select 1 from public.invoice_lines il
-          where il.invoice_id=root.entity_id and il.timesheet_id=it.timesheet_id
-            and upper(coalesce(il.meta_json->>'line_type',''))='MILEAGE')
-        or upper(coalesce(te.kind,''))='TRAVEL' and exists(
-          select 1 from public.invoice_lines il
-          where il.invoice_id=root.entity_id and il.timesheet_id=it.timesheet_id
-            and upper(coalesce(il.meta_json->>'line_type','')) like '%TRAVEL%')
-        or upper(coalesce(te.kind,''))='ACCOMMODATION' and exists(
-          select 1 from public.invoice_lines il
-          where il.invoice_id=root.entity_id and il.timesheet_id=it.timesheet_id
-            and upper(coalesce(il.meta_json->>'line_type','')) like '%ACCOMMODATION%')
-        or upper(coalesce(te.kind,'')) not in(
-          'MILEAGE','TRAVEL','ACCOMMODATION') and exists(
-          select 1 from public.invoice_lines il
-          where il.invoice_id=root.entity_id and il.timesheet_id=it.timesheet_id
-            and upper(coalesce(il.meta_json->>'line_type','')) like '%EXPENSE%'))
+      and upper(coalesce(te.processing_state,''))<>'SUPERSEDED'
+      and upper(coalesce(te.document_role,'')) not in(
+        'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
+      and upper(coalesce(te.kind,'')) not in(
+        'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
+      and exists(
+        select 1 from public.invoice_lines il
+        where il.invoice_id=root.entity_id and il.timesheet_id=it.timesheet_id
+          and(
+            upper(coalesce(il.meta_json->>'line_type','')) in('MILEAGE','EXPENSES')
+            or upper(coalesce(il.meta_json->>'line_type','')) like '%EXPENSE%'
+            or upper(coalesce(il.meta_json->>'line_type','')) like '%TRAVEL%'
+            or upper(coalesce(il.meta_json->>'line_type','')) like '%ACCOMMODATION%'))
     union
     select distinct it.chunk_id,it.document_version_id,it.operation_id,
-      it.timesheet_id,'MANUAL_TIMESHEET',a.original_r2_key,
-      coalesce(a.original_filename,'Manual timesheet'),'TIMESHEET',
+      it.timesheet_id,it.timesheet_id,'MANUAL_TIMESHEET',a.original_r2_key,
+      coalesce(a.original_filename,'Manual timesheet'),'TIMESHEET','SIGNED_TIMESHEET',
       a.source_revision,a.id,a.created_at_utc
     from invoice_timesheets it join public.invoice_document_assets a
       on a.id=it.manual_document_asset_id
@@ -450,10 +447,17 @@ begin
       and it.attach_timesheet and not it.no_timesheet_required
     union
     select distinct l.id,l.resolved_document_version_id,l.operation_id,
-      (x.value->>'evidence_id')::uuid,'TIMESHEET_EVIDENCE',
+      (x.value->>'evidence_id')::uuid,
+      case when coalesce(x.value->>'timesheet_id','') ~*
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        then (x.value->>'timesheet_id')::uuid end,
+      'TIMESHEET_EVIDENCE',
       coalesce(x.value->>'original_r2_key',x.value->>'storage_key'),
       coalesce(x.value->>'display_name',x.value->>'kind','Evidence'),
       upper(coalesce(x.value->>'kind','OTHER')),
+      upper(coalesce(
+        resolved_evidence.document_role,nullif(btrim(x.value->>'document_role'),''),''
+      )),
       x.value->>'source_revision',
       (x.value->>'asset_id')::uuid,v.created_at_utc
     from linked l
@@ -462,8 +466,23 @@ begin
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(v.snapshot_json->'supporting_manifest')='array'
         then v.snapshot_json->'supporting_manifest' else '[]'::jsonb end) x(value)
+    left join public.timesheet_evidence resolved_evidence
+      on resolved_evidence.id=case
+        when coalesce(x.value->>'evidence_id','') ~*
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        then (x.value->>'evidence_id')::uuid end
     where l.purpose='FINAL_ISSUE'
       and upper(coalesce(x.value->>'kind',''))<>'TIMESHEET'
+      and upper(coalesce(resolved_evidence.processing_state,''))<>'SUPERSEDED'
+      and nullif(upper(coalesce(
+        resolved_evidence.document_role,nullif(btrim(x.value->>'document_role'),''),''
+      )),'') is not null
+      and upper(coalesce(
+        resolved_evidence.document_role,nullif(btrim(x.value->>'document_role'),''),''
+      )) not in(
+        'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
+      and upper(coalesce(x.value->>'kind','')) not in(
+        'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES')
       and coalesce(x.value->>'asset_id','') ~*
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       and coalesce(x.value->>'evidence_id','') ~*
@@ -472,8 +491,11 @@ begin
   evidence_items as materialized (
     select e.chunk_id,e.document_version_id,e.operation_id,
       2000+row_number() over(partition by e.chunk_id
-        order by case e.kind when 'TIMESHEET' then 0 when 'MILEAGE' then 1
-          when 'TRAVEL' then 2 when 'ACCOMMODATION' then 3 else 4 end,
+        order by case e.kind when 'TIMESHEET' then 0 else 1 end,
+          e.timesheet_id,
+          case when e.document_role='EXPENSE_MILEAGE_APPROVAL_SUMMARY' then 0 else 1 end,
+          case e.kind when 'MILEAGE' then 1 when 'TRAVEL' then 2
+            when 'ACCOMMODATION' then 3 else 4 end,
           e.created_at,e.source_id)::integer ordinal,
       e.source_id,e.source_kind,e.original_r2_key,e.display_name,e.kind,
       e.source_revision,e.document_asset_id

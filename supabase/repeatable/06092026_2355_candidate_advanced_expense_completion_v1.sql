@@ -878,9 +878,8 @@ begin
      or coalesce(v_fin.pay_total_inc_vat_snapshot,0)<>0
      or v_fin.authorised_at_utc is not null
      or v_fin.locked_by_invoice_id is not null
-     or v_fin.paid_at_utc is not null
-     or v_timesheet.authorised_at_server is not null
-     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
+      or v_timesheet.authorised_at_server is not null
+      or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
      or v_timesheet.sheet_scope::text<>'WEEKLY'
      or coalesce(v_timesheet.is_adjustment,false) is not true
      or upper(coalesce(v_timesheet.adjustment_origin,'')) in ('IMPORT_CORRECTION','IMPORT_CANCELLATION') then

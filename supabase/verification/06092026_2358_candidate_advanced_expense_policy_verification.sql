@@ -1733,4 +1733,339 @@ begin
 end;
 $targetless_final_pending$;
 
+-- Payment remains visible history, but payment alone is not an Expense edit
+-- lock.  A paid Expense-only carrier can cancel its categories while one
+-- reusable correction shell preserves the settled row; authorisation/invoice guards are
+-- covered by the earlier protected-category cases in this verifier.
+do $paid_expense_only$
+declare
+  v_base public.candidate_submission_workflows%rowtype;
+  v_actor uuid:=pg_catalog.gen_random_uuid();
+  v_timesheet uuid:=pg_catalog.gen_random_uuid();
+  v_week uuid:=pg_catalog.gen_random_uuid();
+  v_workflow uuid:=pg_catalog.gen_random_uuid();
+  v_component uuid:=pg_catalog.gen_random_uuid();
+  v_component_two uuid:=pg_catalog.gen_random_uuid();
+  v_paid_fin_id uuid;
+  v_paid_fin_before jsonb;
+  v_session uuid;
+  v_paid_at timestamptz:=now()-interval '1 day';
+  v_projection jsonb;
+  v_projected_category jsonb;
+  v_capabilities jsonb;
+  v_action jsonb;
+  v_first_result jsonb;
+  v_result jsonb;
+begin
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(v_actor,'advanced-paid-'||v_actor::text||'@example.test',
+    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  update public.settings_defaults
+  set candidate_app_system_actor_user_id=v_actor
+  where id=1;
+
+  select workflow.* into strict v_base
+  from public.candidate_submission_workflows workflow
+  where workflow.idempotency_key='advanced-expense:approved';
+  select session.id into strict v_session
+  from public.candidate_app_sessions session
+  where session.account_id=v_base.account_id and session.environment='TEST'
+  order by session.expires_at_utc desc limit 1;
+
+  insert into public.timesheets(
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,
+    job_title_norm,contract_id,week_ending_date,sheet_scope,line_type,
+    submission_mode,is_adjustment,adjustment_origin,status,r2_nurse_key,r2_auth_key
+  ) values(
+    v_timesheet,'ADVANCED_PAID_'||replace(v_timesheet::text,'-',''),
+    'GCK-ADVANCED-'||replace(v_base.candidate_id::text,'-',''),
+    'VERIFICATION HOSPITAL','VERIFICATION WARD','NURSE',v_base.contract_id,
+    current_date-interval '21 days','WEEKLY','EXPENSES','ELECTRONIC',true,
+    'CANDIDATE_EXPENSE_ONLY','RECEIVED','verification/paid/candidate',
+    'verification/paid/manager'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,is_adjustment,status,
+    submission_mode_snapshot,timesheet_id
+  ) values(
+    v_week,v_base.contract_id,(current_date-interval '21 days')::date,880,true,
+    'SUBMITTED','ELECTRONIC',v_timesheet
+  );
+  insert into public.timesheets_financials(
+    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,
+    other_pay_ex_vat,other_charge_ex_vat,travel_pay_ex_vat,travel_charge_ex_vat,
+    expenses_pay_ex_vat,
+    expenses_charge_ex_vat,total_pay_ex_vat,total_charge_ex_vat,
+    expenses_description,processing_status,paid_at_utc
+  ) values(
+    v_timesheet,1,v_base.candidate_id,
+    (select contract.client_id from public.contracts contract
+      where contract.id=v_base.contract_id),0,
+    9,9,4,4,13,13,13,13,'Paid Other and Travel expenses','UNPROCESSED',v_paid_at
+  ) returning id into v_paid_fin_id;
+  select to_jsonb(row) into strict v_paid_fin_before
+  from public.timesheets_financials row where row.id=v_paid_fin_id;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,
+    generation,contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,policy_snapshot_json,input_snapshot_json,idempotency_key,
+    manager_approved_at_utc,finalised_at_utc
+  ) values(
+    v_workflow,'TEST',v_base.account_id,v_base.candidate_id,'CONTRACT_EXPENSE',
+    'WEEKLY','ELECTRONIC','FINALISED',1,v_base.contract_id,v_week,v_timesheet,
+    v_timesheet,(current_date-interval '21 days')::date,'{}','{}',
+    'advanced-expense:paid-only',now(),now()
+  );
+  insert into public.candidate_expense_components(
+    expense_component_id,workflow_id,workflow_generation,expense_category,
+    owning_timesheet_id,amount,mileage_units,lifecycle_state,
+    manager_approval_state,agency_authorisation_state,submitted_at_utc,
+    manager_approved_at_utc
+  ) values
+  (
+    v_component,v_workflow,1,'OTHER',v_timesheet,9,0,'MANAGER_APPROVED',
+    'APPROVED','PAID',now(),now()
+  ),(
+    v_component_two,v_workflow,1,'TRAVEL',v_timesheet,4,0,'MANAGER_APPROVED',
+    'APPROVED','PAID',now(),now()
+  );
+  insert into public.timesheet_financial_retention(timesheet_id)
+  values(v_timesheet)
+  on conflict(timesheet_id) do nothing;
+
+  v_projection:=public.candidate_expense_component_projection_v1(
+    'TEST',array[v_workflow],array[v_timesheet]
+  );
+  select category,category->'available_action' into v_projected_category,v_action
+  from jsonb_array_elements(v_projection#>'{timesheets,0,category_statuses}') category
+  where category->>'expense_component_id'=v_component::text;
+  if coalesce(v_action->>'code','')<>'CANCEL_EXPENSE'
+     or not coalesce((v_projected_category->>'protected')::boolean,false)
+     or not coalesce((v_projected_category->>'payment_only_actionable')::boolean,false)
+     or coalesce(v_projected_category->>'agency_authorisation_state','')<>'PAID' then
+    raise exception 'Paid-only Expense category was not visible and editable: %',v_projection;
+  end if;
+
+  -- The canonical coalesced pay authority must recognise a partial settlement,
+  -- not infer it from the generic protected bit or from Timesheet wording.
+  insert into public.timesheet_pay_state(
+    timesheet_id,last_settled_snapshot_json,last_settled_signature,
+    summary_pay_status_code,summary_pay_icon_code,
+    summary_pay_paid_at_utc,summary_net_delta_ex_vat
+  ) values(v_timesheet,'{}','advanced-expense-part-paid-verification',
+    'PARTIALLY_PAID','HALF_COIN',v_paid_at,-4);
+  update public.timesheet_summary_pay_state_cache
+  set summary_state_applies=true,summary_pay_status_code='PARTIALLY_PAID',
+    summary_pay_icon_code='HALF_COIN',net_delta_ex_vat=-4,
+    outstanding_ex_vat=4,paid_to_date_ex_vat=9
+  where timesheet_id=v_timesheet;
+  if private._candidate_expense_effective_payment_v1(v_timesheet)#>>'{status_code}'
+       is distinct from 'PARTIALLY_PAID' then
+    raise exception 'Part-paid Expense authority was not recognised';
+  end if;
+  v_capabilities:=private._candidate_record_capabilities_v1(v_timesheet,v_week,'{}');
+  if not coalesce((v_capabilities->>'payment_only_expense_edit')::boolean,false)
+     or not coalesce((v_capabilities->>'can_edit_expenses')::boolean,false)
+     or not coalesce((v_capabilities->>'can_attach_expense_evidence')::boolean,false)
+     or coalesce((v_capabilities->>'can_edit_hours')::boolean,false) then
+    raise exception 'Part-paid Expense capabilities were not safely separated: %',v_capabilities;
+  end if;
+
+  v_first_result:=public.candidate_expense_component_action_atomic_v1(
+    v_session,'TEST',v_workflow,1,v_component,1,'CANCEL_EXPENSE',
+    'advanced-expense:paid-only-cancel',now()
+  );
+  if coalesce(v_first_result->>'state','')<>'CANCELLED'
+     or (select count(*) from public.timesheets_financials row
+         where row.timesheet_id=v_timesheet and row.is_current)<>1
+     or (select count(*) from public.timesheets_financials row
+         where row.timesheet_id=v_timesheet
+           and row.policy_snapshot_json#>>'{candidate_expense_payment_edit_shell_v1,active}'='true')<>1
+     or (select travel_pay_ex_vat from public.timesheets_financials row
+         where row.timesheet_id=v_timesheet and row.is_current) is distinct from 4::numeric
+     or (select other_pay_ex_vat from public.timesheets_financials row
+         where row.timesheet_id=v_timesheet and row.is_current) is distinct from 0::numeric then
+    raise exception 'First part-paid Expense removal did not create one reusable shell: %',v_first_result;
+  end if;
+
+  v_result:=public.candidate_expense_component_action_atomic_v1(
+    v_session,'TEST',v_workflow,1,v_component_two,1,'CANCEL_EXPENSE',
+    'advanced-expense:paid-only-cancel-two',now()+interval '1 second'
+  );
+  if coalesce(v_result->>'state','')<>'CANCELLED'
+     or coalesce(v_result->>'empty_timesheet_consequence','')
+       <>'REMOVE_FROM_CURRENT_KEEP_HISTORY'
+     or not exists(select 1 from public.timesheets row where row.timesheet_id=v_timesheet)
+      or (select to_jsonb(row)-'is_current' from public.timesheets_financials row
+          where row.id=v_paid_fin_id)
+         is distinct from (v_paid_fin_before-'is_current')
+      or (select is_current from public.timesheets_financials row
+          where row.id=v_paid_fin_id) is distinct from false
+      or not exists(select 1 from public.timesheets_financials row
+       where row.timesheet_id=v_timesheet and row.id=v_paid_fin_id
+         and row.paid_at_utc=v_paid_at and row.other_pay_ex_vat=9
+         and row.travel_pay_ex_vat=4 and row.total_pay_ex_vat=13)
+      or (select count(*) from public.timesheets_financials row
+          where row.timesheet_id=v_timesheet
+            and row.policy_snapshot_json#>>'{candidate_expense_payment_edit_shell_v1,active}'='true')<>1
+      or not exists(select 1 from public.timesheets_financials row
+          where row.timesheet_id=v_timesheet and row.is_current
+            and row.paid_at_utc is null and row.paid_by_user_id is null
+            and row.payment_reference is null
+            and row.remittance_last_sent_at_utc is null
+            and row.remittance_send_count=0
+            and row.locked_by_invoice_id is null and row.locked_at_utc is null
+            and row.authorised_at_utc is null and row.authorised_by_user_id is null)
+     or not exists(select 1 from public.timesheets row
+       where row.timesheet_id=v_timesheet and row.is_current
+         and row.archived_at_utc is not null
+         and row.archived_reason_code='FINANCIAL_HISTORY_PREVENTED_DELETE')
+     or exists(select 1 from public.timesheets row
+       where row.timesheet_id=v_timesheet and row.is_current
+         and row.archived_at_utc is null)
+     or (select lifecycle_state from public.candidate_expense_components
+       where expense_component_id=v_component) is distinct from 'CANCELLED' then
+    raise exception 'Paid-only Expense cancellation did not retain its history: %',
+      jsonb_build_object(
+        'result',v_result,
+        'timesheet_exists',exists(select 1 from public.timesheets row
+          where row.timesheet_id=v_timesheet),
+        'paid_history_unchanged',(select to_jsonb(row)-'is_current'
+          from public.timesheets_financials row where row.id=v_paid_fin_id)
+          is not distinct from (v_paid_fin_before-'is_current'),
+        'edit_shell_count',(select count(*) from public.timesheets_financials row
+          where row.timesheet_id=v_timesheet
+            and row.policy_snapshot_json#>>'{candidate_expense_payment_edit_shell_v1,active}'='true'),
+        'archived_current_timesheet_exists',exists(select 1 from public.timesheets row
+          where row.timesheet_id=v_timesheet and row.is_current
+            and row.archived_at_utc is not null),
+        'unarchived_current_timesheet_exists',exists(select 1 from public.timesheets row
+          where row.timesheet_id=v_timesheet and row.is_current
+            and row.archived_at_utc is null),
+        'component_state',(select lifecycle_state
+          from public.candidate_expense_components
+          where expense_component_id=v_component)
+      );
+  end if;
+end;
+$paid_expense_only$;
+
+-- Paid worked Hours are never removed by an Expense action. The individual
+-- category may use the same historical-row rollover, but the whole-claim action
+-- is absent and the new current shell retains the complete Hours economics.
+do $paid_worked_hours$
+declare
+  v_base public.candidate_submission_workflows%rowtype;
+  v_actor uuid:=pg_catalog.gen_random_uuid();
+  v_timesheet uuid:=pg_catalog.gen_random_uuid();
+  v_week uuid:=pg_catalog.gen_random_uuid();
+  v_workflow uuid:=pg_catalog.gen_random_uuid();
+  v_component uuid:=pg_catalog.gen_random_uuid();
+  v_session uuid;
+  v_paid_at timestamptz:=now()-interval '2 days';
+  v_old_fin uuid;
+  v_old_before jsonb;
+  v_projection jsonb;
+  v_capabilities jsonb;
+  v_result jsonb;
+  v_truth numeric;
+begin
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(v_actor,'advanced-paid-hours-'||v_actor::text||'@example.test',
+    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
+  select workflow.* into strict v_base from public.candidate_submission_workflows workflow
+  where workflow.idempotency_key='advanced-expense:approved';
+  select session.id into strict v_session from public.candidate_app_sessions session
+  where session.account_id=v_base.account_id and session.environment='TEST'
+  order by session.expires_at_utc desc limit 1;
+  insert into public.timesheets(
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    contract_id,week_ending_date,sheet_scope,line_type,submission_mode,status,
+    r2_nurse_key,r2_auth_key
+  ) values(
+    v_timesheet,'ADVANCED_PAID_HOURS_'||replace(v_timesheet::text,'-',''),
+    'GCK-ADVANCED-'||replace(v_base.candidate_id::text,'-',''),
+    'VERIFICATION HOSPITAL','VERIFICATION WARD','NURSE',v_base.contract_id,
+    (current_date-interval '28 days')::date,'WEEKLY','HOURS','ELECTRONIC','RECEIVED',
+    'verification/paid-hours/candidate','verification/paid-hours/manager'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,is_adjustment,status,
+    submission_mode_snapshot,timesheet_id
+  ) values(v_week,v_base.contract_id,(current_date-interval '28 days')::date,0,false,
+    'SUBMITTED','ELECTRONIC',v_timesheet);
+  insert into public.timesheets_financials(
+    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,hours_day,
+    pay_day,charge_day,other_pay_ex_vat,other_charge_ex_vat,expenses_pay_ex_vat,
+    expenses_charge_ex_vat,total_pay_ex_vat,total_charge_ex_vat,
+    processing_status,paid_at_utc,payment_reference,remittance_send_count,
+    remittance_last_sent_at_utc
+  ) values(
+    v_timesheet,1,v_base.candidate_id,
+    (select contract.client_id from public.contracts contract where contract.id=v_base.contract_id),
+    8,8,80,80,9,9,9,9,89,89,'UNPROCESSED',v_paid_at,
+    'ADVANCED-PAID-HOURS',2,v_paid_at
+  ) returning id into v_old_fin;
+  select to_jsonb(row) into strict v_old_before from public.timesheets_financials row
+  where row.id=v_old_fin;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    policy_snapshot_json,input_snapshot_json,idempotency_key,manager_approved_at_utc,
+    finalised_at_utc
+  ) values(
+    v_workflow,'TEST',v_base.account_id,v_base.candidate_id,'CONTRACT_COMBINED',
+    'WEEKLY','ELECTRONIC','FINALISED',1,v_base.contract_id,v_week,v_timesheet,
+    v_timesheet,(current_date-interval '28 days')::date,'{}','{}',
+    'advanced-expense:paid-worked-hours',now(),now()
+  );
+  insert into public.candidate_expense_components(
+    expense_component_id,workflow_id,workflow_generation,expense_category,
+    owning_timesheet_id,amount,mileage_units,lifecycle_state,manager_approval_state,
+    agency_authorisation_state,submitted_at_utc,manager_approved_at_utc
+  ) values(v_component,v_workflow,1,'OTHER',v_timesheet,9,0,'MANAGER_APPROVED',
+    'APPROVED','PAID',now(),now());
+  v_projection:=public.candidate_expense_component_projection_v1(
+    'TEST',array[v_workflow],array[v_timesheet]
+  );
+  if v_projection#>'{timesheets,0,whole_claim_action}' is distinct from 'null'::jsonb
+     or coalesce(v_projection#>>'{timesheets,0,category_statuses,0,available_action,code}','')
+       <>'CANCEL_EXPENSE' then
+    raise exception 'Paid worked Hours projected an unsafe whole-claim result: %',v_projection;
+  end if;
+  v_capabilities:=private._candidate_record_capabilities_v1(v_timesheet,v_week,'{}');
+  if coalesce((v_capabilities->>'can_edit_hours')::boolean,false)
+     or not coalesce((v_capabilities->>'requires_carrier')::boolean,false)
+     or not coalesce((v_capabilities->>'candidate_expenses_allowed')::boolean,false)
+     or coalesce((v_capabilities->>'can_edit_expenses')::boolean,false) then
+    raise exception 'Paid worked Hours did not retain the separate Expense route: %',v_capabilities;
+  end if;
+  v_result:=public.candidate_expense_component_action_atomic_v1(
+    v_session,'TEST',v_workflow,1,v_component,1,'CANCEL_EXPENSE',
+    'advanced-expense:paid-worked-hours-cancel',now()
+  );
+  if coalesce(v_result->>'state','')<>'CANCELLED'
+     or (select to_jsonb(row)-'is_current' from public.timesheets_financials row
+         where row.id=v_old_fin) is distinct from (v_old_before-'is_current')
+     or not exists(select 1 from public.timesheets_financials row
+       where row.timesheet_id=v_timesheet and row.is_current and row.id<>v_old_fin
+         and row.total_hours=8 and row.hours_day=8 and row.pay_day=80
+         and row.other_pay_ex_vat=0 and row.total_pay_ex_vat=80
+         and row.paid_at_utc is null and row.payment_reference is null
+         and row.remittance_send_count=0 and row.remittance_last_sent_at_utc is null)
+     or not exists(select 1 from public.timesheets row where row.timesheet_id=v_timesheet
+       and row.is_current and row.archived_at_utc is null) then
+    raise exception 'Paid worked Hours were not retained around the Expense correction: %',v_result;
+  end if;
+  update public.timesheets set authorised_at_server=now()
+  where timesheet_id=v_timesheet;
+  select coalesce(sum(row.truth_ex_vat),0) into v_truth
+  from public._pay_current_timesheet_entitlement_components(array[v_timesheet]) row;
+  if v_truth is distinct from 80::numeric then
+    raise exception 'Expense correction shell did not feed current pay reconciliation: %',v_truth;
+  end if;
+end;
+$paid_worked_hours$;
+
 rollback;
