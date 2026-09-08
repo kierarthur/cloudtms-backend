@@ -53,6 +53,12 @@ const latestCandidateFinalisation = read(
 const latestExpenseDuplicateReview = read(
   'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql'
 );
+const invoiceExpenseRouting = read(
+  'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql'
+);
+const invoiceSourceRevisionParity = read(
+  'supabase/repeatable/08092026_1605_invoice_expense_source_revision_parity_v1.sql'
+);
 
 test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
@@ -901,6 +907,14 @@ test('invoice grouping derives expense-only economics and isolates the effective
   assert.match(replacements.invoiceGroups, /then 'EXPENSE'/i);
   assert.match(replacements.invoiceGroups, /expense_delivery_identity/i);
   assert.match(replacements.invoiceGroups, /EXPENSE_INVOICE_EMAIL_REQUIRED/);
+});
+
+test('invoice source revision remains identical to the shared source verifier', () => {
+  assert.match(invoiceExpenseRouting, /then coalesce\(s\.expense_delivery_identity,'NO_EXPENSE_RECIPIENT'\) end\),[\s\S]{0,40}'sha256'\),'hex'\) row_revision/i);
+  assert.match(invoiceSourceRevisionParity, /_timesheet_settings_authority_frozen_v1\(t\.timesheet_id\)/i);
+  assert.match(invoiceSourceRevisionParity, /when s\.invoice_stream='EXPENSE' then lower\(nullif\(btrim\(/i);
+  assert.match(invoiceSourceRevisionParity, /candidate_expense_invoice_email/i);
+  assert.match(invoiceSourceRevisionParity, /'NO_EXPENSE_RECIPIENT'/i);
 });
 
 test('invoice delivery sends expense stream to the expense email without self-bill suppression', () => {
