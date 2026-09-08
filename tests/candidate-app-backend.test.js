@@ -69,6 +69,7 @@ const {
   knownErrorCode,
   officeErrorCode,
   assertManagerRouteApprovalContext,
+  managerStartMutationKey,
   documentStreamSource,
   renderExpensePage,
   routeMatch,
@@ -8377,6 +8378,40 @@ test('manager approval authority is matched to the current request before a deci
   assert.ok(currentApproval >= 0);
   assert.ok(authorityCheck > currentApproval);
   assert.ok(decisiveTransition > authorityCheck);
+});
+
+test('manager start replay identity changes when a preserved link receives refreshed documents', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000051';
+  const approvalId = '00000000-0000-4000-8000-000000000053';
+  const tokenHash = 'a'.repeat(64);
+  const first = await managerStartMutationKey(workflowId, tokenHash, {
+    approval: {
+      id: approvalId,
+      workflow_generation: 2,
+      request_generation: 1,
+      review_manifest_sha256: `\\x${'b'.repeat(64)}`
+    }
+  });
+  const replay = await managerStartMutationKey(workflowId, tokenHash, {
+    approval: {
+      id: approvalId,
+      workflow_generation: 2,
+      request_generation: 1,
+      review_manifest_sha256: `\\x${'b'.repeat(64)}`
+    }
+  });
+  const refreshed = await managerStartMutationKey(workflowId, tokenHash, {
+    approval: {
+      id: approvalId,
+      workflow_generation: 4,
+      request_generation: 1,
+      review_manifest_sha256: `\\x${'c'.repeat(64)}`
+    }
+  });
+  assert.equal(first, replay);
+  assert.notEqual(first, refreshed);
+  assert.match(first, /^manager-start:[0-9a-f]{64}$/);
+  assert.match(refreshed, /^manager-start:[0-9a-f]{64}$/);
 });
 
 test('every manager review surface short-circuits to the same update hold receipt', async () => {

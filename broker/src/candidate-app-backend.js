@@ -8387,6 +8387,27 @@ function managerSubmissionType(workflowKind) {
   return 'TIMESHEET';
 }
 
+async function managerStartMutationKey(workflowId, tokenHashHex, managerContext) {
+  const approval = managerContext?.approval;
+  const manifestHash = text(approval?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const workflowGeneration = Number(approval?.workflow_generation);
+  const requestGeneration = Number(approval?.request_generation);
+  if (!UUID_RE.test(text(approval?.id))
+      || !Number.isSafeInteger(workflowGeneration) || workflowGeneration < 1
+      || !Number.isSafeInteger(requestGeneration) || requestGeneration < 1
+      || !SHA256_RE.test(manifestHash)) {
+    return `manager-start:${workflowId}:${tokenHashHex}`;
+  }
+  return `manager-start:${await sha256Hex(canonicalJson({
+    workflow_id: workflowId,
+    workflow_generation: workflowGeneration,
+    approval_request_id: approval.id,
+    approval_request_generation: requestGeneration,
+    review_manifest_sha256: manifestHash,
+    approval_token_sha256: tokenHashHex
+  }))}`;
+}
+
 function managerStartResult(result, routeAuthority) {
   const components = (Array.isArray(result?.ordered_components) ? result.ordered_components : [])
     .map((component) => ({
@@ -8484,7 +8505,7 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   }
   const body = request.method === 'GET' ? {} : await readJson(request);
   const mutationKey = request.method === 'GET'
-    ? `manager-start:${workflowId}:${auth.token_hash_hex}`
+    ? await managerStartMutationKey(workflowId, auth.token_hash_hex, managerContext)
     : requireCandidateIdempotency(body.idempotency_key);
   const generation = body.generation == null ? null : requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   let dbAction = {
@@ -11493,6 +11514,7 @@ export const candidateAppBackendInternals = Object.freeze({
   officeErrorCode,
   knownErrorCode,
   assertManagerRouteApprovalContext,
+  managerStartMutationKey,
   documentStreamSource,
   managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
