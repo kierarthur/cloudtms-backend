@@ -2118,8 +2118,14 @@ begin
                 'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
                 'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null))
-        and not((coalesce(tf.expenses_pay_ex_vat,0)<>0
-              or coalesce(tf.expenses_charge_ex_vat,0)<>0)
+        and not((((coalesce(tf.travel_pay_ex_vat,0)
+                +coalesce(tf.accommodation_pay_ex_vat,0)
+                +coalesce(tf.other_pay_ex_vat,0)=0)
+              and coalesce(tf.expenses_pay_ex_vat,0)<>0)
+            or ((coalesce(tf.travel_charge_ex_vat,0)
+                +coalesce(tf.accommodation_charge_ex_vat,0)
+                +coalesce(tf.other_charge_ex_vat,0)=0)
+              and coalesce(tf.expenses_charge_ex_vat,0)<>0))
           and not exists(
             select 1 from public.timesheet_evidence e
             join public.invoice_document_assets a

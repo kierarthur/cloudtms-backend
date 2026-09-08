@@ -65,6 +65,9 @@ const invoiceCorrectionValidation = read(
 const invoiceCorrectionStreamParity = read(
   'supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql'
 );
+const invoiceGenerationFrozenSettings = read(
+  'supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql'
+);
 
 test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
@@ -947,6 +950,25 @@ test('invoice correction stream closure restores current invoice authorities bef
 
   assert.ok(currentAuthority >= 0, 'closure must replay the established current invoice authorities');
   assert.ok(correctionValidator > currentAuthority, 'changed correction validator must remain the final authority');
+});
+
+test('invoice commit safety requires generic evidence only for an undivided legacy expense total', () => {
+  const advance = privateDefinition(
+    invoiceGenerationFrozenSettings,
+    '_invoice_generation_advance_core_v8'
+  );
+  assert.match(
+    advance,
+    /travel_pay_ex_vat,0\)\s*\+coalesce\(tf\.accommodation_pay_ex_vat,0\)\s*\+coalesce\(tf\.other_pay_ex_vat,0\)=0\)\s*and coalesce\(tf\.expenses_pay_ex_vat,0\)<>0/i
+  );
+  assert.match(
+    advance,
+    /travel_charge_ex_vat,0\)\s*\+coalesce\(tf\.accommodation_charge_ex_vat,0\)\s*\+coalesce\(tf\.other_charge_ex_vat,0\)=0\)\s*and coalesce\(tf\.expenses_charge_ex_vat,0\)<>0/i
+  );
+  assert.match(
+    advance,
+    /other_pay_ex_vat,0\)<>0\s*or coalesce\(tf\.other_charge_ex_vat,0\)<>0\)[\s\S]*upper\(coalesce\(e\.kind,''\)\) in\(\s*'OTHER','EXPENSE','EXPENSES'\)/i
+  );
 });
 
 test('invoice delivery sends expense stream to the expense email without self-bill suppression', () => {
