@@ -3448,7 +3448,7 @@ begin
         when coalesce(v_update.prior_review_manifest_json->>'manifest_sha256','')
           ~ '^[0-9a-fA-F]{64}$'
           then decode(lower(v_update.prior_review_manifest_json->>'manifest_sha256'),'hex')
-        else null
+        else private._candidate_sha256_jsonb_v1(v_update.prior_review_manifest_json)
         end)
      or v_prior.immutable_submission_json is distinct from
         v_update.prior_immutable_submission_json

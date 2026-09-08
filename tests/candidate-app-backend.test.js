@@ -3100,8 +3100,8 @@ test('expense update recovery validates the embedded manager manifest identity',
   ), 'utf8');
   assert.match(sql,
     /prior_review_manifest_json->>'manifest_sha256'[\s\S]*decode\(lower\(v_update\.prior_review_manifest_json->>'manifest_sha256'\),'hex'\)/i);
-  assert.doesNotMatch(sql,
-    /prior_review_manifest_sha256 is distinct from\s*private\._candidate_sha256_jsonb_v1\(v_update\.prior_review_manifest_json\)/i);
+  assert.match(sql,
+    /else private\._candidate_sha256_jsonb_v1\(v_update\.prior_review_manifest_json\)/i);
 });
 
 test('a RENDERING pending withdrawal retry resumes its saved render without resubmitting', async () => {
