@@ -3,13 +3,16 @@ import test from 'node:test';
 
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsInvoiceEvidencePrepareAdapter,
   handleMyTmsPaperDocumentNudgeAdapter,
   handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
   nudgeCandidatePaperDocumentViaAdapter,
+  prepareCandidateInvoiceEvidenceViaAdapter,
   purgeMyTmsManagerControlAdapterNonces,
   verifyCandidatePaperQrViaAdapter,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
+  MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH,
   MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH,
   myTmsManagerControlAdapterInternals
 } from '../broker/src/mytms-manager-control-adapter.js';
@@ -215,5 +218,59 @@ test('paper document nudge adapter rejects unbounded or malformed work before di
   );
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error_code, 'MYTMS_PAPER_DOCUMENT_REQUEST_INVALID');
+  assert.equal(calls, 0);
+});
+
+test('private Candidate invoice evidence preparation signs one bounded Timesheet request', async () => {
+  const serviceEnv = testEnv();
+  const calls = [];
+  const clientEnv = {
+    CANDIDATE_APP_ENVIRONMENT: serviceEnv.CANDIDATE_APP_ENVIRONMENT,
+    MYTMS_MANAGER_CONTROL_ADAPTER_SECRET: serviceEnv.MYTMS_MANAGER_CONTROL_ADAPTER_SECRET,
+    MYTMS_MANAGER_CONTROL_ADAPTER: {
+      fetch: (request) => handleMyTmsInvoiceEvidencePrepareAdapter(
+        request,
+        serviceEnv,
+        {
+          prepareInvoiceEvidence: async (call) => {
+            calls.push(call);
+            return { ok: true, evidence_count: 2, operation_count: 2 };
+          }
+        }
+      )
+    }
+  };
+  const first = '00000000-0000-4000-8000-000000000202';
+  const second = '00000000-0000-4000-8000-000000000201';
+  const result = await prepareCandidateInvoiceEvidenceViaAdapter(clientEnv, {
+    timesheetIds: [first, second, first]
+  });
+  assert.deepEqual(result, { ok: true, evidence_count: 2, operation_count: 2 });
+  assert.deepEqual(calls, [{ timesheetIds: [second, first] }]);
+});
+
+test('invoice evidence adapter rejects extra fields and invalid Timesheet IDs before dispatch', async () => {
+  const env = testEnv();
+  let calls = 0;
+  const unsigned = new Request(
+    `https://control.internal${MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        timesheet_ids: ['not-a-timesheet'],
+        include_signatures: true
+      })
+    }
+  );
+  const response = await handleMyTmsInvoiceEvidencePrepareAdapter(
+    await signCandidatePrivateRequest(
+      unsigned, myTmsManagerControlAdapterInternals.adapterAuthEnv(env)
+    ),
+    env,
+    { prepareInvoiceEvidence: async () => { calls += 1; } }
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error_code, 'MYTMS_INVOICE_EVIDENCE_REQUEST_INVALID');
   assert.equal(calls, 0);
 });

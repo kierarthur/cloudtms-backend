@@ -35,8 +35,11 @@ import {
   signInvoiceDrainRequest,
   verifyInvoiceDrainSignature
 } from '../broker/src/invoice-queue-security.js';
-import { invoiceAsyncHttpInternals } from '../broker/src/invoice-async-http.js';
-import { handleInvoiceAsyncHttpRequest } from '../broker/src/invoice-async-http.js';
+import {
+  handleInvoiceAsyncHttpRequest,
+  invoiceAsyncHttpInternals,
+  prepareCandidateInvoiceEvidenceAssets
+} from '../broker/src/invoice-async-http.js';
 import {
   buildMergeReceipt,
   buildPhysicalReceipt,
@@ -47,6 +50,124 @@ import {
 const V8_ACTOR_ID = '00000000-0000-4000-8000-000000000010';
 const V8_FUNCTION_MANIFEST = '45741d3e5f0f4b6da6c5dd1e64f6ca034e2198f3043da5fa68d05da1ba639295';
 const V8_CURSOR_SECRET = 'test-session-secret-with-more-than-thirty-two-characters';
+
+test('Candidate invoice evidence preparation excludes signatures and prepares expenses with their summary', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000301';
+  const expenseId = '00000000-0000-4000-8000-000000000302';
+  const summaryId = '00000000-0000-4000-8000-000000000303';
+  const originalFetch = globalThis.fetch;
+  const headKeys = [];
+  const rpcCalls = [];
+  const nudges = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    assert.equal(url.pathname, '/rest/v1/timesheet_evidence');
+    assert.equal(url.searchParams.get('timesheet_id'), `in.(${timesheetId})`);
+    assert.equal(url.searchParams.get('processing_state'), 'eq.READY');
+    assert.equal(url.searchParams.get('document_role'),
+      'in.(SOURCE_EVIDENCE,MILEAGE_CLAIM_FORM,EXPENSE_MILEAGE_APPROVAL_SUMMARY)');
+    assert.equal(url.searchParams.get('document_asset_id'), 'is.null');
+    return Response.json([
+      {
+        id: '00000000-0000-4000-8000-000000000304', timesheet_id: timesheetId,
+        kind: 'TIMESHEET', document_role: 'SIGNED_TIMESHEET', processing_state: 'READY',
+        storage_key: 'candidate-app/signed-timesheet.pdf', created_at: '2026-09-08T10:00:00Z'
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000305', timesheet_id: timesheetId,
+        kind: 'OTHER', document_role: 'MANAGER_SIGNATURE', processing_state: 'READY',
+        storage_key: 'candidate-app/manager-signature.png', created_at: '2026-09-08T10:00:01Z'
+      },
+      {
+        id: expenseId, timesheet_id: timesheetId,
+        kind: 'OTHER', document_role: 'SOURCE_EVIDENCE', processing_state: 'READY',
+        storage_key: 'candidate-app/other-expense.pdf', display_name: 'Other expense.pdf',
+        created_at: '2026-09-08T10:00:02Z'
+      },
+      {
+        id: summaryId, timesheet_id: timesheetId,
+        kind: 'OTHER', document_role: 'EXPENSE_MILEAGE_APPROVAL_SUMMARY', processing_state: 'READY',
+        storage_key: 'candidate-app/expense-summary.pdf', source_revision: 'summary-revision',
+        display_name: 'Expense summary.pdf', created_at: '2026-09-08T10:00:03Z'
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000306', timesheet_id: timesheetId,
+        kind: 'TRAVEL', document_role: 'SOURCE_EVIDENCE', processing_state: 'SUPERSEDED',
+        storage_key: 'candidate-app/old-travel.pdf', created_at: '2026-09-08T09:00:00Z'
+      }
+    ]);
+  };
+  try {
+    const result = await prepareCandidateInvoiceEvidenceAssets(
+      v8Environment({
+        R2: {
+          async head(key) {
+            headKeys.push(key);
+            return { httpMetadata: { contentType: 'application/pdf' } };
+          }
+        }
+      }),
+      {},
+      [timesheetId],
+      {
+        rpc: async (name, args) => {
+          rpcCalls.push({ name, args });
+          return args.p_commands.map((command, index) => ({
+            accepted: true,
+            operation_id: `00000000-0000-4000-8000-00000000031${index}`,
+            status: 'QUEUED'
+          }));
+        },
+        nudgeOperations: async (_env, operations, options) => {
+          nudges.push({ operations, options });
+          return { scheduled: true };
+        }
+      }
+    );
+    assert.deepEqual(result, { ok: true, evidence_count: 2, operation_count: 2 });
+    assert.deepEqual(headKeys, ['candidate-app/other-expense.pdf', 'candidate-app/expense-summary.pdf']);
+    assert.equal(rpcCalls.length, 1);
+    assert.equal(rpcCalls[0].name, 'invoice_operation_start_batch');
+    assert.equal(rpcCalls[0].args.p_actor_user_id, V8_ACTOR_ID);
+    assert.deepEqual(rpcCalls[0].args.p_commands.map((command) => command.source_id), [
+      expenseId, summaryId
+    ]);
+    assert.match(rpcCalls[0].args.p_commands[0].source_revision,
+      /^LEGACY_TIMESHEET_EVIDENCE:[0-9a-f]{64}$/);
+    assert.equal(rpcCalls[0].args.p_commands[1].source_revision, 'summary-revision');
+    assert.equal(nudges.length, 1);
+    assert.deepEqual(nudges[0].options.lanes, ['DOCUMENT']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate invoice evidence preparation rejects more than one hundred eligible rows', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000321';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json(Array.from({ length: 101 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    timesheet_id: timesheetId,
+    kind: 'OTHER',
+    document_role: 'SOURCE_EVIDENCE',
+    processing_state: 'READY',
+    storage_key: `candidate-app/expense-${index + 1}.pdf`,
+    created_at: '2026-09-08T10:00:00Z'
+  })));
+  try {
+    await assert.rejects(
+      prepareCandidateInvoiceEvidenceAssets(
+        v8Environment(),
+        {},
+        [timesheetId],
+        { rpc: async () => { throw new Error('RPC must not run'); } }
+      ),
+      /INVOICE_EVIDENCE_SCOPE_TOO_LARGE/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 function v8DatabaseContract(overrides = {}) {
   return {

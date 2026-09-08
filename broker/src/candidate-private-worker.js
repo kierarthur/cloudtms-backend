@@ -3,6 +3,7 @@ import {
   drainCandidateExpenseSummaries,
   handleCandidateAppRequest,
   processPendingCandidatePaperPacks,
+  recoverUnpreparedCandidateInvoiceEvidence,
   recoverPendingCandidateExpenseUpdates,
   resumePendingCandidateReviewRenders,
   resumePendingCandidateExpenseUpdateRenders,
@@ -534,7 +535,7 @@ export default {
       await removePrivatePrefix(request),
       env,
       ctx,
-      createCandidatePrivateDependencies(env, 'PRIVATE')
+      createCandidatePrivateDependencies(env, 'PRIVATE', ctx)
     );
     if (!response) return json(404, { ok: false, error_code: 'CANDIDATE_PRIVATE_ROUTE_NOT_FOUND' });
     const failure = await privateFailureDiagnostic(response);
@@ -550,7 +551,7 @@ export default {
   },
   async scheduled(controller, env, ctx) {
     if (!requiredConfigurationAvailable(env)) return;
-    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
+    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE', ctx);
     // Keep the small agency TEST PostgREST pool bounded. A single scheduled
     // invocation performs its independent maintenance jobs in order, and a
     // failed job is reported without preventing the remaining jobs from
@@ -579,6 +580,9 @@ export default {
       await run('expense-summaries', () => drainCandidateExpenseSummaries(
         env, dependencies, { limit: 10 }
       ));
+      await run('invoice-evidence', () => recoverUnpreparedCandidateInvoiceEvidence(
+        env, dependencies, 25
+      ));
       await run('manager-finalisations', () => recoverPendingCandidateManagerFinalisations(
         env, dependencies, 5
       ));
@@ -594,12 +598,12 @@ export default {
       ));
     })());
   },
-  async queue(batch, env) {
+  async queue(batch, env, ctx) {
     if (!requiredConfigurationAvailable(env)) {
       batch.retryAll({ delaySeconds: 10 });
       return;
     }
-    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
+    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE', ctx);
     for (const message of batch.messages) {
       const body = message.body;
       try {
@@ -631,6 +635,10 @@ export default {
               }
             }
           );
+        } else if (body?.contract_version === 'CANDIDATE_INVOICE_EVIDENCE_PREPARE_QUEUE_MESSAGE_V1') {
+          result = await dependencies.prepareInvoiceEvidence({
+            timesheetIds: body.timesheet_ids
+          });
         } else {
           console.error('[candidate-private] invalid document render queue message', {
             error_code: 'CANDIDATE_DOCUMENT_RENDER_QUEUE_MESSAGE_INVALID'
@@ -638,7 +646,7 @@ export default {
           message.ack();
           continue;
         }
-        if (result.failed > 0) message.retry({ delaySeconds: 10 });
+        if (Number(result?.failed || 0) > 0) message.retry({ delaySeconds: 10 });
         else message.ack();
       } catch (error) {
         console.error('[candidate-private] document render queue retry required', {

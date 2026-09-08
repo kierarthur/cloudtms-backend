@@ -17,6 +17,8 @@ export const MYTMS_PAPER_QR_SIGN_ADAPTER_PATH =
   '/private/mytms-control/v1/paper-qr-sign';
 export const MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH =
   '/private/mytms-control/v1/paper-document-nudge';
+export const MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH =
+  '/private/mytms-control/v1/invoice-evidence-prepare';
 
 const ALLOWED_FUNCTIONS = new Set([
   'manager_email_route_register_v1',
@@ -243,6 +245,44 @@ export async function handleMyTmsPaperDocumentNudgeAdapter(
   }
 }
 
+export async function handleMyTmsInvoiceEvidencePrepareAdapter(
+  request,
+  env,
+  { prepareInvoiceEvidence } = {}
+) {
+  if (request.method !== 'POST'
+      || new URL(request.url).pathname !== MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH) {
+    return json(404, { ok: false, error_code: 'MYTMS_INVOICE_EVIDENCE_ROUTE_NOT_FOUND' });
+  }
+  try {
+    if (!await verifyCandidatePrivateRequest(request, adapterAuthEnv(env))
+        || !await consumeAdapterNonce(request, env)) {
+      return json(401, { ok: false, error_code: 'MYTMS_INVOICE_EVIDENCE_AUTHORITY_INVALID' });
+    }
+    const body = await boundedJson(request);
+    const keys = body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.keys(body).sort() : [];
+    const timesheetIds = Array.isArray(body?.timesheet_ids)
+      ? [...new Set(body.timesheet_ids.map((value) => text(value).toLowerCase()))].sort()
+      : [];
+    if (keys.join(',') !== 'timesheet_ids'
+        || timesheetIds.length < 1 || timesheetIds.length > 25
+        || timesheetIds.some((value) => !UUID_PATTERN.test(value))) {
+      return json(400, { ok: false, error_code: 'MYTMS_INVOICE_EVIDENCE_REQUEST_INVALID' });
+    }
+    if (typeof prepareInvoiceEvidence !== 'function') {
+      return json(503, { ok: false, error_code: 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE' });
+    }
+    const result = await prepareInvoiceEvidence({ timesheetIds });
+    return json(202, { ok: true, accepted: true, result });
+  } catch (error) {
+    const candidate = text(error?.code || error?.message || error).toUpperCase();
+    const errorCode = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+      ? candidate : 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE';
+    return json(503, { ok: false, error_code: errorCode });
+  }
+}
+
 export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
   if (text(env.QR_SIGNING_SECRET)) {
     return text(qrText).startsWith('TSQ2.')
@@ -346,6 +386,38 @@ export async function nudgeCandidatePaperDocumentViaAdapter(env, {
     const code = text(payload?.error_code).toUpperCase();
     throw new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
       ? code : 'MYTMS_PAPER_DOCUMENT_PROCESSOR_UNAVAILABLE');
+  }
+  return payload.result;
+}
+
+export async function prepareCandidateInvoiceEvidenceViaAdapter(env, {
+  timesheetIds
+} = {}) {
+  const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
+  const canonicalIds = Array.isArray(timesheetIds)
+    ? [...new Set(timesheetIds.map((value) => text(value).toLowerCase()))].sort()
+    : [];
+  if (!binding || typeof binding.fetch !== 'function'
+      || canonicalIds.length < 1 || canonicalIds.length > 25
+      || canonicalIds.some((value) => !UUID_PATTERN.test(value))) {
+    throw new Error('MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE');
+  }
+  const unsigned = new Request(
+    `https://cloudtms-manager-control.internal${MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ timesheet_ids: canonicalIds })
+    }
+  );
+  const response = await binding.fetch(await signCandidatePrivateRequest(
+    unsigned, adapterAuthEnv(env)
+  ));
+  const payload = await boundedJson(response);
+  if (response.status !== 202 || payload?.ok !== true || payload?.accepted !== true) {
+    const code = text(payload?.error_code).toUpperCase();
+    throw new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+      ? code : 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE');
   }
   return payload.result;
 }

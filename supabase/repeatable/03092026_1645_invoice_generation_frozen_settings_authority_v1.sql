@@ -172,6 +172,10 @@ begin
             select 1 from public.timesheet_evidence e
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='MILEAGE'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null)
             then 'MISSING_MILEAGE_EVIDENCE' end end,
         case when(coalesce(tf.mileage_pay_ex_vat,0)<>0
@@ -180,6 +184,10 @@ begin
             select 1 from public.timesheet_evidence e
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='MILEAGE'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null
               and e.document_asset_id is null)
           then 'MILEAGE_ASSET_NOT_REGISTERED' end,
@@ -194,6 +202,10 @@ begin
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,'')) in(
                 'TRAVEL','ACCOMMODATION','OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET','EXPENSE_MILEAGE_APPROVAL_SUMMARY')
               and nullif(e.storage_key,'') is not null)
             then 'MISSING_EXPENSE_EVIDENCE' end end,
         case when(
@@ -208,6 +220,10 @@ begin
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,'')) in(
                 'TRAVEL','ACCOMMODATION','OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null
               and e.document_asset_id is null)
           then 'EXPENSE_ASSET_NOT_REGISTERED' end,
@@ -217,6 +233,10 @@ begin
             select 1 from public.timesheet_evidence e
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='TRAVEL'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null)
           then 'MISSING_TRAVEL_EVIDENCE' end,
         case when(coalesce(tf.accommodation_pay_ex_vat,0)<>0
@@ -225,6 +245,10 @@ begin
             select 1 from public.timesheet_evidence e
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='ACCOMMODATION'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null)
           then 'MISSING_ACCOMMODATION_EVIDENCE' end,
         case when(coalesce(tf.other_pay_ex_vat,0)<>0
@@ -234,6 +258,10 @@ begin
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,'')) in(
                 'OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET','EXPENSE_MILEAGE_APPROVAL_SUMMARY')
               and nullif(e.storage_key,'') is not null)
           then 'MISSING_OTHER_EXPENSE_EVIDENCE' end,
         case when exists(
@@ -241,6 +269,12 @@ begin
             join public.invoice_document_assets a
               on a.id=e.document_asset_id
             where e.timesheet_id=m.timesheet_id
+              and upper(coalesce(e.kind,'')) in(
+                'MILEAGE','TRAVEL','ACCOMMODATION','OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and a.status in(
                 'UNSUPPORTED','CORRUPT','MISSING','FAILED','SUPERSEDED'))
           then 'REQUIRED_ASSET_PERMANENT_FAILURE' end,
@@ -660,6 +694,10 @@ begin
                'FAILED','SUPERSEDED')
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='MILEAGE'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null))
         and not((coalesce(tf.travel_pay_ex_vat,0)<>0
               or coalesce(tf.travel_charge_ex_vat,0)<>0)
@@ -671,6 +709,10 @@ begin
                'FAILED','SUPERSEDED')
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='TRAVEL'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null))
         and not((coalesce(tf.accommodation_pay_ex_vat,0)<>0
               or coalesce(tf.accommodation_charge_ex_vat,0)<>0)
@@ -682,6 +724,10 @@ begin
                'FAILED','SUPERSEDED')
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,''))='ACCOMMODATION'
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET')
               and nullif(e.storage_key,'') is not null))
         and not((coalesce(tf.expenses_pay_ex_vat,0)<>0
               or coalesce(tf.expenses_charge_ex_vat,0)<>0)
@@ -694,6 +740,10 @@ begin
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,'')) in(
                 'OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET','EXPENSE_MILEAGE_APPROVAL_SUMMARY')
               and nullif(e.storage_key,'') is not null))
         and not((coalesce(tf.other_pay_ex_vat,0)<>0
               or coalesce(tf.other_charge_ex_vat,0)<>0)
@@ -706,6 +756,10 @@ begin
             where e.timesheet_id=m.timesheet_id
               and upper(coalesce(e.kind,'')) in(
                 'OTHER','EXPENSE','EXPENSES')
+              and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+              and upper(coalesce(e.document_role,'')) not in(
+                'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+                'SIGNED_TIMESHEET','EXPENSE_MILEAGE_APPROVAL_SUMMARY')
               and nullif(e.storage_key,'') is not null))
         and not exists(
           select 1
@@ -713,6 +767,10 @@ begin
           left join public.invoice_document_assets a
             on a.id=e.document_asset_id
           where e.timesheet_id=m.timesheet_id
+            and upper(coalesce(e.processing_state,''))<>'SUPERSEDED'
+            and upper(coalesce(e.document_role,'')) not in(
+              'CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','ELECTRONIC_SIGNATURES',
+              'SIGNED_TIMESHEET')
             and(
               (upper(coalesce(e.kind,''))='MILEAGE'
                 and(coalesce(tf.mileage_pay_ex_vat,0)<>0
@@ -2109,4 +2167,3 @@ grant execute on function private._invoice_generation_advance_core_v8(jsonb,time
   to postgres, service_role;
 
 commit;
-

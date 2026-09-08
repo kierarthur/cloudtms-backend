@@ -64,13 +64,16 @@ import {
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsInvoiceEvidencePrepareAdapter,
   handleMyTmsPaperDocumentNudgeAdapter,
   handleMyTmsPaperQrSignAdapter,
   handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
   nudgeCandidatePaperDocumentViaAdapter,
+  prepareCandidateInvoiceEvidenceViaAdapter,
   purgeMyTmsManagerControlAdapterNonces,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
+  MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH,
   MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH,
   MYTMS_PAPER_QR_SIGN_ADAPTER_PATH,
   MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH
@@ -144,7 +147,8 @@ import {
 } from './banking-pay-draft-certified-v8.js';
 import {
   createReadyInvoiceDocumentLink,
-  handleInvoiceAsyncHttpRequest
+  handleInvoiceAsyncHttpRequest,
+  prepareCandidateInvoiceEvidenceAssets
 } from './invoice-async-http.js';
 import {
   checkInvoiceDocumentProcessorReady,
@@ -198007,7 +198011,7 @@ function matchPath(pathname, pattern) {
   return params;
 }
 
-export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE') {
+export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE', ctx = null) {
   const candidateRpc = (functionName, args, options) => sbRpc(env, functionName, args, options);
   return {
     routeAudience,
@@ -198022,7 +198026,10 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
       buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission, mutationKey }),
     finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
     enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options),
-    nudgeQrPack: (options) => nudgeCandidateQrPackDocumentOperation(env, options)
+    nudgeQrPack: (options) => nudgeCandidateQrPackDocumentOperation(env, options),
+    prepareInvoiceEvidence: ({ timesheetIds }) => env.INVOICE_ACTOR_USER_ID
+      ? prepareCandidateInvoiceEvidenceAssets(env, ctx, timesheetIds, { rpc: candidateRpc })
+      : prepareCandidateInvoiceEvidenceViaAdapter(env, { timesheetIds })
   };
 }
 export const candidateOfficeSummaryInternals = Object.freeze({
@@ -198098,11 +198105,20 @@ export default {
       });
     }
 
+    if (req.method === 'POST' && p === MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH) {
+      return handleMyTmsInvoiceEvidencePrepareAdapter(req, env, {
+        prepareInvoiceEvidence: ({ timesheetIds }) =>
+          prepareCandidateInvoiceEvidenceAssets(env, ctx, timesheetIds, {
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options)
+          })
+      });
+    }
+
     const candidateAppResponse = await handleCandidateAppRequest(
       req,
       env,
       ctx,
-      createCandidatePrivateDependencies(env, 'OFFICE')
+      createCandidatePrivateDependencies(env, 'OFFICE', ctx)
     );
     if (candidateAppResponse) return withCORS(env, req, candidateAppResponse);
 

@@ -4864,6 +4864,17 @@ export async function drainCandidateExpenseSummaries(env, deps, options = {}) {
         p_summary_sha256: summarySha256,
         p_now_utc: new Date().toISOString()
       });
+      try {
+        if (!await queueCandidateInvoiceEvidencePreparation(env, [timesheetId])
+            && typeof deps?.prepareInvoiceEvidence === 'function') {
+          await deps.prepareInvoiceEvidence({ timesheetIds: [timesheetId] });
+        }
+      } catch (error) {
+        console.error('[candidate-app] invoice evidence preparation dispatch failed', {
+          timesheet_id: timesheetId,
+          error_code: knownErrorCode(error) || 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE'
+        });
+      }
       results.push(result);
     } catch (error) {
       const failureCode = knownErrorCode(error).slice(0, 100);
@@ -4886,6 +4897,36 @@ export async function drainCandidateExpenseSummaries(env, deps, options = {}) {
   }
   return { ok: results.every((result) => result?.ok === true),
     claimed_count: jobs.length, results };
+}
+
+export async function recoverUnpreparedCandidateInvoiceEvidence(env, deps, limit = 25) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 25, 100));
+  const rows = await restRows(env, 'timesheet_evidence',
+    'processing_state=eq.READY&document_asset_id=is.null'
+    + '&document_role=in.(SOURCE_EVIDENCE,MILEAGE_CLAIM_FORM,EXPENSE_MILEAGE_APPROVAL_SUMMARY)'
+    + '&storage_key=like.candidate-app%2F*'
+    + '&select=timesheet_id,kind,document_role,created_at'
+    + '&order=created_at.desc'
+    + `&limit=${boundedLimit}`);
+  const excludedRoles = new Set([
+    'CANDIDATE_SIGNATURE', 'MANAGER_SIGNATURE', 'ELECTRONIC_SIGNATURES', 'SIGNED_TIMESHEET'
+  ]);
+  const timesheetIds = [...new Set(rows.filter((row) => {
+    const kind = upper(row?.kind);
+    const role = upper(row?.document_role);
+    return UUID_RE.test(text(row?.timesheet_id))
+      && kind !== 'TIMESHEET'
+      && !excludedRoles.has(kind)
+      && !excludedRoles.has(role);
+  }).map((row) => text(row.timesheet_id).toLowerCase()))].slice(0, 25);
+  if (!timesheetIds.length) {
+    return { ok: true, timesheet_count: 0 };
+  }
+  if (typeof deps?.prepareInvoiceEvidence !== 'function') {
+    throw new CandidateHttpError(503, 'MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE');
+  }
+  const result = await deps.prepareInvoiceEvidence({ timesheetIds });
+  return { ok: result?.ok === true, timesheet_count: timesheetIds.length, result };
 }
 
 function candidateRpcArgs(access, env, overrides = {}) {
@@ -7642,6 +7683,22 @@ async function queueCandidateManagerFinalisation(env, result) {
     contract_version: 'CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1',
     workflow_id: requireUuid(result?.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
     generation: requireInteger(result?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1)
+  });
+  return true;
+}
+
+async function queueCandidateInvoiceEvidencePreparation(env, timesheetIds) {
+  if (!env.CANDIDATE_DOCUMENT_RENDER_QUEUE
+      || typeof env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send !== 'function') return false;
+  const canonicalIds = [...new Set((Array.isArray(timesheetIds) ? timesheetIds : [])
+    .filter(Boolean)
+    .map((value) => requireUuid(value, 'TIMESHEET_NOT_FOUND').toLowerCase()))].sort();
+  if (!canonicalIds.length || canonicalIds.length > 25) {
+    throw new CandidateHttpError(409, 'MYTMS_INVOICE_EVIDENCE_REQUEST_INVALID');
+  }
+  await env.CANDIDATE_DOCUMENT_RENDER_QUEUE.send({
+    contract_version: 'CANDIDATE_INVOICE_EVIDENCE_PREPARE_QUEUE_MESSAGE_V1',
+    timesheet_ids: canonicalIds
   });
   return true;
 }

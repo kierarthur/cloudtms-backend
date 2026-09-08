@@ -11,6 +11,8 @@ const expenseRecoverySql = fs.readFileSync(path.join(root,
   'supabase/repeatable/08092026_1050_candidate_expense_render_recovery_without_operation_v1.sql'), 'utf8');
 const workerSource = fs.readFileSync(path.join(root,
   'broker/src/candidate-private-worker.js'), 'utf8');
+const backendSource = fs.readFileSync(path.join(root,
+  'broker/src/candidate-app-backend.js'), 'utf8');
 const configSource = fs.readFileSync(path.join(root,
   'candidate-private-api/wrangler.jsonc'), 'utf8');
 
@@ -25,16 +27,22 @@ test('review render recovery is service-only, exact-target capable and excludes 
   assert.doesNotMatch(recoverySql, /grant execute[\s\S]*to (?:anon|authenticated)/i);
 });
 
-test('one durable queue covers review renders, expense refreshes and manager final documents', () => {
+test('one durable queue covers document renders, manager finalisation and invoice evidence', () => {
   assert.match(configSource, /CANDIDATE_DOCUMENT_RENDER_QUEUE/);
   assert.match(configSource, /test-cloudtms-candidate-document-render-recovery/);
   assert.match(configSource, /test-cloudtms-candidate-document-render-recovery-dlq/);
   assert.match(workerSource, /CANDIDATE_REVIEW_RENDER_QUEUE_MESSAGE_V1/);
   assert.match(workerSource, /CANDIDATE_EXPENSE_RENDER_QUEUE_MESSAGE_V1/);
   assert.match(workerSource, /CANDIDATE_MANAGER_FINALISATION_QUEUE_MESSAGE_V1/);
+  assert.match(workerSource, /CANDIDATE_INVOICE_EVIDENCE_PREPARE_QUEUE_MESSAGE_V1/);
   assert.match(workerSource, /resumePendingCandidateReviewRenders/);
   assert.match(workerSource, /resumePendingCandidateExpenseUpdateRenders/);
   assert.match(workerSource, /recoverPendingCandidateManagerFinalisations/);
+  assert.match(workerSource, /recoverUnpreparedCandidateInvoiceEvidence/);
+  assert.match(backendSource,
+    /document_role=in\.\(SOURCE_EVIDENCE,MILEAGE_CLAIM_FORM,EXPENSE_MILEAGE_APPROVAL_SUMMARY\)/);
+  assert.match(backendSource,
+    /candidate_expense_summary_complete_v1[\s\S]*queueCandidateInvoiceEvidencePreparation\(env, \[timesheetId\]\)/);
 });
 
 test('expense render recovery includes ordinary updates without an expense operation', () => {

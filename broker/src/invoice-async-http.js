@@ -1979,6 +1979,151 @@ function inferredInvoiceEvidenceMediaType(evidence = {}, object = {}) {
   return 'application/octet-stream';
 }
 
+const CANDIDATE_INVOICE_EVIDENCE_EXCLUDED_ROLES = new Set([
+  'CANDIDATE_SIGNATURE',
+  'MANAGER_SIGNATURE',
+  'ELECTRONIC_SIGNATURES',
+  'SIGNED_TIMESHEET'
+]);
+const CANDIDATE_INVOICE_EVIDENCE_INCLUDED_ROLES = new Set([
+  'SOURCE_EVIDENCE',
+  'MILEAGE_CLAIM_FORM',
+  'EXPENSE_MILEAGE_APPROVAL_SUMMARY'
+]);
+
+function candidateInvoiceEvidenceMayBePrepared(evidence = {}) {
+  const kind = String(evidence.kind || '').trim().toUpperCase();
+  const documentRole = String(evidence.document_role || '').trim().toUpperCase();
+  const processingState = String(evidence.processing_state || '').trim().toUpperCase();
+  return kind !== 'TIMESHEET'
+    && processingState === 'READY'
+    && CANDIDATE_INVOICE_EVIDENCE_INCLUDED_ROLES.has(documentRole)
+    && !CANDIDATE_INVOICE_EVIDENCE_EXCLUDED_ROLES.has(kind)
+    && !CANDIDATE_INVOICE_EVIDENCE_EXCLUDED_ROLES.has(documentRole);
+}
+
+export async function prepareCandidateInvoiceEvidenceAssets(
+  env,
+  ctx,
+  timesheetIds,
+  deps = {}
+) {
+  const canonicalTimesheetIds = canonicalUuidArray(timesheetIds || []);
+  if (canonicalTimesheetIds.length < 1 || canonicalTimesheetIds.length > 25) {
+    throw invoiceBatchContractError('MYTMS_INVOICE_EVIDENCE_REQUEST_INVALID');
+  }
+  const actorUserId = String(env?.INVOICE_ACTOR_USER_ID || '').trim().toLowerCase();
+  if (!UUID_PATTERN.test(actorUserId) || typeof deps.rpc !== 'function') {
+    throw invoiceBatchContractError('MYTMS_INVOICE_EVIDENCE_PROCESSOR_UNAVAILABLE');
+  }
+
+  const evidenceQuery = new URL(`${env.SUPABASE_URL}/rest/v1/timesheet_evidence`);
+  evidenceQuery.searchParams.set('timesheet_id', `in.(${canonicalTimesheetIds.join(',')})`);
+  evidenceQuery.searchParams.set('processing_state', 'eq.READY');
+  evidenceQuery.searchParams.set(
+    'document_role',
+    'in.(SOURCE_EVIDENCE,MILEAGE_CLAIM_FORM,EXPENSE_MILEAGE_APPROVAL_SUMMARY)'
+  );
+  evidenceQuery.searchParams.set('document_asset_id', 'is.null');
+  evidenceQuery.searchParams.set(
+    'select',
+    'id,timesheet_id,kind,document_role,candidate_component_id,storage_key,source_revision,display_name,document_asset_id,processing_state,created_at'
+  );
+  evidenceQuery.searchParams.set('order', 'created_at.asc,id.asc');
+  evidenceQuery.searchParams.set('limit', '101');
+  const evidenceResponse = await fetch(evidenceQuery, {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+  const evidencePayload = await evidenceResponse.json().catch(() => []);
+  if (!evidenceResponse.ok || !Array.isArray(evidencePayload)) {
+    throw invoiceBatchContractError('MYTMS_INVOICE_EVIDENCE_QUERY_FAILED');
+  }
+  const evidenceRows = evidencePayload.filter(candidateInvoiceEvidenceMayBePrepared);
+  if (evidenceRows.length > 100) {
+    throw invoiceBatchContractError('INVOICE_EVIDENCE_SCOPE_TOO_LARGE');
+  }
+  if (!evidenceRows.length) {
+    return { ok: true, evidence_count: 0, operation_count: 0 };
+  }
+
+  const evidenceSources = await Promise.all(evidenceRows.map(async evidence => {
+    const originalR2Key = String(evidence.storage_key || '').trim().replace(/^\/+/, '');
+    const originalObject = originalR2Key ? await env.R2?.head?.(originalR2Key) : null;
+    return { evidence, originalR2Key, originalObject };
+  }));
+  if (evidenceSources.some(source => !source.originalR2Key || !source.originalObject)) {
+    throw invoiceBatchContractError('INVOICE_EVIDENCE_SOURCE_MISSING');
+  }
+
+  const assetCommands = await Promise.all(evidenceSources.map(async source => {
+    const evidence = source.evidence;
+    const sourceRevision = String(evidence.source_revision || '').trim()
+      || `LEGACY_TIMESHEET_EVIDENCE:${await sha256Text([
+        evidence.id,
+        source.originalR2Key,
+        evidence.created_at || ''
+      ].join('|'))}`;
+    return {
+      command_type: 'PREPARE_ASSET',
+      source_kind: 'TIMESHEET_EVIDENCE',
+      source_id: evidence.id,
+      source_revision: sourceRevision,
+      original_r2_key: source.originalR2Key,
+      original_filename: String(
+        evidence.display_name || `Invoice evidence ${evidence.id}`
+      ).slice(0, 240),
+      declared_media_type: inferredInvoiceEvidenceMediaType(
+        evidence,
+        source.originalObject
+      ),
+      rotation_degrees: 0
+    };
+  }));
+  const assetValues = rpcValue(await deps.rpc('invoice_operation_start_batch', {
+    p_commands: assetCommands,
+    p_actor_user_id: actorUserId
+  }));
+  const assetResults = Array.isArray(assetValues) ? assetValues : [assetValues];
+  const rejectedAsset = assetResults.find(result => (
+    result?.accepted === false || result?.blocked === true || result?.terminal_error
+  ));
+  if (rejectedAsset) {
+    const errorCode = String(
+      rejectedAsset?.terminal_error?.code
+        || rejectedAsset?.error?.code
+        || rejectedAsset?.terminal_error
+        || rejectedAsset?.error
+        || 'INVOICE_EVIDENCE_PREPARATION_BLOCKED'
+    ).trim().toUpperCase();
+    throw invoiceBatchContractError(
+      /^[A-Z][A-Z0-9_]{2,159}$/.test(errorCode)
+        ? errorCode : 'INVOICE_EVIDENCE_PREPARATION_BLOCKED'
+    );
+  }
+  const activeAssetOperations = assetResults.filter(
+    row => row?.accepted !== false && row?.operation_id
+  );
+  if (activeAssetOperations.length) {
+    const nudge = typeof deps.nudgeOperations === 'function'
+      ? deps.nudgeOperations
+      : nudgeInvoiceOperations;
+    await nudge(env, activeAssetOperations, {
+      ctx,
+      rpc: deps.rpc,
+      lanes: ['DOCUMENT'],
+      priorityClass: 'INTERACTIVE'
+    });
+  }
+  return {
+    ok: true,
+    evidence_count: evidenceRows.length,
+    operation_count: activeAssetOperations.length
+  };
+}
+
 async function handleViewDocument(
   env,
   req,
