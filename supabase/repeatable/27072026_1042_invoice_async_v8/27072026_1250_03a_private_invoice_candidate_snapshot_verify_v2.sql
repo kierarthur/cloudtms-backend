@@ -97,10 +97,15 @@ begin
       message = 'BATCH_SNAPSHOT_EXPIRED';
   end if;
 
-  select s.decrypted_secret
+  select coalesce(
+    nullif(s.decrypted_secret, ''),
+    nullif(m.secret_material, '')
+  )
   into v_secret
   from private.invoice_async_snapshot_hmac_keys k
-  join vault.decrypted_secrets s on s.id = k.vault_secret_id
+  left join vault.decrypted_secrets s on s.id = k.vault_secret_id
+  left join private.invoice_async_snapshot_hmac_secret_material m
+    on m.secret_id = k.vault_secret_id
   where k.key_id = v_key_id
     and k.active_from_utc <= v_at
     and (k.active_to_utc is null or v_at < k.active_to_utc)
@@ -111,6 +116,10 @@ begin
         and v_now <= k.verify_until_utc
       )
     )
+    and coalesce(
+      nullif(s.decrypted_secret, ''),
+      nullif(m.secret_material, '')
+    ) is not null
   limit 1;
 
   if v_secret is null then

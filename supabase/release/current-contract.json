@@ -6451,7 +6451,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1348c5c176285f9bc00da9ca3fabf26c72f5cb20b856606946409076bbadc6a8"
+      "definition_sha256": "95f95ff7297d9c7af9fdeab4577810120512b2bc6844ea35438848dadcb25680"
     },
     {
       "acl": [
@@ -6475,7 +6475,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "634819a4e482e49b2d158f6ae2eb65f490da6fd60b3d380f05c81e772823b722"
+      "definition_sha256": "cb1581d592846a56badd34c7a266f8d0b807d51f37a8bb885291db2278db3347"
     },
     {
       "acl": [
@@ -20180,7 +20180,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4e60456bedac50a59f8490c808004a6144b25fdca3564f586606828866983cb7"
+      "definition_sha256": "c6bbd7a2e2f5c7b4ea93f6d9701a18068fc9bab9f0a3af2615ed4950cb418e27"
     },
     {
       "acl": [
@@ -50745,6 +50745,108 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK ((active_to_utc IS NULL OR active_to_utc > active_from_utc) AND (verify_until_utc IS NULL OR verify_until_utc >= COALESCE(active_to_utc, active_from_utc)))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "invoice_async_snapshot_hmac_secret_material",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "secret_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "secret_material",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "invoice_async_snapshot_hmac_secret_material_pkey",
+          "definition": "CREATE UNIQUE INDEX invoice_async_snapshot_hmac_secret_material_pkey ON private.invoice_async_snapshot_hmac_secret_material USING btree (secret_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "invoice_async_snapshot_hmac_secret_material_nonempty_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(secret_material) >= 43)"
+        },
+        {
+          "name": "invoice_async_snapshot_hmac_secret_material_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (secret_id)"
         }
       ],
       "view_definition_sha256": null

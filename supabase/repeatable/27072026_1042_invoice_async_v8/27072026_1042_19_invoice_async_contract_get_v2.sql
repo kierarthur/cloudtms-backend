@@ -199,11 +199,16 @@ as $function$
     select exists (
       select 1
       from private.invoice_async_snapshot_hmac_keys k
-      join vault.decrypted_secrets s on s.id=k.vault_secret_id
+      left join vault.decrypted_secrets s on s.id=k.vault_secret_id
+      left join private.invoice_async_snapshot_hmac_secret_material m
+        on m.secret_id=k.vault_secret_id
       where k.is_current
         and k.active_from_utc<=statement_timestamp()
         and (k.active_to_utc is null or k.active_to_utc>statement_timestamp())
-        and nullif(s.decrypted_secret,'') is not null
+        and coalesce(
+          nullif(s.decrypted_secret,''),
+          nullif(m.secret_material,'')
+        ) is not null
     ) snapshot_key_ready
   ),
   trigger_state as (

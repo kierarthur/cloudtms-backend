@@ -47,15 +47,24 @@ begin
 
   select
     k.key_id,
-    s.decrypted_secret
+    coalesce(
+      nullif(s.decrypted_secret, ''),
+      nullif(m.secret_material, '')
+    )
   into
     v_key_id,
     v_secret
   from private.invoice_async_snapshot_hmac_keys k
-  join vault.decrypted_secrets s on s.id = k.vault_secret_id
+  left join vault.decrypted_secrets s on s.id = k.vault_secret_id
+  left join private.invoice_async_snapshot_hmac_secret_material m
+    on m.secret_id = k.vault_secret_id
   where k.is_current
     and k.active_from_utc <= v_now
     and (k.active_to_utc is null or k.active_to_utc > v_now)
+    and coalesce(
+      nullif(s.decrypted_secret, ''),
+      nullif(m.secret_material, '')
+    ) is not null
   order by k.active_from_utc desc, k.key_id
   limit 1;
 

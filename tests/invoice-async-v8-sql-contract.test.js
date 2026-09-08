@@ -342,6 +342,37 @@ test('candidate snapshots are Vault-backed, signed, and verified in DB', () => {
   assert.match(bump, /pg_advisory_xact_lock/i);
 });
 
+test('snapshot signing repairs a restored missing Vault secret without reusing its key identity', () => {
+  const repair = read(
+    'supabase/migrations/08092026_1323_invoice_snapshot_key_restore_repair.sql',
+  );
+  const verification = read(
+    'supabase/verification/08092026_1324_invoice_snapshot_key_restore_repair_verification.sql',
+  );
+  const snapshotGet = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_03_private_invoice_candidate_snapshot_get_v2.sql',
+  );
+  const snapshotVerify = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1250_03a_private_invoice_candidate_snapshot_verify_v2.sql',
+  );
+  const contract = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_19_invoice_async_contract_get_v2.sql',
+  );
+
+  assert.match(repair, /create table if not exists private\.invoice_async_snapshot_hmac_secret_material/i);
+  assert.match(repair, /revoke all[\s\S]*from public, anon, authenticated, service_role/i);
+  assert.match(repair, /to_regprocedure\([\s\S]*vault\.create_secret\(text,text,text,uuid\)/i);
+  assert.match(repair, /v_key_id\s*:=\s*'restore-'\s*\|\|/i);
+  assert.doesNotMatch(repair, /on conflict\s*\(key_id\)/i);
+  assert.match(repair, /extensions\.gen_random_bytes\(48\)/i);
+  assert.match(snapshotGet, /invoice_async_snapshot_hmac_secret_material/i);
+  assert.match(snapshotVerify, /invoice_async_snapshot_hmac_secret_material/i);
+  assert.match(contract, /invoice_async_snapshot_hmac_secret_material/i);
+  assert.match(verification, /v_current_count\s*<>\s*1/i);
+  assert.match(verification, /v_healthy_count\s*<>\s*1/i);
+  assert.match(verification, /snapshot_signing_ready/i);
+});
+
 test('canonical hashes and candidate trigger projections are locked artifacts', () => {
   const vectors = JSON.parse(read(
     'supabase/contracts/27072026_1250_invoice_async_v8_canonical_hash_vectors.json',
