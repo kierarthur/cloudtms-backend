@@ -934,6 +934,18 @@ test('invoice correction validation uses the same ordinary stream rules as invoi
   assert.match(invoiceCorrectionStreamParity, /23072026_2207_private_invoice_correction_validate_batch\.sql/i);
 });
 
+test('invoice correction stream closure restores current invoice authorities before the changed validator', () => {
+  const currentAuthority = invoiceCorrectionStreamParity.indexOf(
+    '\\ir 07092026_0611_candidate_invoice_current_authority_closure_v1.sql'
+  );
+  const correctionValidator = invoiceCorrectionStreamParity.indexOf(
+    '\\ir 23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql'
+  );
+
+  assert.ok(currentAuthority >= 0, 'closure must replay the established current invoice authorities');
+  assert.ok(correctionValidator > currentAuthority, 'changed correction validator must remain the final authority');
+});
+
 test('invoice delivery sends expense stream to the expense email without self-bill suppression', () => {
   assert.match(replacements.invoiceDelivery, /when private\._candidate_feature_enabled_current_v1\('candidate_expense_invoice_routing_v1'\)[\s\S]{0,120}and f\.invoice_stream='EXPENSE' then 'EXPENSE_INVOICE_EMAIL'/i);
   assert.match(replacements.invoiceDelivery, /f\.invoice_stream<>'EXPENSE' and f\.invoice_self_bill/i);
