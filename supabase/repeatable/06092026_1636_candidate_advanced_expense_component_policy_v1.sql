@@ -4325,8 +4325,14 @@ begin
       v_environment,v_component.expense_component_id,p_now_utc
     );
     v_direct_empty_pending:=v_workflow.workflow_kind='CONTRACT_EXPENSE'
-      and coalesce(v_removal_context#>>'{basis,empty_timesheet_consequence}','NONE')
-        <>'NONE'
+      and (
+        coalesce(v_removal_context#>>'{basis,empty_timesheet_consequence}','NONE')
+          <>'NONE'
+        or (
+          v_workflow.target_timesheet_id is null
+          and v_component.owning_timesheet_id is null
+        )
+      )
       and not exists(
         select 1 from public.candidate_expense_components other_component
         where other_component.workflow_id=v_workflow.id

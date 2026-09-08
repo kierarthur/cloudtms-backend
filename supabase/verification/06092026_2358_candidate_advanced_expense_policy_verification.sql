@@ -1629,4 +1629,108 @@ begin
 end;
 $manager_update_hold$;
 
+-- Removing the final category from a still-pending, target-less later
+-- expense claim is terminal. It must cancel the empty approval/workflow
+-- directly; there are no remaining documents to regenerate or reapprove.
+do $targetless_final_pending$
+declare
+  v_base public.candidate_submission_workflows%rowtype;
+  v_workflow uuid:=pg_catalog.gen_random_uuid();
+  v_expense_component uuid:=pg_catalog.gen_random_uuid();
+  v_document_component uuid:=pg_catalog.gen_random_uuid();
+  v_approval uuid:=pg_catalog.gen_random_uuid();
+  v_result jsonb;
+  v_replay jsonb;
+begin
+  select workflow.* into strict v_base
+  from public.candidate_submission_workflows workflow
+  where workflow.idempotency_key='advanced-expense:manager-hold';
+  -- The preceding hold/retry proof intentionally leaves its fixture active.
+  -- Retire only that rollback-scoped fixture before creating the one-active
+  -- target-less expense claim for this separate assertion.
+  update public.candidate_submission_workflows
+  set state='CANCELLED',cancelled_at_utc=now(),updated_at_utc=now()
+  where id=v_base.id;
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,
+    generation,contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,policy_snapshot_json,input_snapshot_json,idempotency_key,
+    review_manifest_json,review_manifest_sha256
+  ) values(
+    v_workflow,'TEST',v_base.account_id,v_base.candidate_id,'CONTRACT_EXPENSE',
+    'WEEKLY','ELECTRONIC','AWAITING_MANAGER_APPROVAL',1,v_base.contract_id,
+    v_base.contract_week_id,v_base.anchor_timesheet_id,null,v_base.week_ending_date,
+    '{}','{}','advanced-expense:targetless-final-pending','{}',
+    decode(repeat('d3',32),'hex')
+  );
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,timesheet_id,component_kind,
+    expense_category,document_role,state,storage_key,media_type,byte_size,
+    source_content_sha256,immutable_at_utc,required,review_render_state,
+    final_signed_render_state
+  ) values(
+    v_document_component,v_workflow,1,1,null,'EXPENSE_EVIDENCE','OTHER',
+    'SOURCE_EVIDENCE','IMMUTABLE','verification/targetless-final/other.jpg',
+    'image/jpeg',100,decode(repeat('d1',32),'hex'),now(),false,
+    'NOT_REQUIRED','NOT_REQUIRED'
+  );
+  insert into public.candidate_expense_components(
+    expense_component_id,workflow_id,workflow_generation,expense_category,
+    owning_timesheet_id,amount,mileage_units,lifecycle_state,
+    manager_approval_state,agency_authorisation_state,submitted_at_utc
+  ) values(
+    v_expense_component,v_workflow,1,'OTHER',null,3,0,
+    'SUBMITTED','PENDING','NOT_AUTHORISED',now()
+  );
+  insert into public.candidate_approval_requests(
+    id,workflow_id,workflow_generation,request_generation,method,state,token_hash,
+    expires_at_utc,review_manifest_sha256,required_component_ids,
+    required_component_manifest_json
+  ) values(
+    v_approval,v_workflow,1,1,'PHONE','PENDING',
+    decode(repeat('d2',32),'hex'),now()+interval '1 hour',
+    decode(repeat('d3',32),'hex'),
+    array[v_document_component],jsonb_build_array(jsonb_build_object(
+      'component_id',v_document_component
+    ))
+  );
+
+  v_result:=public.candidate_expense_component_action_atomic_v1(
+    (select session.id from public.candidate_app_sessions session
+      where session.account_id=v_base.account_id and session.environment='TEST'
+      order by session.expires_at_utc desc limit 1),
+    'TEST',v_workflow,1,v_expense_component,1,'WITHDRAW_EXPENSE',
+    'advanced-expense:targetless-final-withdraw',now()
+  );
+  if coalesce(v_result->>'state','')<>'WITHDRAWN'
+     or coalesce(v_result->>'update_state','')<>'NONE'
+     or coalesce((v_result->>'automatic_resubmission_required')::boolean,false)
+     or (select state from public.candidate_submission_workflows
+         where id=v_workflow) is distinct from 'CANCELLED'
+     or (select generation from public.candidate_submission_workflows
+         where id=v_workflow) is distinct from 2
+     or (select state from public.candidate_approval_requests
+         where id=v_approval) is distinct from 'CANCELLED'
+     or (select lifecycle_state from public.candidate_expense_components
+         where expense_component_id=v_expense_component) is distinct from 'WITHDRAWN'
+     or exists(select 1 from public.candidate_pending_expense_updates update_row
+       where update_row.workflow_id=v_workflow) then
+    raise exception 'Target-less final pending category did not close directly: %',v_result;
+  end if;
+  v_replay:=public.candidate_expense_component_action_atomic_v1(
+    (select session.id from public.candidate_app_sessions session
+      where session.account_id=v_base.account_id and session.environment='TEST'
+      order by session.expires_at_utc desc limit 1),
+    'TEST',v_workflow,1,v_expense_component,1,'WITHDRAW_EXPENSE',
+    'advanced-expense:targetless-final-withdraw',now()+interval '1 second'
+  );
+  if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
+     or v_replay-'idempotent_replay'<>v_result-'idempotent_replay' then
+    raise exception 'Target-less final pending withdrawal replay changed: %, %',
+      v_result,v_replay;
+  end if;
+end;
+$targetless_final_pending$;
+
 rollback;

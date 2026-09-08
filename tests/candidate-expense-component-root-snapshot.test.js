@@ -133,6 +133,17 @@ test('a refreshed client resumes only the exact active pending withdrawal', () =
   );
 });
 
+test('the final category in a target-less pending expense claim closes directly', () => {
+  assert.match(
+    source,
+    /v_direct_empty_pending:=v_workflow\.workflow_kind='CONTRACT_EXPENSE'[\s\S]*?v_workflow\.target_timesheet_id is null[\s\S]*?v_component\.owning_timesheet_id is null/
+  );
+  assert.match(
+    source,
+    /if v_direct_empty_pending then[\s\S]*?state='CANCELLED'[\s\S]*?workflow\.state='AWAITING_MANAGER_APPROVAL'/
+  );
+});
+
 test('automatic withdrawal retries use the durable database operation identity', () => {
   assert.match(
     brokerSource,
