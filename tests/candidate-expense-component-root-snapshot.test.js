@@ -192,3 +192,46 @@ test('pending expense rebind keeps approval ownership on the request manifest', 
     /update public\.candidate_submission_components set approval_request_id/
   );
 });
+
+test('pending expense rebind advances every unsent manager email to the fresh documents', () => {
+  const rebind = source.match(
+    /create or replace function public\.candidate_expense_update_rebind_atomic_v1\([\s\S]*?\n\$function\$;/
+  )?.[0] || '';
+
+  assert.match(
+    rebind,
+    /update public\.candidate_approval_requests set[\s\S]*?returning \* into v_approval/
+  );
+  assert.match(
+    rebind,
+    /update public\.mail_outbox manager_mail set[\s\S]*?'candidate_manager_workflow_generation',v_workflow\.generation/
+  );
+  assert.match(rebind, /manager_mail\.status='QUEUED' and manager_mail\.sent_at is null/);
+  assert.match(
+    rebind,
+    /candidate_manager_mail_kind'[\s\S]*?in \('INITIAL','REMINDER','RENEWAL'\)/
+  );
+  assert.match(
+    rebind,
+    /candidate_approval_request_id'[\s\S]*?v_approval\.id::text[\s\S]*?candidate_approval_request_generation'[\s\S]*?v_approval\.request_generation::text/
+  );
+  assert.match(
+    rebind,
+    /candidate_manager_workflow_generation'[\s\S]*?v_update\.from_workflow_generation::text/
+  );
+  assert.match(rebind, /'manager_queued_mail_rebound_count',v_manager_mail_rebound_count/);
+});
+
+test('release repair advances only a current unsent manager email with matching authority', () => {
+  const repair = source.match(
+    /do \$repair_queued_manager_mail_generation\$[\s\S]*?\$repair_queued_manager_mail_generation\$;/
+  )?.[0] || '';
+
+  assert.match(repair, /manager_mail\.status='QUEUED' and manager_mail\.sent_at is null/);
+  assert.match(repair, /route_receipt\.state='CURRENT'/);
+  assert.match(repair, /approval\.method='EMAIL' and approval\.state='PENDING'/);
+  assert.match(repair, /workflow\.generation=approval\.workflow_generation/);
+  assert.match(repair, /workflow\.route='EMAIL' and workflow\.state='AWAITING_MANAGER_APPROVAL'/);
+  assert.match(repair, /workflow\.review_manifest_sha256=approval\.review_manifest_sha256/);
+  assert.doesNotMatch(repair, /status='SENT'/);
+});

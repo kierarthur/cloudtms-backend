@@ -2964,6 +2964,7 @@ declare
   v_paper_mail_ids uuid[];
   v_paper_mail public.mail_outbox%rowtype;
   v_paper_notification_id uuid;
+  v_manager_mail_rebound_count integer:=0;
 begin
   if p_workflow_id is null or p_update_id is null
      or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
@@ -3076,10 +3077,39 @@ begin
       review_progress_json='{}'::jsonb,review_started_at_utc=null,
       review_completed_at_utc=null,updated_at_utc=p_now_utc
     where id=v_approval.id and state='PENDING'
-      and workflow_generation=v_update.from_workflow_generation;
+      and workflow_generation=v_update.from_workflow_generation
+    returning * into v_approval;
     if not found then
       raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
     end if;
+    -- The manager URL is stable, but every unsent message must name the
+    -- request's current immutable document generation.  Otherwise the email
+    -- outbox correctly refuses to send the stale generation after rebind.
+    update public.mail_outbox manager_mail set
+      payment_scope_json=manager_mail.payment_scope_json||jsonb_build_object(
+        'candidate_manager_workflow_generation',v_workflow.generation,
+        'candidate_manager_mail_rebound_at_utc',p_now_utc
+      )
+    where manager_mail.type='TIMESHEET_GENERAL'
+      and manager_mail.context_kind='CANDIDATE_WORKFLOW'
+      and manager_mail.context_id=v_workflow.id
+      and manager_mail.status='QUEUED' and manager_mail.sent_at is null
+      and upper(coalesce(
+        manager_mail.payment_scope_json->>'candidate_mail_authority',''
+      ))='MANAGER_APPROVAL_V1'
+      and upper(coalesce(
+        manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''
+      )) in ('INITIAL','REMINDER','RENEWAL')
+      and lower(coalesce(
+        manager_mail.payment_scope_json->>'candidate_manager_mail_retired','false'
+      )) in ('false','f','0','no')
+      and manager_mail.payment_scope_json->>'candidate_approval_request_id'=
+        v_approval.id::text
+      and manager_mail.payment_scope_json->>'candidate_approval_request_generation'=
+        v_approval.request_generation::text
+      and manager_mail.payment_scope_json->>'candidate_manager_workflow_generation'=
+        v_update.from_workflow_generation::text;
+    get diagnostics v_manager_mail_rebound_count=row_count;
     -- The approval request owns the ordered required-component manifest.
     -- Source/review document rows must keep approval_request_id null: that
     -- column is reserved by the table contract for a captured manager
@@ -3421,6 +3451,7 @@ begin
     'generation',v_workflow.generation,'update_state','NONE','update_id',v_update.update_id,
     'category_changes',v_update.update_plan_json,'approval_request_id',v_approval.id,
     'approval_request_generation',v_approval.request_generation,
+    'manager_queued_mail_rebound_count',v_manager_mail_rebound_count,
     'manager_link_preserved',v_update.update_mode='PENDING_MANAGER',
     'paper_pack_replacement',v_update.update_mode='PAPER_REPLACEMENT',
     'old_pack_retired',v_update.update_mode='PAPER_REPLACEMENT',
@@ -6174,6 +6205,65 @@ alter function public.candidate_office_expense_category_projection_batch_v1(text
 alter function public.candidate_office_expense_category_reject_atomic_v1(uuid,text,uuid,integer,uuid,integer,text,text,text,timestamptz) owner to postgres;
 alter function public.candidate_office_expense_category_reject_commit_v1(text,uuid,uuid,timestamptz) owner to postgres;
 alter function public.candidate_office_expense_category_adapter_v1(uuid,text,jsonb,timestamptz) owner to postgres;
+
+-- Repair only unsent manager messages whose preserved request and route
+-- receipt already prove that a completed expense refresh moved the request
+-- to a newer immutable document generation.  No recipient, link, schedule or
+-- already-sent message is changed.
+do $repair_queued_manager_mail_generation$
+begin
+  update public.mail_outbox manager_mail set
+    payment_scope_json=manager_mail.payment_scope_json||jsonb_build_object(
+      'candidate_manager_workflow_generation',approval.workflow_generation,
+      'candidate_manager_mail_rebound_at_utc',transaction_timestamp()
+    )
+  from public.candidate_approval_requests approval
+  join public.candidate_submission_workflows workflow
+    on workflow.id=approval.workflow_id
+  join public.candidate_manager_email_route_receipts route_receipt
+    on route_receipt.route_receipt_id=approval.current_manager_route_receipt_id
+   and route_receipt.workflow_id=approval.workflow_id
+   and route_receipt.approval_request_id=approval.id
+   and route_receipt.request_generation=approval.request_generation
+   and route_receipt.manager_token_hash_snapshot=approval.token_hash
+   and route_receipt.state='CURRENT'
+  where manager_mail.type='TIMESHEET_GENERAL'
+    and manager_mail.context_kind='CANDIDATE_WORKFLOW'
+    and manager_mail.context_id=workflow.id
+    and manager_mail.status='QUEUED' and manager_mail.sent_at is null
+    and manager_mail.delivered_at is null and manager_mail.read_at is null
+    and upper(coalesce(
+      manager_mail.payment_scope_json->>'candidate_mail_authority',''
+    ))='MANAGER_APPROVAL_V1'
+    and upper(coalesce(
+      manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''
+    )) in ('INITIAL','REMINDER','RENEWAL')
+    and lower(coalesce(
+      manager_mail.payment_scope_json->>'candidate_manager_mail_retired','false'
+    )) in ('false','f','0','no')
+    and manager_mail.payment_scope_json->>'candidate_approval_request_id'=
+      approval.id::text
+    and manager_mail.payment_scope_json->>'candidate_approval_request_generation'=
+      approval.request_generation::text
+    and manager_mail.payment_scope_json->>'candidate_manager_workflow_generation'
+      is distinct from approval.workflow_generation::text
+    and manager_mail.payment_scope_json->>'candidate_manager_route_receipt_id'=
+      route_receipt.route_receipt_id::text
+    and manager_mail.payment_scope_json->>'candidate_manager_route_ticket_id'=
+      route_receipt.manager_route_ticket_id::text
+    and manager_mail.payment_scope_json->>'candidate_manager_route_revision'=
+      route_receipt.route_revision::text
+    and lower(coalesce(
+      manager_mail.payment_scope_json->>'candidate_manager_route_registration_sha256',''
+    ))=encode(route_receipt.registration_receipt_sha256,'hex')
+    and approval.method='EMAIL' and approval.state='PENDING'
+    and approval.expires_at_utc>transaction_timestamp()
+    and approval.manager_email_normalized=manager_mail."to"
+    and workflow.generation=approval.workflow_generation
+    and workflow.route='EMAIL' and workflow.state='AWAITING_MANAGER_APPROVAL'
+    and workflow.review_manifest_sha256=approval.review_manifest_sha256;
+end;
+$repair_queued_manager_mail_generation$;
 
 revoke all on function private._candidate_expense_number_v1(jsonb,text) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_expense_payload_without_category_v1(jsonb,text) from public,anon,authenticated,service_role;
