@@ -2737,17 +2737,13 @@ begin
     v_new_submission#>'{expense_submission,canonical_tsfin_snapshot}',
     v_new_submission->'expense_submission',
     v_new_submission#>'{expense_claim,canonical_tsfin_snapshot}',
-    v_new_submission->'expense_claim',
-    v_new_submission->'canonical_tsfin_snapshot',
-    v_new_submission,'{}'::jsonb
+    v_new_submission->'expense_claim',v_new_submission,'{}'::jsonb
   );
   v_prior_claim:=coalesce(
     v_update.prior_immutable_submission_json#>'{expense_submission,canonical_tsfin_snapshot}',
     v_update.prior_immutable_submission_json->'expense_submission',
     v_update.prior_immutable_submission_json#>'{expense_claim,canonical_tsfin_snapshot}',
-    v_update.prior_immutable_submission_json->'expense_claim',
-    v_update.prior_immutable_submission_json->'canonical_tsfin_snapshot',
-    v_update.prior_immutable_submission_json,'{}'::jsonb
+    v_update.prior_immutable_submission_json->'expense_claim','{}'::jsonb
   );
   foreach v_category in array array['MILEAGE','TRAVEL','ACCOMMODATION','OTHER'] loop
     select change->>'update_kind' into v_kind

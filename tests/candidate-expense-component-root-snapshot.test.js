@@ -20,6 +20,13 @@ const brokerSource = readFileSync(
   new URL('../broker/src/candidate-app-backend.js', import.meta.url),
   'utf8'
 );
+const finalPendingUpdateSubmit = readFileSync(
+  new URL(
+    '../supabase/repeatable/08092026_0918_candidate_expense_update_root_snapshot_validation_v1.sql',
+    import.meta.url
+  ),
+  'utf8'
+);
 
 test('expense component values accept combined and later expense-only snapshots', () => {
   const componentValues = source.match(
@@ -65,7 +72,7 @@ test('category removal clears a root-level canonical later-expense snapshot', ()
 });
 
 test('pending expense submit validates root-level later-expense snapshots', () => {
-  const submit = source.match(
+  const submit = finalPendingUpdateSubmit.match(
     /create or replace function public\.candidate_expense_update_submit_atomic_v1\([\s\S]*?\n\$function\$;/
   )?.[0] || '';
 
@@ -81,6 +88,14 @@ test('pending expense submit validates root-level later-expense snapshots', () =
     submit.indexOf("v_new_submission->'canonical_tsfin_snapshot'") <
       submit.indexOf("v_new_submission,'{}'::jsonb"),
     'the new root-level canonical snapshot must be read before the outer object fallback'
+  );
+  assert.match(
+    finalPendingUpdateSubmit,
+    /revoke all on function public\.candidate_expense_update_submit_atomic_v1\([\s\S]*?from public,anon,authenticated,service_role;/
+  );
+  assert.match(
+    finalPendingUpdateSubmit,
+    /grant execute on function public\.candidate_expense_update_submit_atomic_v1\([\s\S]*?to service_role;/
   );
 });
 
