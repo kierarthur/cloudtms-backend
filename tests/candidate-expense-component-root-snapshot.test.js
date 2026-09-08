@@ -166,3 +166,18 @@ test('a fresh pending expense update never reuses an aborted document generation
     /from public\.candidate_submission_components component[\s\S]*?where component\.workflow_id=v_workflow\.id/
   );
 });
+
+test('pending expense rebind keeps approval ownership on the request manifest', () => {
+  const rebind = source.match(
+    /create or replace function public\.candidate_expense_update_rebind_atomic_v1\([\s\S]*?\n\$function\$;/
+  )?.[0] || '';
+
+  assert.match(
+    rebind,
+    /update public\.candidate_approval_requests set[\s\S]*?required_component_ids=v_component_ids/
+  );
+  assert.doesNotMatch(
+    rebind,
+    /update public\.candidate_submission_components set approval_request_id/
+  );
+});

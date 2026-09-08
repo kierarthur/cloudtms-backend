@@ -2895,9 +2895,11 @@ begin
     if not found then
       raise exception 'CANDIDATE_EXPENSE_UPDATE_APPROVAL_CHANGED' using errcode='40001';
     end if;
-    update public.candidate_submission_components set approval_request_id=v_approval.id
-    where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-      and required and state<>'SUPERSEDED';
+    -- The approval request owns the ordered required-component manifest.
+    -- Source/review document rows must keep approval_request_id null: that
+    -- column is reserved by the table contract for a captured manager
+    -- signature.  Rebinding the request therefore updates the request's
+    -- required_component_ids above, not the document rows themselves.
   end if;
   update public.candidate_pending_expense_updates set
     state='COMMITTED',current_workflow_generation=v_workflow.generation,
