@@ -248,8 +248,12 @@ begin
   values(v_candidate,'route-daily@example.test',true,null);
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-    candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone
-  ) values(gen_random_uuid(),v_client,'2026-01-01','ELECTRONIC',6,true,true);
+    candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone,
+    candidate_expense_invoice_email
+  ) values(
+    gen_random_uuid(),v_client,'2026-01-01','ELECTRONIC',6,true,true,
+    'expenses@example.test'
+  );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
     default_submission_mode,weekly_timesheet_source,role,band

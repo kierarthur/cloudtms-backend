@@ -255,8 +255,11 @@ begin
   values(v_candidate,'standalone-expense@example.test',true,'GCK-STANDALONE');
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,
-    candidate_expenses_require_separate_timesheet
-  ) values(gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',true);
+    candidate_expenses_require_separate_timesheet,candidate_expense_invoice_email
+  ) values(
+    gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',true,
+    'expenses@example.test'
+  );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,
     week_ending_weekday_snapshot,default_submission_mode

@@ -1475,10 +1475,11 @@ begin
   insert into public.clients(id,name) values(v_client,'Manager hold verification client');
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,
-    week_ending_weekday,candidate_expenses_require_separate_timesheet
+    week_ending_weekday,candidate_expenses_require_separate_timesheet,
+    candidate_expense_invoice_email
   ) values(
     pg_catalog.gen_random_uuid(),v_client,current_date-7,'ELECTRONIC',
-    extract(dow from current_date)::integer,true
+    extract(dow from current_date)::integer,true,'expenses@example.test'
   );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,pay_method_snapshot,

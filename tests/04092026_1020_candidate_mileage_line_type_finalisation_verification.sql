@@ -63,10 +63,10 @@ begin
   values(v_client,'Mileage line type verification client');
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-    candidate_expenses_require_separate_timesheet
+    candidate_expenses_require_separate_timesheet,candidate_expense_invoice_email
   ) values(
     gen_random_uuid(),v_client,current_date-30,'ELECTRONIC',
-    extract(dow from current_date)::integer,true
+    extract(dow from current_date)::integer,true,'expenses@example.test'
   );
   insert into public.candidates(id,email,active)
   values(v_candidate,'mileage-line-type-'||replace(v_candidate::text,'-','')||'@example.test',true);

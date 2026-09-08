@@ -24,11 +24,12 @@ insert into private.candidate_daily_entitlements(
 );
 insert into public.client_settings(
   id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-  candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone
+  candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone,
+  candidate_expense_invoice_email
 ) values(
   'b7080000-0000-4000-8000-000000000003',
   'b7080000-0000-4000-8000-000000000001',current_date-365,'ELECTRONIC',
-  extract(dow from current_date)::integer,true,true
+  extract(dow from current_date)::integer,true,true,'expenses@example.test'
 );
 insert into public.contracts(
   id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,

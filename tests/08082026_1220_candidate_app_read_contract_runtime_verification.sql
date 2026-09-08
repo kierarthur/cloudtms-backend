@@ -42,10 +42,10 @@ begin
     (v_old_candidate,'read-old@example.test',true,null);
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-    candidate_expenses_require_separate_timesheet
+    candidate_expenses_require_separate_timesheet,candidate_expense_invoice_email
   ) values
-    (gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',extract(dow from current_date)::integer,true),
-    (gen_random_uuid(),v_old_client,current_date-300,'ELECTRONIC',extract(dow from current_date)::integer,true);
+    (gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',extract(dow from current_date)::integer,true,'expenses@example.test'),
+    (gen_random_uuid(),v_old_client,current_date-300,'ELECTRONIC',extract(dow from current_date)::integer,true,'expenses@example.test');
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
     default_submission_mode
