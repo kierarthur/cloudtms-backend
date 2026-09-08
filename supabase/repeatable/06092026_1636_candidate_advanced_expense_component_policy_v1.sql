@@ -2264,7 +2264,18 @@ begin
       ));
     end if;
   end loop;
-  v_next_generation:=v_workflow.generation+1;
+  -- A failed document refresh is restored to the last manager-visible
+  -- workflow generation, while its generated component rows remain as
+  -- SUPERSEDED audit history.  Never reuse one of those historical
+  -- generations: the workflow/component uniqueness contract is independent
+  -- of component state.  Continue from the first generation that has never
+  -- held a document component for this workflow.
+  select greatest(
+    v_workflow.generation+1,
+    coalesce(max(component.workflow_generation),0)+1
+  ) into v_next_generation
+  from public.candidate_submission_components component
+  where component.workflow_id=v_workflow.id;
   v_submission:=v_workflow.immutable_submission_json;
   v_input:=v_workflow.input_snapshot_json;
   for v_change in select value from jsonb_array_elements(v_normalised) item(value)

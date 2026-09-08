@@ -1455,6 +1455,7 @@ declare
   v_manifest jsonb;
   v_manifest_sha bytea;
   v_begin jsonb;
+  v_retry jsonb;
   v_hold jsonb;
   v_update uuid;
   v_now timestamptz:=clock_timestamp();
@@ -1602,6 +1603,28 @@ begin
        'TEST',v_workflow,v_token_sha,v_now+interval '32 minutes'
      ) is not null then
     raise exception 'Terminal update continued to hold the restored manager link';
+  end if;
+
+  -- The failed refresh keeps its later-generation document rows as
+  -- SUPERSEDED audit history.  A fresh edit must skip those used generations
+  -- instead of colliding with the workflow/component uniqueness constraint.
+  v_retry:=public.candidate_expense_update_begin_atomic_v1(
+    v_session,'TEST',v_workflow,1,
+    '[{"update_kind":"ADD_CATEGORY","expense_category":"OTHER"}]'::jsonb,
+    'advanced-expense:manager-hold-retry',v_now+interval '32 minutes'
+  );
+  if coalesce(v_retry->>'state','')<>'WORKER_DRAFT'
+     or coalesce((v_retry->>'generation')::integer,0)<>3
+     or not exists(
+       select 1 from public.candidate_submission_components component
+       where component.workflow_id=v_workflow
+         and component.workflow_generation=3
+         and component.component_no=1
+         and component.component_kind='EXPENSE_EVIDENCE'
+         and component.expense_category='TRAVEL'
+         and component.state='IMMUTABLE'
+     ) then
+    raise exception 'Fresh update did not skip the aborted document generation: %',v_retry;
   end if;
 end;
 $manager_update_hold$;

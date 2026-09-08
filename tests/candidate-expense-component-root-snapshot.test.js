@@ -151,3 +151,18 @@ test('automatic withdrawal retries use the durable database operation identity',
     /jsonResponse\(202,[\s\S]*candidateExpenseCategoryPendingUpdateAcceptedResult/
   );
 });
+
+test('a fresh pending expense update never reuses an aborted document generation', () => {
+  const begin = source.match(
+    /create or replace function public\.candidate_expense_update_begin_atomic_v1\([\s\S]*?\n\$function\$;/
+  )?.[0] || '';
+
+  assert.match(
+    begin,
+    /select greatest\([\s\S]*?v_workflow\.generation\+1[\s\S]*?max\(component\.workflow_generation\)[\s\S]*?into v_next_generation/
+  );
+  assert.match(
+    begin,
+    /from public\.candidate_submission_components component[\s\S]*?where component\.workflow_id=v_workflow\.id/
+  );
+});
