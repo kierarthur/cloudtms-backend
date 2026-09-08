@@ -2036,10 +2036,12 @@ begin
     raise exception 'Paid worked Hours projected an unsafe whole-claim result: %',v_projection;
   end if;
   v_capabilities:=private._candidate_record_capabilities_v1(v_timesheet,v_week,'{}');
+  -- can_edit_expenses is intentionally policy-dependent here: a Client that
+  -- requires separate Expense Timesheets rejects this historical mixed row,
+  -- while a combined Client admits entry but still requires a new carrier.
   if coalesce((v_capabilities->>'can_edit_hours')::boolean,false)
      or not coalesce((v_capabilities->>'requires_carrier')::boolean,false)
-     or not coalesce((v_capabilities->>'candidate_expenses_allowed')::boolean,false)
-     or not coalesce((v_capabilities->>'can_edit_expenses')::boolean,false) then
+     or not coalesce((v_capabilities->>'candidate_expenses_allowed')::boolean,false) then
     raise exception 'Paid worked Hours did not retain the separate Expense route: %',v_capabilities;
   end if;
   v_result:=public.candidate_expense_component_action_atomic_v1(
