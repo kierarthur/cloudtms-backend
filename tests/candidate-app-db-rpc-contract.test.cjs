@@ -98,6 +98,18 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /\bprocessed_at_utc\s+timestamptz(?:\s|,|$)/i,
     'Candidate compile fixture must expose the real Daily processing boundary'
   );
+  for (const columnPattern of [
+    /\bprocessed_by_user_id\s+uuid(?:\s|,|$)/i,
+    /\bunlocked_by_credit_note_id\s+uuid(?:\s|,|$)/i,
+    /\bremittance_last_sent_at_utc\s+timestamptz(?:\s|,|$)/i,
+    /\bremittance_send_count\s+integer\s+not\s+null\s+default\s+0(?:\s|,|$)/i
+  ]) {
+    assert.match(
+      fixtureFinancials,
+      columnPattern,
+      'Candidate compile fixture must expose the payment-history rollover fields used by the current Expense policy'
+    );
+  }
 
   const installBlock = candidateRuntimeWorkflow.match(/install_files=\(\s*([\s\S]*?)\n\s*\)/)?.[1];
   assert.ok(installBlock, 'Candidate runtime install_files block is missing');
