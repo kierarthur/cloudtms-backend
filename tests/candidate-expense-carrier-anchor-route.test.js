@@ -9,6 +9,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const repeatablePath = 'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql';
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
+const duplicateAnchorInclusionPath = 'supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql';
 const mileageLineTypeVerifierPath = 'tests/04092026_1020_candidate_mileage_line_type_finalisation_verification.sql';
 const separationDeliveryPath = 'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql';
 const importCarrierFinalisationPath = 'supabase/repeatable/04092026_2232_candidate_import_expense_carrier_finalisation_v1.sql';
@@ -16,6 +17,7 @@ const weeklyFinalisationPath = 'supabase/repeatable/27082026_2205_candidate_week
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
 const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
+const duplicateAnchorInclusion = read(duplicateAnchorInclusionPath);
 const authoriseAuthority = read('supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql');
 const bulkDataset = read('supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql');
 const broker = read('broker/src/index.js');
@@ -203,6 +205,20 @@ test('duplicate review is category-specific and excludes the official expense su
   assert.match(repeatable, /DUPLICATE_EXPENSE_REVIEW[\s\S]*DUPLICATE_EXPENSE_/i);
   assert.match(candidateBroker, /CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED/i);
   assert.match(candidateBroker, /duplicate_expense_confirmation/i);
+});
+
+test('later claims warn about approved categories on their shared worked-Timesheet anchor', () => {
+  const priorComponents = duplicateAnchorInclusion.match(
+    /prior_component_claims as \([\s\S]*?\), prior_financial_claims as \(/
+  )?.[0] || '';
+  assert.match(priorComponents, /prior_workflow\.id<>v_workflow\.id/i);
+  assert.match(priorComponents, /component\.manager_approved_at_utc is not null/i);
+  assert.doesNotMatch(priorComponents, /component\.workflow_generation=prior_workflow\.generation/i);
+  assert.doesNotMatch(
+    priorComponents,
+    /coalesce\(prior_workflow\.target_timesheet_id,prior_workflow\.anchor_timesheet_id\)[\s\S]*?is distinct from coalesce\(v_workflow\.target_timesheet_id,v_workflow\.anchor_timesheet_id\)/i
+  );
+  assert.match(duplicateAnchorInclusion, /revoke all on function private\._expense_duplicate_review_v1\(uuid,text\[\]\)[\s\S]*from public,anon,authenticated,service_role/i);
 });
 
 test('Office authorisation requires deliberate review and bulk authorisation excludes the claim', () => {
