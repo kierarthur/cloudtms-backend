@@ -3052,6 +3052,44 @@ test('scheduled recovery resumes the exact saved expense document update', async
   assert.equal(calls[0].mutationKey, `candidate-expense-operation:${operationId}`);
 });
 
+test('scheduled recovery resumes an ordinary expense update without an operation row', async () => {
+  const updateId = '00000000-0000-4000-8000-0000000001d1';
+  const workflowId = '00000000-0000-4000-8000-0000000001d2';
+  const submitted = {
+    update_id: updateId,
+    workflow_id: workflowId,
+    render_contract: { phase: 'REVIEW', components: [{ component_id: 'saved' }] }
+  };
+  const calls = [];
+  const result = await resumePendingCandidateExpenseUpdateRenders(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {
+      async rpc() {
+        return {
+          ok: true,
+          contract_version: 'CANDIDATE_EXPENSE_RENDER_RECOVERY_LIST_V1',
+          count: 1,
+          items: [{
+            update_id: updateId,
+            workflow_id: workflowId,
+            operation_id: null,
+            submit_result_json: submitted,
+            updated_at_utc: '2026-09-08T09:00:00.000Z'
+          }]
+        };
+      }
+    }, 1, {
+      async renderUpdate(env, deps, receipt, mutationKey) {
+        calls.push({ receipt, mutationKey });
+      }
+    }
+  );
+  assert.deepEqual(result, { scanned: 1, recovered: 1, failed: 0 });
+  assert.deepEqual(calls, [{
+    receipt: submitted,
+    mutationKey: `candidate-expense-update:${updateId}`
+  }]);
+});
+
 test('scheduled recovery requests only bounded pending review documents', async () => {
   const calls = [];
   const result = await resumePendingCandidateReviewRenders({

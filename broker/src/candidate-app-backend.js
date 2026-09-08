@@ -5789,7 +5789,8 @@ export async function resumePendingCandidateExpenseUpdateRenders(
     try {
       const updateId = requireUuid(row.update_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
       const workflowId = requireUuid(row.workflow_id, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
-      const operationId = requireUuid(row.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND');
+      const operationId = row.operation_id == null ? null
+        : requireUuid(row.operation_id, 'CANDIDATE_EXPENSE_OPERATION_NOT_FOUND');
       const submitted = parseJson(row.submit_result_json, {}) || {};
       if (submitted.update_id !== updateId
           || submitted.workflow_id !== workflowId
@@ -5797,7 +5798,9 @@ export async function resumePendingCandidateExpenseUpdateRenders(
         throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_UPDATE_NOT_READY');
       }
       await renderUpdate(
-        env, deps, submitted, `candidate-expense-operation:${operationId}`
+        env, deps, submitted, operationId
+          ? `candidate-expense-operation:${operationId}`
+          : `candidate-expense-update:${updateId}`
       );
       recovered += 1;
     } catch (error) {
