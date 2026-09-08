@@ -515,6 +515,4 @@ $function$;
 revoke all on function public.expense_placement_resolve_v1(uuid,text,uuid,uuid,jsonb,timestamptz) from public,anon,authenticated;
 grant execute on function public.expense_placement_resolve_v1(uuid,text,uuid,uuid,jsonb,timestamptz) to service_role;
 
-notify pgrst, 'reload schema';
-
 commit;
