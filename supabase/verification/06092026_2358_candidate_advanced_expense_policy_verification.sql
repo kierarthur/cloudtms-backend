@@ -2039,7 +2039,7 @@ begin
   if coalesce((v_capabilities->>'can_edit_hours')::boolean,false)
      or not coalesce((v_capabilities->>'requires_carrier')::boolean,false)
      or not coalesce((v_capabilities->>'candidate_expenses_allowed')::boolean,false)
-     or coalesce((v_capabilities->>'can_edit_expenses')::boolean,false) then
+     or not coalesce((v_capabilities->>'can_edit_expenses')::boolean,false) then
     raise exception 'Paid worked Hours did not retain the separate Expense route: %',v_capabilities;
   end if;
   v_result:=public.candidate_expense_component_action_atomic_v1(
