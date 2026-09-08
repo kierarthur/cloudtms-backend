@@ -24,7 +24,7 @@ const files = {
 const sql = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
 const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
-const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
+const latestCapabilities = read('supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
 const latestExpenseApply = read('supabase/repeatable/05092026_0035_candidate_expense_carrier_approved_projection_v1.sql');
 const latestExpenseCarrierAnchor = read(
@@ -108,6 +108,7 @@ test('Candidate runtime gate finishes with every current authority', () => {
   const settingsProcessedDailyOriginRepair = 'supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql';
   const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
   const settingsAuthorityBarrier = 'supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql';
+  const expenseEmailAdmission = 'supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql';
   const qrRefuseServiceAcl = 'supabase/repeatable/04092026_1710_timesheet_qr_refuse_service_acl_v1.sql';
   const breakHelperOwner = 'supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql';
   const breakAuthority = 'supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql';
@@ -136,9 +137,17 @@ test('Candidate runtime gate finishes with every current authority', () => {
     'historical Client settings origins must be repaired after the schema and before resolver consumers'
   );
   assert.ok(installPaths.includes(settingsAuthorityBarrier), 'frozen-settings evaluation barrier is missing');
+  assert.ok(installPaths.includes(expenseEmailAdmission), 'current Candidate expense capability authority is missing');
   assert.ok(
     installPaths.indexOf(settingsAuthorityConsumer) < installPaths.indexOf(settingsAuthorityBarrier),
     'frozen-settings evaluation barrier must follow every generated Candidate/invoice consumer'
+  );
+  assert.ok(
+    installPaths.indexOf('supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql')
+      < installPaths.indexOf(expenseEmailAdmission)
+      && installPaths.indexOf(expenseEmailAdmission)
+        < installPaths.indexOf('supabase/repeatable/06092026_1636_candidate_advanced_expense_component_policy_v1.sql'),
+    'current Candidate expense capabilities must follow the older capability owner and precede advanced expense consumers'
   );
   assert.ok(installPaths.includes(qrRefuseServiceAcl), 'QR refusal service-only ACL convergence is missing');
   assert.equal(
