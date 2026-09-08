@@ -99,6 +99,22 @@ test('pending expense submit validates root-level later-expense snapshots', () =
   );
 });
 
+test('pending expense submit accepts a verified receipt reused from immutable history', () => {
+  const submit = finalPendingUpdateSubmit.match(
+    /create or replace function public\.candidate_expense_update_submit_atomic_v1\([\s\S]*?\n\$function\$;/
+  )?.[0] || '';
+  const plannedStart = submit.indexOf(
+    ") or exists(\n    select 1 from jsonb_array_elements(v_update.update_plan_json) change"
+  );
+  const plannedEnd = submit.indexOf(") or exists(", plannedStart + 12);
+  const plannedCategoryEvidence = plannedStart >= 0 && plannedEnd > plannedStart
+    ? submit.slice(plannedStart, plannedEnd) : '';
+
+  assert.match(plannedCategoryEvidence, /current_component\.state='IMMUTABLE'/);
+  assert.match(plannedCategoryEvidence, /current_component\.source_content_sha256 is not null/);
+  assert.doesNotMatch(plannedCategoryEvidence, /current_component\.source_component_id is null/);
+});
+
 test('release reconciliation is limited to mismatched live later-expense components', () => {
   const reconciliation = source.match(
     /do \$reconcile_later_expense_components\$[\s\S]*?\$reconcile_later_expense_components\$;/

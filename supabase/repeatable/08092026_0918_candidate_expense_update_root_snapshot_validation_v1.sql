@@ -229,7 +229,6 @@ begin
           and current_component.state='IMMUTABLE'
           and current_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
           and current_component.expense_category=change->>'expense_category'
-          and current_component.source_component_id is null
           and current_component.source_content_sha256 is not null
       )
   ) or exists(
