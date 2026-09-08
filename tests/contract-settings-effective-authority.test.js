@@ -8,6 +8,8 @@ const wrangler = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf
 const migration = readFileSync(new URL('../supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql', import.meta.url), 'utf8');
 const missingSettingsCanvasRepair = readFileSync(new URL('../supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql', import.meta.url), 'utf8');
 const processedDailyOriginRepair = readFileSync(new URL('../supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql', import.meta.url), 'utf8');
+const legacyDailyAuthorityBackfill = readFileSync(new URL('../supabase/migrations/08092026_1415_legacy_daily_settings_authority_backfill.sql', import.meta.url), 'utf8');
+const legacyDailyAuthorityBackfillVerification = readFileSync(new URL('../supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql', import.meta.url), 'utf8');
 const resolver = readFileSync(new URL('../supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql', import.meta.url), 'utf8');
 const plannedClientRefresh = readFileSync(new URL('../supabase/repeatable/04092026_1901_client_planned_override_refresh_v1.sql', import.meta.url), 'utf8');
 const invoiceCore = readFileSync(new URL('../supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql', import.meta.url), 'utf8');
@@ -116,6 +118,20 @@ test('processed Daily rows without a Contract can resolve the first historical C
   assert.doesNotMatch(processedDailyOriginRepair, /total_pay|pay_method|settle|provider|Policy\.X/i);
 });
 
+test('legacy current Daily rows freeze dated authority without changing Timesheet behaviour', () => {
+  assert.match(legacyDailyAuthorityBackfill, /sheet_scope='DAILY'::public\.timesheet_scope_enum/);
+  assert.match(legacyDailyAuthorityBackfill, /is_current=true/);
+  assert.match(legacyDailyAuthorityBackfill, /revoked_at is null/);
+  assert.match(legacyDailyAuthorityBackfill, /settings_authority_json='\{\}'::jsonb/);
+  assert.match(legacyDailyAuthorityBackfill, /timesheets_financials financial[\s\S]*?financial\.is_current=true[\s\S]*?financial\.client_id is not null/);
+  assert.match(legacyDailyAuthorityBackfill, /_contract_settings_effective_core_v1\([\s\S]*?'DAILY',null/);
+  assert.match(legacyDailyAuthorityBackfill, /set updated_at=timesheet\.updated_at/);
+  assert.doesNotMatch(legacyDailyAuthorityBackfill, /delete from|insert into|total_pay|pay_method|settle|provider|Policy\.X/i);
+  assert.match(legacyDailyAuthorityBackfillVerification, /LEGACY_DAILY_SETTINGS_AUTHORITY_BACKFILL_INCOMPLETE/);
+  assert.match(legacyDailyAuthorityBackfillVerification, /LEGACY_DAILY_SETTINGS_AUTHORITY_BACKFILL_HELPER_RETAINED/);
+  assert.match(legacyDailyAuthorityBackfillVerification, /LEGACY_DAILY_SETTINGS_AUTHORITY_BACKFILL_TRIGGER_RETAINED/);
+});
+
 test('invoice consumers use each real Timesheet frozen authority, not current Client or Contract settings', () => {
   for (const source of [invoiceCore, invoiceResolver, invoiceVat, invoiceCorrection, invoicePresentation, invoiceApplyEdits, invoiceGenerationFinal]) {
     assert.match(source, /_timesheet_settings_authority_frozen_v1/);
@@ -150,6 +166,13 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
   assert.doesNotMatch(finalGenerationDefinition, /from public\.client_settings/);
   assert.match(invoiceGenerationFinal, /revoke all on function private\._invoice_generation_advance_core_v8\(jsonb,timestamptz\)[\s\S]*?authenticated/);
   assert.match(invoiceGenerationFinal, /grant execute on function private\._invoice_generation_advance_core_v8\(jsonb,timestamptz\)[\s\S]*?to postgres, service_role/);
+});
+
+test('invoice precheck preserves frozen history and excludes only unsafe unsnapshotted history', () => {
+  assert.match(invoicePrecheck, /when coalesce\(ts\.settings_authority_json,'\{\}'::jsonb\)<>'\{\}'::jsonb[\s\S]*?_timesheet_settings_authority_frozen_v1\(ts\.timesheet_id\)/);
+  assert.match(invoicePrecheck, /when ts\.is_current=true and ts\.revoked_at is null[\s\S]*?_contract_settings_effective_core_v1\(/);
+  assert.match(invoicePrecheck, /where \(ts\.is_current=true and ts\.revoked_at is null\)[\s\S]*?or coalesce\(ts\.settings_authority_json,'\{\}'::jsonb\)<>'\{\}'::jsonb/);
+  assert.doesNotMatch(invoicePrecheck, /from public\.client_settings/);
 });
 
 test('invoice presentation release fails closed instead of certifying a deferred definition', () => {

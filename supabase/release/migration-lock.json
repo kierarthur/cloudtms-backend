@@ -891,6 +891,10 @@
       "sha256": "7357782926560ac1f33eb7d6c2c7a17ffeb6dd4d5bae9239f254e39b8f6b1da0"
     },
     {
+      "path": "supabase/migrations/08092026_1415_legacy_daily_settings_authority_backfill.sql",
+      "sha256": "f76c8ec1ba450c680301fccd43fe8510a1bffeda23a2fde6ce9083a2df59bab3"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

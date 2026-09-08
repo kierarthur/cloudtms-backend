@@ -230,17 +230,28 @@ left join lateral (
 ) tf on true
 
 cross join lateral (
-  select private._contract_settings_effective_core_v1(
-    tf.client_id,
-    ts.contract_id,
-    coalesce(
-      (ts.worked_start_iso at time zone 'Europe/London')::date,
-      (ts.scheduled_start_iso at time zone 'Europe/London')::date,
-      ts.week_ending_date
-    ),
-    case when ts.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'INVOICE' end,
-    ts.timesheet_id
-  ) as settings_json
+  select case
+    -- A historical member of a current correction chain keeps the exact
+    -- authority frozen on that immutable Timesheet identity.  Do not ask the
+    -- current-only resolver to reinterpret it from today's Client settings.
+    when coalesce(ts.settings_authority_json,'{}'::jsonb)<>'{}'::jsonb
+      then private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
+    -- Current records which have not yet frozen authority retain the existing
+    -- Daily first-use path.  Processed Weekly/current records still fail closed
+    -- in the shared resolver if their authority is unexpectedly absent.
+    when ts.is_current=true and ts.revoked_at is null
+      then private._contract_settings_effective_core_v1(
+        tf.client_id,
+        ts.contract_id,
+        coalesce(
+          (ts.worked_start_iso at time zone 'Europe/London')::date,
+          (ts.scheduled_start_iso at time zone 'Europe/London')::date,
+          ts.week_ending_date
+        ),
+        case when ts.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'INVOICE' end,
+        ts.timesheet_id
+      )
+  end as settings_json
 ) authority
 
 -- timesheet evidence PDF presence (kind = TIMESHEET)
@@ -480,7 +491,14 @@ left join lateral (
       end
     ) as issue_missing_count
 
-) refchk on true;
+) refchk on true
+
+-- Unsnapshotted superseded/revoked legacy rows are not valid invoice sources.
+-- Excluding only that impossible historical state prevents one old row from
+-- blocking classification of every current invoice candidate, while retaining
+-- snapshotted historical correction-chain members for Policy X validation.
+where (ts.is_current=true and ts.revoked_at is null)
+   or coalesce(ts.settings_authority_json,'{}'::jsonb)<>'{}'::jsonb;
 
 -- Reassert the existing service-only security contract after replacement.
 alter view public.v_ts_invoice_precheck set (security_invoker=true);
