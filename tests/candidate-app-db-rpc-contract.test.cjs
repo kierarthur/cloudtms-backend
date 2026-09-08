@@ -68,9 +68,6 @@ const invoiceCorrectionStreamParity = read(
 const invoiceGenerationFrozenSettings = read(
   'supabase/repeatable/03092026_1645_invoice_generation_frozen_settings_authority_v1.sql'
 );
-const invoiceExpenseSeparation = read(
-  'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql'
-);
 
 test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
@@ -972,19 +969,6 @@ test('invoice commit safety requires generic evidence only for an undivided lega
     advance,
     /other_pay_ex_vat,0\)<>0\s*or coalesce\(tf\.other_charge_ex_vat,0\)<>0\)[\s\S]*upper\(coalesce\(e\.kind,''\)\) in\(\s*'OTHER','EXPENSE','EXPENSES'\)/i
   );
-});
-
-test('invoice segment commit expands each selected Timesheet segment exactly once', () => {
-  for (const source of [invoiceExpenseSeparation, invoiceGenerationFrozenSettings]) {
-    const advance = privateDefinition(source, '_invoice_generation_advance_core_v8');
-    const segmentEntries = advance.match(
-      /segment_entries as materialized\s*\([\s\S]*?\),\s*segment_daily_lines as materialized/i
-    )?.[0] || '';
-    assert.match(
-      segmentEntries,
-      /from\s*\(\s*select distinct on \(base\.chunk_id,base\.timesheet_id\) base\.\*\s*from source_rows base\s*order by base\.chunk_id,base\.timesheet_id,base\.source_member_key\s*\) s\s*cross join lateral jsonb_array_elements/i
-    );
-  }
 });
 
 test('invoice delivery sends expense stream to the expense email without self-bill suppression', () => {

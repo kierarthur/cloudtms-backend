@@ -1054,11 +1054,7 @@ begin
         when coalesce(seg.value->>'charge_ex_vat','')~
           '^[+-]?[0-9]+([.][0-9]+)?$' then(seg.value->>'charge_ex_vat')::numeric
         else 0 end segment_charge_ex
-    from (
-      select distinct on (base.chunk_id,base.timesheet_id) base.*
-      from source_rows base
-      order by base.chunk_id,base.timesheet_id,base.source_member_key
-    ) s
+    from source_rows s
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(s.invoice_breakdown_json->'segments')='array'
         then s.invoice_breakdown_json->'segments' else '[]'::jsonb end)
