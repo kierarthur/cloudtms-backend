@@ -649,10 +649,19 @@ final as materialized (
     ti.status::text target_status,
     ti.issued_at_utc target_issued_at_utc,
     ti.client_id target_client_id,
-    case when lower(coalesce(
-      ti.header_snapshot_json#>>'{meta,self_bill}','false'))
-      in('true','t','1','yes') then 'SELF_BILL' else 'NORMAL' end
-      target_invoice_stream,
+    case
+      when lower(coalesce(
+        ti.header_snapshot_json#>>'{meta,self_bill}','false'))
+        in('true','t','1','yes') then 'SELF_BILL'
+      when private._candidate_feature_enabled_current_v1(
+        'candidate_expense_invoice_routing_v1'
+      ) and upper(coalesce(
+        nullif(btrim(ti.header_snapshot_json->>'invoice_stream'),''),
+        nullif(btrim(ti.header_snapshot_json#>>'{meta,invoice_stream}'),''),
+        'NORMAL'
+      ))='EXPENSE' then 'EXPENSE'
+      else 'NORMAL'
+    end target_invoice_stream,
     coalesce(pair_scope.scope_json,'{}'::jsonb) pair_scope_json,
     (
       not r.import_declared

@@ -931,6 +931,9 @@ test('invoice correction validation uses the same ordinary stream rules as invoi
   assert.match(invoiceCorrectionValidation, /accommodation_pay_ex_vat/i);
   assert.match(invoiceCorrectionValidation, /other_pay_ex_vat/i);
   assert.match(invoiceCorrectionValidation, /when p\.self_bill then 'SELF_BILL'/i);
+  assert.match(invoiceCorrectionValidation, /ti\.header_snapshot_json->>'invoice_stream'/i);
+  assert.match(invoiceCorrectionValidation, /ti\.header_snapshot_json#>>'\{meta,invoice_stream\}'/i);
+  assert.match(invoiceCorrectionValidation, /\)\)='EXPENSE' then 'EXPENSE'/i);
   assert.match(invoiceCorrectionStreamParity, /23072026_2207_private_invoice_correction_validate_batch\.sql/i);
 });
 
