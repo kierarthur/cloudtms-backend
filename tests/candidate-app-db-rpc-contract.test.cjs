@@ -59,6 +59,12 @@ const invoiceExpenseRouting = read(
 const invoiceSourceRevisionParity = read(
   'supabase/repeatable/08092026_1605_invoice_expense_source_revision_parity_v1.sql'
 );
+const invoiceCorrectionValidation = read(
+  'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql'
+);
+const invoiceCorrectionStreamParity = read(
+  'supabase/repeatable/08092026_1615_invoice_correction_stream_parity_v1.sql'
+);
 
 test('Candidate runtime gate finishes with every current authority', () => {
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
@@ -915,6 +921,17 @@ test('invoice source revision remains identical to the shared source verifier', 
   assert.match(invoiceSourceRevisionParity, /when s\.invoice_stream='EXPENSE' then lower\(nullif\(btrim\(/i);
   assert.match(invoiceSourceRevisionParity, /candidate_expense_invoice_email/i);
   assert.match(invoiceSourceRevisionParity, /'NO_EXPENSE_RECIPIENT'/i);
+});
+
+test('invoice correction validation uses the same ordinary stream rules as invoice generation', () => {
+  assert.match(invoiceCorrectionValidation, /candidate_expense_invoice_routing_v1/i);
+  assert.match(invoiceCorrectionValidation, /expenses_pay_ex_vat/i);
+  assert.match(invoiceCorrectionValidation, /mileage_pay_ex_vat/i);
+  assert.match(invoiceCorrectionValidation, /travel_pay_ex_vat/i);
+  assert.match(invoiceCorrectionValidation, /accommodation_pay_ex_vat/i);
+  assert.match(invoiceCorrectionValidation, /other_pay_ex_vat/i);
+  assert.match(invoiceCorrectionValidation, /when p\.self_bill then 'SELF_BILL'/i);
+  assert.match(invoiceCorrectionStreamParity, /23072026_2207_private_invoice_correction_validate_batch\.sql/i);
 });
 
 test('invoice delivery sends expense stream to the expense email without self-bill suppression', () => {

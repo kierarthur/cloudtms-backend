@@ -122,6 +122,13 @@ seed_units as materialized (
     coalesce(f.client_id,c.client_id) client_id,
     f.id financial_id,f.processing_status::text processing_status,
     f.basis::text basis,f.total_charge_ex_vat,f.is_stale,f.stale_reason,
+    f.total_hours,f.hours_day,f.hours_night,f.hours_sat,f.hours_sun,f.hours_bh,
+    f.additional_pay_ex_vat,f.additional_charge_ex_vat,
+    f.expenses_pay_ex_vat,f.expenses_charge_ex_vat,
+    f.mileage_pay_ex_vat,f.mileage_charge_ex_vat,
+    f.travel_pay_ex_vat,f.travel_charge_ex_vat,
+    f.accommodation_pay_ex_vat,f.accommodation_charge_ex_vat,
+    f.other_pay_ex_vat,f.other_charge_ex_vat,
     f.locked_by_invoice_id,f.invoice_breakdown_json,
     f.policy_snapshot_json,f.rate_source_refs_json,
     coalesce(
@@ -161,6 +168,7 @@ classified as materialized (
     coalesce((authority.settings_json#>>'{values,is_nhsp}')::boolean,false) is_nhsp,
     coalesce((authority.settings_json#>>'{values,autoprocess_hr}')::boolean,false) autoprocess_hr,
     coalesce((authority.settings_json#>>'{values,no_timesheet_required}')::boolean,false) no_timesheet_required,
+    coalesce((authority.settings_json#>>'{values,self_bill}')::boolean,false) self_bill,
     (a.adjustment_origin in(
         'IMPORT_CORRECTION','IMPORT_CANCELLATION',
         'HEALTHROSTER_CHANGED_HOURS','NHSP_CHANGED_HOURS',
@@ -251,10 +259,37 @@ policy_validated as materialized (
         ((p.correction_leg->'invoice_policy')-'invoice_policy_fingerprint')::text,
         'UTF8'),'sha256'),'hex')
     end recomputed_invoice_policy_fingerprint,
-    case when upper(coalesce(p.basis,'')) in(
-      'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL',
-      'HEALTHROSTER_ADJUSTMENT') then 'SELF_BILL' else 'NORMAL' end
-      current_invoice_stream
+    case
+      when private._candidate_feature_enabled_current_v1(
+        'candidate_expense_invoice_routing_v1'
+      )
+      and (
+        abs(coalesce(p.total_hours,0))
+        +abs(coalesce(p.hours_day,0))+abs(coalesce(p.hours_night,0))
+        +abs(coalesce(p.hours_sat,0))+abs(coalesce(p.hours_sun,0))
+        +abs(coalesce(p.hours_bh,0))
+        +abs(coalesce(p.additional_pay_ex_vat,0))
+        +abs(coalesce(p.additional_charge_ex_vat,0))
+      )=0
+      and (
+        abs(coalesce(p.expenses_pay_ex_vat,0))
+        +abs(coalesce(p.expenses_charge_ex_vat,0))
+        +abs(coalesce(p.mileage_pay_ex_vat,0))
+        +abs(coalesce(p.mileage_charge_ex_vat,0))
+        +abs(coalesce(p.travel_pay_ex_vat,0))
+        +abs(coalesce(p.travel_charge_ex_vat,0))
+        +abs(coalesce(p.accommodation_pay_ex_vat,0))
+        +abs(coalesce(p.accommodation_charge_ex_vat,0))
+        +abs(coalesce(p.other_pay_ex_vat,0))
+        +abs(coalesce(p.other_charge_ex_vat,0))
+      )>0 then 'EXPENSE'
+      when upper(coalesce(p.basis,'')) in(
+        'NHSP','NHSP_ADJUSTMENT','HEALTHROSTER_SELF_BILL',
+        'HEALTHROSTER_ADJUSTMENT'
+      ) then 'SELF_BILL'
+      when p.self_bill then 'SELF_BILL'
+      else 'NORMAL'
+    end current_invoice_stream
   from policy_checked p
 ),
 policy_final as materialized (
