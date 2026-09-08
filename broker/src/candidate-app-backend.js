@@ -1892,7 +1892,11 @@ async function reusableCandidateExpenseSource(
     `id=eq.${encodeURIComponent(source.workflow_id)}`
       + '&select=id,environment,account_id,candidate_id,contract_id,week_ending_date,state'
   );
-  const sameClaimFamily = sourceWorkflow
+  const sameWorkflowHistory = sourceWorkflow
+    && sourceWorkflow.id === workflow.id
+    && Number.isSafeInteger(Number(source.workflow_generation))
+    && Number(source.workflow_generation) < Number(workflow.generation);
+  const terminalClaimFamily = sourceWorkflow
     && sourceWorkflow.id !== workflow.id
     && sourceWorkflow.environment === workflow.environment
     && sourceWorkflow.account_id === workflow.account_id
@@ -1900,7 +1904,7 @@ async function reusableCandidateExpenseSource(
     && sourceWorkflow.contract_id === workflow.contract_id
     && sourceWorkflow.week_ending_date === workflow.week_ending_date
     && ['CANCELLED', 'REJECTED', 'REFUSED', 'SUPERSEDED'].includes(upper(sourceWorkflow.state));
-  if (!sameClaimFamily
+  if (!(sameWorkflowHistory || terminalClaimFamily)
       || !['IMMUTABLE', 'SUPERSEDED', 'REJECTED'].includes(upper(source.state))
       || source.immutable_at_utc == null
       || upper(source.component_kind) !== componentKind
@@ -2544,7 +2548,15 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     await assertManagerRouteWorkflow(env, workflowId, authority);
     const managerToken = bearerToken(request);
     if (!managerToken) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
-    const managerContext = await managerDocumentReadContext(request, env, workflowId);
+    const managerRead = await managerDocumentReadContextWithHoldRetry(
+      request, env, deps, workflowId
+    );
+    if (managerRead.hold) {
+      return jsonResponse(202, managerRead.hold, {
+        'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+      });
+    }
+    const managerContext = managerRead.context;
     await assertManagerRouteApprovalContext(env, managerContext.approval, authority);
     approvalTokenHash = await sha256Hex(managerToken);
     ownerId = approvalTokenHash;
@@ -8353,6 +8365,20 @@ async function managerPendingExpenseUpdateHold(request, env, deps, workflowId) {
   return hold?.state === 'UPDATING' ? hold : null;
 }
 
+async function managerDocumentReadContextWithHoldRetry(request, env, deps, workflowId) {
+  try {
+    return { context: await managerDocumentReadContext(request, env, workflowId), hold: null };
+  } catch (error) {
+    if (![
+      'MANAGER_APPROVAL_REQUEST_NOT_READY',
+      'MANAGER_APPROVAL_REQUEST_SUPERSEDED'
+    ].includes(knownErrorCode(error))) throw error;
+    const hold = await managerPendingExpenseUpdateHold(request, env, deps, workflowId);
+    if (!hold) throw error;
+    return { context: null, hold };
+  }
+}
+
 async function managerDocumentReadContext(request, env, workflowId) {
   const auth = await managerTokenContext(request, env);
   const workflow = await workflowRow(env, workflowId);
@@ -8500,9 +8526,15 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
     ? managerRouteAuthority(request) : null;
   if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
-  const managerContext = routeAuthority
-    ? await managerDocumentReadContext(request, env, workflowId)
-    : null;
+  const managerRead = routeAuthority
+    ? await managerDocumentReadContextWithHoldRetry(request, env, deps, workflowId)
+    : { context: null, hold: null };
+  if (managerRead.hold) {
+    return jsonResponse(202, managerRead.hold, {
+      'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+    });
+  }
+  const managerContext = managerRead.context;
   if (routeAuthority) {
     await assertManagerRouteApprovalContext(env, managerContext.approval, routeAuthority);
   }
@@ -8601,7 +8633,15 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
     const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
       ? managerRouteAuthority(request) : null;
     if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
-    const context = await managerDocumentReadContext(request, env, workflowId);
+    const managerRead = await managerDocumentReadContextWithHoldRetry(
+      request, env, deps, workflowId
+    );
+    if (managerRead.hold) {
+      return jsonResponse(202, managerRead.hold, {
+        'retry-after': String(Math.max(1, Number(managerRead.hold.retry_after_seconds) || 2))
+      });
+    }
+    const context = managerRead.context;
     if (routeAuthority) await assertManagerRouteResult(env, {
       approval_request_id: context.approval.id,
       approval_request_generation: context.approval.request_generation
@@ -11469,6 +11509,7 @@ export const candidateAppBackendInternals = Object.freeze({
   preparedUploadContract,
   preparedCandidateComponentReplay,
   currentCandidateExpenseComponentReplay,
+  reusableCandidateExpenseSource,
   expenseSummaryDisplayLines,
   currentSubmittedDisplayWorkflow,
   candidateSubmittedFactsProjection,
@@ -11517,6 +11558,7 @@ export const candidateAppBackendInternals = Object.freeze({
   officeErrorCode,
   knownErrorCode,
   assertManagerRouteApprovalContext,
+  managerDocumentReadContextWithHoldRetry,
   managerStartMutationKey,
   documentStreamSource,
   managerActionMethods: MANAGER_ACTION_METHODS,

@@ -26,6 +26,7 @@ const {
   preparedUploadContract,
   preparedCandidateComponentReplay,
   currentCandidateExpenseComponentReplay,
+  reusableCandidateExpenseSource,
   expenseSummaryDisplayLines,
   officialPeriodWithShiftLines,
   paperPackIdentity,
@@ -69,6 +70,7 @@ const {
   knownErrorCode,
   officeErrorCode,
   assertManagerRouteApprovalContext,
+  managerDocumentReadContextWithHoldRetry,
   managerStartMutationKey,
   documentStreamSource,
   renderExpensePage,
@@ -4989,6 +4991,50 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
   }
 });
 
+test('a failed later-expense attempt may reuse its unchanged receipt in a newer generation of the same workflow', async () => {
+  const workflowId = '00000000-0000-4000-8000-00000000044a';
+  const sourceComponentId = '00000000-0000-4000-8000-00000000044b';
+  const accountId = '00000000-0000-4000-8000-00000000044c';
+  const candidateId = '00000000-0000-4000-8000-00000000044d';
+  const digest = '7'.repeat(64);
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([{
+        id: workflowId, environment: 'TEST', account_id: accountId,
+        candidate_id: candidateId, contract_id: null,
+        week_ending_date: '2026-09-13', generation: 8, state: 'WORKER_DRAFT'
+      }]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      return Response.json([{
+        id: sourceComponentId, workflow_id: workflowId, workflow_generation: 7,
+        component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+        expense_category: 'TRAVEL', media_type: 'image/png', byte_size: 123,
+        state: 'SUPERSEDED', immutable_at_utc: '2026-09-08T10:00:00.000Z',
+        source_content_sha256: `\\x${digest}`
+      }]);
+    }
+    throw new Error(`Unexpected same-workflow source read: ${target.pathname}`);
+  };
+  try {
+    const source = await reusableCandidateExpenseSource(
+      env, { account_id: accountId, selected_candidate_id: candidateId }, workflowId,
+      'EXPENSE_EVIDENCE', 'SOURCE_EVIDENCE', 'TRAVEL', 'image/png', 123, digest
+    );
+    assert.equal(source.id, sourceComponentId);
+    assert.equal(source.workflow_generation, 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('interrupted duplicate expense prepare preserves completed components and repairs only its empty placeholder', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000451',
@@ -8450,6 +8496,53 @@ test('manager start replay identity changes when a preserved link receives refre
   assert.notEqual(first, refreshed);
   assert.match(first, /^manager-start:[0-9a-f]{64}$/);
   assert.match(refreshed, /^manager-start:[0-9a-f]{64}$/);
+});
+
+test('manager context race is converted to the update hold instead of a false not-ready error', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000061';
+  const approvalId = '00000000-0000-4000-8000-000000000063';
+  const hold = {
+    ok: true,
+    state: 'UPDATING',
+    status_code: 'MANAGER_APPROVAL_REQUEST_UPDATING',
+    message: 'This claim is being updated. It will open automatically when ready.',
+    retry_after_seconds: 2,
+    workflow_id: workflowId,
+    approval_request_id: approvalId,
+    approval_request_generation: 4
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://database.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-placeholder'
+  };
+  const token = 'manager-update-race-token';
+  const request = new Request(`https://private.test/candidate-manager/v1/workflows/${workflowId}/start`, {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([{ id: workflowId, environment: 'TEST', generation: 7 }]);
+    }
+    if (url.pathname.endsWith('/candidate_approval_requests')) return Response.json([]);
+    throw new Error(`unexpected manager race read: ${url.pathname}`);
+  };
+  try {
+    const result = await managerDocumentReadContextWithHoldRetry(request, env, {
+      async rpc(name, args) {
+        assert.equal(name, 'candidate_expense_update_manager_hold_v1');
+        assert.equal(args.p_workflow_id, workflowId);
+        assert.match(args.p_approval_token_hash_hex, /^[0-9a-f]{64}$/);
+        return hold;
+      }
+    }, workflowId);
+    assert.equal(result.context, null);
+    assert.deepEqual(result.hold, hold);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('every manager review surface short-circuits to the same update hold receipt', async () => {
