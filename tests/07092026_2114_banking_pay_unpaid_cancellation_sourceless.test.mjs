@@ -45,6 +45,7 @@ const paths = {
   integrityOut: 'supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql',
   statusAdmissionOut: 'supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql',
   cutoverRepair: 'supabase/migrations/07092026_1931_banking_pay_legacy_terminal_correction_cutover_repair_v1.sql',
+  legacyBlockedCutover: 'supabase/migrations/07092026_1933_banking_pay_legacy_applied_with_blockers_cutover_v1.sql',
   migration: 'supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql',
   verifier: 'supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql',
 };
@@ -335,6 +336,32 @@ test('legacy TEST cutover boundary mutations fail closed', () => {
       `legacy cutover mutation ${index + 1} survived`
     );
   }
+});
+
+test('legacy applied-with-blockers audit residue is terminalised without changing money or policy', () => {
+  const cutover = read(paths.legacyBlockedCutover);
+  const noticeMigration = read('supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql');
+  assert.match(cutover, /v_environment IS DISTINCT FROM 'TEST'[\s\S]+RETURN;/);
+  assert.match(cutover, /request_row\.status = 'APPLIED_WITH_BLOCKERS'/);
+  assert.match(cutover, /request_row\.requested_at_utc < '2026-08-15 00:00:00\+00'::timestamptz/);
+  assert.match(cutover, /batch_row\.status = 'DRAFT'/);
+  assert.match(cutover, /batch_row\.execution_commit_state = 'NOT_SUBMITTED'/);
+  assert.match(cutover, /NOT EXISTS \([\s\S]+public\.pay_bank_transfers/);
+  assert.match(cutover, /PRE_BANK_CANCEL_CLASSIFICATION_REQUIRED/);
+  assert.match(cutover, /PARTIALLY_CANCELLED_BEFORE_BANK_SUBMISSION/);
+  assert.match(cutover, /LEGACY_WORKBENCH_REFRESH_REQUIRES_CURRENT_AUTHORITY/);
+  assert.match(cutover, /v_active_request_count IS DISTINCT FROM 1/);
+  assert.match(cutover, /SET status = 'BLOCKED'/);
+  assert.match(cutover, /'preserved_applied_work', true/);
+  assert.match(cutover, /'financial_rows_changed', false/);
+  assert.doesNotMatch(cutover, /\b(DELETE|TRUNCATE|MERGE)\b/i);
+  assert.doesNotMatch(cutover, /UPDATE\s+public\.(pay_batches|pay_batch_items|pay_bank_transfers|pay_advances)/i);
+  assert.doesNotMatch(cutover, /provider|mail_outbox|remittance/i);
+  assert.ok(
+    paths.legacyBlockedCutover.localeCompare('supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql') < 0,
+    'the legacy terminal cutover must sort before the cancellation-notice cutover'
+  );
+  assert.match(noticeMigration, /PAYMENT_CANCELLATION_NOTICE_CUTOVER_ACTIVE_REQUESTS/);
 });
 
 test('integrity checker reproduces exact V1, V2/comm1 and V2/comm2 hash contracts', () => {
