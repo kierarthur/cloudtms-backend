@@ -86,6 +86,7 @@ const CONFLICT_ERROR_CODES = new Set([
   'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE',
   'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED',
   'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED',
+  'CANDIDATE_RECEIPT_STORAGE_STALE',
   'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT',
   'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH',
   'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT',
@@ -824,6 +825,8 @@ function errorResponse(error, correlationId, office = false, safeDiagnosticDetai
   const professionalMessages = {
     TIMESHEET_WORK_INTERVAL_OVERLAP: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
     CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED: 'You have already submitted this type of expense for this client and week ending. Check the existing claim before submitting it again.',
+    CANDIDATE_EVIDENCE_BYTES_ALREADY_USED: 'This supporting item is still attached to a current claim. Choose a different item, or remove it from the current claim first if that option is available.',
+    CANDIDATE_RECEIPT_STORAGE_STALE: 'This saved receipt can no longer be reused. Take a new photo of the receipt and try again.',
     CANDIDATE_CONTEXT_STALE: 'This timesheet changed. Refresh it before trying again.',
     CANDIDATE_REQUEST_GENERATION_STALE: 'This manager request changed. Refresh it before trying again.',
     CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED: 'The selected timesheets changed. Review the current selection before sending reminders.',
@@ -1879,7 +1882,8 @@ async function reusableCandidateExpenseSource(
     `source_content_sha256=eq.${digest}`
       + '&source_component_id=is.null'
       + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
-      + 'expense_category,media_type,byte_size,state,immutable_at_utc,source_content_sha256&limit=2'
+      + 'expense_category,storage_key,media_type,byte_size,state,immutable_at_utc,'
+      + 'source_content_sha256&limit=2'
   );
   if (!sources.length) return null;
   if (sources.length !== 1) {
@@ -1890,22 +1894,32 @@ async function reusableCandidateExpenseSource(
     env,
     'candidate_submission_workflows',
     `id=eq.${encodeURIComponent(source.workflow_id)}`
-      + '&select=id,environment,account_id,candidate_id,contract_id,week_ending_date,state'
+      + '&select=id,environment,account_id,candidate_id,workflow_kind,scope,'
+      + 'contract_id,week_ending_date,state'
   );
   const sameWorkflowHistory = sourceWorkflow
     && sourceWorkflow.id === workflow.id
     && Number.isSafeInteger(Number(source.workflow_generation))
     && Number(source.workflow_generation) < Number(workflow.generation);
-  const terminalClaimFamily = sourceWorkflow
+  const weeklyKinds = ['CONTRACT_HOURS', 'CONTRACT_EXPENSE', 'CONTRACT_COMBINED'];
+  const targetIsWeeklyClaim = upper(workflow.scope) === 'WEEKLY'
+    && weeklyKinds.includes(upper(workflow.workflow_kind));
+  // This read is only a same-family/immutable-source preflight.  The final
+  // live-use decision belongs to candidate_component_prepare_atomic_v1, which
+  // serialises on the immutable root and evaluates its exact current uses in
+  // the same transaction as the new component insert.
+  const sameClaimFamily = sourceWorkflow
     && sourceWorkflow.id !== workflow.id
     && sourceWorkflow.environment === workflow.environment
     && sourceWorkflow.account_id === workflow.account_id
     && sourceWorkflow.candidate_id === workflow.candidate_id
     && sourceWorkflow.contract_id === workflow.contract_id
     && sourceWorkflow.week_ending_date === workflow.week_ending_date
-    && ['CANCELLED', 'REJECTED', 'REFUSED', 'SUPERSEDED'].includes(upper(sourceWorkflow.state));
-  if (!(sameWorkflowHistory || terminalClaimFamily)
-      || !['IMMUTABLE', 'SUPERSEDED', 'REJECTED'].includes(upper(source.state))
+    && upper(sourceWorkflow.scope) === 'WEEKLY'
+    && weeklyKinds.includes(upper(sourceWorkflow.workflow_kind));
+  if (!targetIsWeeklyClaim
+      || !(sameWorkflowHistory || sameClaimFamily)
+      || !['IMMUTABLE', 'SUPERSEDED', 'REJECTED', 'ABANDONED'].includes(upper(source.state))
       || source.immutable_at_utc == null
       || upper(source.component_kind) !== componentKind
       || upper(source.document_role) !== documentRole
@@ -1914,6 +1928,33 @@ async function reusableCandidateExpenseSource(
       || Number(source.byte_size) !== byteSize
       || text(source.source_content_sha256).replace(/^\\x/i, '').toLowerCase() !== sourceContentSha256) {
     throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  const storageKey = text(source.storage_key).replace(/^\/+/, '');
+  const bucket = env.R2;
+  if (!bucket || typeof bucket.head !== 'function') {
+    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  }
+  let stored;
+  try {
+    stored = storageKey ? await bucket.head(storageKey) : null;
+  } catch {
+    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
+  }
+  const metadata = stored?.customMetadata || {};
+  if (!stored
+      || Number(stored.size) !== byteSize
+      || normaliseMediaType(stored.httpMetadata?.contentType) !== mediaType
+      || text(metadata.purpose) !== 'candidate-component'
+      || text(metadata.workflow_id) !== source.workflow_id
+      || text(metadata.component_id) !== source.id
+      || normaliseMediaType(metadata.media_type) !== mediaType
+      || Number(metadata.byte_size) !== byteSize
+      || text(metadata.sha256).toLowerCase() !== sourceContentSha256) {
+    // A digest-matching root already exists, so an ordinary fresh upload would
+    // be rejected by the root-only global digest constraint after its R2 put.
+    // Stop before creating a component or upload ticket instead of cloning a
+    // missing/unproved object or leaving a doomed pending upload behind.
+    throw new CandidateHttpError(409, 'CANDIDATE_RECEIPT_STORAGE_STALE');
   }
   return source;
 }
@@ -2637,7 +2678,10 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     expense_category: body.expense_category == null ? null : upper(body.expense_category),
     paper_return_page_key: body.paper_return_page_key == null ? null : text(body.paper_return_page_key),
     storage_key: storageKey, media_type: mediaType, byte_size: byteSize,
-    ...(reusableSource ? { source_component_id: reusableSource.id } : {}),
+    ...(reusableSource ? {
+      source_component_id: reusableSource.id,
+      source_content_sha256_hex: sourceContentSha256
+    } : {}),
     approval_request_id: approvalRequestId,
     ...(owner === 'office' ? { service_phone_approval: true, actor_user_id: ownerId } : {}),
     ...(approvalTokenHash ? {

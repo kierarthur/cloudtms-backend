@@ -33,6 +33,8 @@ declare
   v_paper_page_key text;
   v_requested_media_type text;
   v_requested_byte_size bigint;
+  v_requested_source_component_id uuid;
+  v_requested_source_digest bytea;
   v_component_no integer;
   v_mutation_semantic_payload jsonb;
   v_mutation_request_sha256 text;
@@ -124,6 +126,20 @@ begin
   exception when invalid_text_representation or numeric_value_out_of_range then
     raise exception 'CANDIDATE_COMPONENT_SIZE_INVALID' using errcode='22023';
   end;
+  if nullif(v_payload->>'source_component_id','') is not null then
+    begin
+      v_requested_source_component_id:=(v_payload->>'source_component_id')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
+    end;
+    if coalesce(v_payload->>'source_content_sha256_hex','')
+       !~ '^[0-9a-fA-F]{64}$' then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+    end if;
+    v_requested_source_digest:=decode(
+      v_payload->>'source_content_sha256_hex','hex'
+    );
+  end if;
 
   select * into v_component
   from public.candidate_submission_components
@@ -143,6 +159,13 @@ begin
        or v_component.byte_size is distinct from v_requested_byte_size
        or v_component.manager_signature_capture_method is not null
        or v_component.expected_source_content_sha256 is not null
+       or v_component.source_component_id
+          is distinct from v_requested_source_component_id
+       or (
+         v_requested_source_component_id is not null
+         and v_component.source_content_sha256
+           is distinct from v_requested_source_digest
+       )
        or v_component.paper_return_page_key is distinct from v_paper_page_key then
       raise exception 'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' using errcode='23505';
     end if;
@@ -181,6 +204,15 @@ begin
      and v_component_kind in ('CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE') then
     raise exception 'CANDIDATE_COMPONENT_AMENDMENT_REQUIRED' using errcode='55000';
   end if;
+  if v_component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+     and (
+       v_workflow.scope<>'WEEKLY'
+       or v_workflow.workflow_kind not in (
+         'CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'
+       )
+     ) then
+    raise exception 'CANDIDATE_COMPONENT_TYPE_INVALID' using errcode='22023';
+  end if;
   if v_component_kind='SIGNED_RETURN' then
     if v_workflow.route<>'PAPER' or v_workflow.state<>'AWAITING_PAPER_RETURN'
        or v_workflow.paper_return_manifest_sha256 is null
@@ -195,31 +227,143 @@ begin
     raise exception 'CANDIDATE_PAPER_RETURN_PAGE_KEY_FORBIDDEN' using errcode='22023';
   end if;
 
-  if nullif(v_payload->>'source_component_id','') is not null then
+  if v_requested_source_component_id is not null then
     select source_component.* into v_source_component
     from public.candidate_submission_components source_component
     join public.candidate_submission_workflows source_workflow
       on source_workflow.id=source_component.workflow_id
-    where source_component.id=(v_payload->>'source_component_id')::uuid
-      and source_component.state in ('IMMUTABLE','SUPERSEDED','REJECTED')
+    where source_component.id=v_requested_source_component_id
+      and source_component.state in (
+        'IMMUTABLE','SUPERSEDED','REJECTED','ABANDONED'
+      )
       and source_component.immutable_at_utc is not null
       and source_component.source_content_sha256 is not null
       and source_component.source_component_id is null
       and source_workflow.environment=v_environment
       and source_workflow.account_id=v_account_id
       and source_workflow.candidate_id=v_candidate_id
+      and source_workflow.scope='WEEKLY'
+      and source_workflow.workflow_kind in (
+        'CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'
+      )
       and (
-        source_workflow.id=v_workflow.id
+        (
+          source_workflow.id=v_workflow.id
+          and source_component.workflow_generation<v_workflow.generation
+        )
         or (
+          source_workflow.id<>v_workflow.id
+          and
           source_workflow.contract_id is not distinct from v_workflow.contract_id
           and source_workflow.week_ending_date is not distinct from v_workflow.week_ending_date
-          and source_workflow.state in ('CANCELLED','REJECTED','REFUSED','SUPERSEDED')
         )
-      );
+      )
+    for update of source_component;
     if not found or v_source_component.component_kind<>v_component_kind
        or v_source_component.document_role<>v_document_role
-       or v_source_component.expense_category is distinct from v_expense_category then
+       or v_source_component.expense_category is distinct from v_expense_category
+       or lower(v_source_component.media_type) is distinct from v_requested_media_type
+       or v_source_component.byte_size is distinct from v_requested_byte_size
+       or v_source_component.source_content_sha256
+          is distinct from v_requested_source_digest then
       raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
+    end if;
+
+    -- A different workflow may select this immutable root only after the
+    -- exact receipt lineage has a durable ended fact.  The current target's
+    -- own earlier generation is the established carry-forward exception.
+    if v_source_component.workflow_id<>v_workflow.id
+       and not exists(
+         select 1
+         from public.candidate_submission_components ended_component
+         join public.candidate_submission_workflows ended_workflow
+           on ended_workflow.id=ended_component.workflow_id
+         left join public.candidate_expense_components ended_expense
+           on ended_expense.workflow_id=ended_component.workflow_id
+          and ended_expense.expense_category=ended_component.expense_category
+         left join public.timesheet_evidence ended_evidence
+           on ended_evidence.candidate_component_id=ended_component.id
+         where (ended_component.id=v_source_component.id
+           or ended_component.source_component_id=v_source_component.id)
+           and ended_component.component_kind=v_component_kind
+           and ended_component.document_role=v_document_role
+           and ended_component.expense_category is not distinct from v_expense_category
+           and (
+             ended_component.state in ('SUPERSEDED','REJECTED','ABANDONED')
+             or ended_workflow.state in (
+               'CANCELLED','REJECTED','REFUSED','EXPIRED','SUPERSEDED'
+             )
+             or ended_expense.lifecycle_state in (
+               'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+             )
+             or ended_evidence.processing_state='SUPERSEDED'
+           )
+       ) then
+      raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505';
+    end if;
+
+    -- The immutable root row is locked above.  PostgreSQL foreign-key checks
+    -- take a conflicting key-share lock before another workflow can point at
+    -- that root, so this current-use decision and the insert below are one
+    -- atomic admission.  Historical generations do not keep a receipt live:
+    -- the exact root must still occur in the category ledger's current
+    -- generation.  A missing legacy ledger fails closed while its workflow is
+    -- still current, but a whole terminal legacy workflow releases the root.
+    if exists(
+      select 1
+      from public.candidate_submission_components live_component
+      join public.candidate_submission_workflows live_workflow
+        on live_workflow.id=live_component.workflow_id
+      left join public.candidate_expense_components live_expense
+        on live_expense.workflow_id=live_component.workflow_id
+       and live_expense.expense_category=live_component.expense_category
+      where not (
+          live_component.workflow_id=v_workflow.id
+          and live_component.workflow_generation<v_workflow.generation
+        )
+        and (live_component.id=v_source_component.id
+          or live_component.source_component_id=v_source_component.id)
+        and live_component.component_kind=v_component_kind
+        and live_component.document_role=v_document_role
+        and live_component.expense_category is not distinct from v_expense_category
+        and live_component.state not in ('SUPERSEDED','REJECTED','ABANDONED')
+        and (
+          (
+            live_expense.expense_component_id is not null
+            and live_component.workflow_generation=live_expense.workflow_generation
+            and live_expense.lifecycle_state not in (
+              'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'
+            )
+          )
+          or (
+            live_expense.expense_component_id is null
+            and live_component.workflow_generation=case
+              when live_workflow.state='FINALISED'
+                then greatest(live_workflow.generation-1,1)
+              else live_workflow.generation
+            end
+            and live_workflow.state not in (
+              'CANCELLED','REJECTED','REFUSED','EXPIRED','SUPERSEDED'
+            )
+          )
+        )
+    ) or exists(
+      select 1
+      from public.timesheet_evidence live_evidence
+      join public.candidate_submission_components materialised_component
+        on materialised_component.id=live_evidence.candidate_component_id
+      where live_evidence.processing_state<>'SUPERSEDED'
+        and not (
+          materialised_component.workflow_id=v_workflow.id
+          and materialised_component.workflow_generation<v_workflow.generation
+        )
+        and (materialised_component.id=v_source_component.id
+          or materialised_component.source_component_id=v_source_component.id)
+        and materialised_component.component_kind=v_component_kind
+        and materialised_component.document_role=v_document_role
+        and materialised_component.expense_category is not distinct from v_expense_category
+    ) then
+      raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505';
     end if;
   end if;
 

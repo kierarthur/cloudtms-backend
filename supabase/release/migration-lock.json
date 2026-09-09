@@ -895,6 +895,10 @@
       "sha256": "f76c8ec1ba450c680301fccd43fe8510a1bffeda23a2fde6ce9083a2df59bab3"
     },
     {
+      "path": "supabase/migrations/09092026_1335_candidate_receipt_lineage_lookup_index.sql",
+      "sha256": "2fb1e52fde48cd2125e47375a40e995ec020b3302b69469e238a62631094d09a"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

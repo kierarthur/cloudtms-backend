@@ -15757,7 +15757,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "18149ee5dcbfaf94191fc10afb28ffc126152d2beb9e98332c9b3bc2a8d6a164"
+      "definition_sha256": "66cf278e8d94594313b9f282cc00e3e3f9038b8bb30c94b7671b558e31644906"
     },
     {
       "acl": [
@@ -72610,6 +72610,10 @@
         {
           "name": "candidate_submission_components_review_storage_uq",
           "definition": "CREATE UNIQUE INDEX candidate_submission_components_review_storage_uq ON public.candidate_submission_components USING btree (review_storage_key) WHERE (review_storage_key IS NOT NULL)"
+        },
+        {
+          "name": "candidate_submission_components_source_lineage_idx",
+          "definition": "CREATE INDEX candidate_submission_components_source_lineage_idx ON public.candidate_submission_components USING btree (source_component_id, workflow_id, workflow_generation, expense_category, state) WHERE (source_component_id IS NOT NULL)"
         },
         {
           "name": "candidate_submission_components_source_sha256_uq",

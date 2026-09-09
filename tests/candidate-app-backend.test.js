@@ -4894,6 +4894,26 @@ test('new Candidate component preparation uses the narrow authenticated fast-pat
   }
 });
 
+function candidateReceiptBucket({ storageKey, workflowId, componentId, mediaType, byteSize, digest }) {
+  return {
+    async head(key) {
+      if (key !== storageKey) return null;
+      return {
+        size: byteSize,
+        httpMetadata: { contentType: mediaType },
+        customMetadata: {
+          purpose: 'candidate-component',
+          workflow_id: workflowId,
+          component_id: componentId,
+          media_type: mediaType,
+          byte_size: String(byteSize),
+          sha256: digest
+        }
+      };
+    }
+  };
+}
+
 test('changed Candidate hours reuse unchanged immutable expense evidence without uploading its bytes again', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000441',
@@ -4910,12 +4930,17 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
   const componentId = '00000000-0000-4000-8000-000000000447';
   const digest = '8'.repeat(64);
   const contractId = '00000000-0000-4000-8000-000000000448';
+  const storageKey = 'candidate-app/test/old/source/expense.jpg';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
     CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
     SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: candidateReceiptBucket({
+      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
+      mediaType: 'image/jpeg', byteSize: 5, digest
+    })
   };
   const token = await createAccessToken(env, session);
   const calls = [];
@@ -4930,11 +4955,13 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
       if (id === `eq.${workflowId}`) return Response.json([{
         id: workflowId, environment: 'TEST', account_id: session.account_id,
         candidate_id: session.selected_candidate_id, contract_id: contractId,
+        workflow_kind: 'CONTRACT_HOURS', scope: 'WEEKLY',
         week_ending_date: '2026-07-26', generation: 1, state: 'WORKER_DRAFT'
       }]);
       if (id === `eq.${sourceWorkflowId}`) return Response.json([{
         id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
         candidate_id: session.selected_candidate_id, contract_id: contractId,
+        workflow_kind: 'CONTRACT_COMBINED', scope: 'WEEKLY',
         week_ending_date: '2026-07-26', state: 'SUPERSEDED'
       }]);
     }
@@ -4946,7 +4973,8 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
       if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
         id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-        expense_category: 'ACCOMMODATION', media_type: 'image/jpeg', byte_size: 5,
+        expense_category: 'ACCOMMODATION', storage_key: storageKey,
+        media_type: 'image/jpeg', byte_size: 5,
         state: 'SUPERSEDED', immutable_at_utc: '2026-08-31T10:00:00.000Z',
         source_content_sha256: `\\x${digest}`
       }]);
@@ -4972,7 +5000,7 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
         calls.push({ name, args });
         return {
           ok: true, component_id: componentId, workflow_generation: 1,
-          storage_key: 'candidate-app/test/old/source/expense.jpg',
+          storage_key: storageKey,
           media_type: 'image/jpeg', byte_size: 5,
           component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
           expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
@@ -4986,6 +5014,7 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, 'candidate_component_prepare_atomic_v1');
     assert.equal(calls[0].args.p_payload.source_component_id, sourceComponentId);
+    assert.equal(calls[0].args.p_payload.source_content_sha256_hex, digest);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4997,10 +5026,15 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
   const accountId = '00000000-0000-4000-8000-00000000044c';
   const candidateId = '00000000-0000-4000-8000-00000000044d';
   const digest = '7'.repeat(64);
+  const storageKey = 'candidate-app/test/abandoned/source/expense.png';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: candidateReceiptBucket({
+      storageKey, workflowId, componentId: sourceComponentId,
+      mediaType: 'image/png', byteSize: 123, digest
+    })
   };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => {
@@ -5009,6 +5043,7 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
       return Response.json([{
         id: workflowId, environment: 'TEST', account_id: accountId,
         candidate_id: candidateId, contract_id: null,
+        workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
         week_ending_date: '2026-09-13', generation: 8, state: 'WORKER_DRAFT'
       }]);
     }
@@ -5016,8 +5051,9 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
       return Response.json([{
         id: sourceComponentId, workflow_id: workflowId, workflow_generation: 7,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-        expense_category: 'TRAVEL', media_type: 'image/png', byte_size: 123,
-        state: 'SUPERSEDED', immutable_at_utc: '2026-09-08T10:00:00.000Z',
+        expense_category: 'TRAVEL', storage_key: storageKey,
+        media_type: 'image/png', byte_size: 123,
+        state: 'ABANDONED', immutable_at_utc: '2026-09-08T10:00:00.000Z',
         source_content_sha256: `\\x${digest}`
       }]);
     }
@@ -5030,6 +5066,106 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
     );
     assert.equal(source.id, sourceComponentId);
     assert.equal(source.workflow_generation, 7);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('receipt reuse preflight passes one exact same-family immutable root to atomic database authority', async () => {
+  const workflowId = '00000000-0000-4000-8000-00000000047a';
+  const sourceWorkflowId = '00000000-0000-4000-8000-00000000047b';
+  const sourceComponentId = '00000000-0000-4000-8000-00000000047d';
+  const accountId = '00000000-0000-4000-8000-00000000047e';
+  const candidateId = '00000000-0000-4000-8000-00000000047f';
+  const contractId = '00000000-0000-4000-8000-000000000480';
+  const digest = '6'.repeat(64);
+  const storageKey = 'candidate-app/test/ended/source/expense.png';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: candidateReceiptBucket({
+      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
+      mediaType: 'image/png', byteSize: 123, digest
+    })
+  };
+  const reads = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    reads.push(target.pathname);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      const id = target.searchParams.get('id');
+      if (id === `eq.${workflowId}`) return Response.json([{
+        id: workflowId, environment: 'TEST', account_id: accountId,
+        candidate_id: candidateId, contract_id: contractId,
+        workflow_kind: 'CONTRACT_HOURS', scope: 'WEEKLY',
+        week_ending_date: '2026-09-06', generation: 1, state: 'WORKER_DRAFT'
+      }]);
+      if (id === `eq.${sourceWorkflowId}`) {
+        assert.match(target.searchParams.get('select') || '', /workflow_kind,scope/);
+        return Response.json([{
+          id: sourceWorkflowId, environment: 'TEST', account_id: accountId,
+          candidate_id: candidateId, contract_id: contractId,
+          workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+          week_ending_date: '2026-09-06', state: 'FINALISED'
+        }]);
+      }
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
+        id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
+        component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+        expense_category: 'OTHER', storage_key: storageKey,
+        media_type: 'image/png', byte_size: 123,
+        state: 'IMMUTABLE', immutable_at_utc: '2026-09-08T10:00:00.000Z',
+        source_content_sha256: `\\x${digest}`
+      }]);
+    }
+    throw new Error(`Unexpected receipt-reuse read: ${target.pathname}${target.search}`);
+  };
+  try {
+    const args = [
+      env, { account_id: accountId, selected_candidate_id: candidateId }, workflowId,
+      'EXPENSE_EVIDENCE', 'SOURCE_EVIDENCE', 'OTHER', 'image/png', 123, digest
+    ];
+    const source = await reusableCandidateExpenseSource(...args);
+    assert.equal(source.id, sourceComponentId);
+    assert.equal(reads.filter(path => path.endsWith('/candidate_submission_workflows')).length, 2);
+    assert.equal(reads.filter(path => path.endsWith('/candidate_submission_components')).length, 1);
+    assert.equal(reads.some(path => path.endsWith('/candidate_expense_components')), false);
+    const validStoredObject = () => ({
+      size: 123,
+      httpMetadata: { contentType: 'image/png' },
+      customMetadata: {
+        purpose: 'candidate-component', workflow_id: sourceWorkflowId,
+        component_id: sourceComponentId, media_type: 'image/png',
+        byte_size: '123', sha256: digest
+      }
+    });
+    const staleObjects = [
+      null,
+      { ...validStoredObject(), size: 122 },
+      { ...validStoredObject(), httpMetadata: { contentType: 'image/jpeg' } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, purpose: 'other' } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, workflow_id: workflowId } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, component_id: workflowId } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, media_type: 'image/jpeg' } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, byte_size: '122' } },
+      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, sha256: '0'.repeat(64) } }
+    ];
+    for (const stale of staleObjects) {
+      env.R2.head = async () => stale;
+      await assert.rejects(
+        () => reusableCandidateExpenseSource(...args),
+        (error) => error?.status === 409 && error?.code === 'CANDIDATE_RECEIPT_STORAGE_STALE'
+      );
+    }
+    env.R2.head = async () => { throw new Error('simulated R2 dependency failure'); };
+    await assert.rejects(
+      () => reusableCandidateExpenseSource(...args),
+      (error) => error?.status === 503 && error?.code === 'CANDIDATE_STORAGE_UNAVAILABLE'
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5053,12 +5189,17 @@ test('interrupted duplicate expense prepare preserves completed components and r
   const contractId = '00000000-0000-4000-8000-000000000459';
   const originalPrepareKey = '00000000-0000-4000-8000-000000000460';
   const digest = '9'.repeat(64);
+  const storageKey = 'candidate-app/test/interrupted/source/expense.jpg';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
     CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
     SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: candidateReceiptBucket({
+      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
+      mediaType: 'image/jpeg', byteSize: 5, digest
+    })
   };
   const token = await createAccessToken(env, session);
   const calls = [];
@@ -5072,11 +5213,13 @@ test('interrupted duplicate expense prepare preserves completed components and r
       if (id === `eq.${workflowId}`) return Response.json([{
         id: workflowId, environment: 'TEST', account_id: session.account_id,
         candidate_id: session.selected_candidate_id, contract_id: contractId,
+        workflow_kind: 'CONTRACT_HOURS', scope: 'WEEKLY',
         week_ending_date: '2026-07-26', generation: 1, state: 'WORKER_DRAFT'
       }]);
       if (id === `eq.${sourceWorkflowId}`) return Response.json([{
         id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
         candidate_id: session.selected_candidate_id, contract_id: contractId,
+        workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
         week_ending_date: '2026-07-26', state: 'SUPERSEDED'
       }]);
     }
@@ -5088,7 +5231,8 @@ test('interrupted duplicate expense prepare preserves completed components and r
       if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
         id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-        expense_category: 'ACCOMMODATION', media_type: 'image/jpeg', byte_size: 5,
+        expense_category: 'ACCOMMODATION', storage_key: storageKey,
+        media_type: 'image/jpeg', byte_size: 5,
         state: 'SUPERSEDED', immutable_at_utc: '2026-08-31T10:00:00.000Z',
         source_content_sha256: `\\x${digest}`
       }]);
@@ -5131,7 +5275,7 @@ test('interrupted duplicate expense prepare preserves completed components and r
         assert.equal(name, 'candidate_component_prepare_atomic_v1');
         return {
           ok: true, component_id: replacementComponentId, workflow_generation: 1,
-          storage_key: 'candidate-app/test/old/source/expense.jpg',
+          storage_key: storageKey,
           media_type: 'image/jpeg', byte_size: 5,
           component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
           expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
@@ -5144,6 +5288,7 @@ test('interrupted duplicate expense prepare preserves completed components and r
     assert.equal(Object.hasOwn(body, 'upload'), false);
     assert.equal(calls.length, 2);
     assert.equal(calls[1].args.p_payload.source_component_id, sourceComponentId);
+    assert.equal(calls[1].args.p_payload.source_content_sha256_hex, digest);
     assert.match(calls[1].args.p_idempotency_key, /^lineage:[0-9a-f]{64}$/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -5193,12 +5338,41 @@ test('expense prepare reuses the exact carried component in the current generati
   }
 });
 
-test('Candidate component fast-path refreshes the PostgREST schema cache after installation', async () => {
+test('Candidate component fast-path owns atomic exact-root receipt reuse and refreshes PostgREST', async () => {
   const sql = await readFile(new URL(
     '../supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql',
     import.meta.url
   ), 'utf8');
+  assert.match(sql, /for update of source_component/i);
+  assert.match(sql, /source_content_sha256_hex[\s\S]*\^\[0-9a-fA-F\]\{64\}\$/i);
+  assert.match(sql, /source_component\.source_content_sha256[\s\S]*is distinct from v_requested_source_digest/i);
+  assert.match(sql, /source_component\.media_type[\s\S]*is distinct from v_requested_media_type/i);
+  assert.match(sql, /source_component\.byte_size[\s\S]*is distinct from v_requested_byte_size/i);
+  assert.match(sql, /v_component\.source_component_id[\s\S]*is distinct from v_requested_source_component_id/i);
+  assert.match(sql, /v_workflow\.scope<>'WEEKLY'[\s\S]*v_workflow\.workflow_kind not in/i);
+  assert.match(sql, /'IMMUTABLE','SUPERSEDED','REJECTED','ABANDONED'/i);
+  assert.match(sql, /source_workflow\.id=v_workflow\.id[\s\S]*source_component\.workflow_generation<v_workflow\.generation/i);
+  assert.match(sql, /or \(\s*source_workflow\.id<>v_workflow\.id[\s\S]*source_workflow\.contract_id is not distinct from v_workflow\.contract_id/i);
+  assert.match(sql, /live_component\.source_component_id=v_source_component\.id/i);
+  assert.match(sql, /live_component\.workflow_generation=live_expense\.workflow_generation/i);
+  assert.match(sql, /live_component\.workflow_id=v_workflow\.id[\s\S]*live_component\.workflow_generation<v_workflow\.generation/i);
+  assert.doesNotMatch(sql, /where live_component\.workflow_id<>v_workflow\.id/i);
+  assert.match(sql, /ended_component\.state in \('SUPERSEDED','REJECTED','ABANDONED'\)/i);
+  assert.match(sql, /'MANAGER_REFUSED','OFFICE_REJECTED','WITHDRAWN','CANCELLED','SUPERSEDED'/i);
+  assert.match(sql, /live_expense\.expense_component_id is null[\s\S]*live_workflow\.state not in \([\s\S]*'EXPIRED'/i);
+  assert.match(sql, /from public\.timesheet_evidence live_evidence[\s\S]*live_evidence\.processing_state<>'SUPERSEDED'/i);
+  assert.match(sql, /raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505'/i);
   assert.match(sql, /grant execute on function public\.candidate_component_prepare_atomic_v1[\s\S]*notify pgrst, 'reload schema';/i);
+});
+
+test('Candidate receipt lineage has a bounded source-root lookup index', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/migrations/09092026_1335_candidate_receipt_lineage_lookup_index.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /create index if not exists candidate_submission_components_source_lineage_idx/i);
+  assert.match(sql, /source_component_id,[\s\S]*workflow_id,[\s\S]*workflow_generation,[\s\S]*expense_category,[\s\S]*state/i);
+  assert.match(sql, /where source_component_id is not null/i);
 });
 
 test('finalised Candidate detail reads the immutable signed artifact generation', async () => {
