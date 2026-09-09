@@ -251,6 +251,10 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER in schema public grant execute on functions to service_role;',
     );
     assert.equal(
+      mapLogicalPostgresOwnerSql('alter default privileges for role "postgres" in schema public revoke all on functions from PUBLIC, service_role, postgres;'),
+      'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER in schema public revoke all on functions from PUBLIC, service_role, CURRENT_USER;',
+    );
+    assert.equal(
       mapGeneratedAclBaselineSql('grant execute on function public.example() to "postgres";'),
       'grant execute on function public.example() to CURRENT_USER;',
     );

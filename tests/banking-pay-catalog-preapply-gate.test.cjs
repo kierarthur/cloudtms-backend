@@ -131,6 +131,7 @@ test('logical postgres ownership and exact relative includes are mapped only in 
     "SET plpgsql_check.profiler = 'off';",
     "SELECT 'ALTER FUNCTION public.real_one(uuid, text) SET plpgsql_check.mode TO ''disabled'';';",
     "SELECT 'REVOKE EXECUTE ON FUNCTION public.fake() FROM PUBLIC, authenticator;';",
+    "SELECT 'GRANT EXECUTE ON FUNCTION public.fake() TO postgres;';",
     '-- REVOKE EXECUTE ON FUNCTION public.fake() FROM PUBLIC, authenticator;',
     'REVOKE ALL ON FUNCTION public.real_one(uuid,text) FROM PUBLIC, anon, authenticator, service_role;',
     'GRANT EXECUTE ON FUNCTION public.real_one(uuid,text) TO postgres;',
@@ -145,10 +146,12 @@ test('logical postgres ownership and exact relative includes are mapped only in 
   assert.doesNotMatch(adapted.sourceSql, /^SET plpgsql_check\.profiler/m);
   assert.match(adapted.sourceSql, /SELECT 'ALTER FUNCTION public\.real_one\(uuid, text\) SET plpgsql_check\.mode TO ''disabled'';';/);
   assert.match(adapted.sourceSql, /SELECT 'REVOKE EXECUTE ON FUNCTION public\.fake\(\) FROM PUBLIC, authenticator;';/);
+  assert.match(adapted.sourceSql, /SELECT 'GRANT EXECUTE ON FUNCTION public\.fake\(\) TO postgres;';/);
   assert.match(adapted.sourceSql, /-- REVOKE EXECUTE ON FUNCTION public\.fake\(\) FROM PUBLIC, authenticator;/);
   assert.match(adapted.sourceSql, /REVOKE ALL ON FUNCTION public\.real_one\(uuid,text\) FROM PUBLIC, anon, service_role;/);
   assert.doesNotMatch(adapted.sourceSql, /^REVOKE[^;]*\bauthenticator\b/im);
-  assert.match(adapted.sourceSql, /GRANT EXECUTE ON FUNCTION public\.real_one\(uuid,text\) TO postgres;/);
+  assert.match(adapted.sourceSql, /GRANT EXECUTE ON FUNCTION public\.real_one\(uuid,text\) TO CURRENT_USER;/);
+  assert.doesNotMatch(adapted.sourceSql, /^GRANT[^;]*\bTO\s+(?:"postgres"|postgres)\b/im);
 
   assert.throws(
     () => adaptCatalogLogicalOwnerForRehearsal('ALTER TABLE public.unsafe OWNER TO postgres;'),

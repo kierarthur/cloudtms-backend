@@ -11,6 +11,12 @@ const sourcePath = path.join(
   '01092026_1459_banking_pay_signed_recovery_draft_v1.sql'
 );
 const sql = fs.readFileSync(sourcePath, 'utf8');
+const verifierSql = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'verification',
+  '01092026_1510_banking_pay_signed_recovery_draft_verification.sql'
+), 'utf8');
 const currentProjectionSql = fs.readFileSync(path.join(
   root,
   'supabase',
@@ -134,4 +140,9 @@ test('the classifier remains private and the established finalizer ACL is preser
     sql,
     /REVOKE ALL ON FUNCTION public\.pay_batch_finalize_reservations_and_markers\([\s\S]*FROM PUBLIC, anon, authenticated;[\s\S]*GRANT EXECUTE ON FUNCTION public\.pay_batch_finalize_reservations_and_markers\([\s\S]*TO postgres, service_role;/i
   );
+});
+
+test('the release verifier checks the effective provider owner without naming a legacy role', () => {
+  assert.match(verifierSql, /has_function_privilege\(current_user,helper_signature,'EXECUTE'\)/i);
+  assert.doesNotMatch(verifierSql, /has_function_privilege\('postgres'/i);
 });

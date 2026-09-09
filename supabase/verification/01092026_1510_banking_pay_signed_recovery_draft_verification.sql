@@ -39,7 +39,7 @@ begin
   if has_function_privilege('anon',helper_signature,'EXECUTE')
      or has_function_privilege('authenticated',helper_signature,'EXECUTE')
      or has_function_privilege('service_role',helper_signature,'EXECUTE')
-     or not has_function_privilege('postgres',helper_signature,'EXECUTE')
+     or not has_function_privilege(current_user,helper_signature,'EXECUTE')
      or has_function_privilege('anon',finalizer_signature,'EXECUTE')
      or has_function_privilege('authenticated',finalizer_signature,'EXECUTE')
      or not has_function_privilege('service_role',finalizer_signature,'EXECUTE') then

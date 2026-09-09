@@ -68,6 +68,11 @@ test('the mandatory verifier runs on NEW and UPGRADE releases', () => {
   assert.ok(release.newVerificationFiles.includes(verifierName));
 });
 
+test('the mandatory verifier checks the effective provider owner without naming a legacy role', () => {
+  assert.match(verifier, /has_function_privilege\(current_user,helper_signature,'EXECUTE'\)/i);
+  assert.doesNotMatch(verifier, /has_function_privilege\('postgres'/i);
+});
+
 test('the private helper retains its established owner and closed browser/service ACL', () => {
   assert.match(
     sql,

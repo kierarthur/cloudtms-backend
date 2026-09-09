@@ -270,13 +270,28 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
     if (/^(?:ALTER\s+FUNCTION\s+[\s\S]+?\)\s+)?SET\s+"?plpgsql_check\./i.test(trimmed)) {
       fail('only the seven exact disabled/off plpgsql_check settings are portable');
     }
-    if (/^REVOKE\b/i.test(trimmed)) {
-      const adapted = raw.replace(/,\s*authenticator(?=\s*[,;])/gi, '');
-      if (/\bauthenticator\b/i.test(adapted)) {
-        fail('authenticator may be omitted only from an exact comma-delimited REVOKE role list');
+    if (/^(?:GRANT|REVOKE)\b/i.test(trimmed)) {
+      const clauseMatches = [...raw.matchAll(/\b(?:TO|FROM)\b/gi)];
+      if (clauseMatches.length === 0) fail('GRANT/REVOKE statement has no exact grantee clause');
+      const clause = clauseMatches.at(-1);
+      const clauseEnd = clause.index + clause[0].length;
+      let granteeList = raw.slice(clauseEnd);
+      if (/^REVOKE\b/i.test(trimmed)) {
+        granteeList = granteeList.replace(/,\s*authenticator(?=\s*[,;])/gi, '');
+        if (/\bauthenticator\b/i.test(granteeList)) {
+          fail('authenticator may be omitted only from an exact comma-delimited REVOKE role list');
+        }
       }
+      granteeList = granteeList.replace(
+        /(^|,)([ \t\r\n]*)(?:"postgres"|postgres)(?=[ \t\r\n]*(?:,|;|\bwith\b))/gi,
+        '$1$2CURRENT_USER',
+      );
+      if (/(^|,)[ \t\r\n]*(?:"postgres"|postgres)(?=[ \t\r\n]*(?:,|;|\bwith\b))/i.test(granteeList)) {
+        fail('logical postgres ACL grantee could not be mapped');
+      }
+      const adapted = raw.slice(0, clauseEnd) + granteeList;
       if (adapted !== raw) {
-        replacements.push({ ...statement, adapted, identity: 'OMIT ABSENT MIGET AUTHENTICATOR REVOKE' });
+        replacements.push({ ...statement, adapted, identity: 'PORTABLE PROVIDER ACL ADAPTATION' });
       }
       continue;
     }
@@ -314,12 +329,13 @@ export function adaptCatalogLogicalOwnerForRehearsal(sourceSql) {
   }
 
   return {
-    mode: replacements.some(({ identity }) => identity === 'OMIT ABSENT MIGET AUTHENTICATOR REVOKE')
+    mode: replacements.some(({ identity }) => identity === 'PORTABLE PROVIDER ACL ADAPTATION')
       ? 'MAPPED_PROVIDER_PORTABLE_AUTHORITY'
       : 'MAPPED_LOGICAL_POSTGRES_TO_CURRENT_USER',
     sourceSql: adaptedSource,
     mappedIdentities: replacements
       .map(({ identity }) => identity)
-      .filter((identity) => !identity.startsWith('OMIT ')),
+      .filter((identity) => !identity.startsWith('OMIT ')
+        && identity !== 'PORTABLE PROVIDER ACL ADAPTATION'),
   };
 }

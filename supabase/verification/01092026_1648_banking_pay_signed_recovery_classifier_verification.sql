@@ -35,7 +35,7 @@ begin
   if has_function_privilege('anon',helper_signature,'EXECUTE')
      or has_function_privilege('authenticated',helper_signature,'EXECUTE')
      or has_function_privilege('service_role',helper_signature,'EXECUTE')
-     or not has_function_privilege('postgres',helper_signature,'EXECUTE') then
+     or not has_function_privilege(current_user,helper_signature,'EXECUTE') then
     raise exception 'BANKING_PAY_SIGNED_RECOVERY_CLASSIFIER_ACL_DRIFT';
   end if;
 end;

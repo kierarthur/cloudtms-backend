@@ -21,7 +21,10 @@ function mapLogicalPostgresAclGrantees(source) {
       /^(?:\s+|--[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)*/,
       '',
     );
-    if (!/^(?:grant|revoke)\b/i.test(withoutLeadingComments)) return statement;
+    if (
+      !/^(?:grant|revoke)\b/i.test(withoutLeadingComments)
+      && !/^alter\s+default\s+privileges\b/i.test(withoutLeadingComments)
+    ) return statement;
 
     const clauseMatches = [...statement.matchAll(/\b(?:to|from)\b/gi)];
     if (clauseMatches.length === 0) return statement;
