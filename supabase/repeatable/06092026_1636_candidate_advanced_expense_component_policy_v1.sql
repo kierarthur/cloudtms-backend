@@ -1140,12 +1140,14 @@ declare
   v_remaining_expense_value numeric;
   v_owner_category_count integer;
   v_financial_category_amount numeric;
+  v_financial_category_charge numeric;
   v_surviving_description text;
   v_unmaterialised_prior jsonb;
   v_prior_amount numeric;
   v_prior_units numeric;
   v_payment jsonb;
   v_edit_financial_id uuid;
+  v_pay_cost_multiplier numeric:=1;
 begin
   select * into v_component from public.candidate_expense_components component
   where component.expense_component_id=p_expense_component_id for update;
@@ -1188,6 +1190,11 @@ begin
     when 'TRAVEL' then coalesce(v_fin.travel_pay_ex_vat,0)
     when 'ACCOMMODATION' then coalesce(v_fin.accommodation_pay_ex_vat,0)
     else coalesce(v_fin.other_pay_ex_vat,0) end;
+  v_financial_category_charge:=case v_component.expense_category
+    when 'MILEAGE' then coalesce(v_fin.mileage_charge_ex_vat,0)
+    when 'TRAVEL' then coalesce(v_fin.travel_charge_ex_vat,0)
+    when 'ACCOMMODATION' then coalesce(v_fin.accommodation_charge_ex_vat,0)
+    else coalesce(v_fin.other_charge_ex_vat,0) end;
   v_unmaterialised_prior:=private._candidate_expense_unmaterialised_prior_v1(
     v_component.expense_component_id
   );
@@ -1248,12 +1255,20 @@ begin
     then 0 else coalesce(v_fin.other_charge_ex_vat,0) end;
   v_expenses_pay:=v_travel_pay+v_accommodation_pay+v_other_pay;
   v_expenses_charge:=v_travel_charge+v_accommodation_charge+v_other_charge;
-  v_total_pay:=coalesce(v_fin.pay_day,0)+coalesce(v_fin.pay_night,0)
-    +coalesce(v_fin.pay_sat,0)+coalesce(v_fin.pay_sun,0)+coalesce(v_fin.pay_bh,0)
-    +coalesce(v_fin.additional_pay_ex_vat,0)+v_mileage_pay+v_expenses_pay;
-  v_total_charge:=coalesce(v_fin.charge_day,0)+coalesce(v_fin.charge_night,0)
-    +coalesce(v_fin.charge_sat,0)+coalesce(v_fin.charge_sun,0)+coalesce(v_fin.charge_bh,0)
-    +coalesce(v_fin.additional_charge_ex_vat,0)+v_mileage_charge+v_expenses_charge;
+  -- pay_day/charge_day and their sibling columns are rate snapshots, not
+  -- monetary subtotals.  Preserve the already-authoritative hours and
+  -- additional totals and subtract only this exact owned expense category.
+  v_total_pay:=round(
+    coalesce(v_fin.total_pay_ex_vat,0)-v_financial_category_amount,2
+  );
+  v_total_charge:=round(
+    coalesce(v_fin.total_charge_ex_vat,0)-v_financial_category_charge,2
+  );
+  if coalesce(v_fin.total_pay_ex_vat,0)<>0 then
+    v_pay_cost_multiplier:=(
+      coalesce(v_fin.total_charge_ex_vat,0)-coalesce(v_fin.margin_ex_vat,0)
+    )/v_fin.total_pay_ex_vat;
+  end if;
   v_surviving_description:=nullif(concat_ws('; ',
     case when v_travel_pay<>0 then 'Travel £'||to_char(v_travel_pay,'FM999999999990.00') end,
     case when v_accommodation_pay<>0 then
@@ -1288,7 +1303,8 @@ begin
     -- a surviving category is never silently erased from legacy displays.
     expenses_description=v_surviving_description,
     total_pay_ex_vat=v_total_pay,total_charge_ex_vat=v_total_charge,
-    margin_ex_vat=v_total_charge-v_total_pay,is_stale=true,
+    margin_ex_vat=round(v_total_charge-(v_total_pay*v_pay_cost_multiplier),2),
+    is_stale=true,
     stale_reason='CANDIDATE_EXPENSE_COMPONENT_REMOVED',updated_at=p_now_utc
   where id=v_fin.id and is_current;
   if not found then raise exception 'CANDIDATE_EXPENSE_FINANCIALS_CHANGED' using errcode='40001'; end if;
@@ -1321,13 +1337,8 @@ begin
       and coalesce(v_fin.hours_day,0)=0 and coalesce(v_fin.hours_night,0)=0
       and coalesce(v_fin.hours_sat,0)=0 and coalesce(v_fin.hours_sun,0)=0
       and coalesce(v_fin.hours_bh,0)=0
-      and coalesce(v_fin.pay_day,0)=0 and coalesce(v_fin.pay_night,0)=0
-      and coalesce(v_fin.pay_sat,0)=0 and coalesce(v_fin.pay_sun,0)=0
-      and coalesce(v_fin.pay_bh,0)=0
-      and coalesce(v_fin.charge_day,0)=0 and coalesce(v_fin.charge_night,0)=0
-      and coalesce(v_fin.charge_sat,0)=0 and coalesce(v_fin.charge_sun,0)=0
-      and coalesce(v_fin.charge_bh,0)=0
-      and v_total_pay=0 and v_total_charge=0 and v_total_charge-v_total_pay=0
+      and v_total_pay=0 and v_total_charge=0
+      and round(v_total_charge-(v_total_pay*v_pay_cost_multiplier),2)=0
       and coalesce(v_fin.pay_vat_amount_snapshot,0)=0
       and coalesce(v_fin.pay_total_inc_vat_snapshot,0)=0
       and v_timesheet.authorised_at_server is null
@@ -5208,6 +5219,8 @@ declare
   v_route_kind text;
   v_workflow_route_kind text;
   v_route_authority jsonb;
+  v_is_candidate_expense_carrier boolean:=false;
+  v_payment jsonb;
   v_unmaterialised_prior jsonb;
   v_eligible boolean:=false;
   v_disabled text;
@@ -5245,6 +5258,19 @@ begin
     select * into v_fin from public.timesheets_financials row
     where row.timesheet_id=v_timesheet_id and row.is_current
     order by row.computed_at_utc desc nulls last,row.updated_at desc,row.id desc limit 1;
+  end if;
+  v_is_candidate_expense_carrier:=v_timesheet_id is not null
+    and v_timesheet.timesheet_id is not null
+    and v_workflow.workflow_kind='CONTRACT_EXPENSE'
+    and v_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+    and upper(coalesce(v_timesheet.line_type::text,'')) in ('EXPENSES','MILEAGE')
+    and (
+      v_timesheet.candidate_workflow_id=v_workflow.id
+      or v_workflow.target_timesheet_id=v_timesheet_id
+      or v_component.owning_timesheet_id=v_timesheet_id
+    );
+  if v_fin.id is not null then
+    v_payment:=private._candidate_expense_effective_payment_v1(v_timesheet_id);
   end if;
   v_category_json:=private._candidate_expense_component_json_v1(v_component,false);
   v_unmaterialised_prior:=private._candidate_expense_unmaterialised_prior_v1(
@@ -5296,15 +5322,8 @@ begin
     and coalesce(v_fin.hours_day,0)=0 and coalesce(v_fin.hours_night,0)=0
     and coalesce(v_fin.hours_sat,0)=0 and coalesce(v_fin.hours_sun,0)=0
     and coalesce(v_fin.hours_bh,0)=0
-    and coalesce(v_fin.pay_day,0)=0 and coalesce(v_fin.pay_night,0)=0
-    and coalesce(v_fin.pay_sat,0)=0 and coalesce(v_fin.pay_sun,0)=0
-    and coalesce(v_fin.pay_bh,0)=0
-    and coalesce(v_fin.charge_day,0)=0 and coalesce(v_fin.charge_night,0)=0
-    and coalesce(v_fin.charge_sat,0)=0 and coalesce(v_fin.charge_sun,0)=0
-    and coalesce(v_fin.charge_bh,0)=0
     and coalesce(v_fin.total_pay_ex_vat,0)=v_current_amount
     and coalesce(v_fin.total_charge_ex_vat,0)=v_current_charge
-    and coalesce(v_fin.margin_ex_vat,0)=v_current_charge-v_current_amount
     and coalesce(v_fin.expenses_pay_ex_vat,0)
       +coalesce(v_fin.mileage_pay_ex_vat,0)=v_current_amount
     and coalesce(v_fin.expenses_charge_ex_vat,0)
@@ -5389,7 +5408,18 @@ begin
   end if;
   v_workflow_route_kind:=case when v_workflow.route='PAPER' then 'QR'
     when v_workflow.route in ('ELECTRONIC','PHONE','EMAIL') then 'ELECTRONIC' end;
-  if v_timesheet_id is not null and v_timesheet.timesheet_id is not null then
+  if v_is_candidate_expense_carrier then
+    -- A separate Candidate expense carrier is deliberately stored as MANUAL
+    -- when it has no Candidate signature.  That storage invariant must not
+    -- erase the immutable PHONE/EMAIL/PAPER claim origin in Office.  The
+    -- component, workflow and current carrier ownership checks above keep
+    -- genuine Office-entered manual expenses outside this route.
+    v_route_kind:=v_workflow_route_kind;
+    v_route_authority:=jsonb_build_object(
+      'route_family',v_route_kind,
+      'authority_basis','CANDIDATE_EXPENSE_WORKFLOW_ROUTE'
+    );
+  elsif v_timesheet_id is not null and v_timesheet.timesheet_id is not null then
     begin
       v_route_authority:=private._candidate_route_family_v1(
         v_timesheet_id,v_workflow.contract_week_id
@@ -5406,11 +5436,14 @@ begin
      or v_route_kind not in ('ELECTRONIC','QR')
      or v_workflow_route_kind is distinct from v_route_kind then
     v_disabled:='ROUTE_NOT_ELIGIBLE';
-  elsif v_component.agency_authorisation_state<>'NOT_AUTHORISED'
+  elsif v_component.agency_authorisation_state not in ('NOT_AUTHORISED','PAID')
      or v_timesheet.authorised_at_server is not null
-     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED','PAID')
+     or upper(coalesce(v_timesheet.status::text,'')) in ('AUTHORISED','AUTHORIZED','INVOICED')
      or v_fin.authorised_at_utc is not null or v_fin.locked_by_invoice_id is not null
-     or v_fin.paid_at_utc is not null then
+     or (
+       v_component.agency_authorisation_state='PAID'
+       and not coalesce((v_payment->>'payment_only_eligible')::boolean,false)
+     ) then
     v_disabled:='EXPENSE_PROTECTED';
   elsif v_owner_count<>1
      or (v_current_amount is distinct from v_component.amount and (

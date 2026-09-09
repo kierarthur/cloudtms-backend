@@ -858,16 +858,9 @@ begin
      or coalesce(v_fin.hours_sat,0)<>0
      or coalesce(v_fin.hours_sun,0)<>0
      or coalesce(v_fin.hours_bh,0)<>0
-     or coalesce(v_fin.pay_day,0)<>0
-     or coalesce(v_fin.pay_night,0)<>0
-     or coalesce(v_fin.pay_sat,0)<>0
-     or coalesce(v_fin.pay_sun,0)<>0
-     or coalesce(v_fin.pay_bh,0)<>0
-     or coalesce(v_fin.charge_day,0)<>0
-     or coalesce(v_fin.charge_night,0)<>0
-     or coalesce(v_fin.charge_sat,0)<>0
-     or coalesce(v_fin.charge_sun,0)<>0
-     or coalesce(v_fin.charge_bh,0)<>0
+     -- pay_day/charge_day and their sibling columns are retained rate
+     -- snapshots. They may be non-zero on a genuinely empty expense carrier
+     -- and therefore are not evidence that worked hours or money remain.
      or coalesce(v_fin.total_pay_ex_vat,0)<>0
      or coalesce(v_fin.total_charge_ex_vat,0)<>0
      or coalesce(v_fin.margin_ex_vat,0)<>0
