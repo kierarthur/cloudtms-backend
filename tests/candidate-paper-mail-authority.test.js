@@ -35,6 +35,9 @@ const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_vers
 const legacyOrphanSource = read(
   'supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql'
 );
+const sentPaperFinalAuthoritySource = read(
+  'supabase/repeatable/07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql'
+);
 const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
 const backendSource = read('broker/src/candidate-app-backend.js');
 const normalBackendSource = read('broker/src/index.js');
@@ -242,6 +245,16 @@ test('legacy one-page cancellation adapter opens only for the exact orphaned-tok
   assert.doesNotMatch(backendSource, /candidate_workflow_cancel_atomic_v2[\s\S]{0,300}p_action/);
   assert.match(legacyOrphanSource, /revoke all on function private\._candidate_legacy_paper_orphan_prepare_v1\([\s\S]*service_role/i);
   assert.match(legacyOrphanSource, /grant execute on function public\.candidate_workflow_cancel_atomic_v2\([\s\S]*to service_role/i);
+});
+
+test('the final sent-paper authority verifies its installed guard before commit', () => {
+  assert.match(sentPaperFinalAuthoritySource, /candidate_sent_paper_retirement_final_authority_verify/i);
+  assert.match(sentPaperFinalAuthoritySource, /and v_reason not in \(/i);
+  assert.match(
+    sentPaperFinalAuthoritySource,
+    /and \(mail_row\.status<>''SENT'' or v_is_historical_replacement_retirement\)/i
+  );
+  assert.match(sentPaperFinalAuthoritySource, /CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_NOT_INSTALLED/i);
 });
 
 test('PAPER cancellation has bounded workflow, token and current-source lookups', () => {

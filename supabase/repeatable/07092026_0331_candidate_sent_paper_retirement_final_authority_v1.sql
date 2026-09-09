@@ -60,4 +60,23 @@ begin
 end;
 $candidate_sent_paper_retirement_final_authority$;
 
+do $candidate_sent_paper_retirement_final_authority_verify$
+declare
+  v_definition text;
+begin
+  select pg_catalog.replace(
+    pg_catalog.pg_get_functiondef(
+      'private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamptz)'::regprocedure
+    ),
+    E'\r\n',E'\n'
+  ) into v_definition;
+  if pg_catalog.strpos(v_definition,E'and v_reason not in (\n         ''WORKFLOW_CANCELLED'',''WORKFLOW_SUPERSEDED'',''WORKFLOW_AMENDED'',\n         ''OFFICE_REJECTED'',''EXPENSE_CATEGORY_OFFICE_REJECTED''\n       )')=0
+     or pg_catalog.strpos(v_definition,E'and (mail_row.status<>''SENT'' or v_is_historical_replacement_retirement)')=0
+     or pg_catalog.strpos(v_definition,E'if v_mail.status=''SENT'' and not v_is_historical_replacement_retirement then')>0 then
+    raise exception 'CANDIDATE_SENT_PAPER_RETIREMENT_FINAL_AUTHORITY_NOT_INSTALLED'
+      using errcode='55000';
+  end if;
+end;
+$candidate_sent_paper_retirement_final_authority_verify$;
+
 commit;
