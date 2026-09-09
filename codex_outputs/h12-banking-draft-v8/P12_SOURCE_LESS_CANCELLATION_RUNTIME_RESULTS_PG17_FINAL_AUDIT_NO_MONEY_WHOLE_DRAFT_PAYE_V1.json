@@ -1,0 +1,346 @@
+{
+  "contract": "H12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_V1",
+  "status": "PASS",
+  "source_head": "34d073fef04c365fc0c557f881b749ce88a7e7d7",
+  "mode": "CANDIDATE_GREEN",
+  "base_runner_sha256": "d783120af8fb86ed72fc277e09b5b828a1c6f1c8069cb9151e53f26c14feeade",
+  "candidate_source_paths": [
+    "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
+    "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+    "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+    "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+    "supabase/repeatable/07092026_2136_banking_pay_unpaid_cancellation_sourceless_admission_v1.sql",
+    "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+    "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql",
+    "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql",
+    "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql",
+    "supabase/repeatable/07092026_1933_banking_pay_unpaid_cancellation_investigation_alert_v1.sql",
+    "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql",
+    "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+    "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+    "supabase/repeatable/08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql",
+    "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+    "supabase/repeatable/08092026_0804_pay_workbench_scope_invalidate_pair_arrays_v1.sql",
+    "supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql",
+    "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql",
+    "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql"
+  ],
+  "candidate_source_sha256_before": [
+    {
+      "path": "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
+      "bytes": 3509,
+      "sha256": "ade7edc338c86ba359a3f7bbd463903951fcbd765ca025f1610e6f764b2c7b43"
+    },
+    {
+      "path": "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+      "bytes": 17677,
+      "sha256": "4902b4bf030b41f0e223a5b9db6e00113e0d3320066a8598c42822ea86c13a94"
+    },
+    {
+      "path": "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+      "bytes": 2479,
+      "sha256": "832c54448a33a24b71a5be3e2406673023328da1e766ee27ad8e0e6afdeeaf10"
+    },
+    {
+      "path": "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+      "bytes": 1292,
+      "sha256": "480bccb46f8c676843f9ceec1c0190d5ade77b8279b99c516a4b4b9e438b09ca"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2136_banking_pay_unpaid_cancellation_sourceless_admission_v1.sql",
+      "bytes": 157966,
+      "sha256": "9b116a308b1527d170de09e1a1ff6d110dc76741fc9f27c00a2725b0d61ff889"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+      "bytes": 90076,
+      "sha256": "3766f3541a90044e8d0797039de9548ac41521cc407e0e27abacb456e3d308cb"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql",
+      "bytes": 31211,
+      "sha256": "789dfe41a0cd8c3a9c9849875ddadf098ac3e0f3104efef47fb4e17888fd3209"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql",
+      "bytes": 34457,
+      "sha256": "8df325af195df4d7fc9a261e8ee7c42949cd281574e3f9a0330b14de8eba171a"
+    },
+    {
+      "path": "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql",
+      "bytes": 250464,
+      "sha256": "0ccaa3de7db9eac006afb0d7988e8f21f97e27acb0ae0f0c68b7c020e688d844"
+    },
+    {
+      "path": "supabase/repeatable/07092026_1933_banking_pay_unpaid_cancellation_investigation_alert_v1.sql",
+      "bytes": 154589,
+      "sha256": "60d1ca289eae76075ab7e656138fba152f11d2a0cba386888d377343f176d0b7"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql",
+      "bytes": 131166,
+      "sha256": "86fb2a3f8bafb2bb0669026d49c51e0a488cd2e8884751baddf114c7134e0195"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+      "bytes": 199785,
+      "sha256": "b4ec1a479c0608f997daf0de9d2816803b9aa3af6f3a09edfd411c71572c3e4f"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+      "bytes": 76974,
+      "sha256": "682445ae51d19f04a82eeae239d2b75e95d477872e703a3bdf1b69b9677b2189"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql",
+      "bytes": 129641,
+      "sha256": "2bbbed551f4b04fc25746417d94f2220bd76761d8d0b47a8cfb5a4660967bf41"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+      "bytes": 122980,
+      "sha256": "62683536492429af065870ba8cd1904c2173a7d78e365c1059e4e4b36ec64b4a"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0804_pay_workbench_scope_invalidate_pair_arrays_v1.sql",
+      "bytes": 12597,
+      "sha256": "e0ab173e488eba8182136f85eedd5cff293d85d86146172687e157191e88e478"
+    },
+    {
+      "path": "supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql",
+      "bytes": 40660,
+      "sha256": "5d4c445e7a8a7a9a1119c84975696725f50122fccdd9b0d98128eb6f971c0047"
+    },
+    {
+      "path": "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql",
+      "bytes": 84208,
+      "sha256": "44df6be6109c36cec2522bc0ae86ed86a9eaff99853878aa0ad68bb8e36b8c1c"
+    },
+    {
+      "path": "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql",
+      "bytes": 143240,
+      "sha256": "fd45a62fd71cda461d58a6c82bc88cd23d09d1288815c62d381d34f1867c6761"
+    }
+  ],
+  "candidate_source_sha256_after": [
+    {
+      "path": "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
+      "bytes": 3509,
+      "sha256": "ade7edc338c86ba359a3f7bbd463903951fcbd765ca025f1610e6f764b2c7b43"
+    },
+    {
+      "path": "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+      "bytes": 17677,
+      "sha256": "4902b4bf030b41f0e223a5b9db6e00113e0d3320066a8598c42822ea86c13a94"
+    },
+    {
+      "path": "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+      "bytes": 2479,
+      "sha256": "832c54448a33a24b71a5be3e2406673023328da1e766ee27ad8e0e6afdeeaf10"
+    },
+    {
+      "path": "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+      "bytes": 1292,
+      "sha256": "480bccb46f8c676843f9ceec1c0190d5ade77b8279b99c516a4b4b9e438b09ca"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2136_banking_pay_unpaid_cancellation_sourceless_admission_v1.sql",
+      "bytes": 157966,
+      "sha256": "9b116a308b1527d170de09e1a1ff6d110dc76741fc9f27c00a2725b0d61ff889"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+      "bytes": 90076,
+      "sha256": "3766f3541a90044e8d0797039de9548ac41521cc407e0e27abacb456e3d308cb"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql",
+      "bytes": 31211,
+      "sha256": "789dfe41a0cd8c3a9c9849875ddadf098ac3e0f3104efef47fb4e17888fd3209"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql",
+      "bytes": 34457,
+      "sha256": "8df325af195df4d7fc9a261e8ee7c42949cd281574e3f9a0330b14de8eba171a"
+    },
+    {
+      "path": "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql",
+      "bytes": 250464,
+      "sha256": "0ccaa3de7db9eac006afb0d7988e8f21f97e27acb0ae0f0c68b7c020e688d844"
+    },
+    {
+      "path": "supabase/repeatable/07092026_1933_banking_pay_unpaid_cancellation_investigation_alert_v1.sql",
+      "bytes": 154589,
+      "sha256": "60d1ca289eae76075ab7e656138fba152f11d2a0cba386888d377343f176d0b7"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql",
+      "bytes": 131166,
+      "sha256": "86fb2a3f8bafb2bb0669026d49c51e0a488cd2e8884751baddf114c7134e0195"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+      "bytes": 199785,
+      "sha256": "b4ec1a479c0608f997daf0de9d2816803b9aa3af6f3a09edfd411c71572c3e4f"
+    },
+    {
+      "path": "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+      "bytes": 76974,
+      "sha256": "682445ae51d19f04a82eeae239d2b75e95d477872e703a3bdf1b69b9677b2189"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql",
+      "bytes": 129641,
+      "sha256": "2bbbed551f4b04fc25746417d94f2220bd76761d8d0b47a8cfb5a4660967bf41"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+      "bytes": 122980,
+      "sha256": "62683536492429af065870ba8cd1904c2173a7d78e365c1059e4e4b36ec64b4a"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0804_pay_workbench_scope_invalidate_pair_arrays_v1.sql",
+      "bytes": 12597,
+      "sha256": "e0ab173e488eba8182136f85eedd5cff293d85d86146172687e157191e88e478"
+    },
+    {
+      "path": "supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql",
+      "bytes": 40660,
+      "sha256": "5d4c445e7a8a7a9a1119c84975696725f50122fccdd9b0d98128eb6f971c0047"
+    },
+    {
+      "path": "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql",
+      "bytes": 84208,
+      "sha256": "44df6be6109c36cec2522bc0ae86ed86a9eaff99853878aa0ad68bb8e36b8c1c"
+    },
+    {
+      "path": "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql",
+      "bytes": 143240,
+      "sha256": "fd45a62fd71cda461d58a6c82bc88cd23d09d1288815c62d381d34f1867c6761"
+    }
+  ],
+  "candidate_source_hashes_unchanged": true,
+  "selected_logical_case_count": 3,
+  "selected_physical_run_count": 1,
+  "prepared_snapshot_equivalence": {
+    "PG17": {
+      "contract": "H12_EXISTING_PREPARED_CLONE_EXACT_IDENTITY_V1",
+      "engine": "PG17",
+      "prepared_template_database": "h12_rg5_prepared_pg17",
+      "source_fingerprint": "2c43b0d3ea53be13f60c0ac910d4a97b9cc0070e54dc169d27b3aeae0ba199a5",
+      "semantic_sha256": "5ea67f93fc2d136c932e05fdd7168729915e4b3ae4f3a11ca404ae103d22d44f",
+      "exact_sha256": "3ad6f3e4493a953867ad0aa933b9b17a5f4769f1f4a7d4bc9f5b56b930c9068a",
+      "relation_count": 230,
+      "sequence_count": 12,
+      "one_anchor_per_distinct_source_session": true,
+      "legacy_fresh_to_prepared_clone_semantic_equal": true,
+      "legacy_fresh_to_prepared_clone_exact_equal": true,
+      "route_or_fixture_mutation_before_snapshot": false,
+      "resumed_from_previously_verified_snapshot": true,
+      "elapsed_ms": 5952.887
+    }
+  },
+  "results": [
+    {
+      "run_id": "PG17_NO_MONEY_WHOLE_DRAFT_PAYE",
+      "engine": "PG17",
+      "route": "NO_MONEY",
+      "scope": "WHOLE_DRAFT",
+      "batch_channel": "PAYE",
+      "logical_case_ids": [
+        "PG17_NO_MONEY_WHOLE_DRAFT_MISSING_AMOUNT_INC_VAT",
+        "PG17_NO_MONEY_WHOLE_DRAFT_MISSING_DESCRIPTION",
+        "PG17_NO_MONEY_WHOLE_DRAFT_ZERO_AMOUNT"
+      ],
+      "reasons": [
+        "MISSING_AMOUNT_INC_VAT",
+        "MISSING_DESCRIPTION",
+        "ZERO_AMOUNT"
+      ],
+      "status": "CANDIDATE_GREEN",
+      "request_status": "APPLIED",
+      "operation_status": "COMPLETE",
+      "communication_cleanup_contract_version": 2,
+      "selected_fixture_candidate_count": 2,
+      "selected_safe_count": 2,
+      "selected_ambiguous_count": 6,
+      "safe_carry_forward_count": 2,
+      "ambiguous_carry_forward_count": 0,
+      "ambiguous_alert_evidence_count": 6,
+      "mail_fixture_count": 8,
+      "mail_changed_or_missing_count": 0,
+      "completed_request_replay_same_request": true,
+      "completed_request_replay_same_operation": true,
+      "completed_request_replay_route": "PAYMENT_CORRECTION_REQUEST_START",
+      "no_money_result_contract": {
+        "work_item_count": 2,
+        "expected_top_level_result_key_count": 82,
+        "expected_full_persisted_key_count": 85,
+        "expected_persisted_wrapper_keys": [
+          "candidate_scope_hash",
+          "created_by",
+          "selection_ordinal"
+        ],
+        "returned_top_level_result_keys_complete": true,
+        "full_persisted_result_keys_complete": true,
+        "persisted_top_level_result_keys_complete": true,
+        "explicit_null_key_presence_verified": true,
+        "returned_persisted_contract_jsonb_equal": true,
+        "returned_persisted_contract_canonical_text_equal": true,
+        "returned_persisted_contract_sha256_equal": true,
+        "process_response_loss_replay_exact_equality": true,
+        "exact_request_replay_exact_equality": true
+      },
+      "prepare_response_loss_replay": {
+        "same_request": true,
+        "same_operation": true,
+        "existing_request": true,
+        "route": "WORKER_ALL_MATCHING_PAYMENT_STATUS_REQUEST_START"
+      },
+      "process_response_loss_replay": {
+        "persisted_phase_after_first_response": "FINALISE",
+        "resumed_phase": "REFRESH_WORKBENCH",
+        "financial_effect_repeated": false,
+        "exact_financials_preserved": true,
+        "snapshot_scope": "WHOLE_BATCH",
+        "result_contract_replay_exact_equality": true
+      },
+      "workbench_drain": {
+        "iteration_count": 44,
+        "elapsed_ms": 179150.121,
+        "terminal_current_count": 2,
+        "candidate_count": 2,
+        "normal_step_count": 2,
+        "normal_processed_count": 2,
+        "source_build_step_count": 86,
+        "source_build_stage_counts": {
+          "DEPENDENCY_CLOSURE": 20,
+          "PREPARE_SCOPE": 22,
+          "RECONCILE_EXECUTE": 4,
+          "WORKSPACE_FACT": 40
+        },
+        "scan_progress_step_count": 2,
+        "maximum_individual_call_ms": 1731.718
+      },
+      "maximum_call_ms": 1149.431,
+      "prepared_snapshot_exact_sha256": "3ad6f3e4493a953867ad0aa933b9b17a5f4769f1f4a7d4bc9f5b56b930c9068a",
+      "prepared_snapshot_verified_before_mutation": true,
+      "elapsed_ms": 565384.025
+    }
+  ],
+  "policy_x_preserved": true,
+  "timeout_relaxation": false,
+  "exact_function_budgets": {
+    "prepare_expand_apply_statement_timeout_ms": 6000,
+    "prepare_expand_apply_lock_timeout_ms": 1000,
+    "integrity_checker_statement_timeout_ms": 5000,
+    "status_page_statement_timeout_ms": 5000
+  },
+  "outer_harness_budgets": {
+    "statement_timeout_ms": 15000,
+    "lock_timeout_ms": 1500,
+    "idle_in_transaction_session_timeout_ms": 30000
+  },
+  "provider_settlement_remittance_actions": 0,
+  "test_database_containment": "TASK_OWNED_DISPOSABLE_CLONES_REMOVED"
+}

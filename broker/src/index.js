@@ -52081,7 +52081,7 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
     const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
     const plan = requestRow?.plan_json && typeof requestRow.plan_json === 'object' && !Array.isArray(requestRow.plan_json) ? requestRow.plan_json : {};
     const boundExpiry = requestRow?.reauth_expires_at_utc ? Math.floor(new Date(requestRow.reauth_expires_at_utc).getTime() / 1000) : NaN;
-    if (!requestRow || String(requestRow.status || '').toUpperCase() !== 'PLANNED') {
+    if (!requestRow) {
       return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REQUEST_NOT_READY_TO_START', message: 'The cancellation request is not ready to start.' });
     }
     if (String(requestRow.requested_by_user_id || '').toLowerCase() !== actor.actorUserId.toLowerCase()) {
@@ -52091,7 +52091,7 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
     if ((reason || null) !== (requestRow.reason == null ? null : String(requestRow.reason).trim())) {
       return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REAUTH_REASON_MISMATCH', message: 'The cancellation reason changed after review.' });
     }
-    const proof = await verifyPaymentReversalReauth(env, user, user, token, {
+    const expectedProof = {
       version: 1,
       correction_request_id: correctionRequestId,
       pay_batch_id: String(payBatchId).toLowerCase(),
@@ -52105,8 +52105,19 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
       reason_hash: plan.reason_hash ?? null,
       evidence_hash: plan.evidence_hash ?? null,
       outcome_hash: plan.outcome_hash ?? null
-    });
-    if (!proof.ok || !Number.isFinite(boundExpiry) || proof.verified_payload.expires_at_epoch_seconds !== boundExpiry) {
+    };
+    const requestStatus = String(requestRow.status || '').trim().toUpperCase();
+    const alreadyStarted = new Set([
+      'REQUESTED', 'AWAITING_AUTHORISATION', 'AUTHORISED', 'EXPANDED', 'PROCESSING',
+      'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'REJECTED', 'CANCELLED'
+    ]).has(requestStatus);
+    if (requestStatus !== 'PLANNED' && !alreadyStarted) {
+      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REQUEST_NOT_READY_TO_START', message: 'The cancellation request is not ready to start.' });
+    }
+    const proof = alreadyStarted
+      ? await verifyConsumedBankingPayCorrectionProofReplayV1(env, user, token, requestRow, expectedProof)
+      : await verifyPaymentReversalReauth(env, user, user, token, expectedProof);
+    if (!proof.ok || (!alreadyStarted && (!Number.isFinite(boundExpiry) || proof.verified_payload.expires_at_epoch_seconds !== boundExpiry))) {
       return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REAUTH_PROOF_INVALID', message: 'Please verify your identity again.' });
     }
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
@@ -55878,6 +55889,7 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
     'WHOLE_BATCH_CANCELLATION_PROGRESS',
     'MANUAL_ADJUSTMENTS_CARRIED_FORWARD',
     'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+    'MANUAL_ADJUSTMENT_INVESTIGATION_REQUIRED',
     'PAID_SETTLED_RECOVERY_REQUIRED',
     'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
     'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',
@@ -62778,6 +62790,230 @@ async function schedulePaymentCorrectionWorkbenchNudge(env, executionContext, en
   });
 }
 
+function unwrapPaymentCancellationNoticeResult(raw) {
+  let result = raw;
+  if (Array.isArray(result) && result.length === 1) result = result[0];
+  if (result && typeof result === 'object' && result.pay_payment_cancellation_notice_reconcile_v1) {
+    result = result.pay_payment_cancellation_notice_reconcile_v1;
+  }
+  return result && typeof result === 'object' && !Array.isArray(result) ? result : {};
+}
+
+function validatePaymentCancellationNoticePage(page, expectedMode, pageLimit, priorCursor) {
+  const isCount = (value) => Number.isInteger(value) && value >= 0;
+  const expected = String(expectedMode || '').trim().toUpperCase();
+  const recoveryClaimContendedPresent = !!page
+    && typeof page === 'object'
+    && !Array.isArray(page)
+    && Object.prototype.hasOwnProperty.call(page, 'recovery_claim_contended');
+  const recoveryClaimContended = recoveryClaimContendedPresent
+    ? page.recovery_claim_contended
+    : false;
+  const allowedReasonCodes = new Set([
+    'CORRECTION_ITEM_COVERAGE_AMBIGUOUS',
+    'CORRECTION_ITEM_COVERAGE_INCOMPLETE',
+    'CORRECTION_ITEM_COVERAGE_NOT_FOUND',
+    'CORRECTION_NOT_ELIGIBLE',
+    'CORRECTION_SOURCE_NOT_FOUND',
+    'EXISTING_NOTICE_AWAITS_MANUAL_RETRY',
+    'EXISTING_NOTICE_IDENTITY_CONFLICT',
+    'EXISTING_NOTICE_STATE_CONFLICT',
+    'ORIGINAL_CANDIDATE_INVALID',
+    'ORIGINAL_CONTEXT_INVALID',
+    'ORIGINAL_ITEM_COUNT_MISMATCH',
+    'ORIGINAL_ITEM_SCOPE_DUPLICATE',
+    'ORIGINAL_ITEM_SCOPE_INVALID',
+    'ORIGINAL_ITEM_SCOPE_SIZE_INVALID',
+    'ORIGINAL_MESSAGE_SHAPE_UNSUPPORTED',
+    'ORIGINAL_NOT_FOUND',
+    'ORIGINAL_NOT_PROVIDER_ACCEPTED',
+    'ORIGINAL_PAY_BATCH_CANDIDATE_SCOPE_INVALID',
+    'ORIGINAL_RECIPIENT_IDENTITY_MISMATCH',
+    'REQUEST_PROGRESS_CURSOR_CORRUPT',
+    'SAVED_PROGRESS_INVALID',
+    'UNEXPECTED_EVENT_ERROR'
+  ]);
+  const reasonCounts = page && typeof page.reason_counts === 'object' && !Array.isArray(page.reason_counts)
+    ? page.reason_counts
+    : null;
+  const reasonEntries = reasonCounts ? Object.entries(reasonCounts) : [];
+  const reasonTotal = reasonEntries.reduce((sum, [, value]) => sum + (isCount(value) ? value : 0), 0);
+  const reasonCountsValid = reasonEntries.every(([code, value]) => (
+    allowedReasonCodes.has(String(code || '')) && isCount(value)
+  ));
+  if (!page || typeof page !== 'object' || Array.isArray(page)
+    || page.ok !== true
+    || String(page.mode || '').trim().toUpperCase() !== expected
+    || page.template_version !== 'PAYMENT_CANCELLATION_NOTICE_V1'
+    || !isCount(page.examined)
+    || page.examined > pageLimit
+    || !isCount(page.eligible)
+    || !isCount(page.queued)
+    || !isCount(page.already_present)
+    || !isCount(page.skipped)
+    || !reasonCounts
+    || !reasonCountsValid
+    || page.examined !== page.eligible + page.skipped
+    || page.eligible !== page.queued + page.already_present
+    || reasonTotal !== page.skipped
+    || typeof page.has_more !== 'boolean'
+    || (expected === 'RECOVERY' && typeof page.recovery_claim_contended !== 'boolean')
+    || (expected !== 'RECOVERY' && recoveryClaimContendedPresent
+      && (typeof page.recovery_claim_contended !== 'boolean' || recoveryClaimContended !== false))
+    || (recoveryClaimContended === true && page.has_more !== true)
+    || page.progress_owner !== 'SERVER_ROW'
+    || page.next_cursor != null
+    || priorCursor != null) {
+    throw Object.assign(new Error('PAYMENT_CANCELLATION_NOTICE_PAGE_INVALID'), {
+      code: 'PAYMENT_CANCELLATION_NOTICE_PAGE_INVALID'
+    });
+  }
+  return {
+    server_owned_progress: true,
+    has_more: page.has_more === true,
+    recovery_claim_contended: recoveryClaimContended === true
+  };
+}
+
+async function reconcilePaymentCancellationNoticesBounded(env, options = {}) {
+  const correctionRequestId = String(options.correctionRequestId || '').trim() || null;
+  const recoveryMode = !correctionRequestId;
+  const pageLimit = 50;
+  const reasonCodes = new Set();
+  const raw = await sbRpc(env, 'pay_payment_cancellation_notice_reconcile_v1', {
+    p_correction_request_id: correctionRequestId,
+    p_original_mail_outbox_id: null,
+    p_after_created_at_utc: null,
+    p_after_mail_outbox_id: null,
+    p_limit: pageLimit,
+    p_template_version: 'PAYMENT_CANCELLATION_NOTICE_V1'
+  }, {
+    routeClass: 'OPERATION_WORKER_ADVANCE',
+    purpose: recoveryMode
+      ? 'PAYMENT_CANCELLATION_NOTICE_BOUNDED_RECOVERY'
+      : 'PAYMENT_CANCELLATION_NOTICE_CORRECTION_NUDGE',
+    timeoutMs: 6500
+  });
+  const page = unwrapPaymentCancellationNoticeResult(raw);
+  const validatedPage = validatePaymentCancellationNoticePage(
+    page,
+    recoveryMode ? 'RECOVERY' : 'CORRECTION',
+    pageLimit,
+    null
+  );
+  const pageReasonCounts = page.reason_counts;
+  for (const reasonCode of Object.keys(pageReasonCounts)) {
+    const safeReasonCode = String(reasonCode || '').trim().toUpperCase();
+    if (/^[A-Z0-9_]{1,96}$/.test(safeReasonCode) && reasonCodes.size < 16) reasonCodes.add(safeReasonCode);
+  }
+
+  return {
+    ok: true,
+    mode: recoveryMode ? 'RECOVERY' : 'CORRECTION',
+    calls: 1,
+    page_limit: pageLimit,
+    max_pages: 1,
+    queued: page.queued,
+    already_present: page.already_present,
+    skipped: page.skipped,
+    has_more: page.has_more === true,
+    recovery_claim_contended: validatedPage.recovery_claim_contended,
+    reason_codes: Array.from(reasonCodes).sort()
+  };
+}
+
+function observePaymentCancellationNoticeReconcile(origin, outcome) {
+  const safe = outcome && typeof outcome === 'object' && !Array.isArray(outcome) ? outcome : {};
+  if (safe.ok !== false && Number(safe.skipped || 0) === 0 && safe.has_more !== true) return;
+  try {
+    console.warn(JSON.stringify({
+      event: 'PAYMENT_CANCELLATION_NOTICE_RECONCILE_ATTENTION',
+      origin: String(origin || 'UNKNOWN').slice(0, 80),
+      ok: safe.ok !== false,
+      code: String(safe.code || '').slice(0, 96) || null,
+      calls: Math.max(0, Number(safe.calls) || 0),
+      queued: Math.max(0, Number(safe.queued) || 0),
+      already_present: Math.max(0, Number(safe.already_present) || 0),
+      skipped: Math.max(0, Number(safe.skipped) || 0),
+      has_more: safe.has_more === true,
+      recovery_claim_contended: safe.recovery_claim_contended === true,
+      reason_codes: Array.isArray(safe.reason_codes) ? safe.reason_codes.slice(0, 16) : []
+    }));
+  } catch {}
+}
+
+function schedulePaymentCancellationNoticeNudge(env, executionContext, correctionRequestId) {
+  if (!executionContext || typeof executionContext.waitUntil !== 'function') return false;
+  const task = reconcilePaymentCancellationNoticesBounded(env, { correctionRequestId })
+    .then((outcome) => {
+      observePaymentCancellationNoticeReconcile('PAYMENT_CORRECTION_COMPLETE', outcome);
+      return outcome;
+    })
+    .catch(() => {
+      const outcome = {
+        ok: false,
+        code: 'PAYMENT_CANCELLATION_NOTICE_NUDGE_FAILED',
+        calls: 1,
+        recovery_claim_contended: false
+      };
+      observePaymentCancellationNoticeReconcile('PAYMENT_CORRECTION_COMPLETE', outcome);
+      return outcome;
+    });
+  try {
+    executionContext.waitUntil(task);
+    return true;
+  } catch {
+    observePaymentCancellationNoticeReconcile('PAYMENT_CORRECTION_COMPLETE', {
+      ok: false,
+      code: 'PAYMENT_CANCELLATION_NOTICE_WAIT_UNTIL_REJECTED',
+      calls: 1,
+      recovery_claim_contended: false
+    });
+    return false;
+  }
+}
+
+async function verifyConsumedBankingPayCorrectionProofReplayV1(env, user, token, requestRow, expectedFields) {
+  const exactToken = String(token || '').trim();
+  if (!exactToken || new TextEncoder().encode(exactToken).byteLength > 4096) {
+    return { ok: false, code: 'REAUTH_PROOF_REQUIRED', error: 'Correction reauthentication proof is required.' };
+  }
+  const payload = await verifyBankingPayCorrectionProof(env, exactToken);
+  if (!payload) {
+    return { ok: false, code: 'REAUTH_PROOF_INVALID', error: 'Correction reauthentication proof is invalid.' };
+  }
+  const proofHash = await sha256BankingPayRawText(exactToken);
+  const storedProofHash = String(requestRow?.reauth_proof_hash || '').trim().toLowerCase();
+  const consumedAtMs = new Date(requestRow?.reauth_consumed_at_utc || '').getTime();
+  const expiresAtMs = new Date(requestRow?.reauth_expires_at_utc || '').getTime();
+  if (!BANKING_PAY_CORRECTION_SHA256_RE.test(storedProofHash)
+      || proofHash !== storedProofHash
+      || !Number.isFinite(consumedAtMs)
+      || !Number.isFinite(expiresAtMs)) {
+    return { ok: false, code: 'REAUTH_PROOF_NOT_CONSUMED', error: 'The correction proof was not consumed by this request.' };
+  }
+  const consumedAtEpochSeconds = Math.floor(consumedAtMs / 1000);
+  const expiresAtEpochSeconds = Math.floor(expiresAtMs / 1000);
+  if (payload.expires_at_epoch_seconds !== expiresAtEpochSeconds
+      || payload.issued_at_epoch_seconds > consumedAtEpochSeconds + 30
+      || consumedAtEpochSeconds > payload.expires_at_epoch_seconds) {
+    return { ok: false, code: 'REAUTH_PROOF_CONSUMPTION_INVALID', error: 'The consumed correction proof does not match this request.' };
+  }
+  if (payload.actor_user_id !== String(user?.id || '').trim().toLowerCase()) {
+    return { ok: false, code: 'REAUTH_PROOF_ACTOR_MISMATCH', error: 'The consumed correction proof belongs to another user.' };
+  }
+  const expected = isBankingPayCorrectionPlainObject(expectedFields) ? expectedFields : {};
+  for (const key of BANKING_PAY_CORRECTION_PROOF_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(expected, key)) continue;
+    const left = payload[key] == null ? null : payload[key];
+    const right = expected[key] == null ? null : expected[key];
+    if (left !== right) {
+      return { ok: false, code: 'REAUTH_PROOF_BINDING_MISMATCH', error: `Correction reauthentication proof does not match ${key}.` };
+    }
+  }
+  return { ok: true, proof_hash: proofHash, verified_payload: payload, consumed_replay: true };
+}
+
 async function advancePaymentCorrectionOperation(env, operationRow, user, options = {}) {
   const row = operationRow && typeof operationRow === 'object' && !Array.isArray(operationRow) ? operationRow : {};
   const input = row.input_json && typeof row.input_json === 'object' && !Array.isArray(row.input_json) ? row.input_json : {};
@@ -62803,16 +63039,29 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
   if (!Number.isInteger(correctionPhaseLimit) || correctionPhaseLimit <= 0) {
     throw Object.assign(new Error('PAYMENT_CORRECTION_PHASE_LIMIT_INVALID'), { code: 'PAYMENT_CORRECTION_PHASE_LIMIT_INVALID' });
   }
-  const raw = await sbRpc(env, 'pay_payment_correction_process_chunk', {
-    p_correction_request_id: correctionRequestId,
-    p_limit: correctionPhaseLimit,
-    p_worker_id: workerId,
-    p_actor_user_id: actorUserId || null
-  }, {
-    routeClass: 'OPERATION_WORKER_ADVANCE',
-    purpose: 'PAYMENT_CORRECTION_BOUNDED_PHASE',
-    timeoutMs: Math.max(1000, Math.min(120000, Number(correctionPhaseConfig.max_advance_ms) + 500))
-  });
+  let raw;
+  try {
+    raw = await sbRpc(env, 'pay_payment_correction_process_chunk', {
+      p_correction_request_id: correctionRequestId,
+      p_limit: correctionPhaseLimit,
+      p_worker_id: workerId,
+      p_actor_user_id: actorUserId || null
+    }, {
+      routeClass: 'OPERATION_WORKER_ADVANCE',
+      purpose: 'PAYMENT_CORRECTION_BOUNDED_PHASE',
+      timeoutMs: Math.max(1000, Math.min(120000, Number(correctionPhaseConfig.max_advance_ms) + 500))
+    });
+  } catch (error) {
+    // The database may have committed a terminal correction before a network
+    // response was lost.  This best-effort nudge is detached and can only append
+    // the idempotent mail notice; it never changes the cancellation outcome.
+    schedulePaymentCancellationNoticeNudge(
+      env,
+      options.executionContext || null,
+      correctionRequestId
+    );
+    throw error;
+  }
   let result = raw;
   if (Array.isArray(result) && result.length === 1) result = result[0];
   if (result && typeof result === 'object' && result.pay_payment_correction_process_chunk) result = result.pay_payment_correction_process_chunk;
@@ -62930,6 +63179,16 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
         durable_wake_enqueued: false,
         cron_fallback_required: false
       };
+  if (terminal && status === 'COMPLETE') {
+    // Notice reconciliation is deliberately detached from the cancellation
+    // result.  Failure here cannot turn a completed cancellation into failure;
+    // the bounded mail-drain recovery sweep will converge a lost nudge.
+    schedulePaymentCancellationNoticeNudge(
+      env,
+      options.executionContext || null,
+      correctionRequestId
+    );
+  }
   return Object.assign({}, result, {
     ok: result.ok !== false,
     operation_id: operationId,
@@ -130811,6 +131070,34 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   let deferred = 0;
   const errors = [];
 
+  // Exactly one bounded recovery sweep runs after each drain, including an
+  // otherwise idle drain.  It closes the race where cancellation completed
+  // before the original remittance became durably SENT, without adding one RPC
+  // per email or delaying the cancellation request itself.
+  const finishDrainReport = async (report) => {
+    let cancellationNoticeRecovery;
+    try {
+      cancellationNoticeRecovery = await reconcilePaymentCancellationNoticesBounded(env);
+    } catch {
+      cancellationNoticeRecovery = {
+        ok: false,
+        code: 'PAYMENT_CANCELLATION_NOTICE_RECOVERY_FAILED',
+        calls: 1,
+        queued: 0,
+        already_present: 0,
+        skipped: 0,
+        has_more: false,
+        recovery_claim_contended: false,
+        reason_codes: []
+      };
+    }
+    observePaymentCancellationNoticeReconcile('MAIL_OUTBOX_DRAIN_COMPLETE', cancellationNoticeRecovery);
+    return {
+      ...report,
+      payment_cancellation_notice_recovery: cancellationNoticeRecovery
+    };
+  };
+
   const nowIsoUtc = () => new Date().toISOString();
   const nowPlusMinutesIso = (mins) => {
     const ms = Date.now() + Math.max(1, Number(mins) || 5) * 60 * 1000;
@@ -131239,7 +131526,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   }
 
   if (noClaimedRows || noPickedRows) {
-    return { picked: 0, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors };
+    return finishDrainReport({ picked: 0, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
   }
 
   const routeBuckets = new Map();
@@ -131484,7 +131771,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   }
 
   if (routeBuckets.size === 0) {
-    return { picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors };
+    return finishDrainReport({ picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
   }
 
   let outboundCallCount = 0;
@@ -131576,7 +131863,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     if (outboundCallCount >= maxCallsPerDrain) break;
   }
 
-  return { picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors };
+  return finishDrainReport({ picked: picked.length, sent, failed, deferred, sent_state_retry_count: sentStateRetryCount, errors });
 }
 
 
@@ -137745,6 +138032,7 @@ async function handleGetSettings(env, req) {
         'AUTO_UNWIND_PROGRESS',
         'WHOLE_BATCH_CANCELLATION_PROGRESS',
         'MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS',
+        'MANUAL_ADJUSTMENT_INVESTIGATION_REQUIRED',
         'PAID_SETTLED_RECOVERY_REQUIRED',
         'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
         'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',

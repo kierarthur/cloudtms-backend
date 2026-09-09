@@ -255,6 +255,35 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       'grant execute on function public.example() to CURRENT_USER;',
     );
     assert.equal(
+      mapLogicalPostgresOwnerSql('grant execute on function private.example() to postgres;'),
+      'grant execute on function private.example() to CURRENT_USER;',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql('revoke all on function private.example() from PUBLIC, postgres, service_role;'),
+      'revoke all on function private.example() from PUBLIC, CURRENT_USER, service_role;',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        '-- owner-only helper\r\ngrant execute on function private.example()\r\n  to "postgres";\r\n',
+      ),
+      '-- owner-only helper\r\ngrant execute on function private.example()\r\n  to CURRENT_USER;\r\n',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "CREATE FUNCTION public.example() RETURNS text LANGUAGE plpgsql AS $body$\nBEGIN\n  RETURN 'grant execute on function private.hidden() to postgres;';\nEND;\n$body$;\n",
+      ),
+      "CREATE FUNCTION public.example() RETURNS text LANGUAGE plpgsql AS $body$\nBEGIN\n  RETURN 'grant execute on function private.hidden() to postgres;';\nEND;\n$body$;\n",
+      'logical owner mapping must not rewrite permission-like text inside a function body',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        'grant execute on function pg_temp.fixture() to postgres;',
+        { mapAclGrantees: false },
+      ),
+      'grant execute on function pg_temp.fixture() to postgres;',
+      'rollback-only verifier files outside the authority tree remain byte-identical',
+    );
+    assert.equal(
       mapGeneratedAclBaselineSql('revoke all on function private.example() from PUBLIC, authenticator, supabase_admin;'),
       'revoke all on function private.example() from PUBLIC, supabase_admin;',
     );

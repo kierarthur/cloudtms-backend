@@ -1,0 +1,149 @@
+{
+  "artifact": "BANKING_PAY_PAYMENT_CANCELLATION_NOTICE_V1",
+  "purpose": "Queue one neutral follow-up only when the exact earlier payment email was durably accepted by the provider; notice failure never changes cancellation.",
+  "runtime_authority": "MIGET_TEST_NOT_MUTATED_OR_CLAIMED",
+  "template_version": "PAYMENT_CANCELLATION_NOTICE_V1",
+  "function_identity": "public.pay_payment_cancellation_notice_reconcile_v1(uuid,uuid,timestamptz,uuid,integer,text)",
+  "functional_item_ceiling": 50000,
+  "stress_item_counts": [1, 101, 1001, 5000],
+  "boundary_rejection_item_count": 50001,
+  "rpc_page": {
+    "default_limit": 50,
+    "maximum_limit": 100,
+    "sentinel_rows": 1,
+    "worker_recovery_pages_per_drain": 1,
+    "worker_absolute_page_cap": 1,
+    "progress_owner": "SERVER_ROW",
+    "caller_cursor_permitted": false,
+    "timeout_ms": 6000,
+    "lock_timeout_ms": 1000
+  },
+  "source_owners": [
+    {
+      "function": "public.pay_operation_remittance_scope_seed(uuid,uuid,text,uuid)",
+      "evidence": "candidate and Umbrella payment scopes contain one producer-owned pay_batch_candidate_id, exact Candidate, recipient and item identities"
+    },
+    {
+      "function": "public.pay_remittance_queue_commit_stage(uuid,text,uuid,boolean,uuid,jsonb)",
+      "evidence": "candidate and Umbrella remittance rows are inserted as REMITTANCE with typed recipient and exact payment scope"
+    },
+    {
+      "function": "public.pay_finance_payout_notice_queue_commit_stage(uuid,uuid,boolean,uuid,jsonb)",
+      "evidence": "payout notice rows reuse the remittance-scope payload with one producer-owned pay_batch_candidate_id and append exact item objects"
+    },
+    {
+      "function": "CANDIDATE_UMBRELLA_COPY_REMITTANCE current operation route",
+      "evidence": "render/build work only; it does not persist a separate mail_outbox row and is deliberately not accepted as a source-message shape"
+    },
+    {
+      "function": "public.email_outbox_claim_ready_batch(integer,text,integer)",
+      "evidence": "only QUEUED unsent rows are automatically claimed; an exact FAILED cancellation notice remains visible for the existing mail failure/retry path and is never duplicated"
+    },
+    {
+      "function": "public.outbox_unified_retry(text,uuid,uuid,timestamptz)",
+      "evidence": "the existing audited user action is the sole retry owner for a FAILED unsent cancellation notice; reconciliation does not invent automatic delivery retries"
+    }
+  ],
+  "positive_source_shapes": [
+    "CANDIDATE_REMITTANCE",
+    "UMBRELLA_REMITTANCE",
+    "PAYOUT_NOTICE_CANDIDATE"
+  ],
+  "explicitly_non_reachable_persisted_shapes": [
+    "CANDIDATE_UMBRELLA_COPY_REMITTANCE"
+  ],
+  "required_original_state": {
+    "type": "REMITTANCE",
+    "status": "SENT",
+    "sent_at_required": true,
+    "provider_status": "ACCEPTED"
+  },
+  "required_correction_state": {
+    "status": ["APPLIED", "APPLIED_WITH_BLOCKERS"],
+    "applied_at_required": true,
+    "kind": ["PRE_BANK_CANCEL", "NO_MONEY_UNWIND"],
+    "communication_contract_version": "2",
+    "every_source_item_exactly_once": true,
+    "pay_batch_candidate_binding_required": true,
+    "one_request_may_cover_multiple_source_emails": true
+  },
+  "notice_contract": {
+    "type": "PAYMENT_CANCELLATION",
+    "email_type": "html",
+    "deterministic_key": "PAYMENT_CANCELLATION_NOTICE_V1:<original_mail_outbox_id>",
+    "copy_original_recipients": true,
+    "attachments": [],
+    "subject": "Payment cancelled",
+    "subject_is_fixed_and_does_not_copy_original": true,
+    "body_text": "The payment described in our earlier email has been cancelled and will not be made as previously advised.\n\nIf a replacement payment is arranged, you will receive a separate notification.",
+    "context_kind": "pay_payment_correction_requests",
+    "only_new_business_row_table": "public.mail_outbox",
+    "diagnostic_progress_tables": [
+      "public.mail_outbox",
+      "public.pay_payment_correction_requests"
+    ],
+    "existing_source_row_preservation": {
+      "all_business_mail_and_provider_fields_unchanged": true,
+      "only_exact_server_owned_diagnostic_columns_may_change": true,
+      "unrelated_queued_and_failed_rows_fully_unchanged": true
+    }
+  },
+  "negative_cases": [
+    "ORIGINAL_ABSENT",
+    "ORIGINAL_QUEUED",
+    "ORIGINAL_FAILED",
+    "ORIGINAL_SENT_AT_ABSENT",
+    "ORIGINAL_PROVIDER_NOT_ACCEPTED",
+    "ORIGINAL_NON_PAYMENT_REMITTANCE",
+    "ORIGINAL_UNRELATED_BATCH",
+    "ORIGINAL_WRONG_CANDIDATE",
+    "ORIGINAL_WRONG_RECIPIENT",
+    "ORIGINAL_WRONG_PAY_BATCH_CANDIDATE",
+    "ORIGINAL_ITEM_SCOPE_PARTIAL",
+    "ORIGINAL_ITEM_SCOPE_EXTRA",
+    "ORIGINAL_ITEM_SCOPE_DUPLICATE",
+    "ORIGINAL_ITEM_COUNT_MISMATCH",
+    "ORIGINAL_ITEM_SCOPE_MALFORMED",
+    "ORIGINAL_ITEM_SCOPE_50001",
+    "CORRECTION_NOT_APPLIED",
+    "CORRECTION_APPLIED_AT_ABSENT",
+    "CORRECTION_COMMUNICATION_V1",
+    "CORRECTION_COVERAGE_AMBIGUOUS",
+    "CORRECTION_ITEM_APPLIED_AT_ABSENT",
+    "EXISTING_NOTICE_IDENTITY_CONFLICT",
+    "SAVED_PROGRESS_INVALID",
+    "MODE_CONFLICT",
+    "HALF_CURSOR",
+    "CURSOR_WITH_ID_MODE",
+    "LIMIT_OUT_OF_RANGE",
+    "UNSUPPORTED_TEMPLATE"
+  ],
+  "reliability_cases": [
+    "EXACT_REPLAY_MAX_ONE_NOTICE",
+    "CORRECTION_COMPLETE_BEFORE_ORIGINAL_SENT",
+    "ORIGINAL_SENT_BEFORE_CORRECTION_COMPLETE",
+    "LOST_CORRECTION_REPLY",
+    "LOST_MAIL_PROVIDER_REPLY",
+    "CONCURRENT_CORRECTION_AND_RECOVERY",
+    "BOUNDED_NOISE_INDEX_ISOLATION_DOES_NOT_STARVE_ELIGIBLE",
+    "ONE_CORRECTION_COVERS_TWO_SEPARATELY_SENT_EMAILS",
+    "REQUEST_PROGRESS_IS_SERVER_OWNED",
+    "EXACT_LIMIT_AND_LIMIT_PLUS_ONE_SENTINEL",
+    "EQUAL_TIMESTAMP_LOWER_UUID_EVENT_ORDER_CONVERGES",
+    "CUTOVER_UNTRACKED_APPLIED_REQUEST_WITH_LATER_SENT_TRACKED_MAIL_CONVERGES",
+    "NO_CURSOR_UNEXPECTED_ERROR_RETRY_RESUMES",
+    "TAMPERED_DETERMINISTIC_KEY_COLLISION_IS_TYPED_NOT_HIDDEN",
+    "MALFORMED_RPC_ENVELOPE_IS_OBSERVED",
+    "WAIT_UNTIL_FAILURE_IS_OBSERVED",
+    "CANCELLATION_RESULT_NEVER_DEPENDS_ON_EMAIL"
+  ],
+  "side_effect_boundary": {
+    "mail_outbox_notice_insert_only": true,
+    "event_diagnostic_updates_only": true,
+    "financial_writes": 0,
+    "cancellation_writes": 0,
+    "remittance_writes": 0,
+    "provider_calls": 0,
+    "settlement_writes": 0
+  }
+}

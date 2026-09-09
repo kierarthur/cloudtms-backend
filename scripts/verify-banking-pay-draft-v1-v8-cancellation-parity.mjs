@@ -33,6 +33,11 @@ const NO_MONEY_UNWIND_RESULT_ARITY_SOURCE = path.resolve(
 const RECONCILIATION_ENVELOPE_SOURCE = path.resolve(
   'supabase/migrations/06082026_0407_banking_pay_reconciliation_envelope_v2.sql'
 );
+const CANCEL_RETURN_SELECTION_INTENT_SOURCES = [
+  'supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql',
+  'supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql',
+  'supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql'
+].map((relativePath) => path.resolve(relativePath));
 const SCHEDULED_LOCAL_PREPARE_RUNTIME_SOURCE = path.resolve(
   'tests/04092026_2340_banking_pay_scheduled_due_local_prepare_runtime.sql'
 );
@@ -488,9 +493,151 @@ function normalizeCancellationScaleFinancials(target) {
   // adjustment. Its original Timesheet financial row also carried a synthetic
   // £1 parent total, which is not the sum of its zero physical rate buckets and
   // is therefore correctly rejected by the current rate-authority guard during
-  // a fresh Workbench build. Correct only that disposable fixture inconsistency;
-  // the selected adjustment and every frozen Draft artifact remain unchanged.
-  return queryJson(target, `
+  // a fresh Workbench build. Normalize the disposable Timesheet to the exact
+  // current no-work shape: no worked interval and no schedule-derived segment.
+  // Do not manufacture physical rate identity. The separate selected adjustment
+  // and every frozen Draft artifact remain unchanged.
+  const before = queryJson(target, `
+    WITH batch_timesheets AS (
+      SELECT DISTINCT
+        item_row.timesheet_id,
+        candidate_row.candidate_id
+      FROM public.pay_batch_items AS item_row
+      JOIN public.pay_batch_candidates AS candidate_row
+        ON candidate_row.id = item_row.pay_batch_candidate_id
+      WHERE candidate_row.pay_batch_id = ANY(ARRAY[
+        '${target.batches.PAYE}'::uuid,
+        '${target.batches.UMBRELLA}'::uuid
+      ])
+        AND item_row.timesheet_id IS NOT NULL
+    ), financial_scope AS (
+      SELECT financial_row.*
+      FROM public.timesheets_financials AS financial_row
+      JOIN batch_timesheets
+        ON batch_timesheets.timesheet_id = financial_row.timesheet_id
+       AND batch_timesheets.candidate_id = financial_row.candidate_id
+      WHERE financial_row.is_current IS TRUE
+        AND financial_row.is_stale IS NOT TRUE
+    ), adjustment_scope AS (
+      SELECT adjustment_row.*
+      FROM public.ts_pay_adjustments AS adjustment_row
+      JOIN batch_timesheets
+        ON batch_timesheets.timesheet_id = adjustment_row.timesheet_id
+       AND batch_timesheets.candidate_id = adjustment_row.candidate_id
+    ), adjustment_cardinality AS (
+      SELECT
+        batch_timesheets.timesheet_id,
+        pg_catalog.count(adjustment_row.id)::integer AS adjustment_count
+      FROM batch_timesheets
+      LEFT JOIN public.ts_pay_adjustments AS adjustment_row
+        ON adjustment_row.timesheet_id = batch_timesheets.timesheet_id
+       AND adjustment_row.candidate_id = batch_timesheets.candidate_id
+      GROUP BY batch_timesheets.timesheet_id
+    )
+    SELECT pg_catalog.jsonb_build_object(
+      'target_timesheet_count', (SELECT pg_catalog.count(*)::integer FROM batch_timesheets),
+      'target_timesheet_row_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM public.timesheets AS timesheet_row
+        JOIN batch_timesheets USING(timesheet_id)
+        WHERE timesheet_row.is_current IS TRUE
+      ),
+      'target_financial_count', (SELECT pg_catalog.count(*)::integer FROM financial_scope),
+      'invalid_original_timesheet_shape_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM public.timesheets AS timesheet_row
+        JOIN batch_timesheets USING(timesheet_id)
+        WHERE timesheet_row.is_current IS NOT TRUE
+          OR timesheet_row.sheet_scope IS DISTINCT FROM 'DAILY'
+          OR timesheet_row.worked_start_iso IS NOT NULL
+          OR timesheet_row.worked_end_iso IS NOT NULL
+          OR timesheet_row.break_start_iso IS NOT NULL
+          OR timesheet_row.break_end_iso IS NOT NULL
+          OR timesheet_row.break_minutes IS NOT NULL
+          OR timesheet_row.worked_minutes IS NOT NULL
+          OR timesheet_row.actual_schedule_json IS NOT NULL
+      ),
+      'invalid_zero_unit_carrier_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM financial_scope AS financial_row
+        WHERE COALESCE(financial_row.total_hours, 0) <> 0
+          OR COALESCE(financial_row.hours_day, 0) <> 0
+          OR COALESCE(financial_row.hours_night, 0) <> 0
+          OR COALESCE(financial_row.hours_sat, 0) <> 0
+          OR COALESCE(financial_row.hours_sun, 0) <> 0
+          OR COALESCE(financial_row.hours_bh, 0) <> 0
+          OR COALESCE(financial_row.pay_day, 0) <> 0
+          OR COALESCE(financial_row.pay_night, 0) <> 0
+          OR COALESCE(financial_row.pay_sat, 0) <> 0
+          OR COALESCE(financial_row.pay_sun, 0) <> 0
+          OR COALESCE(financial_row.pay_bh, 0) <> 0
+          OR COALESCE(financial_row.charge_day, 0) <> 0
+          OR COALESCE(financial_row.charge_night, 0) <> 0
+          OR COALESCE(financial_row.charge_sat, 0) <> 0
+          OR COALESCE(financial_row.charge_sun, 0) <> 0
+          OR COALESCE(financial_row.charge_bh, 0) <> 0
+          OR COALESCE(financial_row.expenses_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.mileage_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.additional_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.travel_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.accommodation_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.other_pay_ex_vat, 0) <> 0
+      ),
+      'invalid_original_parent_total_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM financial_scope AS financial_row
+        WHERE financial_row.total_pay_ex_vat IS DISTINCT FROM 1.00
+          OR financial_row.total_charge_ex_vat IS DISTINCT FROM 1.00
+          OR financial_row.margin_ex_vat IS DISTINCT FROM 0.00
+      ),
+      'invalid_original_financial_schedule_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM financial_scope AS financial_row
+        WHERE financial_row.worked_start_iso IS DISTINCT FROM TIMESTAMPTZ '2099-03-23 08:00:00+00'
+          OR financial_row.worked_end_iso IS DISTINCT FROM TIMESTAMPTZ '2099-03-23 16:00:00+00'
+          OR financial_row.break_start_iso IS NOT NULL
+          OR financial_row.break_end_iso IS NOT NULL
+          OR financial_row.break_minutes IS NOT NULL
+          OR financial_row.actual_schedule_json IS DISTINCT FROM
+            '{"date":"2099-03-23","start":"08:00","end":"16:00","break_minutes":0}'::jsonb
+          OR financial_row.actual_minutes_by_day_json IS NOT NULL
+          OR financial_row.invoice_breakdown_json IS DISTINCT FROM '{}'::jsonb
+      ),
+      'adjustment_count', (SELECT pg_catalog.count(*)::integer FROM adjustment_scope),
+      'invalid_adjustment_cardinality_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM adjustment_cardinality
+        WHERE adjustment_count <> 1
+      ),
+      'invalid_adjustment_shape_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM adjustment_scope AS adjustment_row
+        WHERE adjustment_row.delta_pay_ex_vat IS DISTINCT FROM 1.00
+          OR COALESCE(adjustment_row.as_advance, false) IS NOT FALSE
+      ),
+      'adjustment_rows', (
+        SELECT COALESCE(
+          pg_catalog.jsonb_agg(pg_catalog.to_jsonb(adjustment_row) ORDER BY adjustment_row.id),
+          '[]'::jsonb
+        )
+        FROM adjustment_scope AS adjustment_row
+      )
+    )::text
+  `).value;
+  assert.ok(before.target_timesheet_count > 0, JSON.stringify(before));
+  assert.equal(before.target_timesheet_row_count, before.target_timesheet_count, JSON.stringify(before));
+  assert.equal(before.target_financial_count, before.target_timesheet_count, JSON.stringify(before));
+  assert.equal(before.invalid_original_timesheet_shape_count, 0, JSON.stringify(before));
+  assert.equal(before.invalid_zero_unit_carrier_count, 0, JSON.stringify(before));
+  assert.equal(before.invalid_original_parent_total_count, 0, JSON.stringify(before));
+  assert.equal(before.invalid_original_financial_schedule_count, 0, JSON.stringify(before));
+  assert.ok(before.adjustment_count > 0, JSON.stringify(before));
+  assert.equal(before.invalid_adjustment_cardinality_count, 0, JSON.stringify(before));
+  assert.equal(before.invalid_adjustment_shape_count, 0, JSON.stringify(before));
+  assert.equal(before.adjustment_rows.length, before.adjustment_count, JSON.stringify(before));
+  const adjustmentSnapshotSha256 = sha256(before.adjustment_rows);
+
+  const corrected = queryJson(target, `
     WITH batch_timesheets AS (
       SELECT DISTINCT item_row.timesheet_id
       FROM public.pay_batch_items AS item_row
@@ -503,35 +650,38 @@ function normalizeCancellationScaleFinancials(target) {
         AND item_row.timesheet_id IS NOT NULL
     ), corrected_timesheets AS (
       UPDATE public.timesheets AS timesheet_row
-      SET worked_end_iso = timesheet_row.worked_start_iso,
+      SET worked_start_iso = NULL,
+          worked_end_iso = NULL,
+          break_start_iso = NULL,
+          break_end_iso = NULL,
+          break_minutes = NULL,
           worked_minutes = 0,
-          actual_schedule_json = COALESCE(timesheet_row.actual_schedule_json, '{}'::jsonb)
-            || pg_catalog.jsonb_build_object(
-              'end', COALESCE(
-                timesheet_row.actual_schedule_json->>'start',
-                substring(timesheet_row.worked_start_iso::text from 'T([0-9]{2}:[0-9]{2})')
-              ),
-              'break_minutes', 0
-            ),
+          actual_schedule_json = NULL,
           updated_at = pg_catalog.clock_timestamp()
       WHERE timesheet_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
-        AND COALESCE(timesheet_row.worked_minutes, 0) <> 0
+        AND (
+          timesheet_row.worked_start_iso IS NOT NULL
+          OR timesheet_row.worked_end_iso IS NOT NULL
+          OR timesheet_row.break_start_iso IS NOT NULL
+          OR timesheet_row.break_end_iso IS NOT NULL
+          OR timesheet_row.break_minutes IS NOT NULL
+          OR timesheet_row.actual_schedule_json IS NOT NULL
+          OR COALESCE(timesheet_row.worked_minutes, 0) <> 0
+        )
       RETURNING timesheet_row.timesheet_id
     ), corrected_financials AS (
       UPDATE public.timesheets_financials AS financial_row
       SET total_pay_ex_vat = 0,
           total_charge_ex_vat = 0,
           margin_ex_vat = 0,
-          worked_end_iso = financial_row.worked_start_iso,
-          actual_schedule_json = COALESCE(financial_row.actual_schedule_json, '{}'::jsonb)
-            || pg_catalog.jsonb_build_object(
-              'end', COALESCE(
-                financial_row.actual_schedule_json->>'start',
-                substring(financial_row.worked_start_iso::text from 'T([0-9]{2}:[0-9]{2})')
-              ),
-              'break_minutes', 0
-            ),
-          actual_minutes_by_day_json = '{}'::jsonb,
+          worked_start_iso = NULL,
+          worked_end_iso = NULL,
+          break_start_iso = NULL,
+          break_end_iso = NULL,
+          break_minutes = NULL,
+          actual_schedule_json = NULL,
+          actual_minutes_by_day_json = NULL,
+          invoice_breakdown_json = '{"mode":"SEGMENTS","segments":[],"totals":{"total_pay_ex_vat":0,"total_charge_ex_vat":0,"margin_ex_vat":0}}'::jsonb,
           updated_at = pg_catalog.clock_timestamp()
       WHERE financial_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
         AND financial_row.is_current IS TRUE
@@ -552,6 +702,15 @@ function normalizeCancellationScaleFinancials(target) {
           COALESCE(financial_row.total_pay_ex_vat, 0) <> 0
           OR COALESCE(financial_row.total_charge_ex_vat, 0) <> 0
           OR COALESCE(financial_row.margin_ex_vat, 0) <> 0
+          OR financial_row.worked_start_iso IS NOT NULL
+          OR financial_row.worked_end_iso IS NOT NULL
+          OR financial_row.break_start_iso IS NOT NULL
+          OR financial_row.break_end_iso IS NOT NULL
+          OR financial_row.break_minutes IS NOT NULL
+          OR financial_row.actual_schedule_json IS NOT NULL
+          OR financial_row.actual_minutes_by_day_json IS NOT NULL
+          OR financial_row.invoice_breakdown_json IS DISTINCT FROM
+            '{"mode":"SEGMENTS","segments":[],"totals":{"total_pay_ex_vat":0,"total_charge_ex_vat":0,"margin_ex_vat":0}}'::jsonb
         )
       RETURNING financial_row.timesheet_id
     )
@@ -562,31 +721,127 @@ function normalizeCancellationScaleFinancials(target) {
         (SELECT pg_catalog.count(*)::integer FROM corrected_financials)
     )::text
   `).value;
-}
 
-function clearPreexistingCancellationWorkbenchJobs(target) {
-  // The persisted V1/V8 oracle databases intentionally retain unrelated
-  // queued fixture history. This disposable clone isolates the cancellation
-  // boundary so only jobs caused by the cancellation under test are drained.
-  // Succeeded/failed audit history is preserved.
-  return queryJson(target, `
-    WITH batch_candidates AS (
-      SELECT candidate_row.candidate_id
-      FROM public.pay_batch_candidates AS candidate_row
+  const verified = queryJson(target, `
+    WITH batch_timesheets AS (
+      SELECT DISTINCT item_row.timesheet_id
+      FROM public.pay_batch_items AS item_row
+      JOIN public.pay_batch_candidates AS candidate_row
+        ON candidate_row.id = item_row.pay_batch_candidate_id
       WHERE candidate_row.pay_batch_id = ANY(ARRAY[
         '${target.batches.PAYE}'::uuid,
         '${target.batches.UMBRELLA}'::uuid
       ])
-    ), removed AS (
-      DELETE FROM public.banking_pay_workbench_jobs AS job_row
-      WHERE job_row.candidate_id IN (SELECT candidate_id FROM batch_candidates)
-        AND job_row.status IN ('QUEUED', 'RUNNING')
-      RETURNING job_row.id
+        AND item_row.timesheet_id IS NOT NULL
     )
     SELECT pg_catalog.jsonb_build_object(
-      'removed_active_fixture_job_count', pg_catalog.count(*)::integer
+      'invalid_no_work_carrier_count', pg_catalog.count(*) FILTER (
+        WHERE financial_row.worked_start_iso IS NOT NULL
+          OR financial_row.worked_end_iso IS NOT NULL
+          OR financial_row.break_start_iso IS NOT NULL
+          OR financial_row.break_end_iso IS NOT NULL
+          OR financial_row.break_minutes IS NOT NULL
+          OR financial_row.actual_schedule_json IS NOT NULL
+          OR financial_row.actual_minutes_by_day_json IS NOT NULL
+          OR financial_row.invoice_breakdown_json IS DISTINCT FROM
+            '{"mode":"SEGMENTS","segments":[],"totals":{"total_pay_ex_vat":0,"total_charge_ex_vat":0,"margin_ex_vat":0}}'::jsonb
+          OR COALESCE(financial_row.total_hours, 0) <> 0
+          OR COALESCE(financial_row.total_pay_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.total_charge_ex_vat, 0) <> 0
+          OR COALESCE(financial_row.margin_ex_vat, 0) <> 0
+      )::integer,
+      'retained_adjustment_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM public.ts_pay_adjustments AS adjustment_row
+        WHERE adjustment_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
+          AND adjustment_row.delta_pay_ex_vat = 1.00
+      ),
+      'retained_adjustment_total_ex_vat', (
+        SELECT COALESCE(pg_catalog.sum(adjustment_row.delta_pay_ex_vat), 0)
+        FROM public.ts_pay_adjustments AS adjustment_row
+        WHERE adjustment_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
+      ),
+      'retained_adjustment_rows', (
+        SELECT COALESCE(
+          pg_catalog.jsonb_agg(pg_catalog.to_jsonb(adjustment_row) ORDER BY adjustment_row.id),
+          '[]'::jsonb
+        )
+        FROM public.ts_pay_adjustments AS adjustment_row
+        WHERE adjustment_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
+      )
     )::text
-    FROM removed
+    FROM public.timesheets_financials AS financial_row
+    WHERE financial_row.timesheet_id IN (SELECT timesheet_id FROM batch_timesheets)
+      AND financial_row.is_current IS TRUE
+      AND financial_row.is_stale IS NOT TRUE
+  `).value;
+  assert.equal(verified.invalid_no_work_carrier_count, 0, JSON.stringify(verified));
+  assert.ok(verified.retained_adjustment_count > 0, JSON.stringify(verified));
+  assert.equal(
+    Number(verified.retained_adjustment_total_ex_vat),
+    verified.retained_adjustment_count,
+    JSON.stringify(verified)
+  );
+  assert.equal(verified.retained_adjustment_count, before.adjustment_count, JSON.stringify(verified));
+  assert.equal(sha256(verified.retained_adjustment_rows), adjustmentSnapshotSha256, JSON.stringify(verified));
+  return {
+    target_timesheet_count: before.target_timesheet_count,
+    target_financial_count: before.target_financial_count,
+    zero_unit_carrier_precondition_verified: true,
+    adjustment_snapshot_sha256: adjustmentSnapshotSha256,
+    ...corrected,
+    invalid_no_work_carrier_count: verified.invalid_no_work_carrier_count,
+    retained_adjustment_count: verified.retained_adjustment_count,
+    retained_adjustment_total_ex_vat: verified.retained_adjustment_total_ex_vat,
+    retained_adjustment_snapshot_sha256: sha256(verified.retained_adjustment_rows)
+  };
+}
+
+function readCancellationWorkbenchSchedulingState(target, batchId) {
+  return queryJson(target, `
+    WITH batch_candidates AS (
+      SELECT candidate_row.candidate_id
+      FROM public.pay_batch_candidates AS candidate_row
+      WHERE candidate_row.pay_batch_id = '${batchId}'::uuid
+    ), active_jobs AS (
+      SELECT job_row.*
+      FROM public.banking_pay_workbench_jobs AS job_row
+      WHERE job_row.candidate_id IN (SELECT candidate_id FROM batch_candidates)
+        AND job_row.status IN ('QUEUED', 'RUNNING')
+    ), active_builds AS (
+      SELECT build_row.*
+      FROM private.banking_pay_workbench_economic_builds AS build_row
+      WHERE build_row.candidate_id IN (SELECT candidate_id FROM batch_candidates)
+        AND build_row.status NOT IN ('COMPLETE', 'FAILED', 'OBSOLETE', 'CLEANING')
+    )
+    SELECT pg_catalog.jsonb_build_object(
+      'active_job_count', (SELECT pg_catalog.count(*)::integer FROM active_jobs),
+      'active_normal_job_count', (SELECT pg_catalog.count(*)::integer FROM active_jobs WHERE job_type <> 'WORKBENCH_CANDIDATE_SOURCE_BUILD'),
+      'active_source_job_count', (SELECT pg_catalog.count(*)::integer FROM active_jobs WHERE job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'),
+      'invalid_source_job_contract_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM active_jobs
+        WHERE job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+          AND (
+            COALESCE(payload_json->>'authority_fingerprint_version', '') <> '3'
+            OR COALESCE(payload_json->>'authority_fingerprint', '') !~ '^[0-9a-f]{64}$'
+            OR COALESCE(payload_json->>'required_physical_publication_contract_version', '') <> '1'
+          )
+      ),
+      'active_build_count', (SELECT pg_catalog.count(*)::integer FROM active_builds),
+      'invalid_active_build_contract_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM active_builds
+        WHERE authority_fingerprint_version IS DISTINCT FROM 3
+          OR authority_fingerprint IS NULL
+          OR COALESCE((attestation_json->>'required_physical_publication_contract_version')::integer, 0) <> 1
+      ),
+      'source_identity_write_enabled', settings_row.banking_pay_source_publication_identity_write_v1_enabled,
+      'source_identity_enforce_enabled', settings_row.banking_pay_source_publication_identity_enforce_v1_enabled,
+      'same_authority_election_enabled', settings_row.banking_pay_same_authority_build_election_v1_enabled
+    )::text
+    FROM public.settings_defaults AS settings_row
+    WHERE settings_row.id = 1
   `).value;
 }
 
@@ -608,6 +863,29 @@ function installRepositoryReconciliationEnvelope(target) {
     ]);
   } finally {
     runDocker(target.container, ['rm', '-f', containerPath], { allowFailure: true });
+  }
+}
+
+function installCancelReturnSelectionIntent(target) {
+  for (const sourcePath of CANCEL_RETURN_SELECTION_INTENT_SOURCES) {
+    const containerPath = `/tmp/${path.basename(sourcePath)}`;
+    const copied = spawnSync('docker', ['cp', sourcePath, `${target.container}:${containerPath}`], {
+      encoding: 'utf8',
+      windowsHide: true
+    });
+    if (copied.status !== 0) {
+      throw new Error([copied.stdout, copied.stderr].filter(Boolean).join('\n'));
+    }
+    try {
+      runDocker(target.container, [
+        'env',
+        'PGOPTIONS=-c statement_timeout=15s -c lock_timeout=1500ms -c idle_in_transaction_session_timeout=30s -c jit=off',
+        'psql', '-U', 'postgres', '-d', target.database,
+        '-X', '-v', 'ON_ERROR_STOP=1', '-f', containerPath
+      ]);
+    } finally {
+      runDocker(target.container, ['rm', '-f', containerPath], { allowFailure: true });
+    }
   }
 }
 
@@ -909,6 +1187,7 @@ function establishProductionShapedWorkbenchSource(target, batchId) {
             margin_ex_vat = 0,
             worked_start_iso = (v_work_date::text || 'T08:00:00Z')::timestamptz,
             worked_end_iso = (v_work_date::text || 'T09:00:00Z')::timestamptz,
+            break_minutes = 0,
             actual_schedule_json = pg_catalog.jsonb_build_object(
               'date', v_work_date::text,
               'start', '08:00',
@@ -916,6 +1195,11 @@ function establishProductionShapedWorkbenchSource(target, batchId) {
               'break_minutes', 0
             ),
             actual_minutes_by_day_json = pg_catalog.jsonb_build_object(v_work_date::text, 60),
+            -- The persisted scale source is a DAILY fixture. Its exact original
+            -- breakdown was {}, so restoring {} deliberately selects the
+            -- installed DAILY fallback after the earlier no-work normalization.
+            -- An empty SEGMENTS envelope would suppress the genuine TS_DAY row.
+            invoice_breakdown_json = '{}'::jsonb,
             updated_at = pg_catalog.clock_timestamp()
         WHERE financial_row.timesheet_id = v_row.timesheet_id
           AND financial_row.is_current IS TRUE
@@ -924,6 +1208,8 @@ function establishProductionShapedWorkbenchSource(target, batchId) {
         UPDATE public.timesheets AS timesheet_row
         SET worked_start_iso = (v_work_date::text || 'T08:00:00Z')::timestamptz,
             worked_end_iso = (v_work_date::text || 'T09:00:00Z')::timestamptz,
+            break_minutes = 0,
+            worked_minutes = 60,
             actual_schedule_json = pg_catalog.jsonb_build_object(
               'date', v_work_date::text,
               'start', '08:00',
@@ -943,6 +1229,130 @@ function establishProductionShapedWorkbenchSource(target, batchId) {
     END;
     $h2_production_source$;
   `);
+}
+
+function assertProductionShapedWorkbenchComponents(target, batchId) {
+  const proof = queryJson(target, `
+    WITH batch_scope AS (
+      SELECT DISTINCT
+        batch_row.source_workbench_session_id AS session_id,
+        candidate_row.candidate_id,
+        item_row.timesheet_id
+      FROM public.pay_batches AS batch_row
+      JOIN public.pay_batch_candidates AS candidate_row
+        ON candidate_row.pay_batch_id = batch_row.id
+      JOIN public.pay_batch_items AS item_row
+        ON item_row.pay_batch_candidate_id = candidate_row.id
+      WHERE batch_row.id = '${batchId}'::uuid
+        AND item_row.timesheet_id IS NOT NULL
+        AND COALESCE(item_row.is_voided, false) IS FALSE
+    ), current_builds AS (
+      SELECT DISTINCT
+        batch_scope.candidate_id,
+        build_row.id AS build_id
+      FROM batch_scope
+      JOIN public.banking_pay_workbench_session_scope AS scope_row
+        ON scope_row.session_id = batch_scope.session_id
+       AND scope_row.candidate_id = batch_scope.candidate_id
+      JOIN private.banking_pay_workbench_economic_builds AS build_row
+        ON build_row.session_id = batch_scope.session_id
+       AND build_row.candidate_id = batch_scope.candidate_id
+       AND build_row.source_build_run_id = scope_row.certified_preview_publication_source_build_run_id
+      WHERE build_row.status = 'COMPLETE'
+    ), components AS (
+      SELECT current_builds.candidate_id, component_row.*
+      FROM current_builds
+      CROSS JOIN LATERAL private.pay_current_timesheet_entitlement_components_from_build_v1(
+        current_builds.build_id,
+        NULL::text
+      ) AS component_row
+    ), expected_adjustments AS (
+      SELECT
+        batch_scope.candidate_id,
+        adjustment_row.timesheet_id,
+        adjustment_row.id::text AS adjustment_id,
+        adjustment_row.delta_pay_ex_vat
+      FROM batch_scope
+      JOIN public.ts_pay_adjustments AS adjustment_row
+        ON adjustment_row.timesheet_id = batch_scope.timesheet_id
+       AND adjustment_row.candidate_id = batch_scope.candidate_id
+    )
+    SELECT pg_catalog.jsonb_build_object(
+      'expected_timesheet_count', (SELECT pg_catalog.count(*)::integer FROM batch_scope),
+      'complete_build_candidate_count', (SELECT pg_catalog.count(*)::integer FROM current_builds),
+      'expected_candidate_count', (SELECT pg_catalog.count(DISTINCT candidate_id)::integer FROM batch_scope),
+      'invalid_production_source_shape_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM batch_scope
+        JOIN public.timesheets AS timesheet_row
+          ON timesheet_row.timesheet_id = batch_scope.timesheet_id
+         AND timesheet_row.is_current IS TRUE
+        JOIN public.timesheets_financials AS financial_row
+          ON financial_row.timesheet_id = batch_scope.timesheet_id
+         AND financial_row.candidate_id = batch_scope.candidate_id
+         AND financial_row.is_current IS TRUE
+         AND financial_row.is_stale IS NOT TRUE
+        WHERE timesheet_row.worked_minutes IS DISTINCT FROM 60
+          OR timesheet_row.break_minutes IS DISTINCT FROM 0
+          OR financial_row.total_hours IS DISTINCT FROM 1.00
+          OR financial_row.hours_day IS DISTINCT FROM 1.00
+          OR financial_row.total_pay_ex_vat IS DISTINCT FROM 1.00
+          OR financial_row.total_charge_ex_vat IS DISTINCT FROM 1.00
+          OR financial_row.margin_ex_vat IS DISTINCT FROM 0.00
+          OR financial_row.break_minutes IS DISTINCT FROM 0
+          OR financial_row.invoice_breakdown_json IS DISTINCT FROM '{}'::jsonb
+      ),
+      'ts_day_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM components
+        JOIN batch_scope USING(candidate_id, timesheet_id)
+        WHERE components.key_type = 'TS_DAY'
+      ),
+      'invalid_ts_day_amount_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM components
+        JOIN batch_scope USING(candidate_id, timesheet_id)
+        WHERE components.key_type = 'TS_DAY'
+          AND components.truth_ex_vat IS DISTINCT FROM 1.00
+      ),
+      'ts_total_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM components
+        JOIN batch_scope USING(candidate_id, timesheet_id)
+        WHERE components.key_type = 'TS_TOTAL'
+      ),
+      'expected_adjustment_count', (SELECT pg_catalog.count(*)::integer FROM expected_adjustments),
+      'matched_adjustment_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM expected_adjustments
+        JOIN components
+          ON components.candidate_id = expected_adjustments.candidate_id
+         AND components.timesheet_id = expected_adjustments.timesheet_id
+         AND components.key_type = 'ADJUSTMENT_CODE'
+         AND components.key_value = expected_adjustments.adjustment_id
+      ),
+      'invalid_adjustment_amount_count', (
+        SELECT pg_catalog.count(*)::integer
+        FROM expected_adjustments
+        JOIN components
+          ON components.candidate_id = expected_adjustments.candidate_id
+         AND components.timesheet_id = expected_adjustments.timesheet_id
+         AND components.key_type = 'ADJUSTMENT_CODE'
+         AND components.key_value = expected_adjustments.adjustment_id
+        WHERE components.truth_ex_vat IS DISTINCT FROM expected_adjustments.delta_pay_ex_vat
+      )
+    )::text
+  `).value;
+  assert.ok(proof.expected_timesheet_count > 0, JSON.stringify(proof));
+  assert.equal(proof.complete_build_candidate_count, proof.expected_candidate_count, JSON.stringify(proof));
+  assert.equal(proof.invalid_production_source_shape_count, 0, JSON.stringify(proof));
+  assert.equal(proof.ts_day_count, proof.expected_timesheet_count, JSON.stringify(proof));
+  assert.equal(proof.invalid_ts_day_amount_count, 0, JSON.stringify(proof));
+  assert.equal(proof.ts_total_count, 0, JSON.stringify(proof));
+  assert.ok(proof.expected_adjustment_count > 0, JSON.stringify(proof));
+  assert.equal(proof.matched_adjustment_count, proof.expected_adjustment_count, JSON.stringify(proof));
+  assert.equal(proof.invalid_adjustment_amount_count, 0, JSON.stringify(proof));
+  return proof;
 }
 
 function establishCurrentWorkbenchAuthority(target, batchId) {
@@ -1465,6 +1875,23 @@ function readCancellationWorkbenchCurrentness(target, batchId, allowActiveOwner 
   `).value;
 }
 
+function assertCancellationWorkbenchPreScheduleInvariant(target, batchId) {
+  const scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+  const currentness = readCancellationWorkbenchCurrentness(target, batchId, false);
+  assert.equal(scheduling.source_identity_write_enabled, true, JSON.stringify(scheduling));
+  assert.equal(scheduling.source_identity_enforce_enabled, true, JSON.stringify(scheduling));
+  assert.equal(scheduling.same_authority_election_enabled, true, JSON.stringify(scheduling));
+  assert.equal(scheduling.invalid_source_job_contract_count, 0, JSON.stringify(scheduling));
+  assert.equal(scheduling.invalid_active_build_contract_count, 0, JSON.stringify(scheduling));
+  assert.equal(scheduling.active_normal_job_count, 0, JSON.stringify(scheduling));
+  assert.equal(scheduling.active_source_job_count, 0, JSON.stringify(scheduling));
+  assert.equal(scheduling.active_job_count, 0, JSON.stringify(scheduling));
+  assert.equal(scheduling.active_build_count, 0, JSON.stringify(scheduling));
+  assert.equal(currentness.all_terminal_current, true, JSON.stringify(currentness));
+  assert.equal(currentness.terminal_current_count, currentness.candidate_count, JSON.stringify(currentness));
+  return { scheduling, currentness, safe_to_schedule: true };
+}
+
 function drainCancellationWorkbenchSourceBuilds(target, batchId) {
   const scope = queryJson(target, `
     SELECT pg_catalog.jsonb_build_object(
@@ -1485,57 +1912,145 @@ function drainCancellationWorkbenchSourceBuilds(target, batchId) {
     'WORKBENCH_CANDIDATE_LINE_WORK_SEED',
     'WORKBENCH_CANDIDATE_LINE_WORK_PROCESS',
     'WORKBENCH_PREVIEW_ROWS_MATERIALISE',
-    'CONTRACT_CLIENT_DIRTY_FANOUT'
+    'CONTRACT_CLIENT_DIRTY_FANOUT',
+    'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+    'WORKBENCH_SCOPE_RECONCILE'
   ]::text[]`;
   const safeSteps = [];
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    const currentness = readCancellationWorkbenchCurrentness(target, batchId, false);
-    if (currentness.all_terminal_current === true) {
-      return { currentness, safe_steps: safeSteps, iteration_count: iteration };
+  for (const candidateId of scope.candidate_ids) {
+    const dirtyRepair = queryJson(target, `
+      SELECT public.pay_workbench_repair_invalid_dirty_apply_jobs_v1(
+        '${scope.session_id}'::uuid,
+        '${candidateId}'::uuid,
+        10,
+        'H2_CANCEL_WORKBENCH_INVALID_DIRTY_APPLY_CANONICAL_REPAIR'
+      )::text
+    `).value;
+    assert.equal(dirtyRepair.ok, true, JSON.stringify(dirtyRepair));
+    assert.equal(Number(dirtyRepair.failed_count || 0), 0, JSON.stringify(dirtyRepair));
+    assert.equal(Number(dirtyRepair.remaining_invalid_unrepaired_count || 0), 0, JSON.stringify(dirtyRepair));
+    assert.equal(dirtyRepair.all_state_transitions_proven, true, JSON.stringify(dirtyRepair));
+    safeSteps.push({
+      candidate_id: candidateId,
+      route: 'PRECLAIM_INVALID_DIRTY_REPAIR',
+      ok: true,
+      processed: Number(dirtyRepair.repaired_candidate_count || 0),
+      result_code: null
+    });
+
+    const sourceRepair = queryJson(target, `
+      SELECT public.pay_workbench_repair_invalid_source_authority_jobs_v1(
+        '${scope.session_id}'::uuid,
+        '${candidateId}'::uuid,
+        10,
+        'H2_CANCEL_WORKBENCH_INVALID_SOURCE_AUTHORITY_OWNER_REPAIR'
+      )::text
+    `).value;
+    assert.equal(sourceRepair.ok, true, JSON.stringify(sourceRepair));
+    assert.equal(Number(sourceRepair.failed_count || 0), 0, JSON.stringify(sourceRepair));
+    assert.equal(Number(sourceRepair.remaining_invalid_active_count || 0), 0, JSON.stringify(sourceRepair));
+    assert.equal(sourceRepair.all_state_transitions_proven, true, JSON.stringify(sourceRepair));
+    safeSteps.push({
+      candidate_id: candidateId,
+      route: 'PRECLAIM_INVALID_SOURCE_REPAIR',
+      ok: true,
+      processed: Number(sourceRepair.repaired_candidate_count || 0),
+      result_code: null
+    });
+  }
+  for (let iteration = 0; iteration < 120; iteration += 1) {
+    let scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+    let currentness = readCancellationWorkbenchCurrentness(target, batchId, true);
+    if (scheduling.active_job_count === 0
+        && scheduling.active_build_count === 0
+        && currentness.all_terminal_current === true) {
+      const preScheduleInvariant = assertCancellationWorkbenchPreScheduleInvariant(target, batchId);
+      return {
+        currentness: preScheduleInvariant.currentness,
+        pre_schedule_invariant: preScheduleInvariant,
+        safe_steps: safeSteps,
+        iteration_count: iteration
+      };
     }
     let claimedThisIteration = 0;
     let scanProgressThisIteration = 0;
-    let dirtyProgressThisIteration = 0;
-    for (const candidateId of scope.candidate_ids) {
-      // The production aggregate Worker drains the priority dirty lane before
-      // attempting ordinary stage work. Cancellation-created dirty jobs are
-      // deliberately global (session_id NULL), so the faithful scheduled-worker
-      // invocation must not apply a session filter here. Candidate filtering
-      // keeps this rollback fixture bounded to the Draft under test.
-      const dirtyDrain = queryJson(target, `
-        SELECT public.pay_workbench_worker_drain_chunk_revalidated_v1(
-          1,
-          clock_timestamp(),
-          NULL::uuid,
-          '${candidateId}'::uuid,
-          ${normalJobTypesSql},
-          '${workerId}:NORMAL',
-          180
-        )::text
-      `).value;
-      assert.equal(dirtyDrain.ok, true, JSON.stringify({
-        code: 'H2_CANCEL_WORKBENCH_DIRTY_DRAIN_FAILED',
-        candidate_id: candidateId,
-        result: dirtyDrain
-      }));
-      const dirtyMadeProgress = dirtyDrain.dirty_priority_made_progress === true
-        || Number(dirtyDrain.dirty_priority_jobs_processed || 0) > 0;
-      if (dirtyMadeProgress) dirtyProgressThisIteration += 1;
-      safeSteps.push({
-        candidate_id: candidateId,
-        route: 'DIRTY_PRIORITY',
-        ok: dirtyDrain.ok === true,
-        processed: Number(dirtyDrain.dirty_priority_jobs_processed || 0),
-        remaining: Number(dirtyDrain.dirty_priority_jobs_remaining || 0),
-        result_code: dirtyDrain.stop_reason || null
-      });
+    let normalProgressThisIteration = 0;
 
+    // Match the production aggregate Worker: drain all normal/dirty work for
+    // the complete batch Candidate set to quiescence before entering the
+    // bounded source-build lane. Never alternate one normal call and one
+    // source claim for the same Candidate.
+    for (let normalSweep = 0; normalSweep < 160; normalSweep += 1) {
+      scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+      if (scheduling.active_normal_job_count === 0) break;
+      const activeNormalBefore = scheduling.active_normal_job_count;
+      let sweepMadeProgress = false;
+      for (const candidateId of scope.candidate_ids) {
+        const normalDrain = queryJson(target, `
+          SELECT public.pay_workbench_worker_drain_chunk_revalidated_v1(
+            1,
+            clock_timestamp(),
+            NULL::uuid,
+            '${candidateId}'::uuid,
+            ${normalJobTypesSql},
+            '${workerId}:NORMAL',
+            180
+          )::text
+        `).value;
+        assert.equal(normalDrain.ok, true, JSON.stringify({
+          code: 'H2_CANCEL_WORKBENCH_NORMAL_DRAIN_FAILED',
+          candidate_id: candidateId,
+          result: normalDrain
+        }));
+        const processed = Number(normalDrain.processed || normalDrain.jobs_processed || 0)
+          + Number(normalDrain.dirty_priority_jobs_processed || 0);
+        const madeProgress = normalDrain.dirty_priority_made_progress === true
+          || normalDrain.made_progress === true
+          || processed > 0;
+        if (madeProgress) {
+          sweepMadeProgress = true;
+          normalProgressThisIteration += 1;
+        }
+        safeSteps.push({
+          candidate_id: candidateId,
+          route: 'NORMAL',
+          normal_sweep: normalSweep + 1,
+          ok: normalDrain.ok === true,
+          processed,
+          remaining: Number(normalDrain.dirty_priority_jobs_remaining || 0),
+          result_code: normalDrain.stop_reason || null
+        });
+      }
+      scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+      if (scheduling.active_normal_job_count === 0) break;
+      assert.ok(sweepMadeProgress || scheduling.active_normal_job_count < activeNormalBefore, JSON.stringify({
+        code: 'H2_CANCEL_WORKBENCH_NORMAL_DRAIN_NO_PROGRESS',
+        scheduling,
+        safe_steps: safeSteps.slice(-scope.candidate_ids.length)
+      }));
+      if (normalSweep === 159) {
+        assert.fail(JSON.stringify({
+          code: 'H2_CANCEL_WORKBENCH_NORMAL_DRAIN_LIMIT_EXCEEDED',
+          scheduling
+        }));
+      }
+    }
+
+    scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+    assert.equal(scheduling.active_normal_job_count, 0, JSON.stringify({
+      code: 'H2_CANCEL_WORKBENCH_SOURCE_LANE_BLOCKED_BY_NORMAL_WORK',
+      scheduling
+    }));
+    assert.equal(scheduling.invalid_source_job_contract_count, 0, JSON.stringify(scheduling));
+
+    for (const candidateId of scope.candidate_ids) {
       const claim = queryJson(target, `
         SELECT public.pay_workbench_source_build_attempt_claim_start_v1(
           '${workerId}', '${laneId}', 25, NULL::timestamptz,
           '${scope.session_id}'::uuid, '${candidateId}'::uuid
         )::text
       `).value;
+      assert.equal(claim.ok, true, JSON.stringify(claim));
       if (claim.claimed !== true) {
         if (claim.scan_progress === true) {
           scanProgressThisIteration += 1;
@@ -1592,9 +2107,13 @@ function drainCancellationWorkbenchSourceBuilds(target, batchId) {
       });
       assert.equal(execution.ok, true, JSON.stringify(safeSteps.at(-1)));
     }
-    assert.ok(dirtyProgressThisIteration > 0 || claimedThisIteration > 0 || scanProgressThisIteration > 0, JSON.stringify({
+    currentness = readCancellationWorkbenchCurrentness(target, batchId, true);
+    scheduling = readCancellationWorkbenchSchedulingState(target, batchId);
+    assert.ok(normalProgressThisIteration > 0 || claimedThisIteration > 0 || scanProgressThisIteration > 0
+      || (scheduling.active_job_count === 0 && scheduling.active_build_count === 0 && currentness.all_terminal_current === true), JSON.stringify({
       code: 'H2_CANCEL_WORKBENCH_DRAIN_NO_PROGRESS',
       currentness,
+      scheduling,
       safe_steps: safeSteps
     }));
   }
@@ -1752,25 +2271,23 @@ function runCancellation(target, channel, batchId) {
     'SCHEDULED_FAILED_NO_MONEY'
   ].includes(paymentState), `unknown H2_CANCEL_PAYMENT_STATE ${paymentState}`);
   if (paymentState !== 'DRAFT') assert.equal(cancellationScope, 'ONE_CANDIDATE');
-  let productionShapeActiveJobIsolation = null;
+  let productionShapeWorkbenchConvergence = null;
+  let productionShapeComponentProof = null;
   if (String(process.env.H2_CANCEL_PRODUCTION_SHAPED_SOURCE || '').trim().toLowerCase() === 'true') {
     establishProductionShapedWorkbenchSource(target, batchId);
-    // Shaping the old scale-only oracle deliberately fires the real dirty
-    // triggers. Those setup jobs are not cancellation work and must not be
-    // allowed to advance the source generation after the certified current
-    // baseline below has been sealed.
-    productionShapeActiveJobIsolation = clearPreexistingCancellationWorkbenchJobs(target);
+    productionShapeWorkbenchConvergence = drainCancellationWorkbenchSourceBuilds(target, batchId);
+    productionShapeComponentProof = assertProductionShapedWorkbenchComponents(target, batchId);
   }
-  const currentnessBefore = String(process.env.H2_CANCEL_ESTABLISH_CURRENT_SOURCE || '').trim().toLowerCase() === 'true'
+  const establishedCurrentness = String(process.env.H2_CANCEL_ESTABLISH_CURRENT_SOURCE || '').trim().toLowerCase() === 'true'
     ? establishCurrentWorkbenchAuthority(target, batchId)
     : null;
-  // The synthetic certification writes exercise the real source-line dirty
-  // triggers. Once terminal-current has been proved, discard only those
-  // setup-created active jobs so the later drain is attributable solely to
-  // the cancellation under test.
-  const certifiedBaselineActiveJobIsolation = currentnessBefore
-    ? clearPreexistingCancellationWorkbenchJobs(target)
+  const certifiedBaselineWorkbenchConvergence = establishedCurrentness
+    ? drainCancellationWorkbenchSourceBuilds(target, batchId)
     : null;
+  const currentnessBefore = certifiedBaselineWorkbenchConvergence?.currentness
+    || productionShapeWorkbenchConvergence?.currentness
+    || establishedCurrentness;
+  const preScheduleWorkbenchInvariant = assertCancellationWorkbenchPreScheduleInvariant(target, batchId);
   // A real scheduled execution seals its unsent-overlay proof against the
   // already-current Workbench authority inherited from the frozen Draft.
   // Prepare the scheduled payment only after that authority is current, and
@@ -2176,11 +2693,11 @@ function runCancellation(target, channel, batchId) {
   if (!workbenchDrain && String(process.env.H2_CANCEL_DRAIN_WORKBENCH || '').trim().toLowerCase() === 'true') {
     workbenchDrain = drainCancellationWorkbenchSourceBuilds(target, batchId);
   }
-  if (workbenchDrain && productionShapeActiveJobIsolation) {
-    workbenchDrain.production_shape_active_job_isolation = productionShapeActiveJobIsolation;
+  if (workbenchDrain && productionShapeWorkbenchConvergence) {
+    workbenchDrain.production_shape_workbench_convergence = productionShapeWorkbenchConvergence;
   }
-  if (workbenchDrain && certifiedBaselineActiveJobIsolation) {
-    workbenchDrain.certified_baseline_active_job_isolation = certifiedBaselineActiveJobIsolation;
+  if (workbenchDrain && certifiedBaselineWorkbenchConvergence) {
+    workbenchDrain.certified_baseline_workbench_convergence = certifiedBaselineWorkbenchConvergence;
   }
 
   const after = queryJson(target, `
@@ -2473,6 +2990,8 @@ function runCancellation(target, channel, batchId) {
     normalized,
     scheduled_preparation: scheduledPreparation,
     currentness_before: currentnessBefore,
+    production_shape_component_proof: productionShapeComponentProof,
+    pre_schedule_workbench_invariant: preScheduleWorkbenchInvariant,
     workbench_drain: workbenchDrain,
     digest_sha256: sha256(normalized),
     operation_iteration_count: iteration,
@@ -2486,7 +3005,6 @@ function runTarget(target) {
   cloneDatabase(target);
   try {
     const scaleFinancialNormalization = normalizeCancellationScaleFinancials(target);
-    const preexistingWorkbenchIsolation = clearPreexistingCancellationWorkbenchJobs(target);
     // The long-lived disposable source snapshot predates the repository's
     // controlled reconciliation envelope. Install that immutable authority in
     // the clone so a cancellation-return test reaches reconciliation instead
@@ -2512,6 +3030,10 @@ function runTarget(target) {
       const routeHandoffCandidateInstalled = String(process.env.H2_CANCEL_APPLY_ROUTE_HANDOFF || '').trim().toLowerCase() === 'true';
       if (routeHandoffCandidateInstalled) installCorrectionRouteHandoffCandidate(target);
     }
+    const cancelReturnSelectionIntentInstalled = String(
+      process.env.H2_CANCEL_APPLY_RETURN_SELECTION_INTENT || ''
+    ).trim().toLowerCase() === 'true';
+    if (cancelReturnSelectionIntentInstalled) installCancelReturnSelectionIntent(target);
     const setPageEnabled = String(process.env.H2_CANCEL_SET_PAGE || '').trim().toLowerCase() === 'true';
     execSql(target, `
       UPDATE public.settings_defaults
@@ -2525,7 +3047,10 @@ function runTarget(target) {
           banking_pay_workbench_semantic_ready_observe_v2_enabled = true,
           banking_pay_workbench_semantic_ready_publication_v3_enabled = true,
           banking_pay_workbench_semantic_ready_draft_guard_v2_enabled = true,
-          banking_pay_selection_intent_identity_v1_enabled = true
+          banking_pay_selection_intent_identity_v1_enabled = true,
+          banking_pay_source_publication_identity_write_v1_enabled = true,
+          banking_pay_source_publication_identity_enforce_v1_enabled = true,
+          banking_pay_same_authority_build_election_v1_enabled = true
       WHERE id = 1
     `);
     const requestedChannel = String(process.env.H2_CANCEL_CHANNEL || '').trim().toUpperCase();
@@ -2538,11 +3063,17 @@ function runTarget(target) {
       'IMMEDIATE_FAILED_NO_MONEY',
       'SCHEDULED_FAILED_NO_MONEY'
     ].includes(paymentState));
+    const preexistingWorkbenchConvergence = Object.fromEntries(
+      channels.map((channel) => [
+        channel,
+        drainCancellationWorkbenchSourceBuilds(target, target.batches[channel])
+      ])
+    );
     const scheduledPreparation = {};
     const results = {
-      _fixture_isolation: {
+      _fixture_convergence: {
         ...scaleFinancialNormalization,
-        ...preexistingWorkbenchIsolation
+        workbench: preexistingWorkbenchConvergence
       },
       _payment_state_fixture: {
         payment_state: paymentState,
@@ -2628,6 +3159,7 @@ if (requestedTarget) {
     replacement_installed: String(process.env.H2_CANCEL_APPLY_REPLACEMENT || '').trim().toLowerCase() === 'true',
     bank_event_classification_constraint_installed: String(process.env.H2_CANCEL_APPLY_BANK_EVENT_CLASSIFICATION || '').trim().toLowerCase() === 'true',
     no_money_unwind_result_arity_installed: String(process.env.H2_CANCEL_APPLY_NO_MONEY_RESULT_ARITY || '').trim().toLowerCase() === 'true',
+    cancel_return_selection_intent_installed: String(process.env.H2_CANCEL_APPLY_RETURN_SELECTION_INTENT || '').trim().toLowerCase() === 'true',
     set_page_enabled: String(process.env.H2_CANCEL_SET_PAGE || '').trim().toLowerCase() === 'true',
     results: compactOutput
       ? Object.fromEntries(Object.entries(targetResults).map(([channel, result]) => [channel, result.normalized

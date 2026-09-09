@@ -66,18 +66,19 @@ test('v2 installs the complete additive Banking Pay modal contract', () => {
 test('general browser isolation inventory admits only the current service RPC boundary', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '22082026_1302_general_browser_isolation_verification.sql'));
-  assert.match(verification, /v_count<>689 or v_service_missing<>74 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'90f0a040daf55d8afb1fb61d4776cef0'/);
-  assert.doesNotMatch(verification, /v_count<>682 or v_service_missing<>74/);
+  assert.match(verification, /v_count<>691 or v_service_missing<>74 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'d3486b9d3f1047897840a94cc917ba8e'/);
+  assert.doesNotMatch(verification, /v_count<>690 or v_service_missing<>74 or v_browser_executable<>0/);
+  assert.doesNotMatch(verification, /v_hash<>'eb2e346231dc5e0fc6be4d1a4cf2546b'/);
 });
 
 test('Candidate-named isolation inventory remains at the current proved boundary', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '27082026_1947_candidate_named_security_verification_v3.sql'));
-  assert.match(verification, /v_count<>125 or v_service_missing<>8 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'84575ef2d02293ecda5bf871a7359179'/);
-  assert.doesNotMatch(verification, /v_count<>124 or v_service_missing<>8 or v_browser_executable<>0/);
-  assert.doesNotMatch(verification, /v_hash<>'390cec48151731c4346e701cf48940ae'/);
+  assert.match(verification, /v_count<>153 or v_service_missing<>9 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'09776a03e437813978671677fa90a4e0'/);
+  assert.doesNotMatch(verification, /v_count<>125 or v_service_missing<>8 or v_browser_executable<>0/);
+  assert.doesNotMatch(verification, /v_hash<>'84575ef2d02293ecda5bf871a7359179'/);
 });
 
 test('v2 summary is server-owned, selected-only and keyset paged before the browser', () => {

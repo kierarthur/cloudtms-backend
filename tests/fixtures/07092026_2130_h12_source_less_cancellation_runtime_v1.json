@@ -1,0 +1,806 @@
+{
+  "artifact": "H12_SOURCE_LESS_CANCELLATION_RUNTIME_MATRIX_V1",
+  "source_head": "34d073fef04c365fc0c557f881b749ce88a7e7d7",
+  "mode": "TASK_OWNED_DISPOSABLE_DATABASE_ROLLBACK_OR_CLONE_ONLY",
+  "runtime_authority": "MIGET_TEST_NOT_MUTATED_OR_CLAIMED",
+  "immutable_prechange_mail_fixture": {
+    "path": "tests/07092026_1700_h12_unpaid_cancellation_unsafe_mail_prechange_runtime.sql",
+    "sha256": "492959d64126156839e21503f0fc39145f1cc713f6c3f3a1742ed7e37e37e95f",
+    "bytes": 36766,
+    "status": "READ_ONLY_PRECHANGE_RED_EVIDENCE_NOT_COPIED_OR_EDITED"
+  },
+  "policy_boundary": {
+    "cancellation_scope": [
+      "ENTIRE_CANDIDATE_PAYMENT",
+      "ENTIRE_DRAFT_OR_RUN"
+    ],
+    "confirmed_unpaid_cancellation_must_complete": true,
+    "ambiguous_adjustment_automatic_carry_forward": false,
+    "ambiguous_adjustment_future_economics_inferred": false,
+    "exact_frozen_facts_preserved_for_investigation": true,
+    "existing_banking_alert_required": true,
+    "mail_can_veto_cancellation": false,
+    "policy_x_source": "FROZEN_DRAFT_ITEMS_AND_CORRECTION_MEMBERSHIP",
+    "timeout_relaxation": false
+  },
+  "matrix": {
+    "logical_case_count": 40,
+    "physical_run_count": 16,
+    "packing_rule": "Each physical engine/route/scope/channel run carries every source-proved active ambiguity reason for that channel together: three for PAYE and two for Umbrella. This proves all 40 active logical cells without manufacturing an Umbrella missing-payee shape that the current detector correctly resolves from other authoritative context.",
+    "axes": {
+      "engines": [
+        "PG17",
+        "PG18"
+      ],
+      "routes": [
+        "PRE_BANK",
+        "NO_MONEY"
+      ],
+      "scopes": [
+        "ONE_CANDIDATE",
+        "WHOLE_DRAFT"
+      ],
+      "reasons": [
+        "MISSING_AMOUNT_INC_VAT",
+        "ZERO_AMOUNT",
+        "MISSING_AMOUNT_EX_VAT",
+        "MISSING_AMOUNT_VAT",
+        "MISSING_DESCRIPTION"
+      ]
+    },
+    "route_environment": {
+      "PRE_BANK": "DRAFT",
+      "NO_MONEY": "SCHEDULED_FAILED_NO_MONEY"
+    },
+    "scope_environment": {
+      "ONE_CANDIDATE": "ONE_CANDIDATE",
+      "WHOLE_DRAFT": "WHOLE_BATCH"
+    }
+  },
+  "execution_manifest": {
+    "status": "READY_AWAITING_FROZEN_COHORT_HASHES_AND_INDEPENDENT_REVIEW_PASS",
+    "runner": "scripts/verify-banking-pay-source-less-cancellation-v1.mjs",
+    "mode": "CANDIDATE_GREEN",
+    "command_group_count": 8,
+    "physical_run_count": 16,
+    "logical_case_count": 40,
+    "maximum_command_wall_time_ms": 900000,
+    "active_historical_request_runtime_cases": 0,
+    "historical_compatibility_evidence": "STATIC_NON_REINTERPRETATION_AND_ZERO_ACTIVE_RELEASE_PRECONDITION_ONLY",
+    "candidate_sql_paths_in_install_order": [
+      "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
+      "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+      "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+      "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+      "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+      "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql",
+      "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql",
+      "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql",
+      "supabase/repeatable/07092026_1933_banking_pay_unpaid_cancellation_investigation_alert_v1.sql",
+      "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql",
+      "supabase/repeatable/07092026_2136_banking_pay_unpaid_cancellation_sourceless_admission_v1.sql",
+      "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+      "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+      "supabase/repeatable/08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql",
+      "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+      "supabase/repeatable/08092026_0804_pay_workbench_scope_invalidate_pair_arrays_v1.sql",
+      "supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql",
+      "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql",
+      "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql"
+    ],
+    "preflight": [
+      "All candidate SQL files exist and each SHA-256 is captured immediately before the command.",
+      "The 0517/0518/0519 cohort set plus the 0804/0805/0806/0807 invalidator correction have explicit NO EDIT IN FLIGHT signals and independent PG17/PG18 PASS before this matrix starts.",
+      "The generated runner parses for PG17 and PG18 before any database clone is created.",
+      "The selected command describes exactly two packed physical routes and five logical cells.",
+      "Task-owned template and target database names are unique and no other task database is removed.",
+      "The same already-settled baseline owners are installed in red and green.",
+      "No active legacy-request database case is executed.",
+      "Candidate SQL SHA-256 values are captured again after the command and must be byte-identical.",
+      "Every owner call keeps its existing statement and lock budget and the command must finish inside fifteen minutes."
+    ],
+    "groups": [
+      {"group_id":"PG17_PRE_BANK_ONE_CANDIDATE","engine":"PG17","route":"PRE_BANK","scope":"ONE_CANDIDATE","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg17","target_database":"h12_rg5_builder_cancel_pg17","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG17_PRE_BANK_WHOLE_DRAFT","engine":"PG17","route":"PRE_BANK","scope":"WHOLE_DRAFT","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg17","target_database":"h12_rg5_builder_cancel_pg17","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG17_NO_MONEY_ONE_CANDIDATE","engine":"PG17","route":"NO_MONEY","scope":"ONE_CANDIDATE","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg17","target_database":"h12_rg5_builder_cancel_pg17","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG17_NO_MONEY_WHOLE_DRAFT","engine":"PG17","route":"NO_MONEY","scope":"WHOLE_DRAFT","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg17","target_database":"h12_rg5_builder_cancel_pg17","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG18_PRE_BANK_ONE_CANDIDATE","engine":"PG18","route":"PRE_BANK","scope":"ONE_CANDIDATE","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg18","target_database":"h12_rg5_builder_cancel_pg18","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG18_PRE_BANK_WHOLE_DRAFT","engine":"PG18","route":"PRE_BANK","scope":"WHOLE_DRAFT","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg18","target_database":"h12_rg5_builder_cancel_pg18","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG18_NO_MONEY_ONE_CANDIDATE","engine":"PG18","route":"NO_MONEY","scope":"ONE_CANDIDATE","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg18","target_database":"h12_rg5_builder_cancel_pg18","result_status":"PENDING_FROZEN_SOURCE"},
+      {"group_id":"PG18_NO_MONEY_WHOLE_DRAFT","engine":"PG18","route":"NO_MONEY","scope":"WHOLE_DRAFT","channels":["PAYE","UMBRELLA"],"physical_runs":2,"logical_cells":5,"template_database":"h12_sourceless_baseline_pg18","target_database":"h12_rg5_builder_cancel_pg18","result_status":"PENDING_FROZEN_SOURCE"}
+    ],
+    "result_contract": {
+      "required_status": "PASS",
+      "request_status": "APPLIED",
+      "operation_status": "COMPLETE",
+      "exact_retry_same_request_and_operation": true,
+      "lost_reply_no_double_effect": true,
+      "competing_claim_no_double_effect": true,
+      "workbench_terminal_current": true,
+      "provider_settlement_remittance_actions": 0,
+      "policy_or_economic_change": false,
+      "timeout_relaxation": false,
+      "source_hashes_unchanged_during_run": true
+    }
+  },
+  "reason_cases": [
+    {
+      "reason": "MISSING_AMOUNT_INC_VAT",
+      "batch_channel": "PAYE",
+      "bad_item_channel": "PAYE",
+      "mutation": "amount_inc_vat=NULL"
+    },
+    {
+      "reason": "MISSING_DESCRIPTION",
+      "batch_channel": "PAYE",
+      "bad_item_channel": "PAYE",
+      "mutation": "description=' '"
+    },
+    {
+      "reason": "ZERO_AMOUNT",
+      "batch_channel": "PAYE",
+      "bad_item_channel": "PAYE",
+      "mutation": "amount_ex_vat=0, amount_vat=0, amount_inc_vat=0"
+    },
+    {
+      "reason": "MISSING_AMOUNT_EX_VAT",
+      "batch_channel": "UMBRELLA",
+      "bad_item_channel": "UMBRELLA",
+      "mutation": "amount_ex_vat=NULL"
+    },
+    {
+      "reason": "MISSING_AMOUNT_VAT",
+      "batch_channel": "UMBRELLA",
+      "bad_item_channel": "UMBRELLA",
+      "mutation": "amount_vat=NULL"
+    }
+  ],
+  "schema_unreachable_detector_guards": [
+    {
+      "reason": "MISSING_CANDIDATE_CONTEXT",
+      "proof": "pay_batch_candidates.candidate_id is NOT NULL and the detector uses an inner candidates join",
+      "handling": "SOURCE_GUARD_ONLY_DO_NOT_WEAKEN_SCHEMA"
+    },
+    {
+      "reason": "UNSUPPORTED_OR_MISSING_PAY_CHANNEL",
+      "proof": "pay_batch_items.pay_channel is NOT NULL and constrained to the accepted channels",
+      "handling": "SOURCE_GUARD_ONLY_DO_NOT_WEAKEN_SCHEMA"
+    },
+    {
+      "reason": "MISSING_UMBRELLA_PAYEE_CONTEXT",
+      "proof": "The detector deliberately resolves effective Umbrella context from four ordered sources: the frozen item, transfer umbrella, current Candidate umbrella, then an Umbrella transfer payee. The failed active fixture nulled only the item field while the Candidate Umbrella remained present, so the row correctly remained safe. The current Draft item owner also rejects a fresh Umbrella row with no resolved payee before insert and otherwise freezes the resolved Umbrella on the item.",
+      "handling": "STATIC_HOSTILE_OR_HISTORY_GUARD_ONLY_UNLESS_ALL_FOUR_SOURCES_ARE_INDEPENDENTLY_PROVED_ABSENT",
+      "active_runtime_matrix": false,
+      "observed_pg17_fixture_trace": {
+        "fixture_candidate_count": 2,
+        "item_umbrella_null_count": 2,
+        "candidate_umbrella_present_count": 2,
+        "transfer_umbrella_present_count": 0,
+        "transfer_payee_present_count": 0,
+        "detector_safe_count_per_candidate": 2,
+        "detector_ambiguous_count_per_candidate": 2,
+        "actual_blockers": [
+          "MISSING_AMOUNT_EX_VAT",
+          "MISSING_AMOUNT_VAT"
+        ],
+        "classification": "FIXTURE_SHAPE_MISMATCH_NOT_DETECTOR_GAP"
+      }
+    }
+  ],
+  "per_target_candidate_fixture": {
+    "ordinary_source_backed_item_count_minimum": 1,
+    "safe_source_less_item_count": 1,
+    "ambiguous_source_less_item_count_per_channel_run": {
+      "PAYE": 3,
+      "UMBRELLA": 2
+    },
+    "safe_paye": {
+      "description": "H12 exact frozen PAYE manual deduction",
+      "amount_ex_vat": "-0.25",
+      "amount_vat": "0.00",
+      "amount_inc_vat": "-0.25",
+      "paye_treatment": "NET_DEDUCT"
+    },
+    "safe_umbrella": {
+      "description": "H12 exact frozen Umbrella manual credit",
+      "amount_ex_vat": "12.00",
+      "amount_vat": "2.40",
+      "amount_inc_vat": "14.40",
+      "paye_treatment": null
+    }
+  },
+  "mail_independence_fixture": {
+    "purpose": "Prove that only a freshly planned request carrying explicit communication-cleanup contract V2 makes email delivery state irrelevant to financial cancellation. Existing V1 and V2/communication-V1 requests retain their exact historical replay semantics.",
+    "rows_per_target_candidate": 4,
+    "states": [
+      {
+        "fixture_kind": "UNSAFE_RELATED_QUEUED",
+        "meaning": "A queued message names the batch and Candidate but lacks an exact frozen payment binding. This is the pre-change veto shape."
+      },
+      {
+        "fixture_kind": "UNSAFE_RELATED_CLAIMED",
+        "meaning": "The same unsafe shape has already been leased by a sender, modelling a claim race without contacting a provider."
+      },
+      {
+        "fixture_kind": "MISMATCHED_QUEUED",
+        "meaning": "A queued message belongs to another synthetic batch and Candidate and must remain unrelated."
+      },
+      {
+        "fixture_kind": "RELATED_SENT",
+        "meaning": "A related message is already sent and must remain historical evidence."
+      }
+    ],
+    "required_after_cancellation": {
+      "every_row_byte_identical": true,
+      "queued_rows_not_failed_or_deleted": true,
+      "claimed_lease_not_cleared_or_reassigned": true,
+      "sent_row_not_rewritten": true,
+      "apply_owner_mail_outbox_reads_or_writes": 0,
+      "provider_or_email_sender_invocations": 0
+    }
+  },
+  "conditional_cancellation_follow_up_contract": {
+    "status": "FROZEN_LOCAL_CANDIDATE_RUNTIME_PROOF_PENDING",
+    "migration_path": "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+    "migration_sha256": "4902b4bf030b41f0e223a5b9db6e00113e0d3320066a8598c42822ea86c13a94",
+    "owner_path": "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+    "owner_sha256": "682445ae51d19f04a82eeae239d2b75e95d477872e703a3bdf1b69b9677b2189",
+    "financial_cancellation_dependency": false,
+    "runs_inside_financial_apply_owner": false,
+    "external_sender_invoked_by_runtime_fixture": false,
+    "original_outbox_business_mail_provider_fields_byte_identical": true,
+    "qualifying_sent_original_permitted_server_diagnostic_columns": [
+      "cancel_notice_tracked",
+      "cancel_notice_reconciled_sent_at_utc",
+      "cancel_notice_next_attempt_at_utc",
+      "cancel_notice_result_code"
+    ],
+    "unrelated_queued_failed_rows_fully_byte_identical": true,
+    "server_diagnostic_columns_change_no_delivery_payment_or_cancellation_fact": true,
+    "one_follow_up_required_only_if": [
+      "the original notice is bound to the exact cancelled batch and Candidate-or-Umbrella/item scope",
+      "the original notice status is SENT",
+      "sent_at is non-null",
+      "provider_status is exactly ACCEPTED",
+      "the original notice is the exact existing Candidate or Umbrella REMITTANCE vocabulary proved by the owner mapping"
+    ],
+    "recipient_rule": "Copy the authoritative original outbox recipient; do not resolve a new recipient.",
+    "deduplication_identity": "PAYMENT_CANCELLATION_NOTICE_V1:<immutable original outbox ID>",
+    "zero_follow_up_cells": [
+      "EXACT_RELATED_QUEUED",
+      "EXACT_RELATED_CLAIMED_NOT_SENT",
+      "EXACT_RELATED_FAILED_OR_LEGACY_CANCELLED_AS_FAILED",
+      "ORIGINAL_NOTICE_ABSENT",
+      "UNRELATED_SENT_OR_QUEUED",
+      "MISMATCHED_BATCH_CANDIDATE_UMBRELLA_OR_ITEM_SCOPE"
+    ],
+    "race_cell": "If the exact original is QUEUED or claimed at financial completion and later becomes authoritatively SENT, the separate producer converges to exactly one follow-up.",
+    "retry_and_lost_reply_maximum_follow_up_count": 1
+  },
+  "communication_contract_compatibility": {
+    "rule": "Deployment never reinterprets a persisted cancellation request. The durable request/work-item marker selects its exact communication behavior.",
+    "total_case_count": 4,
+    "contract_case_count": 3,
+    "cutover_guard_case_count": 1,
+    "contracts": [
+      {
+        "case_id": "LEGACY_V1_EXACT_REPLAY",
+        "candidate_scope_contract_version": 1,
+        "candidate_scope_hash_version": 1,
+        "source_row_count_semantics": "FINANCIAL_AND_QUEUED_COMMUNICATIONS",
+        "communication_cleanup_contract_version": null,
+        "expected_behavior": "EXACT_HISTORICAL_V1_REPLAY",
+        "mail_independent_financial_cancellation": false,
+        "must_not_be_reinterpreted_as_fresh_v2": true
+      },
+      {
+        "case_id": "LEGACY_V2_COMMUNICATION_V1_EXACT_REPLAY",
+        "candidate_scope_contract_version": 2,
+        "candidate_scope_hash_version": 2,
+        "source_row_count_semantics": "FINANCIAL_ONLY",
+        "communication_cleanup_contract_version": 1,
+        "expected_behavior": "EXACT_HISTORICAL_V2_COMMUNICATION_V1_REPLAY",
+        "mail_independent_financial_cancellation": false,
+        "must_not_be_reinterpreted_as_fresh_v2": true
+      },
+      {
+        "case_id": "FRESH_V2_COMMUNICATION_V2_MAIL_INDEPENDENT",
+        "candidate_scope_contract_version": 2,
+        "candidate_scope_hash_version": 2,
+        "source_row_count_semantics": "FINANCIAL_ONLY",
+        "communication_cleanup_contract_version": 2,
+        "expected_behavior": "FINANCIAL_CANCELLATION_IGNORES_AND_DOES_NOT_MUTATE_MAIL",
+        "mail_independent_financial_cancellation": true,
+        "must_be_explicit_on_new_request": true,
+        "mail_states_irrelevant": [
+          "UNSAFE_RELATED_QUEUED",
+          "UNSAFE_RELATED_CLAIMED",
+          "MISMATCHED_QUEUED",
+          "RELATED_SENT"
+        ]
+      }
+    ],
+    "cutover_guard_cells": [
+      {
+        "case_id": "NONTERMINAL_OLD_REQUEST_DETECTED_NOT_REINTERPRETED",
+        "setup": "Persist a nonterminal request under its original V1 or V2/communication-V1 marker before the candidate owners are installed.",
+        "expected_behavior": "The candidate detects and resumes the exact persisted contract. It never assigns communication V2 by deployment date, retry time or missing optional output fields.",
+        "release_safety_evidence_only": true,
+        "ui_retry_claim": false
+      }
+    ],
+    "runtime_proof_required": {
+      "legacy_v1_exact_replay": true,
+      "legacy_v2_communication_v1_exact_replay": true,
+      "fresh_v2_communication_v2_only": true,
+      "persisted_marker_unchanged_on_retry": true,
+      "deployment_date_fallback_forbidden": true,
+      "candidate_paths_pending_exact_source_assignment": true
+    },
+    "release_precondition": {
+      "active_nonterminal_v1_or_v2_communication_v1_request_count": 0,
+      "nonterminal_request_statuses": [
+        "PLANNING",
+        "PLANNED",
+        "REQUESTED",
+        "AWAITING_AUTHORISATION",
+        "AUTHORISED",
+        "EXPANDED",
+        "PROCESSING"
+      ],
+      "nonterminal_linked_payment_correction_operation_statuses": [
+        "QUEUED",
+        "RUNNING",
+        "WAITING",
+        "WAITING_AUTHORISATION",
+        "WAITING_PROVIDER",
+        "REVIEW_REQUIRED"
+      ],
+      "terminal_request_history_statuses": [
+        "APPLIED",
+        "APPLIED_WITH_BLOCKERS",
+        "BLOCKED",
+        "FAILED",
+        "REJECTED",
+        "CANCELLED"
+      ],
+      "terminal_operation_history_statuses": [
+        "COMPLETE",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "unexpected_or_null_status_fails_closed": true,
+      "operation_link": "operation_type=PAYMENT_CORRECTION and input_json.correction_request_id equals the exact request ID",
+      "fail_closed_if_nonzero": true,
+      "release_safety_evidence_only": true,
+      "ui_retry_claim": false
+    }
+  },
+  "integrity_hash_compatibility": {
+    "prechange_first_divergence": "V2 communication-V1 can produce a false SELECTION_HASH_MISMATCH because the integrity checker does not reconstruct the persisted candidate-scope contract exactly.",
+    "required_exact_hash_contracts": [
+      "LEGACY_V1",
+      "LEGACY_V2_COMMUNICATION_V1",
+      "FRESH_V2_COMMUNICATION_V2"
+    ],
+    "invalid_marker_cases": [
+      "MIXED_REQUEST_AND_WORK_ITEM_MARKERS",
+      "MISSING_REQUIRED_FRESH_V2_MARKER",
+      "UNSUPPORTED_CANDIDATE_SCOPE_VERSION",
+      "UNSUPPORTED_COMMUNICATION_CLEANUP_VERSION"
+    ],
+    "invalid_marker_outcome": "FAIL_CLOSED_BEFORE_FINANCIAL_MUTATION",
+    "new_additive_checker_owner_path": "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql",
+    "path_status": "GENERATOR_AUTHENTIC_PATH_ASSIGNED_LOCAL_CANDIDATE_PROOF_PENDING",
+    "payment_policy_scope_expanded": false
+  },
+  "status_page_admission_reconciliation": {
+    "classification": "CURRENT_PAYMENT_STATUS_SOURCE_LESS_CANCELLATION_ACTION_WITHHELD",
+    "current_owner": {
+      "path": "supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql",
+      "source_sha256": "c0f38a0555482ad78021c33ecc398bbaf835f0ae30b3dce9bb396e33c74a7bee",
+      "definition_sha256": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd",
+      "identity": "public.pay_batch_payment_status_page_v1(uuid,uuid,jsonb,text,text,integer,jsonb)",
+      "owner": "postgres",
+      "volatility": "STABLE",
+      "parallel": "RESTRICTED",
+      "security": "DEFINER",
+      "search_path": "pg_catalog, private, extensions, pg_temp",
+      "statement_timeout_ms": 5000,
+      "execute_grantees": [
+        "postgres",
+        "service_role"
+      ],
+      "public_anon_authenticated_execute": false,
+      "sole_repeatable_definition": true
+    },
+    "history": {
+      "manual_carry_forward_veto_introduced_by_commit": "7542f9c0fc05fd31cb9f9151958524a22270cc55",
+      "later_retry_context_commit": "e9aa3b68",
+      "current_owner_remains_historical_and_byte_immutable": true
+    },
+    "current_red": {
+      "manual_source_less_detector": true,
+      "pre_bank": {
+        "canonical_provider_state": "NO_TRANSFER_EVIDENCE",
+        "pre_provider_cancel_eligible": false,
+        "draft_cancel_eligible": false,
+        "payment_display_state": "ACTIVE",
+        "available_actions": [],
+        "first_divergence": "DRAFT_CANCEL_ACTION_WITHHELD"
+      },
+      "terminal_no_money": {
+        "canonical_provider_state": "TERMINAL_NO_MONEY",
+        "release_failed_payment_eligible": false,
+        "is_not_paid": false,
+        "payment_display_state": "BLOCKED",
+        "available_actions": [],
+        "first_divergence": "RELEASE_FAILED_PAYMENT_ACTION_WITHHELD"
+      }
+    },
+    "smallest_policy_neutral_successor": {
+      "kind": "ADDITIVE_LATER_EXACT_SINGLE_FUNCTION_REPLACEMENT",
+      "provisional_local_owner_path": "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql",
+      "provisional_local_owner_source_sha256": "86fb2a3f8bafb2bb0669026d49c51e0a488cd2e8884751baddf114c7134e0195",
+      "transient_reviewed_source_sha256_rejected_after_disk_drift": "940128517fecbb68a8073062d64dab8f1494ffdcbaf7562ac50f76ac0f285de3",
+      "source_manifest_status": "FINAL_SOURCE_MANIFEST_REFROZEN",
+      "release_order": "04082026_1146_CURRENT_OWNER_THEN_07092026_2135_EXACT_SUCCESSOR",
+      "semantic_delta": "Keep detecting the source-less investigation condition, but stop using that condition alone as a cancellation veto inside the two complete confirmed-unpaid eligibility conjunctions.",
+      "changed_predicates_exactly": [
+        "release_failed_payment_eligible no longer requires manual_carry_forward_blocked IS NOT TRUE",
+        "pre_provider_cancel_eligible no longer requires manual_carry_forward_blocked IS NOT TRUE"
+      ],
+      "unchanged_hard_gates": [
+        "batch is not terminal",
+        "Candidate payment is not removed",
+        "active frozen items exist",
+        "paid or settled evidence is absent",
+        "provider outcome is not unknown",
+        "provider request, external identity, pending submission and outage evidence remain authoritative",
+        "terminal-no-money is required only for failed-payment release",
+        "no-transfer evidence is required only for pre-provider cancellation",
+        "latest correction work is not blocked or failed",
+        "carry-forward freshness is exact",
+        "the complete Candidate bank-instruction scope is selected"
+      ],
+      "manual_source_less_economics_reconstructed": false,
+      "manual_source_less_carry_forward_created": false,
+      "post_cancellation_investigation_owner_unchanged": true,
+      "output_schema_changed": false,
+      "new_ui_action_added": false
+    },
+    "relevant_boolean_and_action_outputs": {
+      "changed_only_because_cancellation_becomes_actionable": [
+        "release_failed_payment_eligible",
+        "pre_provider_cancel_eligible",
+        "draft_cancel_eligible",
+        "is_not_paid",
+        "eligible_action_codes",
+        "available_actions",
+        "display_status",
+        "payment_display_state",
+        "plain_blocker"
+      ],
+      "required_unchanged": [
+        "is_active",
+        "is_cancelled",
+        "is_paid",
+        "is_settled",
+        "is_released",
+        "complete_candidate_instruction_scope",
+        "include_in_active_overview",
+        "include_in_active_paye_schedule",
+        "shared_instruction",
+        "original_payment_amount_pence",
+        "active_payment_amount_pence",
+        "cancelled_gross_base_amount_pence",
+        "cancelled_payable_amount_pence",
+        "cancelled_bank_amount_pence",
+        "snapshot_token",
+        "stable_sort_cursor",
+        "resolution_context"
+      ]
+    },
+    "expected_green_output_delta": {
+      "pre_bank": {
+        "pre_provider_cancel_eligible": [false, true],
+        "draft_cancel_eligible": [false, true],
+        "available_actions": [[], ["DRAFT_CANCEL"]],
+        "payment_display_state": ["ACTIVE", "ACTIVE"],
+        "plain_blocker": [null, null]
+      },
+      "terminal_no_money": {
+        "release_failed_payment_eligible": [false, true],
+        "is_not_paid": [false, true],
+        "available_actions": [[], ["RELEASE_FAILED_PAYMENT"]],
+        "payment_display_state": ["BLOCKED", "NOT_PAID"],
+        "plain_blocker": ["This failed payment cannot be released until its complete payment scope and evidence are safe.", null]
+      },
+      "aggregate_fields_recomputed_only_from_actionability": [
+        "eligible_matching_count",
+        "selected_amount_pence_available"
+      ],
+      "all_other_row_amount_identity_status_and_snapshot_fields_byte_identical": true
+    },
+    "callers_and_consumers": [
+      {
+        "owner": "broker handleBankingPayPaymentStatusPageV1",
+        "use": "one bounded read whose available_actions are returned to Current Payment Status"
+      },
+      {
+        "owner": "broker handleBankingPayPaymentStatusResolveV1",
+        "use": "re-reads only RESOLVE_PAYMENT_STATUS authority; cancellation eligibility must not weaken its exact context check"
+      },
+      {
+        "owner": "private.pay_workbench_cancel_reversion_proof_core_v1",
+        "use": "consumes pre_provider_cancel_eligible and CANCEL_PAYMENT, then independently proves exact unsent, settlement, publication and economic authority"
+      },
+      {
+        "owner": "public.pay_payment_cancellation_route_diagnostic_v1",
+        "use": "reports the canonical action and then invokes the unchanged independent reversion proof"
+      }
+    ],
+    "deterministic_negative_cells": [
+      "PAID_OR_SETTLED",
+      "PROVIDER_OUTCOME_UNKNOWN",
+      "PROVIDER_REQUEST_SENT_OR_EXTERNAL_ID_PRESENT",
+      "PROVIDER_SUBMISSION_IN_PROGRESS",
+      "PROVIDER_OUTAGE",
+      "PENDING_NON_FINAL_PROVIDER_STATE",
+      "PARTIAL_OR_SHARED_INSTRUCTION_SCOPE",
+      "STALE_OR_CONFLICTED_CARRY_FORWARD",
+      "BLOCKED_OR_FAILED_CORRECTION_WORK",
+      "TERMINAL_BATCH",
+      "REMOVED_PAYMENT",
+      "ZERO_ACTIVE_ITEMS",
+      "WRONG_ROUTE_STATE"
+    ],
+    "deterministic_positive_cells": [
+      "PAYE_PRE_BANK_COMPLETE_CANDIDATE",
+      "UMBRELLA_PRE_BANK_COMPLETE_CANDIDATE",
+      "PAYE_TERMINAL_NO_MONEY_COMPLETE_CANDIDATE",
+      "UMBRELLA_TERMINAL_NO_MONEY_COMPLETE_CANDIDATE",
+      "WHOLE_DRAFT_PRE_BANK_BYPASSES_ROW_ACTION_AND_REMAINS_SUPPORTED",
+      "WHOLE_DRAFT_TERMINAL_NO_MONEY_BYPASSES_ROW_ACTION_AND_REMAINS_SUPPORTED"
+    ],
+    "pagination_and_filter_assertions": [
+      "actionable_only includes the newly eligible full Candidate exactly once",
+      "DRAFT_CANCEL and RELEASE_FAILED_PAYMENT action filters return only their exact route rows",
+      "cursor, row count, has_more and stable ordering remain unchanged",
+      "page limit remains one of 25, 50, 75 or 100 and the function stays under 5000ms"
+    ]
+  },
+  "manual_carry_forward_economic_identity_reconciliation": {
+    "classification": "CURRENT_CANONICAL_PRODUCER_IDENTITY_OMISSION",
+    "policy_or_economic_defect": false,
+    "current_owner": {
+      "path": "supabase/repeatable/04092026_1330_banking_pay_manual_carry_forward_selection_authority_v1.sql",
+      "source_sha256": "28069c242c44e77333c15d599cbac1526ba966af274aad00ab2afda55018f01a",
+      "identity": "public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)",
+      "emits_selectable_ready_manual_carry_forward": true,
+      "emits_required_nested_economic_key": false
+    },
+    "first_runtime_divergence": "CERTIFIED_SOURCE_PREVIEW_ROW_CONTRACT_INVALID_AFTER_SOURCE_REBUILD",
+    "first_runtime_detail": "READY_ROW_ECONOMIC_KEY_MISSING for the canonical selectable MANUAL_ADJUSTMENT_CARRY_FORWARD row",
+    "existing_reconciler": {
+      "path": "supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql",
+      "behavior": "Copies line_json.economic_key when present and otherwise preserves an empty object; it is not a second economic-key oracle."
+    },
+    "certified_preview_validator": {
+      "path": "supabase/repeatable/07082026_2154_banking_pay_publish_certified_source_preview_v1.sql",
+      "behavior": "Correctly fails closed when a selectable row has no key_type or key_value."
+    },
+    "required_existing_downstream_identity": {
+      "key_type": "MANUAL_CARRY_FORWARD",
+      "key_value": "lowercase manual carry-forward UUID",
+      "timesheet_id": "optional existing Timesheet UUID only",
+      "source_paths": [
+        "supabase/repeatable/02092026_1030_banking_pay_draft_scope_finance_constituent_handoff_v1.sql",
+        "supabase/repeatable/04092026_1360_banking_pay_manual_carry_forward_draft_materialisation_v1.sql"
+      ]
+    },
+    "candidate_owner": {
+      "path": "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+      "source_sha256": "b4ec1a479c0608f997daf0de9d2816803b9aa3af6f3a09edfd411c71572c3e4f",
+      "status": "LOCAL_SOURCE_CANDIDATE_RUNTIME_PROOF_PENDING",
+      "sole_semantic_delta": "Add component key, flat key and nested economic_key identity to the existing MANUAL_ADJUSTMENT_CARRY_FORWARD preview line.",
+      "amount_sign_tax_vat_channel_payee_or_eligibility_changed": false,
+      "historical_owner_byte_identical": true,
+      "pg17_preserved_red_boundary_replay": {
+        "database": "h2_cancel_v8_pg17",
+        "engine": "PostgreSQL 17",
+        "scope": "WORKBENCH_SOURCE_REBUILD_ONLY_NOT_FULL_CANCELLATION_CANDIDATE",
+        "prechange_first_attempt_code": "CERTIFIED_SOURCE_PREVIEW_ROW_CONTRACT_INVALID",
+        "prechange_first_attempt_detail": "READY_ROW_ECONOMIC_KEY_MISSING",
+        "replacement_installed_definition_sha256": "6288242a029702f7fbff182df1feeeb94a9e8cc93a7cf959c634120e5fc62eae",
+        "source_build_elapsed_ms": [
+          1193,
+          939
+        ],
+        "candidate_count": 2,
+        "terminal_current_count": 2,
+        "all_terminal_current": true,
+        "manual_carry_forward_ready_row_count": 2,
+        "source_preview_missing_or_changed_amount_channel_count": 0,
+        "provider_settlement_remittance_invoked": false,
+        "pg18_and_complete_candidate_matrix_pending": true
+      }
+    },
+    "current_red_evidence_preserved": true,
+    "expected_candidate_green": "The same canonical carry-forward row passes the certified preview contract and Workbench rebuild without changing its amount, sign, channel, tax or VAT facts."
+  },
+  "current_red_contract": {
+    "expected_outcome": "CANCELLATION_BLOCKED_BEFORE_FINANCIAL_WRITES",
+    "required_token": "SOURCE_LESS_MANUAL_ADJUSTMENT_AMBIGUOUS",
+    "route_scope_specific_observed_symptoms": {
+      "PRE_BANK_ONE_CANDIDATE": {
+        "boundary": "CURRENT_PAYMENT_STATUS_ACTION_ADMISSION",
+        "required_evidence": [
+          "draft_cancel_eligible=false"
+        ],
+        "meaning": "The current row action is withheld before a correction request starts."
+      },
+      "PRE_BANK_WHOLE_DRAFT": {
+        "boundary": "ALL_MATCHING_SELECTION_PREPARATION",
+        "required_evidence": [
+          "PAYMENT_CORRECTION_SELECTION_EMPTY",
+          "DESCRIPTOR_INVALID"
+        ],
+        "meaning": "The same current admission veto filters every matching Candidate, so the whole-Draft route terminates with its exact generic empty-selection symptom."
+      },
+      "NO_MONEY_ALL_SCOPES": {
+        "boundary": "CURRENT_PAYMENT_STATUS_RELEASE_ACTION_ADMISSION",
+        "required_evidence": [
+          "rows=[]",
+          "eligible_matching_count=0"
+        ],
+        "meaning": "The current status owner withholds RELEASE_FAILED_PAYMENT for both the one-Candidate and whole-Draft entry points before either can create a cancellation request."
+      }
+    },
+    "selected_items_voided": 0,
+    "carry_forwards_created": 0,
+    "provider_settlement_remittance_delta": 0,
+    "observed_dual_engine_control": [
+      {
+        "engine": "PG17",
+        "route": "PRE_BANK",
+        "scope": "ONE_CANDIDATE",
+        "channel": "PAYE",
+        "logical_cell_count": 3,
+        "status": "EXPECTED_CURRENT_RED_ADMISSION_VETO",
+        "financial_cancellation_applied": false,
+        "elapsed_ms": 19230.486
+      },
+      {
+        "engine": "PG18",
+        "route": "PRE_BANK",
+        "scope": "ONE_CANDIDATE",
+        "channel": "PAYE",
+        "logical_cell_count": 3,
+        "status": "EXPECTED_CURRENT_RED_ADMISSION_VETO",
+        "financial_cancellation_applied": false,
+        "elapsed_ms": 19637.958
+      }
+    ]
+  },
+  "candidate_green_contract": {
+    "candidate_scope_contract_version": 2,
+    "candidate_scope_hash_version": 2,
+    "source_row_count_semantics": "FINANCIAL_ONLY",
+    "communication_cleanup_contract_version": 2,
+    "request_terminal_status": "APPLIED",
+    "operation_terminal_status": "COMPLETE",
+    "selected_original_items_voided_exactly_once": true,
+    "safe_source_less_item_carry_forward_exactly_once": true,
+    "ambiguous_source_less_item_carry_forward_count": 0,
+    "ambiguous_source_less_item_payable_rebuild_count": 0,
+    "ambiguous_source_less_item_correction_evidence_exactly_once": true,
+    "ambiguous_source_less_item_alert_exactly_once": true,
+    "mail_fixture_rows_unchanged": true,
+    "alert_must_identify": [
+      "candidate_id",
+      "pay_batch_id",
+      "pay_batch_item_id",
+      "reason",
+      "amount_ex_vat",
+      "amount_vat",
+      "amount_inc_vat",
+      "sign",
+      "pay_channel",
+      "paye_treatment"
+    ],
+    "unselected_candidate_authority_byte_identical": true,
+    "ordinary_and_safe_workbench_rows_rebuild": true,
+    "ambiguous_item_not_silently_reintroduced": true,
+    "retry_same_request_no_double_effect": true,
+    "lost_reply_replay_no_double_effect": true,
+    "concurrent_duplicate_no_double_effect": true,
+    "provider_attempt_delta": 0,
+    "settlement_delta": 0,
+    "remittance_delta": 0,
+    "prepare_expand_apply_statement_timeout_ms": 6000,
+    "prepare_expand_apply_lock_timeout_ms": 1000,
+    "integrity_checker_statement_timeout_ms": 5000,
+    "outer_harness_statement_timeout_ms": 15000,
+    "outer_harness_lock_timeout_ms": 1500,
+    "outer_harness_idle_in_transaction_timeout_ms": 30000
+  },
+  "established_current_source_prerequisites": {
+    "purpose": "The long-lived disposable database snapshot predates already-settled current repository corrections. Install these exact current owners in both CURRENT_RED and CANDIDATE_GREEN so the comparison isolates only the new source-less cancellation boundary.",
+    "applied_identically_in_red_and_green": true,
+    "counted_as_source_less_candidate_changes": false,
+    "disposable_payment_date_contract": {
+      "source_fixture_edited": false,
+      "operation_runtime_expression": "(current_date + 1)::text",
+      "authorisation_runtime_expression": "current_date + 1",
+      "operation_and_authorisation_dates_equal": true,
+      "applied_identically_in_red_and_green": true,
+      "purpose": "Keep the rollback-only scheduled-payment fixture future-dated across a local-midnight/database-timezone boundary without changing schedule or payment policy."
+    },
+    "owner_paths": [
+      "supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql",
+      "supabase/repeatable/05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1.sql",
+      "supabase/repeatable/05092026_0655_banking_pay_active_draft_reservation_evidence_precedence_v1.sql",
+      "supabase/migrations/05092026_1330_banking_pay_bank_event_movement_classification_v1.sql",
+      "supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql",
+      "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql"
+    ]
+  },
+  "candidate_install_contract": {
+    "default_mode": "CURRENT_RED_NO_CANDIDATE_SQL",
+    "green_mode_requires_explicit_paths": true,
+    "environment_variable": "H12_SOURCE_LESS_CANDIDATE_SQL_PATHS",
+    "permitted_prefixes": [
+      "supabase/migrations/",
+      "supabase/repeatable/"
+    ],
+    "current_owner_files_may_be_edited": false,
+    "shared_release_files_may_be_edited": false,
+    "fresh_assignment_owner_paths": [
+      "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+      "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql"
+    ],
+    "required_manual_carry_forward_identity_owner_path": "supabase/repeatable/07092026_2140_banking_pay_manual_carry_forward_economic_identity_v1.sql",
+    "required_conditional_cancellation_follow_up_owner_path": "supabase/repeatable/07092026_2301_banking_pay_payment_cancellation_notice_reconcile_v1.sql",
+    "required_candidate_dirty_cohort_owner_path": "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+    "required_scope_invalidator_owner_path": "supabase/repeatable/08092026_0804_pay_workbench_scope_invalidate_pair_arrays_v1.sql",
+    "required_cancel_return_frozen_scope_index_path": "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+    "required_cancel_return_selection_intent_owner_path": "supabase/repeatable/08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql",
+    "required_certified_preview_final_selection_count_owner_path": "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql",
+    "required_no_money_workbench_return_owner_path": "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql",
+    "scope_invalidator_historical_include": {
+      "path": "supabase/repeatable/04082026_1139_pay_workbench_scope_invalidate_v1.sql",
+      "include_basename": "04082026_1139_pay_workbench_scope_invalidate_v1.sql",
+      "sha256": "f304e2d072d9c93f8fbe1e4ab9998b64d926a161c7b6ef4bde86dcb3ca681538",
+      "exact_include_count": 1
+    },
+    "superseded_never_created_paths": [
+      "supabase/repeatable/07092026_2011_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql",
+      "supabase/repeatable/07092026_2012_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql"
+    ],
+    "required_candidate_owner_identities": [
+      "public.pay_payment_correction_selection_prepare_chunk_v1",
+      "public.pay_payment_correction_expand_work",
+      "public.pay_payment_correction_integrity_check_v1",
+      "public.pay_pre_bank_cancel_apply_work_item",
+      "public.pay_no_money_unwind_apply_work_item"
+    ],
+    "local_install_order": "schema/admission, fresh communication-V2 prepare, fresh communication-V2 expand, exact versioned integrity checker, apply owners, alert readers, dirty-cohort owner, final pair-array scope invalidator"
+  },
+  "replay_schedules": [
+    "EXACT_REQUEST_RETRY_AFTER_COMPLETE",
+    "PREPARE_REPLY_LOST_THEN_IDENTICAL_START",
+    "APPLY_REPLY_LOST_THEN_RESUME_FROM_PERSISTED_PHASE",
+    "TWO_WORKERS_COMPETE_FOR_ONE_WORK_ITEM",
+    "TWO_IDENTICAL_WHOLE_SCOPE_REQUESTS"
+  ],
+  "forbidden_shortcuts": [
+    "Creating a carry-forward for an ambiguous item",
+    "Deleting or overwriting the ambiguous frozen evidence",
+    "Recalculating its amount, sign, PAYE gross/net treatment, Umbrella VAT, channel or payee",
+    "Letting email or alert delivery veto cancellation",
+    "Moving or submitting provider money",
+    "Increasing the statement or lock timeout",
+    "Weakening schema constraints to manufacture unreachable detector reasons"
+  ]
+}

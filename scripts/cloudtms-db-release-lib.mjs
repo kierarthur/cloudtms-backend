@@ -15,7 +15,97 @@ function omitAbsentMigetAuthenticatorFromRevokes(source) {
   );
 }
 
-export function mapLogicalPostgresOwnerSql(source) {
+function mapLogicalPostgresAclGrantees(source) {
+  const rewriteStatement = statement => {
+    const withoutLeadingComments = statement.replace(
+      /^(?:\s+|--[^\r\n]*(?:\r?\n|$)|\/\*[\s\S]*?\*\/)*/,
+      '',
+    );
+    if (!/^(?:grant|revoke)\b/i.test(withoutLeadingComments)) return statement;
+
+    const clauseMatches = [...statement.matchAll(/\b(?:to|from)\b/gi)];
+    if (clauseMatches.length === 0) return statement;
+    const clause = clauseMatches.at(-1);
+    const clauseEnd = clause.index + clause[0].length;
+    const granteeList = statement.slice(clauseEnd).replace(
+      /(^|,)([ \t\r\n]*)(?:"postgres"|postgres)(?=[ \t\r\n]*(?:,|;|\bwith\b))/gi,
+      '$1$2CURRENT_USER',
+    );
+    return statement.slice(0, clauseEnd) + granteeList;
+  };
+
+  let output = '';
+  let statementStart = 0;
+  let state = 'normal';
+  let dollarTag = '';
+  let blockCommentDepth = 0;
+  const text = String(source);
+
+  for (let index = 0; index < text.length; index += 1) {
+    const current = text[index];
+    const next = text[index + 1];
+
+    if (state === 'line-comment') {
+      if (current === '\n') state = 'normal';
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (current === '/' && next === '*') {
+        blockCommentDepth += 1;
+        index += 1;
+      } else if (current === '*' && next === '/') {
+        blockCommentDepth -= 1;
+        index += 1;
+        if (blockCommentDepth === 0) state = 'normal';
+      }
+      continue;
+    }
+    if (state === 'single-quote') {
+      if (current === "'" && next === "'") index += 1;
+      else if (current === "'") state = 'normal';
+      continue;
+    }
+    if (state === 'double-quote') {
+      if (current === '"' && next === '"') index += 1;
+      else if (current === '"') state = 'normal';
+      continue;
+    }
+    if (state === 'dollar-quote') {
+      if (text.startsWith(dollarTag, index)) {
+        index += dollarTag.length - 1;
+        state = 'normal';
+      }
+      continue;
+    }
+
+    if (current === '-' && next === '-') {
+      state = 'line-comment';
+      index += 1;
+    } else if (current === '/' && next === '*') {
+      state = 'block-comment';
+      blockCommentDepth = 1;
+      index += 1;
+    } else if (current === "'") {
+      state = 'single-quote';
+    } else if (current === '"') {
+      state = 'double-quote';
+    } else if (current === '$') {
+      const match = text.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/);
+      if (match) {
+        dollarTag = match[0];
+        state = 'dollar-quote';
+        index += dollarTag.length - 1;
+      }
+    } else if (current === ';') {
+      output += rewriteStatement(text.slice(statementStart, index + 1));
+      statementStart = index + 1;
+    }
+  }
+
+  return output + text.slice(statementStart);
+}
+
+export function mapLogicalPostgresOwnerSql(source, options = {}) {
   const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
   if (!mode) return source;
   if (mode !== 'CURRENT_USER') {
@@ -23,7 +113,7 @@ export function mapLogicalPostgresOwnerSql(source) {
   }
   const diagnosticParameter = String.raw`(?:"plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)"|plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors))`;
   const diagnosticValue = String.raw`(?:'disabled'|'off')`;
-  const mapped = String(source)
+  const mapped = (options.mapAclGrantees === false ? String(source) : mapLogicalPostgresAclGrantees(source))
     .replace(/\bowner\s+to\s+(?:"postgres"|postgres)(?=\s*;)/gi, 'OWNER TO CURRENT_USER')
     .replace(
       /\balter\s+default\s+privileges\s+for\s+role\s+(?:"postgres"|postgres)/gi,
@@ -239,7 +329,7 @@ function executableSqlFile(file) {
   const relative = path.relative(authorityRoot, absolute);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     const source = fs.readFileSync(absolute, 'utf8');
-    const mapped = mapLogicalPostgresOwnerSql(source);
+    const mapped = mapLogicalPostgresOwnerSql(source, { mapAclGrantees: false });
     if (mapped !== source) {
       throw new Error('Logical owner mapping is limited to SQL authority under supabase/');
     }

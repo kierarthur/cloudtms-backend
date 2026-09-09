@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const sourcePath = path.resolve(
   __dirname,
-  '../supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql'
+  '../supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql'
 );
 const source = fs.readFileSync(sourcePath, 'utf8');
 const parityHarness = fs.readFileSync(
@@ -33,6 +33,7 @@ function readBalancedCall(text, callStart) {
   let lineComment = false;
   let blockComment = false;
   let topLevelCommas = 0;
+  const nestedCallStarts = [];
 
   for (let index = open; index < text.length; index += 1) {
     const current = text[index];
@@ -86,6 +87,7 @@ function readBalancedCall(text, callStart) {
         continue;
       }
     }
+    if (text.startsWith('jsonb_build_object(', index)) nestedCallStarts.push(index);
     if (current === '(') {
       depth += 1;
       continue;
@@ -97,7 +99,9 @@ function readBalancedCall(text, callStart) {
         return {
           body,
           end: index + 1,
-          argumentCount: body.trim() === '' ? 0 : topLevelCommas + 1
+          argumentCount: body.trim() === '' ? 0 : topLevelCommas + 1,
+          nestedCallStarts,
+          start: callStart
         };
       }
       continue;
@@ -108,35 +112,57 @@ function readBalancedCall(text, callStart) {
 }
 
 function resultObjectCalls(text) {
-  const statementStart = text.indexOf('v_result := jsonb_build_object(');
+  const functionStart = text.indexOf(
+    'CREATE OR REPLACE FUNCTION public.pay_no_money_unwind_apply_work_item('
+  );
+  assert.ok(functionStart >= 0, 'final pay_no_money_unwind_apply_work_item owner is missing');
+  const functionEnd = text.indexOf('\n$function$;', functionStart);
+  assert.ok(functionEnd > functionStart, 'final pay_no_money_unwind_apply_work_item terminator is missing');
+  const functionSource = text.slice(functionStart, functionEnd);
+  const statementStart = functionSource.indexOf('v_result := jsonb_build_object(');
   assert.ok(statementStart >= 0, 'v_result construction is missing');
-  const statementEnd = text.indexOf('\n  );\n\n  UPDATE public.pay_payment_correction_work_items', statementStart);
+  const statementEnd = functionSource.indexOf(
+    'UPDATE public.pay_payment_correction_work_items',
+    statementStart
+  );
   assert.ok(statementEnd > statementStart, 'v_result construction terminator is missing');
-  const statement = text.slice(statementStart, statementEnd + 5);
-  const calls = [];
+  const statement = functionSource.slice(statementStart, statementEnd);
+  const topLevelCalls = [];
   let searchFrom = statement.indexOf('jsonb_build_object(');
   while (searchFrom >= 0) {
     const call = readBalancedCall(statement, searchFrom);
-    calls.push(call);
+    topLevelCalls.push(call);
     const separator = statement.slice(call.end).match(/^\s*\|\|\s*jsonb_build_object\(/);
     if (!separator) break;
     searchFrom = call.end + separator[0].lastIndexOf('jsonb_build_object(');
   }
-  return calls;
+
+  const allCallStarts = new Set(
+    topLevelCalls.flatMap((call) => [call.start, ...call.nestedCallStarts])
+  );
+  const allCalls = Array.from(allCallStarts)
+    .sort((left, right) => left - right)
+    .map((callStart) => readBalancedCall(statement, callStart));
+  return { allCalls, topLevelCalls };
 }
 
 function assertSafeResultArity(text) {
-  const calls = resultObjectCalls(text);
-  assert.equal(calls.length, 3, 'the result envelope must remain three bounded additive objects');
-  for (const call of calls) {
+  const { allCalls, topLevelCalls } = resultObjectCalls(text);
+  for (const call of allCalls) {
     assert.equal(call.argumentCount % 2, 0, 'jsonb_build_object must receive name/value pairs');
     assert.ok(call.argumentCount <= 100, `jsonb_build_object has ${call.argumentCount} arguments`);
   }
-  return calls.map((call) => call.argumentCount);
+  assert.equal(topLevelCalls.length, 4, 'the result envelope must remain four bounded additive objects');
+  return {
+    all: allCalls.map((call) => call.argumentCount),
+    topLevel: topLevelCalls.map((call) => call.argumentCount)
+  };
 }
 
-test('failed-payment release builds the unchanged result envelope with bounded PostgreSQL function arity', () => {
-  assert.deepEqual(assertSafeResultArity(source), [92, 40, 16]);
+test('final failed-payment owner builds the result envelope with bounded PostgreSQL function arity', () => {
+  const arity = assertSafeResultArity(source);
+  assert.deepEqual(arity.topLevel, [86, 22, 40, 16]);
+  assert.deepEqual(arity.all, [86, 22, 40, 16, 18]);
   for (const requiredField of [
     'selected_candidate_count',
     'voided_item_count',
@@ -152,13 +178,50 @@ test('failed-payment release builds the unchanged result envelope with bounded P
   }
 });
 
-test('mutation guard kills restoration of the oversized single result constructor', () => {
+test('mutation guard rejects removal of every result split boundary', () => {
+  const mutations = [
+    {
+      label: '43/11 boundary',
+      pattern: /('communication_cleanup_contract_version', CASE[\s\S]*?\bEND)\s*\)\s*\|\|\s*jsonb_build_object\(\s*('matching_queued_count')/,
+      replacement: '$1,\n    $2',
+      expectedError: /jsonb_build_object has 108 arguments/
+    },
+    {
+      label: '11/20 boundary',
+      pattern: /('blockers', '\[\]'::jsonb)\s*\)\s*\|\|\s*jsonb_build_object\(\s*('manual_adjustment_support_details_json')/,
+      replacement: '$1,\n    $2',
+      expectedError: /four bounded additive objects/
+    },
+    {
+      label: '20/8 boundary',
+      pattern: /('rail_state_summary', COALESCE\(v_rail_state_summary_json, '\{\}'::jsonb\))\s*\)\s*\|\|\s*jsonb_build_object\(\s*('workbench_refresh_status')/,
+      replacement: '$1,\n    $2',
+      expectedError: /four bounded additive objects/
+    }
+  ];
+
+  for (const mutation of mutations) {
+    const mutant = source.replace(mutation.pattern, mutation.replacement);
+    assert.notEqual(mutant, source, `${mutation.label} mutation did not apply`);
+    assert.throws(
+      () => assertSafeResultArity(mutant),
+      mutation.expectedError,
+      `${mutation.label} mutation survived`
+    );
+  }
+});
+
+test('balanced arity guard scans nested result constructors', () => {
+  const oversizedPairs = Array.from(
+    { length: 42 },
+    (_, index) => `'oversized_${index}', ${index}`
+  ).join(',\n      ');
   const mutant = source.replace(
-    /'blockers', '\[\]'::jsonb\s*\) \|\| jsonb_build_object\(\s*'manual_adjustment_support_details_json'/,
-    "'blockers', '[]'::jsonb,\n    'manual_adjustment_support_details_json'"
+    /('workbench_refresh', jsonb_build_object\(\s*)('status')/,
+    `$1${oversizedPairs},\n      $2`
   );
-  assert.notEqual(mutant, source, 'arity mutation did not apply');
-  assert.throws(() => assertSafeResultArity(mutant));
+  assert.notEqual(mutant, source, 'nested arity mutation did not apply');
+  assert.throws(() => assertSafeResultArity(mutant), /jsonb_build_object has 102 arguments/);
 });
 
 test('one-Candidate failed-payment release verifies durable work-item evidence rather than optional debug audit', () => {
@@ -177,7 +240,17 @@ test('one-Candidate failed-payment release verifies durable work-item evidence r
 });
 
 test('release verification binds the bounded result envelope and preserves the established security and budgets', () => {
-  assert.match(installedVerification, /v_result_join_count <> 2/);
+  assert.match(installedVerification, /v_result_join_count <> 3/);
+  for (const boundaryField of [
+    'communication_cleanup_contract_version',
+    'matching_queued_count',
+    'blockers',
+    'manual_adjustment_support_details_json',
+    'rail_state_summary',
+    'workbench_refresh_status'
+  ]) {
+    assert.match(installedVerification, new RegExp(boundaryField));
+  }
   assert.match(installedVerification, /statement_timeout=6000ms/);
   assert.match(installedVerification, /lock_timeout=1000ms/);
   assert.match(installedVerification, /acl_row\.grantee = 0/);

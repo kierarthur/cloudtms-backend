@@ -5856,7 +5856,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "249757a20e512e182e6e3a4c8f6c17f638afd5aa1164f7238d1f1e78a38659be"
+      "definition_sha256": "366fbaae56a5db9c628126f50ce078763f877c611dfae6cc26c587b565990ec8"
     },
     {
       "acl": [
@@ -7903,6 +7903,25 @@
         "search_path=\"\""
       ],
       "schema": "private",
+      "identity": "pay_workbench_candidate_dirty_cohort_stage_v1(p_job_id uuid, p_candidate_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "2687f7a47881126a274b335ad0799feaf2acfda7b0722c1b3a7f50a084d2fa51"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
       "identity": "pay_workbench_candidate_physical_currentness_page_v1(p_session_id uuid, p_candidate_ids uuid[], p_mode text, p_options_json jsonb)",
       "parallel": "r",
       "volatility": "s",
@@ -9751,7 +9770,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "42971b436098105cc127e7a3f8df5e3541d11e48d81fe7284e362e8da53a2cc3"
+      "definition_sha256": "489512991e194d1d2831dbf6280767527fa1f776f2202a31a58c66167d0aa69a"
     },
     {
       "acl": [
@@ -9808,7 +9827,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "93a09afeee40e674dd4e7198dd3d138d1561c1e468659139ba906358ddf338d9"
+      "definition_sha256": "d6a0f185a4a3eb38490a78cbdd0bfe32e7fcea4b1ab3db55480027cdc4886e24"
     },
     {
       "acl": [
@@ -13003,7 +13022,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5cf0518c4470b7d772a627c43841ea79e788c59c9ecb5824136f7c94c4c8584f"
+      "definition_sha256": "542569e5832e5ab3462370f466ae67a5029debf4da5a1ea17e05361f772e3d0b"
     },
     {
       "acl": [
@@ -14452,7 +14471,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "931f37c0c91377429ffe05afc75f561871ac684d691a686ace5351f3f9cd54bc"
+      "definition_sha256": "42d9d2971d6372531b1baa3222bac530eef64e21c33ef28310c679151990e3d8"
     },
     {
       "acl": [
@@ -14476,7 +14495,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1421e8a6cc6e1633b25d635c223e04c8abcec114d94392f307cb627de453f2bb"
+      "definition_sha256": "76cd65d1cb3cf3519410d40e0ff1f1936ed44695f3b2db615e7de0086757fbe0"
     },
     {
       "acl": [
@@ -14548,7 +14567,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0227b0c13566dcb7a96e3dbafb065ccf20cce9555130eb0496bf430b4cc8603b"
+      "definition_sha256": "4b36334b8f7c8454f47d88915068dd41fabd6c37a1ede616dfb523d8edd6282b"
     },
     {
       "acl": [
@@ -23075,7 +23094,7 @@
       "parallel": "r",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd"
+      "definition_sha256": "e7a5cfc84f3db369739881d1ff0db0d3a08a89e0bcb398db26f7a249148f6d74"
     },
     {
       "acl": [
@@ -24305,7 +24324,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fbebb548ab805c50a432f5612093c223fb3200f9b9ecb3dfed6aad468525d958"
+      "definition_sha256": "2285079b3a88ffa5ef6dab0a339aab5679d142853b082e867dc74ee200d3fb3f"
     },
     {
       "acl": [
@@ -24578,7 +24597,33 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c2df38403908cefa577c4e593223ca9dda1b708d4e0e1075d395ea2056d07843"
+      "definition_sha256": "dc307adea1c09b58a6d34311a4adcb138bb19615349fcd24b413e07fe99c03a9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "lock_timeout=1000ms",
+        "search_path=\"\"",
+        "statement_timeout=6000ms"
+      ],
+      "schema": "public",
+      "identity": "pay_payment_cancellation_notice_reconcile_v1(p_correction_request_id uuid, p_original_mail_outbox_id uuid, p_after_created_at_utc timestamp with time zone, p_after_mail_outbox_id uuid, p_limit integer, p_template_version text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8ba0a86ccc16837c2c2e9083127ccf63e650c461ca8636141df0d556c8810afa"
     },
     {
       "acl": [
@@ -24674,7 +24719,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3bcf21c8b46a64ce8dee0e9752606056149bc590669ea6065e674c50bdc705a7"
+      "definition_sha256": "f1d036ffe1e165b05598a4b503f2d85cea97bd04f0d7e4242fa9b3bcb8747a99"
     },
     {
       "acl": [
@@ -24725,7 +24770,7 @@
       "parallel": "r",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "2ea5bac5c9ccbfb620d562c1c5c7e71d7cc30bcc02b183e78be1735dbff4918c"
+      "definition_sha256": "6acc373d2ad30819750d76ce942bff187b337e3e612a50e3a0c6c1bf65d278e9"
     },
     {
       "acl": [
@@ -24749,7 +24794,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ccff33eee19511579594eea7a4be10641517bd0e4eb20e34df12ca41c4691d2c"
+      "definition_sha256": "5371e9525129d295aad3fc70e826ff264f5e585ac819277f37455e83cb573ce0"
     },
     {
       "acl": [
@@ -24775,7 +24820,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7bb210f6f426c431eaba667377bb602adf616b643aeac3104236e0cb49d1f51d"
+      "definition_sha256": "d07107bbb827348183bd76c5c54347c4763835fdd0c7b4e30816c6acb5ed897f"
     },
     {
       "acl": [
@@ -24853,7 +24898,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "104d0460c50d4ccdb3e37a6e74d7a8de7a134445e66f3d2c05b15fd65298efb5"
+      "definition_sha256": "a51e432461f584d5677fc38dcdaeb17fecadf04f0f4a7e72cd297bfeec7efd97"
     },
     {
       "acl": [
@@ -24905,7 +24950,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "03a05a5d784beb5845125cc398166ebfbb221aa9e65022e2d7ea4a54d92fb83f"
+      "definition_sha256": "07f6cd72847357e1fe8a9e4eab9a231594fb97fce4aaaa60ec98aa42cd29af81"
     },
     {
       "acl": [
@@ -25004,7 +25049,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0bc45a7c2a699126bf554ea0ca1bfda278d8321855e794b42dd477d7db956af9"
+      "definition_sha256": "9475812b6d146f434971317d23f6b7754b666ca4403ecd8ccb6f4269c3966d10"
     },
     {
       "acl": [
@@ -25172,7 +25217,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715"
+      "definition_sha256": "53c213b94143df5391608dba2e6719aa0257301495d16fcec50c8b79b1627408"
     },
     {
       "acl": [
@@ -26182,7 +26227,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ffeae1a1a2a06e80dc5cd2cd1ac0ffe964b658c9000badc7410a1b3a8afd9fd0"
+      "definition_sha256": "1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e"
     },
     {
       "acl": [
@@ -27094,7 +27139,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8308ceb4c35e1020a221b91e8e73f026dff4fb33bd61c6f88c885e09bf7923d3"
+      "definition_sha256": "5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18"
     },
     {
       "acl": [
@@ -36037,6 +36082,10 @@
         {
           "name": "banking_pay_draft_frozen_candidate_scopes_v8_pk",
           "definition": "CREATE UNIQUE INDEX banking_pay_draft_frozen_candidate_scopes_v8_pk ON private.banking_pay_draft_frozen_candidate_scopes_v8 USING btree (operation_id, candidate_scope_ordinal)"
+        },
+        {
+          "name": "banking_pay_draft_frozen_scopes_v8_batch_candidate_idx",
+          "definition": "CREATE INDEX banking_pay_draft_frozen_scopes_v8_batch_candidate_idx ON private.banking_pay_draft_frozen_candidate_scopes_v8 USING btree (pay_batch_id, candidate_id, resolved_pay_channel, operation_id, candidate_scope_ordinal)"
         },
         {
           "name": "banking_pay_draft_frozen_scopes_v8_page_idx",
@@ -62102,6 +62151,14 @@
           "definition": "CREATE INDEX bpay_wb_jobs_source_claim_idx ON public.banking_pay_workbench_jobs USING btree (run_at_utc, priority, created_at_utc, id) INCLUDE (candidate_id, session_id, economic_build_id, private_stage, attempt_count, max_attempts) WHERE ((status = 'QUEUED'::text) AND (job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'::text))"
         },
         {
+          "name": "idx_bpay_wb_jobs_candidate_dirty_active_cohort_v1",
+          "definition": "CREATE INDEX idx_bpay_wb_jobs_candidate_dirty_active_cohort_v1 ON public.banking_pay_workbench_jobs USING btree (candidate_id, id) WHERE ((job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'::text) AND (status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])) AND (candidate_id IS NOT NULL))"
+        },
+        {
+          "name": "idx_bpay_wb_jobs_legacy_candidate_dirty_active_cohort_v1",
+          "definition": "CREATE INDEX idx_bpay_wb_jobs_legacy_candidate_dirty_active_cohort_v1 ON public.banking_pay_workbench_jobs USING btree (lower(btrim(COALESCE((payload_json ->> 'candidate_id'::text), ''::text))), id) WHERE ((job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'::text) AND (status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])) AND (candidate_id IS NULL))"
+        },
+        {
           "name": "idx_bpay_workbench_jobs_generated_work_authority",
           "definition": "CREATE INDEX idx_bpay_workbench_jobs_generated_work_authority ON public.banking_pay_workbench_jobs USING btree (dedupe_key, scope_change_generation DESC, created_at_utc DESC, id DESC) INCLUDE (job_type, status, candidate_id, session_id) WHERE ((scope_change_generation IS NOT NULL) AND (job_type = ANY (ARRAY['WORKBENCH_CANDIDATE_DIRTY_APPLY'::text, 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'::text, 'CONTRACT_CLIENT_DIRTY_FANOUT'::text])))"
         },
@@ -87220,6 +87277,38 @@
           "generated": ""
         },
         {
+          "name": "cancel_notice_next_attempt_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_reconciled_sent_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_result_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_tracked",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "cc",
           "type": "text",
           "default": null,
@@ -87490,6 +87579,18 @@
           "definition": "CREATE INDEX idx_mail_outbox_status ON public.mail_outbox USING btree (status, created_at_utc)"
         },
         {
+          "name": "mail_outbox_payment_cancellation_pending_idx",
+          "definition": "CREATE INDEX mail_outbox_payment_cancellation_pending_idx ON public.mail_outbox USING btree (COALESCE(cancel_notice_next_attempt_at_utc, sent_at), sent_at, id) WHERE ((cancel_notice_tracked IS TRUE) AND (type = 'REMITTANCE'::text) AND (status = 'SENT'::mail_status_enum) AND (sent_at IS NOT NULL) AND (provider_status = 'ACCEPTED'::text) AND (cancel_notice_reconciled_sent_at_utc IS DISTINCT FROM sent_at))"
+        },
+        {
+          "name": "mail_outbox_payment_cancellation_sent_candidate_source_idx",
+          "definition": "CREATE INDEX mail_outbox_payment_cancellation_sent_candidate_source_idx ON public.mail_outbox USING btree (context_id, ((payment_scope_json ->> 'candidate_id'::text)), ((payment_scope_json ->> 'pay_batch_candidate_id'::text)), created_at_utc, id) WHERE ((context_kind = 'pay_batches'::text) AND (type = 'REMITTANCE'::text) AND (status = 'SENT'::mail_status_enum) AND (sent_at IS NOT NULL) AND (provider_status = 'ACCEPTED'::text))"
+        },
+        {
+          "name": "mail_outbox_payment_cancellation_sent_source_idx",
+          "definition": "CREATE INDEX mail_outbox_payment_cancellation_sent_source_idx ON public.mail_outbox USING btree (context_id, created_at_utc, id) WHERE ((context_kind = 'pay_batches'::text) AND (type = 'REMITTANCE'::text) AND (status = 'SENT'::mail_status_enum) AND (sent_at IS NOT NULL) AND (provider_status = 'ACCEPTED'::text))"
+        },
+        {
           "name": "mail_outbox_payment_scope_json_gin_idx",
           "definition": "CREATE INDEX mail_outbox_payment_scope_json_gin_idx ON public.mail_outbox USING gin (payment_scope_json)"
         },
@@ -87579,7 +87680,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((type = ANY (ARRAY['INVOICE'::text, 'REMITTANCE'::text, 'TSO_FAILURE'::text, 'BROADCAST'::text, 'TIMESHEET_QR'::text, 'TIMESHEET_REFUSAL'::text, 'TIMESHEET_GENERAL'::text, 'TIMESHEET_QUERY'::text])) OR type = 'MAILSHOT_EMAIL'::text)"
+          "definition": "CHECK ((type = ANY (ARRAY['INVOICE'::text, 'REMITTANCE'::text, 'TSO_FAILURE'::text, 'BROADCAST'::text, 'TIMESHEET_QR'::text, 'TIMESHEET_REFUSAL'::text, 'TIMESHEET_GENERAL'::text, 'TIMESHEET_QUERY'::text, 'PAYMENT_CANCELLATION'::text])) OR type = 'MAILSHOT_EMAIL'::text)"
         },
         {
           "name": "mail_outbox_waiting_invoice_operation_fk",
@@ -97210,6 +97311,10 @@
       ],
       "indexes": [
         {
+          "name": "idx_pay_correction_items_sourceless_investigation_recent",
+          "definition": "CREATE INDEX idx_pay_correction_items_sourceless_investigation_recent ON public.pay_payment_correction_items USING btree (applied_at_utc DESC NULLS LAST, id DESC) WHERE ((status = 'APPLIED'::text) AND (pay_batch_item_id IS NOT NULL) AND ((after_snapshot_json #>> '{source_restoration,status}'::text[]) = 'NEEDS_INVESTIGATION'::text) AND ((after_snapshot_json #>> '{source_restoration,policy}'::text[]) = 'PRESERVE_FROZEN_FACTS_NO_RECONSTRUCTION'::text))"
+        },
+        {
           "name": "pay_payment_correction_items_applied_item_kind_uidx",
           "definition": "CREATE UNIQUE INDEX pay_payment_correction_items_applied_item_kind_uidx ON public.pay_payment_correction_items USING btree (pay_batch_item_id, correction_item_kind) WHERE ((status = 'APPLIED'::text) AND (pay_batch_item_id IS NOT NULL))"
         },
@@ -97244,6 +97349,14 @@
         {
           "name": "pay_payment_correction_items_reservation_idx",
           "definition": "CREATE INDEX pay_payment_correction_items_reservation_idx ON public.pay_payment_correction_items USING btree (reservation_id)"
+        },
+        {
+          "name": "pay_payment_correction_items_sourceless_investigation_batch_idx",
+          "definition": "CREATE INDEX pay_payment_correction_items_sourceless_investigation_batch_idx ON public.pay_payment_correction_items USING btree (pay_batch_id, applied_at_utc DESC NULLS LAST, id DESC) WHERE ((status = 'APPLIED'::text) AND ((after_snapshot_json #>> '{source_restoration,status}'::text[]) = 'NEEDS_INVESTIGATION'::text) AND ((after_snapshot_json #>> '{source_restoration,policy}'::text[]) = 'PRESERVE_FROZEN_FACTS_NO_RECONSTRUCTION'::text))"
+        },
+        {
+          "name": "pay_payment_correction_items_sourceless_investigation_item_idx",
+          "definition": "CREATE INDEX pay_payment_correction_items_sourceless_investigation_item_idx ON public.pay_payment_correction_items USING btree (pay_batch_item_id, applied_at_utc DESC NULLS LAST, id DESC) WHERE ((status = 'APPLIED'::text) AND (pay_batch_item_id IS NOT NULL) AND ((after_snapshot_json #>> '{source_restoration,status}'::text[]) = 'NEEDS_INVESTIGATION'::text) AND ((after_snapshot_json #>> '{source_restoration,policy}'::text[]) = 'PRESERVE_FROZEN_FACTS_NO_RECONSTRUCTION'::text))"
         },
         {
           "name": "pay_payment_correction_items_timesheet_key_idx",
@@ -97732,6 +97845,62 @@
           "generated": ""
         },
         {
+          "name": "cancel_notice_after_created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_after_mail_outbox_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_next_attempt_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_progress_applied_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_reconciled_applied_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_result_json",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cancel_notice_tracked",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "cancelled_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -97904,6 +98073,10 @@
         {
           "name": "idx_pay_payment_correction_requests_due_v2",
           "definition": "CREATE INDEX idx_pay_payment_correction_requests_due_v2 ON public.pay_payment_correction_requests USING btree (status, requested_at_utc, id) WHERE (status = ANY (ARRAY['PLANNING'::text, 'PLANNED'::text, 'REQUESTED'::text, 'AWAITING_AUTHORISATION'::text]))"
+        },
+        {
+          "name": "pay_payment_cancellation_notice_recovery_request_idx",
+          "definition": "CREATE INDEX pay_payment_cancellation_notice_recovery_request_idx ON public.pay_payment_correction_requests USING btree (COALESCE(cancel_notice_next_attempt_at_utc, applied_at_utc), applied_at_utc, id) WHERE ((cancel_notice_tracked IS TRUE) AND (applied_at_utc IS NOT NULL) AND (cancel_notice_reconciled_applied_at_utc IS DISTINCT FROM applied_at_utc) AND (status = ANY (ARRAY['APPLIED'::text, 'APPLIED_WITH_BLOCKERS'::text])) AND (correction_kind = ANY (ARRAY['PRE_BANK_CANCEL'::text, 'NO_MONEY_UNWIND'::text])) AND ((plan_json ->> 'candidate_scope_contract_version'::text) = '2'::text) AND ((plan_json ->> 'candidate_scope_hash_version'::text) = '2'::text) AND ((plan_json ->> 'source_row_count_semantics'::text) = 'FINANCIAL_ONLY'::text) AND ((plan_json ->> 'communication_cleanup_contract_version'::text) = '2'::text))"
         },
         {
           "name": "pay_payment_correction_requests_batch_status_idx",

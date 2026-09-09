@@ -141,11 +141,13 @@ begin
   -- remain additive. The pending-expense Timesheet deletion boundary adds its
   -- service-only preview and confirmed-apply RPCs. The unified Outbox projection
   -- adds one service-only RPC for complete cross-source sorting and membership.
+  -- The unpaid-cancellation communication boundary adds one service-only notice
+  -- reconciliation RPC and preserves zero direct browser execution.
   -- The owner-internal reference issuer and established shared-session opener
   -- remain withheld, so browser execution stays zero.
   -- The combined hash is sealed from the clean dual-engine candidate below.
-  if v_count<>690 or v_service_missing<>74 or v_browser_executable<>0
-     or v_hash<>'eb2e346231dc5e0fc6be4d1a4cf2546b' then
+  if v_count<>691 or v_service_missing<>74 or v_browser_executable<>0
+     or v_hash<>'d3486b9d3f1047897840a94cc917ba8e' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

@@ -1,0 +1,226 @@
+{
+  "contract": "H12_CANCELLATION_MATRIX_PROGRESS_V1",
+  "updated_at_utc": "2026-09-09T12:46:25Z",
+  "source_head": "34d073fef04c365fc0c557f881b749ce88a7e7d7",
+  "logical_case_count": 40,
+  "first_pass_completed_count": 40,
+  "first_pass_completed_case_range": "1-40",
+  "next_case_number": null,
+  "remaining_case_range": null,
+  "final_clean_40_case_audit_pending": false,
+  "final_clean_audit_completed_count": 40,
+  "final_clean_audit_remaining_case_range": null,
+  "final_clean_audit_status": "PASS",
+  "continuation_rule": "Resume from the first unpassed case after a failure. Do not repeat earlier passed cases until the single final clean 40/40 audit.",
+  "completed_blocks": [
+    {
+      "case_range": "1-10",
+      "status": "PASS_AT_PRIOR_FAILURE_CHECKPOINT",
+      "note": "Passed before the earlier whole-Draft PAYE failure; consolidated output was not written because that outer diagnostic stopped at the next block."
+    },
+    {
+      "case_range": "11-13",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_NO_MONEY_WHOLE_DRAFT_PAYE_FINAL_V1.json",
+      "result_sha256": "3a5c87d9b953412dc02bfb37c4989d269a08e25ae5b8652b2465f6dd92f6a204"
+    },
+    {
+      "case_range": "14-16",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_NO_MONEY_WHOLE_DRAFT_PAYE_FINAL_V1.json",
+      "result_sha256": "f47a59912dd0e27dab2543c8263b53eca835877c7e3cab71d1f7e66e981e8bc2"
+    },
+    {
+      "case_range": "17-18",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_NO_MONEY_WHOLE_DRAFT_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "27f70bc3ea1b8ebb0e62739f55bfc60275b2c863e188557572cf103732e5457a"
+    },
+    {
+      "case_range": "19-20",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_NO_MONEY_WHOLE_DRAFT_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "b8fa12294e67460b801e0c51891f5d49869d1159c32f069ba428f5dad4bfd25d"
+    },
+    {
+      "case_range": "21-23",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_PRE_BANK_ONE_CANDIDATE_PAYE_CONTINUATION_V1.json",
+      "result_sha256": "b55e77a684dcfb27551b26cfcddd37b1522e08bb9554cfe155fb66872f91bba9"
+    },
+    {
+      "case_range": "24-26",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_PRE_BANK_ONE_CANDIDATE_PAYE_CONTINUATION_V1.json",
+      "result_sha256": "eae18e9e2e663d1dc39ffbec21af45793f4acdb0041cb7bbf843b6af161dfb7b"
+    },
+    {
+      "case_range": "27-28",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_PRE_BANK_ONE_CANDIDATE_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "a588fd039b6264a0ee2304375d37f0d4edac59478e0b3bc3ea45650305f16e5a"
+    },
+    {
+      "case_range": "29-30",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_PRE_BANK_ONE_CANDIDATE_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "c765bbf8497444e1564347df4d9c1df2465f5d8a5615681d8e8874bc870b4fc7"
+    },
+    {
+      "case_range": "31-33",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_PRE_BANK_WHOLE_DRAFT_PAYE_CONTINUATION_V1.json",
+      "result_sha256": "692d3d29a6a5e891e77654b890cf4740949775853c19bd5340a3444c2e2e1405"
+    },
+    {
+      "case_range": "34-36",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_PRE_BANK_WHOLE_DRAFT_PAYE_CONTINUATION_V1.json",
+      "result_sha256": "1354e006eedda782dd42ffc8ee174124401443fae9dc69f846590feba1ae7fc5"
+    },
+    {
+      "case_range": "37-38",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_PRE_BANK_WHOLE_DRAFT_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "05eb01ada18377b0a6a25f67ea376092ea72549d1f6d3bde38167c9032fe06a4"
+    },
+    {
+      "case_range": "39-40",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_PRE_BANK_WHOLE_DRAFT_UMBRELLA_CONTINUATION_V1.json",
+      "result_sha256": "599aef7a2e801b89de1f4c102eb079c6fa36b10ba4e1f52dfd1cad08fb7b3bf1"
+    }
+  ],
+  "final_clean_audit_blocks": [
+    {
+      "case_range": "1-5",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_NO_MONEY_ONE_CANDIDATE_V1.json",
+      "result_sha256": "7f6bdda0649ae14669a3bb2faf127868ed1edb5cb55daf563f0b59d6a12b8e83"
+    },
+    {
+      "case_range": "6-10",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_NO_MONEY_ONE_CANDIDATE_V1.json",
+      "result_sha256": "69af02ff6cc5e7ac9a6a46a1ea1a3ca95e0cf8dc6d5fabcb5fc55ca006f05d84"
+    },
+    {
+      "case_range": "11-13",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_NO_MONEY_WHOLE_DRAFT_PAYE_V1.json",
+      "result_sha256": "f2d85b6c1172708be0a432377467ba798288fd812a867a821d0f02461c6d2eb7"
+    },
+    {
+      "case_range": "14-16",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_NO_MONEY_WHOLE_DRAFT_PAYE_V1.json",
+      "result_sha256": "bf6694f98951d5b1321d8872005bfa8166f19338b6834a7a819942620b009176"
+    },
+    {
+      "case_range": "17-18",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_NO_MONEY_WHOLE_DRAFT_UMBRELLA_V1.json",
+      "result_sha256": "1563489e81ce7ee186b4bb1b196557c179d18ed788b992fb61405e3bfd519e12"
+    },
+    {
+      "case_range": "19-20",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_NO_MONEY_WHOLE_DRAFT_UMBRELLA_V1.json",
+      "result_sha256": "85dedf19de65d1142f8a4a71e51eb93cb52448a757dc75a9ba91d16ef987e1a0"
+    },
+    {
+      "case_range": "21-23",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_PRE_BANK_ONE_CANDIDATE_PAYE_V1.json",
+      "result_sha256": "df6229856b19d9b10dd2c61d8530ca5b3a4156a088d4d3fe3f60ee1ba9ea0960"
+    },
+    {
+      "case_range": "24-26",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_PRE_BANK_ONE_CANDIDATE_PAYE_V1.json",
+      "result_sha256": "e897e709224a55c43326132cc9d4923e1fdab22621f0dfefba9af087c5dd1fc5"
+    },
+    {
+      "case_range": "27-28",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_PRE_BANK_ONE_CANDIDATE_UMBRELLA_V1.json",
+      "result_sha256": "e0ec4b45c4433623b74af1373ceb607c59f98a3518e4c253f4e86200af911f36"
+    },
+    {
+      "case_range": "29-30",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_PRE_BANK_ONE_CANDIDATE_UMBRELLA_V1.json",
+      "result_sha256": "f9ffaa1aa12c3facb599e58b9effe39f15ce4e2ad659523c4e7cb2c1b8645d0a"
+    },
+    {
+      "case_range": "31-33",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_PRE_BANK_WHOLE_DRAFT_PAYE_V1.json",
+      "result_sha256": "c9606d9e28217c269a2ac839a901a17dd7c03c91902648531d85b285d2c07ac9"
+    },
+    {
+      "case_range": "34-36",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_PRE_BANK_WHOLE_DRAFT_PAYE_V1.json",
+      "result_sha256": "9d5aeca3f0fa83a2cec5c30ac69b2bd82ce54df5ad20ed6c9a64f01d74550413"
+    },
+    {
+      "case_range": "37-38",
+      "status": "PASS",
+      "engine": "PG17",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG17_FINAL_AUDIT_PRE_BANK_WHOLE_DRAFT_UMBRELLA_V1.json",
+      "result_sha256": "1bb1c37e6275e13e7dbd7846f9bc3cce3202acb5a1992cb77017616705e6f826"
+    },
+    {
+      "case_range": "39-40",
+      "status": "PASS",
+      "engine": "PG18",
+      "result_file": "P12_SOURCE_LESS_CANCELLATION_RUNTIME_RESULTS_PG18_FINAL_AUDIT_PRE_BANK_WHOLE_DRAFT_UMBRELLA_V1.json",
+      "result_sha256": "e1ce3ffc1f1e85b4d4e78c7f6793043312bb8ba693a383e5f57b17d261a8e9ab"
+    }
+  ],
+  "active_block": null,
+  "final_clean_audit_completeness": {
+    "status": "PASS",
+    "evidence_file_count": 14,
+    "physical_run_count": 16,
+    "logical_case_count": 40,
+    "unique_logical_case_count": 40,
+    "missing_case_count": 0,
+    "duplicate_case_count": 0,
+    "extra_case_count": 0,
+    "maximum_route_call_ms": 1182.771,
+    "maximum_workbench_call_ms": 2100.886,
+    "fixed_outer_statement_timeout_ms": 15000,
+    "policy_x_preserved": true,
+    "timeout_relaxation": false,
+    "provider_settlement_remittance_actions": 0
+  },
+  "policy_or_economic_change": false,
+  "remote_database_mutation": false,
+  "provider_payment_settlement_remittance_action": false
+}

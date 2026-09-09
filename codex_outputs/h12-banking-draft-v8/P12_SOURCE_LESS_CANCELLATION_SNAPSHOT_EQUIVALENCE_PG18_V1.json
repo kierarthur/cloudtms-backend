@@ -1,0 +1,31 @@
+{
+  "contract": "H12_LEGACY_FRESH_PREPARED_CLONE_EQUIVALENCE_V1",
+  "status": "PASS",
+  "mode": "CANDIDATE_GREEN",
+  "base_runner_sha256": "71bdca7d0943fc63e92329749be41597b2478e028fec365ab0f1c874b8678dbc",
+  "selected_engines": [
+    "PG18"
+  ],
+  "evidence": {
+    "PG18": {
+      "contract": "H12_LEGACY_FRESH_PREPARED_CLONE_EQUIVALENCE_V1",
+      "engine": "PG18",
+      "prepared_template_database": "h12_rg5_prepared_pg18",
+      "source_fingerprint": "6b70376c32eda654d9b200411b72c86564bf292d2c466c400d8ecb3163035e35",
+      "semantic_sha256": "4aa8155ce77a2e4133614a55f08460f8e87e3d7a55c20c22c1d621bb0d5e174b",
+      "exact_sha256": "3ee2103d8d4ab3d02883aa5ae94c225a1023bd74ed5598adec0a6d05462f92f1",
+      "relation_count": 230,
+      "sequence_count": 12,
+      "distinct_source_session_count": 1,
+      "one_anchor_per_distinct_source_session": true,
+      "legacy_fresh_to_prepared_clone_semantic_equal": true,
+      "legacy_fresh_to_prepared_clone_exact_equal": true,
+      "route_or_fixture_mutation_before_snapshot": false,
+      "elapsed_ms": 612464.329
+    }
+  },
+  "route_fixture_scope_mutation_executed": false,
+  "runtime_matrix_executed": false,
+  "policy_or_economic_change": false,
+  "test_database_containment": "TASK_OWNED_PREPARED_TEMPLATES_AND_CLONES_REMOVED"
+}

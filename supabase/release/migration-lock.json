@@ -887,6 +887,22 @@
       "sha256": "038cd79c1798e4d27fd22e328abe9ac3df8ce3f4da4a2e8139688cb8e803e77d"
     },
     {
+      "path": "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
+      "sha256": "ade7edc338c86ba359a3f7bbd463903951fcbd765ca025f1610e6f764b2c7b43"
+    },
+    {
+      "path": "supabase/migrations/07092026_2300_banking_pay_payment_cancellation_mail_outbox_v1.sql",
+      "sha256": "4902b4bf030b41f0e223a5b9db6e00113e0d3320066a8598c42822ea86c13a94"
+    },
+    {
+      "path": "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+      "sha256": "832c54448a33a24b71a5be3e2406673023328da1e766ee27ad8e0e6afdeeaf10"
+    },
+    {
+      "path": "supabase/migrations/08092026_1159_banking_pay_cancel_return_frozen_scope_lookup_v1.sql",
+      "sha256": "480bccb46f8c676843f9ceec1c0190d5ade77b8279b99c516a4b4b9e438b09ca"
+    },
+    {
       "path": "supabase/migrations/08092026_1323_invoice_snapshot_key_restore_repair.sql",
       "sha256": "7357782926560ac1f33eb7d6c2c7a17ffeb6dd4d5bae9239f254e39b8f6b1da0"
     },

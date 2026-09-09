@@ -1,0 +1,242 @@
+{
+  "artifact": "WORKBENCH_DIRTY_COHORT_LOCAL_EVIDENCE_V1",
+  "schema_version": 1,
+  "generated_at_utc": "2026-09-08T06:42:51.331Z",
+  "workspace": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\h12-source-less-cancel-alert-v1-backend",
+  "source_state": "NO_EDIT_IN_FLIGHT",
+  "frozen_files": [
+    {
+      "path": "supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql",
+      "bytes": 2479,
+      "sha256": "832c54448a33a24b71a5be3e2406673023328da1e766ee27ad8e0e6afdeeaf10"
+    },
+    {
+      "path": "supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql",
+      "bytes": 122980,
+      "sha256": "62683536492429af065870ba8cd1904c2173a7d78e365c1059e4e4b36ec64b4a"
+    },
+    {
+      "path": "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+      "bytes": 9379,
+      "sha256": "436157abd5c8b4ee980af8705da256b8ee6488f068354d3f458fe744f4d66a2d"
+    },
+    {
+      "path": "tests/08092026_0520_banking_pay_candidate_dirty_cohort_authority.test.cjs",
+      "bytes": 15485,
+      "sha256": "04ed5fdee1f5eebe8060514475c0c16bb3b946ac6f1fcd884a4842ea6289ea58"
+    },
+    {
+      "path": "tests/08092026_0521_banking_pay_candidate_dirty_cohort_runtime_verification.sql",
+      "bytes": 60721,
+      "sha256": "8a25413f88fabb940c46fc7f3bd2777e84549343c7bd07e556c6b443d01ef1b5"
+    },
+    {
+      "path": "tests/08092026_0521_banking_pay_candidate_dirty_cohort_concurrency.runtime.test.cjs",
+      "bytes": 15081,
+      "sha256": "ab3bbccd59aaa495bcdce594b4bb37c9004a3a1a718248e0c8f15079c6f2da6d"
+    }
+  ],
+  "command_context": {
+    "shell": "PowerShell",
+    "working_directory": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\h12-source-less-cancel-alert-v1-backend",
+    "static_command": "node --test tests/08092026_0520_banking_pay_candidate_dirty_cohort_authority.test.cjs",
+    "engines": [
+      {
+        "postgres_major": 17,
+        "container": "h12-dirty-coalesce-pg17",
+        "database": "h12_source_compile_pg17",
+        "clone_source_database": "h12_dirty_isolate_pg17",
+        "clone_command": "docker exec h12-dirty-coalesce-pg17 psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c \"CREATE DATABASE h12_source_compile_pg17 TEMPLATE h12_dirty_isolate_pg17;\"",
+        "commands": [
+          "Get-Content -Raw 'supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql' | docker exec -i h12-dirty-coalesce-pg17 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg17",
+          "Get-Content -Raw 'supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql' | docker exec -i h12-dirty-coalesce-pg17 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg17",
+          "Get-Content -Raw 'supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql' | docker exec -i h12-dirty-coalesce-pg17 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg17",
+          "Get-Content -Raw 'tests/08092026_0521_banking_pay_candidate_dirty_cohort_runtime_verification.sql' | docker exec -i h12-dirty-coalesce-pg17 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg17",
+          "$env:H12_DIRTY_COHORT_CONCURRENCY_CONTAINER='h12-dirty-coalesce-pg17'; $env:H12_DIRTY_COHORT_CONCURRENCY_DATABASE='h12_source_compile_pg17'; node --test tests/08092026_0521_banking_pay_candidate_dirty_cohort_concurrency.runtime.test.cjs; Remove-Item Env:H12_DIRTY_COHORT_CONCURRENCY_CONTAINER,Env:H12_DIRTY_COHORT_CONCURRENCY_DATABASE"
+        ]
+      },
+      {
+        "postgres_major": 18,
+        "container": "h12-dirty-coalesce-pg18",
+        "database": "h12_source_compile_pg18",
+        "clone_source_database": "h12_cohort_pg18",
+        "clone_command": "docker exec h12-dirty-coalesce-pg18 psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c \"CREATE DATABASE h12_source_compile_pg18 TEMPLATE h12_cohort_pg18;\"",
+        "commands": [
+          "Get-Content -Raw 'supabase/migrations/08092026_0517_banking_pay_candidate_dirty_active_cohort_indexes_v1.sql' | docker exec -i h12-dirty-coalesce-pg18 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg18",
+          "Get-Content -Raw 'supabase/repeatable/08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql' | docker exec -i h12-dirty-coalesce-pg18 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg18",
+          "Get-Content -Raw 'supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql' | docker exec -i h12-dirty-coalesce-pg18 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg18",
+          "Get-Content -Raw 'tests/08092026_0521_banking_pay_candidate_dirty_cohort_runtime_verification.sql' | docker exec -i h12-dirty-coalesce-pg18 psql -X -v ON_ERROR_STOP=1 -U postgres -d h12_source_compile_pg18",
+          "$env:H12_DIRTY_COHORT_CONCURRENCY_CONTAINER='h12-dirty-coalesce-pg18'; $env:H12_DIRTY_COHORT_CONCURRENCY_DATABASE='h12_source_compile_pg18'; node --test tests/08092026_0521_banking_pay_candidate_dirty_cohort_concurrency.runtime.test.cjs; Remove-Item Env:H12_DIRTY_COHORT_CONCURRENCY_CONTAINER,Env:H12_DIRTY_COHORT_CONCURRENCY_DATABASE"
+        ]
+      }
+    ]
+  },
+  "results": {
+    "static_exact_source_gate": {
+      "status": "PASS",
+      "passed": 8,
+      "total": 8
+    },
+    "source_agent_runs": {
+      "postgres_17": {
+        "migration_0517": "PASS",
+        "repeatable_0518": "PASS",
+        "verifier_0519": "PASS",
+        "runtime_0521": "PASS",
+        "active_member_count": 101,
+        "active_member_fast_path_elapsed_ms": 1620.06,
+        "active_member_fast_path_budget_ms": 30000,
+        "concurrency": {
+          "status": "PASS",
+          "passed": 2,
+          "total": 2,
+          "overlapping_processor_test_elapsed_ms": 4708,
+          "late_arrival_test_elapsed_ms": 7802,
+          "timings_are_rounded_from_node_test_output": true
+        }
+      },
+      "postgres_18": {
+        "migration_0517": "PASS",
+        "repeatable_0518": "PASS",
+        "verifier_0519": "PASS",
+        "runtime_0521": "PASS",
+        "active_member_count": 101,
+        "active_member_fast_path_elapsed_ms": 1078.95,
+        "active_member_fast_path_budget_ms": 30000,
+        "concurrency": {
+          "status": "PASS",
+          "passed": 2,
+          "total": 2,
+          "overlapping_processor_test_elapsed_ms": 4844,
+          "late_arrival_test_elapsed_ms": 7694,
+          "timings_are_rounded_from_node_test_output": true
+        }
+      }
+    },
+    "root_independent_reruns": {
+      "postgres_17": {
+        "runtime_0521": "PASS",
+        "active_member_count": 101,
+        "active_member_fast_path_elapsed_ms": 1656.55,
+        "concurrency": {
+          "status": "PASS",
+          "passed": 2,
+          "total": 2,
+          "elapsed_ms_not_recorded_in_report": true
+        }
+      },
+      "postgres_18": {
+        "runtime_0521": "PASS",
+        "active_member_count": 101,
+        "active_member_fast_path_elapsed_ms": 1077.46,
+        "concurrency": {
+          "status": "PASS",
+          "passed": 2,
+          "total": 2,
+          "elapsed_ms_not_recorded_in_report": true
+        }
+      }
+    },
+    "proved_runtime_cases": [
+      "ALL_PLUS_TARGETED_ONE_AUTHORITY",
+      "DISJOINT_TARGETED_UNION_ONE_AUTHORITY",
+      "ACTIVE_MEMBER_COUNT_101_NO_CAPACITY_FAILURE",
+      "CORRECTION_OWNED_UNFINISHED_EXCLUDED_THEN_ADMITTED",
+      "TARGETED_TO_FULL_REISSUE",
+      "EXACT_FULL_SINGLETON_REPLAY_NO_CHURN",
+      "RESPONSE_LOSS_REPLAY",
+      "LATE_ARRIVAL_NEXT_COHORT",
+      "TRUE_OVERLAPPING_PUBLIC_PROCESSORS_ONE_DELAYED_ONE_STAGED",
+      "CROSS_ROLE_HOSTILE_TEMP_RELATIONS_UNTOUCHED",
+      "DIRECT_AND_LEGACY_PARTIAL_INDEX_PLAN_USE"
+    ]
+  },
+  "policy_and_money_boundary": {
+    "classification": "POLICY_NEUTRAL_FRESHNESS_ONLY",
+    "policy_x_only": true,
+    "economic_calculation_performed": false,
+    "changes_eligibility_or_economic_rules": false,
+    "changes_timeout_policy": false,
+    "durably_merges_or_rewrites_member_reasons_or_correction_context": false,
+    "permitted_effects": [
+      "candidate source sequence advancement",
+      "candidate scope generation invalidation",
+      "shared freshness-authority token staging",
+      "active dirty-job lifecycle requeue/refund required for serialization"
+    ],
+    "forbidden_effects": [
+      "Draft economic calculation",
+      "pay batch or batch-item mutation",
+      "provider attempt mutation",
+      "payment mutation",
+      "settlement mutation",
+      "remittance mutation"
+    ],
+    "static_proof": "0518 helper DML is restricted to freshness authority and async-job state; 0520 rejects economic/payment/provider/settlement/remittance DML.",
+    "runtime_proof": "0521 compares exact fixture row JSON for pay_batches, pay_batch_candidates, correction requests and operations across processor windows, and preserves provider, settlement, remittance, batch and batch-item cardinalities."
+  },
+  "local_installation": {
+    "installed_frozen_definitions_present": true,
+    "checked_objects": [
+      "private.pay_workbench_candidate_dirty_cohort_stage_v1",
+      "public.pay_workbench_candidate_dirty_apply_job_process",
+      "public.idx_bpay_wb_jobs_candidate_dirty_active_cohort_v1",
+      "public.idx_bpay_wb_jobs_legacy_candidate_dirty_active_cohort_v1"
+    ],
+    "postgres_17": "PRESENT",
+    "postgres_18": "PRESENT",
+    "verification_and_runtime_transactions_persisted_fixture_changes": false,
+    "concurrency_harness_left_fixture_rows": false
+  },
+  "open_gates": [
+    {
+      "gate": "INDEPENDENT_REVIEWER_FROZEN_SOURCE",
+      "status": "OPEN",
+      "detail": "Independent stable-hash source and runtime review is still running."
+    },
+    {
+      "gate": "INSTALLED_DEFINITION_IDENTITY",
+      "status": "OPEN",
+      "detail": "Both local clones contain the installed frozen objects, but final independent installed-definition identity approval is pending."
+    },
+    {
+      "gate": "FINAL_RELEASE_INTEGRATION",
+      "status": "OPEN",
+      "detail": "The future one-line F7 include and current-contract/current-release changes are REQUIRED_NOT_YET_APPLIED and were intentionally not touched in this worktree."
+    }
+  ],
+  "disposable_database_ownership": {
+    "owner_task": "/root/workbench_dirty_coalesce_source",
+    "databases": [
+      {
+        "container": "h12-dirty-coalesce-pg17",
+        "database": "h12_source_compile_pg17",
+        "clone_source_database": "h12_dirty_isolate_pg17",
+        "state": "RETAINED_PENDING_INDEPENDENT_REVIEW"
+      },
+      {
+        "container": "h12-dirty-coalesce-pg18",
+        "database": "h12_source_compile_pg18",
+        "clone_source_database": "h12_cohort_pg18",
+        "state": "RETAINED_PENDING_INDEPENDENT_REVIEW"
+      }
+    ],
+    "containers_owned_by_this_task": false,
+    "containers_must_not_be_removed_by_this_task": true,
+    "databases_must_not_be_dropped_until_review_releases_them": true,
+    "must_not_touch": [
+      "h12_dirty_isolate_pg17",
+      "h12_cohort_pg18",
+      "any h12_cohort_* database",
+      "either shared container"
+    ]
+  },
+  "excluded_changes": {
+    "shared_or_h1_release_files_changed": false,
+    "broker_changed": false,
+    "release_json_changed": false,
+    "contract_json_changed": false,
+    "deployment_performed": false,
+    "remote_database_used": false
+  }
+}

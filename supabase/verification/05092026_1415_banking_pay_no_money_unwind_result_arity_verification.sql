@@ -88,14 +88,24 @@ BEGIN
   ) / pg_catalog.length(') || jsonb_build_object(');
 
   IF v_result_section IS NULL
-     OR v_result_join_count <> 2
+     OR v_result_join_count <> 3
      OR pg_catalog.strpos(
           v_result_section,
-          '''blockers'', ''[]''::jsonb' || chr(10) || '  ) || jsonb_build_object('
+          '''communication_cleanup_contract_version'', CASE' || chr(10)
+            || '      WHEN v_candidate_scope_contract_version = 2 THEN v_communication_cleanup_contract_version ELSE NULL::integer END'
+            || chr(10) || '  ) || jsonb_build_object(' || chr(10)
+            || '    ''matching_queued_count'', v_matching_queued_count'
         ) = 0
      OR pg_catalog.strpos(
           v_result_section,
-          '''rail_state_summary'', COALESCE(v_rail_state_summary_json, ''{}''::jsonb)' || chr(10) || '  ) || jsonb_build_object('
+          '''blockers'', ''[]''::jsonb' || chr(10) || '  ) || jsonb_build_object(' || chr(10)
+            || '    ''manual_adjustment_support_details_json'', COALESCE(v_manual_adjustment_result, ''{}''::jsonb)'
+        ) = 0
+     OR pg_catalog.strpos(
+          v_result_section,
+          '''rail_state_summary'', COALESCE(v_rail_state_summary_json, ''{}''::jsonb)' || chr(10)
+            || '  ) || jsonb_build_object(' || chr(10)
+            || '    ''workbench_refresh_status'', COALESCE(v_workbench_refresh_status, ''NOT_REQUIRED'')'
         ) = 0 THEN
     RAISE EXCEPTION 'BANKING_PAY_NO_MONEY_UNWIND_RESULT_ENVELOPE_NOT_BOUNDED';
   END IF;

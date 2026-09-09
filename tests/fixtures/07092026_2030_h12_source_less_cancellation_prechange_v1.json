@@ -1,0 +1,231 @@
+{
+  "artifact": "H12_SOURCE_LESS_CANCELLATION_PRECHANGE_EVIDENCE_V1",
+  "as_of_utc": "2026-09-07T20:30:00Z",
+  "mode": "TEST_AND_EVIDENCE_ONLY_PRECHANGE_GUARD",
+  "implementation_status": "NOT_IMPLEMENTED",
+  "source_identity": {
+    "repository_head": "34d073fef04c365fc0c557f881b749ce88a7e7d7",
+    "runtime_authority": "MIGET_TEST_NOT_MUTATED_OR_CLAIMED"
+  },
+  "source_files": [
+    {
+      "path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+      "bytes": 9214490,
+      "sha256": "8b3cb3e112ae227a80bf2e661272264c3d6145d0e2ff6ad8d88e8eee2db1553f",
+      "owners": [
+        "public._pay_detect_manual_adjustments_for_carry_forward",
+        "public._pay_manual_adjustment_carry_forward_create",
+        "public.banking_alert_fingerprint",
+        "public.banking_alerts_active_for_user",
+        "public.banking_alert_payload_for_pay_batch",
+        "public.pay_settled_payment_reversal_apply_work_item"
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql",
+      "bytes": 117077,
+      "sha256": "4a40fc4911382946dc5ba26d25d5963e552f01e9cada7280b2b4e69db427e43b",
+      "owners": ["public.pay_pre_bank_cancel_apply_work_item"]
+    },
+    {
+      "path": "supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql",
+      "bytes": 121566,
+      "sha256": "2934fff3ee503cbf4a8336d449944bcf6c125fb7de87c3a7cd88aafe2b73b8cc",
+      "owners": ["public.pay_no_money_unwind_apply_work_item"]
+    },
+    {
+      "path": "supabase/repeatable/04082026_1208_pay_payment_correction_expand_work.sql",
+      "bytes": 30449,
+      "sha256": "7d944938263dd27a77bc24632a48e2ff9283e01a004a74a3337e790711f2ad51",
+      "owners": ["public.pay_payment_correction_expand_work"]
+    },
+    {
+      "path": "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql",
+      "bytes": 143060,
+      "sha256": "60e5fc26fbd147991c16ada0aaf2a9691143ccf46aa6e3227dc78d823a7a7ce1",
+      "owners": ["public.pay_payment_correction_process_chunk"]
+    },
+    {
+      "path": "supabase/migrations/30042026_1341_newcolumns_reverse_payments.sql",
+      "bytes": 26358,
+      "sha256": "a5762598b5597fb521a47b7f3db2d2d043dd6a3e2acc8931b23269e9404fdcef",
+      "owners": ["public.pay_payment_correction_work_items"]
+    }
+  ],
+  "supported_user_scope": [
+    "ENTIRE_CANDIDATE_PAYMENT",
+    "ENTIRE_DRAFT_OR_RUN"
+  ],
+  "c016": {
+    "id": "C016_SOURCE_LESS_MANUAL_ADJUSTMENT",
+    "binding_user_decision": "CONFIRMED_UNPAID_CANCELLATION_MUST_PROCEED_WITH_EXACT_DURABLE_INVESTIGATION_EVIDENCE",
+    "prechange_status": "PROVED_CURRENT_POLICY_DIVERGENCE_NOT_FIXED",
+    "current_veto": {
+      "code": "SOURCE_LESS_MANUAL_ADJUSTMENT_AMBIGUOUS",
+      "owners": [
+        "public.pay_pre_bank_cancel_apply_work_item",
+        "public.pay_no_money_unwind_apply_work_item"
+      ],
+      "ordering": "DETECTOR_AND_BLOCK_RETURN_PRECEDE_CARRY_FORWARD_CREATION_CORRECTION_LEDGER_AND_FINANCIAL_CANCELLATION_WRITES",
+      "effect": "A valid confirmed-unpaid whole-Candidate or whole-Draft work item is marked BLOCKED before cancellation because future source treatment cannot be inferred."
+    },
+    "detector_contract": {
+      "owner": "public._pay_detect_manual_adjustments_for_carry_forward",
+      "manual_like_markers": [
+        "MANUAL",
+        "ADJUSTMENT",
+        "DEBT",
+        "CREDIT",
+        "ADJUSTMENT_DELTA",
+        "MANUAL_CREDIT_ADJUSTMENT_PAYMENT",
+        "MANUAL_CREDIT_PAYOUT",
+        "MANUAL_DEBT_RECOVERY",
+        "FINANCE_ADJUSTMENT"
+      ],
+      "source_less_safe_requires": [
+        "NON_NULL_AMOUNT_INC_VAT",
+        "NON_ZERO_ROUNDED_AMOUNT_INC_VAT",
+        "NON_NULL_AMOUNT_EX_VAT",
+        "NON_NULL_AMOUNT_VAT",
+        "NON_BLANK_DESCRIPTION",
+        "CANDIDATE_ID",
+        "PAY_CHANNEL_PAYE_OR_UMBRELLA",
+        "UMBRELLA_PAYEE_CONTEXT_WHEN_UMBRELLA"
+      ],
+      "source_less_safe_classification": "SOURCE_LESS_CARRY_FORWARD_SAFE",
+      "source_less_ambiguous_classification": "SOURCE_LESS_AMBIGUOUS",
+      "ambiguity_reasons": [
+        "MISSING_AMOUNT_INC_VAT",
+        "ZERO_AMOUNT",
+        "MISSING_AMOUNT_EX_VAT",
+        "MISSING_AMOUNT_VAT",
+        "MISSING_DESCRIPTION",
+        "MISSING_CANDIDATE_CONTEXT",
+        "UNSUPPORTED_OR_MISSING_PAY_CHANNEL",
+        "MISSING_UMBRELLA_PAYEE_CONTEXT"
+      ]
+    },
+    "deterministic_cases": [
+      {
+        "case_id": "PAYE_COMPLETE_SOURCE_LESS",
+        "input": {
+          "amount_inc_vat": "-25.00",
+          "amount_ex_vat": "-25.00",
+          "amount_vat": "0.00",
+          "description": "Frozen manual deduction",
+          "candidate_id_present": true,
+          "pay_channel": "PAYE",
+          "umbrella_payee_present": false
+        },
+        "expected_classification": "SOURCE_LESS_CARRY_FORWARD_SAFE",
+        "current_route": "CREATE_CARRY_FORWARD_THEN_CONTINUE_EXISTING_CANCELLATION"
+      },
+      {
+        "case_id": "UMBRELLA_COMPLETE_SOURCE_LESS",
+        "input": {
+          "amount_inc_vat": "30.00",
+          "amount_ex_vat": "25.00",
+          "amount_vat": "5.00",
+          "description": "Frozen manual credit",
+          "candidate_id_present": true,
+          "pay_channel": "UMBRELLA",
+          "umbrella_payee_present": true
+        },
+        "expected_classification": "SOURCE_LESS_CARRY_FORWARD_SAFE",
+        "current_route": "CREATE_CARRY_FORWARD_THEN_CONTINUE_EXISTING_CANCELLATION"
+      },
+      {
+        "case_id": "PAYE_MISSING_DESCRIPTION",
+        "input": {
+          "amount_inc_vat": "-25.00",
+          "amount_ex_vat": "-25.00",
+          "amount_vat": "0.00",
+          "description": "",
+          "candidate_id_present": true,
+          "pay_channel": "PAYE",
+          "umbrella_payee_present": false
+        },
+        "expected_classification": "SOURCE_LESS_AMBIGUOUS",
+        "expected_reason": "MISSING_DESCRIPTION",
+        "current_route": "BLOCK_BEFORE_CANCELLATION"
+      },
+      {
+        "case_id": "UMBRELLA_MISSING_PAYEE",
+        "input": {
+          "amount_inc_vat": "30.00",
+          "amount_ex_vat": "25.00",
+          "amount_vat": "5.00",
+          "description": "Frozen manual credit",
+          "candidate_id_present": true,
+          "pay_channel": "UMBRELLA",
+          "umbrella_payee_present": false
+        },
+        "expected_classification": "SOURCE_LESS_AMBIGUOUS",
+        "expected_reason": "MISSING_UMBRELLA_PAYEE_CONTEXT",
+        "current_route": "BLOCK_BEFORE_CANCELLATION"
+      }
+    ],
+    "current_safe_path": {
+      "can_carry_forward_automatically": true,
+      "caller_sequence": [
+        "public._pay_detect_manual_adjustments_for_carry_forward",
+        "public._pay_manual_adjustment_carry_forward_create",
+        "public._pay_manual_adjustment_carry_forward_release_for_scope",
+        "INSERT public.pay_payment_correction_items status APPLIED",
+        "EXISTING_FINANCIAL_CANCELLATION_WRITES"
+      ]
+    },
+    "current_alert_lifecycle": {
+      "kind": "MANUAL_ADJUSTMENT_AMBIGUOUS_BLOCKERS",
+      "source": "PENDING_CARRY_FORWARD_ON_NON_CANCELLED_SOURCE_BATCH",
+      "stable_identity": "GROUPED_ACTIVE",
+      "after_source_batch_cancelled": "DISAPPEARS",
+      "durable_post_cancellation_investigation_source": false
+    },
+    "future_correction_guard_only": {
+      "financial_cancellation": "MUST_NOT_BE_BLOCKED_BY_SOURCE_AMBIGUITY",
+      "durable_evidence": "REQUIRED_ATOMIC_WITH_CANCELLATION",
+      "alert": "SEPARATE_IDEMPOTENT_NON_VETOING",
+      "automatic_carry_forward_for_ambiguous_item": false,
+      "future_source_or_economic_outcome": "UNRESOLVED_SEPARATE_POLICY_QUESTION",
+      "implementation_authorised": false
+    }
+  },
+  "c020": {
+    "id": "C020_PROCESSOR_UNSUPPORTED_WORK_KIND",
+    "corrected_classification": "CANONICAL_UNPAID_GENERATION_UNREACHABLE_HOSTILE_OR_LEGACY_FAIL_CLOSED",
+    "prechange_status": "CURRENT_DEFENSIVE_GUARD_IS_CORRECT_NO_AUTOMATIC_FIX",
+    "current_processor": "public.pay_payment_correction_process_chunk",
+    "canonical_generator": "public.pay_payment_correction_expand_work",
+    "canonical_unpaid_generation": {
+      "NO_MONEY_UNWIND_REQUEST": "NO_MONEY_UNWIND",
+      "EVERY_OTHER_REQUEST_ACCEPTED_BY_THIS_UNPAID_EXPAND_OWNER": "PRE_BANK_CANCEL",
+      "can_emit_other_work_kind": false
+    },
+    "table_allowed_work_kinds": [
+      "PRE_BANK_CANCEL",
+      "NO_MONEY_UNWIND",
+      "SETTLED_REVERSAL"
+    ],
+    "separate_paid_owner": {
+      "work_kind": "SETTLED_REVERSAL",
+      "owner": "public.pay_settled_payment_reversal_apply_work_item",
+      "current_policy": "PAID_SETTLED_RECOVERY_REQUIRED_AMEND_AND_RECOVER_OVERPAYMENT"
+    },
+    "unsupported_branch": {
+      "code": "BLOCKED_BY_UNSUPPORTED_SOURCE",
+      "meaning": "The unpaid processor received a legacy corrupt or wrong-engine work kind.",
+      "required_behavior": "FAIL_CLOSED_WITHOUT_RECLASSIFYING_OR_MOVING_MONEY"
+    },
+    "relationship_to_c016": "NONE. C016 is a valid unpaid work kind with incomplete future-source facts; C020 is an invalid route identity for the unpaid processor.",
+    "blocks_canonical_confirmed_unpaid_cancellation": false,
+    "implementation_authorised": false
+  },
+  "forbidden_inferences": [
+    "Treating source-less ambiguity as proof that money moved.",
+    "Inventing missing source, amount, sign, gross/net, tax, VAT, Candidate, channel, payee or future payment treatment.",
+    "Routing SETTLED_REVERSAL through PRE_BANK_CANCEL or NO_MONEY_UNWIND.",
+    "Changing mail or making cancellation depend on communication.",
+    "Calling this evidence an implementation or Miget installed proof."
+  ]
+}

@@ -125,7 +125,16 @@
     "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
     "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
     "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
-    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql"
+    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+    "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+    "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+    "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+    "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+    "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+    "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+    "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+    "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+    "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -217,6 +226,15 @@
     "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
     "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
     "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
-    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql"
+    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql",
+    "supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql",
+    "supabase/verification/07092026_2142_banking_pay_manual_carry_forward_economic_identity_verification.sql",
+    "supabase/verification/07092026_2302_banking_pay_payment_cancellation_notice_verification.sql",
+    "supabase/verification/08092026_0511_banking_pay_payment_correction_prepare_idempotency_verification.sql",
+    "supabase/verification/08092026_0519_banking_pay_candidate_dirty_cohort_authority_verification.sql",
+    "supabase/verification/08092026_0805_pay_workbench_scope_invalidate_pair_arrays_verification.sql",
+    "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
+    "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
+    "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql"
   ]
 }
