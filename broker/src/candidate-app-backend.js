@@ -1929,34 +1929,52 @@ async function reusableCandidateExpenseSource(
       || text(source.source_content_sha256).replace(/^\\x/i, '').toLowerCase() !== sourceContentSha256) {
     throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
   }
-  const storageKey = text(source.storage_key).replace(/^\/+/, '');
-  const bucket = env.R2;
-  if (!bucket || typeof bucket.head !== 'function') {
-    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
-  }
-  let stored;
-  try {
-    stored = storageKey ? await bucket.head(storageKey) : null;
-  } catch {
-    throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
-  }
-  const metadata = stored?.customMetadata || {};
-  if (!stored
-      || Number(stored.size) !== byteSize
-      || normaliseMediaType(stored.httpMetadata?.contentType) !== mediaType
-      || text(metadata.purpose) !== 'candidate-component'
-      || text(metadata.workflow_id) !== source.workflow_id
-      || text(metadata.component_id) !== source.id
-      || normaliseMediaType(metadata.media_type) !== mediaType
-      || Number(metadata.byte_size) !== byteSize
-      || text(metadata.sha256).toLowerCase() !== sourceContentSha256) {
-    // A digest-matching root already exists, so an ordinary fresh upload would
-    // be rejected by the root-only global digest constraint after its R2 put.
-    // Stop before creating a component or upload ticket instead of cloning a
-    // missing/unproved object or leaving a doomed pending upload behind.
-    throw new CandidateHttpError(409, 'CANDIDATE_RECEIPT_STORAGE_STALE');
-  }
+  // The historical database row proves the immutable lineage identity.  The
+  // selected bytes are uploaded again under a new component-owned R2 key and
+  // COMPONENT_COMPLETE checks their digest against this root.  Do not depend
+  // on the historical R2 object: its former claim may legitimately clean it up
+  // after this preflight, which would make a zero-copy reference unsafe.
   return source;
+}
+
+function candidateComponentDigest(value) {
+  return text(value).replace(/^\\x/i, '').toLowerCase();
+}
+
+function candidateComponentPrepareModeMatches(component, expected, allowLegacyClone = false) {
+  const state = upper(component?.state);
+  const actualDigest = candidateComponentDigest(component?.source_content_sha256);
+  const expectedDigest = candidateComponentDigest(component?.expected_source_content_sha256);
+  if (expected.source_component_id) {
+    if (component?.source_component_id !== expected.source_component_id) return false;
+    if (expectedDigest === expected.source_content_sha256) {
+      return (state === 'PENDING' && !actualDigest)
+        || (state === 'IMMUTABLE' && actualDigest === expected.source_content_sha256);
+    }
+    // Every source-linked reuse owns a fresh upload.  A legacy zero-copy row
+    // has no expected digest proving that fresh copy, so it must never be
+    // accepted as a completed replay.  The legacy allowance below remains
+    // intentionally limited to direct-root first-use idempotency.
+    return false;
+  }
+  if (component?.source_component_id != null) return false;
+  const requestedDigest = expected.requested_source_content_sha256 || '';
+  if (requestedDigest) {
+    if (expectedDigest === requestedDigest) {
+      return (state === 'PENDING' && !actualDigest)
+        || (state === 'IMMUTABLE' && actualDigest === requestedDigest);
+    }
+    // Completed roots created by the immediately preceding release did not
+    // persist the expected digest.  They remain safe to replay only when their
+    // immutable actual digest matches the newly supplied request exactly.
+    return allowLegacyClone
+      && state === 'IMMUTABLE'
+      && !expectedDigest
+      && actualDigest === requestedDigest;
+  }
+  if (expectedDigest) return false;
+  return (state === 'PENDING' && !actualDigest)
+    || (state === 'IMMUTABLE' && Boolean(actualDigest));
 }
 
 async function currentCandidateExpenseComponentReplay(
@@ -1992,9 +2010,19 @@ async function currentCandidateExpenseComponentReplay(
     throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_AMBIGUOUS');
   }
   const component = matches[0];
+  const legacyZeroCopyReuse = component.source_component_id === reusableSource.id
+    && upper(component.state) === 'IMMUTABLE'
+    && !candidateComponentDigest(component.expected_source_content_sha256)
+    && candidateComponentDigest(component.source_content_sha256)
+      === expected.source_content_sha256;
+  if (legacyZeroCopyReuse) {
+    // This older completed row may still point at the historical receipt's
+    // storage object.  It cannot prove the fresh current copy now required for
+    // safe reuse, so give the Candidate the specific recoverable instruction.
+    throw new CandidateHttpError(409, 'CANDIDATE_RECEIPT_STORAGE_STALE');
+  }
   if (!candidateComponentPrepareMatches(component, workflowId, generation, expected)
-      || text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
-        !== expected.source_content_sha256
+      || !candidateComponentPrepareModeMatches(component, expected, true)
       || (component.id !== reusableSource.id
         && component.source_component_id !== reusableSource.id)) {
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
@@ -2028,8 +2056,7 @@ function candidateComponentPrepareMatches(component, workflowId, generation, exp
     && normaliseMediaType(component.media_type) === expected.media_type
     && Number(component.byte_size) === expected.byte_size
     && component.approval_request_id == null
-    && component.manager_signature_capture_method == null
-    && component.expected_source_content_sha256 == null;
+    && component.manager_signature_capture_method == null;
 }
 
 async function repairInterruptedCandidateExpensePrepare(
@@ -2052,13 +2079,11 @@ async function repairInterruptedCandidateExpensePrepare(
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
   }
   const state = upper(existing.state);
-  const sourceDigest = text(existing.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
-  if (existing.source_component_id === reusableSource.id
-      && state === 'IMMUTABLE'
-      && sourceDigest === expected.source_content_sha256) {
+  if (candidateComponentPrepareModeMatches(existing, expected, true)) {
     return idempotencyKey;
   }
   const interruptedDirectPrepare = existing.source_component_id == null
+    && existing.expected_source_content_sha256 == null
     && existing.source_content_sha256 == null
     && ['PENDING', 'SUPERSEDED'].includes(state);
   if (!interruptedDirectPrepare) {
@@ -2078,7 +2103,7 @@ async function repairInterruptedCandidateExpensePrepare(
 }
 
 async function preparedCandidateComponentReplay(
-  env, access, workflowId, generation, idempotencyKey, expected
+  env, access, workflowId, generation, idempotencyKey, expected, options = {}
 ) {
   const componentSelect = 'id,workflow_id,workflow_generation,component_kind,document_role,'
     + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
@@ -2091,13 +2116,24 @@ async function preparedCandidateComponentReplay(
       + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
       + `&select=${componentSelect}`
   );
+  if (options.exactDirectOnly === true) {
+    if (!component || component.source_component_id != null) return null;
+  }
   let recoveredPendingPrepare = false;
-  if (!component) {
+  if (!component && options.exactDirectOnly !== true) {
     // Older builds could lose the locally persisted prepare key after the
     // database had durably created the component but before the HTTP response
     // reached the phone. Recover only one exact, still-unuploaded component.
-    // Completed components are deliberately excluded because their immutable
-    // digest cannot be compared until the upload bytes have been supplied.
+    // A source-linked component carries the exact expected digest, so both its
+    // pending upload and its completed immutable copy can be recovered safely.
+    const reuseRecoveryFilter = expected.source_component_id
+      ? `&state=in.(PENDING,IMMUTABLE)&source_component_id=eq.${encodeURIComponent(expected.source_component_id)}`
+        + `&expected_source_content_sha256=eq.${encodeURIComponent(`\\x${expected.source_content_sha256}`)}`
+      : expected.requested_source_content_sha256
+        ? `&state=eq.PENDING&expected_source_content_sha256=eq.${encodeURIComponent(`\\x${expected.requested_source_content_sha256}`)}`
+          + '&source_content_sha256=is.null&source_component_id=is.null'
+        : '&state=eq.PENDING&expected_source_content_sha256=is.null'
+          + '&source_content_sha256=is.null&source_component_id=is.null';
     const pending = await restRows(
       env,
       'candidate_submission_components',
@@ -2107,9 +2143,8 @@ async function preparedCandidateComponentReplay(
         + `&document_role=eq.${encodeURIComponent(expected.document_role)}`
         + `&media_type=eq.${encodeURIComponent(expected.media_type)}`
         + `&byte_size=eq.${expected.byte_size}`
-        + '&state=eq.PENDING&approval_request_id=is.null'
-        + '&manager_signature_capture_method=is.null'
-        + '&expected_source_content_sha256=is.null&source_content_sha256=is.null'
+        + '&approval_request_id=is.null&manager_signature_capture_method=is.null'
+        + reuseRecoveryFilter
         + (expected.expense_category == null
           ? '&expense_category=is.null'
           : `&expense_category=eq.${encodeURIComponent(expected.expense_category)}`)
@@ -2150,14 +2185,8 @@ async function preparedCandidateComponentReplay(
       || (!recoveredPendingPrepare && component.upload_idempotency_key !== idempotencyKey)
       || component.approval_request_id != null
       || component.manager_signature_capture_method != null
-      || component.expected_source_content_sha256 != null
-      || (recoveredPendingPrepare && component.source_content_sha256 != null)
-      || (expected.source_component_id == null
-        ? component.source_component_id != null
-        : component.source_component_id !== expected.source_component_id)
-      || (expected.source_content_sha256
-        && text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
-          !== expected.source_content_sha256)) {
+      || !candidateComponentPrepareMatches(component, workflowId, generation, expected)
+      || !candidateComponentPrepareModeMatches(component, expected, true)) {
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
   }
   const authoritative = preparedUploadContract({
@@ -2663,7 +2692,44 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   if (owner !== 'candidate' && sourceContentSha256 != null) {
     throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
   }
-  if (owner === 'candidate') {
+  if (owner === 'candidate'
+      && sourceContentSha256 != null
+      && !['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  if (owner === 'candidate'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+      && sourceContentSha256 == null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+  }
+  const idempotencyKey = owner === 'office'
+    ? requireOfficeIdempotency(body.idempotency_key)
+    : requireCandidateIdempotency(body.idempotency_key);
+  const directExpected = {
+    media_type: mediaType,
+    byte_size: byteSize,
+    component_kind: componentKind,
+    document_role: upper(body.document_role || (owner === 'office' ? 'MANAGER_SIGNATURE' : '')),
+    expense_category: body.expense_category == null ? null : upper(body.expense_category),
+    paper_return_page_key: body.paper_return_page_key == null
+      ? null
+      : text(body.paper_return_page_key),
+    workflow_generation: generation,
+    source_component_id: null,
+    source_content_sha256: null,
+    requested_source_content_sha256: sourceContentSha256
+  };
+  // Replay the caller's exact direct component before looking for an ended
+  // historical receipt with the same digest.  Once a first-use upload has
+  // completed, that component is itself the digest root; treating it as a new
+  // reuse request would incorrectly reject an ordinary lost-response retry.
+  const exactDirectReplay = owner === 'candidate'
+    ? await preparedCandidateComponentReplay(
+      env, candidateAccess, workflowId, generation, idempotencyKey,
+      directExpected, { exactDirectOnly: true }
+    )
+    : null;
+  if (owner === 'candidate' && !exactDirectReplay) {
     reusableSource = await reusableCandidateExpenseSource(
       env, candidateAccess, workflowId, componentKind,
       upper(body.document_role || ''),
@@ -2671,6 +2737,15 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       mediaType, byteSize, sourceContentSha256
     );
   }
+  const databaseExpectedContentSha256 = owner === 'candidate'
+    && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+    ? sourceContentSha256
+    : expectedContentSha256;
+  const uploadExpectedContentSha256 = databaseExpectedContentSha256
+    || (owner === 'candidate'
+      && ['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)
+      ? sourceContentSha256
+      : null);
   const storageKey = componentStorageKey(environment, workflowId, generation, componentKind, mediaType);
   const payload = {
     component_kind: componentKind,
@@ -2688,21 +2763,21 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       approval_token_hash_hex: approvalTokenHash
     } : {}),
     ...(captureMethod ? { manager_signature_capture_method: captureMethod } : {}),
-    ...(expectedContentSha256 ? { expected_source_content_sha256_hex: expectedContentSha256 } : {})
+    ...(databaseExpectedContentSha256
+      ? { expected_source_content_sha256_hex: databaseExpectedContentSha256 }
+      : {})
     ,...(paperReturnProof ? {
       paper_return_proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
     } : {})
   };
-  const idempotencyKey = owner === 'office'
-    ? requireOfficeIdempotency(body.idempotency_key)
-    : requireCandidateIdempotency(body.idempotency_key);
   const expected = {
     media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
     document_role: payload.document_role, expense_category: payload.expense_category,
     paper_return_page_key: payload.paper_return_page_key,
     workflow_generation: generation,
     source_component_id: reusableSource?.id ?? null,
-    source_content_sha256: reusableSource ? sourceContentSha256 : null
+    source_content_sha256: reusableSource ? sourceContentSha256 : null,
+    requested_source_content_sha256: sourceContentSha256
   };
   const currentExpenseReplay = owner === 'candidate'
     ? await currentCandidateExpenseComponentReplay(
@@ -2715,7 +2790,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       idempotencyKey, expected, reusableSource
     )
     : idempotencyKey;
-  const preparedReplay = currentExpenseReplay || (owner === 'candidate'
+  const preparedReplay = exactDirectReplay || currentExpenseReplay || (owner === 'candidate'
     ? await preparedCandidateComponentReplay(
       env, candidateAccess, workflowId, generation, effectiveIdempotencyKey, expected
     )
@@ -2740,7 +2815,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   }
   const authoritative = preparedUploadContract(result, expected);
   const componentId = authoritative.component_id;
-  const ticket = reusableSource ? null : await uploadTicket(env, {
+  const ticket = authoritative.state === 'PENDING' ? await uploadTicket(env, {
     env: environment,
     authority_kind: authority?.authority_kind || 'CANDIDATE_SESSION',
     owner, owner_id: ownerId, workflow_id: workflowId,
@@ -2752,7 +2827,9 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
     key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
     completion_idempotency_key: `${effectiveIdempotencyKey}:complete`,
-    ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {}),
+    ...(uploadExpectedContentSha256
+      ? { expected_content_sha256: uploadExpectedContentSha256 }
+      : {}),
     ...(captureMethod ? { capture_method: captureMethod } : {}),
     ...(paperReturnProof ? { paper_return_proof: {
       proof_contract_version: paperReturnProof.proof_contract_version,
@@ -2772,15 +2849,14 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       request_generation: authority.request_generation,
       credential_generation: authority.credential_generation
     } : {})
-  });
+  }) : null;
   return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
     ok: true, workflow_id: workflowId, generation: authoritative.workflow_generation, component_id: componentId,
     idempotent_replay: result.idempotent_replay === true,
-    reused_existing_upload: Boolean(reusableSource),
+    reused_existing_upload: authoritative.state === 'IMMUTABLE',
     ...(ticket ? { upload: {
       method: 'PUT', url: `${owner === 'office' ? '/api/candidate-app' : CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
-      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600,
-      ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {})
+      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600
     } } : {})
   });
 }
@@ -4636,12 +4712,21 @@ async function drawCandidateBranding(pdf, page, branding, {
 }
 
 async function embedExpenseSource(pdf, page, env, component, renderInput, contentTop, contentHeight) {
-  const sourceId = renderInput?.source_component_id || component.source_component_id;
-  if (!sourceId) return false;
-  const sourceComponent = await restOne(env, 'candidate_submission_components', `id=eq.${encodeURIComponent(sourceId)}&select=*`);
-  if (!sourceComponent?.storage_key) throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
-  const expected = text(sourceComponent.source_content_sha256).replace(/^\\x/, '') || null;
-  const source = await r2Bytes(env, sourceComponent.storage_key, expected);
+  const renderSourceId = renderInput?.source_component_id || null;
+  const permittedSourceId = component.source_component_id || component.id;
+  const expected = candidateComponentDigest(component.source_content_sha256) || null;
+  const renderDigest = candidateComponentDigest(renderInput?.source_content_sha256) || null;
+  if (!renderSourceId && !expected) return false;
+  if (!component.storage_key
+      || !expected
+      || renderSourceId !== permittedSourceId
+      || renderDigest !== expected) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  // Render only the current component-owned copy.  The historical lineage
+  // root may already have been cleaned up after its claim ended, and must not
+  // remain a storage dependency for the new live claim.
+  const source = await r2Bytes(env, component.storage_key, expected);
   const width = page.getWidth() - 72;
   if (source.media_type === 'application/pdf') {
     const input = await PDFDocument.load(source.bytes);
@@ -8996,7 +9081,10 @@ async function paperExpensePageBytes(
     paper_return_qr_text: pageQrText,
     paper_return_display_name: displayName,
     render_input: upper(component.component_kind) === 'EXPENSE_SUMMARY'
-      ? {} : { source_component_id: component.id }
+      ? {} : {
+        source_component_id: component.source_component_id || component.id,
+        source_content_sha256: candidateComponentDigest(component.source_content_sha256)
+      }
   }, { workflow, component }, 'REVIEW');
   return rendered.pdf_bytes;
 }

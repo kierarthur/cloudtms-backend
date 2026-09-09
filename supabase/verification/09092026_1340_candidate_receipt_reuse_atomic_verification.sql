@@ -76,6 +76,30 @@ begin
      )=0
      or pg_catalog.strpos(
        pg_catalog.lower(v_definition),
+       '''expected_source_content_sha256_hex'''
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
+       'v_expected_source_digest'
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
+       '''candidate_component_storage_key_invalid'''
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
+       'v_component_kind not in (''mileage_form'',''expense_evidence'')'
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
+       'v_component_kind,v_expense_category,v_document_role,''pending'''
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
+       'v_expected_source_digest,p_now_utc'
+     )=0
+     or pg_catalog.strpos(
+       pg_catalog.lower(v_definition),
        '''abandoned'''
      )=0
      or pg_catalog.strpos(

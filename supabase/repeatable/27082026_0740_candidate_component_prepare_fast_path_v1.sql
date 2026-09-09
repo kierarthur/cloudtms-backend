@@ -35,11 +35,13 @@ declare
   v_requested_byte_size bigint;
   v_requested_source_component_id uuid;
   v_requested_source_digest bytea;
+  v_expected_source_digest bytea;
   v_component_no integer;
   v_mutation_semantic_payload jsonb;
   v_mutation_request_sha256 text;
   v_mutation_receipt jsonb;
   v_response jsonb;
+  v_constraint_name text;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_session_id is null or p_workflow_id is null
@@ -86,6 +88,76 @@ begin
       )::text;
   end if;
 
+  v_component_kind:=upper(btrim(coalesce(v_payload->>'component_kind','')));
+  v_document_role:=upper(btrim(coalesce(v_payload->>'document_role','')));
+  v_expense_category:=nullif(upper(btrim(coalesce(v_payload->>'expense_category',''))),'');
+  v_paper_page_key:=nullif(btrim(coalesce(v_payload->>'paper_return_page_key','')),'');
+  v_requested_media_type:=nullif(lower(btrim(coalesce(v_payload->>'media_type',''))),'');
+  begin
+    v_requested_byte_size:=nullif(v_payload->>'byte_size','')::bigint;
+  exception when invalid_text_representation or numeric_value_out_of_range then
+    raise exception 'CANDIDATE_COMPONENT_SIZE_INVALID' using errcode='22023';
+  end;
+  if nullif(v_payload->>'source_component_id','') is not null then
+    begin
+      v_requested_source_component_id:=(v_payload->>'source_component_id')::uuid;
+    exception when invalid_text_representation then
+      raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
+    end;
+    if coalesce(v_payload->>'source_content_sha256_hex','')
+       !~ '^[0-9a-fA-F]{64}$' then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+    end if;
+    v_requested_source_digest:=decode(
+      v_payload->>'source_content_sha256_hex','hex'
+    );
+  elsif nullif(btrim(coalesce(v_payload->>'source_content_sha256_hex','')),'') is not null then
+    raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
+  end if;
+  if nullif(btrim(coalesce(v_payload->>'expected_source_content_sha256_hex','')),'') is not null then
+    if coalesce(v_payload->>'expected_source_content_sha256_hex','')
+       !~ '^[0-9a-fA-F]{64}$' then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+    end if;
+    v_expected_source_digest:=decode(
+      v_payload->>'expected_source_content_sha256_hex','hex'
+    );
+  end if;
+  -- Receipt uploads are digest-bound before any idempotent receipt or row
+  -- replay.  This prevents an interrupted legacy PENDING row without an exact
+  -- digest from being revived by either an older or newer client.
+  if v_component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE') then
+    if (
+      (v_component_kind='MILEAGE_FORM'
+        and (v_document_role<>'MILEAGE_CLAIM_FORM' or v_expense_category<>'MILEAGE'))
+      or (v_component_kind='EXPENSE_EVIDENCE'
+        and (v_document_role<>'SOURCE_EVIDENCE'
+          or v_expense_category not in ('TRAVEL','ACCOMMODATION','OTHER','MILEAGE')))
+      or v_workflow.scope<>'WEEKLY'
+      or v_workflow.workflow_kind not in (
+        'CONTRACT_HOURS','CONTRACT_EXPENSE','CONTRACT_COMBINED'
+      )
+    ) then
+      raise exception 'CANDIDATE_COMPONENT_TYPE_INVALID' using errcode='22023';
+    end if;
+    if v_expected_source_digest is null then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+    end if;
+    if nullif(btrim(coalesce(v_payload->>'storage_key','')),'') is null then
+      raise exception 'CANDIDATE_COMPONENT_STORAGE_KEY_INVALID' using errcode='22023';
+    end if;
+  elsif v_expected_source_digest is not null then
+    raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+  end if;
+  if v_requested_source_component_id is not null
+     and v_component_kind not in ('MILEAGE_FORM','EXPENSE_EVIDENCE') then
+    raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
+  end if;
+  if v_requested_source_component_id is not null
+     and v_expected_source_digest is distinct from v_requested_source_digest then
+    raise exception 'CANDIDATE_COMPONENT_DIGEST_MISMATCH' using errcode='22023';
+  end if;
+
   v_mutation_semantic_payload:=v_payload-'storage_key';
   v_mutation_request_sha256:=encode(extensions.digest(convert_to(jsonb_build_object(
     'contract_version','CANDIDATE_WORKFLOW_MUTATION_REQUEST_V1',
@@ -116,31 +188,6 @@ begin
     raise exception 'CANDIDATE_WORKFLOW_NOT_MUTABLE' using errcode='55000';
   end if;
 
-  v_component_kind:=upper(btrim(coalesce(v_payload->>'component_kind','')));
-  v_document_role:=upper(btrim(coalesce(v_payload->>'document_role','')));
-  v_expense_category:=nullif(upper(btrim(coalesce(v_payload->>'expense_category',''))),'');
-  v_paper_page_key:=nullif(btrim(coalesce(v_payload->>'paper_return_page_key','')),'');
-  v_requested_media_type:=nullif(lower(btrim(coalesce(v_payload->>'media_type',''))),'');
-  begin
-    v_requested_byte_size:=nullif(v_payload->>'byte_size','')::bigint;
-  exception when invalid_text_representation or numeric_value_out_of_range then
-    raise exception 'CANDIDATE_COMPONENT_SIZE_INVALID' using errcode='22023';
-  end;
-  if nullif(v_payload->>'source_component_id','') is not null then
-    begin
-      v_requested_source_component_id:=(v_payload->>'source_component_id')::uuid;
-    exception when invalid_text_representation then
-      raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='28000';
-    end;
-    if coalesce(v_payload->>'source_content_sha256_hex','')
-       !~ '^[0-9a-fA-F]{64}$' then
-      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
-    end if;
-    v_requested_source_digest:=decode(
-      v_payload->>'source_content_sha256_hex','hex'
-    );
-  end if;
-
   select * into v_component
   from public.candidate_submission_components
   where workflow_id=v_workflow.id
@@ -158,13 +205,28 @@ begin
        or lower(v_component.media_type) is distinct from v_requested_media_type
        or v_component.byte_size is distinct from v_requested_byte_size
        or v_component.manager_signature_capture_method is not null
-       or v_component.expected_source_content_sha256 is not null
+       or v_component.expected_source_content_sha256
+          is distinct from v_expected_source_digest
        or v_component.source_component_id
           is distinct from v_requested_source_component_id
        or (
-         v_requested_source_component_id is not null
-         and v_component.source_content_sha256
-           is distinct from v_requested_source_digest
+         v_component.state='PENDING'
+         and (
+           v_component.source_content_sha256 is not null
+           or v_component.immutable_at_utc is not null
+         )
+       )
+       or (
+         v_component.state='IMMUTABLE'
+         and (
+           v_component.source_content_sha256 is null
+           or v_component.immutable_at_utc is null
+           or (
+             v_expected_source_digest is not null
+             and v_component.source_content_sha256
+               is distinct from v_expected_source_digest
+           )
+         )
        )
        or v_component.paper_return_page_key is distinct from v_paper_page_key then
       raise exception 'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' using errcode='23505';
@@ -365,6 +427,19 @@ begin
     ) then
       raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505';
     end if;
+  elsif v_component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+    and exists(
+      select 1
+      from public.candidate_submission_components used_root
+      where used_root.source_component_id is null
+        and used_root.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+        and used_root.source_content_sha256=v_expected_source_digest
+    ) then
+    -- A completed physical root with these exact bytes must be selected as a
+    -- source lineage, even when its former use has ended.  Rejecting here
+    -- avoids issuing an upload ticket that COMPONENT_COMPLETE could never
+    -- commit because the original source hash remains globally reserved.
+    raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505';
   end if;
 
   select coalesce(max(component_no),0)+1 into v_component_no
@@ -380,15 +455,14 @@ begin
     manager_signature_capture_method,expected_source_content_sha256,created_at_utc
   ) values (
     v_workflow.id,v_workflow.generation,v_component_no,null,v_workflow.target_timesheet_id,
-    v_component_kind,v_expense_category,v_document_role,
-    case when v_source_component.id is null then 'PENDING' else 'IMMUTABLE' end,
+    v_component_kind,v_expense_category,v_document_role,'PENDING',
     v_source_component.id,
-    coalesce(v_source_component.storage_key,nullif(v_payload->>'storage_key','')),
-    coalesce(v_source_component.media_type,v_requested_media_type),
-    coalesce(v_source_component.byte_size,v_requested_byte_size),
-    v_source_component.source_content_sha256,btrim(p_idempotency_key),
-    case when v_source_component.id is null then null else p_now_utc end,
-    false,null,'NOT_REQUIRED','NOT_REQUIRED',v_paper_page_key,null,null,p_now_utc
+    nullif(btrim(v_payload->>'storage_key'),''),
+    v_requested_media_type,
+    v_requested_byte_size,
+    null,btrim(p_idempotency_key),null,
+    false,null,'NOT_REQUIRED','NOT_REQUIRED',v_paper_page_key,null,
+    v_expected_source_digest,p_now_utc
   ) returning * into v_component;
   v_response:=jsonb_build_object(
     'ok',true,'idempotent_replay',false,
@@ -406,6 +480,14 @@ begin
     v_response,p_now_utc
   );
   return v_response;
+exception
+  when unique_violation then
+    get stacked diagnostics v_constraint_name=constraint_name;
+    if v_constraint_name=
+       'candidate_submission_components_live_receipt_expected_sha256_uq' then
+      raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505';
+    end if;
+    raise;
 end;
 $function$;
 

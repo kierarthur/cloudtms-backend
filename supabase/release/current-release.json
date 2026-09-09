@@ -124,7 +124,8 @@
     "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
     "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
     "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
-    "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql"
+    "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -215,6 +216,7 @@
     "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
     "supabase/verification/08092026_1416_legacy_daily_settings_authority_backfill_verification.sql",
     "supabase/verification/09092026_1340_candidate_receipt_reuse_atomic_verification.sql",
-    "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql"
+    "supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql",
+    "supabase/verification/09092026_1420_candidate_receipt_fresh_reupload_verification.sql"
   ]
 }

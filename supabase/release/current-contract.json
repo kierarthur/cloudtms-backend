@@ -2928,7 +2928,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8b5be347d942aa06f08b9a01025826f7de039b351e4c5981b77a644419ae480c"
+      "definition_sha256": "6586909a7b192a4eebd1b164381fd062ca318e2afbdc6e3510b3f38f918c6e9c"
     },
     {
       "acl": [
@@ -2966,7 +2966,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c5477268294e13a8a1ef9a9cb87981414bebbb046775bf7cfe529a8b5fe530af"
+      "definition_sha256": "8877aada71e1932e630cc15e2ce12edcb60411f17bdf147fb974738e92fefd07"
     },
     {
       "acl": [
@@ -5856,7 +5856,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "366fbaae56a5db9c628126f50ce078763f877c611dfae6cc26c587b565990ec8"
+      "definition_sha256": "249757a20e512e182e6e3a4c8f6c17f638afd5aa1164f7238d1f1e78a38659be"
     },
     {
       "acl": [
@@ -15757,7 +15757,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "66cf278e8d94594313b9f282cc00e3e3f9038b8bb30c94b7671b558e31644906"
+      "definition_sha256": "b3cfc8ebd363614377591e5b5b98f1ee992e98b8cd9b09daaef8290ca6769231"
     },
     {
       "acl": [
@@ -17722,7 +17722,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "efa834501bc4c22785d23e9f99cb6f21c3251ffb16549b3486b060ea6296db1d"
+      "definition_sha256": "ce5f4283228aae9274b37959faad0628e98b7a5cc7208122d2b5a35d616c4f5b"
     },
     {
       "acl": [
@@ -72596,8 +72596,16 @@
           "definition": "CREATE UNIQUE INDEX candidate_submission_components_live_manager_signature_uq ON public.candidate_submission_components USING btree (approval_request_id) WHERE ((component_kind = 'MANAGER_SIGNATURE'::text) AND (state <> 'SUPERSEDED'::text) AND (approval_request_id IS NOT NULL))"
         },
         {
+          "name": "candidate_submission_components_live_receipt_expected_sha256_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_submission_components_live_receipt_expected_sha256_uq ON public.candidate_submission_components USING btree (expected_source_content_sha256) WHERE ((expected_source_content_sha256 IS NOT NULL) AND (source_component_id IS NULL) AND (component_kind = ANY (ARRAY['MILEAGE_FORM'::text, 'EXPENSE_EVIDENCE'::text])) AND (state = ANY (ARRAY['PENDING'::text, 'IMMUTABLE'::text])))"
+        },
+        {
           "name": "candidate_submission_components_paper_return_page_uq",
           "definition": "CREATE UNIQUE INDEX candidate_submission_components_paper_return_page_uq ON public.candidate_submission_components USING btree (workflow_id, workflow_generation, paper_return_page_key) WHERE ((component_kind = 'SIGNED_RETURN'::text) AND (state <> 'SUPERSEDED'::text))"
+        },
+        {
+          "name": "candidate_submission_components_physical_storage_key_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_submission_components_physical_storage_key_uq ON public.candidate_submission_components USING btree (storage_key) WHERE ((storage_key IS NOT NULL) AND ((source_component_id IS NULL) OR ((expected_source_content_sha256 IS NOT NULL) AND (component_kind = ANY (ARRAY['MILEAGE_FORM'::text, 'EXPENSE_EVIDENCE'::text])))))"
         },
         {
           "name": "candidate_submission_components_pkey",

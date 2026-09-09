@@ -132,7 +132,13 @@ begin
   if v_component.source_component_id is not null then
     select * into v_source from public.candidate_submission_components
     where id=v_component.source_component_id
-      and state in ('IMMUTABLE','SUPERSEDED','REJECTED')
+      and (
+        state in ('IMMUTABLE','SUPERSEDED','REJECTED')
+        or (
+          state='ABANDONED'
+          and v_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+        )
+      )
       and immutable_at_utc is not null
       and source_content_sha256 is not null;
     if not found then
@@ -141,10 +147,35 @@ begin
   else
     v_source:=v_component;
   end if;
-  v_source_digest:=coalesce(v_component.source_content_sha256,v_source.source_content_sha256);
-  if v_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
-     and v_source_digest is null then
-    raise exception 'CANDIDATE_EVIDENCE_COMPONENT_INVALID' using errcode='55000';
+  if v_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE') then
+    v_source_digest:=v_component.source_content_sha256;
+    if v_component.state<>'IMMUTABLE'
+       or v_component.immutable_at_utc is null
+       or nullif(btrim(coalesce(v_component.storage_key,'')),'') is null
+       or v_source_digest is null
+       or octet_length(v_source_digest)<>32
+       or nullif(lower(btrim(coalesce(v_component.media_type,''))),'') is null
+       or coalesce(v_component.byte_size,0)<1 then
+      raise exception 'CANDIDATE_EVIDENCE_COMPONENT_INVALID' using errcode='55000';
+    end if;
+    if v_component.source_component_id is not null
+       and (
+         v_source.component_kind is distinct from v_component.component_kind
+         or v_source.document_role is distinct from v_component.document_role
+         or v_source.expense_category is distinct from v_component.expense_category
+         or lower(v_source.media_type) is distinct from lower(v_component.media_type)
+         or v_source.byte_size is distinct from v_component.byte_size
+         or v_source.source_content_sha256 is distinct from v_source_digest
+       ) then
+      raise exception 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' using errcode='55000';
+    end if;
+  else
+    -- Preserve the established signature/document lineage fallback.  Only
+    -- receipt evidence is required to have been freshly re-uploaded onto the
+    -- current immutable component.
+    v_source_digest:=coalesce(
+      v_component.source_content_sha256,v_source.source_content_sha256
+    );
   end if;
 
   v_core:=jsonb_build_object(
@@ -401,6 +432,27 @@ begin
   if tg_op='DELETE' and old.immutable_at_utc is not null then
     raise exception 'CANDIDATE_COMPONENT_IMMUTABLE' using errcode='55000';
   end if;
+  -- A receipt-recovery reservation owns a fresh physical upload key while it
+  -- is still PENDING.  Its lineage and exact expected identity must therefore
+  -- be fixed before the ordinary immutable transition happens.
+  if tg_op='UPDATE'
+     and old.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+     and old.expected_source_content_sha256 is not null then
+    if new.workflow_id is distinct from old.workflow_id
+       or new.workflow_generation is distinct from old.workflow_generation
+       or new.component_no is distinct from old.component_no
+       or new.component_kind is distinct from old.component_kind
+       or new.expense_category is distinct from old.expense_category
+       or new.document_role is distinct from old.document_role
+       or new.source_component_id is distinct from old.source_component_id
+       or new.storage_key is distinct from old.storage_key
+       or new.media_type is distinct from old.media_type
+       or new.byte_size is distinct from old.byte_size
+       or new.upload_idempotency_key is distinct from old.upload_idempotency_key
+       or new.expected_source_content_sha256 is distinct from old.expected_source_content_sha256 then
+      raise exception 'CANDIDATE_COMPONENT_IMMUTABLE' using errcode='55000';
+    end if;
+  end if;
   if tg_op='UPDATE' and old.immutable_at_utc is not null then
     if new.workflow_id is distinct from old.workflow_id
        or new.workflow_generation is distinct from old.workflow_generation
@@ -413,6 +465,7 @@ begin
        or new.media_type is distinct from old.media_type
        or new.byte_size is distinct from old.byte_size
        or new.source_content_sha256 is distinct from old.source_content_sha256
+       or new.expected_source_content_sha256 is distinct from old.expected_source_content_sha256
        or new.immutable_at_utc is distinct from old.immutable_at_utc
        or new.required is distinct from old.required
        or new.review_ordinal is distinct from old.review_ordinal

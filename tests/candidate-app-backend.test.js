@@ -4894,27 +4894,288 @@ test('new Candidate component preparation uses the narrow authenticated fast-pat
   }
 });
 
-function candidateReceiptBucket({ storageKey, workflowId, componentId, mediaType, byteSize, digest }) {
-  return {
-    async head(key) {
-      if (key !== storageKey) return null;
-      return {
-        size: byteSize,
-        httpMetadata: { contentType: mediaType },
-        customMetadata: {
-          purpose: 'candidate-component',
-          workflow_id: workflowId,
-          component_id: componentId,
-          media_type: mediaType,
-          byte_size: String(byteSize),
-          sha256: digest
-        }
+test('direct Candidate Mileage and expense receipt prepares persist an exact digest without exposing it publicly', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004a1',
+    session_id: '00000000-0000-4000-8000-0000000004a1',
+    account_id: '00000000-0000-4000-8000-0000000004a2',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004a3',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const cases = [
+    {
+      workflow_id: '00000000-0000-4000-8000-0000000004a4',
+      component_id: '00000000-0000-4000-8000-0000000004a5',
+      idempotency_key: '00000000-0000-4000-8000-0000000004a6',
+      component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+      expense_category: 'TRAVEL', media_type: 'image/png', byte_size: 41,
+      digest: 'd'.repeat(64)
+    },
+    {
+      workflow_id: '00000000-0000-4000-8000-0000000004a7',
+      component_id: '00000000-0000-4000-8000-0000000004a8',
+      idempotency_key: '00000000-0000-4000-8000-0000000004a9',
+      component_kind: 'MILEAGE_FORM', document_role: 'MILEAGE_CLAIM_FORM',
+      expense_category: 'MILEAGE', media_type: 'image/jpeg', byte_size: 42,
+      digest: 'e'.repeat(64)
+    }
+  ];
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const item of cases) {
+      const rpcCalls = [];
+      globalThis.fetch = async input => {
+        const target = new URL(String(input));
+        if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+        if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([{
+          id: item.workflow_id, environment: 'TEST', account_id: session.account_id,
+          candidate_id: session.selected_candidate_id,
+          contract_id: '00000000-0000-4000-8000-0000000004aa',
+          workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+          week_ending_date: '2026-09-13', generation: 1, state: 'WORKER_DRAFT'
+        }]);
+        if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([]);
+        throw new Error(`Unexpected direct receipt prepare read: ${target.pathname}${target.search}`);
       };
+      const response = await handleCandidateAppRequest(new Request(
+        `https://private.test/candidate-app/v1/workflows/${item.workflow_id}/components/prepare`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            generation: 1, component_kind: item.component_kind,
+            document_role: item.document_role, expense_category: item.expense_category,
+            media_type: item.media_type, byte_size: item.byte_size,
+            source_content_sha256: item.digest, idempotency_key: item.idempotency_key
+          })
+        }
+      ), env, {}, {
+        routeAudience: 'PRIVATE',
+        async rpc(name, args) {
+          rpcCalls.push({ name, args });
+          assert.equal(name, 'candidate_component_prepare_atomic_v1');
+          assert.equal(args.p_payload.expected_source_content_sha256_hex, item.digest);
+          assert.equal(Object.hasOwn(args.p_payload, 'source_component_id'), false);
+          assert.equal(Object.hasOwn(args.p_payload, 'source_content_sha256_hex'), false);
+          return {
+            ok: true, component_id: item.component_id, workflow_generation: 1,
+            storage_key: args.p_payload.storage_key,
+            media_type: item.media_type, byte_size: item.byte_size,
+            component_kind: item.component_kind, document_role: item.document_role,
+            expense_category: item.expense_category, paper_return_page_key: null,
+            state: 'PENDING'
+          };
+        }
+      });
+      const body = await response.json();
+      assert.equal(response.status, 201, JSON.stringify(body));
+      assert.equal(body.reused_existing_upload, false);
+      assert.equal(Object.hasOwn(body.upload, 'expected_content_sha256'), false);
+      assert.equal(Object.hasOwn(body.upload, 'storage_key'), false);
+      assert.equal(rpcCalls.length, 1);
+      const ticket = await verifyUploadTicket(
+        env,
+        decodeURIComponent(body.upload.url.split('/').at(-1))
+      );
+      assert.equal(ticket.expected_content_sha256, item.digest);
+      assert.equal(ticket.component_id, item.component_id);
+      assert.equal(ticket.key, rpcCalls[0].args.p_payload.storage_key);
+
+      const missingDigest = await handleCandidateAppRequest(new Request(
+        `https://private.test/candidate-app/v1/workflows/${item.workflow_id}/components/prepare`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            generation: 1, component_kind: item.component_kind,
+            document_role: item.document_role, expense_category: item.expense_category,
+            media_type: item.media_type, byte_size: item.byte_size,
+            idempotency_key: item.idempotency_key
+          })
+        }
+      ), env, {}, {
+        routeAudience: 'PRIVATE',
+        async rpc() { throw new Error('an unbound receipt must not reach the database'); }
+      });
+      const missingBody = await missingDigest.json();
+      assert.equal(missingDigest.status, 400, JSON.stringify(missingBody));
+      assert.equal(missingBody.error_code, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate source digests are rejected for non-receipt component kinds', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004ab',
+    session_id: '00000000-0000-4000-8000-0000000004ab',
+    account_id: '00000000-0000-4000-8000-0000000004ac',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004ad',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-0000000004ae';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  let componentReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) componentReads += 1;
+    throw new Error(`Unexpected non-receipt digest read: ${target.pathname}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1, component_kind: 'CANDIDATE_SIGNATURE',
+          document_role: 'CANDIDATE_SIGNATURE', media_type: 'image/png', byte_size: 20,
+          source_content_sha256: 'f'.repeat(64),
+          idempotency_key: '00000000-0000-4000-8000-0000000004af'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('rejected source digest must not reach the database'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 403, JSON.stringify(body));
+    assert.equal(body.error_code, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+    assert.equal(componentReads, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('two concurrent direct receipt prepares with different keys expose only one upload admission', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004c1',
+    session_id: '00000000-0000-4000-8000-0000000004c1',
+    account_id: '00000000-0000-4000-8000-0000000004c2',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004c3',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-0000000004c4';
+  const idempotencyKeys = [
+    '00000000-0000-4000-8000-0000000004c5',
+    '00000000-0000-4000-8000-0000000004c6'
+  ];
+  const componentIds = [
+    '00000000-0000-4000-8000-0000000004c7',
+    '00000000-0000-4000-8000-0000000004c8'
+  ];
+  const digest = '3'.repeat(64);
+  const workflow = {
+    id: workflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    contract_id: '00000000-0000-4000-8000-0000000004c9',
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 1, state: 'WORKER_DRAFT'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const pendingRpcCalls = [];
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([]);
+    throw new Error(`Unexpected concurrent receipt prepare read: ${target.pathname}${target.search}`);
+  };
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_component_prepare_atomic_v1');
+      return new Promise((resolve, reject) => {
+        pendingRpcCalls.push({ args, resolve, reject });
+        if (pendingRpcCalls.length !== 2) return;
+        const ordered = [...pendingRpcCalls].sort((left, right) => (
+          left.args.p_idempotency_key.localeCompare(right.args.p_idempotency_key)
+        ));
+        ordered[0].resolve({
+          ok: true, component_id: componentIds[0], workflow_generation: 1,
+          storage_key: ordered[0].args.p_payload.storage_key,
+          media_type: 'image/png', byte_size: 64,
+          component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+          expense_category: 'OTHER', paper_return_page_key: null, state: 'PENDING'
+        });
+        const conflict = new Error('CANDIDATE_EVIDENCE_BYTES_ALREADY_USED');
+        conflict.json = { message: 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' };
+        ordered[1].reject(conflict);
+      });
     }
   };
-}
+  const requestFor = idempotencyKey => new Request(
+    `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        generation: 1, component_kind: 'EXPENSE_EVIDENCE',
+        document_role: 'SOURCE_EVIDENCE', expense_category: 'OTHER',
+        media_type: 'image/png', byte_size: 64,
+        source_content_sha256: digest, idempotency_key: idempotencyKey
+      })
+    }
+  );
+  try {
+    const responses = await Promise.all(idempotencyKeys.map(key => (
+      handleCandidateAppRequest(requestFor(key), env, {}, deps)
+    )));
+    const results = await Promise.all(responses.map(async response => ({
+      status: response.status, body: await response.json()
+    })));
+    assert.deepEqual(results.map(result => result.status).sort(), [201, 409]);
+    assert.equal(pendingRpcCalls.length, 2);
+    assert.equal(new Set(pendingRpcCalls.map(call => call.args.p_idempotency_key)).size, 2);
+    assert.equal(new Set(pendingRpcCalls.map(call => call.args.p_payload.storage_key)).size, 2);
+    assert.deepEqual(
+      new Set(pendingRpcCalls.map(call => call.args.p_payload.expected_source_content_sha256_hex)),
+      new Set([digest])
+    );
+    const admitted = results.find(result => result.status === 201).body;
+    const refused = results.find(result => result.status === 409).body;
+    assert.equal(admitted.reused_existing_upload, false);
+    assert.equal(Object.hasOwn(admitted.upload, 'expected_content_sha256'), false);
+    assert.equal(refused.error_code, 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED');
+    assert.equal(Object.hasOwn(refused, 'upload'), false);
+    const ticket = await verifyUploadTicket(
+      env,
+      decodeURIComponent(admitted.upload.url.split('/').at(-1))
+    );
+    assert.equal(ticket.expected_content_sha256, digest);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
-test('changed Candidate hours reuse unchanged immutable expense evidence without uploading its bytes again', async () => {
+test('changed Candidate hours re-upload an ended receipt into fresh component-owned storage', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000441',
     session_id: '00000000-0000-4000-8000-000000000441',
@@ -4937,10 +5198,7 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
     CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
-    R2: candidateReceiptBucket({
-      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
-      mediaType: 'image/jpeg', byteSize: 5, digest
-    })
+    R2: { async head() { throw new Error('historical R2 must not be read during prepare'); } }
   };
   const token = await createAccessToken(env, session);
   const calls = [];
@@ -5000,21 +5258,31 @@ test('changed Candidate hours reuse unchanged immutable expense evidence without
         calls.push({ name, args });
         return {
           ok: true, component_id: componentId, workflow_generation: 1,
-          storage_key: storageKey,
+          storage_key: args.p_payload.storage_key,
           media_type: 'image/jpeg', byte_size: 5,
           component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
+          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'PENDING'
         };
       }
     });
     const body = await response.json();
     assert.equal(response.status, 201, `${JSON.stringify(body)} calls=${calls.length} reads=${JSON.stringify(reads)}`);
-    assert.equal(body.reused_existing_upload, true);
-    assert.equal(Object.hasOwn(body, 'upload'), false);
+    assert.equal(body.reused_existing_upload, false);
+    assert.equal(Object.hasOwn(body.upload, 'expected_content_sha256'), false);
+    assert.equal(Object.hasOwn(body.upload, 'storage_key'), false);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, 'candidate_component_prepare_atomic_v1');
     assert.equal(calls[0].args.p_payload.source_component_id, sourceComponentId);
     assert.equal(calls[0].args.p_payload.source_content_sha256_hex, digest);
+    assert.equal(calls[0].args.p_payload.expected_source_content_sha256_hex, digest);
+    assert.notEqual(calls[0].args.p_payload.storage_key, storageKey);
+    const ticket = await verifyUploadTicket(
+      env,
+      decodeURIComponent(body.upload.url.split('/').at(-1))
+    );
+    assert.equal(ticket.key, calls[0].args.p_payload.storage_key);
+    assert.equal(ticket.expected_content_sha256, digest);
+    assert.equal(ticket.component_id, componentId);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5027,14 +5295,12 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
   const candidateId = '00000000-0000-4000-8000-00000000044d';
   const digest = '7'.repeat(64);
   const storageKey = 'candidate-app/test/abandoned/source/expense.png';
+  let historicalHeadReads = 0;
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
-    R2: candidateReceiptBucket({
-      storageKey, workflowId, componentId: sourceComponentId,
-      mediaType: 'image/png', byteSize: 123, digest
-    })
+    R2: { async head() { historicalHeadReads += 1; throw new Error('historical object unavailable'); } }
   };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async input => {
@@ -5066,12 +5332,13 @@ test('a failed later-expense attempt may reuse its unchanged receipt in a newer 
     );
     assert.equal(source.id, sourceComponentId);
     assert.equal(source.workflow_generation, 7);
+    assert.equal(historicalHeadReads, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('receipt reuse preflight passes one exact same-family immutable root to atomic database authority', async () => {
+test('receipt reuse preflight depends on immutable database identity, never the historical R2 object', async () => {
   const workflowId = '00000000-0000-4000-8000-00000000047a';
   const sourceWorkflowId = '00000000-0000-4000-8000-00000000047b';
   const sourceComponentId = '00000000-0000-4000-8000-00000000047d';
@@ -5080,14 +5347,12 @@ test('receipt reuse preflight passes one exact same-family immutable root to ato
   const contractId = '00000000-0000-4000-8000-000000000480';
   const digest = '6'.repeat(64);
   const storageKey = 'candidate-app/test/ended/source/expense.png';
+  let historicalHeadReads = 0;
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
-    R2: candidateReceiptBucket({
-      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
-      mediaType: 'image/png', byteSize: 123, digest
-    })
+    R2: { async head() { historicalHeadReads += 1; throw new Error('historical object unavailable'); } }
   };
   const reads = [];
   const originalFetch = globalThis.fetch;
@@ -5134,44 +5399,15 @@ test('receipt reuse preflight passes one exact same-family immutable root to ato
     assert.equal(reads.filter(path => path.endsWith('/candidate_submission_workflows')).length, 2);
     assert.equal(reads.filter(path => path.endsWith('/candidate_submission_components')).length, 1);
     assert.equal(reads.some(path => path.endsWith('/candidate_expense_components')), false);
-    const validStoredObject = () => ({
-      size: 123,
-      httpMetadata: { contentType: 'image/png' },
-      customMetadata: {
-        purpose: 'candidate-component', workflow_id: sourceWorkflowId,
-        component_id: sourceComponentId, media_type: 'image/png',
-        byte_size: '123', sha256: digest
-      }
-    });
-    const staleObjects = [
-      null,
-      { ...validStoredObject(), size: 122 },
-      { ...validStoredObject(), httpMetadata: { contentType: 'image/jpeg' } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, purpose: 'other' } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, workflow_id: workflowId } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, component_id: workflowId } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, media_type: 'image/jpeg' } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, byte_size: '122' } },
-      { ...validStoredObject(), customMetadata: { ...validStoredObject().customMetadata, sha256: '0'.repeat(64) } }
-    ];
-    for (const stale of staleObjects) {
-      env.R2.head = async () => stale;
-      await assert.rejects(
-        () => reusableCandidateExpenseSource(...args),
-        (error) => error?.status === 409 && error?.code === 'CANDIDATE_RECEIPT_STORAGE_STALE'
-      );
-    }
-    env.R2.head = async () => { throw new Error('simulated R2 dependency failure'); };
-    await assert.rejects(
-      () => reusableCandidateExpenseSource(...args),
-      (error) => error?.status === 503 && error?.code === 'CANDIDATE_STORAGE_UNAVAILABLE'
-    );
+    assert.equal(historicalHeadReads, 0);
+    env.R2 = null;
+    assert.equal((await reusableCandidateExpenseSource(...args)).id, sourceComponentId);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('interrupted duplicate expense prepare preserves completed components and repairs only its empty placeholder', async () => {
+test('a legacy direct PENDING receipt without its expected digest fails closed before lineage lookup', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000451',
     session_id: '00000000-0000-4000-8000-000000000451',
@@ -5190,23 +5426,22 @@ test('interrupted duplicate expense prepare preserves completed components and r
   const originalPrepareKey = '00000000-0000-4000-8000-000000000460';
   const digest = '9'.repeat(64);
   const storageKey = 'candidate-app/test/interrupted/source/expense.jpg';
+  const pendingStorageKey = 'candidate-app/test/current/source/interrupted-expense.jpg';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
     CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
     SUPABASE_URL: 'https://test.supabase.invalid',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
-    R2: candidateReceiptBucket({
-      storageKey, workflowId: sourceWorkflowId, componentId: sourceComponentId,
-      mediaType: 'image/jpeg', byteSize: 5, digest
-    })
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
   const token = await createAccessToken(env, session);
   const calls = [];
+  const reads = [];
   let superseded = false;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async url => {
     const target = new URL(String(url));
+    reads.push(`${target.pathname}${target.search}`);
     if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
     if (target.pathname.endsWith('/candidate_submission_workflows')) {
       const id = target.searchParams.get('id');
@@ -5241,8 +5476,9 @@ test('interrupted duplicate expense prepare preserves completed components and r
         id: pendingComponentId, workflow_id: workflowId, workflow_generation: 1,
         component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
         expense_category: 'ACCOMMODATION', paper_return_page_key: null,
-        media_type: 'image/jpeg', byte_size: 5,
+        storage_key: pendingStorageKey, media_type: 'image/jpeg', byte_size: 5,
         state: superseded ? 'SUPERSEDED' : 'PENDING', approval_request_id: null,
+        upload_idempotency_key: originalPrepareKey,
         manager_signature_capture_method: null, expected_source_content_sha256: null,
         source_content_sha256: null, source_component_id: null
       }]);
@@ -5275,27 +5511,398 @@ test('interrupted duplicate expense prepare preserves completed components and r
         assert.equal(name, 'candidate_component_prepare_atomic_v1');
         return {
           ok: true, component_id: replacementComponentId, workflow_generation: 1,
-          storage_key: storageKey,
+          storage_key: args.p_payload.storage_key,
           media_type: 'image/jpeg', byte_size: 5,
           component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
+          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'PENDING'
         };
       }
     });
     const body = await response.json();
-    assert.equal(response.status, 201, JSON.stringify(body));
-    assert.equal(body.reused_existing_upload, true);
+    assert.equal(response.status, 409, JSON.stringify({ body, calls, reads }));
+    assert.equal(body.error_code, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
     assert.equal(Object.hasOwn(body, 'upload'), false);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[1].args.p_payload.source_component_id, sourceComponentId);
-    assert.equal(calls[1].args.p_payload.source_content_sha256_hex, digest);
-    assert.match(calls[1].args.p_idempotency_key, /^lineage:[0-9a-f]{64}$/);
+    assert.equal(calls.length, 0);
+    assert.equal(superseded, false);
+    assert.equal(reads.some(read => read.includes(`id=eq.${sourceWorkflowId}`)), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('expense prepare reuses the exact carried component in the current generation', async () => {
+test('an exact digest-bound direct PENDING receipt replay reissues only its opaque upload ticket', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004b1',
+    session_id: '00000000-0000-4000-8000-0000000004b1',
+    account_id: '00000000-0000-4000-8000-0000000004b2',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004b3',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-0000000004b4';
+  const componentId = '00000000-0000-4000-8000-0000000004b5';
+  const idempotencyKey = '00000000-0000-4000-8000-0000000004b6';
+  const digest = '1'.repeat(64);
+  const storageKey = 'candidate-app/test/current/source/exact-direct-receipt.png';
+  const component = {
+    id: componentId, workflow_id: workflowId, workflow_generation: 2,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'TRAVEL', paper_return_page_key: null,
+    storage_key: storageKey, media_type: 'image/png', byte_size: 88,
+    state: 'PENDING', upload_idempotency_key: idempotencyKey,
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: `\\x${digest}`,
+    source_content_sha256: null, source_component_id: null
+  };
+  const workflow = {
+    id: workflowId, account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 2, state: 'WORKER_DRAFT'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  let componentReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      componentReads += 1;
+      assert.equal(target.searchParams.get('upload_idempotency_key'), `eq.${idempotencyKey}`);
+      return Response.json([component]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    throw new Error(`Unexpected exact direct PENDING replay read: ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'TRAVEL',
+          media_type: 'image/png', byte_size: 88,
+          source_content_sha256: digest, idempotency_key: idempotencyKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('exact direct PENDING replay must not mutate'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.component_id, componentId);
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.reused_existing_upload, false);
+    assert.equal(Object.hasOwn(body.upload, 'expected_content_sha256'), false);
+    assert.equal(Object.hasOwn(body.upload, 'storage_key'), false);
+    assert.equal(componentReads, 1);
+    const ticket = await verifyUploadTicket(
+      env,
+      decodeURIComponent(body.upload.url.split('/').at(-1))
+    );
+    assert.equal(ticket.expected_content_sha256, digest);
+    assert.equal(ticket.component_id, componentId);
+    assert.equal(ticket.key, storageKey);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a lost direct receipt prepare key recovers only the PENDING row with the same expected digest', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004b7',
+    session_id: '00000000-0000-4000-8000-0000000004b7',
+    account_id: '00000000-0000-4000-8000-0000000004b8',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004b9',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-0000000004ba';
+  const componentId = '00000000-0000-4000-8000-0000000004bb';
+  const requestKey = '00000000-0000-4000-8000-0000000004bc';
+  const originalKey = '00000000-0000-4000-8000-0000000004bd';
+  const digest = '2'.repeat(64);
+  const storageKey = 'candidate-app/test/current/source/lost-direct-receipt.jpg';
+  const component = {
+    id: componentId, workflow_id: workflowId, workflow_generation: 3,
+    component_kind: 'MILEAGE_FORM', document_role: 'MILEAGE_CLAIM_FORM',
+    expense_category: 'MILEAGE', paper_return_page_key: null,
+    storage_key: storageKey, media_type: 'image/jpeg', byte_size: 99,
+    state: 'PENDING', upload_idempotency_key: originalKey,
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: `\\x${digest}`,
+    source_content_sha256: null, source_component_id: null
+  };
+  const workflow = {
+    id: workflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    contract_id: '00000000-0000-4000-8000-0000000004be',
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 3, state: 'WORKER_DRAFT'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  let recoveryReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.has('upload_idempotency_key')) return Response.json([]);
+      if (target.searchParams.get('source_content_sha256') === `eq.\\x${digest}`) {
+        return Response.json([]);
+      }
+      if (target.searchParams.get('expected_source_content_sha256') === `eq.\\x${digest}`) {
+        recoveryReads += 1;
+        assert.equal(target.searchParams.get('state'), 'eq.PENDING');
+        assert.equal(target.searchParams.get('source_component_id'), 'is.null');
+        assert.equal(target.searchParams.get('source_content_sha256'), 'is.null');
+        return Response.json([component]);
+      }
+    }
+    throw new Error(`Unexpected lost direct receipt recovery read: ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 3, component_kind: 'MILEAGE_FORM',
+          document_role: 'MILEAGE_CLAIM_FORM', expense_category: 'MILEAGE',
+          media_type: 'image/jpeg', byte_size: 99,
+          source_content_sha256: digest, idempotency_key: requestKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('lost direct PENDING recovery must not mutate'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.component_id, componentId);
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.reused_existing_upload, false);
+    assert.equal(Object.hasOwn(body.upload, 'expected_content_sha256'), false);
+    assert.equal(recoveryReads, 1);
+    const ticket = await verifyUploadTicket(
+      env,
+      decodeURIComponent(body.upload.url.split('/').at(-1))
+    );
+    assert.equal(ticket.expected_content_sha256, digest);
+    assert.equal(ticket.component_id, componentId);
+    assert.equal(ticket.key, storageKey);
+    assert.equal(ticket.completion_idempotency_key, `${requestKey}:complete`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a legacy completed first-use receipt retry returns its direct-root component without self-rejecting', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-00000000049a',
+    session_id: '00000000-0000-4000-8000-00000000049a',
+    account_id: '00000000-0000-4000-8000-00000000049b',
+    selected_candidate_id: '00000000-0000-4000-8000-00000000049c',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-00000000049d';
+  const componentId = '00000000-0000-4000-8000-00000000049e';
+  const idempotencyKey = '00000000-0000-4000-8000-00000000049f';
+  const digest = 'c'.repeat(64);
+  const component = {
+    id: componentId, workflow_id: workflowId, workflow_generation: 2,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'OTHER', paper_return_page_key: null,
+    storage_key: 'candidate-app/test/current/source/first-use-receipt.pdf',
+    media_type: 'application/pdf', byte_size: 456, state: 'IMMUTABLE',
+    upload_idempotency_key: idempotencyKey,
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: null,
+    source_content_sha256: `\\x${digest}`, source_component_id: null
+  };
+  const workflow = {
+    id: workflowId, account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 2, state: 'WORKER_DRAFT'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  let componentReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      componentReads += 1;
+      assert.equal(target.searchParams.get('upload_idempotency_key'), `eq.${idempotencyKey}`);
+      return Response.json([component]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    throw new Error(`Unexpected completed first-use replay read: ${target.pathname}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'OTHER',
+          media_type: 'application/pdf', byte_size: 456,
+          source_content_sha256: digest, idempotency_key: idempotencyKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('completed first-use replay must not mutate'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.component_id, componentId);
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.reused_existing_upload, true);
+    assert.equal(Object.hasOwn(body, 'upload'), false);
+    assert.equal(componentReads, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a legacy source-linked zero-copy receipt fails closed before any ticket or mutation side effect', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-0000000004d1',
+    session_id: '00000000-0000-4000-8000-0000000004d1',
+    account_id: '00000000-0000-4000-8000-0000000004d2',
+    selected_candidate_id: '00000000-0000-4000-8000-0000000004d3',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-0000000004d4';
+  const sourceWorkflowId = '00000000-0000-4000-8000-0000000004d5';
+  const sourceComponentId = '00000000-0000-4000-8000-0000000004d6';
+  const legacyComponentId = '00000000-0000-4000-8000-0000000004d7';
+  const idempotencyKey = '00000000-0000-4000-8000-0000000004d8';
+  const contractId = '00000000-0000-4000-8000-0000000004d9';
+  const digest = 'd'.repeat(64);
+  const targetWorkflow = {
+    id: workflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id, contract_id: contractId,
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 2, state: 'WORKER_DRAFT'
+  };
+  const sourceWorkflow = {
+    id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id, contract_id: contractId,
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 1, state: 'CANCELLED'
+  };
+  const source = {
+    id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'OTHER', storage_key: 'candidate-app/test/ended/source/receipt.png',
+    media_type: 'image/png', byte_size: 123, state: 'SUPERSEDED',
+    immutable_at_utc: '2026-09-08T10:00:00.000Z', source_content_sha256: `\\x${digest}`
+  };
+  const legacyZeroCopy = {
+    id: legacyComponentId, workflow_id: workflowId, workflow_generation: 2,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'OTHER', paper_return_page_key: null,
+    storage_key: source.storage_key, media_type: 'image/png', byte_size: 123,
+    state: 'IMMUTABLE', upload_idempotency_key: idempotencyKey,
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: null,
+    source_content_sha256: `\\x${digest}`, source_component_id: sourceComponentId
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: { async head() { throw new Error('legacy zero-copy rejection must not read R2'); } }
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let rpcCalls = 0;
+  let legacyReads = 0;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([
+        target.searchParams.get('id') === `eq.${sourceWorkflowId}` ? sourceWorkflow : targetWorkflow
+      ]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.has('upload_idempotency_key')) return Response.json([]);
+      if (target.searchParams.get('source_component_id') === 'is.null') return Response.json([source]);
+      if (target.searchParams.get('state') === 'eq.IMMUTABLE') {
+        legacyReads += 1;
+        return Response.json([legacyZeroCopy]);
+      }
+    }
+    throw new Error(`Unexpected legacy zero-copy read: ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'OTHER',
+          media_type: 'image/png', byte_size: 123, source_content_sha256: digest,
+          idempotency_key: idempotencyKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { rpcCalls += 1; throw new Error('legacy zero-copy replay must not mutate or audit'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 409, JSON.stringify(body));
+    assert.equal(body.error_code, 'CANDIDATE_RECEIPT_STORAGE_STALE');
+    assert.equal(
+      body.message,
+      'This saved receipt can no longer be reused. Take a new photo of the receipt and try again.'
+    );
+    assert.equal(Object.hasOwn(body, 'upload'), false);
+    assert.equal(Object.hasOwn(body, 'reused_existing_upload'), false);
+    assert.equal(legacyReads, 1);
+    assert.equal(rpcCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('completed exact receipt re-upload replays its current immutable component', async () => {
   const workflowId = '00000000-0000-4000-8000-000000000471';
   const sourceComponentId = '00000000-0000-4000-8000-000000000472';
   const carriedComponentId = '00000000-0000-4000-8000-000000000473';
@@ -5322,7 +5929,7 @@ test('expense prepare reuses the exact carried component in the current generati
       media_type: 'image/jpeg', byte_size: 5, state: 'IMMUTABLE',
       source_component_id: sourceComponentId, source_content_sha256: `\\x${digest}`,
       approval_request_id: null, manager_signature_capture_method: null,
-      expected_source_content_sha256: null
+      expected_source_content_sha256: `\\x${digest}`
     }]);
   };
   try {
@@ -5338,6 +5945,286 @@ test('expense prepare reuses the exact carried component in the current generati
   }
 });
 
+test('lost receipt prepare key recovers the exact pending fresh upload and reissues its ticket', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000481',
+    session_id: '00000000-0000-4000-8000-000000000481',
+    account_id: '00000000-0000-4000-8000-000000000482',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000483',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000484';
+  const sourceWorkflowId = '00000000-0000-4000-8000-000000000485';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000486';
+  const pendingComponentId = '00000000-0000-4000-8000-000000000487';
+  const requestKey = '00000000-0000-4000-8000-000000000488';
+  const lostPrepareKey = '00000000-0000-4000-8000-000000000489';
+  const contractId = '00000000-0000-4000-8000-00000000048a';
+  const digest = 'b'.repeat(64);
+  const freshStorageKey = 'candidate-app/test/current/source/recovered-expense.png';
+  const targetWorkflow = {
+    id: workflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id, contract_id: contractId,
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 3, state: 'WORKER_DRAFT'
+  };
+  const sourceWorkflow = {
+    id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
+    candidate_id: session.selected_candidate_id, contract_id: contractId,
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY',
+    week_ending_date: '2026-09-13', generation: 1, state: 'CANCELLED'
+  };
+  const source = {
+    id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'TRAVEL', storage_key: 'candidate-app/test/ended/source/receipt.png',
+    media_type: 'image/png', byte_size: 123, state: 'SUPERSEDED',
+    immutable_at_utc: '2026-09-08T10:00:00.000Z', source_content_sha256: `\\x${digest}`
+  };
+  const pending = {
+    id: pendingComponentId, workflow_id: workflowId, workflow_generation: 3,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'TRAVEL', paper_return_page_key: null,
+    storage_key: freshStorageKey, media_type: 'image/png', byte_size: 123,
+    state: 'PENDING', upload_idempotency_key: lostPrepareKey,
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: `\\x${digest}`,
+    source_content_sha256: null, source_component_id: sourceComponentId
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  let exactRecoveryReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      return Response.json([
+        target.searchParams.get('id') === `eq.${sourceWorkflowId}` ? sourceWorkflow : targetWorkflow
+      ]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('source_component_id') === 'is.null') return Response.json([source]);
+      if (target.searchParams.has('upload_idempotency_key')) return Response.json([]);
+      if (target.searchParams.get('state') === 'eq.IMMUTABLE') return Response.json([]);
+      if (target.searchParams.get('state') === 'in.(PENDING,IMMUTABLE)') {
+        exactRecoveryReads += 1;
+        assert.equal(target.searchParams.get('source_component_id'), `eq.${sourceComponentId}`);
+        assert.equal(target.searchParams.get('expected_source_content_sha256'), `eq.\\x${digest}`);
+        return Response.json([pending]);
+      }
+    }
+    throw new Error(`Unexpected lost-key recovery read: ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 3, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'TRAVEL',
+          media_type: 'image/png', byte_size: 123, source_content_sha256: digest,
+          idempotency_key: requestKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('exact pending recovery must not mutate again'); }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.component_id, pendingComponentId);
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.reused_existing_upload, false);
+    assert.equal(Object.hasOwn(body.upload, 'expected_content_sha256'), false);
+    assert.equal(exactRecoveryReads, 1);
+    const ticket = await verifyUploadTicket(
+      env,
+      decodeURIComponent(body.upload.url.split('/').at(-1))
+    );
+    assert.equal(ticket.key, freshStorageKey);
+    assert.equal(ticket.component_id, pendingComponentId);
+    assert.equal(ticket.expected_content_sha256, digest);
+    assert.equal(ticket.completion_idempotency_key, `${requestKey}:complete`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('wrong reused receipt bytes stop before R2 while exact bytes complete the fresh copy', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-00000000048b',
+    session_id: '00000000-0000-4000-8000-00000000048b',
+    account_id: '00000000-0000-4000-8000-00000000048c',
+    selected_candidate_id: '00000000-0000-4000-8000-00000000048d',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-00000000048e';
+  const componentId = '00000000-0000-4000-8000-00000000048f';
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  pdf.addPage([120, 80]).drawText('Reusable TEST receipt', { x: 10, y: 40, size: 8 });
+  const bytes = new Uint8Array(await pdf.save({ useObjectStreams: false }));
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  let putCount = 0;
+  let completionCalls = 0;
+  env.R2 = {
+    async put(key, storedBytes, options) {
+      putCount += 1;
+      assert.equal(key, 'candidate-app/test/current/source/exact-receipt.pdf');
+      assert.equal(createHash('sha256').update(storedBytes).digest('hex'), digest);
+      assert.equal(options.customMetadata.sha256, digest);
+      return { key };
+    },
+    async head() { throw new Error('fresh exact upload must not fall back to an older object'); }
+  };
+  const token = await createAccessToken(env, session);
+  const ticketFor = async expectedDigest => uploadTicket(env, {
+    env: 'TEST', authority_kind: 'CANDIDATE_SESSION',
+    owner: 'candidate', owner_id: session.session_id,
+    candidate_account_id: session.account_id, candidate_id: session.selected_candidate_id,
+    workflow_id: workflowId, generation: 2, component_id: componentId,
+    component_kind: 'EXPENSE_EVIDENCE',
+    key: 'candidate-app/test/current/source/exact-receipt.pdf',
+    media_type: 'application/pdf', byte_size: bytes.byteLength,
+    expected_content_sha256: expectedDigest,
+    completion_idempotency_key: '00000000-0000-4000-8000-000000000490:complete'
+  });
+  const uploadRequest = (ticket) => new Request(
+    `https://private.test/candidate-app/v1/uploads/${encodeURIComponent(ticket)}`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/pdf',
+        'content-length': String(bytes.byteLength)
+      },
+      body: bytes
+    }
+  );
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const target = new URL(String(input));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    throw new Error(`Unexpected exact-upload read: ${target.pathname}`);
+  };
+  try {
+    const wrong = await handleCandidateAppRequest(
+      uploadRequest(await ticketFor('0'.repeat(64))), env, {}, {
+        routeAudience: 'PRIVATE',
+        async rpc() { completionCalls += 1; throw new Error('wrong bytes reached completion'); }
+      }
+    );
+    assert.equal(wrong.status, 400);
+    assert.equal((await wrong.json()).error_code, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
+    assert.equal(putCount, 0);
+    assert.equal(completionCalls, 0);
+
+    const exact = await handleCandidateAppRequest(
+      uploadRequest(await ticketFor(digest)), env, {}, {
+        routeAudience: 'PRIVATE',
+        async rpc(name, args) {
+          completionCalls += 1;
+          assert.equal(name, 'candidate_workflow_transition_atomic_v1');
+          assert.equal(args.p_action, 'COMPONENT_COMPLETE');
+          assert.equal(args.p_payload.component_id, componentId);
+          assert.equal(args.p_payload.source_content_sha256_hex, digest);
+          return { ok: true, state: 'IMMUTABLE' };
+        }
+      }
+    );
+    assert.equal(exact.status, 200);
+    const exactBody = await exact.json();
+    assert.equal(exactBody.state, 'IMMUTABLE');
+    assert.equal(exactBody.content_sha256, digest);
+    assert.equal(putCount, 1);
+    assert.equal(completionCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('expense rendering reads the current receipt copy and never the ended lineage object', async () => {
+  const sourceComponentId = '00000000-0000-4000-8000-000000000491';
+  const componentId = '00000000-0000-4000-8000-000000000492';
+  const currentStorageKey = 'candidate-app/test/current/source/render-receipt.pdf';
+  const historicalStorageKey = 'candidate-app/test/ended/source/render-receipt.pdf';
+  const sourcePdf = await PDFDocument.create({ updateMetadata: false });
+  sourcePdf.addPage([160, 100]).drawText('Current receipt copy', { x: 12, y: 50, size: 9 });
+  const sourceBytes = new Uint8Array(await sourcePdf.save({ useObjectStreams: false }));
+  const digest = createHash('sha256').update(sourceBytes).digest('hex');
+  const component = {
+    id: componentId, source_component_id: sourceComponentId,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'OTHER', review_ordinal: 1,
+    storage_key: currentStorageKey, media_type: 'application/pdf',
+    byte_size: sourceBytes.byteLength, source_content_sha256: `\\x${digest}`,
+    state: 'IMMUTABLE'
+  };
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000493',
+    week_ending_date: '2026-09-13',
+    immutable_submission_json: {
+      official_presentation: {
+        branding: noLogoBranding(),
+        worker: { first_name: 'Test', surname: 'Worker' },
+        client: { name: 'Test Client' }
+      },
+      expense_submission: { canonical_tsfin_snapshot: {
+        other_pay_ex_vat: 25, expenses_pay_ex_vat: 25
+      } }
+    }
+  };
+  const storageReads = [];
+  const env = { R2: {
+    async get(key) {
+      storageReads.push(key);
+      if (key === historicalStorageKey) throw new Error('historical object was read');
+      if (key !== currentStorageKey) return null;
+      return {
+        httpMetadata: { contentType: 'application/pdf' },
+        async arrayBuffer() {
+          return sourceBytes.buffer.slice(sourceBytes.byteOffset, sourceBytes.byteOffset + sourceBytes.byteLength);
+        }
+      };
+    }
+  } };
+  const contract = {
+    review_ordinal: 1,
+    render_input: { source_component_id: sourceComponentId, source_content_sha256: digest }
+  };
+  const rendered = await renderExpensePage(env, contract, { workflow, component }, 'REVIEW');
+  assert.ok(rendered.pdf_bytes.byteLength > sourceBytes.byteLength);
+  assert.deepEqual(storageReads, [currentStorageKey]);
+
+  for (const renderInput of [
+    { source_component_id: '00000000-0000-4000-8000-000000000494', source_content_sha256: digest },
+    { source_component_id: sourceComponentId, source_content_sha256: '0'.repeat(64) }
+  ]) {
+    await assert.rejects(
+      renderExpensePage(env, { review_ordinal: 1, render_input: renderInput }, { workflow, component }, 'REVIEW'),
+      error => error?.code === 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED'
+    );
+  }
+  assert.deepEqual(storageReads, [currentStorageKey]);
+});
+
 test('Candidate component fast-path owns atomic exact-root receipt reuse and refreshes PostgREST', async () => {
   const sql = await readFile(new URL(
     '../supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql',
@@ -5346,6 +6233,14 @@ test('Candidate component fast-path owns atomic exact-root receipt reuse and ref
   assert.match(sql, /for update of source_component/i);
   assert.match(sql, /source_content_sha256_hex[\s\S]*\^\[0-9a-fA-F\]\{64\}\$/i);
   assert.match(sql, /source_component\.source_content_sha256[\s\S]*is distinct from v_requested_source_digest/i);
+  assert.match(sql, /expected_source_content_sha256_hex[\s\S]*v_expected_source_digest/i);
+  assert.match(sql, /elsif nullif\(btrim\(coalesce\(v_payload->>'source_content_sha256_hex',''\)\),''\) is not null[\s\S]*CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED/i);
+  assert.match(sql, /v_component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)[\s\S]*v_expected_source_digest is null[\s\S]*CANDIDATE_COMPONENT_DIGEST_INVALID/i);
+  assert.match(sql, /v_expected_source_digest is distinct from v_requested_source_digest/i);
+  assert.match(sql, /v_component\.expected_source_content_sha256[\s\S]*is distinct from v_expected_source_digest/i);
+  assert.match(sql, /v_component_kind,v_expense_category,v_document_role,'PENDING'/i);
+  assert.match(sql, /nullif\(btrim\(v_payload->>'storage_key'\),''\)[\s\S]*v_expected_source_digest/i);
+  assert.doesNotMatch(sql, /coalesce\(v_source_component\.storage_key/i);
   assert.match(sql, /source_component\.media_type[\s\S]*is distinct from v_requested_media_type/i);
   assert.match(sql, /source_component\.byte_size[\s\S]*is distinct from v_requested_byte_size/i);
   assert.match(sql, /v_component\.source_component_id[\s\S]*is distinct from v_requested_source_component_id/i);
@@ -5362,6 +6257,7 @@ test('Candidate component fast-path owns atomic exact-root receipt reuse and ref
   assert.match(sql, /live_expense\.expense_component_id is null[\s\S]*live_workflow\.state not in \([\s\S]*'EXPIRED'/i);
   assert.match(sql, /from public\.timesheet_evidence live_evidence[\s\S]*live_evidence\.processing_state<>'SUPERSEDED'/i);
   assert.match(sql, /raise exception 'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' using errcode='23505'/i);
+  assert.match(sql, /when unique_violation[\s\S]*candidate_submission_components_live_receipt_expected_sha256_uq[\s\S]*CANDIDATE_EVIDENCE_BYTES_ALREADY_USED/i);
   assert.match(sql, /grant execute on function public\.candidate_component_prepare_atomic_v1[\s\S]*notify pgrst, 'reload schema';/i);
 });
 
@@ -5373,6 +6269,48 @@ test('Candidate receipt lineage has a bounded source-root lookup index', async (
   assert.match(sql, /create index if not exists candidate_submission_components_source_lineage_idx/i);
   assert.match(sql, /source_component_id,[\s\S]*workflow_id,[\s\S]*workflow_generation,[\s\S]*expense_category,[\s\S]*state/i);
   assert.match(sql, /where source_component_id is not null/i);
+});
+
+test('Candidate receipt prepare reserves one live digest and owns one fresh physical storage key', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/migrations/09092026_1410_candidate_receipt_fresh_upload_storage_owner.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /component\.source_component_id is null[\s\S]*component\.state='PENDING'[\s\S]*component\.expected_source_content_sha256 is null[\s\S]*CANDIDATE_COMPONENT_UNBOUND_PENDING_RECEIPT/i);
+  assert.match(sql, /CANDIDATE_COMPONENT_PHYSICAL_STORAGE_KEY_DUPLICATE/i);
+  assert.match(sql, /create unique index if not exists candidate_submission_components_physical_storage_key_uq/i);
+  assert.match(sql, /on public\.candidate_submission_components\(storage_key\)/i);
+  assert.match(sql, /source_component_id is null/i);
+  assert.match(sql, /expected_source_content_sha256 is not null/i);
+  assert.match(sql, /component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);
+  assert.match(sql, /CANDIDATE_COMPONENT_LIVE_RECEIPT_DIGEST_DUPLICATE/i);
+  assert.match(sql, /create unique index if not exists candidate_submission_components_live_receipt_expected_sha256_uq/i);
+  assert.match(sql, /on public\.candidate_submission_components\(expected_source_content_sha256\)[\s\S]*source_component_id is null[\s\S]*component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)[\s\S]*state in \('PENDING','IMMUTABLE'\)/i);
+});
+
+test('Candidate receipt verification refuses a second idempotency key for the same pending digest', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/verification/09092026_1400_candidate_receipt_reuse_behavior_verification.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /'expected_source_content_sha256_hex',v_direct_digest_hex[\s\S]*\),\s*'receipt-reuse:direct-exact',v_now/i);
+  assert.match(sql, /'expected_source_content_sha256_hex',v_direct_digest_hex[\s\S]*\),\s*'receipt-reuse:direct-competing-key',v_now\+interval '0\.01 seconds'/i);
+  assert.match(sql, /raise exception 'A second direct PREPARE reserved the same receipt bytes'/i);
+  assert.match(sql, /when unique_violation[\s\S]*sqlerrm<>'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED'/i);
+  assert.match(sql, /upload_idempotency_key='receipt-reuse:direct-competing-key'[\s\S]*raise exception 'The rejected direct PREPARE left an upload admission behind'/i);
+});
+
+test('Candidate receipt render authority protects the current copy and accepts ended lineage roots', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /state in \('IMMUTABLE','SUPERSEDED','REJECTED'\)/i);
+  assert.match(sql, /state='ABANDONED'[\s\S]*component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);
+  assert.match(sql, /v_source_digest:=v_component\.source_content_sha256/i);
+  assert.match(sql, /nullif\(btrim\(coalesce\(v_component\.storage_key,''\)\),''\) is null/i);
+  assert.match(sql, /old\.expected_source_content_sha256 is not null[\s\S]*new\.storage_key is distinct from old\.storage_key/i);
+  assert.match(sql, /new\.expected_source_content_sha256 is distinct from old\.expected_source_content_sha256/i);
 });
 
 test('finalised Candidate detail reads the immutable signed artifact generation', async () => {
@@ -5458,7 +6396,7 @@ test('Candidate component preparation recovers one exact pending component after
     const body = await response.json();
     assert.equal(body.idempotent_replay, true);
     assert.equal(body.component_id, componentId);
-    assert.equal(componentReads, 2);
+    assert.equal(componentReads, 3, 'exact-direct replay, durable-key replay, then bounded lost-key recovery');
   } finally {
     globalThis.fetch = originalFetch;
   }

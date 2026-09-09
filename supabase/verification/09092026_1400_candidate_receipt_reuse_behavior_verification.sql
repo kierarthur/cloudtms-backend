@@ -35,9 +35,18 @@ as $function$
       'document_role','SOURCE_EVIDENCE',
       'expense_category',p_expense_category,
       'source_component_id',p_source_component_id,
+      'storage_key','verification/receipt-reuse/reupload/'
+        ||pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to(p_idempotency_key,'UTF8'),'sha256'
+        ),'hex')||'.jpg',
       'media_type','image/jpeg',
       'byte_size',321,
       'source_content_sha256_hex',(
+        select pg_catalog.encode(component.source_content_sha256,'hex')
+        from public.candidate_submission_components component
+        where component.id=p_source_component_id
+      ),
+      'expected_source_content_sha256_hex',(
         select pg_catalog.encode(component.source_content_sha256,'hex')
         from public.candidate_submission_components component
         where component.id=p_source_component_id
@@ -102,9 +111,14 @@ begin
         'document_role','SOURCE_EVIDENCE',
         'expense_category',p_expense_category,
         'source_component_id',p_source_component_id,
+        'storage_key','verification/receipt-reuse/reupload/'
+          ||pg_catalog.encode(extensions.digest(
+            pg_catalog.convert_to(p_idempotency_key,'UTF8'),'sha256'
+          ),'hex')||'.jpg',
         'media_type',p_media_type,
         'byte_size',p_byte_size,
-        'source_content_sha256_hex',p_source_digest_hex
+        'source_content_sha256_hex',p_source_digest_hex,
+        'expected_source_content_sha256_hex',p_source_digest_hex
       ),
       p_idempotency_key,
       p_now_utc
@@ -116,6 +130,35 @@ begin
     end if;
   end;
 end;
+$function$;
+
+create function pg_temp.candidate_receipt_complete(
+  p_session_id uuid,
+  p_workflow_id uuid,
+  p_generation integer,
+  p_component_id uuid,
+  p_source_digest_hex text,
+  p_idempotency_key text,
+  p_now_utc timestamptz
+)
+returns jsonb
+language sql
+as $function$
+  select public.candidate_workflow_transition_atomic_v1(
+    p_session_id,
+    'TEST',
+    p_workflow_id,
+    'COMPONENT_COMPLETE',
+    p_generation,
+    jsonb_build_object(
+      'component_id',p_component_id,
+      'source_content_sha256_hex',p_source_digest_hex,
+      'verified_media_type','image/jpeg',
+      'verified_byte_size',321
+    ),
+    p_idempotency_key,
+    p_now_utc
+  );
 $function$;
 
 do $verification$
@@ -146,9 +189,17 @@ declare
   v_result jsonb;
   v_replay jsonb;
   v_component_id uuid;
+  v_direct_component_id uuid;
   v_sibling_before jsonb;
+  v_direct_digest_hex text:=pg_catalog.encode(extensions.digest(
+    pg_catalog.convert_to('direct receipt exact bytes','UTF8'),'sha256'
+  ),'hex');
+  v_direct_storage_key text:='verification/receipt-reuse/direct-root.jpg';
   v_source_digest_hex text;
+  v_source_storage_key text;
+  v_recovery_storage_key text;
   v_lineage_plan json;
+  v_constraint_name text;
 begin
   insert into public.clients(id,name)
   values(v_client,'Candidate receipt reuse verification client');
@@ -274,6 +325,191 @@ begin
     end if;
   end;
 
+  -- First-use receipt uploads are exact before any R2 completion.  Missing or
+  -- unbound digests fail closed, while a lost prepare response returns the
+  -- one original PENDING owner and its original storage key.
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','TRAVEL',
+        'storage_key','verification/receipt-reuse/direct-missing-digest.jpg',
+        'media_type','image/jpeg','byte_size',321
+      ),
+      'receipt-reuse:direct-missing-digest',v_now
+    );
+    raise exception 'Direct receipt without an expected digest was accepted';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_DIGEST_INVALID' then
+      raise;
+    end if;
+  end;
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','TRAVEL',
+        'storage_key','verification/receipt-reuse/direct-unbound-source.jpg',
+        'media_type','image/jpeg','byte_size',321,
+        'source_content_sha256_hex',v_direct_digest_hex,
+        'expected_source_content_sha256_hex',v_direct_digest_hex
+      ),
+      'receipt-reuse:direct-unbound-source',v_now
+    );
+    raise exception 'Direct receipt accepted a source digest without its source';
+  exception when invalid_authorization_specification then
+    if sqlerrm<>'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED' then
+      raise;
+    end if;
+  end;
+  v_result:=public.candidate_component_prepare_atomic_v1(
+    v_session,'TEST',v_target_workflow,1,
+    jsonb_build_object(
+      'component_kind','EXPENSE_EVIDENCE',
+      'document_role','SOURCE_EVIDENCE',
+      'expense_category','TRAVEL',
+      'storage_key',v_direct_storage_key,
+      'media_type','image/jpeg','byte_size',321,
+      'expected_source_content_sha256_hex',v_direct_digest_hex
+    ),
+    'receipt-reuse:direct-exact',v_now
+  );
+  v_direct_component_id:=nullif(v_result->>'component_id','')::uuid;
+  if v_direct_component_id is null
+     or v_result->>'state' is distinct from 'PENDING'
+     or (select source_component_id from public.candidate_submission_components
+         where id=v_direct_component_id) is not null
+     or (select source_content_sha256 from public.candidate_submission_components
+         where id=v_direct_component_id) is not null
+     or (select expected_source_content_sha256 from public.candidate_submission_components
+         where id=v_direct_component_id) is distinct from decode(v_direct_digest_hex,'hex') then
+    raise exception 'Direct receipt was not reserved with exact expected bytes: %',v_result;
+  end if;
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','TRAVEL',
+        'storage_key','verification/receipt-reuse/direct-competing-key.jpg',
+        'media_type','image/jpeg','byte_size',321,
+        'expected_source_content_sha256_hex',v_direct_digest_hex
+      ),
+      'receipt-reuse:direct-competing-key',v_now+interval '0.01 seconds'
+    );
+    raise exception 'A second direct PREPARE reserved the same receipt bytes';
+  exception when unique_violation then
+    if sqlerrm<>'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' then
+      raise;
+    end if;
+  end;
+  if exists(
+    select 1
+    from public.candidate_submission_components component
+    where component.upload_idempotency_key='receipt-reuse:direct-competing-key'
+  ) or exists(
+    select 1
+    from public.audit_events event_row
+    where event_row.object_type='candidate_workflow_mutation_receipt'
+      and event_row.object_id_text=v_target_workflow::text
+      and event_row.correlation_id='receipt-reuse:direct-competing-key'
+  ) then
+    raise exception 'The rejected direct PREPARE left an upload admission behind';
+  end if;
+  delete from public.audit_events
+  where object_type='candidate_workflow_mutation_receipt'
+    and object_id_text=v_target_workflow::text
+    and correlation_id='receipt-reuse:direct-exact';
+  v_replay:=public.candidate_component_prepare_atomic_v1(
+    v_session,'TEST',v_target_workflow,1,
+    jsonb_build_object(
+      'component_kind','EXPENSE_EVIDENCE',
+      'document_role','SOURCE_EVIDENCE',
+      'expense_category','TRAVEL',
+      'storage_key','verification/receipt-reuse/direct-lost-response-key.jpg',
+      'media_type','image/jpeg','byte_size',321,
+      'expected_source_content_sha256_hex',v_direct_digest_hex
+    ),
+    'receipt-reuse:direct-exact',v_now+interval '0.1 seconds'
+  );
+  if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
+     or nullif(v_replay->>'component_id','')::uuid is distinct from v_direct_component_id
+     or v_replay->>'storage_key' is distinct from v_direct_storage_key
+     or (select count(*) from public.candidate_submission_components component
+         where component.workflow_id=v_target_workflow
+           and component.upload_idempotency_key='receipt-reuse:direct-exact')<>1 then
+    raise exception 'Direct receipt lost-response replay created a second owner: %',v_replay;
+  end if;
+  delete from public.audit_events
+  where object_type='candidate_workflow_mutation_receipt'
+    and object_id_text=v_target_workflow::text
+    and correlation_id='receipt-reuse:direct-exact';
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','TRAVEL',
+        'storage_key',v_direct_storage_key,
+        'media_type','image/jpeg','byte_size',321,
+        'expected_source_content_sha256_hex',pg_catalog.repeat('0',64)
+      ),
+      'receipt-reuse:direct-exact',v_now+interval '0.2 seconds'
+    );
+    raise exception 'Direct receipt replay accepted different expected bytes';
+  exception when unique_violation then
+    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' then
+      raise;
+    end if;
+  end;
+  v_replay:=pg_temp.candidate_receipt_complete(
+    v_session,v_target_workflow,1,v_direct_component_id,v_direct_digest_hex,
+    'receipt-reuse:direct-complete',v_now+interval '0.3 seconds'
+  );
+  if (select state from public.candidate_submission_components
+      where id=v_direct_component_id) is distinct from 'IMMUTABLE'
+     or (select source_content_sha256 from public.candidate_submission_components
+         where id=v_direct_component_id) is distinct from decode(v_direct_digest_hex,'hex')
+     or (select expected_source_content_sha256 from public.candidate_submission_components
+         where id=v_direct_component_id) is distinct from decode(v_direct_digest_hex,'hex') then
+    raise exception 'Direct receipt did not complete against its expected bytes: %',v_replay;
+  end if;
+  update public.candidate_submission_components
+  set state='SUPERSEDED',superseded_at_utc=v_now
+  where id=v_direct_component_id;
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','TRAVEL',
+        'storage_key','verification/receipt-reuse/direct-ended-root.jpg',
+        'media_type','image/jpeg','byte_size',321,
+        'expected_source_content_sha256_hex',v_direct_digest_hex
+      ),
+      'receipt-reuse:direct-ended-root',v_now+interval '0.4 seconds'
+    );
+    raise exception 'Direct PREPARE bypassed an existing completed receipt root';
+  exception when unique_violation then
+    if sqlerrm<>'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED' then
+      raise;
+    end if;
+  end;
+  if exists(
+    select 1
+    from public.candidate_submission_components component
+    where component.upload_idempotency_key='receipt-reuse:direct-ended-root'
+  ) then
+    raise exception 'The rejected completed-root PREPARE left an upload admission behind';
+  end if;
+
   insert into public.candidate_submission_components(
     id,workflow_id,workflow_generation,component_no,timesheet_id,
     component_kind,expense_category,document_role,state,storage_key,
@@ -306,10 +542,53 @@ begin
     'DRAFT','NOT_REQUESTED','NOT_AUTHORISED'
   );
 
-  select pg_catalog.encode(source_content_sha256,'hex')
-  into strict v_source_digest_hex
+  select pg_catalog.encode(source_content_sha256,'hex'),storage_key
+  into strict v_source_digest_hex,v_source_storage_key
   from public.candidate_submission_components
   where id=v_source_root;
+
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','OTHER',
+        'source_component_id',v_source_root,
+        'storage_key','verification/receipt-reuse/reupload/missing-expected.jpg',
+        'media_type','image/jpeg',
+        'byte_size',321,
+        'source_content_sha256_hex',v_source_digest_hex
+      ),
+      'receipt-reuse:block-missing-expected',v_now
+    );
+    raise exception 'Receipt recovery without an expected digest was accepted';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_DIGEST_INVALID' then
+      raise;
+    end if;
+  end;
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','OTHER',
+        'source_component_id',v_source_root,
+        'media_type','image/jpeg',
+        'byte_size',321,
+        'source_content_sha256_hex',v_source_digest_hex,
+        'expected_source_content_sha256_hex',v_source_digest_hex
+      ),
+      'receipt-reuse:block-missing-storage',v_now
+    );
+    raise exception 'Receipt recovery without a fresh storage key was accepted';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_STORAGE_KEY_INVALID' then
+      raise;
+    end if;
+  end;
 
   -- The database itself, not only the calling service, binds a reuse request
   -- to the exact immutable bytes selected by the Candidate.
@@ -325,6 +604,28 @@ begin
     v_session,v_target_workflow,1,v_source_root,'OTHER','image/jpeg',321,
     pg_catalog.repeat('0',64),'receipt-reuse:block-wrong-digest',v_now
   );
+  begin
+    perform public.candidate_component_prepare_atomic_v1(
+      v_session,'TEST',v_target_workflow,1,
+      jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE',
+        'document_role','SOURCE_EVIDENCE',
+        'expense_category','OTHER',
+        'source_component_id',v_source_root,
+        'storage_key','verification/receipt-reuse/reupload/wrong-expected.jpg',
+        'media_type','image/jpeg',
+        'byte_size',321,
+        'source_content_sha256_hex',v_source_digest_hex,
+        'expected_source_content_sha256_hex',pg_catalog.repeat('0',64)
+      ),
+      'receipt-reuse:block-wrong-expected',v_now
+    );
+    raise exception 'Mismatched expected Candidate receipt digest was accepted';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_DIGEST_MISMATCH' then
+      raise;
+    end if;
+  end;
 
   -- A receipt in each live business state remains unavailable.
   perform pg_temp.expect_candidate_receipt_live_block(
@@ -394,13 +695,23 @@ begin
     'receipt-reuse:ended-category',v_now+interval '3 seconds'
   );
   v_component_id:=nullif(v_result->>'component_id','')::uuid;
+  select storage_key into strict v_recovery_storage_key
+  from public.candidate_submission_components
+  where id=v_component_id;
   if coalesce((v_result->>'ok')::boolean,false)=false
      or v_component_id is null
      or (select source_component_id
          from public.candidate_submission_components
          where id=v_component_id) is distinct from v_source_root
      or (select state from public.candidate_submission_components
-         where id=v_component_id) is distinct from 'IMMUTABLE'
+         where id=v_component_id) is distinct from 'PENDING'
+     or (select source_content_sha256 from public.candidate_submission_components
+         where id=v_component_id) is not null
+     or (select expected_source_content_sha256
+         from public.candidate_submission_components
+         where id=v_component_id) is distinct from decode(v_source_digest_hex,'hex')
+     or v_recovery_storage_key is not distinct from v_source_storage_key
+     or nullif(btrim(v_recovery_storage_key),'') is null
      or (select manager_approved_at_utc
          from public.candidate_submission_components
          where id=v_component_id) is not null
@@ -409,6 +720,102 @@ begin
          where expense_row.expense_component_id=v_approved_sibling_expense)
         is distinct from v_sibling_before then
     raise exception 'Ended category reuse changed the approved sibling: %',v_result;
+  end if;
+
+  begin
+    update public.candidate_submission_components
+    set expected_source_content_sha256=extensions.digest(
+      pg_catalog.convert_to('different expected receipt bytes','UTF8'),'sha256'
+    )
+    where id=v_component_id;
+    raise exception 'Pending receipt recovery identity was mutable';
+  exception when object_not_in_prerequisite_state then
+    if sqlerrm<>'CANDIDATE_COMPONENT_IMMUTABLE' then
+      raise;
+    end if;
+  end;
+
+  begin
+    insert into public.candidate_submission_components(
+      workflow_id,workflow_generation,component_no,timesheet_id,
+      component_kind,expense_category,document_role,state,source_component_id,
+      storage_key,media_type,byte_size,upload_idempotency_key,
+      expected_source_content_sha256,created_at_utc
+    ) values(
+      v_target_workflow,1,9999,v_timesheet,'EXPENSE_EVIDENCE','OTHER',
+      'SOURCE_EVIDENCE','PENDING',v_source_root,v_recovery_storage_key,
+      'image/jpeg',321,'receipt-reuse:duplicate-physical-owner',
+      decode(v_source_digest_hex,'hex'),v_now
+    );
+    raise exception 'A second physical owner accepted the recovery storage key';
+  exception when unique_violation then
+    get stacked diagnostics v_constraint_name=constraint_name;
+    if v_constraint_name<>'candidate_submission_components_physical_storage_key_uq' then
+      raise;
+    end if;
+  end;
+
+  begin
+    perform pg_temp.candidate_receipt_complete(
+      v_session,v_target_workflow,1,v_component_id,pg_catalog.repeat('0',64),
+      'receipt-reuse:complete-wrong-digest',v_now+interval '3.5 seconds'
+    );
+    raise exception 'Receipt recovery completed with different bytes';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_DIGEST_MISMATCH' then
+      raise;
+    end if;
+  end;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_target_workflow,'COMPONENT_COMPLETE',1,
+      jsonb_build_object(
+        'component_id',v_component_id,
+        'source_content_sha256_hex',v_source_digest_hex,
+        'verified_media_type','image/jpeg',
+        'verified_byte_size',322
+      ),
+      'receipt-reuse:complete-wrong-size',v_now+interval '3.51 seconds'
+    );
+    raise exception 'Receipt recovery completed with changed size metadata';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_MEDIA_INVALID' then
+      raise;
+    end if;
+  end;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_target_workflow,'COMPONENT_COMPLETE',1,
+      jsonb_build_object(
+        'component_id',v_component_id,
+        'source_content_sha256_hex',v_source_digest_hex,
+        'verified_media_type','image/png',
+        'verified_byte_size',321
+      ),
+      'receipt-reuse:complete-wrong-media',v_now+interval '3.52 seconds'
+    );
+    raise exception 'Receipt recovery completed with changed media metadata';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'CANDIDATE_COMPONENT_MEDIA_INVALID' then
+      raise;
+    end if;
+  end;
+  v_replay:=pg_temp.candidate_receipt_complete(
+    v_session,v_target_workflow,1,v_component_id,v_source_digest_hex,
+    'receipt-reuse:complete-ended-category',v_now+interval '3.6 seconds'
+  );
+  if coalesce((v_replay->>'ok')::boolean,false)=false
+     or (select state from public.candidate_submission_components
+         where id=v_component_id) is distinct from 'IMMUTABLE'
+     or (select source_content_sha256
+         from public.candidate_submission_components
+         where id=v_component_id) is distinct from decode(v_source_digest_hex,'hex')
+     or (select expected_source_content_sha256
+         from public.candidate_submission_components
+         where id=v_component_id) is distinct from decode(v_source_digest_hex,'hex')
+     or (select storage_key from public.candidate_submission_components
+         where id=v_component_id) is distinct from v_recovery_storage_key then
+    raise exception 'Exact receipt re-upload did not complete immutably: %',v_replay;
   end if;
 
   -- Older releases could leave the prepared component without its audit
@@ -438,9 +845,11 @@ begin
         'document_role','SOURCE_EVIDENCE',
         'expense_category','OTHER',
         'source_component_id',v_source_root,
+        'storage_key',v_recovery_storage_key,
         'media_type','image/jpeg',
         'byte_size',321,
-        'source_content_sha256_hex',pg_catalog.repeat('0',64)
+        'source_content_sha256_hex',pg_catalog.repeat('0',64),
+        'expected_source_content_sha256_hex',pg_catalog.repeat('0',64)
       ),
       'receipt-reuse:ended-category',v_now+interval '4 seconds'
     );
@@ -451,13 +860,18 @@ begin
     end if;
   end;
 
-  -- A lost-response replay returns the same component and creates no copy.
+  -- A lost-response replay returns the same physical recovery component and
+  -- creates no duplicate reservation or upload owner.
   v_replay:=pg_temp.candidate_receipt_prepare(
     v_session,v_target_workflow,1,v_source_root,'OTHER',
     'receipt-reuse:ended-category',v_now+interval '4 seconds'
   );
   if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
-     or v_replay-'idempotent_replay' is distinct from v_result-'idempotent_replay'
+     or nullif(v_replay->>'component_id','')::uuid is distinct from v_component_id
+     or v_replay->>'storage_key' is distinct from v_recovery_storage_key
+     or v_replay->>'component_kind' is distinct from 'EXPENSE_EVIDENCE'
+     or v_replay->>'document_role' is distinct from 'SOURCE_EVIDENCE'
+     or v_replay->>'expense_category' is distinct from 'OTHER'
      or (select count(*) from public.candidate_submission_components component
          where component.workflow_id=v_target_workflow
            and component.upload_idempotency_key='receipt-reuse:ended-category')<>1 then

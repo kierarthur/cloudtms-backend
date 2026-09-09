@@ -1896,6 +1896,17 @@ begin
        and v_component.expected_source_content_sha256<>v_digest then
       raise exception 'CANDIDATE_COMPONENT_DIGEST_MISMATCH' using errcode='22023';
     end if;
+    if v_component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+       and v_component.expected_source_content_sha256 is not null
+       and (
+         nullif(btrim(coalesce(v_component.storage_key,'')),'') is null
+         or coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,
+              v_component.byte_size) is distinct from v_component.byte_size
+         or lower(coalesce(nullif(v_payload->>'verified_media_type',''),
+              v_component.media_type)) is distinct from lower(v_component.media_type)
+       ) then
+      raise exception 'CANDIDATE_COMPONENT_MEDIA_INVALID' using errcode='22023';
+    end if;
     v_manager_capture_method:=nullif(upper(btrim(coalesce(
       v_payload->>'manager_signature_capture_method',''
     ))),'');
