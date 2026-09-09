@@ -8,6 +8,11 @@ const sql = fs.readFileSync(path.join(
   'fixtures',
   '05092026_1100_cloudtms_local_pg18_provider_prerequisites.sql',
 ), 'utf8');
+const pg17Sql = fs.readFileSync(path.join(
+  __dirname,
+  'fixtures',
+  '28082026_1229_banking_modal_local_pg17_prerequisites.sql',
+), 'utf8');
 
 test('PG18 provider compatibility fixture is local, version-bounded and empty-database only', () => {
   assert.match(sql, /current_database\(\) !~ '\^banking_modal_v2_/);
@@ -31,4 +36,16 @@ test('PG18 fixture supplies only the source-consumed auth and vault boundary', (
   assert.equal((sql.match(/^CREATE FUNCTION vault\./gm) || []).length, 1);
   assert.equal((sql.match(/^CREATE TABLE vault\./gm) || []).length, 1);
   assert.equal((sql.match(/^CREATE VIEW vault\./gm) || []).length, 1);
+});
+
+test('PG17 fixture uses the same stock-image provider boundary without a hosting-only extension', () => {
+  assert.match(pg17Sql, /server_version_num'\)::integer NOT BETWEEN 170000 AND 179999/);
+  assert.match(pg17Sql, /n\.nspname IN \('public', 'private', 'auth', 'vault'\)/);
+  assert.doesNotMatch(pg17Sql, /supabase_vault/i);
+  assert.match(pg17Sql, /CREATE EXTENSION pgcrypto WITH SCHEMA extensions/);
+  assert.match(pg17Sql, /CREATE TABLE auth\.users \(id uuid PRIMARY KEY\)/);
+  assert.match(pg17Sql, /CREATE TABLE vault\.secrets/);
+  assert.match(pg17Sql, /CREATE VIEW vault\.decrypted_secrets/);
+  assert.match(pg17Sql, /CREATE FUNCTION vault\.create_secret\([\s\S]*new_key_id uuid DEFAULT NULL/);
+  assert.doesNotMatch(pg17Sql, /\b(?:DELETE|UPDATE|TRUNCATE|DROP)\b/i);
 });

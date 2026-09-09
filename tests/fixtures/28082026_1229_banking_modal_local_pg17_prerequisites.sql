@@ -9,14 +9,16 @@ BEGIN
     RAISE EXCEPTION 'BANKING_MODAL_LOCAL_FIXTURE_TARGET_INVALID';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-             WHERE n.nspname IN ('public', 'private') AND c.relkind IN ('r','p','v')) THEN
+             WHERE n.nspname IN ('public', 'private', 'auth', 'vault')
+               AND c.relkind IN ('r','p','v')) THEN
     RAISE EXCEPTION 'BANKING_MODAL_LOCAL_FIXTURE_REQUIRES_EMPTY_DATABASE';
   END IF;
 END
 $local_only$;
 CREATE SCHEMA extensions;
 CREATE SCHEMA auth;
-CREATE EXTENSION supabase_vault CASCADE;
+CREATE SCHEMA vault;
+CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
 DO $provider_roles$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
@@ -35,4 +37,44 @@ CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
 $$;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
+$$;
+
+CREATE TABLE vault.secrets (
+  id uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  name text,
+  description text NOT NULL DEFAULT '',
+  secret text NOT NULL,
+  key_id uuid,
+  nonce bytea,
+  created_at timestamptz NOT NULL DEFAULT current_timestamp,
+  updated_at timestamptz NOT NULL DEFAULT current_timestamp
+);
+
+CREATE VIEW vault.decrypted_secrets AS
+SELECT
+  id,
+  name,
+  description,
+  secret,
+  secret AS decrypted_secret,
+  key_id,
+  nonce,
+  created_at,
+  updated_at
+FROM vault.secrets;
+
+CREATE FUNCTION vault.create_secret(
+  new_secret text,
+  new_name text DEFAULT NULL,
+  new_description text DEFAULT '',
+  new_key_id uuid DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+  INSERT INTO vault.secrets (secret, name, description, key_id)
+  VALUES (new_secret, new_name, new_description, new_key_id)
+  RETURNING id
 $$;
