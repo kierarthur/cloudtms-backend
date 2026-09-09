@@ -46,6 +46,13 @@
 -- restore the pre-history-anchor implementation on an UPGRADE database.
 \ir 04092026_1952_candidate_expense_history_anchor_recovery_v1.sql
 
+-- Replaying the complete 4 September workflow owner above also restores its
+-- earlier sent-PAPER retirement guard. Reapply the dedicated final authority
+-- before the later read/action owners so a dependency-only UPGRADE cannot
+-- leave sent immutable pack history blocking an otherwise eligible
+-- cancellation or Office Expense-category rejection.
+\ir 07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql
+
 -- The effective-payment History reader is newer again and owns the current
 -- candidate_app_timesheet_detail_v1 definition.  Reapply it last so the older
 -- detail reader embedded in the compatibility chain cannot move paid

@@ -191,6 +191,7 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
     '31082026_0557_candidate_empty_expense_carrier_action_v1.sql',
     '02092026_1918_candidate_finalised_hours_primary_action_v1.sql',
     '04092026_1952_candidate_expense_history_anchor_recovery_v1.sql',
+    '07092026_0331_candidate_sent_paper_retirement_final_authority_v1.sql',
     '05092026_0420_candidate_timesheet_effective_pay_history_v1.sql',
     '05092026_0941_candidate_protected_additional_expense_action_v1.sql'
   ]) {
@@ -204,7 +205,10 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
     /\\ir 02092026_1918_candidate_finalised_hours_primary_action_v1\.sql[\s\S]*\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql/i,
     'The current expense-history transition must remain the final workflow owner during UPGRADE replay');
   assert.match(finalAuthority,
-    /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql/i,
+    /\\ir 04092026_1952_candidate_expense_history_anchor_recovery_v1\.sql[\s\S]*\\ir 07092026_0331_candidate_sent_paper_retirement_final_authority_v1\.sql[\s\S]*\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql/i,
+    'The sent-PAPER final authority must follow the complete workflow owner and precede the later read/action owners');
+  assert.match(finalAuthority,
+    /\\ir 07092026_0331_candidate_sent_paper_retirement_final_authority_v1\.sql[\s\S]*\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql/i,
     'The effective-payment History detail must remain the final Candidate detail owner during UPGRADE replay');
   assert.match(finalAuthority,
     /\\ir 05092026_0420_candidate_timesheet_effective_pay_history_v1\.sql[\s\S]*\\ir 05092026_0941_candidate_protected_additional_expense_action_v1\.sql/i,
