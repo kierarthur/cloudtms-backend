@@ -337,13 +337,19 @@ begin
         'updated_at_utc',resolved.updated_at_utc
       ) order by resolved.updated_at_utc desc,resolved.id) as workflows,
       (array_agg(
-        nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','')::numeric
+        coalesce(
+          nullif(resolved.immutable_submission_json#>>'{canonical_tsfin_snapshot,total_hours}','')::numeric,
+          nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','')::numeric
+        )
         order by resolved.updated_at_utc desc,resolved.id
       ) filter (where resolved.state in (
         'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
         'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
         'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
-      ) and nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','') is not null))[1]
+      ) and coalesce(
+        nullif(resolved.immutable_submission_json#>>'{canonical_tsfin_snapshot,total_hours}',''),
+        nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','')
+      ) is not null))[1]
         as submitted_total_hours,
       (array_agg(
         nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}','')::numeric

@@ -26,7 +26,9 @@ test('submitted Weekly workflows remain linked to their exact Contract Week befo
 });
 
 test('submitted Weekly cards show immutable hours and expenses before financial materialisation',()=>{
+  assert.match(sql, /\{canonical_tsfin_snapshot,total_hours\}/i);
   assert.match(sql,/\{hours_submission,canonical_tsfin_snapshot,total_hours\}/i);
+  assert.match(sql, /coalesce\([\s\S]*\{canonical_tsfin_snapshot,total_hours\}[\s\S]*\{hours_submission,canonical_tsfin_snapshot,total_hours\}[\s\S]*\)[\s\n]+order by resolved\.updated_at_utc/i);
   for(const field of [
     'expenses_pay_ex_vat','mileage_pay_ex_vat','travel_pay_ex_vat',
     'accommodation_pay_ex_vat','other_pay_ex_vat'
