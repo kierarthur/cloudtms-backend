@@ -9,6 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 const historicalPath = 'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql';
+const replayRootPath = 'supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql';
 const currentOwnerPath = 'supabase/repeatable/08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql';
 const finalClosurePath = 'supabase/repeatable/09092026_1500_candidate_duplicate_expense_anchor_final_authority_v1.sql';
 const verifierPath = 'supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql';
@@ -21,8 +22,10 @@ test('the final closure restores only the exact current duplicate-expense owner'
   assert.equal(sha256(historical), '639b53dfaf72b629e6c6064c9e816af88a63e67b0247117c1b4881aa27ea752a');
   assert.equal(sha256(currentOwner), 'fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e');
   assert.match(finalClosure, /^\\set ON_ERROR_STOP on$/m);
+  assert.match(finalClosure, /^\\ir 27082026_1436_candidate_withdrawal_read_authority_v1\.sql$/m);
   assert.match(finalClosure, /^\\ir 08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1\.sql$/m);
-  assert.equal((finalClosure.match(/^\\ir /gm) || []).length, 1);
+  assert.equal((finalClosure.match(/^\\ir /gm) || []).length, 2);
+  assert.ok(finalClosure.indexOf('27082026_1436') < finalClosure.indexOf('08092026_0631'));
   assert.doesNotMatch(finalClosure, /create\s+(?:or\s+replace\s+)?function/i);
   assert.doesNotMatch(finalClosure, /\b(insert|update|delete|merge|truncate)\b/i);
 });
@@ -30,7 +33,16 @@ test('the final closure restores only the exact current duplicate-expense owner'
 test('the final authority is later than both the replaying historical closure and current owner', async () => {
   const { sqlDateKey } = await import('../scripts/cloudtms-db-release-lib.mjs');
   assert.ok(sqlDateKey(finalClosurePath) > sqlDateKey(historicalPath));
+  assert.ok(sqlDateKey(finalClosurePath) > sqlDateKey(replayRootPath));
   assert.ok(sqlDateKey(finalClosurePath) > sqlDateKey(currentOwnerPath));
+});
+
+test('the final closure hash is transitively bound to the exact shared replay root', async () => {
+  const { closureFor } = await import('../scripts/cloudtms-db-release-lib.mjs');
+  const closure = closureFor(finalClosurePath);
+  assert.ok(closure.paths.includes(replayRootPath));
+  assert.ok(closure.paths.includes(historicalPath));
+  assert.equal(closure.paths.at(-1), currentOwnerPath);
 });
 
 test('the verifier freezes the intended definition, metadata and private ACL', () => {
