@@ -232,7 +232,22 @@ begin
       where workflow.candidate_id=v_candidate_id
         and workflow.contract_id=carrier.contract_id
         and workflow.week_ending_date=carrier.week_ending_date
-        and (workflow.target_timesheet_id=carrier.timesheet_id or workflow.contract_week_id=carrier.id)
+        and (
+          workflow.target_timesheet_id=carrier.timesheet_id
+          or (
+            workflow.target_timesheet_id is null
+            and workflow.contract_week_id=carrier.id
+            and not exists (
+              select 1
+              from public.candidate_submission_workflows exact_owner
+              where exact_owner.candidate_id=v_candidate_id
+                and exact_owner.contract_id=carrier.contract_id
+                and exact_owner.week_ending_date=carrier.week_ending_date
+                and exact_owner.target_timesheet_id=carrier.timesheet_id
+                and exact_owner.state not in ('CANCELLED','SUPERSEDED','REJECTED')
+            )
+          )
+        )
         and workflow.state not in ('CANCELLED','SUPERSEDED','REJECTED')
     ) workflow_anchor on true
     left join lateral (

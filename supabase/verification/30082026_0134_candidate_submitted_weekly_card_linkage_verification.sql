@@ -48,6 +48,14 @@ begin
     raise exception 'CANDIDATE_MUTABLE_DRAFT_CONTENT_TRUTH_MISSING';
   end if;
 
+  if position('workflow.target_timesheet_id=carrier.timesheet_id' in lower(v_definition))=0
+     or position('workflow.target_timesheet_id is null' in lower(v_definition))=0
+     or position('from public.candidate_submission_workflows exact_owner' in lower(v_definition))=0
+     or position('exact_owner.target_timesheet_id=carrier.timesheet_id' in lower(v_definition))=0
+     or position('workflow.target_timesheet_id=carrier.timesheet_id or workflow.contract_week_id=carrier.id' in lower(v_definition))<>0 then
+    raise exception 'CANDIDATE_MULTI_EXPENSE_EXACT_OWNER_PRECEDENCE_MISSING';
+  end if;
+
   if has_function_privilege('anon',
        'public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)',
        'EXECUTE')
