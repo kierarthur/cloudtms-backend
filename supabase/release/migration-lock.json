@@ -887,6 +887,10 @@
       "sha256": "038cd79c1798e4d27fd22e328abe9ac3df8ce3f4da4a2e8139688cb8e803e77d"
     },
     {
+      "path": "supabase/migrations/07092026_1931_banking_pay_legacy_terminal_correction_cutover_repair_v1.sql",
+      "sha256": "086b8ca7d3985d80ea6dd803b757458efb2de912e7800ccf4e9d9db5961ce019"
+    },
+    {
       "path": "supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql",
       "sha256": "ade7edc338c86ba359a3f7bbd463903951fcbd765ca025f1610e6f764b2c7b43"
     },

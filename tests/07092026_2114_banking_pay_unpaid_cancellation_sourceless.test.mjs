@@ -44,9 +44,33 @@ const paths = {
   expandOut: 'supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql',
   integrityOut: 'supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql',
   statusAdmissionOut: 'supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql',
+  cutoverRepair: 'supabase/migrations/07092026_1931_banking_pay_legacy_terminal_correction_cutover_repair_v1.sql',
   migration: 'supabase/migrations/07092026_1932_banking_pay_unpaid_cancellation_sourceless_alert_index_v1.sql',
   verifier: 'supabase/verification/07092026_2115_banking_pay_unpaid_cancellation_sourceless_verification.sql',
 };
+
+function assertLegacyCutoverRepairSafety(source) {
+  assert.equal(count(source, 'DO $legacy_terminal_correction_cutover_repair$'), 1);
+  assert.match(source, /set local statement_timeout = '6000ms';/);
+  assert.match(source, /set local lock_timeout = '1000ms';/);
+  assert.match(source, /v_environment IS DISTINCT FROM 'TEST'[\s\S]+RETURN;/);
+  assert.equal(count(source, "request_row.requested_at_utc < '2026-08-15 00:00:00+00'::timestamptz"), 2);
+  assert.equal(count(source, "request_row.correction_kind = 'PRE_BANK_CANCEL'"), 2);
+  assert.equal(count(source, "request_row.status = 'PROCESSING'"), 2);
+  assert.match(source, /work_row\.status NOT IN \(\s*'APPLIED', 'SKIPPED', 'BLOCKED', 'FAILED_FINAL', 'CANCELLED'\s*\)/);
+  assert.equal(count(source, "operation_row.status = 'REVIEW_REQUIRED'"), 2);
+  assert.equal(count(source, "operation_row.phase = 'FINALISE'"), 2);
+  assert.match(source, /v_eligible_request_count IS DISTINCT FROM v_active_request_count/);
+  assert.match(source, /v_eligible_request_count > 8/);
+  assert.match(source, /private\.pay_payment_mutation_guard_v1\([\s\S]+?'CORRECTION_APPLY'/);
+  assert.match(source, /public\.pay_payment_correction_process_chunk\([\s\S]+?v_target\.request_id,[\s\S]+?100,[\s\S]+?v_worker_id/);
+  assert.match(source, /v_result->>'code' IS DISTINCT FROM 'PAYMENT_CORRECTION_FINALISED'/);
+  assert.match(source, /'LEGACY_WORKBENCH_REFRESH_REQUIRES_CURRENT_AUTHORITY'/);
+  assert.match(source, /PAYMENT_CORRECTION_LEGACY_CUTOVER_NOT_CLEAN/);
+  assert.doesNotMatch(source, /\b(DELETE|TRUNCATE|MERGE)\b/i);
+  assert.doesNotMatch(source, /UPDATE\s+public\.(pay_batches|pay_batch_items|pay_bank_transfers|pay_bank_transfer_events)/i);
+  assert.doesNotMatch(source, /provider|mail_outbox|remittance/i);
+}
 
 const applyConfig = {
   label: 'pre-bank apply',
@@ -277,6 +301,40 @@ test('final activation and release verifier reject every nonterminal correction 
   assert.doesNotMatch(verifier, /pg_catalog\.substring\(\s*v_definition\s+FROM/i);
   assert.doesNotMatch(verifier, /\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\s+(INTO\s+|FROM\s+)?public\./i);
   assert.match(verifier, /begin;[\s\S]+rollback;/i);
+});
+
+test('legacy TEST cutover closes only bounded terminal-work cancellations through the existing owner', () => {
+  const repair = read(paths.cutoverRepair);
+  const followingMigration = read(paths.migration);
+  assertLegacyCutoverRepairSafety(repair);
+  assert.ok(
+    paths.cutoverRepair.localeCompare(paths.migration) < 0,
+    'the repair must sort before the unchanged zero-active cutover gate'
+  );
+  assert.match(followingMigration, /PAYMENT_CORRECTION_RELEASE_REQUIRES_ZERO_ACTIVE_REQUESTS/);
+});
+
+test('legacy TEST cutover boundary mutations fail closed', () => {
+  const repair = read(paths.cutoverRepair);
+  const mutations = [
+    source => source.replace("IF v_environment IS DISTINCT FROM 'TEST' THEN", 'IF false THEN'),
+    source => source.replaceAll("request_row.correction_kind = 'PRE_BANK_CANCEL'", 'true'),
+    source => source.replaceAll("request_row.status = 'PROCESSING'", 'true'),
+    source => source.replaceAll("request_row.requested_at_utc < '2026-08-15 00:00:00+00'::timestamptz", 'true'),
+    source => source.replaceAll("operation_row.status = 'REVIEW_REQUIRED'", 'true'),
+    source => source.replaceAll("operation_row.phase = 'FINALISE'", 'true'),
+    source => source.replace('v_eligible_request_count IS DISTINCT FROM v_active_request_count', 'false'),
+    source => source.replace('v_eligible_request_count > 8', 'false'),
+    source => source.replace("v_result->>'code' IS DISTINCT FROM 'PAYMENT_CORRECTION_FINALISED'", 'false'),
+    source => source.replace('PAYMENT_CORRECTION_LEGACY_CUTOVER_NOT_CLEAN', 'PAYMENT_CORRECTION_LEGACY_CUTOVER_UNCHECKED'),
+  ];
+  for (const [index, mutation] of mutations.entries()) {
+    assert.throws(
+      () => assertLegacyCutoverRepairSafety(mutation(repair)),
+      undefined,
+      `legacy cutover mutation ${index + 1} survived`
+    );
+  }
 });
 
 test('integrity checker reproduces exact V1, V2/comm1 and V2/comm2 hash contracts', () => {
