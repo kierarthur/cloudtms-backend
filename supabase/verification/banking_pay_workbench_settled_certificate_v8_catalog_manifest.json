@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_workbench_publish_certified_source_preview_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_economic_build_id uuid, p_source_build_run_id uuid, p_source_change_seq bigint, p_session_version bigint, p_completion_job_id uuid, p_refresh_scope_kind text, p_targeted_timesheet_ids jsonb, p_linked_timesheet_ids jsonb, p_publication_options_json jsonb",
-      "definition_sha256": "42971b436098105cc127e7a3f8df5e3541d11e48d81fe7284e362e8da53a2cc3",
+      "definition_sha256": "489512991e194d1d2831dbf6280767527fa1f776f2202a31a58c66167d0aa69a",
       "owner": "postgres",
       "security_definer": false,
       "volatility": "v",
@@ -26,7 +26,8 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql"
+        "supabase/repeatable/07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql",
+        "supabase/repeatable/08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql"
       ]
     },
     {
