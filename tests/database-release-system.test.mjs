@@ -10,6 +10,9 @@ import {
   readJson, releaseAdmissionSql, releaseVerifierVariables, repoRoot, sha256, sqlDateKey,
   validateExpectedDatabase, validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
+import {
+  prepareCatalogOwnedSourceForRehearsal,
+} from '../supabase/verification/catalog_outer_transaction_envelope.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
 const filesUnder = relative => {
@@ -954,4 +957,79 @@ test('Bible preserves Policy X and protected security boundary', () => {
   assert.match(bible, /protected-boundary-lock\.json/);
   assert.match(bible, /There is no blind baselining/);
   assert.match(read('AGENTS.md'), /Mandatory database release process/);
+});
+
+test('one-time TEST Workbench cleanup retires only the exact observed old state', () => {
+  const cleanup = read(
+    'supabase/migrations/09092026_2142_banking_pay_test_clean_workbench_baseline_v1.sql',
+  );
+  const prepared = prepareCatalogOwnedSourceForRehearsal(cleanup);
+  assert.equal(prepared.mode, 'EXACT_OUTER_TRANSACTION_ENVELOPE');
+  assert.match(cleanup, /set local statement_timeout = '6000ms';/i);
+  assert.match(cleanup, /set local lock_timeout = '1000ms';/i);
+  assert.match(cleanup, /if v_environment is distinct from 'TEST' then\s+return;/i);
+  assert.doesNotMatch(cleanup, /current_database\s*\(\s*\)/i);
+  assert.doesNotMatch(cleanup, /\bcreate\s+(?:or\s+replace\s+)?function\b/i);
+  assert.doesNotMatch(cleanup, /\b(?:delete\s+from|truncate(?:\s+table)?|drop\s+table)\b/i);
+  assert.doesNotMatch(cleanup, /\b(?:grant|revoke|alter\s+(?:function|table))\b/i);
+
+  for (const exactGuard of [
+    'v_open_session_count is distinct from 1',
+    'v_target_session_count is distinct from 1',
+    'v_target_build_count is distinct from 3',
+    'v_target_active_job_count is distinct from 25',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_SCOPE_MISMATCH',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_DRAFT_OPERATION_FOUND',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_SESSION_CHANGED',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_JOB_SET_CHANGED',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_ACTIVE_WORK_FOUND',
+    'BANKING_PAY_TEST_CLEAN_BASELINE_POSTCONDITION_FAILED',
+    "stale_session.status = 'DISCARDED'",
+    "current_session.status = 'OPEN'",
+    "current_scope.status = 'SOURCE_BUILD_PENDING'",
+    "current_state.status = 'PENDING'",
+    "current_job.job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'",
+    "current_job.status = 'QUEUED'",
+    "current_job.private_stage = 'BUILD_INITIALISE'",
+    "current_job.private_cursor_kind = 'BUILD_INITIALISE'",
+    "'pay_workbench_enqueue_candidate_refresh'",
+    "terminal_continuation.status = 'DEAD'",
+    "'REPLACED_SESSION_QUEUE_REPLAYED'",
+  ]) {
+    assert.ok(cleanup.includes(exactGuard), `missing cleanup guard: ${exactGuard}`);
+  }
+
+  const updateTargets = [...cleanup.matchAll(/\bupdate\s+([a-z_][a-z0-9_.]*)\s+as\s+/gi)]
+    .map(match => match[1].toLowerCase())
+    .sort();
+  assert.deepEqual(updateTargets, [
+    'private.banking_pay_workbench_candidate_scope_registry',
+    'private.banking_pay_workbench_economic_builds',
+    'private.banking_pay_workbench_stage_attempts',
+    'public.banking_pay_workbench_jobs',
+  ].sort());
+  assert.match(
+    cleanup,
+    /public\.pay_workbench_session_discard\(\s*v_current_session_id,\s*v_actor_user_id\s*\)/i,
+  );
+  assert.match(cleanup, /'payment_policy_changed', false/g);
+  assert.match(cleanup, /'financial_rows_changed', false/g);
+
+  for (const target of [
+    'banking_pay_operations',
+    'pay_batches',
+    'pay_batch_candidates',
+    'pay_batch_items',
+    'pay_batch_selected_allocations',
+    'pay_payment_correction_requests',
+    'pay_payment_correction_work_items',
+    'banking_pay_provider',
+    'remittance',
+    'settlement',
+  ]) {
+    assert.doesNotMatch(
+      cleanup,
+      new RegExp(`\\b(?:update|insert\\s+into|delete\\s+from)\\s+(?:public\\.|private\\.)?${target}\\b`, 'i'),
+    );
+  }
 });
