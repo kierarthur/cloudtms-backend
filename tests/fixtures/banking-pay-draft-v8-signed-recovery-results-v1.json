@@ -7,7 +7,7 @@
     "scripts/verify-banking-pay-draft-v8-signed-recovery-matrix.mjs": "4e338f3057727b1b69f2f71cecbd8f918c41ffa27a7886ccf31dd72d5d6d3cfb",
     "tests/fixtures/banking-pay-draft-v8-signed-recovery-cases-v1.json": "a8ecef217a95b68a4a9e3a5ec8b1832703190e5916d9eef8c5aa86baf6e3d1af",
     "tests/01092026_1511_banking_pay_signed_recovery_draft_runtime_verification.sql": "7abb47f475e140aec0fbd8ee41e70e180afc4ccd00023fe23e2018a4ce432c5d",
-    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql": "1be7a8fd32208b0f14a76bbae5bb435dd9501179ade4b4cbe3551c9797ad8915",
+    "supabase/verification/01092026_1648_banking_pay_signed_recovery_classifier_verification.sql": "97e624c284317d59f7206d0697d09f9c18bed80bb471fc5f6c680a6197e52b6f",
     "tests/fixtures/28082026_1429_banking_pay_selection_setup.sql": "49be81d05368e413c8ffe2c442b7f5dde546073cba7bb9e3952473aee6ae5fea"
   },
   "execution_contract": {

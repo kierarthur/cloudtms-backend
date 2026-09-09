@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd",
+      "definition_sha256": "e7a5cfc84f3db369739881d1ff0db0d3a08a89e0bcb398db26f7a249148f6d74",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -343,7 +343,8 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql"
+        "supabase/repeatable/04082026_1146_pay_batch_payment_status_page_v1.sql",
+        "supabase/repeatable/07092026_2135_banking_pay_unpaid_cancellation_status_admission_v1.sql"
       ]
     },
     {
@@ -411,7 +412,7 @@
       "schema": "public",
       "name": "pay_no_money_unwind_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "fbebb548ab805c50a432f5612093c223fb3200f9b9ecb3dfed6aad468525d958",
+      "definition_sha256": "2285079b3a88ffa5ef6dab0a339aab5679d142853b082e867dc74ee200d3fb3f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -434,7 +435,8 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql"
+        "supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql",
+        "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql"
       ]
     },
     {
@@ -560,7 +562,7 @@
       "schema": "public",
       "name": "pay_payment_correction_expand_work",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "3bcf21c8b46a64ce8dee0e9752606056149bc590669ea6065e674c50bdc705a7",
+      "definition_sha256": "f1d036ffe1e165b05598a4b503f2d85cea97bd04f0d7e4242fa9b3bcb8747a99",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -583,7 +585,8 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/04082026_1208_pay_payment_correction_expand_work.sql"
+        "supabase/repeatable/04082026_1208_pay_payment_correction_expand_work.sql",
+        "supabase/repeatable/07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql"
       ]
     },
     {
@@ -620,7 +623,7 @@
       "schema": "public",
       "name": "pay_payment_correction_integrity_check_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_max_candidates integer",
-      "definition_sha256": "2ea5bac5c9ccbfb620d562c1c5c7e71d7cc30bcc02b183e78be1735dbff4918c",
+      "definition_sha256": "6acc373d2ad30819750d76ce942bff187b337e3e612a50e3a0c6c1bf65d278e9",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -642,14 +645,15 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/04082026_1148_pay_payment_correction_integrity_check_v1.sql"
+        "supabase/repeatable/04082026_1148_pay_payment_correction_integrity_check_v1.sql",
+        "supabase/repeatable/07092026_2021_banking_pay_payment_correction_integrity_communication_v2_v1.sql"
       ]
     },
     {
       "schema": "public",
       "name": "pay_payment_correction_process_chunk",
       "identity_arguments": "p_correction_request_id uuid, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "7bb210f6f426c431eaba667377bb602adf616b643aeac3104236e0cb49d1f51d",
+      "definition_sha256": "d07107bbb827348183bd76c5c54347c4763835fdd0c7b4e30816c6acb5ed897f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -673,7 +677,8 @@
       ],
       "source_files": [
         "supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql",
-        "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql"
+        "supabase/repeatable/04092026_2350_banking_pay_cancellation_completion_v1.sql",
+        "supabase/repeatable/09092026_0020_banking_pay_no_money_workbench_return_v1.sql"
       ]
     },
     {
@@ -710,7 +715,7 @@
       "schema": "public",
       "name": "pay_payment_correction_request_start",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid, p_auto_requested boolean, p_accepted_resolution_json jsonb",
-      "definition_sha256": "104d0460c50d4ccdb3e37a6e74d7a8de7a134445e66f3d2c05b15fd65298efb5",
+      "definition_sha256": "a51e432461f584d5677fc38dcdaeb17fecadf04f0f4a7e72cd297bfeec7efd97",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -733,14 +738,15 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql"
+        "supabase/repeatable/04082026_1207_pay_payment_correction_request_start.sql",
+        "supabase/repeatable/08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql"
       ]
     },
     {
       "schema": "public",
       "name": "pay_payment_correction_selection_prepare_chunk_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_cursor_json jsonb, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "03a05a5d784beb5845125cc398166ebfbb221aa9e65022e2d7ea4a54d92fb83f",
+      "definition_sha256": "07f6cd72847357e1fe8a9e4eab9a231594fb97fce4aaaa60ec98aa42cd29af81",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -764,7 +770,8 @@
       ],
       "source_files": [
         "supabase/repeatable/04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql",
-        "supabase/repeatable/05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1.sql"
+        "supabase/repeatable/05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1.sql",
+        "supabase/repeatable/07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql"
       ]
     },
     {
@@ -830,7 +837,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "0bc45a7c2a699126bf554ea0ca1bfda278d8321855e794b42dd477d7db956af9",
+      "definition_sha256": "9475812b6d146f434971317d23f6b7754b666ca4403ecd8ccb6f4269c3966d10",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -854,7 +861,8 @@
       ],
       "source_files": [
         "supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql",
-        "supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql"
+        "supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql",
+        "supabase/repeatable/07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql"
       ]
     },
     {
@@ -981,7 +989,7 @@
       "schema": "public",
       "name": "pay_payment_cancelability_diagnostic",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_actor_user_id uuid, p_diagnostic_context text",
-      "definition_sha256": "7888b5bd9bca1c1a375f88f2e8631d3dd6f8d3839d84820fa1597f2de1a5e065",
+      "definition_sha256": "dc307adea1c09b58a6d34311a4adcb138bb19615349fcd24b413e07fe99c03a9",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -1003,6 +1011,7 @@
         }
       ],
       "source_files": [
+        "supabase/repeatable/07092026_2136_banking_pay_unpaid_cancellation_sourceless_admission_v1.sql",
         "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
       ]
     },

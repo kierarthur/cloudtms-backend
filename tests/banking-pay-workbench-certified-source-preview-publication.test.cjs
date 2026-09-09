@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const read = (kind, name) => fs.readFileSync(path.join(root, 'supabase', kind, name), 'utf8');
 
 const migration = read('migrations', '07082026_2153_certified_source_preview_publication_guard.sql');
-const publisher = read('repeatable', '07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql');
+const publisher = read('repeatable', '08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql');
 const progress = read('repeatable', '07082026_2155_pay_workbench_session_recompute_progress_counters.sql');
 const completion = read('repeatable', '04082026_1219_pay_workbench_complete_job.sql');
 const catalogue = JSON.parse(read(
@@ -52,17 +52,24 @@ test('GitHub records and verifies all three installed publication authorities', 
   assert.match(workflow, /verify_banking_pay_workbench_certified_source_preview_catalog\.mjs/);
 });
 
-test('each publication function has one authoritative SQL definition', () => {
+test('each publication function has one exact authoritative replacement chain', () => {
   const sqlFiles = ['migrations', 'repeatable'].flatMap((kind) => {
     const directory = path.join(root, 'supabase', kind);
     return fs.readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
       .map((entry) => path.join(directory, entry.name));
   });
-  for (const [schema, name] of [
-    ['private', 'pay_workbench_publish_certified_source_preview_v1'],
-    ['public', 'pay_workbench_complete_job'],
-    ['public', 'pay_workbench_session_recompute_progress_counters']
+  for (const [schema, name, expectedOwners] of [
+    ['private', 'pay_workbench_publish_certified_source_preview_v1', [
+      '07082026_2154_pay_workbench_publish_certified_source_preview_v1.sql',
+      '08092026_1201_banking_pay_certified_preview_final_selection_count_v1.sql',
+    ]],
+    ['public', 'pay_workbench_complete_job', [
+      '04082026_1219_pay_workbench_complete_job.sql',
+    ]],
+    ['public', 'pay_workbench_session_recompute_progress_counters', [
+      '07082026_2155_pay_workbench_session_recompute_progress_counters.sql',
+    ]]
   ]) {
     const pattern = new RegExp(
       `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+${schema}\\.${name}\\s*\\(`,
@@ -72,7 +79,7 @@ test('each publication function has one authoritative SQL definition', () => {
       const source = fs.readFileSync(file, 'utf8');
       return [...source.matchAll(pattern)].map(() => path.basename(file));
     });
-    assert.equal(owners.length, 1, `${schema}.${name} owners: ${owners.join(', ')}`);
+    assert.deepEqual(owners, expectedOwners, `${schema}.${name} replacement chain`);
   }
 });
 

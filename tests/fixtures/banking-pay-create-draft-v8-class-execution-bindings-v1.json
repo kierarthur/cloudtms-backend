@@ -7,7 +7,7 @@
   },
   "source_parity_matrix": {
     "path": "tests/fixtures/banking-pay-create-draft-v8-policy-parity-matrix-v1.json",
-    "sha256": "a7f85c0ae98ede2c6eef02ffa7381fc50a7067d470260a20045cac32dd7edfab"
+    "sha256": "cf1df598385e9574a77a2017398f5ae1bb6e2613b7024448b5008383df875fc0"
   },
   "evidence_definitions": {
     "STRUCTURAL_MATRIX_CLASS_ID_ONLY": {
@@ -92,7 +92,7 @@
       "runner_path": "scripts/verify-banking-pay-draft-v8-signed-recovery-matrix.mjs",
       "runner_sha256": "4e338f3057727b1b69f2f71cecbd8f918c41ffa27a7886ccf31dd72d5d6d3cfb",
       "result_path": "tests/fixtures/banking-pay-draft-v8-signed-recovery-results-v1.json",
-      "result_sha256": "c2026bd86f3659e1b05f9ac377625aab732803e264981c6baa4af5f17270bab1",
+      "result_sha256": "d1682ff440c557ced9e47196d1947f37e07afcaee6e9032b110c3bc273db4aa7",
       "required_literal_markers": [
         "H2_V8_SIGNED_RECOVERY_PASS=signed_positive_return",
         "H2_V8_SIGNED_RECOVERY_PASS=signed_negative_recovery",

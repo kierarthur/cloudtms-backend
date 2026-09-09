@@ -36,10 +36,24 @@ const laterReplacementOwners = new Map([
   ['pay_payment_correction_process_chunk', [
     '04082026_1209_pay_payment_correction_process_chunk.sql',
     '04092026_2350_banking_pay_cancellation_completion_v1.sql',
+    '09092026_0020_banking_pay_no_money_workbench_return_v1.sql',
+  ]],
+  ['pay_no_money_unwind_apply_work_item', [
+    '04082026_1158_pay_no_money_unwind_apply_work_item.sql',
+    '07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql',
+  ]],
+  ['pay_payment_correction_expand_work', [
+    '04082026_1208_pay_payment_correction_expand_work.sql',
+    '07092026_2014_banking_pay_unpaid_cancellation_communication_v2_expand_v1.sql',
+  ]],
+  ['pay_payment_correction_request_start', [
+    '04082026_1207_pay_payment_correction_request_start.sql',
+    '08092026_0510_banking_pay_payment_correction_prepare_idempotency_v1.sql',
   ]],
   ['pay_pre_bank_cancel_apply_work_item', [
     '04082026_1158_pay_pre_bank_cancel_apply_work_item.sql',
     '04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql',
+    '07092026_1932_banking_pay_unpaid_cancellation_sourceless_apply_v1.sql',
   ]],
 ]);
 

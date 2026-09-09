@@ -278,11 +278,11 @@
         },
         {
           "path": "tests/banking-pay-signed-recovery-draft-parity.test.cjs",
-          "sha256": "2525b426fa5e9fb646a484537853db68d047b407d87cc2ac855f62f10126785f"
+          "sha256": "afbef9908fb924f256555cce174d374a4ba48321032913ba33eeedd5bd35ab56"
         },
         {
           "path": "tests/banking-pay-signed-recovery-classifier-historical-compatibility.test.cjs",
-          "sha256": "9b973d97ccf32980c231584bb3aa8decd6c33025ad6846eb088ab0c8f86b55c0"
+          "sha256": "9d43ddfcb3c01973c1e36e097a544a17a182f91de11baf95138cd09301fb698c"
         },
         {
           "path": "tests/banking-pay-draft-constituent-parity-v8.test.cjs",
