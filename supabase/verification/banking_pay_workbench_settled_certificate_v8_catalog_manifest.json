@@ -785,7 +785,7 @@
       "schema": "public",
       "name": "pay_workbench_settled_certificate_due_claim_v8",
       "identity_arguments": "p_limit integer",
-      "definition_sha256": "d854674d2f2e0d55af4a2e1d7be612616243d097ce1427294695627c773c30eb",
+      "definition_sha256": "2fef1eda1b003d994fc45208ade329bb812b0fc29f37f4db4b39799dab00e989",
       "owner": "postgres",
       "security_definer": true,
       "volatility": "v",
