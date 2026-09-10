@@ -1741,7 +1741,7 @@ $targetless_final_pending$;
 do $paid_expense_only$
 declare
   v_base public.candidate_submission_workflows%rowtype;
-  v_actor uuid:=pg_catalog.gen_random_uuid();
+  v_actor uuid;
   v_timesheet uuid:=pg_catalog.gen_random_uuid();
   v_week uuid:=pg_catalog.gen_random_uuid();
   v_workflow uuid:=pg_catalog.gen_random_uuid();
@@ -1758,9 +1758,14 @@ declare
   v_first_result jsonb;
   v_result jsonb;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(v_actor,'advanced-paid-'||v_actor::text||'@example.test',
-    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  select actor.id into strict v_actor
+  from public.tms_users actor
+  where actor.email='candidate-app-system@cloudtms.invalid'
+    and actor.role='user'
+    and actor.is_active=false
+    and actor.password_hash='!cloudtms-system-actor-no-login-v1!'
+    and coalesce(actor.payment_authoriser,false)=false
+    and coalesce(actor.payment_golden_key,false)=false;
   update public.settings_defaults
   set candidate_app_system_actor_user_id=v_actor
   where id=1;

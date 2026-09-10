@@ -931,6 +931,10 @@
       "sha256": "08cc807a053a67f452460298f6f076c210effb7033735b000fbe9a0a084347a3"
     },
     {
+      "path": "supabase/migrations/10092026_1800_candidate_system_actor_archive_bridge.sql",
+      "sha256": "cd306f4f2c4ad1e4fd84faac3ceed432fc03875e0cf3af1eb3cabafb07c5d54a"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
