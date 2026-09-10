@@ -214,6 +214,9 @@ test('due claim skips sealed and terminal generations while prioritising resumab
   assert.match(build, /lock_timeout', '1500'/i);
   assert.match(build, /active\.lifecycle = 'BUILDING'[\s\S]*?lease_expires_at_utc/i);
   assert.match(build, /active\.certificate_uuid IS NULL[\s\S]*?NOT EXISTS[\s\S]*?historical\.authority_fence_generation = session\.authority_fence_generation/i);
+  assert.match(build, /session\.scope_seed_complete[\s\S]*session\.scope_total_count = session\.scope_seeded_count[\s\S]*session\.scope_total_count = session\.scope_ready_count/i);
+  assert.match(build, /session\.scope_pending_count = 0[\s\S]*session\.scope_failed_count = 0[\s\S]*session\.line_units_total = session\.line_units_ready/i);
+  assert.match(build, /session\.line_units_pending = 0[\s\S]*session\.line_units_failed = 0[\s\S]*session\.scope_change_generation_target = session\.scope_change_generation_applied[\s\S]*session\.scope_change_generation_target = session\.scope_change_generation_shadow_checked/i);
   assert.match(build, /ORDER BY CASE WHEN active\.lifecycle = 'BUILDING' THEN 0 ELSE 1 END/i);
   assert.match(build, /FOR UPDATE OF session SKIP LOCKED/i);
   assert.match(build, /WORKBENCH_SETTLED_CERTIFICATE_V8:' \|\| v_due\.session_id::text/i);

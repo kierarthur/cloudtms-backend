@@ -2693,6 +2693,16 @@ BEGIN
       AND session.discarded_at_utc IS NULL
       AND session.replacement_session_id IS NULL
       AND session.selected_row_count BETWEEN 1 AND 50000
+      AND session.scope_seed_complete
+      AND session.scope_total_count = session.scope_seeded_count
+      AND session.scope_total_count = session.scope_ready_count
+      AND session.scope_pending_count = 0
+      AND session.scope_failed_count = 0
+      AND session.line_units_total = session.line_units_ready
+      AND session.line_units_pending = 0
+      AND session.line_units_failed = 0
+      AND session.scope_change_generation_target = session.scope_change_generation_applied
+      AND session.scope_change_generation_target = session.scope_change_generation_shadow_checked
       AND (
         (
           active.lifecycle = 'BUILDING'
