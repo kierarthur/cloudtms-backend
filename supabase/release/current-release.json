@@ -135,7 +135,8 @@
     "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
     "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
     "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
-    "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql"
+    "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql",
+    "supabase/verification/10092026_0835_planned_week_candidate_submission_delete_guard_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -237,6 +238,7 @@
     "supabase/verification/08092026_1203_banking_pay_cancel_return_selection_intent_verification.sql",
     "supabase/verification/09092026_0022_banking_pay_no_money_workbench_return_verification.sql",
     "supabase/verification/09092026_1501_candidate_duplicate_expense_anchor_final_authority_verification.sql",
-    "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql"
+    "supabase/verification/09092026_1901_candidate_expense_update_submit_final_authority_verification.sql",
+    "supabase/verification/10092026_0835_planned_week_candidate_submission_delete_guard_verification.sql"
   ]
 }

@@ -10472,6 +10472,75 @@ async function handleOfficeRejectPreview(request, env, deps, timesheetId) {
   }));
 }
 
+function requireContractWeekSubmissionDeleteGuard(value, contractWeekId) {
+  const result = isObject(value) ? value : {};
+  const guardedWorkflows = Array.isArray(result.guarded_workflows) ? result.guarded_workflows : null;
+  const relatedWorkflowIds = Array.isArray(result.related_workflow_ids) ? result.related_workflow_ids : null;
+  const contextSha256 = text(result.context_sha256).toLowerCase();
+  const stage = upper(result.candidate_submission_stage) || null;
+  if (result.ok !== true
+      || text(result.contract_version) !== 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_V1'
+      || text(result.contract_week_id) !== contractWeekId
+      || !SHA256_RE.test(contextSha256)
+      || typeof result.candidate_submission_rejection_required !== 'boolean'
+      || guardedWorkflows == null || relatedWorkflowIds == null
+      || Number(result.guarded_workflow_count) !== guardedWorkflows.length
+      || result.candidate_submission_rejection_required !== (guardedWorkflows.length > 0)
+      || (stage != null && !['CANDIDATE_SUBMITTED', 'MANAGER_APPROVED'].includes(stage))
+      || (guardedWorkflows.length > 0 && stage == null)
+      || (guardedWorkflows.length === 0 && stage != null)) {
+    throw new CandidateHttpError(503, 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  return {
+    ...result,
+    context_sha256: contextSha256,
+    candidate_submission_stage: stage
+  };
+}
+
+async function handleOfficeContractWeekRejectPreview(request, env, deps, contractWeekId) {
+  await requireOfficeActor(request, deps, 'reject_submission');
+  const currentContractWeekId = requireUuid(contractWeekId, 'CONTRACT_WEEK_NOT_FOUND');
+  const result = await rpcCall(deps, 'contract_week_submission_delete_guard_preview_v1', {
+    p_environment: environmentName(env),
+    p_contract_week_id: currentContractWeekId
+  });
+  return jsonResponse(200, requireContractWeekSubmissionDeleteGuard(result, currentContractWeekId));
+}
+
+async function handleOfficeContractWeekReject(request, env, deps, contractWeekId) {
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
+  const currentContractWeekId = requireUuid(contractWeekId, 'CONTRACT_WEEK_NOT_FOUND');
+  const body = await readJson(request);
+  const reason = text(body.reason);
+  if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_REASON_REQUIRED');
+  if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_REASON_INVALID');
+  const expectedContextSha256 = requireSha256(
+    body.expected_context_sha256,
+    'CONTRACT_WEEK_SUBMISSION_DELETE_CONTEXT_INVALID'
+  );
+  const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+  const result = await rpcCall(deps, 'contract_week_submission_reject_atomic_v1', {
+    p_actor_user_id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED'),
+    p_environment: environmentName(env),
+    p_contract_week_id: currentContractWeekId,
+    p_expected_context_sha256: expectedContextSha256,
+    p_reason: reason,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  if (!isObject(result)
+      || result.ok !== true
+      || text(result.contract_version) !== 'CONTRACT_WEEK_SUBMISSION_REJECTION_V1'
+      || text(result.contract_week_id) !== currentContractWeekId
+      || result.candidate_submission_rejected !== true
+      || result.candidate_must_start_new_claim !== true
+      || !Array.isArray(result.rejected_workflow_ids)) {
+    throw new CandidateHttpError(503, 'CONTRACT_WEEK_SUBMISSION_REJECTION_INVALID');
+  }
+  return jsonResponse(200, result);
+}
+
 async function handleOfficeRoute(request, env, deps, action, timesheetId) {
   const user = await requireOfficeActor(request, deps, 'change_route');
   if (action === 'preview') {
@@ -11604,6 +11673,16 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     if (match) {
       if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
       return await handleOfficeReject(request, env, deps, match.timesheetId);
+    }
+    match = routeMatch(path, '/api/candidate-app/contract-weeks/:contractWeekId/reject-preview');
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeContractWeekRejectPreview(request, env, deps, match.contractWeekId);
+    }
+    match = routeMatch(path, '/api/candidate-app/contract-weeks/:contractWeekId/reject');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeContractWeekReject(request, env, deps, match.contractWeekId);
     }
     match = routeMatch(path, '/api/candidate-app/workflows/:workflowId/paper-pack');
     if (match) {

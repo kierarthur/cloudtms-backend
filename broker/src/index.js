@@ -107437,6 +107437,54 @@ async function loadTimesheetCandidateSubmissionDeleteGuard(env, timesheetIds, ro
   };
 }
 
+async function loadContractWeekSubmissionDeleteGuard(env, contractWeekId, routeClass, purpose) {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sha256Re = /^[0-9a-f]{64}$/i;
+  const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
+  const weekId = String(contractWeekId || '').trim();
+  if (!['TEST', 'LIVE'].includes(environment) || !uuidRe.test(weekId)) {
+    throw new Error('CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  let result = await sbRpc(env, 'contract_week_submission_delete_guard_preview_v1', {
+    p_environment: environment,
+    p_contract_week_id: weekId
+  }, {
+    routeClass,
+    purpose,
+    timeoutMs: 8000
+  });
+  if (Array.isArray(result)) result = result[0] || null;
+  if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'data')) {
+    result = Array.isArray(result.data) ? (result.data[0] || null) : result.data;
+  }
+  if (!result || typeof result !== 'object' || Array.isArray(result)
+      || result.ok !== true
+      || result.contract_version !== 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_V1'
+      || String(result.contract_week_id || '') !== weekId
+      || !sha256Re.test(String(result.context_sha256 || ''))
+      || typeof result.candidate_submission_rejection_required !== 'boolean'
+      || !Array.isArray(result.guarded_workflows)
+      || !Array.isArray(result.related_workflow_ids)) {
+    throw new Error('CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  const stage = String(result.candidate_submission_stage || '').trim().toUpperCase() || null;
+  if (stage && !['CANDIDATE_SUBMITTED', 'MANAGER_APPROVED'].includes(stage)) {
+    throw new Error('CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  if (Number(result.guarded_workflow_count) !== result.guarded_workflows.length
+      || result.candidate_submission_rejection_required !== (result.guarded_workflows.length > 0)
+      || (result.guarded_workflows.length > 0 && !stage)
+      || (result.guarded_workflows.length === 0 && stage)) {
+    throw new Error('CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_INVALID');
+  }
+  return {
+    ...result,
+    context_sha256: String(result.context_sha256).toLowerCase(),
+    candidate_submission_stage: stage,
+    candidate_submission_rejection_required: result.guarded_workflows.length > 0
+  };
+}
+
 async function loadCandidateManagerRouteTicketsForWorkflows(env, workflowIds) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const ids = Array.from(new Set(
@@ -194332,14 +194380,87 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
 async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
-  if (!contractWeekId) return withCORS(env, req, badRequest('contract_week_id is required'));
+  const weekId = String(contractWeekId || '').trim();
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const sha256Re = /^[0-9a-f]{64}$/i;
+  if (!uuidRe.test(weekId)) return withCORS(env, req, badRequest('contract_week_id must be a valid UUID'));
+
+  let deleteGuard;
+  try {
+    deleteGuard = await loadContractWeekSubmissionDeleteGuard(
+      env,
+      weekId,
+      'USER_INTERACTIVE',
+      req.method === 'GET' ? 'CONTRACT_WEEK_DELETE_PREVIEW' : 'CONTRACT_WEEK_DELETE_PREFLIGHT'
+    );
+  } catch (error) {
+    const message = String(error?.message || error || 'CONTRACT_WEEK_SUBMISSION_DELETE_GUARD_FAILED');
+    if (message.includes('CONTRACT_WEEK_NOT_FOUND')) return withCORS(env, req, notFound('Week not found'));
+    return withCORS(env, req, serverError('The planned-week delete check could not be completed.'));
+  }
+
+  if (req.method === 'GET') {
+    return withCORS(env, req, ok({ ok: true, preview: deleteGuard }));
+  }
+  if (req.method !== 'POST') {
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: 'METHOD_NOT_ALLOWED',
+      message: 'Planned-week delete must use GET or POST.'
+    }), {
+      status: 405,
+      headers: { 'content-type': 'application/json', allow: 'GET, POST' }
+    }));
+  }
+
+  let body;
+  try { body = await req.json(); } catch { body = null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return withCORS(env, req, badRequest('Invalid JSON object'));
+  }
+  const allowedKeys = new Set(['expected_context_sha256', 'delete_operation_id']);
+  const unsupportedKeys = Object.keys(body).filter((key) => !allowedKeys.has(key));
+  if (unsupportedKeys.length) {
+    return withCORS(env, req, badRequest('Planned delete request contains unsupported fields.'));
+  }
+  const expectedContextSha256 = String(body.expected_context_sha256 || '').trim().toLowerCase();
+  const deleteOperationId = String(body.delete_operation_id || '').trim();
+  if (!sha256Re.test(expectedContextSha256)) {
+    return withCORS(env, req, badRequest('expected_context_sha256 must be a SHA-256 value'));
+  }
+  if (!uuidRe.test(deleteOperationId)) {
+    return withCORS(env, req, badRequest('delete_operation_id must be a valid UUID'));
+  }
+  if (deleteGuard.context_sha256 !== expectedContextSha256) {
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: 'CONTRACT_WEEK_DELETE_CONTEXT_CHANGED',
+      error: 'This planned week changed after the delete warning was shown. Refresh and review it again.',
+      mutation_performed: false,
+      refresh_required: true,
+      preview: deleteGuard
+    }), { status: 409, headers: { 'content-type': 'application/json' } }));
+  }
+  if (deleteGuard.candidate_submission_rejection_required === true) {
+    const managerApproved = deleteGuard.candidate_submission_stage === 'MANAGER_APPROVED';
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: 'CANDIDATE_SUBMISSION_REJECTION_REQUIRED',
+      error: managerApproved
+        ? 'This Candidate Submission has been approved by the manager. Reject the Candidate Submission before deleting the planned week.'
+        : 'This planned week has been submitted by the candidate. Reject the Candidate Submission before deleting the planned week.',
+      mutation_performed: false,
+      refresh_required: true,
+      preview: deleteGuard
+    }), { status: 409, headers: { 'content-type': 'application/json' } }));
+  }
 
   const enc = encodeURIComponent;
   const trimStr = (v) => String(v || '').trim();
 
   const contractWeek = await sbGetOne(
     env,
-    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,planned_schedule_json,totals_json,updated_at`
+    `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,uploaded_pdf_r2_key,additional_seq,is_adjustment,planned_schedule_json,totals_json,updated_at`
   );
   if (!contractWeek) {
     return withCORS(env, req, notFound('Week not found'));
@@ -194402,38 +194523,63 @@ async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
     };
   };
 
+  let row;
+  try {
+    row = await sbRpc(env, 'contract_week_delete_planned_guarded_v1', {
+      p_environment: String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase(),
+      p_contract_week_id: weekId,
+      p_actor_user_id: user?.id || null,
+      p_expected_context_sha256: expectedContextSha256,
+      p_delete_operation_id: deleteOperationId,
+      p_now_utc: new Date().toISOString()
+    }, {
+      routeClass: 'USER_INTERACTIVE',
+      purpose: 'CONTRACT_WEEK_DELETE_PLANNED_GUARDED',
+      timeoutMs: 8000
+    });
+    if (Array.isArray(row)) row = row[0] || null;
+    if (row && typeof row === 'object' && Object.prototype.hasOwnProperty.call(row, 'data')) {
+      row = Array.isArray(row.data) ? (row.data[0] || null) : row.data;
+    }
+    if (!row || row.ok !== true || row.deleted !== true
+        || row.contract_version !== 'CONTRACT_WEEK_DELETE_PLANNED_GUARDED_V1'
+        || String(row.contract_week_id || '') !== weekId
+        || String(row.delete_operation_id || '') !== deleteOperationId) {
+      throw new Error('CONTRACT_WEEK_DELETE_PLANNED_GUARDED_INVALID');
+    }
+  } catch (error) {
+    const message = String(error?.message || error || 'Planned delete failed');
+    const contextChanged = /CONTRACT_WEEK_DELETE_CONTEXT_CHANGED|CANDIDATE_SUBMISSION_REJECTION_REQUIRED/.test(message);
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false,
+      error_code: contextChanged ? 'CONTRACT_WEEK_DELETE_CONTEXT_CHANGED' : 'CONTRACT_WEEK_DELETE_FAILED',
+      error: contextChanged
+        ? 'This planned week changed before deletion. Refresh and review it again.'
+        : 'The planned week could not be deleted.',
+      mutation_performed: false,
+      refresh_required: true
+    }), { status: contextChanged ? 409 : 400, headers: { 'content-type': 'application/json' } }));
+  }
+
+  // The database is the authority. Storage cleanup begins only after the guarded
+  // delete succeeds so a blocked database delete can never remove staged files.
   let stagedCleanup = {
     staged_row_count: 0,
     deleted_storage_keys: [],
     failed_storage_keys: []
   };
-
+  let cleanupError = null;
   try {
     stagedCleanup = await deleteContractWeekStagedFilesAndRows(contractWeek);
-  } catch (e) {
-    return withCORS(env, req, badRequest(`Planned delete cleanup failed: ${e?.message || String(e)}`));
+  } catch (error) {
+    cleanupError = String(error?.message || error || 'Planned delete cleanup failed').slice(0, 500);
   }
-
-  const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/contract_week_delete_planned`, {
-    method: 'POST',
-    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
-    body: JSON.stringify({
-      p_contract_week_id: contractWeekId,
-      p_actor_user_id: user?.id || null
-    })
-  });
-
-  if (!rpcRes.ok) {
-    const t = await rpcRes.text().catch(() => '');
-    return withCORS(env, req, badRequest(`Planned delete failed: ${t}`));
-  }
-
-  const rows = await rpcRes.json().catch(() => []);
-  const row = Array.isArray(rows) ? rows[0] : rows;
 
   return withCORS(env, req, ok({
     ok: true,
     result: row || null,
+    cleanup_complete: cleanupError == null && stagedCleanup.failed_storage_keys.length === 0,
+    cleanup_warning: cleanupError,
     staged_row_count: Number(stagedCleanup.staged_row_count || 0),
     deleted_storage_keys: stagedCleanup.deleted_storage_keys || [],
     failed_storage_keys: stagedCleanup.failed_storage_keys || []
@@ -200381,7 +200527,7 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
 // NEW: planned-only delete (calls contract_week_delete_planned RPC)
 {
   const m = matchPath(p, '/api/contract-weeks/:id/delete-planned');
-  if (m && req.method === 'POST') return handleContractWeekDeletePlanned(env, req, m.id);
+  if (m && ['GET', 'POST'].includes(req.method)) return handleContractWeekDeletePlanned(env, req, m.id);
 }
 
 

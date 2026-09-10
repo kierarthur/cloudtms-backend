@@ -5818,6 +5818,25 @@
     {
       "acl": [
         {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_contract_week_submission_delete_guard_v1(p_environment text, p_contract_week_id uuid, p_lock_workflows boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d969116925acbd118b1cd4c782a2713a9e6ace9435fca080a21053d5d7911536"
+    },
+    {
+      "acl": [
+        {
           "grantee": "PUBLIC",
           "grantable": false,
           "privilege": "EXECUTE"
@@ -18528,6 +18547,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_week_delete_planned_guarded_v1(p_environment text, p_contract_week_id uuid, p_actor_user_id uuid, p_expected_context_sha256 text, p_delete_operation_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c59c17dc450f363282e5ca4142b3fb56a7ad80fe77834d7cf58ca87c4ef365c2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, pg_catalog"
       ],
       "schema": "public",
@@ -18608,6 +18651,54 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b89f7be64ad0502d4ae873dede60a189914858dc2c9c259a4a0251b3106e3bbc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_week_submission_delete_guard_preview_v1(p_environment text, p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "0b9fa37643aa4e6e088aafbdf6cce39da8cc62b7ca8d3c996fa6342c12b1a1e3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_week_submission_reject_atomic_v1(p_actor_user_id uuid, p_environment text, p_contract_week_id uuid, p_expected_context_sha256 text, p_reason text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e1f200ae15352dd8650cb9c6a4273360b36acacd0dfd33e1a6a0ccf8dd6634ee"
     },
     {
       "acl": [
