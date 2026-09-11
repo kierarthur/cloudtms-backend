@@ -9570,7 +9570,7 @@ test('manager approval authority is matched to the current request before a deci
   const body = source.slice(start, end);
   const currentApproval = body.indexOf('managerDocumentReadContext');
   const authorityCheck = body.indexOf('assertManagerRouteApprovalContext');
-  const decisiveTransition = body.indexOf('const result = await rpcCall');
+  const decisiveTransition = body.indexOf('const result = await managerRpcCall');
   assert.ok(currentApproval >= 0);
   assert.ok(authorityCheck > currentApproval);
   assert.ok(decisiveTransition > authorityCheck);
@@ -9652,6 +9652,114 @@ test('manager context race is converted to the update hold instead of a false no
     }, workflowId);
     assert.equal(result.context, null);
     assert.deepEqual(result.hold, hold);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('manager routes bound database waits and return a retryable service response', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000061';
+  const timeout = new Error('RPC timed out');
+  timeout.status = 408;
+  const response = await handleCandidateAppRequest(new Request(
+    `https://private.test/candidate-manager/v1/workflows/${workflowId}/start`, {
+      headers: { authorization: 'Bearer manager-timeout-token' }
+    }
+  ), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args, options) {
+      assert.equal(name, 'candidate_expense_update_manager_hold_v1');
+      assert.equal(args.p_workflow_id, workflowId);
+      assert.deepEqual(options, { timeoutMs: 8000 });
+      throw timeout;
+    }
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.error_code, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  assert.equal(body.message,
+    'The manager approval service is temporarily unavailable. No decision has been recorded. Try again.');
+  assert.equal(body.retryable, true);
+  assert.match(body.request_id, /^[0-9a-f-]{36}$/i);
+});
+
+test('manager signature preparation returns the exact browser-supplied upload digest', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000071';
+  const approvalId = '00000000-0000-4000-8000-000000000072';
+  const componentId = '00000000-0000-4000-8000-000000000073';
+  const manifest = 'a'.repeat(64);
+  const signatureDigest = 'b'.repeat(64);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.includes('/candidate_submission_workflows?')) return Response.json([{
+      id: workflowId, environment: 'TEST', generation: 3, review_manifest_sha256: `\\x${manifest}`
+    }]);
+    if (url.includes('/candidate_approval_requests?')) return Response.json([{
+      id: approvalId,
+      workflow_id: workflowId,
+      workflow_generation: 3,
+      request_generation: 1,
+      method: 'PHONE',
+      state: 'PENDING',
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      review_manifest_sha256: `\\x${manifest}`,
+      required_component_ids: [componentId],
+      required_component_manifest_json: []
+    }]);
+    throw new Error(`unexpected manager signature read: ${url}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-manager/v1/workflows/${workflowId}/signature/prepare`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer manager-phone-token',
+          'content-type': 'application/json',
+          'x-cloudtms-manager-route-authority': 'MANAGER_PHONE'
+        },
+        body: JSON.stringify({
+          generation: 3,
+          idempotency_key: '00000000-0000-4000-8000-000000000074',
+          component_kind: 'MANAGER_SIGNATURE',
+          document_role: 'MANAGER_SIGNATURE',
+          media_type: 'image/png',
+          byte_size: 128,
+          capture_method: 'DRAW',
+          content_sha256: signatureDigest
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'manager-signature-test-upload-secret',
+      SUPABASE_URL: 'https://database.test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-placeholder'
+    }, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, _args, options) {
+        assert.deepEqual(options, { timeoutMs: 8000 });
+        if (name === 'candidate_expense_update_manager_hold_v1') return {};
+        assert.equal(name, 'candidate_workflow_transition_atomic_v1');
+        return {
+          component_id: componentId,
+          storage_key: 'candidate-app/test/manager-signature.png',
+          media_type: 'image/png',
+          byte_size: 128,
+          component_kind: 'MANAGER_SIGNATURE',
+          document_role: 'MANAGER_SIGNATURE',
+          expense_category: null,
+          paper_return_page_key: null,
+          workflow_generation: 3,
+          state: 'PENDING',
+          idempotent_replay: false
+        };
+      }
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.upload.expected_content_sha256, signatureDigest);
+    assert.equal(body.upload.byte_size, 128);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -60,6 +60,7 @@ const MANAGER_ACTION_METHODS = Object.freeze({
 });
 const MAX_PUBLIC_JSON_BYTES = 1024 * 1024;
 const MAX_PUBLIC_UPLOAD_BYTES = 15 * 1024 * 1024;
+const MANAGER_PRIVATE_REQUEST_TIMEOUT_MS = 12 * 1000;
 const PUBLIC_ERROR_BYTES = 64 * 1024;
 const ENUMERATION_SAFE_MINIMUM_MS = 250;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1014,7 +1015,8 @@ async function forwardPrivateSystem(request, env, routeDefinition = null) {
 }
 
 async function forwardPrivate(request, env, {
-  authorization = '', body = undefined, timeoutMs = null, federated = null
+  authorization = '', body = undefined, timeoutMs = null, federated = null,
+  timeoutErrorCode = 'CANDIDATE_PRIVATE_API_UNAVAILABLE'
 } = {}) {
   const destination = federated?.route?.registryEntry?.binding || env.CLOUDTMS_PRIVATE;
   if (!destination || typeof destination.fetch !== 'function') {
@@ -1046,16 +1048,36 @@ async function forwardPrivate(request, env, {
     if (federated.projectSession !== false) headers.delete('authorization');
   }
   if (body !== undefined) headers.set('content-type', 'application/json');
+  const controller = Number.isSafeInteger(timeoutMs) && timeoutMs > 0
+    ? new AbortController()
+    : null;
   const unsigned = new Request(url.toString(), {
     method: request.method,
     headers,
     body: bodyValue,
     redirect: 'manual',
-    ...(Number.isSafeInteger(timeoutMs) && timeoutMs > 0
-      ? { signal: AbortSignal.timeout(timeoutMs) }
-      : {})
+    ...(controller ? { signal: controller.signal } : {})
   });
-  return destination.fetch(await signCandidatePrivateRequest(unsigned, env));
+  const signed = await signCandidatePrivateRequest(unsigned, env);
+  let timeout = null;
+  try {
+    if (!controller) return await destination.fetch(signed);
+    const deadline = new Promise((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new DOMException('Manager private request timed out', 'TimeoutError'));
+      }, timeoutMs);
+    });
+    return await Promise.race([destination.fetch(signed), deadline]);
+  } catch (error) {
+    if (controller?.signal.aborted || error?.name === 'AbortError' || error?.name === 'TimeoutError'
+        || /timed out|timeout/i.test(text(error?.message))) {
+      throw new CandidateBrokerError(503, timeoutErrorCode);
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
@@ -1138,9 +1160,11 @@ async function publicSafePrivateResponse(response, env = null) {
   const headers = {};
   const retryAfter = response.headers.get('retry-after');
   if (retryAfter && /^\d{1,9}$/.test(retryAfter)) headers['retry-after'] = retryAfter;
+  const privateErrorCode = text(source.error_code).toUpperCase();
   const errorCode = response.status >= 500
-    ? 'CANDIDATE_PRIVATE_API_UNAVAILABLE'
-    : text(source.error_code) || 'CANDIDATE_REQUEST_FAILED';
+    ? (privateErrorCode === 'MANAGER_DEPENDENCY_UNAVAILABLE'
+      ? privateErrorCode : 'CANDIDATE_PRIVATE_API_UNAVAILABLE')
+    : privateErrorCode || 'CANDIDATE_REQUEST_FAILED';
   const body = {
     ok: false,
     error_code: errorCode,
@@ -3120,7 +3144,9 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       const managerContext = await managerForwardContext(request, env, id);
       return withCors(await publicSafePrivateResponse(await forwardPrivate(request, env, {
         authorization: managerContext.authorization,
-        federated: managerContext.federated
+        federated: managerContext.federated,
+        timeoutMs: MANAGER_PRIVATE_REQUEST_TIMEOUT_MS,
+        timeoutErrorCode: 'MANAGER_DEPENDENCY_UNAVAILABLE'
       })), origin);
     }
 
@@ -3344,6 +3370,7 @@ export const candidateBrokerInternals = Object.freeze({
   sealEnvelope,
   sealVersionedEnvelope,
   sha256Hex,
+  forwardPrivate,
   forwardPrivateSystem,
   candidateDailySystemRateKeys,
   publicSafePrivateResponse,

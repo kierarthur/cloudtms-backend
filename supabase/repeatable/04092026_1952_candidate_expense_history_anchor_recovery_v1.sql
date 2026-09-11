@@ -534,6 +534,7 @@ declare
   v_expense_update_context jsonb;
   v_pending_expense_update public.candidate_pending_expense_updates%rowtype;
   v_is_pending_expense_update boolean:=false;
+  v_replaced_manager_signature_ids uuid[]:=array[]::uuid[];
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_workflow_id is null or jsonb_typeof(v_payload)<>'object' then
@@ -1791,6 +1792,45 @@ begin
       end if;
     elsif v_paper_page_key is not null then
       raise exception 'CANDIDATE_PAPER_RETURN_PAGE_KEY_FORBIDDEN' using errcode='22023';
+    end if;
+    -- A manager may safely reopen the original approval link after a browser,
+    -- network or dependency interruption.  The approval itself is still
+    -- PENDING, so any earlier signature reservation is not an approval fact.
+    -- Replace that unfinished/unused reservation atomically before inserting
+    -- the newly drawn signature.  Exact retries already returned above by
+    -- idempotency key, and an approved request can never enter this branch.
+    if v_component_kind='MANAGER_SIGNATURE' and v_approval.id is not null then
+      with replaced as (
+        update public.candidate_submission_components
+        set state='SUPERSEDED',superseded_at_utc=p_now_utc,
+            review_render_state=case
+              when review_render_state='NOT_REQUIRED' then review_render_state
+              else 'SUPERSEDED'
+            end,
+            final_signed_render_state=case
+              when final_signed_render_state='NOT_REQUIRED' then final_signed_render_state
+              else 'SUPERSEDED'
+            end
+        where approval_request_id=v_approval.id
+          and component_kind='MANAGER_SIGNATURE'
+          and state in ('PENDING','IMMUTABLE')
+          and upload_idempotency_key is distinct from p_idempotency_key
+        returning id
+      )
+      select coalesce(array_agg(id),array[]::uuid[])
+      into v_replaced_manager_signature_ids
+      from replaced;
+      if cardinality(v_replaced_manager_signature_ids)>0 then
+        perform private._candidate_audit_v1(
+          'candidate_approval_request',v_approval.id::text,
+          'MANAGER_SIGNATURE_REPLACED_BEFORE_DECISION',null,
+          jsonb_build_object(
+            'workflow_id',v_workflow.id,
+            'workflow_generation',v_workflow.generation,
+            'replaced_component_ids',to_jsonb(v_replaced_manager_signature_ids)
+          ),null,null,p_idempotency_key,p_now_utc
+        );
+      end if;
     end if;
     if nullif(v_payload->>'source_component_id','') is not null then
       select source_component.* into v_source_component

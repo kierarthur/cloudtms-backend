@@ -300,6 +300,29 @@ test('cross-origin manager documents preserve and expose only the immutable dige
   assert.doesNotMatch(response.headers.get('access-control-expose-headers'), /private/i);
 });
 
+test('public broker preserves the manager retry code from a private dependency failure', async () => {
+  const response = await candidateBrokerInternals.publicSafePrivateResponse(Response.json({
+    ok: false,
+    error_code: 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  }, { status: 503 }));
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error_code, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+});
+
+test('manager private forwarding has a deadline instead of waiting indefinitely', async () => {
+  const env = brokerEnvironment(request => new Promise((_resolve, reject) => {
+    request.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+  }));
+  await assert.rejects(candidateBrokerInternals.forwardPrivate(new Request(
+    'https://candidate-api.test.example/candidate-manager/v1/workflows/'
+      + '00000000-0000-4000-8000-000000000001/start'
+  ), env, {
+    authorization: 'Bearer manager-token',
+    timeoutMs: 5,
+    timeoutErrorCode: 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  }), error => error?.status === 503 && error?.code === 'MANAGER_DEPENDENCY_UNAVAILABLE');
+});
+
 test('public wrapping secrets and database-safe device versions are proved before private mutation', async () => {
   let privateCalls = 0;
   const env = brokerEnvironment(async () => {

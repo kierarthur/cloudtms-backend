@@ -133,6 +133,7 @@ const GENERIC_DOCUMENT_WORKFLOW_ID = '00000000-0000-0000-0000-000000000000';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 const MANAGER_FINALISATION_LEASE_MS = 3 * 60 * 1000;
 const MANAGER_FINALISATION_RPC_TIMEOUT_MS = 20 * 1000;
+const MANAGER_INTERACTIVE_DB_TIMEOUT_MS = 8 * 1000;
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
@@ -645,9 +646,19 @@ async function readJson(request, maxBytes = MAX_JSON_BYTES) {
   }
 }
 
-async function restRows(env, table, query) {
-  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${query}`, { headers: serviceHeaders(env) });
-  if (!response.ok) throw new Error(`CANDIDATE_DATABASE_READ_FAILED:${response.status}`);
+async function restRows(env, table, query, options = {}) {
+  const timeoutMs = Number(options?.timeoutMs);
+  const response = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: serviceHeaders(env),
+    ...(Number.isSafeInteger(timeoutMs) && timeoutMs > 0
+      ? { signal: AbortSignal.timeout(timeoutMs) }
+      : {})
+  });
+  if (!response.ok) {
+    const error = new Error(`CANDIDATE_DATABASE_READ_FAILED:${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   const value = await response.json().catch(() => []);
   return Array.isArray(value) ? value : [];
 }
@@ -664,8 +675,10 @@ async function restRowsPaged(env, table, query, { pageSize = 1000, maxRows = MAX
   }
 }
 
-async function restOne(env, table, query) {
-  const rows = await restRows(env, table, `${query}${query.includes('limit=') ? '' : '&limit=1'}`);
+async function restOne(env, table, query, options = {}) {
+  const rows = await restRows(
+    env, table, `${query}${query.includes('limit=') ? '' : '&limit=1'}`, options
+  );
   return rows[0] || null;
 }
 
@@ -846,6 +859,7 @@ function errorResponse(error, correlationId, office = false, safeDiagnosticDetai
     CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE: 'Break entry is not available for this timesheet route.',
     CANDIDATE_BREAK_ENTRY_REQUIRED: 'Enter the break for each worked period, or confirm that no break was taken.',
     CANDIDATE_WORK_INTERVAL_CONTRADICTORY: 'The times entered conflict with an older saved value. Reopen the timesheet and check the hours before submitting it.',
+    MANAGER_DEPENDENCY_UNAVAILABLE: 'The manager approval service is temporarily unavailable. No decision has been recorded. Try again.',
     CANDIDATE_PAPER_QR_UNREADABLE: 'The timesheet QR code could not be read. Take a clearer photograph of the full page.',
     CANDIDATE_PAPER_QR_AMBIGUOUS: 'This image contains more than one page QR. Photograph one complete page at a time.',
     CANDIDATE_PAPER_QR_PROOF_MISMATCH: 'The photographed timesheet does not match this submission.',
@@ -861,7 +875,8 @@ function errorResponse(error, correlationId, office = false, safeDiagnosticDetai
     error_code: code,
     message: professionalMessages[code] || 'CloudTMS could not complete this Candidate operation.',
     retryable: ['CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED', 'CANDIDATE_REQUEST_GENERATION_STALE',
-      'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED', 'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS'].includes(code),
+      'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED', 'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
+      'MANAGER_DEPENDENCY_UNAVAILABLE'].includes(code),
     request_id: correlationId
   };
   if (error instanceof CandidateHttpError && error.details != null) body.details = error.details;
@@ -1050,6 +1065,37 @@ async function selectedCandidateSessionResponse(env, claims, sessionId, rotation
 async function rpcCall(deps, name, args, options = undefined) {
   const result = await deps.rpc(name, args, options);
   return unwrapRpc(result, name);
+}
+
+function managerDependencyFailure(error) {
+  const status = Number(error?.status);
+  return status === 408 || status >= 500 || error?.name === 'AbortError'
+    || error instanceof TypeError || /timed out|timeout/i.test(text(error?.message));
+}
+
+function managerDependencyUnavailable(error, stage) {
+  if (!managerDependencyFailure(error)) throw error;
+  console.error('[candidate-app] manager interactive dependency unavailable', {
+    stage,
+    status: Number.isSafeInteger(Number(error?.status)) ? Number(error.status) : null
+  });
+  throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+}
+
+async function managerRpcCall(deps, stage, name, args) {
+  try {
+    return await rpcCall(deps, name, args, { timeoutMs: MANAGER_INTERACTIVE_DB_TIMEOUT_MS });
+  } catch (error) {
+    return managerDependencyUnavailable(error, stage);
+  }
+}
+
+async function managerRestOne(env, stage, table, query) {
+  try {
+    return await restOne(env, table, query, { timeoutMs: MANAGER_INTERACTIVE_DB_TIMEOUT_MS });
+  } catch (error) {
+    return managerDependencyUnavailable(error, stage);
+  }
 }
 
 function publicAppBase(request, env) {
@@ -2795,12 +2841,10 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       env, candidateAccess, workflowId, generation, effectiveIdempotencyKey, expected
     )
     : null);
-  const result = preparedReplay || await rpcCall(
-    deps,
-    owner === 'candidate'
-      ? 'candidate_component_prepare_atomic_v1'
-      : 'candidate_workflow_transition_atomic_v1',
-    owner === 'candidate' ? {
+  const transitionName = owner === 'candidate'
+    ? 'candidate_component_prepare_atomic_v1'
+    : 'candidate_workflow_transition_atomic_v1';
+  const transitionArgs = owner === 'candidate' ? {
       p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
       p_expected_generation: generation, p_payload: payload,
       p_idempotency_key: effectiveIdempotencyKey, p_now_utc: new Date().toISOString()
@@ -2808,8 +2852,10 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
       p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
       p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
-    }
-  );
+    };
+  const result = preparedReplay || (owner === 'manager'
+    ? await managerRpcCall(deps, 'signature-prepare', transitionName, transitionArgs)
+    : await rpcCall(deps, transitionName, transitionArgs));
   if (authority?.authority_kind === 'MANAGER_EMAIL') {
     await assertManagerRouteResult(env, result, authority);
   }
@@ -2856,7 +2902,10 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     reused_existing_upload: authoritative.state === 'IMMUTABLE',
     ...(ticket ? { upload: {
       method: 'PUT', url: `${owner === 'office' ? '/api/candidate-app' : CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
-      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600
+      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600,
+      ...(owner === 'manager' && uploadExpectedContentSha256
+        ? { expected_content_sha256: uploadExpectedContentSha256 }
+        : {})
     } } : {})
   });
 }
@@ -2915,7 +2964,7 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
   const ticket = await verifyUploadTicket(env, decodeURIComponent(encodedTicket));
   const owner = await authenticateUploadOwner(request, env, deps, ticket);
   if (ticket.owner === 'manager') {
-    const hold = await rpcCall(deps, 'candidate_expense_update_manager_hold_v1', {
+    const hold = await managerRpcCall(deps, 'signature-upload-hold', 'candidate_expense_update_manager_hold_v1', {
       p_environment: environmentName(env),
       p_workflow_id: requireUuid(ticket.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
       p_approval_token_hash_hex: owner.approval_token_hash_hex,
@@ -3057,13 +3106,18 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       staged_receipt: stagedReceipt
     });
   }
-  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+  const completionArgs = {
       p_session_id: owner.session_id, p_environment: ticket.env,
       p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
       p_expected_generation: Number(ticket.generation),
       p_payload: completionPayload, p_idempotency_key: ticket.completion_idempotency_key,
       p_now_utc: new Date().toISOString()
-    });
+    };
+  const result = ticket.owner === 'manager'
+    ? await managerRpcCall(
+      deps, 'signature-upload-complete', 'candidate_workflow_transition_atomic_v1', completionArgs
+    )
+    : await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', completionArgs);
   return jsonResponse(200, {
     ok: true, workflow_id: ticket.workflow_id, generation: Number(ticket.generation),
     component_id: ticket.component_id, state: result.state, media_type: contentType,
@@ -8542,7 +8596,7 @@ async function managerTokenContext(request, env) {
 
 async function managerPendingExpenseUpdateHold(request, env, deps, workflowId) {
   const auth = await managerTokenContext(request, env);
-  const hold = await rpcCall(deps, 'candidate_expense_update_manager_hold_v1', {
+  const hold = await managerRpcCall(deps, 'update-hold', 'candidate_expense_update_manager_hold_v1', {
     p_environment: environmentName(env),
     p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
     p_approval_token_hash_hex: auth.token_hash_hex,
@@ -8567,12 +8621,14 @@ async function managerDocumentReadContextWithHoldRetry(request, env, deps, workf
 
 async function managerDocumentReadContext(request, env, workflowId) {
   const auth = await managerTokenContext(request, env);
-  const workflow = await workflowRow(env, workflowId);
+  const workflow = await managerRestOne(env, 'workflow-read', 'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}&select=*`);
+  if (!workflow) throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
   if (upper(workflow.environment) !== auth.environment) {
     throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
   }
   const tokenHash = encodeURIComponent(`\\x${auth.token_hash_hex}`);
-  const approval = await restOne(env, 'candidate_approval_requests',
+  const approval = await managerRestOne(env, 'approval-read', 'candidate_approval_requests',
     `workflow_id=eq.${encodeURIComponent(workflow.id)}`
     + `&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
     + '&method=in.(EMAIL,PHONE)&state=eq.PENDING'
@@ -8698,7 +8754,7 @@ function managerTerminalResult(result, action) {
 
 async function handleManagerAction(request, env, deps, workflowId, action, ctx) {
   const auth = await managerTokenContext(request, env);
-  const updateHold = await rpcCall(deps, 'candidate_expense_update_manager_hold_v1', {
+  const updateHold = await managerRpcCall(deps, 'action-hold', 'candidate_expense_update_manager_hold_v1', {
     p_environment: environmentName(env),
     p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
     p_approval_token_hash_hex: auth.token_hash_hex,
@@ -8735,14 +8791,14 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   }[action];
   if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
   if (action === 'approve') {
-    const context = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+    const context = await managerRpcCall(deps, 'approve-begin', 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
       null, env, workflowId, 'BEGIN_MANAGER_REVIEW', generation,
       { approval_token_hash_hex: auth.token_hash_hex }, `${mutationKey}:begin-review`
     ));
     dbAction = upper(context?.method) === 'PHONE' ? 'PHONE_APPROVE' : 'EMAIL_APPROVE';
   }
   const payload = { ...(isObject(body.payload) ? body.payload : body), approval_token_hash_hex: auth.token_hash_hex };
-  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+  const result = await managerRpcCall(deps, `action-${action}`, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     null, env, workflowId, dbAction, generation, payload, mutationKey
   ));
   if (routeAuthority) await assertManagerRouteResult(env, result, routeAuthority);
@@ -8835,7 +8891,7 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
     if (!context.allowedIds.includes(componentId)) {
       throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
     }
-    component = await restOne(env, 'candidate_submission_components',
+    component = await managerRestOne(env, 'component-read', 'candidate_submission_components',
       `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
   } else if (owner === 'office') {
     await requireOfficeActor(request, deps, 'manage_paper');
