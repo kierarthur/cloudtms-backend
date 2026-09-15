@@ -1096,6 +1096,47 @@ test('unfiltered unified outbox remains available without invoice-generation rea
   }
 });
 
+test('unfiltered Outbox falls through to the legacy handler when the invoice pipeline is disabled', async () => {
+  let requireUserCalled = false;
+  let rpcCalled = false;
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/outbox?limit=50'),
+    v8Environment({ INVOICE_ASYNC_PIPELINE_ENABLED: 'false' }),
+    {},
+    {
+      requireUser: async () => {
+        requireUserCalled = true;
+        return v8Actor();
+      },
+      rpc: async () => {
+        rpcCalled = true;
+        return [];
+      }
+    }
+  );
+  assert.equal(response, null);
+  assert.equal(requireUserCalled, false);
+  assert.equal(rpcCalled, false);
+});
+
+test('explicit invoice Outbox remains unavailable when the invoice pipeline is disabled', async () => {
+  const response = await handleInvoiceAsyncHttpRequest(
+    new Request('https://example.test/api/outbox?channel=INVOICE&limit=50'),
+    v8Environment({ INVOICE_ASYNC_PIPELINE_ENABLED: 'false' }),
+    {},
+    {
+      requireUser: async () => v8Actor(),
+      rpc: async () => []
+    }
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    contract_version: 'INVOICE_ASYNC_BACKEND_V8',
+    error: 'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE'
+  });
+});
+
 test('invoice Outbox queue filters never query chunk-only scheduling columns', async () => {
   const originalFetch = globalThis.fetch;
   const observed = [];

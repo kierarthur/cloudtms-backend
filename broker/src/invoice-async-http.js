@@ -4024,6 +4024,14 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     return handleInvoiceAsyncCapabilities(env, req, deps);
   }
   if (!isInvoiceAsyncRoute(req, url)) return null;
+  if (
+    req.method === 'GET'
+    && path === '/api/outbox'
+    && !String(url.searchParams.get('channel') || '').trim()
+    && !isInvoiceAsyncPipelineEnabled(env)
+  ) {
+    return null;
+  }
   if (isRetiredInvoiceLegacyRoute(req, url)) {
     return jsonResponse({
       ok: false,
