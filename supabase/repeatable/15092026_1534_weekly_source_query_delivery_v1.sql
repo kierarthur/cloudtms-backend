@@ -4962,6 +4962,8 @@ declare
     'weekly_source_query_comparison_fingerprint_v1'
   ];
 begin
+  -- Keep ownership provider-neutral: the authenticated release owner owns the
+  -- routines on both the local proof database and the Miget TEST database.
   if (select pg_catalog.count(*)
       from pg_catalog.pg_proc procedure
       join pg_catalog.pg_namespace namespace on namespace.oid=procedure.pronamespace
