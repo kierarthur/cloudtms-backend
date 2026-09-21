@@ -240,6 +240,7 @@ jobs:
             supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql
             supabase/repeatable/27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql
             supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql
+            supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql
             supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql
             supabase/repeatable/02092026_1918_candidate_finalised_hours_primary_action_v1.sql
             supabase/repeatable/04092026_1500_invoice_frozen_settings_evaluation_barrier_v1.sql

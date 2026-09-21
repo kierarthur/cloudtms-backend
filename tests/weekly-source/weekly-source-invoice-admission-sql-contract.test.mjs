@@ -17,6 +17,7 @@ const classifierVerifier = read('supabase/verification/15092026_1534_00_weekly_s
 const owner = read('supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql');
 const verifier = read('supabase/verification/15092026_1534_weekly_source_invoice_admission_v1.sql');
 const issueValidator = read('supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql');
+const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 const correctionOwner = read(
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
   + '23072026_2207_private_invoice_correction_validate_batch.sql',
@@ -64,6 +65,18 @@ test('shared Weekly Source classifiers precede their same-minute dependants in r
     assert.match(classifierVerifier, new RegExp(`'${classifier}'`));
   }
   assert.doesNotMatch(classifierVerifier, /procedure_row\.proname like 'weekly_source%'/);
+});
+
+test('fresh Candidate runtime installs the source invoice validator before its consumer', () => {
+  const validatorIndex = candidateRuntimeWorkflow.indexOf(
+    'supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql',
+  );
+  const consumerIndex = candidateRuntimeWorkflow.indexOf(
+    'supabase/repeatable/02092026_1834_candidate_expense_separation_delivery_v1.sql',
+  );
+  assert.notEqual(validatorIndex, -1);
+  assert.notEqual(consumerIndex, -1);
+  assert.ok(validatorIndex < consumerIndex);
 });
 
 test('self-bill invoice orchestration exposes only its two service-role RPCs', () => {
