@@ -28,7 +28,7 @@ declare
   v_document uuid:=gen_random_uuid();
 begin
   -- Dormant installation must preserve the exact legacy public behaviour and
-  -- the currently installed authenticated/service-only QR restore ACL.
+  -- the current service-only QR restore ACL.
   v_result:=public.timesheet_route_version_rotate(
     v_manual,v_manual,'ALLOW_QR_AGAIN',v_actor,false
   );
@@ -36,7 +36,7 @@ begin
     raise exception 'feature-off route wrapper did not delegate to exact legacy owner';
   end if;
   if has_function_privilege('anon','public.timesheet_qr_restore_version(uuid,uuid,text,uuid)','EXECUTE')
-     or not has_function_privilege('authenticated','public.timesheet_qr_restore_version(uuid,uuid,text,uuid)','EXECUTE')
+     or has_function_privilege('authenticated','public.timesheet_qr_restore_version(uuid,uuid,text,uuid)','EXECUTE')
      or not has_function_privilege('service_role','public.timesheet_qr_restore_version(uuid,uuid,text,uuid)','EXECUTE') then
     raise exception 'QR restore ACL does not match the installed compatibility contract';
   end if;
