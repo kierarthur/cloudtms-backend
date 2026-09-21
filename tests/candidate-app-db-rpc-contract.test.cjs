@@ -93,6 +93,16 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /create table public\.tms_users[\s\S]*?\bpayment_golden_key\s+boolean\s+not\s+null\s+default\s+false/i,
     'Candidate runtime fixture must expose the payment golden-key safety flag used by expense verification'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.tms_users[\s\S]*?\bdisplay_name\s+text/i,
+    'Candidate runtime fixture must expose the system-actor display name'
+  );
+  assert.ok(
+    candidateRuntimeWorkflow.indexOf('supabase/migrations/26082026_2057_candidate_system_actor_seed.sql')
+      < candidateRuntimeWorkflow.indexOf('supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql'),
+    'Candidate runtime must install the non-login system actor before current Candidate verifiers run'
+  );
   const fixtureContracts = candidateRuntimeFixture.match(
     /create\s+table\s+public\.contracts\s*\(([\s\S]*?)\n\);/i
   )?.[1];

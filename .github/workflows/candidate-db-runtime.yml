@@ -19,6 +19,7 @@ on:
       - 'supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql'
       - 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql'
       - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
+      - 'supabase/migrations/26082026_2057_candidate_system_actor_seed.sql'
       - 'supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql'
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
       - 'supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql'
@@ -189,6 +190,7 @@ jobs:
             supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql
             supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql
             supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
+            supabase/migrations/26082026_2057_candidate_system_actor_seed.sql
             supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql
             supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql
             supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql
