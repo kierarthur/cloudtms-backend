@@ -1228,6 +1228,28 @@ $$;
 
 insert into public.settings_defaults(id) values (1);
 
+-- This fixture proves the protected ordinary-Candidate route without installing
+-- the separate Weekly Source schema.  The real Weekly Source runtime replaces
+-- this test-only answer with its full family guard before deployment.
+create or replace function private.weekly_source_managed_root_guard_v1(
+  p_timesheet_id uuid
+) returns jsonb
+language sql
+stable
+as $function$
+  select jsonb_build_object(
+    'ok',false,
+    'managed',false,
+    'code','WEEKLY_SOURCE_ROOT_IDENTIFIER_MATCHES_NOTHING',
+    'refusal_code',null,
+    'reason',case when p_timesheet_id is null then 'ROOT_ID_REQUIRED' else 'ROOT_NOT_FOUND' end,
+    'timesheet_id',p_timesheet_id,
+    'weekly_source_bound',false,
+    'authorisation_record_without_authorised_timesheet',false,
+    'protected_target_ownership_state',null
+  );
+$function$;
+
 -- TEST already provides this canonical TSFIN context authority.  Reproduce
 -- its bounded signature in the disposable fixture so issue derivation tests
 -- exercise the same dependency instead of falling back to a summary view.

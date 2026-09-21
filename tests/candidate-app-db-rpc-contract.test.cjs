@@ -78,6 +78,11 @@ test('Candidate runtime gate finishes with every current authority', () => {
     candidateRuntimeWorkflow.indexOf(`apply_sql ${fixturePath}`) < candidateRuntimeWorkflow.indexOf('install_files=('),
     'Candidate compile fixture must be installed before every Candidate authority'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create or replace function private\.weekly_source_managed_root_guard_v1\([\s\S]*?'managed',false/i,
+    'ordinary Candidate runtime proof must provide the explicit unmanaged Weekly Source boundary'
+  );
   const fixtureContracts = candidateRuntimeFixture.match(
     /create\s+table\s+public\.contracts\s*\(([\s\S]*?)\n\);/i
   )?.[1];
