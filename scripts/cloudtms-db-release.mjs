@@ -316,11 +316,12 @@ function applyRelease() {
   const expectedHash = canonicalContractHash(expected);
   const customerKey = options['customer-key'] ?? process.env.CLOUDTMS_CUSTOMER_KEY ?? '';
   const current = inventory();
-  // Weekly Source and HANDOVER 2 share one database release.  Refuse every
-  // mutating release mode until HANDOVER 2 has approved the exact two owned
-  // repeatable definitions by content hash.  This is an installation safety
-  // boundary, not a runtime feature switch, and runs before any release DDL.
-  requireWeeklySourceHandover2Approval({ repoRoot, release, inventory: current });
+  // TEST may install the Weekly Source portion while HANDOVER 2 remains a
+  // separately owned, unfinished integration. LIVE still fails closed until
+  // HANDOVER 2 approves the exact two owned definitions by content hash.
+  requireWeeklySourceHandover2Approval({
+    repoRoot, release, inventory: current, environment,
+  });
   const releaseId = `${release.releaseId}-${mode.toLowerCase()}-${gitCommit.slice(0, 12)}`;
   const releaseVerifierContext = {
     expectedDatabase,

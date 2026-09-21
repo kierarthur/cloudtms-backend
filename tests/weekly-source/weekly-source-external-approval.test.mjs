@@ -25,9 +25,22 @@ function rootWith(value) {
   return root;
 }
 
-test('integrated Weekly Source release fails closed without HANDOVER 2 approval', () => {
+test('TEST may install Weekly Source while HANDOVER 2 integration remains pending', () => {
+  const result = requireWeeklySourceHandover2Approval({
+    repoRoot: rootWith(null), release, inventory, environment: 'TEST',
+  });
+  assert.deepEqual(result, {
+    path: null,
+    approval: null,
+    status: 'TEST_WEEKLY_SOURCE_INSTALL_WITH_HANDOVER2_PENDING',
+  });
+});
+
+test('non-TEST integrated Weekly Source release fails closed without HANDOVER 2 approval', () => {
   assert.throws(
-    () => requireWeeklySourceHandover2Approval({ repoRoot: rootWith(null), release, inventory }),
+    () => requireWeeklySourceHandover2Approval({
+      repoRoot: rootWith(null), release, inventory, environment: 'LIVE',
+    }),
     /WEEKLY_SOURCE_HANDOVER2_APPROVAL_MISSING/,
   );
 });
@@ -41,12 +54,14 @@ test('approval must name the exact HANDOVER 2 files and current hashes', () => {
     files: inventory.repeatables.map((item) => ({ ...item })),
   };
   const result = requireWeeklySourceHandover2Approval({
-    repoRoot: rootWith(approval), release, inventory,
+    repoRoot: rootWith(approval), release, inventory, environment: 'TEST',
   });
   assert.equal(result.path, WEEKLY_SOURCE_HANDOVER2_APPROVAL_PATH);
   approval.files[0].sha256 = 'f'.repeat(64);
   assert.throws(
-    () => requireWeeklySourceHandover2Approval({ repoRoot: rootWith(approval), release, inventory }),
+    () => requireWeeklySourceHandover2Approval({
+      repoRoot: rootWith(approval), release, inventory, environment: 'TEST',
+    }),
     /WEEKLY_SOURCE_HANDOVER2_APPROVAL_HASH_MISMATCH/,
   );
 });
@@ -60,7 +75,7 @@ test('unrelated releases are unaffected', () => {
 test('the real release runner checks approval before any release SQL can run', () => {
   const source = readFileSync(new URL('../../scripts/cloudtms-db-release.mjs', import.meta.url), 'utf8');
   const inventory = source.indexOf('const current = inventory();');
-  const approval = source.indexOf('requireWeeklySourceHandover2Approval({ repoRoot, release, inventory: current });');
+  const approval = source.indexOf('requireWeeklySourceHandover2Approval({');
   const firstReleaseSql = source.indexOf("if (mode === 'LEGACY_UPGRADE')", approval);
   assert.ok(inventory >= 0, 'the real runner must build the exact current inventory');
   assert.ok(approval > inventory, 'the approval must bind to that inventory');

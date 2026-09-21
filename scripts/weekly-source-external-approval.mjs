@@ -9,10 +9,17 @@ export const WEEKLY_SOURCE_HANDOVER2_FILES = Object.freeze([
   'supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql',
 ]);
 
-export function requireWeeklySourceHandover2Approval({ repoRoot, release, inventory }) {
+export function requireWeeklySourceHandover2Approval({ repoRoot, release, inventory, environment }) {
   if (!String(release?.releaseId ?? '').includes('weekly-source-plan62')) return null;
   const approvalPath = path.join(repoRoot, WEEKLY_SOURCE_HANDOVER2_APPROVAL_PATH);
   if (!fs.existsSync(approvalPath)) {
+    if (environment === 'TEST') {
+      return Object.freeze({
+        path: null,
+        approval: null,
+        status: 'TEST_WEEKLY_SOURCE_INSTALL_WITH_HANDOVER2_PENDING',
+      });
+    }
     throw new Error('WEEKLY_SOURCE_HANDOVER2_APPROVAL_MISSING');
   }
   const approval = JSON.parse(fs.readFileSync(approvalPath, 'utf8'));
