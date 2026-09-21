@@ -43,6 +43,7 @@ create table public.tms_users (
   email text not null default 'candidate-runtime@example.invalid',
   password_hash text not null default 'UNUSABLE_CANDIDATE_RUNTIME_FIXTURE',
   role text not null default 'admin',
+  payment_authoriser boolean not null default false,
   is_active boolean not null default true
 );
 

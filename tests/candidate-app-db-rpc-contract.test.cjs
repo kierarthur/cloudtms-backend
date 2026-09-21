@@ -83,6 +83,11 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /create or replace function private\.weekly_source_managed_root_guard_v1\([\s\S]*?'managed',false/i,
     'ordinary Candidate runtime proof must provide the explicit unmanaged Weekly Source boundary'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.tms_users[\s\S]*?\bpayment_authoriser\s+boolean\s+not\s+null\s+default\s+false/i,
+    'Candidate runtime fixture must expose the payment-authoriser safety flag used by expense verification'
+  );
   const fixtureContracts = candidateRuntimeFixture.match(
     /create\s+table\s+public\.contracts\s*\(([\s\S]*?)\n\);/i
   )?.[1];
