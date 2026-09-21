@@ -88,6 +88,11 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /create table public\.tms_users[\s\S]*?\bpayment_authoriser\s+boolean\s+not\s+null\s+default\s+false/i,
     'Candidate runtime fixture must expose the payment-authoriser safety flag used by expense verification'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.tms_users[\s\S]*?\bpayment_golden_key\s+boolean\s+not\s+null\s+default\s+false/i,
+    'Candidate runtime fixture must expose the payment golden-key safety flag used by expense verification'
+  );
   const fixtureContracts = candidateRuntimeFixture.match(
     /create\s+table\s+public\.contracts\s*\(([\s\S]*?)\n\);/i
   )?.[1];
