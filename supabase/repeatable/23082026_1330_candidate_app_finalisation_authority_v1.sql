@@ -19,81 +19,41 @@ returns jsonb
 language plpgsql
 stable
 security definer
-set search_path = pg_catalog, public, private, pg_temp
+set search_path = pg_catalog, public, private, extensions, pg_temp
 as $function$
-declare
-  v_as_of date:=coalesce(p_as_of_date,(statement_timestamp() at time zone 'Europe/London')::date);
-  v_contract public.contracts%rowtype;
-  v_settings public.client_settings%rowtype;
-  v_mode public.timesheet_break_entry_mode_enum;
-  v_source text;
-  v_is_nhsp boolean;
-  v_autoprocess_hr boolean;
-  v_no_timesheet_required boolean;
+declare v_authority jsonb; v_date date:=p_as_of_date;
 begin
-  if p_client_id is null then
-    raise exception 'BREAK_ENTRY_CLIENT_REQUIRED' using errcode='22023';
+  if v_date is null then
+    raise exception 'BREAK_ENTRY_AS_OF_DATE_REQUIRED' using errcode='22023';
   end if;
-  if v_as_of<'2000-01-01'::date or v_as_of>'2200-12-31'::date then
-    raise exception 'BREAK_ENTRY_AS_OF_DATE_INVALID' using errcode='22023';
-  end if;
-  if not exists(select 1 from public.clients client_row where client_row.id=p_client_id) then
+  if not exists(select 1 from public.clients cl where cl.id=p_client_id)
+     or not exists(
+       select 1 from public.client_settings cs
+       where cs.client_id=p_client_id
+         and (cs.effective_from is null or cs.effective_from<=v_date)
+     ) then
     raise exception 'CLIENT_OR_SETTINGS_NOT_FOUND' using errcode='P0002';
   end if;
-
-  if p_contract_id is not null then
-    select * into v_contract from public.contracts where id=p_contract_id;
-    if not found then raise exception 'CONTRACT_NOT_FOUND' using errcode='P0002'; end if;
-    if v_contract.client_id is distinct from p_client_id then
-      raise exception 'CONTRACT_CLIENT_MISMATCH' using errcode='22023';
-    end if;
+  v_authority:=private._contract_settings_effective_core_v1(
+    p_client_id,p_contract_id,v_date,'WEEKLY',null
+  );
+  if v_authority->>'client_settings_id' is null then
+    raise exception 'CLIENT_OR_SETTINGS_NOT_FOUND' using errcode='P0002';
   end if;
-
-  select * into v_settings
-  from public.client_settings settings
-  where settings.client_id=p_client_id
-    and (settings.effective_from is null or settings.effective_from<=v_as_of)
-  order by settings.effective_from desc nulls last,
-    settings.updated_at desc nulls last,settings.id desc
-  limit 1;
-  if not found then raise exception 'CLIENT_OR_SETTINGS_NOT_FOUND' using errcode='P0002'; end if;
-
-  if p_contract_id is not null
-     and coalesce(v_contract.overrideclientsettings,false)
-     and v_contract.timesheet_break_entry_mode is not null then
-    v_mode:=v_contract.timesheet_break_entry_mode;
-    v_source:='CONTRACT_OVERRIDE';
-  elsif v_settings.timesheet_break_entry_mode is not null then
-    v_mode:=v_settings.timesheet_break_entry_mode;
-    v_source:='CLIENT_SETTINGS';
-  else
-    v_mode:='START_END_TIMES'::public.timesheet_break_entry_mode_enum;
-    v_source:='DEFAULT';
-  end if;
-
-  v_is_nhsp:=case when p_contract_id is not null
-      and coalesce(v_contract.overrideclientsettings,false)
-      and v_contract.is_nhsp is not null
-    then v_contract.is_nhsp else coalesce(v_settings.is_nhsp,false) end;
-  v_autoprocess_hr:=case when p_contract_id is not null
-      and coalesce(v_contract.overrideclientsettings,false)
-      and v_contract.autoprocess_hr is not null
-    then v_contract.autoprocess_hr else coalesce(v_settings.autoprocess_hr,false) end;
-  v_no_timesheet_required:=case when p_contract_id is not null
-      and coalesce(v_contract.overrideclientsettings,false)
-      and v_contract.no_timesheet_required is not null
-    then v_contract.no_timesheet_required else coalesce(v_settings.no_timesheet_required,false) end;
-
   return jsonb_build_object(
-    'mode',v_mode,
-    'source',v_source,
-    'settings_as_of_date',v_as_of,
-    'client_settings_id',v_settings.id,
+    'mode',v_authority#>'{values,timesheet_break_entry_mode}',
+    'source',case when coalesce((v_authority->>'override_client_settings')::boolean,false)
+      then 'CONTRACT_OVERRIDE' else 'CLIENT_SETTINGS' end,
+    'settings_as_of_date',v_date,
+    'client_settings_id',v_authority->>'client_settings_id',
     'contract_id',p_contract_id,
-    'contract_override_active',coalesce(v_contract.overrideclientsettings,false),
-    'is_nhsp',v_is_nhsp,
-    'autoprocess_hr',v_autoprocess_hr,
-    'no_timesheet_required',v_no_timesheet_required
+    'contract_override_active',coalesce((v_authority->>'override_client_settings')::boolean,false),
+    'import_authoritative',coalesce((v_authority#>>'{applicability,import_authoritative}')::boolean,false),
+    'is_nhsp',coalesce((v_authority#>>'{values,is_nhsp}')::boolean,false),
+    'autoprocess_hr',coalesce((v_authority#>>'{values,autoprocess_hr}')::boolean,false),
+    'no_timesheet_required',coalesce((v_authority#>>'{values,no_timesheet_required}')::boolean,false),
+    'authority_version',v_authority->>'authority_version',
+    'authority_fingerprint',v_authority->>'authority_fingerprint'
   );
 end
 $function$;
@@ -185,17 +145,18 @@ begin
   );
   v_applicable:=coalesce((p_capabilities->>'can_edit_hours')::boolean,false)
     and not coalesce((p_capabilities->>'import_authoritative')::boolean,false)
-    and coalesce(p_capabilities->>'route_family','')='ELECTRONIC'
-    and not coalesce((v_resolution->>'is_nhsp')::boolean,false)
+    and not coalesce((v_resolution->>'import_authoritative')::boolean,false)
+    and coalesce(p_capabilities->>'route_family','') in ('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR')
     and not coalesce((v_resolution->>'no_timesheet_required')::boolean,false);
   v_reason:=case
     when v_applicable then 'CANDIDATE_EDITABLE_ELECTRONIC'
     when coalesce((p_capabilities->>'import_authoritative')::boolean,false)
+      or coalesce((v_resolution->>'import_authoritative')::boolean,false)
       then 'IMPORT_AUTHORITATIVE'
-    when coalesce((v_resolution->>'is_nhsp')::boolean,false) then 'NHSP'
     when coalesce((v_resolution->>'no_timesheet_required')::boolean,false)
       then 'NO_TIMESHEET_REQUIRED'
-    when coalesce(p_capabilities->>'route_family','')<>'ELECTRONIC' then 'NON_ELECTRONIC_ROUTE'
+    when coalesce(p_capabilities->>'route_family','') not in ('','MANUAL_NON_QR','ELECTRONIC','PAPER','QR')
+      then 'NON_ELECTRONIC_ROUTE'
     else 'NOT_CANDIDATE_EDITABLE'
   end;
   v_context_identity:=concat_ws('|',
