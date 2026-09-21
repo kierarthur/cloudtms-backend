@@ -53,7 +53,13 @@ test('editable Weekly Timesheets expose stable break authority before route sele
     '../supabase/repeatable/07092026_0205_candidate_weekly_break_entry_final_authority_v1.sql',
     import.meta.url
   ), 'utf8');
+  assert.match(finalAuthority, /\\ir 02092026_0325_candidate_paper_break_entry_v1\.sql/);
   assert.match(finalAuthority, /\\ir 03092026_1215_candidate_weekly_preroute_break_entry_v1\.sql/);
+  assert.ok(
+    finalAuthority.indexOf('02092026_0325_candidate_paper_break_entry_v1.sql')
+      < finalAuthority.indexOf('03092026_1215_candidate_weekly_preroute_break_entry_v1.sql'),
+    'Daily-aware public readers must be restored before the final Weekly private core',
+  );
   const finalCandidateAuthority = readFileSync(new URL(
     '../supabase/repeatable/23082026_1330_candidate_app_finalisation_authority_v1.sql',
     import.meta.url
