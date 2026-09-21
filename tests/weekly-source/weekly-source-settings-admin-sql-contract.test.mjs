@@ -22,6 +22,8 @@ test('Weekly source settings have one service-only durable owner and CAS saves',
   }
   assert.match(sql, /execute 'revoke all on function '\|\|v_signature\|\|' from public,anon,authenticated'/i);
   assert.match(sql, /execute 'grant execute on function '\|\|v_signature\|\|' to service_role'/i);
+  assert.match(sql, /execute 'alter function '\|\|v_signature\|\|' owner to current_user'/i);
+  assert.doesNotMatch(sql, /execute[^;]*owner to postgres/i);
   assert.match(sql, /notify pgrst, 'reload schema';\s*commit;/i);
   assert.match(sql, /expected_settings_version/i);
   assert.match(sql, /WEEKLY_SOURCE_SETTINGS_STALE/);

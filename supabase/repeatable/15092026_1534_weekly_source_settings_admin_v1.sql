@@ -1379,7 +1379,10 @@ begin
     'public.weekly_source_source_group_save_atomic_v1(jsonb)'
   ]
   loop
-    execute 'alter function '||v_signature||' owner to postgres';
+    -- Miget restores the repository's audited logical postgres owner as the
+    -- provider service owner, so dynamic owner statements must use the
+    -- current release role rather than attempting SET ROLE postgres.
+    execute 'alter function '||v_signature||' owner to current_user';
     execute 'revoke all on function '||v_signature||' from public,anon,authenticated';
     execute 'grant execute on function '||v_signature||' to service_role';
   end loop;
