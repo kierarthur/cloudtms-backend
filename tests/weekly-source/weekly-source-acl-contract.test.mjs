@@ -71,10 +71,11 @@ test('central Weekly Source ACL and independent verifier seal the same exact ser
   // WP-07c first-authorisation and withdrawal entry points, four WP-08b
   // pending-release entry points, one WP-14 guard-refusal recorder and one
   // post-rollback recorder, one WP-14 Candidate hours push, and the two WP-14
-  // Timesheet audit/export readers. Every one was confirmed on a full NEW
+  // Timesheet audit/export readers, plus the invoice/report projection used by
+  // the final self-bill reporting route. Every one was confirmed on a full NEW
   // build to hold exactly one foreign grant, service_role EXECUTE, with anon
   // and authenticated denied.
-  assert.equal(actual.length, 108);
+  assert.equal(actual.length, 109);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
 });
