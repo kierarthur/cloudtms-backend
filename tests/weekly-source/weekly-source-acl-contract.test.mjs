@@ -169,12 +169,15 @@ test('every direct Plan 6 service grant covered by the central ACL remains cover
 });
 
 test('general service-only inventory includes the Weekly Source invoice report projection', async () => {
-  const [general, auditExport] = await Promise.all([
+  const [general, auditExport, auditOrder] = await Promise.all([
     readFile(path.join(root, 'supabase', 'verification', '22082026_1302_general_browser_isolation_verification.sql'), 'utf8'),
     readFile(path.join(root, 'supabase', 'repeatable', '17092026_1200_weekly_source_audit_and_export_v1.sql'), 'utf8'),
+    readFile(path.join(root, 'supabase', 'migrations', '21092026_1817_weekly_source_audit_event_order.sql'), 'utf8'),
   ]);
   assert.match(general, /v_count<>789 or v_service_missing<>75 or v_browser_executable<>0/i);
   assert.match(general, /v_hash<>'9174b0459732514d17f987720c6079f8'/i);
   assert.match(auditExport, /grant execute on function public\.weekly_source_invoice_report_rows_v1\(jsonb\) to service_role/i);
   assert.match(auditExport, /revoke all on function public\.weekly_source_invoice_report_rows_v1\(jsonb\)[\s\S]*from public,anon,authenticated/i);
+  assert.match(general, /v_count<>9 or v_hash<>'7cd05e540b00e9ad067c6fc6d98e4b79'/i);
+  assert.match(auditOrder, /event_sequence bigint generated always as identity/i);
 });

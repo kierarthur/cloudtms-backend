@@ -402,7 +402,10 @@ begin
   into v_count,v_hash
   from targets;
 
-  if v_count<>8 or v_hash<>'27bb33e5336a5c596eaa1b210a14b3dc' then
+  -- The authoritative audit order migration adds the service-only identity
+  -- sequence behind audit_events.event_sequence.  It is not available to
+  -- anon or authenticated and changes the sealed inventory from 8 to 9.
+  if v_count<>9 or v_hash<>'7cd05e540b00e9ad067c6fc6d98e4b79' then
     raise exception 'GENERAL_SEQUENCE_ISOLATION_VERIFICATION_FAILED:count=% hash=%',
       v_count,v_hash;
   end if;
