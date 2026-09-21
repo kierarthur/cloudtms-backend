@@ -4971,7 +4971,7 @@ begin
     raise exception 'WEEKLY_SOURCE_QUERY_PUBLIC_RPC_SURFACE_INCOMPLETE';
   end if;
   foreach v_name in array v_public_names loop
-    execute pg_catalog.format('alter function public.%I(jsonb) owner to postgres',v_name);
+    execute pg_catalog.format('alter function public.%I(jsonb) owner to current_user',v_name);
     execute pg_catalog.format(
       'revoke all on function public.%I(jsonb) from public,anon,authenticated,service_role',v_name
     );
@@ -4994,7 +4994,7 @@ begin
     where namespace.nspname='private' and procedure.proname=any(v_private_names)
     order by procedure.proname,pg_catalog.pg_get_function_identity_arguments(procedure.oid)
   loop
-    execute 'alter function '||v_name||' owner to postgres';
+    execute 'alter function '||v_name||' owner to current_user';
     execute 'revoke all on function '||v_name||' from public,anon,authenticated,service_role';
   end loop;
 end;

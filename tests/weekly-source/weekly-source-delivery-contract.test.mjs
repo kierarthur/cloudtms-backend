@@ -45,10 +45,12 @@ test('database delivery contract is per-target, durable, bounded and browser-den
 });
 
 test('query delivery external-call audit is limited to its owned routine inventory', async () => {
-  const verifier = await source(
-    root,
-    'supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql',
-  );
+  const [repeatable, verifier] = await Promise.all([
+    source(root, 'supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql'),
+    source(root, 'supabase/verification/15092026_1534_weekly_source_query_delivery_v1.sql'),
+  ]);
+  assert.doesNotMatch(repeatable, /execute[^;]*owner to postgres/i);
+  assert.match(repeatable, /execute[^;]*owner to current_user/i);
   assert.match(
     verifier,
     /namespace\.nspname='public' and procedure\.proname=any\(v_public_names\)[\s\S]*namespace\.nspname='private' and procedure\.proname=any\(v_private_names\)[\s\S]*http_post[\s\S]*external provider call/,
