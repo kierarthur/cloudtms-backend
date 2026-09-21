@@ -168,7 +168,7 @@ begin
   return v_result||jsonb_build_object(
     'break_entry',v_context,
     'weekly_entry',v_weekly_context
-  );
+  )||private.weekly_source_candidate_view_merge_v1(v_timesheet_id,p_now_utc);
 end
 $function$;
 

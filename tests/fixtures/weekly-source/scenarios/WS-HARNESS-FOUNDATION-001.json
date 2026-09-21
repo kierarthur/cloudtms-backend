@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "WEEKLY_SOURCE_TEST_SCENARIO_V1",
+  "scenarioId": "WS-HARNESS-FOUNDATION-001",
+  "title": "Harness foundation contract self-test",
+  "fixedSeed": "0000000000000000000000000000000000000000000000000000000000000001",
+  "requirementIds": ["SRC-REQ-005"],
+  "protectedIds": ["PROT-SEC-001", "PROT-AUDIT-001"],
+  "tags": ["HARNESS", "FOUNDATION"],
+  "clock": {
+    "initialUtc": "2026-09-15T09:00:00Z",
+    "timezone": "Europe/London"
+  },
+  "foundation": {
+    "agency": {
+      "key": "agency_1",
+      "globalSettings": {
+        "candidateDeadlineMinutes": 720,
+        "candidateReminderMinutes": 360,
+        "managerBatchMinutes": 360
+      }
+    },
+    "users": [
+      {
+        "key": "office_1",
+        "role": "OFFICE",
+        "active": true
+      }
+    ],
+    "candidates": [],
+    "clients": [],
+    "contracts": [],
+    "weeks": [],
+    "timesheets": []
+  },
+  "sourceUploads": [],
+  "actions": [],
+  "expected": {
+    "outcome": "NO_CHANGE",
+    "sourceMovements": [],
+    "invoiceLines": [],
+    "approvedHours": [],
+    "communications": [],
+    "c1PublicationCategory": "NONE",
+    "visibleAssertions": [],
+    "forbiddenAssertions": []
+  }
+}
+

@@ -10,6 +10,8 @@ AS $function$
 DECLARE
   snap jsonb := COALESCE(p_snapshot_json, '{}'::jsonb);
   prev public.timesheets_financials%ROWTYPE;
+  -- WP-09b finding F1: is there a protected position this call could displace?
+  v_weekly_source_protected_rotation boolean := false;
   inserted_row public.timesheets_financials%ROWTYPE;
   v_current_ts public.timesheets%ROWTYPE;
   v_prev_id uuid := NULL;
@@ -82,6 +84,9 @@ DECLARE
   v_live_authorised boolean := false;
   v_can_preserve_authorised_at boolean := false;
   v_lifecycle_decision text := 'WRITTEN';
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E25).
+  v_weekly_source_guard jsonb;
 BEGIN
   perform public._ctms_assert_tsfin_snapshot_policy_v1(p_timesheet_id, coalesce(p_snapshot_json, '{}'::jsonb));
   PERFORM set_config('lock_timeout', '2500ms', true);
@@ -313,6 +318,91 @@ BEGIN
         )
       )
     );
+  END IF;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E25): this owner demotes
+  -- the current TSFIN row and promotes a replacement, and its error path
+  -- promotes the previous row again.  An authorised Weekly-Source-managed root
+  -- refuses here: before this owner's first write, which is the
+  -- tsfin_prepare_write demotion immediately below, and while it holds the
+  -- timesheet and financial row locks taken above.  A Weekly Source root that
+  -- is not yet authorised is not managed, so first authorisation and
+  -- re-authorisation still write their snapshot; an unmanaged family is
+  -- unaffected (proof/34 section 3 E7; contract open ruling OR-2).
+  v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(p_timesheet_id);
+  -- WP-09b, WP-17b touchpoint reconciliation finding F1 (18 September 2026).
+  -- The protected-pay clause was OVER-APPLIED here and refused Weekly Source's
+  -- own protected-family preparer,
+  -- public.weekly_source_target_managed_root_prepare_atomic_v1, which calls this
+  -- owner to write the legitimate zero current TSFIN a protected family needs
+  -- BEFORE first authorisation.  One defect failed four release verifiers.
+  --
+  -- That is not the case the approver ruled on.  HANDOVER 2 round-5 Part E names
+  -- PROTECTED_ROOT_AUTHORITY_MISSING as the answer to an ordinary ROTATION
+  -- attempt on a protected root, not to the preparer that creates the conditions
+  -- for an authorisation record in the first place: a protected-pay root
+  -- legitimately has no authorisation record at the moment the preparer runs.
+  --
+  -- The distinction is a STATE, not a caller.  Exempting this entry point would
+  -- reopen the hole the guard exists to close, because it is a genuine rotation
+  -- surface.  What it rotates is the CURRENT timesheets_financials row: it
+  -- demotes that row and promotes a replacement.  A protected family therefore
+  -- has a position to defend exactly when there is something to displace --
+  -- a current financial row, or a root that is already authorised.
+  --
+  -- Measured on a real build from empty, the preparer's call has neither: no
+  -- current financial row, authorised_at_server null, no live root
+  -- authorisation, and the protected family at ownership_state=TARGET_MANAGED
+  -- with current_generation_id null, generation 0, lifecycle PENDING_APPROVAL,
+  -- c1_publication_state NONE and 0 components.  Nothing can be rotated; the
+  -- first snapshot is being created.  A rotation attempt on a protected root
+  -- that DOES hold a current financial row, or whose root is authorised, still
+  -- refuses -- proved in both directions.
+  v_weekly_source_protected_rotation :=
+    (v_weekly_source_guard->>'protected_target_ownership_state') is not null
+    and (prev.id is not null
+         or v_current_ts.authorised_at_server is not null);
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  IF (COALESCE((v_weekly_source_guard->>'managed')::boolean, true)
+       and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
+            or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or v_weekly_source_protected_rotation THEN
+    RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      USING ERRCODE = '55000',
+            DETAIL = jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E25:public.tsfin_write_current_snapshot_single_bounded',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id', p_timesheet_id,
+              'reason', v_weekly_source_guard->>'reason'
+            )::text;
   END IF;
 
   PERFORM public.tsfin_prepare_write(p_timesheet_id);

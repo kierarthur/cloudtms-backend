@@ -742,7 +742,10 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
   const signatures = requireObject(model.signatures, 'TIMESHEET_SIGNATURE_ASSET_INVALID');
   const qr = requireObject(model.qr, 'TIMESHEET_QR_STATE_INVALID');
   const variant = String(model.form_variant || '');
-  if (!['ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW','ELECTRONIC_UNSIGNED','QR_UNSIGNED'].includes(variant)) {
+  if (![
+    'ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW',
+    'ELECTRONIC_CANDIDATE_INFORMATIONAL','ELECTRONIC_UNSIGNED','QR_UNSIGNED'
+  ].includes(variant)) {
     fail('TIMESHEET_FORM_VARIANT_INVALID', variant);
   }
   validateAssetIdentity(signatures.candidate);
@@ -753,7 +756,8 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
       fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
     }
     if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_signed_has_qr');
-  } else if (variant === 'ELECTRONIC_MANAGER_REVIEW') {
+  } else if (variant === 'ELECTRONIC_MANAGER_REVIEW'
+      || variant === 'ELECTRONIC_CANDIDATE_INFORMATIONAL') {
     if (!signatures.candidate?.r2_key || signatures.authoriser?.r2_key) {
       fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
     }

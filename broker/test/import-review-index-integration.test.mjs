@@ -55,6 +55,16 @@ test('post-commit orchestration is delegated to the component-aware runner', () 
   assert.match(worker, /runFollowUp:\s*runImportReviewPostCommit/);
 });
 
+// WP-51, closing WP-48's combined-review finding F2.  A static source assertion:
+// it proves the Worker WIRES the established refusal-recording funnel into the
+// follow-up runner, not that a refusal is recorded at run time.
+test('the follow-up runner is wired with the guard-refusal recording funnel', () => {
+  assert.match(
+    worker,
+    /createImportReviewPostCommitRunner\(\{[^}]*sbRpcRecordingGuardRefusal[^}]*\}\)/
+  );
+});
+
 test('Daily timesheet authority is no longer read from or written to hr_rows payload_json', () => {
   assert.doesNotMatch(worker, /payload(?:_json)?\??\.resolved_timesheet_id/);
   const resolutionBody = functionBody('handleHrRotaResolveMappings');

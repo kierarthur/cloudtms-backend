@@ -504,16 +504,14 @@ begin
      and tu.week_ending_date=hf.week_ending_date
   ),
 
+  -- Historical candidate-did-not-work confirmations remain immutable audit
+  -- records, but a completed signed Weekly Timesheet is now the authority.
+  -- Consequently no historical confirmation may remove a current roster-only
+  -- shift from comparison or from the existing manager-correction email.
   confirmed_hr_exceptions as (
     select he.*
     from hr_exception_evidence he
-    join public.import_review_weekly_validation_resolutions r
-      on r.import_id=p_import_id
-     and r.hr_row_id=he.hr_row_id
-     and r.timesheet_id=he.timesheet_id
-     and r.resolution_code='CANDIDATE_DID_NOT_WORK'
-     and r.status in ('CURRENT','APPLIED')
-     and r.evidence_fingerprint=he.exception_evidence_fingerprint
+    where false
   ),
 
   hr_day_totals_effective as (
@@ -1318,7 +1316,7 @@ begin
             and exists (
               select 1
               from jsonb_array_elements(coalesce(wes.comparisons_json,'[]'::jsonb)) as email_cx(value)
-              where coalesce(email_cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+              where coalesce(email_cx.value->>'match_status','MATCH') <> 'MATCH'
                 or coalesce((email_cx.value->>'ref_changed')::boolean,false)
             )
           ),

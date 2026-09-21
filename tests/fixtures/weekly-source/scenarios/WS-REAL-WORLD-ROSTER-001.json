@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "WEEKLY_SOURCE_TEST_SCENARIO_V1",
+  "scenarioId": "WS-REAL-WORLD-ROSTER-001",
+  "title": "HealthRoster source authority, signed Timesheet authority and source-fixed expense profiles",
+  "fixedSeed": "2222222222222222222222222222222222222222222222222222222222222222",
+  "requirementIds": ["SRC-REQ-005", "SRC-REQ-007", "SRC-REQ-008", "SRC-REQ-010"],
+  "protectedIds": ["PROT-EXP-001", "PROT-ORDW-001", "PROT-INV-001"],
+  "tags": ["REAL_WORLD", "HEALTHROSTER", "TIMESHEET_AUTHORITY", "SOURCE_FIXED_EXPENSE"],
+  "clock": { "initialUtc": "2026-09-16T14:00:00Z", "timezone": "Europe/London" },
+  "foundation": {
+    "agency": { "key": "agency_1", "globalSettings": { "candidateDeadlineMinutes": 720, "candidateReminderMinutes": 360, "managerBatchMinutes": 360 } },
+    "users": [{ "key": "office_1", "role": "OFFICE", "active": true }],
+    "candidates": [{ "key": "candidate_1", "displayName": "Roster Candidate", "tmsRef": "CAN-ROSTER-1", "payMethod": "PAYE", "umbrellaKey": null, "active": true, "activeDeviceCount": 1 }],
+    "clients": [
+      {
+        "key": "client_source", "name": "Source Authority Trust", "sourceAuthority": "SOURCE", "managerEmail": "source@example.test",
+        "settings": { "selfBill": true, "nhsp": false, "noTimesheetRequired": true, "requiresHealthRoster": true, "referenceRequiredBeforePay": false, "autoAuthorise": false, "candidateQueriesEnabled": true, "managerQueriesEnabled": true, "sourceSuppliedExpenses": false, "sourceExpenseVatChargeable": false, "breakEntryMode": "DURATION_MINUTES", "calculationMode": "SPLIT_RATE", "cutoffWeekday": 3, "cutoffLocalTime": "15:00" }
+      },
+      {
+        "key": "client_signed", "name": "Timesheet Authority Trust", "sourceAuthority": "SIGNED_TIMESHEET", "managerEmail": "signed@example.test",
+        "settings": { "selfBill": false, "nhsp": false, "noTimesheetRequired": false, "requiresHealthRoster": true, "referenceRequiredBeforePay": false, "autoAuthorise": true, "candidateQueriesEnabled": false, "managerQueriesEnabled": true, "sourceSuppliedExpenses": false, "sourceExpenseVatChargeable": false, "breakEntryMode": "START_END_TIMES", "calculationMode": "SPLIT_RATE", "cutoffWeekday": 3, "cutoffLocalTime": "15:00" }
+      },
+      {
+        "key": "client_fixed", "name": "Source Expense Client", "sourceAuthority": "SOURCE", "managerEmail": "fixed@example.test",
+        "settings": { "selfBill": true, "nhsp": false, "noTimesheetRequired": true, "requiresHealthRoster": true, "referenceRequiredBeforePay": false, "autoAuthorise": false, "candidateQueriesEnabled": true, "managerQueriesEnabled": true, "sourceSuppliedExpenses": true, "sourceExpenseVatChargeable": true, "breakEntryMode": "DURATION_MINUTES", "calculationMode": "WHOLE_SHIFT", "cutoffWeekday": 3, "cutoffLocalTime": "15:00" }
+      }
+    ],
+    "contracts": [
+      { "key": "contract_source", "candidateKey": "candidate_1", "clientKey": "client_source", "startDate": "2026-08-01", "endDate": "2026-12-31", "role": "Nurse", "band": "Band 5", "payMethod": "PAYE", "rates": { "pay": { "day": "1000", "night": "1200", "saturday": "1300", "sunday": "1400", "bankHoliday": "1500" }, "charge": { "day": "2000", "night": "2400", "saturday": "2600", "sunday": "2800", "bankHoliday": "3000" } }, "additionalUnits": [] },
+      { "key": "contract_signed", "candidateKey": "candidate_1", "clientKey": "client_signed", "startDate": "2026-08-01", "endDate": "2026-12-31", "role": "Nurse", "band": "Band 5", "payMethod": "PAYE", "rates": { "pay": { "day": "1000", "night": "1200", "saturday": "1300", "sunday": "1400", "bankHoliday": "1500" }, "charge": { "day": "2000", "night": "2400", "saturday": "2600", "sunday": "2800", "bankHoliday": "3000" } }, "additionalUnits": [] },
+      { "key": "contract_fixed", "candidateKey": "candidate_1", "clientKey": "client_fixed", "startDate": "2026-08-01", "endDate": "2026-12-31", "role": "Nurse", "band": "Band 5", "payMethod": "PAYE", "rates": { "pay": { "day": "1000", "night": "1000", "saturday": "1000", "sunday": "1000", "bankHoliday": "1000" }, "charge": { "day": "2000", "night": "2000", "saturday": "2000", "sunday": "2000", "bankHoliday": "2000" } }, "additionalUnits": [] }
+    ],
+    "weeks": [
+      { "key": "week_source", "contractKey": "contract_source", "weekEndingDate": "2026-09-20", "additionalSequence": 0, "status": "SUBMITTED" },
+      { "key": "week_signed", "contractKey": "contract_signed", "weekEndingDate": "2026-09-20", "additionalSequence": 0, "status": "SUBMITTED" },
+      { "key": "week_fixed", "contractKey": "contract_fixed", "weekEndingDate": "2026-09-20", "additionalSequence": 0, "status": "SUBMITTED" }
+    ],
+    "timesheets": [
+      { "key": "timesheet_source", "weekKey": "week_source", "submissionState": "SUBMITTED", "candidateSigned": true, "managerSigned": false, "shifts": [{ "key": "shift_source", "workDate": "2026-09-14", "start": "20:00", "end": "08:00", "breakMinutes": 60, "breakStart": null, "breakEnd": null, "workedMinutes": 660, "reference": null, "additionalUnits": [] }], "expenses": { "mode": "NONE", "amountPence": "0", "evidenceCount": 0 } },
+      { "key": "timesheet_signed", "weekKey": "week_signed", "submissionState": "SUBMITTED", "candidateSigned": true, "managerSigned": true, "shifts": [{ "key": "shift_signed", "workDate": "2026-09-15", "start": "09:00", "end": "17:00", "breakMinutes": 30, "breakStart": "12:30", "breakEnd": "13:00", "workedMinutes": 450, "reference": null, "additionalUnits": [] }], "expenses": { "mode": "ORDINARY_EVIDENCE", "amountPence": "2500", "evidenceCount": 2 } },
+      { "key": "timesheet_fixed", "weekKey": "week_fixed", "submissionState": "SUBMITTED", "candidateSigned": true, "managerSigned": false, "shifts": [{ "key": "shift_fixed", "workDate": "2026-09-16", "start": "09:00", "end": "17:00", "breakMinutes": 30, "breakStart": null, "breakEnd": null, "workedMinutes": 450, "reference": null, "additionalUnits": [] }], "expenses": { "mode": "SOURCE_FIXED", "amountPence": "1234", "evidenceCount": 0 } }
+    ]
+  },
+  "sourceUploads": [
+    { "key": "hr_source", "profile": "HEALTHROSTER_SELF_BILL_LAYOUT_A_V1", "stage": "FINAL", "clientKey": "client_source", "trustName": "Source Authority Trust", "reportNumber": null, "cycleUtc": "2026-09-16T14:00:00Z", "coverageStart": "2026-09-14", "coverageEnd": "2026-09-20", "complete": true, "mutations": [], "physicalRows": [{ "key": "row_source", "candidateKey": "candidate_1", "contractKey": "contract_source", "requestId": "HR-A-001", "workDate": "2026-09-14", "actualStart": "20:00", "actualEnd": "08:00", "actualBreakMinutes": 60, "actualWorkedMinutes": 660, "sign": "POSITIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised", "finalisedBy": "Roster Manager", "commissionPence": null, "totalCostPence": null, "sourceExpensePence": null, "role": "Nurse", "band": "Band 5" }] },
+    { "key": "hr_signed", "profile": "HEALTHROSTER_TIMESHEET_AUTHORITY_LAYOUT_B_V1", "stage": "COMPARISON_ONLY", "clientKey": "client_signed", "trustName": "Timesheet Authority Trust", "reportNumber": null, "cycleUtc": "2026-09-16T14:00:00Z", "coverageStart": "2026-09-14", "coverageEnd": "2026-09-20", "complete": true, "mutations": [], "physicalRows": [{ "key": "row_signed", "candidateKey": "candidate_1", "contractKey": "contract_signed", "requestId": "HR-B-001", "workDate": "2026-09-15", "actualStart": "09:00", "actualEnd": "17:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 450, "sign": "POSITIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised", "finalisedBy": "Roster Manager", "commissionPence": null, "totalCostPence": null, "sourceExpensePence": null, "role": "Nurse", "band": "Band 5" }] },
+    { "key": "fixed_source", "profile": "GENERIC_WEEKLY_COMPLETE_V1", "stage": "FINAL", "clientKey": "client_fixed", "trustName": "Source Expense Client", "reportNumber": null, "cycleUtc": "2026-09-16T14:00:00Z", "coverageStart": "2026-09-14", "coverageEnd": "2026-09-20", "complete": true, "mutations": [], "physicalRows": [{ "key": "row_fixed", "candidateKey": "candidate_1", "contractKey": "contract_fixed", "requestId": "FIXED-001", "workDate": "2026-09-16", "actualStart": "09:00", "actualEnd": "17:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 450, "sign": "POSITIVE", "finalisation": "NO_FINALISATION_COLUMN", "statusText": null, "finalisedBy": null, "commissionPence": null, "totalCostPence": "15000", "sourceExpensePence": "1234", "role": "Nurse", "band": "Band 5" }] }
+  ],
+  "actions": [
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-16T14:05:00Z", "actorKey": "office_1", "uploadKey": "hr_source" },
+    { "kind": "FINALISE", "atUtc": "2026-09-16T14:10:00Z", "actorKey": "office_1", "uploadKey": "hr_source" },
+    { "kind": "AUTHORISE", "atUtc": "2026-09-16T14:15:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_source" },
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-16T14:20:00Z", "actorKey": "office_1", "uploadKey": "hr_signed" },
+    { "kind": "CONFIRM_CURRENT_UPLOAD", "atUtc": "2026-09-16T14:25:00Z", "actorKey": "office_1", "uploadKey": "hr_signed" },
+    { "kind": "AUTHORISE", "atUtc": "2026-09-16T14:30:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_signed" },
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-16T14:35:00Z", "actorKey": "office_1", "uploadKey": "fixed_source" },
+    { "kind": "FINALISE", "atUtc": "2026-09-16T14:40:00Z", "actorKey": "office_1", "uploadKey": "fixed_source" },
+    { "kind": "AUTHORISE", "atUtc": "2026-09-16T14:45:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_fixed" },
+    { "kind": "CREATE_INVOICE_BATCH", "atUtc": "2026-09-16T15:00:00Z", "actorKey": "office_1" },
+    { "kind": "READ_PROJECTION", "atUtc": "2026-09-16T15:10:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_signed" }
+  ],
+  "expected": {
+    "outcome": "SUCCESS",
+    "sourceMovements": [
+      { "sourceRowKey": "row_source", "kind": "ADD", "workedMinutes": 660, "invoiceExVatPence": "25600" },
+      { "sourceRowKey": "row_fixed", "kind": "ADD", "workedMinutes": 450, "invoiceExVatPence": "15000" }
+    ],
+    "invoiceLines": [
+      { "sourceRowKey": "row_source", "clientKey": "client_source", "cycleKey": "hr_source", "reportNumber": null, "exVatPence": "25600" },
+      { "sourceRowKey": "row_fixed", "clientKey": "client_fixed", "cycleKey": "fixed_source", "reportNumber": null, "exVatPence": "15000" }
+    ],
+    "approvedHours": [
+      { "candidateKey": "candidate_1", "contractKey": "contract_source", "weekKey": "week_source", "shifts": [{ "key": "shift_source", "workDate": "2026-09-14", "start": "20:00", "end": "08:00", "breakMinutes": 60, "breakStart": null, "breakEnd": null, "workedMinutes": 660, "reference": "HR-A-001", "additionalUnits": [] }] },
+      { "candidateKey": "candidate_1", "contractKey": "contract_signed", "weekKey": "week_signed", "shifts": [{ "key": "shift_signed", "workDate": "2026-09-15", "start": "09:00", "end": "17:00", "breakMinutes": 30, "breakStart": "12:30", "breakEnd": "13:00", "workedMinutes": 450, "reference": "HR-B-001", "additionalUnits": [] }] },
+      { "candidateKey": "candidate_1", "contractKey": "contract_fixed", "weekKey": "week_fixed", "shifts": [{ "key": "shift_fixed", "workDate": "2026-09-16", "start": "09:00", "end": "17:00", "breakMinutes": 30, "breakStart": null, "breakEnd": null, "workedMinutes": 450, "reference": "FIXED-001", "additionalUnits": [] }] }
+    ],
+    "communications": [],
+    "c1PublicationCategory": "WAITING",
+    "visibleAssertions": [
+      "Source-authority hours use finalised Actual start, end and break",
+      "Signed Timesheet hours remain authoritative and receive the matching reference",
+      "The source-fixed expense stays on the source Timesheet without receipt upload"
+    ],
+    "forbiddenAssertions": [
+      "Contract hours replace Actual hours",
+      "The signed Timesheet expense journey is removed",
+      "A source-fixed expense creates a separate expense Timesheet"
+    ]
+  }
+}

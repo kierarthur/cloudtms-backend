@@ -23,7 +23,9 @@ export const MYTMS_INVOICE_EVIDENCE_PREPARE_ADAPTER_PATH =
 const ALLOWED_FUNCTIONS = new Set([
   'manager_email_route_register_v1',
   'manager_email_route_transition_v1',
-  'manager_review_origin_resolve_v1'
+  'manager_review_origin_resolve_v1',
+  'weekly_query_manager_route_register_v1',
+  'weekly_query_manager_route_resolve_v1'
 ]);
 const MAX_BODY_BYTES = 256 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

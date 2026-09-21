@@ -26,6 +26,14 @@ declare
   v_refresh jsonb;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
+
+  -- Retained only so historical audit records and old callers have a stable,
+  -- explicit failure. A completed signed Weekly Timesheet is authoritative;
+  -- roster-only shifts must now be sent through manager correction and may not
+  -- be suppressed by recording that the candidate did not work.
+  raise exception 'HR_WEEKLY_CANDIDATE_NOT_WORKED_ROUTE_RETIRED'
+    using errcode='0A000';
+
   if p_import_id is null or p_request_id is null or p_confirmed is null
      or coalesce(p_action_id,'')!~'^[0-9a-f]{64}$'
      or coalesce(p_expected_evidence_fingerprint,'')!~'^[0-9a-f]{64}$' then

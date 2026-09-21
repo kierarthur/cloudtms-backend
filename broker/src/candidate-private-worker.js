@@ -306,6 +306,17 @@ function managerRouteRequest(request, routeContext, authorityOverride = null) {
     headers.set('x-cloudtms-manager-route-request-generation', String(context.request_generation));
     headers.set('x-cloudtms-manager-route-credential-generation', String(context.credential_generation));
   }
+  if (authorityKind === 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    headers.set('x-cloudtms-manager-route-ticket', context.manager_route_ticket_id);
+    headers.set('x-cloudtms-manager-route-revision', String(context.route_revision));
+    headers.set('x-cloudtms-manager-route-weekly-batch-hmac', context.review_batch_route_hmac);
+    headers.set(
+      'x-cloudtms-manager-route-weekly-recipient-generation-hmac',
+      context.recipient_generation_route_hmac
+    );
+    headers.set('x-cloudtms-manager-route-weekly-membership-hash', context.original_membership_hash);
+    headers.set('x-cloudtms-manager-route-credential-generation', String(context.credential_generation));
+  }
   return new Request(request, { headers });
 }
 
@@ -481,7 +492,9 @@ export default {
         return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID' });
       }
       const authorityKind = routeContext.context.authority_kind || 'CANDIDATE_SESSION';
-      const managerAuthority = ['MANAGER_EMAIL', 'MANAGER_PHONE'].includes(authorityKind);
+      const managerAuthority = [
+        'MANAGER_EMAIL', 'MANAGER_PHONE', 'WEEKLY_QUERY_MANAGER_EMAIL'
+      ].includes(authorityKind);
       const sharedManagerUpload = path.startsWith(`${PRIVATE_CANDIDATE_PREFIX}/uploads/`);
       const legacyPhoneAuthority = routeContext.context.v === 1
         && request.headers.has('authorization')

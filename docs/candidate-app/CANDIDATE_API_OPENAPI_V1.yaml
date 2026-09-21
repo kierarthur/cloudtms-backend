@@ -326,6 +326,32 @@ paths:
       parameters: [{$ref: '#/components/parameters/NotificationId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
+  /candidate-app/v1/weekly-source/requests/{requestId}:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateWeeklySourceRequest
+      summary: Get one current grouped Weekly hours request
+      x-cloudtms-private-path: /private/candidate-app/v1/weekly-source/requests/{requestId}
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      responses: *standardResponses
+  /candidate-app/v1/weekly-source/requests/{requestId}/draft:
+    put:
+      tags: [Candidate]
+      operationId: saveCandidateWeeklySourceRequestDraft
+      summary: Save partial answers for one current Weekly hours request
+      x-cloudtms-private-path: /private/candidate-app/v1/weekly-source/requests/{requestId}/draft
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/weekly-source/requests/{requestId}/submit:
+    post:
+      tags: [Candidate]
+      operationId: submitCandidateWeeklySourceRequest
+      summary: Submit selected current Weekly answers through the existing whole-week owner
+      x-cloudtms-private-path: /private/candidate-app/v1/weekly-source/requests/{requestId}/submit
+      parameters: [{$ref: '#/components/parameters/RequestId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
   /candidate-app/v1/workflows:
     post:
       tags: [Workflow]
@@ -424,6 +450,25 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/no-work
       parameters:
         - {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/weekly-query-batches/{reviewBatchId}:
+    get:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: getManagerWeeklyQueryBatch
+      summary: Read the unanswered shifts in one current Weekly hours review
+      x-cloudtms-private-path: /private/candidate-manager/v1/weekly-query-batches/{reviewBatchId}
+      parameters: [{$ref: '#/components/parameters/ReviewBatchId'}]
+      responses: *standardResponses
+  /candidate-manager/v1/weekly-query-batches/{reviewBatchId}/responses:
+    post:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: submitManagerWeeklyQueryResponses
+      summary: Save selected answers for one current Weekly hours review
+      x-cloudtms-private-path: /private/candidate-manager/v1/weekly-query-batches/{reviewBatchId}/responses
+      parameters: [{$ref: '#/components/parameters/ReviewBatchId'}]
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/start:
@@ -1414,6 +1459,8 @@ components:
     ContractWeekId: {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     ContractId: {name: contractId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     WorkflowId: {name: workflowId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    RequestId: {name: requestId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    ReviewBatchId: {name: reviewBatchId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     ComponentId: {name: componentId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     NotificationId: {name: notificationId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
   requestBodies:

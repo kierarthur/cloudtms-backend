@@ -145,7 +145,7 @@ MYTMS_IDENTITY_WEB_ORIGIN = "https://mycloudtms.arthur-rai.co.uk"
 MYTMS_GOOGLE_PROVISIONING_ACTIVATION_AUTHORIZED = "FALSE"
 MYTMS_GOOGLE_SWITCH_ACTIVATION_AUTHORIZED = "FALSE"
 MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED = "TRUE"
-MYTMS_PUSH_DELIVERY_ACTIVATION_AUTHORIZED = "FALSE"
+MYTMS_PUSH_DELIVERY_ACTIVATION_AUTHORIZED = "TRUE"
 ALLOWED_ORIGINS = "https://testmode.arthur-rai.co.uk,https://kierarthur.github.io,https://mycloudtms.arthur-rai.co.uk"
 COOKIE_SAME_SITE = "None"
 COOKIE_PARTITIONED = "true"
@@ -238,6 +238,9 @@ service = "test-cloudtms-invoice-document-processor"
 [[env.test.services]]
 binding = "INVOICE_QUEUE_DISPATCHER"
 service = "test-cloudtms-invoice-queue-dispatcher"
+[[env.test.services]]
+binding = "WEEKLY_SOURCE_CANDIDATE_PUSH"
+service = "test-cloudtms-candidate-broker"
 
 [[env.test.kv_namespaces]]
 binding = "SESSIONS"

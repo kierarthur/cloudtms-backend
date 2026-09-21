@@ -169,6 +169,32 @@ function normalizedManagerRouteContext(input) {
       )
     };
   }
+  if (authorityKind === 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    return {
+      ...common,
+      route_version_id: exactUuid(input.route_version_id, 'CANDIDATE_ROUTE_CONTEXT_ROUTE_VERSION_ID_INVALID'),
+      binding_manifest_generation: positiveInteger(
+        input.binding_manifest_generation, 'CANDIDATE_ROUTE_CONTEXT_BINDING_GENERATION_INVALID'
+      ),
+      manager_route_ticket_id: exactUuid(
+        input.manager_route_ticket_id, 'CANDIDATE_ROUTE_CONTEXT_MANAGER_TICKET_INVALID'
+      ),
+      route_revision: positiveInteger(input.route_revision, 'CANDIDATE_ROUTE_CONTEXT_ROUTE_REVISION_INVALID'),
+      review_batch_route_hmac: exactSha256(
+        input.review_batch_route_hmac, 'CANDIDATE_ROUTE_CONTEXT_WEEKLY_BATCH_HMAC_INVALID'
+      ),
+      recipient_generation_route_hmac: exactSha256(
+        input.recipient_generation_route_hmac,
+        'CANDIDATE_ROUTE_CONTEXT_WEEKLY_RECIPIENT_GENERATION_HMAC_INVALID'
+      ),
+      original_membership_hash: exactSha256(
+        input.original_membership_hash, 'CANDIDATE_ROUTE_CONTEXT_WEEKLY_MEMBERSHIP_HASH_INVALID'
+      ),
+      credential_generation: positiveInteger(
+        input.credential_generation, 'CANDIDATE_ROUTE_CONTEXT_CREDENTIAL_GENERATION_INVALID'
+      )
+    };
+  }
   if (authorityKind === 'MANAGER_PHONE') {
     const globalSessionFamilyId = optionalUuid(
       input.global_session_family_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_FAMILY_INVALID'

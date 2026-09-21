@@ -105,13 +105,21 @@ function createScenario(storedResponse, options = {}) {
       completed_timesheet_ids: options.tsfinCompletedTimesheetIds || []
     };
   };
+  // WP-51 / WP-48 F2: the guard-refusal recording funnel is a separate injected
+  // dependency, so the test can see WHICH calls were routed through it.
+  const recordedThroughFunnel = [];
+  const sbRpcRecordingGuardRefusal = async (env, name, args, opts) => {
+    recordedThroughFunnel.push(name);
+    return sbRpc(env, name, args, opts);
+  };
   const runner = createImportReviewPostCommitRunner({
     sbRpc,
+    sbRpcRecordingGuardRefusal,
     unwrapRpcJsonb: (value) => value,
     runTsfinWorkerOnce,
     wait: async () => {}
   });
-  return { runner, calls, tsfinRuns };
+  return { runner, calls, tsfinRuns, recordedThroughFunnel };
 }
 
 test('email enqueue failure after commit records only EMAIL as FAILED_RETRYABLE', async () => {
@@ -344,6 +352,32 @@ test('already-settled exact targets are authorised without re-enqueueing TSFIN',
     && call.args.p_component === 'TSFIN' && call.args.p_new_component_status === 'COMPLETE'));
 });
 
+// WP-51, closing WP-48's combined-review finding F2.
+test('the authorisation is the one call routed through the guard-refusal recording funnel', async () => {
+  const current = createScenario({
+    post_commit_email_action_ids: [],
+    affected_timesheet_ids: [TIMESHEET_ID],
+    post_commit_reauthorise_timesheet_ids: [TIMESHEET_ID],
+    review_email_follow_up_status: 'NOT_REQUIRED',
+    review_tsfin_follow_up_status: 'PENDING'
+  }, {
+    tsfinTargetSummaries: [{ settled: true, pendingTotal: 0 }]
+  });
+
+  await current.runner({}, details());
+
+  assert.deepEqual(current.recordedThroughFunnel, ['timesheet_authorise_bulk_atomic']);
+  assert.ok(current.calls.some((call) => call.name === 'timesheet_authorise_bulk_atomic'));
+});
+
+test('the runner refuses to be built without the guard-refusal recording funnel', () => {
+  assert.throws(() => createImportReviewPostCommitRunner({
+    sbRpc: async () => ({ ok: true }),
+    unwrapRpcJsonb: (value) => value,
+    runTsfinWorkerOnce: async () => ({})
+  }), /guard-refusal recording RPC is required/);
+});
+
 test('configured auto-authorise targets and lifecycle restoration targets share one bounded post-TSFIN call', async () => {
   const current = createScenario({
     post_commit_email_action_ids: [],
@@ -425,6 +459,7 @@ test('uncommitted source prevents every follow-up mutation', async () => {
       calls.push(name);
       return { ok: true, outcome: 'IN_PROGRESS', stored_response: {} };
     },
+    sbRpcRecordingGuardRefusal: async () => { throw new Error('must not authorise'); },
     unwrapRpcJsonb: (value) => value,
     runTsfinWorkerOnce: async () => { throw new Error('must not run'); }
   });

@@ -39,6 +39,11 @@ declare
   -- ref-to-issue flag (effective: contract override aware via v_ts_invoice_precheck)
   v_ref_required_to_issue boolean := false;
 
+  -- Weekly Source Plan 6.2, Gate 7 item G7-3 (24 section 11, 25 section 4).
+  -- The verdict of the one source-aware issue validator, fetched once below.
+  -- {"is_source_invoice": false} for every ordinary invoice.
+  v_weekly_source_issue jsonb := null;
+
   -- ======================================================
   -- DEBUG (optional): single audit row per RPC call
   -- ======================================================
@@ -76,9 +81,22 @@ begin
     raise exception 'invoice_id is required';
   end if;
 
-  perform public._ctms_assert_invoice_correction_lines_v1(
-    p_invoice_id,p_actor_user_id,true,'INVOICE_ISSUE'
-  );
+  -- Weekly Source Plan 6.2, Gate 7 item G7-3: ONE early call into the
+  -- source-aware issue validator.  For every ordinary invoice this returns
+  -- {"is_source_invoice": false} and everything below runs exactly as before.
+  v_weekly_source_issue := private.weekly_source_invoice_issue_validate_v1(p_invoice_id);
+
+  -- 25 section 4 Removed, bullet 3: an admitted Weekly final-source self-bill
+  -- is not judged by the ordinary correction-unit family.  Its own movement
+  -- allocation has just been proved above; a source invoice that failed that
+  -- proof keeps every ordinary control and is blocked below.
+  if not coalesce(
+       (v_weekly_source_issue->>'is_source_invoice')::boolean and
+       (v_weekly_source_issue->>'ok')::boolean, false) then
+    perform public._ctms_assert_invoice_correction_lines_v1(
+      p_invoice_id,p_actor_user_id,true,'INVOICE_ISSUE'
+    );
+  end if;
 
   -- Detect optional invoice columns used to invalidate invoice PDF freshness on ISSUE
   begin
@@ -358,6 +376,14 @@ begin
   v_reasons := array_cat(v_precheck_reasons, v_hr_reasons);
   v_reasons := array_cat(v_reasons, v_issue_ref_reasons);
   v_reasons := array_remove(v_reasons, null);
+
+  -- Weekly Source Plan 6.2, Gate 7 item G7-3 (24 section 11).  Ordinary
+  -- invoice: returns v_reasons unchanged.  Admitted source self-bill: drops
+  -- only the four irrelevant ordinary evidence categories.  Failing source
+  -- invoice: keeps every ordinary reason and adds the source refusals.
+  v_reasons := private.weekly_source_invoice_issue_reasons_v1(
+    v_weekly_source_issue, v_reasons
+  );
 
   -- Debug per-timesheet snapshot (only if enabled)
   if v_invoice_debug then

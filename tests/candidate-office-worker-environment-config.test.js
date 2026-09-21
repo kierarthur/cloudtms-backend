@@ -30,7 +30,7 @@ test('normal TEST Worker installs only the expressly authorised MyTMS TEST contr
     ['MYTMS_GOOGLE_PROVISIONING_ACTIVATION_AUTHORIZED', 'FALSE'],
     ['MYTMS_GOOGLE_SWITCH_ACTIVATION_AUTHORIZED', 'FALSE'],
     ['MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED', 'TRUE'],
-    ['MYTMS_PUSH_DELIVERY_ACTIVATION_AUTHORIZED', 'FALSE']
+    ['MYTMS_PUSH_DELIVERY_ACTIVATION_AUTHORIZED', 'TRUE']
   ]);
   for (const [name, value] of expected) {
     assert.match(testEnvironment, new RegExp(`^${name}\\s*=\\s*"${value.replaceAll('.', '\\.')}"\\s*$`, 'm'));

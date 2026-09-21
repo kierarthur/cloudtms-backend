@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "operation_count": 63,
+  "operation_count": 68,
   "routing_authority": "SERVER_OWNED_ONLY",
   "operations": [
     {
@@ -394,6 +394,51 @@
       "preserves_business_rpc_meaning": true
     },
     {
+      "operation_id": "getCandidateWeeklySourceRequest",
+      "method": "GET",
+      "path": "/candidate-app/v1/weekly-source/requests/{requestId}",
+      "surface": "CANDIDATE_APP",
+      "app_client_included": true,
+      "authority_class": "AGENCY_DATA_PLANE",
+      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "agency_context_required": true,
+      "agency_route_required": true,
+      "data_plane_dispatch_required": true,
+      "client_agency_selector_allowed": false,
+      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "preserves_business_rpc_meaning": true
+    },
+    {
+      "operation_id": "saveCandidateWeeklySourceRequestDraft",
+      "method": "PUT",
+      "path": "/candidate-app/v1/weekly-source/requests/{requestId}/draft",
+      "surface": "CANDIDATE_APP",
+      "app_client_included": true,
+      "authority_class": "AGENCY_DATA_PLANE",
+      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "agency_context_required": true,
+      "agency_route_required": true,
+      "data_plane_dispatch_required": true,
+      "client_agency_selector_allowed": false,
+      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "preserves_business_rpc_meaning": true
+    },
+    {
+      "operation_id": "submitCandidateWeeklySourceRequest",
+      "method": "POST",
+      "path": "/candidate-app/v1/weekly-source/requests/{requestId}/submit",
+      "surface": "CANDIDATE_APP",
+      "app_client_included": true,
+      "authority_class": "AGENCY_DATA_PLANE",
+      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "agency_context_required": true,
+      "agency_route_required": true,
+      "data_plane_dispatch_required": true,
+      "client_agency_selector_allowed": false,
+      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "preserves_business_rpc_meaning": true
+    },
+    {
       "operation_id": "createCandidateWorkflow",
       "method": "POST",
       "path": "/candidate-app/v1/workflows",
@@ -614,6 +659,42 @@
       "allowed_authority_kinds": [
         "MANAGER_EMAIL",
         "MANAGER_PHONE"
+      ],
+      "preserves_business_rpc_meaning": true
+    },
+    {
+      "operation_id": "getManagerWeeklyQueryBatch",
+      "method": "GET",
+      "path": "/candidate-manager/v1/weekly-query-batches/{reviewBatchId}",
+      "surface": "MANAGER_HANDOFF",
+      "app_client_included": true,
+      "authority_class": "AGENCY_DATA_PLANE",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
+      "agency_context_required": true,
+      "agency_route_required": true,
+      "data_plane_dispatch_required": true,
+      "client_agency_selector_allowed": false,
+      "isolation_proof_class": "WEEKLY_QUERY_MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "WEEKLY_QUERY_MANAGER_EMAIL"
+      ],
+      "preserves_business_rpc_meaning": true
+    },
+    {
+      "operation_id": "submitManagerWeeklyQueryResponses",
+      "method": "POST",
+      "path": "/candidate-manager/v1/weekly-query-batches/{reviewBatchId}/responses",
+      "surface": "MANAGER_HANDOFF",
+      "app_client_included": true,
+      "authority_class": "AGENCY_DATA_PLANE",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
+      "agency_context_required": true,
+      "agency_route_required": true,
+      "data_plane_dispatch_required": true,
+      "client_agency_selector_allowed": false,
+      "isolation_proof_class": "WEEKLY_QUERY_MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "WEEKLY_QUERY_MANAGER_EMAIL"
       ],
       "preserves_business_rpc_meaning": true
     },

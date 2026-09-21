@@ -90,7 +90,110 @@ CREATE OR REPLACE FUNCTION public.tsfin_prepare_write(p_timesheet_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 AS $function$
+DECLARE
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E7).
+  v_weekly_source_guard jsonb;
+  -- WP-09b finding F1: is there a protected position this call could displace?
+  v_weekly_source_protected_rotation boolean := false;
 BEGIN
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E7): this owner is
+  -- SECURITY INVOKER and is executable by service_role, so it calls WP-03's
+  -- definer-rights decision shim, which is the only rotation-authority routine
+  -- service_role may execute.  The refusal is taken before this owner's first
+  -- write, which is the demotion below.
+  -- WP-09b review finding F2: the earlier claim here, that an undecidable
+  -- family is "left to behave exactly as today", was FALSE and is withdrawn.
+  -- The shim returns the guard's fail-closed managed = true for every family it
+  -- cannot resolve -- a missing or blank booking identity, a family split by a
+  -- whitespace variant, no current row, an ambiguous canonical row, an unknown
+  -- or null id -- so those ordinary families now refuse here where they
+  -- previously proceeded.  That cost is measured, by shape, in the WP-09b
+  -- report; it is the price of WP-03 handoff N11's unconditional predicate and
+  -- is owner decision OQ-1, not an accident of this call site.
+  -- The lock context is the caller's: reached through E25 or E26 this owner
+  -- already holds the family and TSFIN locks.  Called standalone by
+  -- service_role it holds none, which WP-09b records as an accepted residual
+  -- (report section on F1) rather than taking a family lock inside a
+  -- SECURITY INVOKER owner whose callers lock in the opposite order.
+  v_weekly_source_guard := private.weekly_source_managed_root_guard_decision_v1(p_timesheet_id);
+  -- WP-09b, WP-17b touchpoint reconciliation finding F1 (18 September 2026).
+  -- The protected-pay clause was OVER-APPLIED here and refused Weekly Source's
+  -- own protected-family preparer,
+  -- public.weekly_source_target_managed_root_prepare_atomic_v1, which calls this
+  -- owner to write the legitimate zero current TSFIN a protected family needs
+  -- BEFORE first authorisation.  One defect failed four release verifiers.
+  --
+  -- That is not the case the approver ruled on.  HANDOVER 2 round-5 Part E names
+  -- PROTECTED_ROOT_AUTHORITY_MISSING as the answer to an ordinary ROTATION
+  -- attempt on a protected root, not to the preparer that creates the conditions
+  -- for an authorisation record in the first place: a protected-pay root
+  -- legitimately has no authorisation record at the moment the preparer runs.
+  --
+  -- The distinction is a STATE, not a caller.  Exempting this entry point would
+  -- reopen the hole the guard exists to close, because it is a genuine rotation
+  -- surface.  What it rotates is the CURRENT timesheets_financials row: it
+  -- demotes that row and promotes a replacement.  A protected family therefore
+  -- has a position to defend exactly when there is something to displace --
+  -- a current financial row, or a root that is already authorised.
+  --
+  -- Measured on a real build from empty, the preparer's call has neither: no
+  -- current financial row, authorised_at_server null, no live root
+  -- authorisation, and the protected family at ownership_state=TARGET_MANAGED
+  -- with current_generation_id null, generation 0, lifecycle PENDING_APPROVAL,
+  -- c1_publication_state NONE and 0 components.  Nothing can be rotated; the
+  -- first snapshot is being created.  A rotation attempt on a protected root
+  -- that DOES hold a current financial row, or whose root is authorised, still
+  -- refuses -- proved in both directions.
+  v_weekly_source_protected_rotation :=
+    (v_weekly_source_guard->>'protected_target_ownership_state') is not null
+    and (exists (select 1 from public.timesheets_financials tf
+                  where tf.timesheet_id = p_timesheet_id and tf.is_current)
+         or exists (select 1 from public.timesheets t
+                     where t.timesheet_id = p_timesheet_id
+                       and t.authorised_at_server is not null));
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  IF (COALESCE((v_weekly_source_guard->>'managed')::boolean, true)
+       and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
+            or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or v_weekly_source_protected_rotation THEN
+    RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      USING ERRCODE = '55000',
+            DETAIL = jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E7:public.tsfin_prepare_write',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id', p_timesheet_id,
+              'reason', v_weekly_source_guard->>'reason'
+            )::text;
+  END IF;
+
   -- Guard: refuse writes if the current snapshot is paid OR whole-timesheet locked by an invoice.
   -- IMPORTANT: Do NOT block just because some SEGMENTS are invoice-locked; partial recompute is allowed.
   IF EXISTS (
@@ -152,7 +255,94 @@ CREATE OR REPLACE FUNCTION public.tsfin_mark_revoked(p_timesheet_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 AS $function$
+DECLARE
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E7).
+  v_weekly_source_guard jsonb;
+  -- WP-09b finding F1: is there a protected position this call could displace?
+  v_weekly_source_protected_rotation boolean := false;
 BEGIN
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E7): SECURITY INVOKER, so
+  -- the refusal is taken through WP-03's definer-rights decision shim, before
+  -- this owner's first write.  See public.tsfin_prepare_write above.
+  v_weekly_source_guard := private.weekly_source_managed_root_guard_decision_v1(p_timesheet_id);
+  -- WP-09b, WP-17b touchpoint reconciliation finding F1 (18 September 2026).
+  -- The protected-pay clause was OVER-APPLIED here and refused Weekly Source's
+  -- own protected-family preparer,
+  -- public.weekly_source_target_managed_root_prepare_atomic_v1, which calls this
+  -- owner to write the legitimate zero current TSFIN a protected family needs
+  -- BEFORE first authorisation.  One defect failed four release verifiers.
+  --
+  -- That is not the case the approver ruled on.  HANDOVER 2 round-5 Part E names
+  -- PROTECTED_ROOT_AUTHORITY_MISSING as the answer to an ordinary ROTATION
+  -- attempt on a protected root, not to the preparer that creates the conditions
+  -- for an authorisation record in the first place: a protected-pay root
+  -- legitimately has no authorisation record at the moment the preparer runs.
+  --
+  -- The distinction is a STATE, not a caller.  Exempting this entry point would
+  -- reopen the hole the guard exists to close, because it is a genuine rotation
+  -- surface.  What it rotates is the CURRENT timesheets_financials row: it
+  -- demotes that row and promotes a replacement.  A protected family therefore
+  -- has a position to defend exactly when there is something to displace --
+  -- a current financial row, or a root that is already authorised.
+  --
+  -- Measured on a real build from empty, the preparer's call has neither: no
+  -- current financial row, authorised_at_server null, no live root
+  -- authorisation, and the protected family at ownership_state=TARGET_MANAGED
+  -- with current_generation_id null, generation 0, lifecycle PENDING_APPROVAL,
+  -- c1_publication_state NONE and 0 components.  Nothing can be rotated; the
+  -- first snapshot is being created.  A rotation attempt on a protected root
+  -- that DOES hold a current financial row, or whose root is authorised, still
+  -- refuses -- proved in both directions.
+  v_weekly_source_protected_rotation :=
+    (v_weekly_source_guard->>'protected_target_ownership_state') is not null
+    and (exists (select 1 from public.timesheets_financials tf
+                  where tf.timesheet_id = p_timesheet_id and tf.is_current)
+         or exists (select 1 from public.timesheets t
+                     where t.timesheet_id = p_timesheet_id
+                       and t.authorised_at_server is not null));
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  IF (COALESCE((v_weekly_source_guard->>'managed')::boolean, true)
+       and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
+            or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or v_weekly_source_protected_rotation THEN
+    RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      USING ERRCODE = '55000',
+            DETAIL = jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E7:public.tsfin_mark_revoked',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id', p_timesheet_id,
+              'reason', v_weekly_source_guard->>'reason'
+            )::text;
+  END IF;
+
   -- Guard: do not revoke the current snapshot if it is invoice-locked.
   -- (Same reasoning as tsfin_prepare_write: SEGMENTS can be partially/fully invoiced while summary lock is NULL.)
   IF EXISTS (
@@ -1098,6 +1288,44 @@ $$;
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+-- ------------------------------------------------------------------
+-- Plan 6.2 Gate 11 (WP-14; 24 section 18; gap rows XSG-028, XSG-029).
+--
+-- The late-bound accessor for the ADDITIVE Weekly Source export member below.
+--
+-- Why an accessor and not a direct call: this file's release-order key is
+-- 2026-01-19 and the Weekly Source audit-and-export authority's is 2026-09-17,
+-- so on a NEW build from empty this file is applied FIRST.  A `language sql`
+-- body is validated at creation and could not name a function that does not
+-- exist yet; a `language plpgsql` body is not, which is the same mechanism the
+-- Gate 6 rotation guard already relies on in `tsfin_prepare_write` and
+-- `tsfin_mark_revoked` in this file.
+--
+-- The `to_regprocedure` guard makes the member `{}` on any database where the
+-- Weekly Source authority is not installed, so this file remains applicable on
+-- its own and an ordinary Timesheet's export row is unchanged either way.
+--
+-- It computes nothing itself.  Every hour fact, and in particular paid hours,
+-- belongs to the Weekly Source authority.
+-- ------------------------------------------------------------------
+create or replace function public.tsfin_weekly_source_hours_v1(p_timesheet_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, private, pg_catalog, pg_temp
+as $$
+begin
+  if to_regprocedure('private.weekly_source_export_hours_v1(uuid)') is null then
+    return '{}'::jsonb;
+  end if;
+  return private.weekly_source_export_hours_v1(p_timesheet_id);
+end;
+$$;
+alter function public.tsfin_weekly_source_hours_v1(uuid) owner to postgres;
+revoke all on function public.tsfin_weekly_source_hours_v1(uuid)
+  from public, anon, authenticated, service_role;
+
 create or replace function public.tsfin_report_timesheets_v2(
   p_week_ending_from date default null,
   p_week_ending_to date default null,
@@ -1187,7 +1415,17 @@ select jsonb_build_object(
   ),
   'client', jsonb_build_object(
     'name', base.client_name
-  )
+  ),
+  -- Plan 6.2 Gate 11 (24 section 18; gap rows XSG-028 and XSG-029).  ADDITIVE
+  -- ONLY: one extra member that separates submitted, source, approved and paid
+  -- hours and keeps the invoice movements apart from all four, so a report that
+  -- means to show paid hours can never show a submission or an invoice movement
+  -- instead.  Paid hours come solely from the immutable settlement allocation
+  -- (private.weekly_source_settlement_allocation_v1), never from a
+  -- currency-to-hours calculation and never from the timesheet_pay_state
+  -- last-settled cache.  The composer returns exactly {} for every Timesheet
+  -- that is not a Weekly Source week, so an ordinary export row is unchanged.
+  'weekly_source_hours', public.tsfin_weekly_source_hours_v1(base.timesheet_id)
 )
 from base
 where (p_invoiced is null or base.invoiced_any = p_invoiced)
@@ -7249,6 +7487,17 @@ BEGIN
         ) > 0.01
         AND COALESCE(summary_pay_cache.net_delta_ex_vat, 0::numeric) < -0.01
       ) AS genuine_overpaid,
+      (
+        private.weekly_source_summary_pay_delayed_v1(
+          source_rows.timesheet_id,
+          COALESCE(timesheet_row.contract_id, contract_week_row.contract_id),
+          source_rows.client_id,
+          source_rows.week_ending_date
+        )
+        AND COALESCE(summary_pay_cache.paid_to_date_ex_vat,0::numeric)=0::numeric
+        AND UPPER(COALESCE(summary_pay_cache.summary_pay_status_code,''))
+          NOT IN ('PAID','PARTIALLY_PAID','PROCESSING','ADVANCED','OVERPAID')
+      ) AS weekly_source_pay_delayed,
       (correction_pair_issue_timesheets.timesheet_id IS NOT NULL) AS correction_pair_placement_incomplete,
       CASE
         WHEN source_rows.timesheet_id IS NULL
@@ -7500,6 +7749,11 @@ BEGIN
              WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
              ELSE ARRAY[]::text[]
            END
+        || CASE
+             WHEN enriched_base.weekly_source_pay_delayed
+               THEN ARRAY['Candidate payment is waiting for final weekly source validation.'::text]
+             ELSE ARRAY[]::text[]
+           END
       ) AS business_issue_codes,
       (
         enriched_base.base_business_issue_codes
@@ -7509,6 +7763,11 @@ BEGIN
            END
         || CASE
              WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN enriched_base.weekly_source_pay_delayed
+               THEN ARRAY['Candidate payment is waiting for final weekly source validation.'::text]
              ELSE ARRAY[]::text[]
            END
         || enriched_base.base_payment_badge_codes
@@ -7790,6 +8049,10 @@ BEGIN
         OR (
           v_issues_filter = 'overpaid'
           AND enriched_row.genuine_overpaid
+        )
+        OR (
+          v_issues_filter = 'weekly_source_pay_waiting'
+          AND enriched_row.weekly_source_pay_delayed
         )
       )
   )

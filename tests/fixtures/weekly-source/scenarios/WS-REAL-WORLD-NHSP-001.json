@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "WEEKLY_SOURCE_TEST_SCENARIO_V1",
+  "scenarioId": "WS-REAL-WORLD-NHSP-001",
+  "title": "NHSP protected pay followed by a physical reversal and corrected replacement",
+  "fixedSeed": "1111111111111111111111111111111111111111111111111111111111111111",
+  "requirementIds": ["SRC-REQ-005", "SRC-REQ-006", "SRC-REQ-007", "SRC-REQ-009"],
+  "protectedIds": ["PROT-INV-001", "PROT-AUDIT-001", "PROT-INVMOVE-001"],
+  "tags": ["REAL_WORLD", "NHSP", "PROTECTED_PAY", "RECONCILIATION"],
+  "clock": { "initialUtc": "2026-09-09T14:00:00Z", "timezone": "Europe/London" },
+  "foundation": {
+    "agency": {
+      "key": "agency_1",
+      "globalSettings": { "candidateDeadlineMinutes": 720, "candidateReminderMinutes": 360, "managerBatchMinutes": 360 }
+    },
+    "users": [{ "key": "office_1", "role": "OFFICE", "active": true }],
+    "candidates": [{
+      "key": "candidate_1", "displayName": "Scenario Candidate", "tmsRef": "CAN-SCENARIO-1",
+      "payMethod": "PAYE", "umbrellaKey": null, "active": true, "activeDeviceCount": 1
+    }],
+    "clients": [{
+      "key": "client_nhsp", "name": "Scenario NHSP Trust", "sourceAuthority": "SOURCE",
+      "managerEmail": "manager@example.test",
+      "settings": {
+        "selfBill": true, "nhsp": true, "noTimesheetRequired": true, "requiresHealthRoster": false,
+        "referenceRequiredBeforePay": false, "autoAuthorise": false, "candidateQueriesEnabled": true,
+        "managerQueriesEnabled": true, "sourceSuppliedExpenses": false, "sourceExpenseVatChargeable": false,
+        "breakEntryMode": "DURATION_MINUTES", "calculationMode": "SPLIT_RATE", "cutoffWeekday": 3,
+        "cutoffLocalTime": "15:00"
+      }
+    }],
+    "contracts": [{
+      "key": "contract_nhsp", "candidateKey": "candidate_1", "clientKey": "client_nhsp",
+      "startDate": "2026-08-01", "endDate": "2026-12-31", "role": "Staff Nurse", "band": "Band 5",
+      "payMethod": "PAYE",
+      "rates": {
+        "pay": { "day": "1000", "night": "1000", "saturday": "1000", "sunday": "1000", "bankHoliday": "1000" },
+        "charge": { "day": "2000", "night": "2000", "saturday": "2000", "sunday": "2000", "bankHoliday": "2000" }
+      },
+      "additionalUnits": []
+    }],
+    "weeks": [{
+      "key": "week_1", "contractKey": "contract_nhsp", "weekEndingDate": "2026-09-13",
+      "additionalSequence": 0, "status": "SUBMITTED"
+    }],
+    "timesheets": [{
+      "key": "timesheet_1", "weekKey": "week_1", "submissionState": "SUBMITTED",
+      "candidateSigned": true, "managerSigned": false,
+      "shifts": [{
+        "key": "submitted_shift", "workDate": "2026-09-07", "start": "09:00", "end": "17:00",
+        "breakMinutes": 30, "breakStart": null, "breakEnd": null, "workedMinutes": 450,
+        "reference": null, "additionalUnits": []
+      }],
+      "expenses": { "mode": "NONE", "amountPence": "0", "evidenceCount": 0 }
+    }]
+  },
+  "sourceUploads": [
+    {
+      "key": "prefinal_1", "profile": "NHSP_PREFINAL_RELEASED_V1", "stage": "PREFINAL",
+      "clientKey": "client_nhsp", "trustName": "Scenario NHSP Trust", "reportNumber": null,
+      "cycleUtc": "2026-09-09T14:00:00Z", "coverageStart": "2026-09-07", "coverageEnd": "2026-09-13",
+      "complete": true, "mutations": [],
+      "physicalRows": [{
+        "key": "source_original", "candidateKey": "candidate_1", "contractKey": "contract_nhsp",
+        "requestId": "REQ-SCENARIO-001", "workDate": "2026-09-07", "actualStart": "09:00",
+        "actualEnd": "16:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 390,
+        "sign": "POSITIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised",
+        "finalisedBy": "Scenario Manager", "commissionPence": "2600", "totalCostPence": "10400",
+        "sourceExpensePence": null, "role": "Staff Nurse", "band": "Band 5"
+      }]
+    },
+    {
+      "key": "final_1", "profile": "NHSP_FINAL_BACKING_V1", "stage": "FINAL",
+      "clientKey": "client_nhsp", "trustName": "Scenario NHSP Trust", "reportNumber": "1001",
+      "cycleUtc": "2026-09-09T15:00:00Z", "coverageStart": "2026-09-07", "coverageEnd": "2026-09-13",
+      "complete": true, "mutations": [],
+      "physicalRows": [{
+        "key": "source_original", "candidateKey": "candidate_1", "contractKey": "contract_nhsp",
+        "requestId": "REQ-SCENARIO-001", "workDate": "2026-09-07", "actualStart": "09:00",
+        "actualEnd": "16:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 390,
+        "sign": "POSITIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised",
+        "finalisedBy": "Scenario Manager", "commissionPence": "2600", "totalCostPence": "10400",
+        "sourceExpensePence": null, "role": "Staff Nurse", "band": "Band 5"
+      }]
+    },
+    {
+      "key": "final_2", "profile": "NHSP_FINAL_BACKING_V1", "stage": "FINAL",
+      "clientKey": "client_nhsp", "trustName": "Scenario NHSP Trust", "reportNumber": "1002",
+      "cycleUtc": "2026-09-16T15:00:00Z", "coverageStart": "2026-09-07", "coverageEnd": "2026-09-13",
+      "complete": true, "mutations": [],
+      "physicalRows": [
+        {
+          "key": "source_reversal", "candidateKey": "candidate_1", "contractKey": "contract_nhsp",
+          "requestId": "REQ-SCENARIO-001-R", "workDate": "2026-09-07", "actualStart": "09:00",
+          "actualEnd": "16:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 390,
+          "sign": "FULL_NEGATIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised",
+          "finalisedBy": "Scenario Manager", "commissionPence": "-2600", "totalCostPence": "-10400",
+          "sourceExpensePence": null, "role": "Staff Nurse", "band": "Band 5"
+        },
+        {
+          "key": "source_corrected", "candidateKey": "candidate_1", "contractKey": "contract_nhsp",
+          "requestId": "REQ-SCENARIO-001-C", "workDate": "2026-09-07", "actualStart": "09:00",
+          "actualEnd": "17:00", "actualBreakMinutes": 30, "actualWorkedMinutes": 450,
+          "sign": "POSITIVE", "finalisation": "FINALISED", "statusText": "Timesheet Finalised",
+          "finalisedBy": "Scenario Manager", "commissionPence": "3000", "totalCostPence": "12000",
+          "sourceExpensePence": null, "role": "Staff Nurse", "band": "Band 5"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-09T14:10:00Z", "actorKey": "office_1", "uploadKey": "prefinal_1" },
+    { "kind": "CONFIRM_CURRENT_UPLOAD", "atUtc": "2026-09-09T14:15:00Z", "actorKey": "office_1", "uploadKey": "prefinal_1" },
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-09T15:10:00Z", "actorKey": "office_1", "uploadKey": "final_1" },
+    { "kind": "PROTECT_HOURS", "atUtc": "2026-09-09T15:20:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_1", "shiftKey": "submitted_shift", "reason": "Candidate confirmed the submitted hours" },
+    { "kind": "FINALISE", "atUtc": "2026-09-09T15:30:00Z", "actorKey": "office_1", "uploadKey": "final_1" },
+    { "kind": "AUTHORISE", "atUtc": "2026-09-09T15:35:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_1" },
+    { "kind": "CREATE_INVOICE_BATCH", "atUtc": "2026-09-09T16:00:00Z", "actorKey": "office_1" },
+    { "kind": "UPLOAD_SOURCE", "atUtc": "2026-09-16T15:10:00Z", "actorKey": "office_1", "uploadKey": "final_2" },
+    { "kind": "FINALISE", "atUtc": "2026-09-16T15:20:00Z", "actorKey": "office_1", "uploadKey": "final_2" },
+    { "kind": "RECONCILE_PROTECTED_HOURS", "atUtc": "2026-09-16T15:25:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_1", "shiftKey": "submitted_shift" },
+    { "kind": "CREATE_INVOICE_BATCH", "atUtc": "2026-09-16T16:00:00Z", "actorKey": "office_1" },
+    { "kind": "READ_PROJECTION", "atUtc": "2026-09-16T16:10:00Z", "actorKey": "office_1", "timesheetKey": "timesheet_1" }
+  ],
+  "expected": {
+    "outcome": "SUCCESS",
+    "sourceMovements": [
+      { "sourceRowKey": "source_original", "kind": "PHYSICAL_POSITIVE", "workedMinutes": 390, "invoiceExVatPence": "13000" },
+      { "sourceRowKey": "source_reversal", "kind": "PHYSICAL_FULL_NEGATIVE", "workedMinutes": -390, "invoiceExVatPence": "-13000" },
+      { "sourceRowKey": "source_corrected", "kind": "PHYSICAL_POSITIVE", "workedMinutes": 450, "invoiceExVatPence": "15000" }
+    ],
+    "invoiceLines": [
+      { "sourceRowKey": "source_original", "clientKey": "client_nhsp", "cycleKey": "final_1", "reportNumber": "1001", "exVatPence": "13000" },
+      { "sourceRowKey": "source_reversal", "clientKey": "client_nhsp", "cycleKey": "final_2", "reportNumber": "1002", "exVatPence": "-13000" },
+      { "sourceRowKey": "source_corrected", "clientKey": "client_nhsp", "cycleKey": "final_2", "reportNumber": "1002", "exVatPence": "15000" }
+    ],
+    "approvedHours": [{
+      "candidateKey": "candidate_1", "contractKey": "contract_nhsp", "weekKey": "week_1",
+      "shifts": [{
+        "key": "submitted_shift", "workDate": "2026-09-07", "start": "09:00", "end": "17:00",
+        "breakMinutes": 30, "breakStart": null, "breakEnd": null, "workedMinutes": 450,
+        "reference": "REQ-SCENARIO-001-C", "additionalUnits": []
+      }]
+    }],
+    "communications": [],
+    "c1PublicationCategory": "WAITING",
+    "visibleAssertions": [
+      "Submitted hours, source hours and approved hours remain separately visible",
+      "The second self bill retains separate negative and positive lines",
+      "The corrected source creates no duplicate Candidate payment"
+    ],
+    "forbiddenAssertions": [
+      "Candidate pay is calculated from invoice movement totals",
+      "The negative and positive invoice movements are netted into one line",
+      "A legacy reversal Timesheet pair is created"
+    ]
+  }
+}

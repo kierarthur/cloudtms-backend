@@ -291,7 +291,8 @@ begin
     current_ex_vat,
     current_vat,
     current_inc_vat,
-    updated_at_utc
+    updated_at_utc,
+    ledger_revision
   )
   values (
     p_invoice_id,
@@ -301,7 +302,8 @@ begin
     round(coalesce(v_ex,0)::numeric,2),
     round(coalesce(v_vat,0)::numeric,2),
     round(coalesce(v_inc,0)::numeric,2),
-    now()
+    now(),
+    1
   )
   on conflict (invoice_id) do update
   set
@@ -311,7 +313,11 @@ begin
     current_ex_vat   = excluded.current_ex_vat,
     current_vat      = excluded.current_vat,
     current_inc_vat  = excluded.current_inc_vat,
-    updated_at_utc   = excluded.updated_at_utc;
+    updated_at_utc   = excluded.updated_at_utc,
+    -- Increment on every canonical ledger refresh, even when the resulting
+    -- money totals are the same.  Moving a source line away and back is still
+    -- an intervening event that makes an already-frozen Draft stale.
+    ledger_revision  = public.id_invoice_ledger.ledger_revision + 1;
 
 end;
 $$;
@@ -336,10 +342,13 @@ begin
   begin
     perform public.invoice_recompute_totals(p_invoice_id);
   exception when others then
-    -- If invoice missing or recompute fails, fall back to a safe ledger upsert with zeros.
-    -- (We do NOT raise: ledger must not break invoice_lines operations.)
-    perform public.id_ledger_upsert_from_invoice_row(p_invoice_id, true, null, null, null);
-    return;
+    -- A zero position is not a safe substitute for an invoice whose true
+    -- signed total could not be recomputed: it would advance invoice finance
+    -- while hiding the source movement.  Fail the surrounding invoice-line or
+    -- source-move transaction instead, preserving both the invoice and its
+    -- previous ledger position unchanged.
+    raise exception 'ID_LEDGER_INVOICE_RECOMPUTE_FAILED'
+      using errcode='55000', detail=sqlerrm;
   end;
 
   perform public.id_ledger_upsert_from_invoice_row(p_invoice_id, false, null, null, null);
@@ -872,6 +881,19 @@ begin
     raise exception 'ID_RUN_TABLES_MISSING';
   end if;
 
+  -- There is one mutable invoice-discounting Draft position.  Serialise the
+  -- admission check so two callers cannot freeze overlapping ledger deltas in
+  -- separate Drafts.
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('cloudtms:id_consolidation_active_draft'));
+  if exists(
+    select 1 from public.id_consolidation_runs active_run
+    where active_run.bank_uploaded_at_utc is null
+      and nullif(pg_catalog.btrim(coalesce(active_run.bank_upload_code,'')),'') is null
+  ) then
+    raise exception 'ID_ACTIVE_DRAFT_EXISTS' using errcode='55000';
+  end if;
+
   -- ✅ Two-phase wrapper:
   -- 1) Draft start (creates run header + snapshot lines, NO ledger updates)
   v_draft := public.id_consolidation_run_draft_start(p_actor_user_id, v_note);
@@ -1135,6 +1157,16 @@ begin
     raise exception 'ID_RUN_TABLES_MISSING';
   end if;
 
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('cloudtms:id_consolidation_active_draft'));
+  if exists(
+    select 1 from public.id_consolidation_runs active_run
+    where active_run.bank_uploaded_at_utc is null
+      and nullif(pg_catalog.btrim(coalesce(active_run.bank_upload_code,'')),'') is null
+  ) then
+    raise exception 'ID_ACTIVE_DRAFT_EXISTS' using errcode='55000';
+  end if;
+
   -- Allocate new sequential ref and format as 6 digits
   select nextval('public.id_ref_seq') into v_ref_num;
   v_id_ref := lpad(v_ref_num::text, 6, '0');
@@ -1157,6 +1189,7 @@ begin
       coalesce(l.last_reported_ex_vat,0)::numeric(12,2) as last_reported_ex_vat,
       coalesce(l.last_reported_vat,0)::numeric(12,2) as last_reported_vat,
       coalesce(l.last_reported_inc_vat,0)::numeric(12,2) as last_reported_inc_vat,
+      l.ledger_revision,
 
       (case
         when upper(coalesce(l.invoice_status,'')) = 'ON_HOLD' then 0::numeric(12,2)
@@ -1259,7 +1292,8 @@ begin
       delta_inc_vat,
       current_ex_vat,
       current_vat,
-      current_inc_vat
+      current_inc_vat,
+      ledger_revision
     )
     select
       v_id_ref,
@@ -1272,7 +1306,8 @@ begin
       c.delta_inc_vat,
       c.current_ex_vat,
       c.current_vat,
-      c.current_inc_vat
+      c.current_inc_vat,
+      c.ledger_revision
     from changed c
     returning 1
   )
@@ -1404,6 +1439,43 @@ begin
     end if;
   end if;
 
+  -- The Draft freezes exact ledger positions.  If an invoice changed after
+  -- that freeze, committing the old position would advance the baseline past
+  -- facts that were never present in the bank file.  Refuse and leave the
+  -- Draft cancellable; a fresh Draft will capture the current truth.
+  -- Lock the complete frozen ledger set before comparing it so a source move
+  -- cannot occur between this test and the baseline update below.
+  perform 1
+  from public.id_invoice_ledger ledger
+  join public.id_consolidation_run_lines frozen
+    on frozen.invoice_id=ledger.invoice_id
+  where frozen.id_ref=v_id_ref
+  order by ledger.invoice_id
+  for update of ledger;
+
+  if exists(
+    select 1
+    from public.id_consolidation_run_lines frozen
+    left join public.id_invoice_ledger ledger on ledger.invoice_id=frozen.invoice_id
+    where frozen.id_ref=v_id_ref
+      and (
+        ledger.invoice_id is null
+        or frozen.ledger_revision is null
+        or ledger.ledger_revision is distinct from frozen.ledger_revision
+        or ledger.current_ex_vat is distinct from frozen.current_ex_vat
+        or ledger.current_vat is distinct from frozen.current_vat
+        or ledger.current_inc_vat is distinct from frozen.current_inc_vat
+        or ledger.last_reported_ex_vat is distinct from
+          (frozen.current_ex_vat-frozen.delta_ex_vat)::numeric(12,2)
+        or ledger.last_reported_vat is distinct from
+          (frozen.current_vat-frozen.delta_vat)::numeric(12,2)
+        or ledger.last_reported_inc_vat is distinct from
+          (frozen.current_inc_vat-frozen.delta_inc_vat)::numeric(12,2)
+      )
+  ) then
+    raise exception 'ID_RUN_STALE_LEDGER' using errcode='55000';
+  end if;
+
   -- Detect optional column committed_by_user_id (NOT present in current schema dump)
   select exists (
     select 1
@@ -1497,7 +1569,8 @@ begin
         else coalesce(rl.current_inc_vat,0)::numeric(12,2)
       end
     ),
-    updated_at_utc = v_now
+    updated_at_utc = v_now,
+    ledger_revision = l.ledger_revision + 1
   from public.id_consolidation_run_lines rl
   where rl.id_ref = v_id_ref
     and l.invoice_id = rl.invoice_id;
@@ -1612,7 +1685,3 @@ begin
   );
 end;
 $function$;
-
-
-
-

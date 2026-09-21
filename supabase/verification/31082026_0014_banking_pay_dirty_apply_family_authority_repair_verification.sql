@@ -53,8 +53,16 @@ BEGIN
       ('public.bulk_process_dataset_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.bulk_process_row_context_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.bulk_timesheet_row_patch_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      -- MOVED at the Plan 6.2 final seals pass (WP-15d), 18 September 2026,
+      -- under HANDOVER 2 round-5 Part C.  This is the second of the two pins on
+      -- the same identity; both move together to the same value.  Previous pin
+      -- ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19.
+      -- This file hashes the raw definition while 29082026_0336 normalises CRLF
+      -- to LF first; the installed definition contains zero CR bytes, so both
+      -- forms yield the same value and both pins carry it.  The expected
+      -- proconfig below is deliberately unchanged: only the definition moved.
       ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)'::regprocedure,
-       'ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19'::text,
+       'd05fe8c683bfe6dc5a850d57360a2d1ef303fd184773cafb2a8a6ebbf018f21f'::text,
        ARRAY['search_path=public']::text[]),
       ('public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
       ('public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),

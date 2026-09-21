@@ -17,6 +17,7 @@ DECLARE
   v_out jsonb := '{}'::jsonb;
   v_error_state text := NULL;
   v_capability_items jsonb := NULL;
+  v_family record;
 BEGIN
   PERFORM set_config('lock_timeout', '300ms', true);
 
@@ -68,6 +69,7 @@ BEGIN
   END IF;
 
   DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_items;
+  DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_family_snapshots;
   DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_state;
   DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_work;
   DROP TABLE IF EXISTS pg_temp.timesheet_unauthorise_bulk_updated_ts;
@@ -85,6 +87,73 @@ BEGIN
     NULLIF(BTRIM(COALESCE(input_values.item_json ->> 'backend_row_signature', input_values.item_json ->> 'row_signature', input_values.item_json ->> 'rowSignature', input_values.item_json ->> 'expected_row_signature', input_values.item_json ->> 'expectedRowSignature', '')), '') AS expected_row_signature
   FROM jsonb_array_elements(v_items_array) WITH ORDINALITY AS input_values(item_json, ordinality);
 
+  -- PHD-022. Snapshot the requested family identities before taking locks.
+  -- Every family is then locked in the rotation owner's canonical order:
+  -- trimmed booking key, raw key when different, family Timesheets, and family
+  -- financial rows. The later state build refuses a booking re-point rather
+  -- than following it into an unlocked family.
+  CREATE TEMP TABLE timesheet_unauthorise_bulk_family_snapshots ON COMMIT DROP AS
+  SELECT
+    item_rows.ordinal,
+    parsed.requested_timesheet_id,
+    requested_ts.booking_id AS booking_id_snapshot
+  FROM pg_temp.timesheet_unauthorise_bulk_items AS item_rows
+  CROSS JOIN LATERAL (
+    SELECT CASE
+      WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid
+      WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid
+      ELSE NULL::uuid
+    END AS requested_timesheet_id
+  ) AS parsed
+  LEFT JOIN public.timesheets AS requested_ts
+    ON requested_ts.timesheet_id = parsed.requested_timesheet_id;
+
+  FOR v_family IN
+    SELECT DISTINCT
+      BTRIM(family_snapshot.booking_id_snapshot) AS trimmed_booking_id,
+      family_snapshot.booking_id_snapshot AS booking_id
+    FROM pg_temp.timesheet_unauthorise_bulk_family_snapshots AS family_snapshot
+    WHERE NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NOT NULL
+    ORDER BY BTRIM(family_snapshot.booking_id_snapshot), family_snapshot.booking_id_snapshot
+  LOOP
+    PERFORM pg_advisory_xact_lock(hashtext(v_family.trimmed_booking_id));
+    IF v_family.booking_id IS DISTINCT FROM v_family.trimmed_booking_id THEN
+      PERFORM pg_advisory_xact_lock(hashtext(v_family.booking_id));
+    END IF;
+
+    PERFORM 1
+    FROM public.timesheets AS family_ts
+    WHERE family_ts.booking_id = v_family.booking_id
+    ORDER BY family_ts.timesheet_id
+    FOR UPDATE;
+
+    PERFORM 1
+    FROM public.timesheets_financials AS family_tf
+    JOIN public.timesheets AS family_ts
+      ON family_ts.timesheet_id = family_tf.timesheet_id
+    WHERE family_ts.booking_id = v_family.booking_id
+    ORDER BY family_tf.id
+    FOR UPDATE OF family_tf;
+  END LOOP;
+
+  -- A legacy row without a usable booking identity remains a one-row family so
+  -- existing ordinary behavior is preserved without grouping unrelated blanks.
+  PERFORM 1
+  FROM public.timesheets AS family_ts
+  JOIN pg_temp.timesheet_unauthorise_bulk_family_snapshots AS family_snapshot
+    ON family_snapshot.requested_timesheet_id = family_ts.timesheet_id
+  WHERE NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NULL
+  ORDER BY family_ts.timesheet_id
+  FOR UPDATE OF family_ts;
+
+  PERFORM 1
+  FROM public.timesheets_financials AS family_tf
+  JOIN pg_temp.timesheet_unauthorise_bulk_family_snapshots AS family_snapshot
+    ON family_snapshot.requested_timesheet_id = family_tf.timesheet_id
+  WHERE NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NULL
+  ORDER BY family_tf.id
+  FOR UPDATE OF family_tf;
+
   CREATE TEMP TABLE timesheet_unauthorise_bulk_state ON COMMIT DROP AS
   SELECT
     item_rows.ordinal,
@@ -93,6 +162,7 @@ BEGIN
     CASE WHEN item_rows.timesheet_id_text ~* v_uuid_re THEN item_rows.timesheet_id_text::uuid WHEN item_rows.row_key LIKE 'timesheet:%' AND SUBSTRING(item_rows.row_key FROM 11) ~* v_uuid_re THEN SUBSTRING(item_rows.row_key FROM 11)::uuid ELSE NULL::uuid END AS requested_timesheet_id,
     CASE WHEN item_rows.expected_timesheet_id_text ~* v_uuid_re THEN item_rows.expected_timesheet_id_text::uuid ELSE NULL::uuid END AS expected_timesheet_id,
     item_rows.expected_row_signature,
+    family_snapshot.booking_id_snapshot AS requested_booking_id_snapshot,
     req_ts.timesheet_id AS db_requested_timesheet_id,
     req_ts.booking_id AS requested_booking_id,
     cur_ts.timesheet_id AS current_timesheet_id,
@@ -111,8 +181,13 @@ BEGIN
     cw.id AS contract_week_id,
     sig.signature_json AS signature_json,
     sig.signature_text AS current_row_signature,
-    COALESCE(segment_state.has_segment_invoice_lock, false) AS has_segment_invoice_lock
+    COALESCE(segment_state.has_segment_invoice_lock, false) AS has_segment_invoice_lock,
+    COALESCE(family_state.has_family_tsfin_invoice_lock, false) AS has_family_tsfin_invoice_lock,
+    COALESCE(family_state.has_family_segment_invoice_lock, false) AS has_family_segment_invoice_lock,
+    COALESCE(family_state.has_family_invoice_membership, false) AS has_family_invoice_membership
   FROM pg_temp.timesheet_unauthorise_bulk_items AS item_rows
+  LEFT JOIN pg_temp.timesheet_unauthorise_bulk_family_snapshots AS family_snapshot
+    ON family_snapshot.ordinal = item_rows.ordinal
   LEFT JOIN LATERAL (
     SELECT ts_req.*
     FROM public.timesheets AS ts_req
@@ -167,7 +242,58 @@ BEGIN
       ) AS invoice_segment(segment_json)
       WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
     ) AS has_segment_invoice_lock
-  ) AS segment_state ON true;
+  ) AS segment_state ON true
+  LEFT JOIN LATERAL (
+    SELECT
+      EXISTS (
+        SELECT 1
+        FROM public.timesheets_financials AS family_tf
+        JOIN public.timesheets AS family_ts
+          ON family_ts.timesheet_id = family_tf.timesheet_id
+        WHERE (
+          family_ts.timesheet_id = req_ts.timesheet_id
+          OR (
+            NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NOT NULL
+            AND family_ts.booking_id = family_snapshot.booking_id_snapshot
+          )
+        )
+          AND family_tf.locked_by_invoice_id IS NOT NULL
+      ) AS has_family_tsfin_invoice_lock,
+      EXISTS (
+        SELECT 1
+        FROM public.timesheets_financials AS family_tf
+        JOIN public.timesheets AS family_ts
+          ON family_ts.timesheet_id = family_tf.timesheet_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN family_tf.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+            WHEN jsonb_typeof(family_tf.invoice_breakdown_json) = 'array' THEN family_tf.invoice_breakdown_json
+            WHEN jsonb_typeof(family_tf.invoice_breakdown_json) = 'object'
+             AND jsonb_typeof(family_tf.invoice_breakdown_json -> 'segments') = 'array' THEN family_tf.invoice_breakdown_json -> 'segments'
+            ELSE '[]'::jsonb
+          END
+        ) AS family_segment(segment_json)
+        WHERE (
+          family_ts.timesheet_id = req_ts.timesheet_id
+          OR (
+            NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NOT NULL
+            AND family_ts.booking_id = family_snapshot.booking_id_snapshot
+          )
+        )
+          AND NULLIF(BTRIM(COALESCE(family_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
+      ) AS has_family_segment_invoice_lock,
+      EXISTS (
+        SELECT 1
+        FROM public.invoice_lines AS invoice_line
+        JOIN public.timesheets AS family_ts
+          ON family_ts.timesheet_id = invoice_line.timesheet_id
+        WHERE family_ts.timesheet_id = req_ts.timesheet_id
+           OR (
+             NULLIF(BTRIM(COALESCE(family_snapshot.booking_id_snapshot, '')), '') IS NOT NULL
+             AND family_ts.booking_id = family_snapshot.booking_id_snapshot
+           )
+      ) AS has_family_invoice_membership
+  ) AS family_state ON true;
 
   CREATE TEMP TABLE timesheet_unauthorise_bulk_work ON COMMIT DROP AS
   SELECT
@@ -176,6 +302,7 @@ BEGIN
       WHEN state_rows.requested_timesheet_id IS NULL THEN 'TIMESHEET_ID_REQUIRED'
       WHEN state_rows.expected_timesheet_id IS NULL THEN 'EXPECTED_TIMESHEET_ID_REQUIRED'
       WHEN state_rows.db_requested_timesheet_id IS NULL THEN 'TIMESHEET_NOT_FOUND'
+      WHEN state_rows.requested_booking_id IS DISTINCT FROM state_rows.requested_booking_id_snapshot THEN 'TIMESHEET_MOVED'
       WHEN state_rows.current_timesheet_id IS NULL THEN 'CURRENT_TIMESHEET_NOT_FOUND'
       WHEN state_rows.current_is_current IS DISTINCT FROM true THEN 'CURRENT_TIMESHEET_NOT_FOUND'
       WHEN state_rows.expected_timesheet_id IS DISTINCT FROM state_rows.current_timesheet_id THEN 'TIMESHEET_MOVED'
@@ -183,7 +310,11 @@ BEGIN
       WHEN state_rows.expected_row_signature IS NOT NULL AND COALESCE(state_rows.current_row_signature, '') IS DISTINCT FROM state_rows.expected_row_signature THEN 'ROW_SIGNATURE_MISMATCH'
       WHEN state_rows.current_sheet_scope = 'WEEKLY'::public.timesheet_scope_enum AND state_rows.contract_week_id IS NULL THEN 'CONTRACT_WEEK_NOT_FOUND_FOR_WEEKLY_TIMESHEET'
       WHEN state_rows.current_archived_at_utc IS NOT NULL THEN 'TIMESHEET_ARCHIVED'
-      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_BY_INVOICE'
+      WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL
+        OR state_rows.has_segment_invoice_lock
+        OR state_rows.has_family_tsfin_invoice_lock
+        OR state_rows.has_family_segment_invoice_lock
+        OR state_rows.has_family_invoice_membership THEN 'TIMESHEET_LOCKED_BY_INVOICE'
       WHEN state_rows.current_authorised_at_server IS NULL AND state_rows.tsfin_authorised_at_utc IS NULL THEN 'ALREADY_UNAUTHORISED'
       ELSE NULL::text
     END AS failure_code,
@@ -341,4 +472,4 @@ $function$;
 -- CloudTMS deployment metadata: deterministic owner and API-role ACLs.
 ALTER FUNCTION public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_unauthorise_bulk_atomic(jsonb, uuid, timestamp with time zone) TO service_role;

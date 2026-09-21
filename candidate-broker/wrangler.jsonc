@@ -12,6 +12,8 @@
     "MYTMS_CONTROL_PLANE_ENABLED": "TRUE",
     "MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED": "TRUE",
     "MYTMS_CONTROL_PLANE_URL": "https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev",
+    "APNS_TOPIC": "net.cloudtms.mytms.test",
+    "APNS_ENVIRONMENT": "sandbox",
     "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk,https://mycloudtms.arthur-rai.co.uk,https://mytms-manager-review-test.kier-88a.workers.dev",
     "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true",
     "CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION": "1",

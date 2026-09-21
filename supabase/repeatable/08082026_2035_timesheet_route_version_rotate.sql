@@ -1086,7 +1086,80 @@ as $function$
 declare
   v_environment text;
   v_office_service boolean:=false;
+  v_weekly_source_booking_id text;
+  v_weekly_source_guard jsonb;
 begin
+  -- Plan 6.2 G6-11 (proof/34 section 3).  An authorised Weekly-Source-managed
+  -- root may never be rotated.  The refusal joins the existing block list ahead
+  -- of FINANCIAL_HISTORY and sits in this dispatcher before the
+  -- candidate_route_confirmation flag branch, so it covers both the
+  -- _core_v1 and the _legacy_v1 body.  The guard writes nothing and this
+  -- dispatcher has not written anything at this point.
+  -- WP-09b review finding F1: the verdict must be taken while this transaction
+  -- already holds the compatible locks of proof/34 section 5, not before them.
+  -- Read before any lock, a first authorisation that holds the family and
+  -- commits afterwards leaves this dispatcher free to rotate the now-authorised
+  -- managed root.  Trimmed key first, then the raw key only when it differs,
+  -- then the exact raw-booking family rows: the same deadlock-free order as
+  -- public.timesheet_route_version_confirmed_v1 below and the I-1 helper, and
+  -- the bodies this dispatcher calls re-take the raw key re-entrantly.  A null
+  -- or blank booking identity is left to the guard, which already refuses it.
+  select rotate_target.booking_id into v_weekly_source_booking_id
+  from public.timesheets rotate_target
+  where rotate_target.timesheet_id=p_current_timesheet_id;
+  if v_weekly_source_booking_id is not null
+     and btrim(v_weekly_source_booking_id)<>'' then
+    perform pg_advisory_xact_lock(hashtext(btrim(v_weekly_source_booking_id)));
+    if v_weekly_source_booking_id<>btrim(v_weekly_source_booking_id) then
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_booking_id));
+    end if;
+    perform 1 from public.timesheets locked_member
+    where locked_member.booking_id=v_weekly_source_booking_id for update;
+  end if;
+  v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(
+    p_current_timesheet_id
+  );
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+       and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode='55000',detail=jsonb_build_object(
+        'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+        'entry_point','E1:public.timesheet_route_version_rotate',
+        'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+        'refusal_basis', case
+          -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+          -- canonical booking-reference collision and must be named as one.
+          -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+          -- release, so the order of this edit and WP-03's rename cannot open a gap in
+          -- which Office stops seeing the ruled name.
+          when v_weekly_source_guard->>'reason' in (
+                 'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+            then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            then 'WEEKLY_SOURCE_MANAGED_ROOT'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+            then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+          when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+            then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+          else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+        'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+        'timesheet_id',p_current_timesheet_id,
+        'reason',v_weekly_source_guard->>'reason'
+      )::text;
+  end if;
   select candidate_app_environment into v_environment
   from public.settings_defaults where id=1;
   v_environment:=private._candidate_assert_environment(v_environment);
@@ -2322,6 +2395,7 @@ declare
   v_current public.timesheets%rowtype;
   v_environment text;
   v_route_family_key text;
+  v_weekly_source_guard jsonb;
   v_context jsonb;
   v_result jsonb;
   v_workflow_result jsonb:='{}'::jsonb;
@@ -2380,6 +2454,56 @@ begin
   if v_current.timesheet_id is distinct from p_expected_timesheet_id then
     raise exception 'TIMESHEET_MOVED' using errcode='40001',detail=jsonb_build_object(
       'current_timesheet_id',v_current.timesheet_id)::text;
+  end if;
+  -- Plan 6.2 G6-11 (proof/34 section 3).  The E1 dispatcher guard covers the
+  -- rotation itself, but this route supersedes candidate workflow rows through
+  -- private._timesheet_route_supersede_candidate_v1 before it reaches the
+  -- dispatcher, so the managed-root refusal is also taken here: after the
+  -- trimmed-key advisory lock and the family rows FOR UPDATE, and before this
+  -- owner's first write (HANDOVER 2 round 2 Q9; ROT-004, ROT-012).
+  v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(
+    v_current.timesheet_id
+  );
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+       and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode='55000',detail=jsonb_build_object(
+        'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+        'entry_point','E1a:public.timesheet_route_version_confirmed_v1',
+        'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+        'refusal_basis', case
+          -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+          -- canonical booking-reference collision and must be named as one.
+          -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+          -- release, so the order of this edit and WP-03's rename cannot open a gap in
+          -- which Office stops seeing the ruled name.
+          when v_weekly_source_guard->>'reason' in (
+                 'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+            then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            then 'WEEKLY_SOURCE_MANAGED_ROOT'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+            then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+          when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+            then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+          else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+        'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+        'timesheet_id',v_current.timesheet_id,
+        'reason',v_weekly_source_guard->>'reason'
+      )::text;
   end if;
   perform 1 from public.contract_weeks
   where timesheet_id=v_current.timesheet_id for update;
@@ -2645,7 +2769,75 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $function$
+declare
+  v_weekly_source_booking_id text;
+  v_weekly_source_guard jsonb;
 begin
+  -- Plan 6.2 G6-11 (proof/34 section 3).  Same managed-root refusal as the
+  -- rotate dispatcher, placed before the candidate_route_confirmation flag
+  -- branch so it covers the _legacy_v1 body as well.  Nothing has been written.
+  -- WP-09b review finding F1: the family keys of proof/34 section 5 are taken
+  -- first, in the trimmed-then-raw order, so the verdict is read under the same
+  -- locks that protect the restore itself; the legacy body re-takes the raw key
+  -- re-entrantly.  A null or blank booking identity is left to the guard.
+  -- Every column is table-qualified: this owner RETURNS TABLE, so its output
+  -- columns (timesheet_id among them) are plpgsql variables here.
+  select restore_target.booking_id into v_weekly_source_booking_id
+  from public.timesheets restore_target
+  where restore_target.timesheet_id=p_timesheet_id;
+  if v_weekly_source_booking_id is not null
+     and btrim(v_weekly_source_booking_id)<>'' then
+    perform pg_advisory_xact_lock(hashtext(btrim(v_weekly_source_booking_id)));
+    if v_weekly_source_booking_id<>btrim(v_weekly_source_booking_id) then
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_booking_id));
+    end if;
+    perform 1 from public.timesheets locked_member
+    where locked_member.booking_id=v_weekly_source_booking_id for update;
+  end if;
+  v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(
+    p_timesheet_id
+  );
+  -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+  -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+  -- protected family whose identity cannot be resolved, to a family carrying
+  -- protected pay evidence but no authorisation row
+  -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+  -- unauthorised-Timesheet contradiction, which must never be allowed to
+  -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+  -- family -- including a malformed one -- keeps exactly the behaviour it had
+  -- before this feature was installed.  Absent, null and non-boolean take the
+  -- unsafe value at every read (Part 1 addendum rule 4).
+  if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+       and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+     or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+     or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+    raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+      using errcode='55000',detail=jsonb_build_object(
+        'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+        'entry_point','E4:public.timesheet_qr_restore_version',
+        'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+        'refusal_basis', case
+          -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+          -- canonical booking-reference collision and must be named as one.
+          -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+          -- release, so the order of this edit and WP-03's rename cannot open a gap in
+          -- which Office stops seeing the ruled name.
+          when v_weekly_source_guard->>'reason' in (
+                 'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+            then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+            then 'WEEKLY_SOURCE_MANAGED_ROOT'
+          when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+            then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+          when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+            then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+          else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+        'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+        'timesheet_id',p_timesheet_id,
+        'reason',v_weekly_source_guard->>'reason'
+      )::text;
+  end if;
   if private._candidate_feature_enabled_current_v1('candidate_route_confirmation') then
     raise exception 'QR_RESTORE_RETIRED_USE_FRESH_GENERATION'
       using errcode='55000',detail=jsonb_build_object(
@@ -2686,13 +2878,13 @@ begin
 end;
 $migration$;
 revoke all on function public.timesheet_route_version_rotate(uuid,uuid,text,uuid,boolean)
-  from public,anon;
+  from public,anon,authenticated;
 grant execute on function public.timesheet_route_version_rotate(uuid,uuid,text,uuid,boolean)
-  to authenticated,service_role;
+  to service_role;
 revoke all on function public.timesheet_qr_restore_version(uuid,uuid,text,uuid)
-  from public,anon;
+  from public,anon,authenticated;
 grant execute on function public.timesheet_qr_restore_version(uuid,uuid,text,uuid)
-  to authenticated,service_role;
+  to service_role;
 revoke all on function public.timesheet_route_version_preview_v1(uuid,text)
   from public,anon,authenticated;
 revoke all on function public.timesheet_route_version_confirmed_v1(uuid,uuid,text,text,text,uuid,text,text,text,boolean,timestamptz)

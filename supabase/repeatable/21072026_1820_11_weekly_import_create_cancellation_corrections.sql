@@ -90,6 +90,10 @@ declare
   v_review_status text;
   v_review_operation_id uuid;
 
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E20).
+  v_weekly_source_guard jsonb;
+  v_weekly_source_root uuid;
+
   v_sqlstate text;
   v_err text;
 begin
@@ -205,6 +209,63 @@ begin
     nullif(v_chain_scope->>'latest_positive_timesheet_id','')::uuid,
     v_shift_timesheet_id
   );
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E20): this owner re-points
+  -- an existing correction member into another booking family and promotes it,
+  -- and parents new members on the resolved chain root.  Both the chain root
+  -- and the latest positive Timesheet are checked here, before this owner's
+  -- first write to any Timesheet family and while it holds the shift row lock
+  -- taken above.  An unmanaged family is unaffected.
+  for v_weekly_source_root in
+    select distinct candidate_root.root_id
+    from (values (v_root_timesheet_id),(v_latest_positive_timesheet_id)) candidate_root(root_id)
+    where candidate_root.root_id is not null
+    order by 1
+  loop
+    v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+    -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+    -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+    -- protected family whose identity cannot be resolved, to a family carrying
+    -- protected pay evidence but no authorisation row
+    -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+    -- unauthorised-Timesheet contradiction, which must never be allowed to
+    -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+    -- family -- including a malformed one -- keeps exactly the behaviour it had
+    -- before this feature was installed.  Absent, null and non-boolean take the
+    -- unsafe value at every read (Part 1 addendum rule 4).
+    if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+         and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+       or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+       or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+      raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+        using errcode='55000',detail=jsonb_build_object(
+          'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+          'entry_point','E20:public.weekly_import_create_cancellation_corrections',
+          'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+          'refusal_basis', case
+            -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+            -- canonical booking-reference collision and must be named as one.
+            -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+            -- release, so the order of this edit and WP-03's rename cannot open a gap in
+            -- which Office stops seeing the ruled name.
+            when v_weekly_source_guard->>'reason' in (
+                   'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+              then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              then 'WEEKLY_SOURCE_MANAGED_ROOT'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+              then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+            when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+              then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+            else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+          'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+          'timesheet_id',v_weekly_source_root,
+          'shift_id',p_shift_id,
+          'reason',v_weekly_source_guard->>'reason'
+        )::text;
+    end if;
+  end loop;
+
   v_correction_operation_id := public._ctms_import_correction_operation_find_v1(
     p_import_id,
     v_root_timesheet_id,

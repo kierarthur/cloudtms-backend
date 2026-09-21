@@ -1,3 +1,9 @@
+// WP-32 / WP-23 handoff N3, HANDOVER 2 round-5 ruling A2 and contract decision D13.
+import {
+  isManagedRootGuardRefusal,
+  recordGuardRefusalAfterRollback
+} from './weekly-source/guard-refusal-record.mjs';
+
 const IMPORT_REVIEW_DB_CONTRACT = 'IMPORT_REVIEW_DB_V1';
 const IMPORT_REVIEW_APPLY_CONTRACT = 'IMPORT_REVIEW_APPLY_V1';
 const IMPORT_REVIEW_OPERATION_CONTRACT = 'IMPORT_APPLY_OPERATION_V2';
@@ -257,10 +263,71 @@ function mapRpcError(error) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// WP-32 — the durable caller's record of a managed-root guard refusal.
+//
+// HANDOVER 2 round-5 ruling A2 / contract decision D13.  The owner is WP-14c's
+// `public.weekly_source_guard_refusal_record_after_rollback_v1`; the module is
+// WP-23's `weekly-source/guard-refusal-record.mjs`; WP-23 handoff N3 hands the
+// remaining call sites here with a three-line recipe, which is what follows.
+//
+// WP-14c's four caller rules: a NEW transaction that has not written (the record
+// is its own PostgREST request); only after the rollback (only ever from a
+// `catch`); the SAME correlation identity the attempt carried (generated before
+// the attempt, below); and a failure of the record must never change the outcome
+// of the refusal — `recordGuardRefusalAfterRollback` is total, and the extra
+// `try`/`catch` here covers the predicate and the log as well, so nothing on
+// this path can raise.
+// ---------------------------------------------------------------------------
+
+function importReviewGuardRefusalCorrelationId() {
+  try {
+    const unique = globalThis.crypto?.randomUUID?.();
+    const fallback = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `ws62-broker:import-review:${unique || fallback}`;
+  } catch {
+    return `ws62-broker:import-review:${Date.now().toString(36)}`;
+  }
+}
+
+// Only the one unambiguous Office actor key is read.  A Candidate session id or a
+// workflow id is NOT an actor, so anything else is reported absent rather than
+// guessed; WP-14c's owner accepts a null actor.
+function importReviewGuardRefusalActor(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const value = args.p_actor_user_id;
+  return (typeof value === 'string' && value.trim()) ? value.trim() : null;
+}
+
+async function recordImportReviewGuardRefusal(rpc, error, correlationId, name, args) {
+  try {
+    if (!isManagedRootGuardRefusal(error)) return;
+    try {
+      console.warn('[WEEKLY_SOURCE_GUARD_REFUSAL] ' + JSON.stringify({
+        caller: `broker:import-review:${name}`,
+        correlation_id: correlationId
+      }));
+    } catch {}
+    await recordGuardRefusalAfterRollback({
+      rpc: (functionName, functionArgs, functionOptions) =>
+        rpc(functionName, functionArgs, functionOptions),
+      error,
+      correlationId,
+      caller: `broker:import-review:${name}`,
+      actorUserId: importReviewGuardRefusalActor(args)
+    });
+  } catch {
+    // WP-14c rule 4: a failure of the record must never change the refusal.
+  }
+}
+
 async function runAllowedRpc(sbRpc, env, name, args, options = {}) {
   if (!ROUTE_RPCS.has(name)) throw new Error(`Import-review RPC is not allowlisted: ${name}`);
   const canRetryRead = READ_ONLY_ROUTE_RPCS.has(name) && options.retryRead !== false;
   const maxAttempts = canRetryRead ? 2 : 1;
+  // WP-32: generated BEFORE the attempt so the record carries the identity the
+  // attempt carried (WP-14c rule 3).
+  const guardRefusalCorrelationId = importReviewGuardRefusalCorrelationId();
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -273,7 +340,19 @@ async function runAllowedRpc(sbRpc, env, name, args, options = {}) {
       const message = String(error?.message || '').toUpperCase();
       const transient = status === 408 || status === 500 || status === 502 || status === 503 || status === 504
         || /TIMEOUT|TIMED OUT|ECONNRESET|UPSTREAM/.test(`${code} ${message}`);
-      if (attempt >= maxAttempts || !transient) throw error;
+      if (attempt >= maxAttempts || !transient) {
+        // WP-32: this is the single RPC funnel for every import-review route, so
+        // the recipe applied once here covers E8, E9, E14, E16, E17 and E19.  The
+        // refusal is rethrown unchanged whether or not the record succeeds.
+        await recordImportReviewGuardRefusal(
+          (functionName, functionArgs, functionOptions) => sbRpc(env, functionName, functionArgs, functionOptions),
+          error,
+          guardRefusalCorrelationId,
+          name,
+          args
+        );
+        throw error;
+      }
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
@@ -1051,4 +1130,14 @@ export const importReviewContract = Object.freeze({
     IMPORT_REVIEW_CANONICAL_CORRECTION_CARRIER_CONTRACT,
   targetedFamilyMaterialisation:
     IMPORT_REVIEW_TARGETED_FAMILY_MATERIALISATION_CONTRACT
+});
+
+// WP-32.  Exposed so the wired recorder can be DRIVEN against a real refusal
+// raised by the real installed guard, rather than asserted from the source text.
+// Nothing in the shipped route path reads this object.
+export const importReviewGuardRefusalInternals = Object.freeze({
+  importReviewGuardRefusalCorrelationId,
+  importReviewGuardRefusalActor,
+  recordImportReviewGuardRefusal,
+  runAllowedRpc
 });

@@ -13,8 +13,11 @@ DECLARE
   v_current_ts public.timesheets%ROWTYPE;
   v_current_tsfin public.timesheets_financials%ROWTYPE;
   v_contract_week public.contract_weeks%ROWTYPE;
+  v_requested_booking_id text := NULL;
+  v_family_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_prev_status public.ts_fin_processing_status_enum := NULL;
   v_new_status public.ts_fin_processing_status_enum := 'PENDING_AUTH'::public.ts_fin_processing_status_enum;
+  v_has_family_tsfin_invoice_lock boolean := false;
   v_has_segment_invoice_lock boolean := false;
   v_has_invoice_membership boolean := false;
   v_before_signature_json jsonb := '{}'::jsonb;
@@ -76,6 +79,51 @@ BEGIN
     RAISE EXCEPTION USING MESSAGE = 'INVALID_PAYLOAD', DETAIL = jsonb_build_object('field', 'p_expected_timesheet_id')::text;
   END IF;
 
+  -- PHD-022. Resolve the booking without a row lock, then take the same
+  -- canonical family lock order used by Timesheet rotation before locking any
+  -- Timesheet row: trimmed booking key, raw key when different, family rows,
+  -- then family financial rows. This prevents a rotation from moving invoice
+  -- evidence to a historical sibling between the census and the mutation.
+  SELECT ts.booking_id
+    INTO v_requested_booking_id
+  FROM public.timesheets AS ts
+  WHERE ts.timesheet_id = p_timesheet_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(v_requested_booking_id, '')), '') IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(hashtext(BTRIM(v_requested_booking_id)));
+    IF v_requested_booking_id IS DISTINCT FROM BTRIM(v_requested_booking_id) THEN
+      PERFORM pg_advisory_xact_lock(hashtext(v_requested_booking_id));
+    END IF;
+
+    PERFORM 1
+    FROM public.timesheets AS family_ts
+    WHERE family_ts.booking_id = v_requested_booking_id
+    ORDER BY family_ts.timesheet_id
+    FOR UPDATE;
+
+    SELECT COALESCE(array_agg(family_ts.timesheet_id ORDER BY family_ts.timesheet_id), ARRAY[]::uuid[])
+      INTO v_family_timesheet_ids
+    FROM public.timesheets AS family_ts
+    WHERE family_ts.booking_id = v_requested_booking_id;
+  ELSE
+    PERFORM 1
+    FROM public.timesheets AS family_ts
+    WHERE family_ts.timesheet_id = p_timesheet_id
+    FOR UPDATE;
+    v_family_timesheet_ids := ARRAY[p_timesheet_id]::uuid[];
+  END IF;
+
+  PERFORM 1
+  FROM public.timesheets_financials AS family_tf
+  WHERE family_tf.timesheet_id = ANY(v_family_timesheet_ids)
+  ORDER BY family_tf.id
+  FOR UPDATE;
+
   SELECT ts.*
     INTO v_requested_ts
   FROM public.timesheets AS ts
@@ -85,6 +133,14 @@ BEGIN
 
   IF v_requested_ts.timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TARGET_NOT_FOUND', DETAIL = jsonb_build_object('timesheet_id', p_timesheet_id)::text;
+  END IF;
+
+  IF v_requested_ts.booking_id IS DISTINCT FROM v_requested_booking_id THEN
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_MOVED', DETAIL = jsonb_build_object(
+      'timesheet_id', p_timesheet_id,
+      'expected_booking_id', v_requested_booking_id,
+      'current_booking_id', v_requested_ts.booking_id
+    )::text;
   END IF;
 
   PERFORM public._temp_diag_log(
@@ -194,32 +250,47 @@ BEGIN
 
   SELECT EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(
+    FROM public.timesheets_financials AS family_tf
+    WHERE family_tf.timesheet_id = ANY(v_family_timesheet_ids)
+      AND family_tf.locked_by_invoice_id IS NOT NULL
+  ) INTO v_has_family_tsfin_invoice_lock;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.timesheets_financials AS family_tf
+    CROSS JOIN LATERAL jsonb_array_elements(
       CASE
-        WHEN v_current_tsfin.invoice_breakdown_json IS NULL THEN '[]'::jsonb
-        WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'array' THEN v_current_tsfin.invoice_breakdown_json
-        WHEN jsonb_typeof(v_current_tsfin.invoice_breakdown_json) = 'object'
-         AND jsonb_typeof(v_current_tsfin.invoice_breakdown_json -> 'segments') = 'array' THEN v_current_tsfin.invoice_breakdown_json -> 'segments'
+        WHEN family_tf.invoice_breakdown_json IS NULL THEN '[]'::jsonb
+        WHEN jsonb_typeof(family_tf.invoice_breakdown_json) = 'array' THEN family_tf.invoice_breakdown_json
+        WHEN jsonb_typeof(family_tf.invoice_breakdown_json) = 'object'
+         AND jsonb_typeof(family_tf.invoice_breakdown_json -> 'segments') = 'array' THEN family_tf.invoice_breakdown_json -> 'segments'
         ELSE '[]'::jsonb
       END
     ) AS invoice_segment(segment_json)
-    WHERE NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
+    WHERE family_tf.timesheet_id = ANY(v_family_timesheet_ids)
+      AND NULLIF(BTRIM(COALESCE(invoice_segment.segment_json ->> 'invoice_locked_invoice_id', '')), '') IS NOT NULL
   ) INTO v_has_segment_invoice_lock;
 
   SELECT EXISTS (
     SELECT 1
     FROM public.invoice_lines AS invoice_line
-    WHERE invoice_line.timesheet_id = v_current_ts.timesheet_id
+    WHERE invoice_line.timesheet_id = ANY(v_family_timesheet_ids)
   ) INTO v_has_invoice_membership;
 
   IF v_current_ts.archived_at_utc IS NOT NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ARCHIVED', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
   END IF;
 
-  IF v_current_tsfin.locked_by_invoice_id IS NOT NULL
+  IF COALESCE(v_has_family_tsfin_invoice_lock, false)
      OR COALESCE(v_has_segment_invoice_lock, false)
      OR COALESCE(v_has_invoice_membership, false) THEN
-    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object('timesheet_id', v_current_ts.timesheet_id)::text;
+    RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_LOCKED_BY_INVOICE', DETAIL = jsonb_build_object(
+      'timesheet_id', v_current_ts.timesheet_id,
+      'family_timesheet_ids', to_jsonb(v_family_timesheet_ids),
+      'family_tsfin_lock', COALESCE(v_has_family_tsfin_invoice_lock, false),
+      'family_segment_lock', COALESCE(v_has_segment_invoice_lock, false),
+      'family_invoice_line', COALESCE(v_has_invoice_membership, false)
+    )::text;
   END IF;
 
   IF v_current_ts.authorised_at_server IS NULL AND v_current_tsfin.authorised_at_utc IS NULL AND COALESCE(v_contract_week.status = 'AUTHORISED'::public.contract_week_status_enum, false) = false THEN
@@ -492,4 +563,4 @@ $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_unauthorise_atomic(uuid, uuid, uuid, timestamp with time zone, text) TO service_role;

@@ -20,6 +20,7 @@ import {
   controlPlaneRpc,
   globalAuthCutoverEnabled
 } from './control-plane-client.js';
+import { syncWeeklyPushPreferences } from './weekly-source-push-authority.js';
 import {
   CANDIDATE_DAILY_BOOTSTRAP_ROUTE,
   boundedBodyLength,
@@ -343,6 +344,20 @@ async function managerEmailCredentialHmac(env, credential) {
   return bytesToHex(await crypto.subtle.sign(
     'HMAC', key,
     encoder.encode(`manager-email-credential-v1\u001f${canonicalJson(credential)}`)
+  ));
+}
+
+async function weeklyQueryManagerCredentialHmac(env, credential) {
+  const secret = text(env.MYTMS_MANAGER_ROUTE_HMAC_SECRET);
+  if (secret.length < 32) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+  }
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  return bytesToHex(await crypto.subtle.sign(
+    'HMAC', key,
+    encoder.encode(`weekly-query-manager-credential-v1\u001f${canonicalJson(credential)}`)
   ));
 }
 
@@ -927,6 +942,12 @@ function privatePath(publicPath) {
 }
 
 function enforceManagerMethod(path, method) {
+  const weeklyQueryMatch = /^\/candidate-manager\/v1\/weekly-query-batches\/[0-9a-f-]+(?:\/(responses))?$/i.exec(path);
+  if (weeklyQueryMatch) {
+    const expected = weeklyQueryMatch[1] ? 'POST' : 'GET';
+    if (method !== expected) throw new CandidateBrokerError(405, 'METHOD_NOT_ALLOWED');
+    return;
+  }
   const actionMatch = /^\/candidate-manager\/v1\/workflows\/[0-9a-f-]+\/(start|progress|approve|refuse)$/i.exec(path);
   if (actionMatch) {
     const expected = MANAGER_ACTION_METHODS[actionMatch[1].toLowerCase()];
@@ -1516,6 +1537,54 @@ async function resolveManagerEmailRoute(credential, operationId, env) {
   return { ...result, registryEntry: entry };
 }
 
+async function resolveWeeklyQueryManagerRoute(credential, operationId, env) {
+  if (!controlPlaneEnabled(env)) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+  }
+  let result;
+  try {
+    result = await candidateControlPlaneRpc(
+      env, 'control', 'weekly_query_manager_route_resolve_v1', {
+        p_resolution: {
+          environment_label: environmentName(env),
+          credential_hmac_hex: await weeklyQueryManagerCredentialHmac(env, credential),
+          credential_key_version: 1,
+          operation_id: operationId
+        }
+      }
+    );
+  } catch (error) {
+    if (['DEPENDENCY_UNAVAILABLE', 'CONTROL_PLANE_DISABLED',
+      'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE', 'WEEKLY_QUERY_MANAGER_ROUTE_NOT_CALLABLE'
+    ].includes(error?.code)) {
+      throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+    }
+    throw new CandidateBrokerError(401, 'MANAGER_SECURE_LINK_INVALID');
+  }
+  const resultError = controlPlaneResultError(result, 'MANAGER_SECURE_LINK_INVALID');
+  if (resultError) throw resultError;
+  const entry = candidateDataPlaneRegistryEntry(result.registry_binding_key, env);
+  if (result.authority_kind !== 'WEEKLY_QUERY_MANAGER_EMAIL'
+      || upper(result.environment_label) !== environmentName(env)
+      || !UUID_RE.test(text(result.agency_id))
+      || !UUID_RE.test(text(result.data_plane_id))
+      || !UUID_RE.test(text(result.route_version_id))
+      || !UUID_RE.test(text(result.manager_route_ticket_id))
+      || !SHA256_RE.test(text(result.review_batch_route_hmac_hex))
+      || !SHA256_RE.test(text(result.recipient_generation_route_hmac_hex))
+      || !SHA256_RE.test(text(result.original_membership_hash_hex))
+      || !Number.isSafeInteger(Number(result.route_version)) || Number(result.route_version) < 1
+      || !Number.isSafeInteger(Number(result.binding_manifest_generation))
+      || Number(result.binding_manifest_generation) < 1
+      || !Number.isSafeInteger(Number(result.route_revision)) || Number(result.route_revision) < 1
+      || !Number.isSafeInteger(Number(result.credential_generation))
+      || Number(result.credential_generation) < 1
+      || !entry || entry.environment !== environmentName(env)) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+  }
+  return { ...result, registryEntry: entry };
+}
+
 async function routeContextForPrivate(
   access, route, operationId, env, now = new Date(), authorityKind = 'CANDIDATE_SESSION'
 ) {
@@ -1545,6 +1614,43 @@ async function routeContextForPrivate(
       workflow_route_hmac: text(route.workflow_route_hmac_hex).toLowerCase(),
       approval_request_route_hmac: text(route.approval_request_route_hmac_hex).toLowerCase(),
       request_generation: Number(route.request_generation),
+      credential_generation: Number(route.credential_generation),
+      issued_at_utc: now.toISOString(),
+      expires_at_utc: expiresAt.toISOString(),
+      nonce: crypto.randomUUID(),
+      key_version: route.registryEntry.keyVersion
+    }, {
+      secret: route.registryEntry.routeContextSecret,
+      keyVersion: route.registryEntry.keyVersion,
+      nowMilliseconds: now.getTime()
+    });
+  }
+  if (authorityKind === 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    const routeExpiresAt = Date.parse(text(route.expires_at_utc));
+    const expiresAt = new Date(Math.min(
+      routeExpiresAt,
+      now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
+    ));
+    if (!Number.isFinite(routeExpiresAt) || expiresAt <= now) {
+      throw new CandidateBrokerError(401, 'MANAGER_SECURE_LINK_INVALID');
+    }
+    return signCandidateRouteContext({
+      v: 2,
+      typ: 'cloudtms-route-context-v2',
+      aud: 'candidate-private-api',
+      authority_kind: 'WEEKLY_QUERY_MANAGER_EMAIL',
+      operation_id: operationId,
+      environment: environmentName(env),
+      agency_id: route.agency_id,
+      data_plane_id: route.data_plane_id,
+      route_version_id: route.route_version_id,
+      route_version: Number(route.route_version),
+      binding_manifest_generation: Number(route.binding_manifest_generation),
+      manager_route_ticket_id: route.manager_route_ticket_id,
+      route_revision: Number(route.route_revision),
+      review_batch_route_hmac: text(route.review_batch_route_hmac_hex).toLowerCase(),
+      recipient_generation_route_hmac: text(route.recipient_generation_route_hmac_hex).toLowerCase(),
+      original_membership_hash: text(route.original_membership_hash_hex).toLowerCase(),
       credential_generation: Number(route.credential_generation),
       issued_at_utc: now.toISOString(),
       expires_at_utc: expiresAt.toISOString(),
@@ -1742,10 +1848,18 @@ async function managerForwardContext(request, env, correlationId) {
   );
   const handoffRoute = opened?.payload?.federated_route;
   if (!opened?.payload) {
-    const route = await resolveManagerEmailRoute(supplied, operation.operation_id, env);
+    const weeklyQuery = new Set([
+      'getManagerWeeklyQueryBatch', 'submitManagerWeeklyQueryResponses'
+    ]).has(operation.operation_id);
+    const route = weeklyQuery
+      ? await resolveWeeklyQueryManagerRoute(supplied, operation.operation_id, env)
+      : await resolveManagerEmailRoute(supplied, operation.operation_id, env);
     return {
       authorization,
-      federated: { access: null, route, projectSession: false, authorityKind: 'MANAGER_EMAIL' }
+      federated: {
+        access: null, route, projectSession: false,
+        authorityKind: weeklyQuery ? 'WEEKLY_QUERY_MANAGER_EMAIL' : 'MANAGER_EMAIL'
+      }
     };
   }
   if (!handoffRoute) {
@@ -3272,6 +3386,11 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       return withCors(await publicSafePrivateResponse(response), origin);
     }
 
+    const preferenceSyncBody = federated
+      && request.method === 'PATCH'
+      && path === `${PUBLIC_CANDIDATE_PREFIX}/account/preferences`
+      ? await boundedJson(request.clone())
+      : null;
     const finalisationBody = await candidateFinalisationTransportBody(request, path);
     const phoneAction = /\/workflows\/[0-9a-f-]+\/actions\/select-phone-approval$/i.test(path);
     let phoneBinding = null;
@@ -3307,6 +3426,30 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       return withCors(await wrapPhoneHandoff(
         response, env, access, request, phoneBinding, federated?.route || null
       ), origin);
+    }
+    if (preferenceSyncBody && response.ok) {
+      const privateResult = await response.clone().json();
+      const preferences = privateResult?.notification_preferences;
+      if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
+          || typeof preferences.push !== 'boolean'
+          || typeof preferences.timesheet_expense_attention !== 'boolean') {
+        throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_RESPONSE_INVALID');
+      }
+      const syncResult = await syncWeeklyPushPreferences(env, {
+        agency_id: federated.route.agency_id,
+        membership_id: federated.route.membership_id,
+        account_id: access.global_account_id,
+        local_candidate_id: federated.route.local_candidate_id,
+        membership_generation: Number(federated.route.membership_generation),
+        preferences: {
+          push: preferences.push,
+          timesheet_expense_attention: preferences.timesheet_expense_attention
+        },
+        idempotency_key: text(preferenceSyncBody.idempotency_key)
+      });
+      if (syncResult?.ok !== true) {
+        throw new CandidateBrokerError(503, 'CANDIDATE_PREFERENCE_SYNC_UNAVAILABLE');
+      }
     }
     if (dailyBootstrap && !response.ok) {
       let bootstrapErrorCode = 'CANDIDATE_BOOTSTRAP_DEPENDENCY_FAILED';

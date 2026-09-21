@@ -33,6 +33,8 @@ declare
   v_existing public.hr_imports%rowtype; v_state public.import_review_states%rowtype;
   v_supersede_import public.hr_imports%rowtype; v_supersede_state public.import_review_states%rowtype;
   v_refresh jsonb; v_overlap jsonb;
+  v_weekly_source_guard jsonb; v_weekly_source_root uuid;
+  v_weekly_source_family record;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or v_mode not in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES','PARTIAL')
@@ -158,6 +160,89 @@ begin
     if v_supersede_state.status not in ('STAGED','IN_REVIEW','BLOCKED','READY') then
       raise exception 'IMPORT_REVIEW_REPLACE_NOT_ALLOWED' using errcode='55000';
     end if;
+    -- Plan 6.2 G6-11 (proof/34 section 3, entry point E9 reached through
+    -- public.import_review_replace_v1).  Superseding the prior review retires
+    -- the decisions that drive a later Timesheet version, so a decision bound
+    -- to an authorised Weekly-Source-managed root refuses here: before this
+    -- owner's first write and while it holds the superseded hr_imports and
+    -- import_review_states rows FOR UPDATE.  Ordinary replaces are unaffected.
+    -- WP-09b review finding F1: the verdict is read under the compatible locks
+    -- of proof/34 section 5, taken here for every bound family in the
+    -- deadlock-free trimmed-then-raw order, so a first authorisation holding the
+    -- family cannot commit between the read and the supersede.  Still before any
+    -- write.
+    for v_weekly_source_family in
+      select distinct btrim(family_timesheet.booking_id) as trimmed_booking_id,
+        family_timesheet.booking_id as booking_id
+      from public.import_review_decisions decision
+      join public.timesheets family_timesheet
+        on family_timesheet.timesheet_id=decision.timesheet_id
+      where decision.import_id=p_supersede_import_id
+        and decision.is_current
+        and decision.timesheet_id is not null
+        and family_timesheet.booking_id is not null
+        and btrim(family_timesheet.booking_id)<>''
+      order by 1,2
+    loop
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.trimmed_booking_id));
+      if v_weekly_source_family.booking_id<>v_weekly_source_family.trimmed_booking_id then
+        perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.booking_id));
+      end if;
+      perform 1 from public.timesheets locked_member
+      where locked_member.booking_id=v_weekly_source_family.booking_id for update;
+    end loop;
+    for v_weekly_source_root in
+      select distinct decision.timesheet_id
+      from public.import_review_decisions decision
+      where decision.import_id=p_supersede_import_id
+        and decision.is_current
+        and decision.timesheet_id is not null
+      order by 1
+    loop
+      v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+      -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+      -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+      -- protected family whose identity cannot be resolved, to a family carrying
+      -- protected pay evidence but no authorisation row
+      -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+      -- unauthorised-Timesheet contradiction, which must never be allowed to
+      -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+      -- family -- including a malformed one -- keeps exactly the behaviour it had
+      -- before this feature was installed.  Absent, null and non-boolean take the
+      -- unsafe value at every read (Part 1 addendum rule 4).
+      if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+           and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+         or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+         or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+        raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+          using errcode='55000',detail=jsonb_build_object(
+            'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+            'entry_point','E9:public.import_review_replace_v1',
+            'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+            'refusal_basis', case
+              -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+              -- canonical booking-reference collision and must be named as one.
+              -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+              -- release, so the order of this edit and WP-03's rename cannot open a gap in
+              -- which Office stops seeing the ruled name.
+              when v_weekly_source_guard->>'reason' in (
+                     'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+              when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                then 'WEEKLY_SOURCE_MANAGED_ROOT'
+              when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+              when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+              else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+            'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+            'import_id',p_supersede_import_id,
+            'timesheet_id',v_weekly_source_root,
+            'reason',v_weekly_source_guard->>'reason'
+          )::text;
+      end if;
+    end loop;
   end if;
 
   v_revision_group:=case when p_supersede_import_id is not null

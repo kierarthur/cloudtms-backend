@@ -15,6 +15,17 @@ import {
   parseInvoiceAsyncAccessMode,
   parseInvoiceAsyncAllowedUserIds
 } from './invoice-queue-security.js';
+import {
+  WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_CONTRACT,
+  admitWeeklySourceInvoiceBatch,
+  isWeeklySourceSelectionKey,
+  loadWeeklySourceInvoiceBatchCandidates,
+  mergeWeeklySourceCandidateEnvelope,
+  normaliseWeeklySourceInvoiceBatchSelectionContract,
+  preflightWeeklySourceInvoiceBatch,
+  splitWeeklySourceCandidateRequest,
+  weeklySourceAdmissionInvoiceId
+} from './weekly-source/invoice-batch-integration.mjs';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -1386,11 +1397,12 @@ async function startCommands(env, req, ctx, user, commands, deps, lanes = ['ALL'
   else if (!active.length && rejected.length && !blocked.length && !conflicted.length && !reusedReady.length) status = 400;
   else if (!active.length && (blocked.length || conflicted.length) && !reusedReady.length) status = 409;
   else if ((active.length || reusedReady.length) && (blocked.length || conflicted.length || rejected.length || additionalRejectedCount)) status = 207;
+  if (options.independentSuccess === true && status >= 400) status = 207;
 
   const operationIds = [...new Set(operations.map(row => row?.operation_id).filter(Boolean))];
   const selectionExpansionPending = operations.some(row => row?.selection_expansion_pending === true);
   const basePayload = {
-    ok: active.length > 0 || reusedReady.length > 0,
+    ok: active.length > 0 || reusedReady.length > 0 || options.independentSuccess === true,
     accepted: active.length > 0,
     accepted_count: active.length,
     created_count: created.length,
@@ -1502,7 +1514,12 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
   const body = await readInvoiceBatchJsonBody(req, {
     maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
   });
-  const query = normaliseInvoiceBatchQueryBody(body, action, options);
+  const {
+    ordinaryBody,
+    weeklySourceRequested,
+    weeklySourceSnapshotHash
+  } = splitWeeklySourceCandidateRequest(body, action);
+  const query = normaliseInvoiceBatchQueryBody(ordinaryBody, action, options);
   const expectedFilterHash = await hashInvoiceBatchFilter(action, query.filters, query.sort);
   let expectedQueryHash = query.snapshot
     ? await hashInvoiceBatchQuery(action, query.filters, query.sort, query.snapshot)
@@ -1668,7 +1685,7 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
     ...browserNormalisedFilter
   } = query.filters;
 
-  return jsonResponse({
+  let responseEnvelope = {
     ok: true,
     contract_version: INVOICE_BATCH_CANDIDATE_CONTRACT,
     action,
@@ -1689,7 +1706,16 @@ async function handleCandidates(env, req, deps, rpcName, options = {}) {
       mode: 'IMPLICIT_ALL',
       default_selected: true
     }
-  });
+  };
+  if (action === 'GENERATE' && weeklySourceRequested && query.mode !== 'EXPLICIT_KEYS') {
+    const weeklySource = await loadWeeklySourceInvoiceBatchCandidates(
+      deps,
+      query,
+      weeklySourceSnapshotHash
+    );
+    responseEnvelope = mergeWeeklySourceCandidateEnvelope(responseEnvelope, weeklySource);
+  }
+  return jsonResponse(responseEnvelope);
 }
 
 async function handleNhspCandidates(env, req, deps) {
@@ -1723,7 +1749,7 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     maximumBytes: Number(env?.INVOICE_BATCH_REQUEST_MAX_BYTES) || INVOICE_BATCH_REQUEST_MAX_BYTES
   });
   if (Object.keys(body).some(key => ![
-    'selection_contract', 'command_token'
+    'selection_contract', 'weekly_source_selection_contract', 'command_token'
   ].includes(key))) {
     throw invoiceBatchContractError('BATCH_QUERY_UNKNOWN_FIELD');
   }
@@ -1733,9 +1759,53 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
   });
   const selectionRoot = normaliseInvoiceBatchSelectionRoot(body.selection_contract, 'GENERATE');
   if (!selectionRoot.query.snapshot) throw invoiceBatchContractError('BATCH_SNAPSHOT_REQUIRED');
+  const weeklySourceContract = body.weekly_source_selection_contract == null
+    ? null
+    : normaliseWeeklySourceInvoiceBatchSelectionContract(
+      body.weekly_source_selection_contract
+    );
   if (selectionRoot.query.mode === 'EXPLICIT_KEYS') {
     if (selectionRoot.query.selection_keys.length !== 1) {
       throw invoiceBatchContractError('BATCH_EXPLICIT_KEYS_INVALID');
+    }
+    const explicitSelectionKey = selectionRoot.query.selection_keys[0];
+    if (isWeeklySourceSelectionKey(explicitSelectionKey)) {
+      if (!weeklySourceContract) {
+        throw invoiceBatchContractError('WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_REQUIRED');
+      }
+      const preflight = await preflightWeeklySourceInvoiceBatch(
+        deps,
+        selectionRoot.query,
+        weeklySourceContract,
+        {
+          selectionKeys: selectionRoot.query.selection_keys,
+          expectedSourceRevisions: selectionRoot.query.expected_source_revisions
+        }
+      );
+      if (preflight.selected_manifest_refs.length !== 1) {
+        throw invoiceBatchContractError('BATCH_SOURCE_CHANGED');
+      }
+      const admission = await admitWeeklySourceInvoiceBatch(
+        deps,
+        user.id,
+        token,
+        preflight
+      );
+      const invoiceId = weeklySourceAdmissionInvoiceId(admission);
+      if (!invoiceId) throw invoiceBatchContractError('WEEKLY_SOURCE_INVOICE_BATCH_ADMISSION_CONTRACT_INVALID');
+      return jsonResponse({
+        ok: true,
+        accepted: false,
+        mode: 'GENERATE_AND_VIEW',
+        contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+        weekly_source_contract_version: WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_CONTRACT,
+        weekly_source_admission: admission,
+        weekly_source_per_row_results: admission.per_manifest_results,
+        invoice_id: invoiceId,
+        root_operation_id: null,
+        operation_ids: [],
+        per_command_results: []
+      }, 200);
     }
     const parsed = candidateGroupsFromRpc(await deps.rpc('invoice_batch_generate_candidates', {
       p_query: selectionRoot.query
@@ -1806,13 +1876,84 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
     sort: selectionRoot.query.sort,
     selection: selectionRoot.selection
   };
-  return startCommands(env, req, ctx, user, [{
+  if (!weeklySourceContract) {
+    return startCommands(env, req, ctx, user, [{
+      command_type: 'GENERATE_SELECTED',
+      selection_contract: selectionRoot,
+      command_token: token
+    }], deps, ['DATABASE'], {
+      selectionRoot: true,
+      priorityClass: 'INTERACTIVE',
+      extendResult: (summary, operationRows) => {
+        const root = operationRows[0] || {};
+        return {
+          contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+          progress_contract_version: INVOICE_BATCH_PROGRESS_CONTRACT,
+          root_operation_id: root.operation_id || summary.root_operation_id || null,
+          status: root.status || null,
+          phase: root.phase || null,
+          change_seq: root.change_seq ?? null,
+          selection_expansion_pending: root.selection_expansion_pending === true,
+          estimated_filtered_total: root.estimated_filtered_total ?? null,
+          estimated_selected_total: root.estimated_selected_total ?? null
+        };
+      }
+    });
+  }
+
+  const ordinaryPreflightQuery = {
+    ...selectionRoot.query,
+    mode: 'SUMMARY',
+    group_selectors: []
+  };
+  const ordinaryPreflight = candidateGroupsFromRpc(
+    await deps.rpc('invoice_batch_generate_candidates', {
+      p_query: ordinaryPreflightQuery
+    })
+  );
+  if (ordinaryPreflight.action !== 'GENERATE'
+      || ordinaryPreflight.mode !== 'SUMMARY'
+      || ordinaryPreflight.selection_summary?.exact !== true) {
+    throw invoiceBatchContractError('INVOICE_BATCH_CANDIDATE_CONTRACT_MISMATCH');
+  }
+  const ordinarySelected = Math.max(0, Number(
+    ordinaryPreflight.selection_summary.selected_total || 0
+  ));
+  const sourcePreflight = await preflightWeeklySourceInvoiceBatch(
+    deps,
+    selectionRoot.query,
+    weeklySourceContract
+  );
+  const sourceSelected = sourcePreflight.selected_manifest_refs.length;
+  const sourceAdmission = sourceSelected
+    ? await admitWeeklySourceInvoiceBatch(deps, user.id, token, sourcePreflight)
+    : null;
+
+  if (ordinarySelected === 0) {
+    return jsonResponse({
+      ok: sourceSelected > 0,
+      accepted: false,
+      contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+      weekly_source_contract_version: WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_CONTRACT,
+      weekly_source_admission: sourceAdmission,
+      weekly_source_per_row_results: sourceAdmission?.per_manifest_results || [],
+      ordinary_selected_total: 0,
+      weekly_source_selected_total: sourceSelected,
+      root_operation_id: null,
+      operation_ids: [],
+      per_command_results: []
+    }, sourceSelected > 0 ? 200 : 400);
+  }
+
+  try {
+    return await startCommands(env, req, ctx, user, [{
     command_type: 'GENERATE_SELECTED',
     selection_contract: selectionRoot,
     command_token: token
   }], deps, ['DATABASE'], {
     selectionRoot: true,
     priorityClass: 'INTERACTIVE',
+    independentSuccess: sourceSelected > 0,
     extendResult: (summary, operationRows) => {
       const root = operationRows[0] || {};
       return {
@@ -1824,10 +1965,32 @@ async function handleBatchGenerateConfirm(env, req, ctx, user, deps) {
         change_seq: root.change_seq ?? null,
         selection_expansion_pending: root.selection_expansion_pending === true,
         estimated_filtered_total: root.estimated_filtered_total ?? null,
-        estimated_selected_total: root.estimated_selected_total ?? null
+        estimated_selected_total: root.estimated_selected_total ?? null,
+        ordinary_selected_total: ordinarySelected,
+        weekly_source_selected_total: sourceSelected,
+        weekly_source_contract_version: WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_CONTRACT,
+        weekly_source_admission: sourceAdmission,
+        weekly_source_per_row_results: sourceAdmission?.per_manifest_results || []
       };
     }
   });
+  } catch (error) {
+    if (!sourceAdmission) throw error;
+    return jsonResponse({
+      ok: true,
+      partial: true,
+      error: String(error?.code || error?.message || error || 'ORDINARY_INVOICE_BATCH_START_FAILED').slice(0, 160),
+      contract_version: INVOICE_BATCH_SELECTION_ROOT_CONTRACT,
+      weekly_source_contract_version: WEEKLY_SOURCE_INVOICE_BATCH_SELECTION_CONTRACT,
+      weekly_source_admission: sourceAdmission,
+      weekly_source_per_row_results: sourceAdmission.per_manifest_results,
+      ordinary_selected_total: ordinarySelected,
+      weekly_source_selected_total: sourceSelected,
+      root_operation_id: null,
+      operation_ids: [],
+      per_command_results: []
+    }, 207);
+  }
 }
 
 async function handleBatchIssueConfirm(env, req, ctx, user, deps) {
@@ -4743,5 +4906,6 @@ export const invoiceAsyncHttpInternals = Object.freeze({
   legacyQueueState,
   invoiceEvidenceRequiredByLine,
   requiredInvoiceEvidence,
+  handleBatchGenerateConfirm,
   match
 });

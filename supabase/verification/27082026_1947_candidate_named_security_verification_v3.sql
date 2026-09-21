@@ -117,10 +117,44 @@ begin
   -- standalone expense PAPER pack helper, and the closed Advanced Expense
   -- component/summary/Office authorities are present. The inner Office
   -- category-rejection atomic remains deliberately inaccessible to service_role
-  -- because only its guarded Office adapter may invoke it. Browser execution
-  -- remains exactly zero.
-  if v_count<>153 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'09776a03e437813978671677fa90a4e0' then
+  -- because only its guarded Office adapter may invoke it. Plan 6 adds nine
+  -- service-only Candidate Weekly Source functions. Browser execution remains
+  -- exactly zero and the unrelated service-missing count remains unchanged.
+  --
+  -- MOVED 162 -> 163 at the Plan 6.2 final seals pass (WP-15d), 18 September
+  -- 2026. This is a NEW seal movement: HANDOVER 2 round-5 Part C does not cover
+  -- it, because the routine that causes it did not exist when that ruling was
+  -- written. It is reported to the approver as a new movement rather than under
+  -- the Part C approved list. Part C's governing reason for the sibling
+  -- browser-isolation RPC seal applies identically here: a stale inventory seal
+  -- may not ship even when the security property holds.
+  --
+  -- Previous seal: count=162 service_missing=9 browser_executable=0
+  --                hash=9a8763756da0c15664eea8e8f29874f7
+  -- Measured on a full NEW build from empty (241 migrations, 645 repeatables):
+  --                count=163 service_missing=9 browser_executable=0
+  --                hash=30ab67eac33606d24d9832e5f79b1681
+  --
+  -- Proof: the same inventory query run against ws62_wp15d_base, a clone of the
+  -- pre-Plan-6.2 ws62_template, reproduces the previous seal exactly, which is
+  -- what makes the comparison trustworthy. The set difference against it is
+  -- 1 row present in NEW, 0 absent from NEW and 0 changed:
+  --
+  --   public.weekly_source_candidate_hours_push_v1(pg_catalog.jsonb)|true|false|false
+  --
+  -- That single routine is WP-14's Gate 11 Candidate hours push. It moves this
+  -- seal rather than the general browser-isolation RPC seal only because its
+  -- name contains 'candidate', which the general verifier filters out and this
+  -- one selects for. It is SECURITY DEFINER, owned by postgres, carries a fixed
+  -- search_path and holds exactly one foreign grant, service_role EXECUTE; it is
+  -- registered in private._weekly_source_acl_service_rpc_contract_v1().
+  --
+  -- THE SECURITY PROPERTY IS UNCHANGED: anon and authenticated hold EXECUTE on
+  -- none of the 163, so browser_executable stays 0, and service_missing stays 9
+  -- because the added routine is granted. Full record and the both-direction
+  -- proof: IMPL\reports\WP-15d_REPORT.md.
+  if v_count<>163 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'30ab67eac33606d24d9832e5f79b1681' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

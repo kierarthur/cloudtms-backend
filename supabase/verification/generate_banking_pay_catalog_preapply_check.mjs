@@ -20,10 +20,21 @@ const manifestNames = [
   'banking_pay_workbench_settled_certificate_v8_catalog_manifest.json',
 ];
 
-const [outputArg, ...pendingArgs] = process.argv.slice(2);
+const [outputArg, ...pendingTransport] = process.argv.slice(2);
 if (!outputArg) {
-  console.error('Usage: generate_banking_pay_catalog_preapply_check.mjs <output.sql> [pending-repeatable.sql ...]');
+  console.error('Usage: generate_banking_pay_catalog_preapply_check.mjs <output.sql> [pending-repeatable.sql ...] | --pending-json <file>');
   process.exit(1);
+}
+
+let pendingArgs = pendingTransport;
+if (pendingTransport[0] === '--pending-json') {
+  if (pendingTransport.length !== 2) throw new Error('--pending-json requires exactly one file path');
+  const transportPath = path.resolve(pendingTransport[1]);
+  const parsed = JSON.parse(fs.readFileSync(transportPath, 'utf8'));
+  if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) {
+    throw new Error('Pending repeatable JSON must be an array of paths');
+  }
+  pendingArgs = parsed;
 }
 
 const normalizeRepoPath = (value) => path.relative(repoRoot, path.resolve(repoRoot, value))

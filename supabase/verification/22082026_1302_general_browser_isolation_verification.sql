@@ -54,7 +54,34 @@ begin
   into v_count,v_hash
   from targets;
 
-  if v_count<>126 or v_hash<>'d916546f6203aa1baee7fde8d2c08885' then
+  -- Plan 6 adds 93 source-reconciliation relations. Seven are Candidate-
+  -- named and remain under the dedicated Candidate isolation verifier; the
+  -- other 86 extend this non-Candidate inventory. The sealed hash was
+  -- regenerated only after proving zero anon/authenticated table access.
+  -- Plan 6.2 Gate 1 adds four more non-Candidate relations, taking the
+  -- inventory from 212 to 216: weekly_source_entitlement_decision_bundles,
+  -- weekly_source_entitlement_heads, weekly_source_entitlement_head_components
+  -- and weekly_source_pending_entitlement_bundles. The set difference against a
+  -- pre-Plan-6.2 build was proved to be exactly those four rows, with nothing
+  -- removed and no existing row changed, and each carries enabled and forced
+  -- RLS, only the cloudtms_miget_service_owner_all policy, and no table
+  -- privilege for anon, authenticated or service_role.
+  -- Decision D8 then adds a fifth, weekly_source_root_authorisations, taking
+  -- the inventory from 216 to 217. The set difference against a pre-Plan-6.2
+  -- build was re-measured for this change and is exactly those five relations,
+  -- with nothing removed and no existing row changed; the new one carries
+  -- enabled and forced RLS, only the cloudtms_miget_service_owner_all policy,
+  -- no table-level or column-level grant to any grantee but the owner, and no
+  -- privilege for anon, authenticated or service_role.
+  -- The approved source-rate-disparity journey adds the immutable Office
+  -- acceptance ledger weekly_source_charge_acceptances, taking the inventory
+  -- from 217 to 218. Removing that exact row from the installed 218-row census
+  -- reproduces the prior seal 4621263ae3113627625f576c5563ff7c,
+  -- proving that no earlier relation changed. The added table has enabled and
+  -- forced RLS, only the established cloudtms_miget_service_owner_all policy,
+  -- no anon/authenticated/service_role table privilege and no non-owner column
+  -- privilege.
+  if v_count<>218 or v_hash<>'9cdd16f38d3e11259fc4cd9f83f99b83' then
     raise exception 'GENERAL_RELATION_ISOLATION_VERIFICATION_FAILED:count=% hash=%',
       v_count,v_hash;
   end if;
@@ -147,9 +174,195 @@ begin
   -- service-only RPCs for preview, rejection and guarded deletion.
   -- The owner-internal reference issuer and established shared-session opener
   -- remain withheld, so browser execution stays zero.
-  -- The combined hash is sealed from the clean dual-engine candidate below.
-  if v_count<>694 or v_service_missing<>74 or v_browser_executable<>0
-     or v_hash<>'165022c54fa07006642576ed63b71fec' then
+  -- The combined hash includes the Plan 6 Weekly Source RPC inventory. Its
+  -- additive service-only functions preserve the pre-existing count of
+  -- unrelated service omissions and expose no browser-executable identity.
+  -- Plan 6.2 Gate 8 adds exactly two more non-Candidate SECURITY DEFINER
+  -- entry points, taking the inventory from 764 to 766:
+  -- public.weekly_source_mode_a_dispatch_atomic_v1(jsonb) and
+  -- public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb). The set
+  -- difference against a pre-Plan-6.2 build was proved to be exactly those two
+  -- rows, with nothing removed and no existing row changed. Both are
+  -- service-only with a fixed search_path, both are registered in
+  -- private._weekly_source_acl_service_rpc_contract_v1(), the count of
+  -- unrelated service omissions is unchanged at 74, and browser execution
+  -- stays zero.
+  -- MOVED at the Plan 6.2 final seals pass (WP-15d), 18 September 2026, on the
+  -- express instruction of HANDOVER 2 round-5 Part C: "The browser-isolation
+  -- RPC seal must also move to the independently verified inventory.
+  -- browser_executable = 0 proves the security property but does not permit a
+  -- stale inventory seal. Do not ship 766/74."
+  --
+  -- Measured on a full NEW build from empty (241 migrations, 645 repeatables):
+  --   count=782  service_missing=75  browser_executable=0
+  --   hash=83c87f3491dddb2c8c1383843392db7d
+  -- Part C names 778/75; that figure was taken at the round-5 request and four
+  -- further service RPCs have landed since, so the seal moves to the value
+  -- measured now, not to the one quoted then. Both are recorded in
+  -- IMPL\reports\WP-15d_REPORT.md.
+  --
+  -- Proof, by the method of IMPL\reports\WP-15a_REPORT.md section 6.3: the same
+  -- inventory query was run against ws62_wp15d_base, a clone of the
+  -- pre-Plan-6.2 ws62_template, which reproduced the original sealed
+  -- 764/74/9eae90be87c49a28ed5e7069f65d93fd exactly. The set difference against
+  -- it is 18 rows present in NEW, 0 absent from NEW and 0 changed, so nothing
+  -- was removed and no existing routine's privileges moved. Every one of the 18
+  -- is prosecdef, owned by postgres and carries a fixed search_path; 17 hold
+  -- exactly one foreign grant, service_role EXECUTE, and are registered in
+  -- private._weekly_source_acl_service_rpc_contract_v1(). The eighteenth,
+  -- public.tsfin_weekly_source_hours_v1(uuid), is deliberately granted to
+  -- nobody and is the whole of the 74 -> 75 move in service_missing; it is
+  -- reached only from inside public.tsfin_report_timesheets_v2. anon and
+  -- authenticated hold EXECUTE on none of the 18, so browser_executable stays
+  -- 0 and the security property is unchanged.
+  --
+  -- MOVED AGAIN by WP-44 (notification defects), 18 September 2026, for the one
+  -- service-only RPC that finding F2 requires:
+  -- public.weekly_source_message_dispatch_snapshot_failure_atomic_v1(jsonb).
+  -- Without it a TRANSIENT failure of the Candidate push snapshot step was
+  -- recorded as a PERMANENT suppression carrying a fabricated control-plane
+  -- snapshot identity, and the notification could never be re-claimed.
+  --
+  -- Measured on two full NEW builds from empty of the same tree, one without
+  -- the new routine and one with it (242 migrations, 647 repeatables):
+  --   before  count=782  service_missing=75  browser_executable=0
+  --           hash=83c87f3491dddb2c8c1383843392db7d   (reproduces the seal above)
+  --   after   count=783  service_missing=75  browser_executable=0
+  --           hash=f03f6dec444e8694119fab411ee04f6a
+  -- The set difference between those two inventories is exactly one row present
+  -- in the later build, 0 absent from it and 0 changed:
+  --   public.weekly_source_message_dispatch_snapshot_failure_atomic_v1(pg_catalog.jsonb)
+  --     |svc_execute=true|anon_execute=false|auth_execute=false
+  -- It is prosecdef, owned by postgres, VOLATILE, carries the fixed
+  -- search_path 'public, private, pg_catalog, pg_temp', holds exactly one
+  -- foreign grant (service_role EXECUTE, acl postgres=X/postgres
+  -- service_role=X/postgres) and is registered in
+  -- private._weekly_source_acl_service_rpc_contract_v1(). anon and
+  -- authenticated hold EXECUTE on it in neither build, so browser_executable
+  -- stays 0, service_missing is unchanged at 75, and the security property this
+  -- verifier exists to protect is unchanged. Recorded in
+  -- IMPL\reports\WP-44_NOTIFICATION_DEFECTS.md and handed to WP-15d in
+  -- IMPL\handoffs\WP-44_NEEDS.md for the final seals pass.
+  --
+  -- MOVED AGAIN by WP-59 (the correction-session exit), 19 September 2026, for
+  -- the one service-only RPC that WP-50 finding F3 requires:
+  -- public.weekly_source_correct_final_cancel_atomic_v1(jsonb).  Without it an
+  -- abandoned Correct-final-source correction session could never leave the
+  -- states inside weekly_final_source_correction_sessions_active_uq, and one
+  -- person walking away held that Trust and cutoff out of service for ever.
+  --
+  -- Moved under ruling B1: a measured figure may be sealed only when it is
+  -- re-measured on the exact candidate, the membership proof shows the expected
+  -- additions with zero unexplained removals or changes, and
+  -- browser_executable = 0.  All three were established, not relayed:
+  --
+  -- CONTROL 1 -- a full NEW build from empty of the same tree WITHOUT the new
+  -- routine, banking_modal_v2_release5901_20260919, ran this verifier in its own
+  -- build and PASSED at the then-pinned 783 / f03f6dec444e8694119fab411ee04f6a.
+  --
+  -- CONTROL 2 -- on the candidate build, the routine was dropped inside a
+  -- rolled-back transaction and this verifier's OWN inventory query was re-run
+  -- against the resulting catalogue.  It returned 783 /
+  -- f03f6dec444e8694119fab411ee04f6a exactly, which is what proves the
+  -- measurement method here is the verifier's and not the package's.
+  --
+  --   control    count=783  service_missing=75  browser_executable=0
+  --              hash=f03f6dec444e8694119fab411ee04f6a   (reproduces the seal above)
+  --   candidate  count=784  service_missing=75  browser_executable=0
+  --              hash=81b65eaa75eeb742b54f17c01040d979
+  --
+  -- MEMBERSHIP PROOF, row by row against that control:
+  --   additions=1  removals=0  changes=0  browser_executable=0
+  --   ADDED public.weekly_source_correct_final_cancel_atomic_v1(pg_catalog.jsonb)
+  --         |svc=true|anon=false|auth=false
+  -- It is prosecdef, owned by postgres, VOLATILE, carries the fixed
+  -- search_path 'public, private, pg_catalog, pg_temp', holds exactly one
+  -- foreign grant (service_role EXECUTE) and is registered in
+  -- private._weekly_source_acl_service_rpc_contract_v1().  anon and
+  -- authenticated hold EXECUTE on it in neither measurement, so
+  -- browser_executable stays 0, service_missing is unchanged at 75, and the
+  -- security property this verifier exists to protect is unchanged.
+  --
+  -- RE-MEASURED AND MOVED AGAIN within the same WP-59 window, to 785.  Between
+  -- WP-59's first measurement and its final build from empty, the package that
+  -- owns the WP-50 F2 withdraw-admission owner landed
+  -- public.weekly_source_invoice_withdraw_admission_atomic_v1(jsonb) into the
+  -- same tree.  The tree now carries two additions, not one, and a pin of 784
+  -- would redden every build.  Ruling B1's words are "seal the final measured
+  -- membership", so the FINAL membership is what is sealed here.
+  --
+  -- THREE-WAY CONTROL, on banking_modal_v2_release5905_20260919, a build from
+  -- empty, inside one rolled-back transaction, using this verifier's own
+  -- inventory query at each step:
+  --   tree (both new routines) count=785 service_missing=75 browser_executable=0
+  --                            hash=f07a574367b85de4c57642e28744f69b
+  --   minus WP-59's routine    count=784 service_missing=75 browser_executable=0
+  --                            hash=b61c219afae37e7629a673fe4b9c801a
+  --   minus BOTH (the control) count=783 service_missing=75 browser_executable=0
+  --                            hash=f03f6dec444e8694119fab411ee04f6a
+  -- The control reproduces WP-44's seal exactly, which is what proves the
+  -- measurement method is this verifier's own and not the package's.
+  --
+  -- MEMBERSHIP PROOF against that control: additions=2, removals=0, changes=0,
+  -- browser_executable=0 at every step.
+  --   ADDED public.weekly_source_correct_final_cancel_atomic_v1(pg_catalog.jsonb)
+  --         |svc=true|anon=false|auth=false        (WP-59, this package)
+  --   ADDED public.weekly_source_invoice_withdraw_admission_atomic_v1(pg_catalog.jsonb)
+  --         |svc=true|anon=false|auth=false        (the F2 withdraw-admission package)
+  -- Both are registered in private._weekly_source_acl_service_rpc_contract_v1()
+  -- and in this repository's independent expected set, each by its own owner.
+  -- WP-59 seals the MEMBERSHIP measured here; it makes no claim about the other
+  -- package's design, only that the row it adds is service-only and reachable
+  -- by neither anon nor authenticated.
+  --
+  -- WAS 783 / f03f6dec444e8694119fab411ee04f6a (sealed by WP-44).
+  -- THEN 784 / 81b65eaa75eeb742b54f17c01040d979 (WP-59's own routine alone).
+  -- IS  785 / f07a574367b85de4c57642e28744f69b (the final measured membership).
+  -- Recorded in IMPL\reports\WP-59_CORRECTION_SESSION_EXIT.md.
+  --
+  -- RE-MEASURED on the Stage 9 final candidate, 19 September 2026, after the
+  -- owner-approved Office and completed-Timesheet-copy work.  This is a
+  -- controlled membership change, not a count-only re-pin:
+  --
+  --   previous seal count=785 service_missing=75 browser_executable=0
+  --                 hash=f07a574367b85de4c57642e28744f69b
+  --   current tree  count=788 service_missing=75 browser_executable=0
+  --                 hash=65782ff06a913aeb6ad0afa34842ec82
+  --
+  -- The previous membership is reproduced exactly from the current installed
+  -- catalogue when the four named current additions are removed and the one
+  -- explicitly retired whole-invoice withdrawal RPC is restored as the same
+  -- service-only row it held in the prior seal:
+  --
+  --   REMOVED (approved retirement)
+  --     public.weekly_source_invoice_withdraw_admission_atomic_v1(pg_catalog.jsonb)
+  --       |svc=true|anon=false|auth=false
+  --   ADDED (Office source-charge warning acceptance)
+  --     public.weekly_source_charge_accept_atomic_v1(pg_catalog.jsonb)
+  --       |svc=true|anon=false|auth=false
+  --   ADDED (completed-Timesheet informational-copy delivery)
+  --     public.weekly_source_completed_pack_copy_commit_atomic_v1(pg_catalog.jsonb)
+  --       |svc=true|anon=false|auth=false
+  --     public.weekly_source_completed_pack_copy_due_list_v1(pg_catalog.jsonb)
+  --       |svc=true|anon=false|auth=false
+  --     public.weekly_source_completed_pack_copy_status_sync_v1(pg_catalog.jsonb)
+  --       |svc=true|anon=false|auth=false
+  --
+  -- Three controls were run against the PostgreSQL 17.11 NEW build using this
+  -- verifier's own target query and ordering.  Removing only the three copy
+  -- RPCs returns 785 / fb4b817bcbfce6b61345fd0ad0d64d69.  Removing the charge
+  -- acceptance RPC as well returns the unchanged WP-44 base at
+  -- 783 / f03f6dec444e8694119fab411ee04f6a.  Adding back the correction-session
+  -- exit and the retired withdrawal signature reproduces the previous final
+  -- seal exactly at 785 / f07a574367b85de4c57642e28744f69b.
+  --
+  -- Every added RPC is SECURITY DEFINER, owned by the release owner, has a
+  -- fixed search_path, is executable by service_role and by neither anon nor
+  -- authenticated, and is present in both sides of the independent Weekly
+  -- Source ACL contract.  Therefore browser_executable remains zero and the
+  -- unrelated service_missing figure remains 75.
+  if v_count<>788 or v_service_missing<>75 or v_browser_executable<>0
+     or v_hash<>'65782ff06a913aeb6ad0afa34842ec82' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

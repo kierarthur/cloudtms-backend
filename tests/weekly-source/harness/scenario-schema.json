@@ -1,0 +1,463 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtms.test/contracts/weekly-source-test-scenario-v1.schema.json",
+  "title": "CloudTMS Weekly Source deterministic test scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "scenarioId",
+    "title",
+    "fixedSeed",
+    "requirementIds",
+    "protectedIds",
+    "clock",
+    "foundation",
+    "sourceUploads",
+    "actions",
+    "expected"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "WEEKLY_SOURCE_TEST_SCENARIO_V1" },
+    "scenarioId": { "type": "string", "pattern": "^WS-[A-Z0-9][A-Z0-9_-]{2,79}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "fixedSeed": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "requirementIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z0-9]+-REQ-[0-9]{3}$" }
+    },
+    "protectedIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^PROT-[A-Z0-9]+-[0-9]{3}$" }
+    },
+    "tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$" }
+    },
+    "clock": { "$ref": "#/$defs/clock" },
+    "foundation": { "$ref": "#/$defs/foundation" },
+    "sourceUploads": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceUpload" }
+    },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "expected": { "$ref": "#/$defs/expected" }
+  },
+  "$defs": {
+    "key": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+    "date": { "type": "string", "format": "date" },
+    "time": { "type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$" },
+    "utc": { "type": "string", "format": "date-time" },
+    "pence": { "type": "string", "pattern": "^-?(?:0|[1-9][0-9]{0,14})$" },
+    "minutes": { "type": "integer", "minimum": 0, "maximum": 2880 },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialUtc", "timezone"],
+      "properties": {
+        "initialUtc": { "$ref": "#/$defs/utc" },
+        "timezone": { "const": "Europe/London" }
+      }
+    },
+    "foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agency", "users", "candidates", "clients", "contracts", "weeks", "timesheets"],
+      "properties": {
+        "agency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["key", "globalSettings"],
+          "properties": {
+            "key": { "$ref": "#/$defs/key" },
+            "globalSettings": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["candidateDeadlineMinutes", "candidateReminderMinutes", "managerBatchMinutes"],
+              "properties": {
+                "candidateDeadlineMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
+                "candidateReminderMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 },
+                "managerBatchMinutes": { "type": "integer", "minimum": 1, "maximum": 10080 }
+              }
+            }
+          }
+        },
+        "users": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "role", "active"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "role": { "enum": ["ADMIN", "OFFICE"] },
+              "active": { "type": "boolean" }
+            }
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "displayName", "tmsRef", "payMethod", "active"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "tmsRef": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "payMethod": { "enum": ["PAYE", "UMBRELLA"] },
+              "umbrellaKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+              "active": { "type": "boolean" },
+              "activeDeviceCount": { "type": "integer", "minimum": 0, "maximum": 10 }
+            }
+          }
+        },
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "name", "sourceAuthority", "settings"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "sourceAuthority": { "enum": ["SOURCE", "SIGNED_TIMESHEET", "ORDINARY", "DAILY"] },
+              "managerEmail": { "type": ["string", "null"], "format": "email" },
+              "settings": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "selfBill",
+                  "nhsp",
+                  "noTimesheetRequired",
+                  "requiresHealthRoster",
+                  "referenceRequiredBeforePay",
+                  "autoAuthorise",
+                  "candidateQueriesEnabled",
+                  "managerQueriesEnabled",
+                  "sourceSuppliedExpenses"
+                ],
+                "properties": {
+                  "selfBill": { "type": "boolean" },
+                  "nhsp": { "type": "boolean" },
+                  "noTimesheetRequired": { "type": "boolean" },
+                  "requiresHealthRoster": { "type": "boolean" },
+                  "referenceRequiredBeforePay": { "type": "boolean" },
+                  "autoAuthorise": { "type": "boolean" },
+                  "candidateQueriesEnabled": { "type": "boolean" },
+                  "managerQueriesEnabled": { "type": "boolean" },
+                  "sourceSuppliedExpenses": { "type": "boolean" },
+                  "sourceExpenseVatChargeable": { "type": "boolean" },
+                  "breakEntryMode": { "enum": ["DURATION_MINUTES", "START_END_TIMES"] },
+                  "calculationMode": { "enum": ["SPLIT_RATE", "WHOLE_SHIFT"] },
+                  "cutoffWeekday": { "type": "integer", "minimum": 0, "maximum": 6 },
+                  "cutoffLocalTime": { "$ref": "#/$defs/time" }
+                }
+              }
+            }
+          }
+        },
+        "contracts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "candidateKey", "clientKey", "startDate", "endDate", "band", "payMethod", "rates"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "candidateKey": { "$ref": "#/$defs/key" },
+              "clientKey": { "$ref": "#/$defs/key" },
+              "startDate": { "$ref": "#/$defs/date" },
+              "endDate": { "$ref": "#/$defs/date" },
+              "role": { "type": "string", "maxLength": 120 },
+              "band": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "payMethod": { "enum": ["PAYE", "UMBRELLA"] },
+              "rates": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pay", "charge"],
+                "properties": {
+                  "pay": { "$ref": "#/$defs/rateVector" },
+                  "charge": { "$ref": "#/$defs/rateVector" }
+                }
+              },
+              "additionalUnits": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["code", "payPence", "chargePence"],
+                  "properties": {
+                    "code": { "type": "string", "pattern": "^[A-Z0-9_]{1,40}$" },
+                    "payPence": { "$ref": "#/$defs/pence" },
+                    "chargePence": { "$ref": "#/$defs/pence" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "weeks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "contractKey", "weekEndingDate", "additionalSequence", "status"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "contractKey": { "$ref": "#/$defs/key" },
+              "weekEndingDate": { "$ref": "#/$defs/date" },
+              "additionalSequence": { "type": "integer", "minimum": 0, "maximum": 99 },
+              "status": { "enum": ["OPEN", "SUBMITTED", "AUTHORISED", "CLOSED"] }
+            }
+          }
+        },
+        "timesheets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "weekKey", "submissionState", "candidateSigned", "managerSigned", "shifts", "expenses"],
+            "properties": {
+              "key": { "$ref": "#/$defs/key" },
+              "weekKey": { "$ref": "#/$defs/key" },
+              "submissionState": { "enum": ["ABSENT", "DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "INVOICED"] },
+              "candidateSigned": { "type": "boolean" },
+              "managerSigned": { "type": "boolean" },
+              "shifts": { "type": "array", "items": { "$ref": "#/$defs/shift" } },
+              "expenses": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["mode", "amountPence", "evidenceCount"],
+                "properties": {
+                  "mode": { "enum": ["NONE", "ORDINARY_EVIDENCE", "SOURCE_FIXED"] },
+                  "amountPence": { "$ref": "#/$defs/pence" },
+                  "evidenceCount": { "type": "integer", "minimum": 0, "maximum": 20 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rateVector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["day", "night", "saturday", "sunday", "bankHoliday"],
+      "properties": {
+        "day": { "$ref": "#/$defs/pence" },
+        "night": { "$ref": "#/$defs/pence" },
+        "saturday": { "$ref": "#/$defs/pence" },
+        "sunday": { "$ref": "#/$defs/pence" },
+        "bankHoliday": { "$ref": "#/$defs/pence" }
+      }
+    },
+    "shift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "workDate", "start", "end", "breakMinutes", "workedMinutes"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "workDate": { "$ref": "#/$defs/date" },
+        "start": { "$ref": "#/$defs/time" },
+        "end": { "$ref": "#/$defs/time" },
+        "breakMinutes": { "$ref": "#/$defs/minutes" },
+        "breakStart": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] },
+        "breakEnd": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] },
+        "workedMinutes": { "$ref": "#/$defs/minutes" },
+        "reference": { "type": ["string", "null"], "maxLength": 160 },
+        "additionalUnits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "quantity"],
+            "properties": {
+              "code": { "type": "string", "pattern": "^[A-Z0-9_]{1,40}$" },
+              "quantity": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,4})?$" }
+            }
+          }
+        }
+      }
+    },
+    "sourceUpload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "profile", "stage", "clientKey", "physicalRows"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "profile": {
+          "enum": [
+            "NHSP_PREFINAL_RELEASED_V1",
+            "NHSP_FINAL_BACKING_V1",
+            "HEALTHROSTER_SELF_BILL_LAYOUT_A_V1",
+            "HEALTHROSTER_SELF_BILL_LAYOUT_B_V1",
+            "HEALTHROSTER_TIMESHEET_AUTHORITY_LAYOUT_A_V1",
+            "HEALTHROSTER_TIMESHEET_AUTHORITY_LAYOUT_B_V1",
+            "GENERIC_WEEKLY_COMPLETE_V1",
+            "NONE_ORDINARY_WEEKLY",
+            "NONE_DAILY"
+          ]
+        },
+        "stage": { "enum": ["PREFINAL", "FINAL", "COMPARISON_ONLY", "NONE"] },
+        "clientKey": { "$ref": "#/$defs/key" },
+        "trustName": { "type": ["string", "null"], "maxLength": 200 },
+        "reportNumber": { "type": ["string", "null"], "maxLength": 100 },
+        "cycleUtc": { "oneOf": [{ "$ref": "#/$defs/utc" }, { "type": "null" }] },
+        "coverageStart": { "oneOf": [{ "$ref": "#/$defs/date" }, { "type": "null" }] },
+        "coverageEnd": { "oneOf": [{ "$ref": "#/$defs/date" }, { "type": "null" }] },
+        "complete": { "type": "boolean" },
+        "physicalRows": { "type": "array", "items": { "$ref": "#/$defs/sourceRow" } },
+        "mutations": {
+          "type": "array",
+          "items": { "enum": ["WRONG_HEADER", "WRONG_SHEET", "DUPLICATE_REQUEST_ID", "BLANK_REQUEST_ID", "MIXED_FINALISATION", "MIXED_SIGN", "NEGATIVE_ZERO", "PRICE_MISMATCH", "CROSS_CLIENT"] }
+        }
+      }
+    },
+    "sourceRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "candidateKey", "workDate", "actualStart", "actualEnd", "actualBreakMinutes", "actualWorkedMinutes", "sign", "finalisation"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "candidateKey": { "$ref": "#/$defs/key" },
+        "contractKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "requestId": { "type": ["string", "null"], "maxLength": 160 },
+        "workDate": { "$ref": "#/$defs/date" },
+        "actualStart": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] },
+        "actualEnd": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] },
+        "actualBreakMinutes": { "oneOf": [{ "$ref": "#/$defs/minutes" }, { "type": "null" }] },
+        "actualWorkedMinutes": { "oneOf": [{ "$ref": "#/$defs/minutes" }, { "type": "null" }] },
+        "sign": { "enum": ["POSITIVE", "FULL_NEGATIVE", "ZERO"] },
+        "finalisation": { "enum": ["FINALISED", "NOT_FINALISED", "NO_FINALISATION_COLUMN", "INCONSISTENT"] },
+        "statusText": { "type": ["string", "null"], "maxLength": 100 },
+        "finalisedBy": { "type": ["string", "null"], "maxLength": 120 },
+        "commissionPence": { "oneOf": [{ "$ref": "#/$defs/pence" }, { "type": "null" }] },
+        "totalCostPence": { "oneOf": [{ "$ref": "#/$defs/pence" }, { "type": "null" }] },
+        "sourceExpensePence": { "oneOf": [{ "$ref": "#/$defs/pence" }, { "type": "null" }] },
+        "role": { "type": ["string", "null"], "maxLength": 120 },
+        "band": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ADVANCE_CLOCK",
+            "UPLOAD_SOURCE",
+            "CONFIRM_CURRENT_UPLOAD",
+            "ASK_CANDIDATE",
+            "REMIND_CANDIDATE",
+            "CANDIDATE_RESPOND",
+            "SEND_MANAGER",
+            "MANAGER_RESPOND",
+            "FINALISE",
+            "CORRECT_FINAL_SOURCE",
+            "PROTECT_HOURS",
+            "AMEND_PROTECTED_HOURS",
+            "REMOVE_PROTECTED_HOURS",
+            "MARK_DID_NOT_WORK",
+            "WAIT_FOR_SOURCE",
+            "RECONCILE_PROTECTED_HOURS",
+            "AUTHORISE",
+            "UNAUTHORISE",
+            "CREATE_INVOICE_BATCH",
+            "MOVE_SOURCE_LINE",
+            "UNISSUE_INVOICE",
+            "REISSUE_INVOICE",
+            "CREATE_DRAFT_BOUNDARY_CALL",
+            "RUN_DUE_WORK",
+            "READ_PROJECTION"
+          ]
+        },
+        "atUtc": { "oneOf": [{ "$ref": "#/$defs/utc" }, { "type": "null" }] },
+        "actorKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "uploadKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "candidateKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "managerKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "timesheetKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "shiftKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "invoiceKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "targetInvoiceKey": { "oneOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "response": { "type": ["string", "null"], "maxLength": 100 },
+        "hours": { "oneOf": [{ "$ref": "#/$defs/shift" }, { "type": "null" }] },
+        "reason": { "type": ["string", "null"], "maxLength": 500 },
+        "expectedStateVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "repeatCount": { "type": "integer", "minimum": 1, "maximum": 20 }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "sourceMovements", "invoiceLines", "approvedHours", "communications", "visibleAssertions", "forbiddenAssertions"],
+      "properties": {
+        "outcome": { "enum": ["SUCCESS", "REFUSED", "WAITING", "NO_CHANGE"] },
+        "refusalCode": { "type": ["string", "null"], "pattern": "^(?:[A-Z][A-Z0-9_]{2,99})?$" },
+        "sourceMovements": { "type": "array", "items": { "$ref": "#/$defs/expectedMovement" } },
+        "invoiceLines": { "type": "array", "items": { "$ref": "#/$defs/expectedInvoiceLine" } },
+        "approvedHours": { "type": "array", "items": { "$ref": "#/$defs/expectedApprovedHours" } },
+        "communications": { "type": "array", "items": { "$ref": "#/$defs/expectedCommunication" } },
+        "c1PublicationCategory": { "enum": ["NONE", "COMPLETE_ENTITLEMENT", "CERTIFIED_EMPTY", "WAITING", "REFUSED"] },
+        "visibleAssertions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+        "forbiddenAssertions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 300 } }
+      }
+    },
+    "expectedMovement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRowKey", "kind", "workedMinutes", "invoiceExVatPence"],
+      "properties": {
+        "sourceRowKey": { "$ref": "#/$defs/key" },
+        "kind": { "enum": ["ADD", "AMEND_REVERSAL", "AMEND_REPLACEMENT", "CANCEL", "PHYSICAL_POSITIVE", "PHYSICAL_FULL_NEGATIVE"] },
+        "workedMinutes": { "type": "integer", "minimum": -2880, "maximum": 2880 },
+        "invoiceExVatPence": { "$ref": "#/$defs/pence" }
+      }
+    },
+    "expectedInvoiceLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceRowKey", "clientKey", "cycleKey", "exVatPence"],
+      "properties": {
+        "sourceRowKey": { "$ref": "#/$defs/key" },
+        "clientKey": { "$ref": "#/$defs/key" },
+        "cycleKey": { "$ref": "#/$defs/key" },
+        "reportNumber": { "type": ["string", "null"], "maxLength": 100 },
+        "exVatPence": { "$ref": "#/$defs/pence" }
+      }
+    },
+    "expectedApprovedHours": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateKey", "contractKey", "weekKey", "shifts"],
+      "properties": {
+        "candidateKey": { "$ref": "#/$defs/key" },
+        "contractKey": { "$ref": "#/$defs/key" },
+        "weekKey": { "$ref": "#/$defs/key" },
+        "shifts": { "type": "array", "items": { "$ref": "#/$defs/shift" } }
+      }
+    },
+    "expectedCommunication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audience", "kind", "count"],
+      "properties": {
+        "audience": { "enum": ["CANDIDATE", "MANAGER", "OFFICE"] },
+        "kind": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$" },
+        "count": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "groupKey": { "type": ["string", "null"], "maxLength": 160 }
+      }
+    }
+  }
+}
+

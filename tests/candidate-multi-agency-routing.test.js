@@ -190,6 +190,47 @@ test('manager EMAIL route context v2 is canonical, deployment-bound and authorit
   }, now.getTime()), null);
 });
 
+test('weekly query manager route context is a separate batch-bound authority', async () => {
+  const now = new Date('2026-09-15T16:00:00.000Z');
+  const env = routeEnvironment();
+  const context = {
+    v: 2, typ: 'cloudtms-route-context-v2', aud: 'candidate-private-api',
+    authority_kind: 'WEEKLY_QUERY_MANAGER_EMAIL',
+    operation_id: 'getManagerWeeklyQueryBatch', environment: 'TEST',
+    agency_id: IDS.agency, data_plane_id: IDS.dataPlane,
+    route_version_id: '10000000-0000-4000-8000-000000000017', route_version: 7,
+    binding_manifest_generation: 1,
+    manager_route_ticket_id: '10000000-0000-4000-8000-000000000018', route_revision: 2,
+    review_batch_route_hmac: 'a'.repeat(64),
+    recipient_generation_route_hmac: 'b'.repeat(64),
+    original_membership_hash: 'c'.repeat(64), credential_generation: 3,
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: new Date(now.getTime() + 5 * 60_000).toISOString(),
+    nonce: '10000000-0000-4000-8000-000000000019', key_version: 1
+  };
+  const signed = await signCandidateRouteContext(context, {
+    secret: env.CANDIDATE_ROUTE_CONTEXT_SECRET, keyVersion: 1, nowMilliseconds: now.getTime()
+  });
+  const request = new Request(
+    'https://private.invalid/private/candidate-manager/v1/weekly-query-batches/one',
+    { headers: {
+      'x-cloudtms-route-context': signed.envelope,
+      'x-cloudtms-route-context-sha256': signed.sha256
+    } }
+  );
+  const verified = await verifyCandidateRouteContext(request, env, now.getTime());
+  assert.equal(verified.context.authority_kind, 'WEEKLY_QUERY_MANAGER_EMAIL');
+  assert.equal(verified.context.review_batch_route_hmac, 'a'.repeat(64));
+  assert.equal(verified.context.recipient_generation_route_hmac, 'b'.repeat(64));
+  assert.equal(verified.context.original_membership_hash, 'c'.repeat(64));
+  await assert.rejects(
+    signCandidateRouteContext({ ...context, review_batch_route_hmac: 'bad' }, {
+      secret: env.CANDIDATE_ROUTE_CONTEXT_SECRET, keyVersion: 1, nowMilliseconds: now.getTime()
+    }),
+    /CANDIDATE_ROUTE_CONTEXT_WEEKLY_BATCH_HMAC_INVALID/
+  );
+});
+
 test('service-auth v2 binds both route headers while v1 remains exact and rejects injection', async () => {
   const now = new Date();
   const env = routeEnvironment();
@@ -613,6 +654,71 @@ test('manager EMAIL credential resolves centrally and reaches only its exact pri
     ), env);
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     assert.deepEqual(await response.json(), { ok: true, source: 'synthetic-manager-email' });
+    assert.equal(primaryCalls, 0);
+    assert.equal(syntheticCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('weekly manager credential resolves through its distinct control ticket with no default-plane fallback', async () => {
+  const originalFetch = globalThis.fetch;
+  const batchId = '50000000-0000-4000-8000-000000000021';
+  const syntheticAgency = '50000000-0000-4000-8000-000000000004';
+  const syntheticPlane = '50000000-0000-4000-8000-000000000006';
+  let primaryCalls = 0;
+  let syntheticCalls = 0;
+  const privateEnv = routeEnvironment({
+    CANDIDATE_AGENCY_ID: syntheticAgency,
+    CANDIDATE_DATA_PLANE_ID: syntheticPlane,
+    CANDIDATE_ROUTE_VERSION: '1',
+    CANDIDATE_ROUTE_CONTEXT_SECRET: 'test-synthetic-route-secret'
+  });
+  const env = orchestratorEnvironment(async () => {
+    primaryCalls += 1;
+    return Response.json({ ok: false });
+  }, async request => {
+    syntheticCalls += 1;
+    assert.equal(await verifyCandidatePrivateRequest(request.clone(), privateEnv), true);
+    const route = await verifyCandidateRouteContext(request, privateEnv);
+    assert.equal(route.context.authority_kind, 'WEEKLY_QUERY_MANAGER_EMAIL');
+    assert.equal(route.context.operation_id, 'getManagerWeeklyQueryBatch');
+    assert.equal(route.context.review_batch_route_hmac, 'a'.repeat(64));
+    assert.equal(request.headers.get('authorization'), 'Bearer weekly-manager-opaque-credential');
+    return Response.json({ ok: true, source: 'synthetic-weekly-manager' });
+  });
+  env.MYTMS_MANAGER_ROUTE_HMAC_SECRET = 'test-manager-route-hmac-secret-that-is-not-live';
+  env.CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET = 'test-manager-phone-secret-that-is-not-live';
+  globalThis.fetch = async request => {
+    assert.equal(new URL(request.url).pathname, '/rest/v1/rpc/weekly_query_manager_route_resolve_v1');
+    const body = await request.json();
+    assert.equal(body.p_resolution.operation_id, 'getManagerWeeklyQueryBatch');
+    assert.match(body.p_resolution.credential_hmac_hex, /^[0-9a-f]{64}$/);
+    return Response.json({
+      ok: true, authority_kind: 'WEEKLY_QUERY_MANAGER_EMAIL', environment_label: 'TEST',
+      agency_id: syntheticAgency, data_plane_id: syntheticPlane,
+      registry_binding_key: 'CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND',
+      route_version_id: '50000000-0000-4000-8000-000000000007', route_version: 1,
+      binding_manifest_generation: 1,
+      manager_route_ticket_id: '50000000-0000-4000-8000-000000000022', route_revision: 1,
+      review_batch_route_hmac_hex: 'a'.repeat(64),
+      recipient_generation_route_hmac_hex: 'b'.repeat(64),
+      original_membership_hash_hex: 'c'.repeat(64), credential_generation: 1,
+      expires_at_utc: new Date(Date.now() + 7 * 86400_000).toISOString()
+    });
+  };
+  try {
+    const response = await handleCandidateBrokerRequest(new Request(
+      `https://candidate-api.test.example/candidate-manager/v1/weekly-query-batches/${batchId}`, {
+        headers: {
+          origin: 'https://candidate.test.example',
+          authorization: 'Bearer weekly-manager-opaque-credential',
+          'cf-connecting-ip': '192.0.2.25'
+        }
+      }
+    ), env);
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.deepEqual(await response.json(), { ok: true, source: 'synthetic-weekly-manager' });
     assert.equal(primaryCalls, 0);
     assert.equal(syntheticCalls, 1);
   } finally {

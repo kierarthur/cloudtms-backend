@@ -82,9 +82,43 @@ export async function reconcileTimesheetQueryDeliveryAfterProviderAcceptance({ r
   }
 }
 
-export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runTsfinWorkerOnce, wait } = {}) {
+// WP-51, closing WP-48's combined-review finding F2.
+//
+// `sbRpcRecordingGuardRefusal` is the ESTABLISHED refusal-recording funnel that
+// WP-32 wired at 29 broker call sites; it is passed in, never rebuilt here, and
+// there is no second recorder anywhere in this file.  It is a pass-through: it
+// returns what `sbRpc` returns and rethrows the same error, and its recording is
+// itself fully caught, so a failure of the record can never change the refusal.
+//
+// It is REQUIRED rather than defaulted to `sbRpc`, because a silent default is
+// exactly how the defect got here: a caller that forgets it would still fail
+// closed and still leave no record, and nobody could later establish that the
+// refusal happened.
+//
+// Why only the authorisation call uses it: E29
+// (`weekly_source_managed_root_authorisation_guard_bu`) is a BEFORE UPDATE
+// trigger on `public.timesheets`, so only a call that updates that relation can
+// raise it.  Executed on the build from empty `wp51_before`: of the eight RPCs
+// this runner calls, `timesheet_authorise_bulk_atomic` is the only one whose
+// installed `prosrc` updates `public.timesheets`, and the only one inside the
+// reverse call closure of the 34 routines that carry
+// `WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED`.  The other seven are left on
+// the plain `sbRpc` they already used, so nothing else changes.
+//
+// Both the newly wired Mode A follow-up and the ordinary Imports follow-up reach
+// the authorisation through this one call site, so both are now recorded.
+export function createImportReviewPostCommitRunner({
+  sbRpc,
+  sbRpcRecordingGuardRefusal,
+  unwrapRpcJsonb,
+  runTsfinWorkerOnce,
+  wait
+} = {}) {
   if (typeof sbRpc !== 'function' || typeof unwrapRpcJsonb !== 'function' || typeof runTsfinWorkerOnce !== 'function') {
     throw new TypeError('Import-review follow-up dependencies are required');
+  }
+  if (typeof sbRpcRecordingGuardRefusal !== 'function') {
+    throw new TypeError('Import-review follow-up guard-refusal recording RPC is required');
   }
   const waitForConcurrentTsfin = typeof wait === 'function'
     ? wait
@@ -321,7 +355,12 @@ export function createImportReviewPostCommitRunner({ sbRpc, unwrapRpcJsonb, runT
                 let authoriseResult = null;
                 for (let attempt = 0; attempt < 2; attempt += 1) {
                   try {
-                    const authoriseRaw = await sbRpc(env, 'timesheet_authorise_bulk_atomic', {
+                    // WP-51 / WP-48 F2.  This is the one call in this runner that
+                    // updates `public.timesheets` and can therefore raise E29.  It
+                    // goes through the established refusal-recording funnel, so the
+                    // refusal is both failed closed (rethrown below, unchanged) and
+                    // RECORDED.  Nothing about the failure behaviour changes.
+                    const authoriseRaw = await sbRpcRecordingGuardRefusal(env, 'timesheet_authorise_bulk_atomic', {
                       p_items: chunk.map((timesheetId) => ({
                         timesheet_id: timesheetId,
                         expected_timesheet_id: timesheetId

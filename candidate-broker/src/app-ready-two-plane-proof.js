@@ -467,7 +467,7 @@ export async function handleAppReadyTwoPlaneProof(request, env) {
     return json(passed ? 200 : 503, {
       ok: passed,
       status: passed ? 'PAGE_PASSED' : 'PAGE_FAILED',
-      proof_contract: 'CLOUDTMS_APP_READY_TWO_PLANE_63_OPERATION_V1',
+      proof_contract: 'CLOUDTMS_APP_READY_TWO_PLANE_68_OPERATION_V1',
       policy_version: 2,
       policy_semantic_sha256: CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256,
       operation_count: CANDIDATE_OPERATION_POLICY.length,

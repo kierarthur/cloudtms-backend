@@ -36,6 +36,39 @@ import {
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
 import { dispatchBankingPayModalV2Request } from './banking-pay-modal-v2.js';
+import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
+import { parseWeeklySourceFile } from './weekly-source/index.js';
+import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
+// WP-23 / Gate 13 hostile finance review F2: the Weekly Source first-authorisation
+// routing decision for the real Office Authorise route (and, through it, Bulk
+// Authorise).  The decision is the database's; this import is the transport's
+// half of it.
+import {
+  weeklySourceAuthoriseRouting,
+  weeklySourceUnwrapRpc,
+  WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
+  WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
+} from './weekly-source/authorise-routing.mjs';
+// WP-32 / WP-23 handoff N3, HANDOVER 2 round-5 ruling A2 and contract decision
+// D13: the durable caller's half of the managed-root guard refusal record.  The
+// owner is WP-14c's, the module is WP-23's; this import carries it to the
+// remaining call sites WP-23 handed off.
+import {
+  isManagedRootGuardRefusal,
+  recordGuardRefusalAfterRollback
+} from './weekly-source/guard-refusal-record.mjs';
+import { handleWeeklySourceDeliveryRuntime } from './weekly-source/delivery-runtime.mjs';
+import {
+  orchestrateWeeklyCorrectFinalApply,
+  orchestrateWeeklyCorrectFinalPreview
+} from './weekly-source/correct-final-source-orchestrator.mjs';
+import { adaptWeeklyCorrectFinalServiceSnapshot } from './weekly-source/correct-final-source-snapshot-adapter.mjs';
+import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';
+import {
+  orchestrateWeeklySourceFinalisation,
+  recoverWeeklySourceFinalisationPayProjection
+} from './weekly-source/finalisation-pay-orchestrator.mjs';
+import { createWeeklySourceUploadPublicationOwner } from './weekly-source/upload-publication-owner.mjs';
 import { handleBulkRowFreshnessRequest } from './bulk-row-freshness.js';
 import {
   buildCanonicalDailyFinancialSnapshot,
@@ -46,7 +79,10 @@ import {
   buildCanonicalDailyScheduleFromState,
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
-import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import {
+  handleCandidateAppRequest,
+  renderWeeklySourceCompletedPackArtifact
+} from './candidate-app-backend.js';
 import {
   classifyExpenseTimesheetPresentation,
   isExplicitOfficeCreatedExpenseRecord
@@ -171,6 +207,7 @@ import {
   buildTsq1String as buildTsq1StringShared,
   signTsq1 as signTsq1Shared
 } from './timesheet-qr-payload.js';
+import { canonicalWeeklyShiftFinancialSegment } from './weekly-source/weekly-rate-owner.js';
 
 // Provider compatibility boundary: current CloudTMS business code keeps its
 // established /rest/v1 table and RPC URLs. Only direct requests to a Miget
@@ -203,8 +240,14 @@ function unwrapRpcJsonb(raw, fnName) {
   return raw;
 }
 
+// WP-51 / WP-48 F2.  The follow-up runner authorises through
+// `timesheet_authorise_bulk_atomic`, which updates `public.timesheets` and can
+// therefore raise E29.  It is given the SAME refusal-recording funnel the other
+// call sites in this file use, so that refusal is recorded instead of failing
+// closed silently.  `sbRpc` stays for the calls that cannot reach the guard.
 const runImportReviewPostCommit = createImportReviewPostCommitRunner({
   sbRpc,
+  sbRpcRecordingGuardRefusal,
   unwrapRpcJsonb,
   runTsfinWorkerOnce
 });
@@ -2930,6 +2973,151 @@ const OFFICE_AUTH_REFRESH_REJECTION_CODES = Object.freeze({
   SESSION_VERSION_CHANGED: 'REFRESH_SESSION_VERSION_CHANGED'
 });
 
+async function loadWeeklySourceFileBytes(env, fileKey, options = {}) {
+  const key = String(fileKey || '').trim().replace(/^\/+/, '');
+  const maximumBytes = Number(options.maximumBytes || 0);
+  if (!key || !Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
+    const error = new Error('WEEKLY_SOURCE_FILE_REQUEST_INVALID');
+    error.code = 'WEEKLY_SOURCE_FILE_REQUEST_INVALID';
+    error.status = 400;
+    throw error;
+  }
+  const bucket = env.R2_BUCKET || env.R2;
+  if (!bucket || typeof bucket.get !== 'function') {
+    const error = new Error('WEEKLY_SOURCE_FILE_STORAGE_UNAVAILABLE');
+    error.code = 'WEEKLY_SOURCE_FILE_STORAGE_UNAVAILABLE';
+    error.status = 503;
+    throw error;
+  }
+  const object = await bucket.get(key);
+  if (!object) {
+    const error = new Error('WEEKLY_SOURCE_FILE_NOT_FOUND');
+    error.code = 'WEEKLY_SOURCE_FILE_NOT_FOUND';
+    error.status = 404;
+    throw error;
+  }
+  if (Number(object.size || 0) > maximumBytes) {
+    const error = new Error('WEEKLY_SOURCE_FILE_TOO_LARGE');
+    error.code = 'WEEKLY_SOURCE_FILE_TOO_LARGE';
+    error.status = 413;
+    throw error;
+  }
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (bytes.byteLength > maximumBytes) {
+    const error = new Error('WEEKLY_SOURCE_FILE_TOO_LARGE');
+    error.code = 'WEEKLY_SOURCE_FILE_TOO_LARGE';
+    error.status = 413;
+    throw error;
+  }
+  return bytes;
+}
+
+async function calculateWeeklyProtectedSnapshot(env, input = {}) {
+  const context = input?.context;
+  const schedule = Array.isArray(input?.schedule) ? input.schedule : null;
+  if (!context || typeof context !== 'object' || !schedule
+      || !context.timesheet || !context.contract_week || !context.contract_record
+      || !context.policy) {
+    const error = new Error('WEEKLY_PROTECTED_CALCULATION_CONTEXT_INVALID');
+    error.code = 'WEEKLY_PROTECTED_CALCULATION_CONTEXT_INVALID';
+    throw error;
+  }
+  const rootTimesheetId = String(context.root_timesheet_id || '').trim();
+  const timesheet = {
+    ...context.timesheet,
+    timesheet_id: rootTimesheetId,
+    actual_schedule_json: schedule
+  };
+  const currentFinancial = {
+    ...(context.current_financial || {}),
+    timesheet_id: rootTimesheetId,
+    candidate_id: context.candidate_id,
+    client_id: context.client_id
+  };
+  return buildWeeklyScheduleSegmentsSnapshot(
+    env,
+    timesheet,
+    context.contract_week,
+    context.contract_record,
+    currentFinancial,
+    {
+      write_now: false,
+      policy_override: context.policy,
+      ignore_locked_segments_for_preview: true
+    }
+  );
+}
+
+async function buildWeeklyCorrectFinalServiceSnapshot(env, input = {}) {
+  const rootContext = input?.root_context;
+  const rootTimesheetId = String(rootContext?.root_timesheet_id || '').trim().toLowerCase();
+  if (!rootContext || typeof rootContext !== 'object'
+      || !Array.isArray(rootContext.expected_actual_schedule)
+      || !rootTimesheetId) {
+    const error = new Error('WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID');
+    error.code = 'WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID';
+    error.status = 502;
+    throw error;
+  }
+
+  const [timesheetRows, weeklyRows] = await Promise.all([
+    sbRpc(env, 'tsfin_load_context_batch', { p_timesheet_ids: [rootTimesheetId] }),
+    sbRpc(env, 'tsfin_load_weekly_context_batch', { p_timesheet_ids: [rootTimesheetId] })
+  ]);
+  if (!Array.isArray(timesheetRows) || timesheetRows.length !== 1
+      || !Array.isArray(weeklyRows) || weeklyRows.length !== 1) {
+    const error = new Error('WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID');
+    error.code = 'WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID';
+    error.status = 502;
+    throw error;
+  }
+
+  const timesheetContext = timesheetRows[0];
+  const weeklyContext = weeklyRows[0];
+  const timesheet = timesheetContext?.out_timesheet;
+  const currentFinancial = timesheetContext?.out_cur_fin;
+  const contractWeek = weeklyContext?.out_cw;
+  const contract = weeklyContext?.out_contract;
+  const frozenValues = timesheet?.settings_authority_json?.values;
+  if (!timesheet || !currentFinancial || !contractWeek || !contract
+      || !frozenValues || typeof frozenValues !== 'object' || Array.isArray(frozenValues)) {
+    const error = new Error('WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID');
+    error.code = 'WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID';
+    error.status = 502;
+    throw error;
+  }
+  const policy = { ...frozenValues };
+  delete policy.resolved_at_utc;
+  const calculation = await buildWeeklyScheduleSegmentsSnapshot(
+    env,
+    {
+      ...timesheet,
+      timesheet_id: rootTimesheetId,
+      actual_schedule_json: rootContext.expected_actual_schedule
+    },
+    contractWeek,
+    contract,
+    currentFinancial,
+    {
+      write_now: false,
+      policy_override: policy,
+      ignore_locked_segments_for_preview: true
+    }
+  );
+  if (!calculation || calculation.ok !== true || !calculation.snapshot) {
+    const error = new Error('WEEKLY_SOURCE_CORRECTION_CALCULATION_FAILED');
+    error.code = 'WEEKLY_SOURCE_CORRECTION_CALCULATION_FAILED';
+    error.status = 502;
+    throw error;
+  }
+  return adaptWeeklyCorrectFinalServiceSnapshot({
+    rootContext,
+    timesheetContext,
+    weeklyContext,
+    calculation
+  });
+}
+
 function officeAuthRefreshRejected(code, message) {
   const safeCode = String(code || 'REFRESH_REJECTED');
   try {
@@ -4160,6 +4348,44 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
     return tmpAcc;
   };
 
+  // Weekly duration-only breaks need the real, contiguous rate portions of
+  // this shift. Keep this beside the established Weekly bucket classifier so
+  // Daily and exact-break routes remain untouched. Each real minute is
+  // classified by the same BH/Sun/Sat/Night/Day precedence, then adjacent
+  // minutes with the same bucket are merged.
+  const actualRatePortionsFromSegment = (segment, policy) => {
+    const elapsed = (segment.endMs - segment.startMs) / 60000;
+    if (!Number.isSafeInteger(elapsed) || elapsed <= 0) {
+      throw new Error('Weekly duration-only break shifts must resolve to whole positive minutes');
+    }
+    const portions = [];
+    for (let minuteStartMs = segment.startMs; minuteStartMs < segment.endMs; minuteStartMs += 60000) {
+      const parts = toLocalParts(new Date(minuteStartMs).toISOString(), 'Europe/London');
+      if (!parts?.ymd || !Number.isInteger(parts.hh) || !Number.isInteger(parts.mm)) {
+        throw new Error('Weekly duration-only break shift could not be classified');
+      }
+      const localMinute = (parts.hh * 60) + parts.mm;
+      const oneMinute = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+      segmentChunkIntoBuckets(parts.ymd, localMinute, localMinute + 1, policy, oneMinute);
+      const buckets = Object.entries(oneMinute).filter(([, value]) => value === 1).map(([bucket]) => bucket);
+      if (buckets.length !== 1) {
+        throw new Error('Weekly duration-only break minute did not resolve to exactly one rate category');
+      }
+      const bucket = buckets[0];
+      const previous = portions[portions.length - 1];
+      if (previous && previous.bucket === bucket && previous.endMs === minuteStartMs) {
+        previous.endMs += 60000;
+      } else {
+        portions.push({ bucket, startMs: minuteStartMs, endMs: minuteStartMs + 60000 });
+      }
+    }
+    return portions.map((portion) => ({
+      bucket: portion.bucket,
+      startInstant: new Date(portion.startMs).toISOString(),
+      endInstant: new Date(portion.endMs).toISOString(),
+    }));
+  };
+
   const normDays = (Array.isArray(actualDays) ? actualDays : []).map((d) => {
     if (!d || typeof d !== 'object') return d;
     const out = { ...d };
@@ -4245,6 +4471,9 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
   }
 
   const acc = { day: 0, night: 0, sat: 0, sun: 0, bh: 0 };
+  const collectRatePortions = authorityContext?.return_rate_portions === true;
+  const collectedRatePortions = [];
+  let collectedDurationBreakMinutes = 0;
 
   if (typeof segmentChunkIntoBuckets !== 'function') {
     throw new Error('segmentChunkIntoBuckets is missing (required for BH/Sun/Sat/Night/Day precedence bucketing)');
@@ -4337,6 +4566,9 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
 
     const beforeWork = { ...acc };
     const workedBuckets = actualBucketsFromSegments([shift], policy);
+    if (collectRatePortions) {
+      collectedRatePortions.push(...actualRatePortionsFromSegment(shift, policy));
+    }
     for (const k of Object.keys(acc)) {
       acc[k] += (workedBuckets[k] || 0);
     }
@@ -4406,7 +4638,11 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
 
       const mins = Math.floor(rawBm);
       const beforeAcc = { ...acc };
-      applyDurationBreak(acc, mins);
+      if (collectRatePortions) {
+        collectedDurationBreakMinutes += mins;
+      } else {
+        applyDurationBreak(acc, mins);
+      }
 
       const diffAfter = {};
       for (const k of Object.keys(acc)) {
@@ -4432,6 +4668,13 @@ async function resolveBucketsFromSchedule(env, contract, actualDays /* array */,
   }
 
   logBuckets('final-accumulator', acc);
+  if (collectRatePortions) {
+    return {
+      bucketMinutes: acc,
+      ratePortions: collectedRatePortions,
+      durationBreakMinutes: collectedDurationBreakMinutes,
+    };
+  }
   return acc;
 }
 
@@ -29278,7 +29521,7 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
     p_now_utc: nowUtc
   };
   const begin = officeActorId
-    ? await sbRpc(env, 'cloudtms_office_candidate_adapter_v1', {
+    ? await sbRpcRecordingGuardRefusal(env, 'cloudtms_office_candidate_adapter_v1', {
       p_action: 'WORKFLOW_ACTION_EXECUTE',
       p_actor_user_id: officeActorId,
       p_environment: environment,
@@ -29291,7 +29534,7 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
       },
       p_now_utc: nowUtc
     })
-    : await sbRpc(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
+    : await sbRpcRecordingGuardRefusal(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
   if (begin?.receipt_mode === 'DAILY_FACTUAL') {
     const receiptTimesheetId = String(begin.timesheet_id || '').trim();
     const inputHash = String(begin.canonical_save_input_sha256_hex || '');
@@ -29417,7 +29660,7 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
     p_now_utc: nowUtc
   };
   return officeActorId
-    ? sbRpc(env, 'cloudtms_office_candidate_adapter_v1', {
+    ? sbRpcRecordingGuardRefusal(env, 'cloudtms_office_candidate_adapter_v1', {
       p_action: 'FINALISE_EXECUTE',
       p_actor_user_id: officeActorId,
       p_environment: environment,
@@ -29430,7 +29673,7 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
       },
       p_now_utc: nowUtc
     })
-    : sbRpc(env, 'candidate_submission_finalize_atomic_v1', finalisationPayload);
+    : sbRpcRecordingGuardRefusal(env, 'candidate_submission_finalize_atomic_v1', finalisationPayload);
 }
 
 async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {
@@ -60470,7 +60713,7 @@ const expenseEvidenceKindCategories = {
        timesheet_id: targetTimesheetIdForWrite || currentTimesheetIdForWeek || null,
        response_context: bulkResponseContext
      });
-     rpcRes = await sbRpc(env, rpcFunctionName, rpcArgs);
+     rpcRes = await sbRpcRecordingGuardRefusal(env, rpcFunctionName, rpcArgs);
      wlog('sql_rpc_completed', {
        rpc_function_name: rpcFunctionName,
        contract_week_id: cw.id || null,
@@ -76055,7 +76298,12 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       artifact_hints,
       healthroster_compare
     };
-    const presentedDetailsPayload = await attachCandidateDailyOfficeDetailPresentation(env, rawDetailsPayload);
+    const candidatePresentedDetailsPayload = await attachCandidateDailyOfficeDetailPresentation(env, rawDetailsPayload);
+    const presentedDetailsPayload = await attachWeeklySourceOfficeTimesheetPresentation(
+      env,
+      candidatePresentedDetailsPayload,
+      user.id
+    );
     const expenseWorkflowRoute = await resolveExpenseWorkflowRouteForPresentation(
       env,
       ts,
@@ -79156,7 +79404,7 @@ async function handleTimesheetDailyManualUpsert(env, req, timesheetId) {
       qrAction === 'REISSUE' ? 'REISSUE_QR' :
       'DISABLE_QR'
     );
-    const rotateResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rotateResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: currentTimesheetId,
       p_target_action: canonicalQrAction,
@@ -79895,7 +80143,7 @@ async function handleContractWeekDeleteTimesheet(env, req, weekId) {
 
   let rpcPayload = null;
   try {
-    const rpcRes = await sbRpc(env, 'contract_week_manual_unprocess_atomic', {
+    const rpcRes = await sbRpcRecordingGuardRefusal(env, 'contract_week_manual_unprocess_atomic', {
       p_week_id: String(weekId),
       p_expected_timesheet_id: expectedTimesheetId,
       p_actor_user_id: user?.id || null,
@@ -80505,7 +80753,15 @@ async function handleContractWeekCreateExpenseSheet(env, req, weekId) {
   const now = nowIso();
 
   const payload = [{
-    booking_id, version: 1, is_current: true, status: 'SUBMITTED',
+    // 'SUBMITTED' belongs to public.contract_week_status_enum, not to
+    // public.timesheet_status_enum (RECEIVED, STORED, SHEETS_PENDING,
+    // SHEETS_PARTIAL, SHEETS_SYNCED, ERROR, REVOKED). Sending it made this
+    // insert raise 22P02 'invalid input value for enum timesheet_status_enum:
+    // "SUBMITTED"' on a clean build, so POST /api/contract-weeks/:id/
+    // expense-sheet always returned 500 and never created anything.
+    // 'RECEIVED' is the column default and the value every other weekly and
+    // expense timesheet creator in this file already sends.
+    booking_id, version: 1, is_current: true, status: 'RECEIVED',
     occupant_key_norm: (candidate?.display_name || String(candidate?.id || 'worker')).toLowerCase(),
     hospital_norm: (contract.display_site || client?.name || String(contract.client_id)).toLowerCase(),
     ward_norm: (contract.ward_hint || 'contract').toLowerCase(),
@@ -86515,6 +86771,102 @@ async function attachCandidateDailyOfficeDetailPresentation(env, payloadInput, f
   };
 }
 
+function unwrapWeeklySourceOfficePresentation(value, functionName) {
+  let payload = value;
+  if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)
+      && Object.prototype.hasOwnProperty.call(payload, functionName)) {
+    payload = payload[functionName];
+  }
+  if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)
+      && payload.weekly_source_presentation
+      && typeof payload.weekly_source_presentation === 'object'
+      && !Array.isArray(payload.weekly_source_presentation)) {
+    payload = payload.weekly_source_presentation;
+  }
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null;
+}
+
+async function attachWeeklySourceOfficeTimesheetPresentation(
+  env,
+  payloadInput,
+  actorUserId,
+  rpc = sbRpc
+) {
+  const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)
+    ? { ...payloadInput }
+    : payloadInput;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+
+  const sources = [
+    payload,
+    payload.timesheet,
+    payload.data_row,
+    payload.row,
+    payload.contract_week,
+    payload.effective
+  ].filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+  const firstText = (keys) => {
+    for (const source of sources) {
+      for (const key of keys) {
+        const value = String(source?.[key] == null ? '' : source[key]).trim();
+        if (value) return value;
+      }
+    }
+    return '';
+  };
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const timesheetId = firstText(['current_timesheet_id', 'timesheet_id']);
+  const actorId = String(actorUserId == null ? '' : actorUserId).trim();
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const sheetScope = upper(firstText(['sheet_scope']));
+  if (sheetScope === 'DAILY' || !uuidPattern.test(timesheetId) || !uuidPattern.test(actorId)) return payload;
+
+  const functionName = 'weekly_source_office_timesheet_presentation_v1';
+  try {
+    const raw = await rpc(
+      env,
+      functionName,
+      { p_request: { actor_user_id: actorId, timesheet_id: timesheetId } },
+      { timeoutMs: 20_000 }
+    );
+    const presentation = unwrapWeeklySourceOfficePresentation(raw, functionName);
+    if (!presentation || presentation.applicable === false) return payload;
+    if (String(presentation.contract || '').trim() !== 'WEEKLY_SOURCE_OFFICE_PRESENTATION_V1'
+        || upper(presentation.scope) !== 'WEEKLY') {
+      throw new Error('WEEKLY_SOURCE_PRESENTATION_CONTRACT_INVALID');
+    }
+    return { ...payload, weekly_source_presentation: presentation };
+  } catch (error) {
+    const sourcePotentiallyApplies = payload.is_import_authoritative === true
+      || payload.healthroster_compare?.required === true
+      || upper(firstText(['route_family'])) === 'IMPORT_AUTHORITATIVE'
+      || ['NHSP', 'HEALTHROSTER', 'HEALTHROSTER_NO_TIMESHEET'].includes(
+        upper(firstText(['underlying_channel_family', 'route_subfamily']))
+      );
+    console.warn('[WEEKLY_SOURCE_OFFICE_PRESENTATION] projection unavailable', {
+      timesheet_id: timesheetId,
+      source_potentially_applies: sourcePotentiallyApplies,
+      error: String(error?.message || error || 'WEEKLY_SOURCE_PRESENTATION_UNAVAILABLE')
+    });
+    if (!sourcePotentiallyApplies) return payload;
+    return {
+      ...payload,
+      weekly_source_presentation: {
+        contract: 'WEEKLY_SOURCE_OFFICE_PRESENTATION_V1',
+        scope: 'WEEKLY',
+        record_version: 'UNAVAILABLE',
+        freshness: 'UNAVAILABLE',
+        action_state: {
+          authorise_allowed: false,
+          blocked_reason: 'This Timesheet cannot be checked right now. Please refresh and try again.'
+        }
+      }
+    };
+  }
+}
+
 function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PROJECTION_FAILED') {
   const source = value && typeof value === 'object' ? value : {};
   const candidate = String(source.code || source.error_code || fallback).trim().toUpperCase();
@@ -86724,7 +87076,7 @@ function candidateOfficeSummaryStatusLabel(projection) {
   return '';
 }
 
-async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpc) {
+async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpcRecordingGuardRefusal) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
   const pending = [];
@@ -92637,7 +92989,13 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
       base_only: compactFilters.base_only === true
     });
     const rpcRes = await sbRpc(env, 'bulk_authorise_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
-    const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_authorise_row_context_v1'));
+    let payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_authorise_row_context_v1'));
+    if (['editor', 'compare_import', 'full'].includes(profile)
+        && payload.ok !== false
+        && payload.soft_failure !== true
+        && payload.context_degraded !== true) {
+      payload = await attachWeeklySourceOfficeTimesheetPresentation(env, payload, user.id);
+    }
     if (profile === 'full' && payload.ok !== false && payload.soft_failure !== true && payload.context_degraded !== true) {
       try {
         const payloadClassification = trimStr(
@@ -96292,7 +96650,7 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const attemptStartedAtMs = nowMs();
     try {
-      const result = await sbRpc(env, rpcFunctionName, rpcArgs, rpcOptions);
+      const result = await sbRpcRecordingGuardRefusal(env, rpcFunctionName, rpcArgs, rpcOptions);
       const payloadDescriptor = describeRetryableResultPayload(result);
       if (payloadDescriptor) {
         lastDescriptor = payloadDescriptor;
@@ -103664,7 +104022,7 @@ async function handleTimesheetConvertQrToManual(env, req, timesheetId) {
   let nextVersion = Number(ts.version || 1);
   let newTimesheetId = null;
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'CONVERT_QR_TO_MANUAL',
@@ -104528,7 +104886,7 @@ async function handleTimesheetAllowElectronicAgain(env, req, timesheetId) {
   let nextVersion = Number(ts.version || 1);
   let newTimesheetId = null;
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'ALLOW_ELECTRONIC_AGAIN',
@@ -104906,7 +105264,7 @@ async function handleTimesheetAllowQrAgain(env, req, timesheetId) {
   let nextVersion = Number(ts.version || 1);
   let newTimesheetId = null;
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'ALLOW_QR_AGAIN',
@@ -105310,7 +105668,7 @@ async function handleTimesheetSwitchToManual(env, req, timesheetId) {
   let nextVersion = Number(ts.version || 1);
   let newTimesheetId = null;
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'SWITCH_TO_MANUAL',
@@ -106218,7 +106576,7 @@ async function handleTimesheetSwitchDailyToManual(env, req, timesheetId) {
   let nextVersion = Number(ts.version || 1);
   let newTimesheetId = null;
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'SWITCH_DAILY_TO_MANUAL',
@@ -106695,7 +107053,7 @@ export async function handleTimesheetRevertToElectronic(env, req, timesheetId) {
   }
 
   try {
-    const rpcResult = await sbRpc(env, 'timesheet_route_version_rotate', {
+    const rpcResult = await sbRpcRecordingGuardRefusal(env, 'timesheet_route_version_rotate', {
       p_current_timesheet_id: currentTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_target_action: 'REVERT_TO_ELECTRONIC',
@@ -108181,7 +108539,7 @@ async function handleTimesheetDelete(env, req, timesheetId, ctx) {
       env,
       freshPreview.pending_expense_claims.map((claim) => claim.workflow_id)
     );
-    applyResult = normaliseRpc(await sbRpc(env, 'timesheet_delete_with_candidate_submission_guard_apply_v1', {
+    applyResult = normaliseRpc(await sbRpcRecordingGuardRefusal(env, 'timesheet_delete_with_candidate_submission_guard_apply_v1', {
       p_environment: String(env.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase(),
       p_delete_kind: previewKind,
       p_timesheet_id: freshPreview.current_timesheet_id,
@@ -110991,8 +111349,29 @@ async function handleTimesheetPayHold(env, req, timesheetId) {
 // REPORTS — Timesheets (unchanged; already supports print/csv)
 // ───────────────────────────────────────────────────────────────────────────────
 
-async function handleReportTimesheets(env, req) {
-  const user = await requireUser(env, req, ['admin']);
+function weeklySourceHoursReportColumns(row) {
+  const hours = row?.weekly_source_hours;
+  if (!hours || hours.weekly_source !== true) return null;
+  const fact = (name) => {
+    const value = hours?.[name];
+    return {
+      state: String(value?.state || ''),
+      total: value?.total_hours == null ? '' : round2(value.total_hours).toFixed(2),
+    };
+  };
+  return {
+    submitted: fact('submitted_hours'),
+    source: fact('source_hours'),
+    approved: fact('approved_hours'),
+    paid: fact('paid_hours'),
+    invoiceMovementCount: Number(hours?.invoice_movements?.movement_count || 0),
+  };
+}
+
+async function handleReportTimesheets(env, req, dependencies = {}) {
+  const requireReportUser = dependencies.requireUser || requireUser;
+  const reportRpc = dependencies.rpc || sbRpc;
+  const user = await requireReportUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
@@ -111028,7 +111407,7 @@ async function handleReportTimesheets(env, req) {
   // ✅ single RPC call (segment-aware invoiced logic lives in SQL)
   let rows = [];
   try {
-    const r = await sbRpc(env, 'tsfin_report_timesheets_v2', {
+    const r = await reportRpc(env, 'tsfin_report_timesheets_v2', {
       p_week_ending_from: from || null,
       p_week_ending_to: to || null,
       p_pay_method: payMethod || null,
@@ -111062,10 +111441,13 @@ async function handleReportTimesheets(env, req) {
   };
 
   if (format === 'csv') {
-    const header = ['WeekEnding','Client','PayMethod','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT','ExpensesChargeExVAT','MileageChargeExVAT'];
+    const header = ['WeekEnding','Client','PayMethod','Paid','Invoiced','PayExVAT','ChargeExVAT','MarginExVAT','ExpensesChargeExVAT','MileageChargeExVAT',
+      'SubmittedHoursState','SubmittedHours','FinalSourceHoursState','FinalSourceHours',
+      'ApprovedHoursState','ApprovedHours','PaidHoursState','PaidHours','SourceInvoiceMovementCount'];
     const out = [csvJoin(header)];
 
     for (const r of rows) {
+      const source = weeklySourceHoursReportColumns(r);
       out.push(csvJoin([
         r?.timesheet?.week_ending_date || '',
         r?.client?.name || '',
@@ -111077,6 +111459,11 @@ async function handleReportTimesheets(env, req) {
         round2(r.margin_ex_vat).toFixed(2),
         round2(r.expenses_charge_ex_vat).toFixed(2),
         round2(r.mileage_charge_ex_vat).toFixed(2),
+        source?.submitted.state || '', source?.submitted.total || '',
+        source?.source.state || '', source?.source.total || '',
+        source?.approved.state || '', source?.approved.total || '',
+        source?.paid.state || '', source?.paid.total || '',
+        source ? source.invoiceMovementCount : '',
       ]));
     }
 
@@ -111084,7 +111471,9 @@ async function handleReportTimesheets(env, req) {
   }
 
   if (format === 'print') {
-    const rowsHtml = rows.map(r => `
+    const rowsHtml = rows.map(r => {
+      const source = weeklySourceHoursReportColumns(r);
+      return `
       <tr>
         <td>${r?.timesheet?.week_ending_date || ''}</td>
         <td>${r?.client?.name || ''}</td>
@@ -111094,8 +111483,12 @@ async function handleReportTimesheets(env, req) {
         <td style="text-align:right">${round2(r.total_pay_ex_vat).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.total_charge_ex_vat).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.margin_ex_vat).toFixed(2)}</td>
-      </tr>`
-    ).join('');
+        <td>${source ? `${source.submitted.total || '—'} (${source.submitted.state})` : ''}</td>
+        <td>${source ? `${source.source.total || '—'} (${source.source.state})` : ''}</td>
+        <td>${source ? `${source.approved.total || '—'} (${source.approved.state})` : ''}</td>
+        <td>${source ? `${source.paid.total || '—'} (${source.paid.state})` : ''}</td>
+      </tr>`;
+    }).join('');
 
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
@@ -111111,6 +111504,10 @@ async function handleReportTimesheets(env, req) {
               <th>Pay ex VAT</th>
               <th>Charge ex VAT</th>
               <th>Margin ex VAT</th>
+              <th>Submitted hours</th>
+              <th>Final source hours</th>
+              <th>Approved hours</th>
+              <th>Paid hours</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
@@ -111129,8 +111526,11 @@ async function handleReportTimesheets(env, req) {
 // REPORTS — Invoices (add print)
 // ───────────────────────────────────────────────────────────────────────────────
 
- async function handleReportInvoices(env, req) {
-  const user = await requireUser(env, req, ['admin']);
+ async function handleReportInvoices(env, req, dependencies = {}) {
+  const requireReportUser = dependencies.requireUser || requireUser;
+  const reportFetch = dependencies.fetch || sbFetch;
+  const reportRpc = dependencies.rpc || sbRpc;
+  const user = await requireReportUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
   const urlObj = new URL(req.url);
@@ -111149,22 +111549,33 @@ async function handleReportTimesheets(env, req) {
   if (status) url += `&status=eq.${enc(status)}`;
   if (clientIds.length) url += `&client_id=in.(${clientIds.map(enc).join(',')})`;
 
-  const { rows: invs } = await sbFetch(env, url);
+  const { rows: invs } = await reportFetch(env, url);
   if (!invs?.length) return withCORS(env, req, ok({ rows: [], totals: {} }));
 
   // Get margin by summing invoice_lines.margin_ex_vat
   const invIds = invs.map(i => i.id);
-  const { rows: lines } = await sbFetch(env,
-    `${env.SUPABASE_URL}/rest/v1/invoice_lines?select=invoice_id,margin_ex_vat&invoice_id=in.(${invIds.map(enc).join(',')})`
+  const { rows: lines } = await reportFetch(env,
+    `${env.SUPABASE_URL}/rest/v1/invoice_lines?select=invoice_id,timesheet_id,margin_ex_vat&invoice_id=in.(${invIds.map(enc).join(',')})`
   );
   const marginByInv = {};
   for (const ln of lines || []) {
     marginByInv[ln.invoice_id] = round2((marginByInv[ln.invoice_id] || 0) + Number(ln.margin_ex_vat || 0));
   }
 
+  let sourceReport = [];
+  try {
+    const response = await reportRpc(env, 'weekly_source_invoice_report_rows_v1', {
+      p_request: { invoice_ids: invIds },
+    });
+    sourceReport = Array.isArray(response?.rows) ? response.rows : [];
+  } catch (error) {
+    return withCORS(env, req, serverError(String(error?.message || error)));
+  }
+  const sourceByInvoice = Object.fromEntries(sourceReport.map((row) => [row.invoice_id, row]));
   const rows = invs.map(i => ({
     ...i,
-    margin_ex_vat: marginByInv[i.id] || 0
+    margin_ex_vat: marginByInv[i.id] || 0,
+    weekly_source_invoice: sourceByInvoice[i.id] || {},
   }));
 
   const totals = rows.reduce((a, r) => {
@@ -111177,7 +111588,8 @@ async function handleReportTimesheets(env, req) {
   Object.keys(totals).forEach(k => totals[k] = round2(totals[k]));
 
   if (format === 'csv') {
-    const header = ['InvoiceNo','Status','IssuedAt','SubtotalExVAT','VAT','TotalIncVAT','MarginExVAT'];
+    const header = ['InvoiceNo','Status','IssuedAt','SubtotalExVAT','VAT','TotalIncVAT','MarginExVAT',
+      'SourceMovementCount','SourceMovementExVAT','BackingReportNumbers'];
     const out = [csvJoin(header)];
     for (const r of rows) {
       out.push(csvJoin([
@@ -111187,7 +111599,13 @@ async function handleReportTimesheets(env, req) {
         round2(r.subtotal_ex_vat).toFixed(2),
         round2(r.vat_amount).toFixed(2),
         round2(r.total_inc_vat).toFixed(2),
-        round2(r.margin_ex_vat).toFixed(2)
+        round2(r.margin_ex_vat).toFixed(2),
+        r.weekly_source_invoice?.weekly_source === true ? Number(r.weekly_source_invoice.movement_count || 0) : '',
+        r.weekly_source_invoice?.weekly_source === true ? round2(r.weekly_source_invoice.source_movement_ex_vat).toFixed(2) : '',
+        r.weekly_source_invoice?.weekly_source === true
+          ? (Array.isArray(r.weekly_source_invoice.backing_report_numbers)
+            ? r.weekly_source_invoice.backing_report_numbers.join(' | ') : '')
+          : ''
       ]));
     }
     return withCORS(env, req, ok({ csv: out.join('\n'), totals, count: rows.length }));
@@ -111203,6 +111621,9 @@ async function handleReportTimesheets(env, req) {
         <td style="text-align:right">${round2(r.vat_amount).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.total_inc_vat).toFixed(2)}</td>
         <td style="text-align:right">${round2(r.margin_ex_vat).toFixed(2)}</td>
+        <td>${r.weekly_source_invoice?.weekly_source === true ? Number(r.weekly_source_invoice.movement_count || 0) : ''}</td>
+        <td style="text-align:right">${r.weekly_source_invoice?.weekly_source === true ? round2(r.weekly_source_invoice.source_movement_ex_vat).toFixed(2) : ''}</td>
+        <td>${r.weekly_source_invoice?.weekly_source === true && Array.isArray(r.weekly_source_invoice.backing_report_numbers) ? r.weekly_source_invoice.backing_report_numbers.join(' | ') : ''}</td>
       </tr>`).join('');
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif">
@@ -111211,6 +111632,7 @@ async function handleReportTimesheets(env, req) {
           <thead><tr style="background:#f5f5f5">
             <th>Invoice No</th><th>Status</th><th>Issued At</th>
             <th>Subtotal ex VAT</th><th>VAT</th><th>Total inc VAT</th><th>Margin ex VAT</th>
+            <th>Source movements</th><th>Source movement ex VAT</th><th>Backing reports</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -112586,7 +113008,7 @@ async function handleDailyZeroShiftsReviewCreate(env, req) {
       return withCORS(env, req, badRequest('The selected client is not currently enabled for Daily Validation.'));
     }
 
-    const raw = await sbRpc(env, 'daily_zero_shifts_review_create_v1', {
+    const raw = await sbRpcRecordingGuardRefusal(env, 'daily_zero_shifts_review_create_v1', {
       p_client_id: clientId,
       p_coverage_start_date: coverageStartDate,
       p_coverage_end_date: coverageEndDate,
@@ -137938,6 +138360,9 @@ async function handleGetSettings(env, req) {
 
         // Global policy flags
         'ts_reference_required',
+        'healthroster_import_auto_authorise_default',
+        'nhsp_import_auto_authorise_default',
+        'auto_authorise_on_validation',
         'reversal_complete_financials_date',
         'reversal_replacement_financials_date',
         'updated_at',
@@ -138227,6 +138652,9 @@ async function handleUpdateSettings(env, req) {
 
     'bank_name','bank_sort_code','bank_account_number','vat_registration_number',
     'ts_reference_required',
+    'healthroster_import_auto_authorise_default',
+    'nhsp_import_auto_authorise_default',
+    'auto_authorise_on_validation',
 
     // ✅ Adaptability config
     'import_config_json',
@@ -138438,6 +138866,19 @@ async function handleUpdateSettings(env, req) {
 
   for (const k of allowed) {
     if (!(k in data)) continue;
+
+    if ([
+      'healthroster_import_auto_authorise_default',
+      'nhsp_import_auto_authorise_default',
+      'auto_authorise_on_validation'
+    ].includes(k)) {
+      try {
+        payload[k] = parseStrictBoolean(data[k], k);
+      } catch (e) {
+        return withCORS(env, req, badRequest(String(e?.message || e)));
+      }
+      continue;
+    }
 
     if (k === 'payment_remittance_send_timing') {
       const v = String(data.payment_remittance_send_timing || '').trim().toUpperCase();
@@ -141512,6 +141953,7 @@ async function handleGetClient(env, req, clientId) {
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'healthroster_import_auto_authorise','nhsp_import_auto_authorise',
           'timesheet_break_entry_mode',
 
           // ✅ NEW: client comms opt-ins (DB-backed)
@@ -141944,6 +142386,7 @@ async function handleUpdateClient(env, req, clientId) {
           'effective_from','timezone_id',
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'healthroster_import_auto_authorise','nhsp_import_auto_authorise',
           'timesheet_break_entry_mode',
 
           // manual adjustment email routing
@@ -142001,6 +142444,14 @@ async function handleUpdateClient(env, req, clientId) {
     }
     if ('autoprocess_hr' in data || 'autoprocess_hr' in csInput) {
       csInput.autoprocess_hr = asBool(csInput.autoprocess_hr ?? data.autoprocess_hr);
+    }
+    if ('healthroster_import_auto_authorise' in data || 'healthroster_import_auto_authorise' in csInput) {
+      csInput.healthroster_import_auto_authorise =
+        asBool(csInput.healthroster_import_auto_authorise ?? data.healthroster_import_auto_authorise);
+    }
+    if ('nhsp_import_auto_authorise' in data || 'nhsp_import_auto_authorise' in csInput) {
+      csInput.nhsp_import_auto_authorise =
+        asBool(csInput.nhsp_import_auto_authorise ?? data.nhsp_import_auto_authorise);
     }
     if ('hr_attach_to_invoice' in data || 'hr_attach_to_invoice' in csInput) {
       csInput.hr_attach_to_invoice = asBool(csInput.hr_attach_to_invoice ?? data.hr_attach_to_invoice);
@@ -142114,6 +142565,8 @@ async function handleUpdateClient(env, req, clientId) {
       auto_invoice_default,
       requires_hr,
       autoprocess_hr,
+      healthroster_import_auto_authorise,
+      nhsp_import_auto_authorise,
       hr_attach_to_invoice,
       ts_attach_to_invoice,
       timesheet_break_entry_mode,
@@ -147888,6 +148341,8 @@ async function handleClientsGet(env, req, clientId) {
           'auto_invoice_default',
           'requires_hr',
           'autoprocess_hr',
+          'healthroster_import_auto_authorise',
+          'nhsp_import_auto_authorise',
           'timesheet_break_entry_mode',
           'hr_attach_to_invoice',
           'ts_attach_to_invoice',
@@ -155647,6 +156102,19 @@ async function handleGetInvoice(env, req, invoiceId) {
         ? manifest.header_snapshot_json
         : (invoice.header_snapshot_json && typeof invoice.header_snapshot_json === 'object' ? invoice.header_snapshot_json : {});
 
+    let weeklySourceInvoice = null;
+    if (String(header_snapshot_json?.schema_version || '').trim()
+        === 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1') {
+      weeklySourceInvoice = unwrapRpcJsonb(await sbRpc(
+        env,
+        'weekly_source_invoice_edit_context_v1',
+        { p_request: { actor_user_id: user.id, invoice_id: invoiceId } }
+      ), 'weekly_source_invoice_edit_context_v1');
+      if (weeklySourceInvoice?.is_weekly_source_invoice !== true) {
+        throw new Error('WEEKLY_SOURCE_INVOICE_EDIT_CONTEXT_INVALID');
+      }
+    }
+
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
 
     const items = lineRows.map(l => ({
@@ -155866,6 +156334,8 @@ async function handleGetInvoice(env, req, invoiceId) {
         // ✅ reference sources now come from the RPC (no extra DB reads here)
         timesheet_reference_sources_by_id,
 
+        weekly_source_invoice: weeklySourceInvoice,
+
         correspondence
       }));
     }
@@ -155896,7 +156366,9 @@ async function handleGetInvoice(env, req, invoiceId) {
       reference_rows,
 
       // ✅ reference sources now come from the RPC (no extra DB reads here)
-      timesheet_reference_sources_by_id
+      timesheet_reference_sources_by_id,
+
+      weekly_source_invoice: weeklySourceInvoice
     }));
   } catch {
     return withCORS(env, req, serverError('Failed to fetch invoice'));
@@ -156024,7 +156496,7 @@ async function ensureInvoiceEvidenceBytesArePdf(bytes, context = {}) {
   );
 }
 
-async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts) {
+async function _renderInvoiceBundleAndStore(env, req, invoiceId, userForAudit, opts, testRuntime = null) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
   const enc = encodeURIComponent;
@@ -157445,7 +157917,13 @@ function buildNhspReportHTML(inv, header, nhspData) {
     // 1) Manifest (single RPC)
     step = 'MANIFEST_RPC';
     const tMan0 = Date.now();
-    const man = await sbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
+    // The optional runtime is reachable only through the exported test seam at
+    // the bottom of this module. Production callers always omit it. This lets
+    // the release proof execute this exact renderer/storage owner while using
+    // an in-memory Browser Rendering/R2 fixture instead of a second formatter.
+    const renderSbRpc = testRuntime?.sbRpc || sbRpc;
+    const renderWithBrowser = testRuntime?.withBrowser || withBrowser;
+    const man = await renderSbRpc(env, 'invoice_render_manifest', { p_invoice_id: invoiceId });
     log('log', 'manifest_rpc_ok', { ms: Date.now() - tMan0 });
 
     const manRows = Array.isArray(man) ? man : (man?.data || []);
@@ -157701,7 +158179,7 @@ const hideBankFooter = header.hide_bank_footer === true;
     if (_cacheNeedsRefresh(hrCacheRowsEffective)) {
       step = 'HR_SOURCE_ROWS_COLLECT_RPC';
       const tHr0 = Date.now();
-      const fresh0 = await sbRpc(env, 'invoice_source_rows_collect', { p_invoice_id: invoiceId, p_force_refresh: true });
+      const fresh0 = await renderSbRpc(env, 'invoice_source_rows_collect', { p_invoice_id: invoiceId, p_force_refresh: true });
       const freshRows = Array.isArray(fresh0) ? fresh0 : (fresh0?.data || []);
 
       hrCacheRowsEffective = Array.isArray(freshRows) ? freshRows : [];
@@ -157812,6 +158290,14 @@ const headerPoTpl = pick(headerForTemplate, "po_number", null);
 const itemPosTpl = (invoiceData.items || []).map(i => i?.meta?.po_number).filter(Boolean);
 const uniquePosTpl = Array.from(new Set([...(headerPoTpl ? [headerPoTpl] : []), ...itemPosTpl]));
 const poNoTpl = uniquePosTpl.length === 1 ? String(uniquePosTpl[0]) : "";
+const backingReportNumbersTpl = Array.from(new Set(
+  (Array.isArray(headerForTemplate?.meta?.backing_report_numbers)
+    ? headerForTemplate.meta.backing_report_numbers
+    : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+));
+const backingReportLabelTpl = backingReportNumbersTpl.join(', ');
 
 const bankTpl = (pick(headerForTemplate, "bank", {}) || {});
 const registeredAddressLinesTpl = String(pick(headerForTemplate, "registered_address", "") || "")
@@ -157879,6 +158365,7 @@ const headerTemplate = `
         <tr><th>Due date</th><td class="mono">${escapeHtml(dueTxt)}</td></tr>
         ${termsDaysTpl != null ? `<tr><th>Payment terms</th><td class="mono">${escapeHtml(String(termsDaysTpl))} days</td></tr>` : ""}
         ${poNoTpl ? `<tr><th>PO Number</th><td class="mono">${escapeHtml(poNoTpl)}</td></tr>` : ""}
+        ${backingReportLabelTpl ? `<tr><th>Backing report</th><td class="mono">${escapeHtml(backingReportLabelTpl)}</td></tr>` : ""}
       </table>
     </div>
   </div>
@@ -158344,7 +158831,7 @@ const docsKeys = tsIds.map(tsId => normalizeKey(`docs-pdf/timesheets/ts_${tsId}.
 
     // === EFFICIENCY FIX: single browser session per invoice render ===
     step = 'BROWSER_RENDER_ALL';
-    const renderAll = await withBrowser(env, async (browser) => {
+    const renderAll = await renderWithBrowser(env, async (browser) => {
       const out = { invoicePdfU8: null, hrBytes: null, nhspBytes: null };
 
       // Invoice PDF
@@ -161393,6 +161880,8 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     'auto_invoice_default',
     'requires_hr',
     'autoprocess_hr',
+    'healthroster_import_auto_authorise',
+    'nhsp_import_auto_authorise',
     'hr_attach_to_invoice',
     'ts_attach_to_invoice',
     'send_manual_invoices_to_different_email',
@@ -165600,6 +166089,124 @@ async function sbRpc(env, fn, args, opts) {
 }
 
 
+// ---------------------------------------------------------------------------
+// WP-32 — the durable caller's record of a managed-root guard refusal.
+//
+// HANDOVER 2 round-5 ruling A2 / contract decision D13.  WP-14c built and proved
+// the owner `public.weekly_source_guard_refusal_record_after_rollback_v1`; WP-23
+// built and proved the module `weekly-source/guard-refusal-record.mjs` and wired
+// it at the Weekly Source Office boundary, handing the remaining call sites here
+// (handoff N3) with a three-line recipe.  This is that recipe, factored into one
+// named helper so that each call site is a single-identifier change and no
+// control flow in this file moves.
+//
+// The four caller rules WP-14c states, and how each is honoured:
+//   1. a NEW transaction that has not written — the record goes out as its own
+//      PostgREST request through `sbRpc`, never batched onto the refused call;
+//   2. after the rollback, never before or during — it is only ever reached from
+//      a `catch`, when the refusing call has already thrown;
+//   3. the same correlation identity the attempt carried — the id is generated
+//      BEFORE the attempt and is logged with the refusal;
+//   4. a failure of the record must never change the outcome of the refusal —
+//      `recordGuardRefusalAfterRollback` is itself total, and the extra
+//      `try`/`catch` below covers the predicate and the log as well, so nothing
+//      on this path can raise.
+//
+// `sbRpc` itself is deliberately NOT wrapped: it is the hot Banking Pay path and
+// a catch/rethrow there would touch Banking Pay behaviour (WP-23 handoff N3).
+// ---------------------------------------------------------------------------
+
+function weeklySourceGuardRefusalCorrelationId(prefix) {
+  try {
+    const unique = globalThis.crypto?.randomUUID?.();
+    const fallback = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `ws62-${prefix}:${unique || fallback}`;
+  } catch {
+    return `ws62-${prefix}:${Date.now().toString(36)}`;
+  }
+}
+
+// Only the one unambiguous Office actor key is read.  A Candidate session id or a
+// workflow id is NOT an actor, so anything else is reported absent rather than
+// guessed; WP-14c's owner accepts a null actor.
+function weeklySourceGuardRefusalActor(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const value = args.p_actor_user_id;
+  return (typeof value === 'string' && value.trim()) ? value.trim() : null;
+}
+
+async function recordWeeklySourceGuardRefusal(env, error, correlationId, caller, actorUserId) {
+  try {
+    if (!isManagedRootGuardRefusal(error)) return;
+    try {
+      console.warn('[WEEKLY_SOURCE_GUARD_REFUSAL] ' + JSON.stringify({
+        caller,
+        correlation_id: correlationId
+      }));
+    } catch {}
+    await recordGuardRefusalAfterRollback({
+      rpc: (functionName, functionArgs, functionOptions) =>
+        sbRpc(env, functionName, functionArgs, functionOptions),
+      error,
+      correlationId,
+      caller,
+      actorUserId: actorUserId ?? null
+    });
+  } catch {
+    // WP-14c rule 4: a failure of the record must never change the refusal.
+  }
+}
+
+async function sbRpcRecordingGuardRefusal(env, fn, args, opts, context = null) {
+  const correlationId = (context && typeof context === 'object' && context.correlationId)
+    ? String(context.correlationId)
+    : weeklySourceGuardRefusalCorrelationId('broker');
+  try {
+    return await sbRpc(env, fn, args, opts);
+  } catch (error) {
+    await recordWeeklySourceGuardRefusal(
+      env,
+      error,
+      correlationId,
+      `broker:${String(fn || '').trim() || 'unknown'}`,
+      (context && typeof context === 'object' && context.actorUserId !== undefined)
+        ? context.actorUserId
+        : weeklySourceGuardRefusalActor(args)
+    );
+    throw error;
+  }
+}
+
+// The two QR owners are called with a raw `fetch` rather than through `sbRpc`, so
+// the refusal never becomes a thrown error object.  The PostgREST body is read
+// from the response text and given the shape `readRefusalFacts` expects; nothing
+// is re-derived from the current database state.
+async function recordWeeklySourceGuardRefusalFromResponseBody(env, responseText, caller, actorUserId, correlationId) {
+  try {
+    const raw = String(responseText || '');
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) return;
+    let body = null;
+    try { body = JSON.parse(raw.slice(start, end + 1)); } catch { return; }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return;
+    const refusal = new Error(String(body.message || 'RPC refused'));
+    refusal.json = body;
+    await recordWeeklySourceGuardRefusal(env, refusal, correlationId, caller, actorUserId);
+  } catch {
+    // WP-14c rule 4.
+  }
+}
+
+export const weeklySourceGuardRefusalCallerInternals = Object.freeze({
+  weeklySourceGuardRefusalCorrelationId,
+  weeklySourceGuardRefusalActor,
+  recordWeeklySourceGuardRefusal,
+  sbRpcRecordingGuardRefusal,
+  recordWeeklySourceGuardRefusalFromResponseBody
+});
+
+
 // ---------------------------
 // Context loaders
 // ---------------------------
@@ -165968,7 +166575,7 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
   });
 
   try {
-    const res = await sbRpc(env, 'tsfin_write_snapshots_and_complete', args);
+    const res = await sbRpcRecordingGuardRefusal(env, 'tsfin_write_snapshots_and_complete', args);
     // PostgREST returns table results as an array of rows (usually 1 row here).
     const out = Array.isArray(res) ? (res[0] || null) : res;
 
@@ -166353,7 +166960,7 @@ async function writeSnapshot(env, snapshot) {
   if (!snap.updated_at) snap.updated_at = nowIso;
 
   // Use the correct argument name for the Postgres function:
-  await sbRpc(env, 'tsfin_prepare_write', {
+  await sbRpcRecordingGuardRefusal(env, 'tsfin_prepare_write', {
     p_timesheet_id: snap.timesheet_id
   });
 
@@ -167367,7 +167974,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
       let contextCleanupFailed = false;
       for (const ob of outboxIds) {
         try {
-          await sbRpc(env, "tsfin_mark_revoked", { p_timesheet_id: effId });
+          await sbRpcRecordingGuardRefusal(env, "tsfin_mark_revoked", { p_timesheet_id: effId });
           await sbRpc(env, "tsfin_work_success", { p_id: ob });
           ok++;
         } catch (e) {
@@ -168840,6 +169447,102 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
 
   let rpcPayload = null;
+
+  // WP-23 / Gate 13 hostile finance review F2.  This is the Office Authorise
+  // route, and Bulk Authorise reaches it too through
+  // `callGoldTimesheetLifecycleActionForBulkItem`.  A Weekly Source week must go
+  // to the first-authorisation wrapper, never straight to the ordinary owner:
+  // the ordinary owner writes no root-authorisation generation, so the week
+  // silently stays unmanaged and every later entitlement publication then raises
+  // at the pointer update.  See `weeklySourceAuthoriseRouting` above.
+  const weeklySourceRouting = await weeklySourceAuthoriseRouting(
+    (functionName, args, options) => sbRpc(env, functionName, args, options),
+    currentTimesheetId, user?.id || null
+  );
+  if (weeklySourceRouting.refusal) {
+    lifecycleSignatureLog('weekly_source_routing_refused', {
+      rpc_function_name: WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
+      current_timesheet_id: currentTimesheetId || null,
+      error_code: weeklySourceRouting.refusal.error_code
+    });
+    return withJson(weeklySourceRouting.refusal.status, {
+      error: weeklySourceRouting.refusal.error_code,
+      error_code: weeklySourceRouting.refusal.error_code,
+      message: weeklySourceRouting.refusal.message,
+      current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor({}, currentTimesheetId)
+    });
+  }
+  if (weeklySourceRouting.bound === true) {
+    lifecycleSignatureLog('weekly_source_first_authorise', {
+      rpc_function_name: WEEKLY_SOURCE_FIRST_AUTHORISE_RPC,
+      requested_timesheet_id: requestedTimesheetId || null,
+      expected_timesheet_id: expectedTimesheetId || null,
+      current_timesheet_id: currentTimesheetId || null,
+      expected_row_signature: expectedRowSignature || null
+    });
+    let firstAuthorise = null;
+    try {
+      firstAuthorise = weeklySourceUnwrapRpc(
+        // WP-07's signature, unchanged.  The wrapper interposes the serial gate,
+        // the rotation lock set and the stale-rotation refusal, then calls the
+        // UNCHANGED ordinary Authorise owner itself, exactly once.
+        await sbRpc(env, WEEKLY_SOURCE_FIRST_AUTHORISE_RPC, {
+          p_timesheet_id: currentTimesheetId,
+          p_expected_timesheet_id: expectedTimesheetId || currentTimesheetId,
+          p_expected_row_signature: expectedRowSignature || null,
+          p_actor_user_id: user?.id || null
+        }, { timeoutMs: 20000 }),
+        WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
+      );
+    } catch (err) {
+      const rpcErr = parseRpcFailure(err);
+      const detailObj = rpcErr.detailJson || parseMaybeJsonObj(rpcErr.details) || {};
+      return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
+        currentTimesheetId,
+        expectedTimesheetId,
+        expectedRowSignature,
+        message: rpcErr.message
+      });
+    }
+    if (!firstAuthorise || firstAuthorise.ok !== true) {
+      return mutationErrorResponse(
+        firstString(firstAuthorise?.code, firstAuthorise?.error_code, 'WEEKLY_SOURCE_FIRST_AUTHORISE_REFUSED'),
+        firstAuthorise || {},
+        {
+          currentTimesheetId,
+          expectedTimesheetId,
+          expectedRowSignature,
+          message: firstAuthorise?.refusal_message || firstAuthorise?.reason
+        }
+      );
+    }
+    // The wrapper returns the ordinary owner's own result under
+    // `authorise_result`, so the response shape the Office and the bulk
+    // orchestrator read is rebuilt from it and neither surface has to know which
+    // owner ran.
+    rpcPayload = {
+      ok: true,
+      success: true,
+      operation: firstAuthorise?.authorise_result?.operation || 'AUTHORISE',
+      timesheet_id: firstString(firstAuthorise?.authorise_result?.timesheet_id, firstAuthorise?.timesheet_id, currentTimesheetId),
+      current_timesheet_id: firstString(firstAuthorise?.authorise_result?.timesheet_id, firstAuthorise?.timesheet_id, currentTimesheetId),
+      contract_week_id: firstAuthorise?.authorise_result?.contract_week_id || null,
+      processing_status: firstAuthorise?.authorise_result?.processing_status || null,
+      new_processing_status: firstAuthorise?.authorise_result?.processing_status || null,
+      backend_row_signature: firstAuthorise?.authorised_row_signature || null,
+      row_signature: firstAuthorise?.authorised_row_signature || null,
+      weekly_source_first_authorisation: {
+        root_authorisation_id: firstAuthorise?.root_authorisation_id || null,
+        authorisation_generation: firstAuthorise?.authorisation_generation ?? null,
+        family_booking_id: firstAuthorise?.family_booking_id || null,
+        gate: firstAuthorise?.gate || null
+      }
+    };
+  }
+
+  if (!rpcPayload) {
   try {
     lifecycleSignatureLog('before_rpc', {
       rpc_function_name: authoriseRpcFunctionName,
@@ -169011,6 +169714,8 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
         message: rpcErr.message
       });
     }
+  }
+
   }
 
   if (!rpcPayload) {
@@ -170430,6 +171135,88 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
 
   const now = nowIso();
   let rpcPayload = null;
+
+  // WP-23 / Gate 13 hostile finance review F2.  A Weekly Source week must reach
+  // the first-authorisation wrapper, never the ordinary owner directly, or it
+  // is authorised with no root-authorisation generation and can never publish
+  // an entitlement head.  See `weeklySourceAuthoriseRouting` above.
+  const weeklySourceRouting = await weeklySourceAuthoriseRouting(
+    (functionName, args, options) => sbRpc(env, functionName, args, options),
+    linkedTimesheetId, user?.id || null
+  );
+  if (weeklySourceRouting.refusal) {
+    return withJson(weeklySourceRouting.refusal.status, {
+      error: weeklySourceRouting.refusal.error_code,
+      error_code: weeklySourceRouting.refusal.error_code,
+      message: weeklySourceRouting.refusal.message,
+      current_timesheet_id: currentTimesheetId || null,
+      contract_week_id: contractWeekId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor({}, currentTimesheetId, contractWeekId)
+    });
+  }
+  if (weeklySourceRouting.bound === true) {
+    let firstAuthorise = null;
+    try {
+      firstAuthorise = weeklySourceUnwrapRpc(
+        await sbRpc(env, WEEKLY_SOURCE_FIRST_AUTHORISE_RPC, {
+          // WP-07's signature, unchanged.  `p_expected_timesheet_id` is the
+          // canonical row the screen believes it is acting on, so a family
+          // rotated since the screen loaded is refused
+          // WEEKLY_SOURCE_TIMESHEET_ROTATED_BEFORE_AUTHORISATION rather than
+          // authorised on the wrong physical row.
+          p_timesheet_id: linkedTimesheetId,
+          p_expected_timesheet_id: expectedTimesheetId || linkedTimesheetId,
+          p_expected_row_signature: expectedRowSignature || null,
+          p_actor_user_id: user?.id || null
+        }, { timeoutMs: 20000 }),
+        WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
+      );
+    } catch (err) {
+      const rpcErr = parseRpcFailure(err);
+      const detailObj = rpcErr.detailJson || parseMaybeJsonObj(rpcErr.details) || {};
+      return mutationErrorResponse(rpcErr.message || rpcErr.code, detailObj, {
+        currentTimesheetId,
+        contractWeekId,
+        expectedTimesheetId,
+        expectedRowSignature,
+        message: rpcErr.message
+      });
+    }
+    if (!firstAuthorise) {
+      return withCORS(env, req, serverError(`${WEEKLY_SOURCE_FIRST_AUTHORISE_RPC} returned no payload`));
+    }
+    if (firstAuthorise.ok !== true) {
+      return mutationErrorResponse(
+        firstString(firstAuthorise.code, firstAuthorise.error_code, 'WEEKLY_SOURCE_FIRST_AUTHORISE_REFUSED'),
+        firstAuthorise,
+        { currentTimesheetId, contractWeekId, expectedTimesheetId, expectedRowSignature,
+          message: firstAuthorise.refusal_message || firstAuthorise.reason }
+      );
+    }
+    // The wrapper called the UNCHANGED ordinary Authorise owner itself, exactly
+    // once, and returns its result under `authorise_result`.  The response shape
+    // the Office and the bulk orchestrator read is rebuilt from that, so neither
+    // surface has to know which owner ran.
+    rpcPayload = {
+      ok: true,
+      operation: firstAuthorise?.authorise_result?.operation || 'AUTHORISE',
+      timesheet_id: firstString(firstAuthorise?.authorise_result?.timesheet_id, firstAuthorise?.timesheet_id, linkedTimesheetId),
+      current_timesheet_id: firstString(firstAuthorise?.authorise_result?.timesheet_id, firstAuthorise?.timesheet_id, linkedTimesheetId),
+      contract_week_id: firstString(firstAuthorise?.authorise_result?.contract_week_id, contractWeekId),
+      processing_status: firstAuthorise?.authorise_result?.processing_status || null,
+      backend_row_signature: firstAuthorise?.authorised_row_signature || null,
+      row_signature: firstAuthorise?.authorised_row_signature || null,
+      weekly_source_first_authorisation: {
+        root_authorisation_id: firstAuthorise?.root_authorisation_id || null,
+        authorisation_generation: firstAuthorise?.authorisation_generation ?? null,
+        family_booking_id: firstAuthorise?.family_booking_id || null,
+        gate: firstAuthorise?.gate || null
+      }
+    };
+  }
+
+  if (!rpcPayload) {
   try {
     const rpcRes = await sbRpc(env, 'timesheet_authorise_generic_atomic', {
       p_timesheet_id: linkedTimesheetId,
@@ -170449,6 +171236,7 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
       expectedRowSignature,
       message: rpcErr.message
     });
+  }
   }
 
   if (!rpcPayload) return withCORS(env, req, serverError('timesheet_authorise_generic_atomic returned no payload'));
@@ -171156,8 +171944,17 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     hr_validation_reason_code = null,
 
     // ✅ allow caller to pass SQL policy (ctx.out_policy) to avoid any REST policy loads
-    policy_override = null
+    policy_override = null,
+
+    // Server-only protected-hours preview: calculate a complete candidate-pay
+    // target without copying invoice-locked source segments into that target.
+    // It is never permitted on a writing TSFIN call.
+    ignore_locked_segments_for_preview = false
   } = (options && typeof options === 'object') ? options : {};
+
+  if (ignore_locked_segments_for_preview === true && write_now === true) {
+    throw new Error('PROTECTED_TARGET_PREVIEW_MUST_NOT_WRITE_TSFINS');
+  }
 
   if (!pay || !chg) {
     throw new Error('CONTRACT_RATES_MISSING');
@@ -171776,7 +172573,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     }
 
     // If this corresponds to an invoice-locked segment, preserve evidence as-is (immutability), non-correction only.
-    if (!isCorrection) {
+    if (!isCorrection && ignore_locked_segments_for_preview !== true) {
       // ✅ First try: match by segment_id (robust even if old rows missed start/end fields)
       const pById = preservedBySegId.get(sid) || null;
       const pByKey = preserved.get(key) || null;
@@ -171825,40 +172622,79 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       }
     }
 
-    const mins = await resolveBucketsFromSchedule(env, contract, [seg], policy_override);
+    const weeklyRateMethod = String(
+      policy_override?.weekly_rate_classification_method || 'SPLIT_RATE_WINDOWS'
+    ).trim().toUpperCase();
+    let shiftFinancials;
+    if (weeklyRateMethod === 'WHOLE_SHIFT_START_DAY') {
+      const rawBreakWindows = Array.isArray(seg.breaks)
+        ? seg.breaks.filter((item) => item && String(item.start || '').trim() && String(item.end || '').trim())
+        : [];
+      if (!rawBreakWindows.length && String(seg.break_start || '').trim() && String(seg.break_end || '').trim()) {
+        rawBreakWindows.push({ start: seg.break_start, end: seg.break_end });
+      }
+      const exactIntervals = rawBreakWindows.map((item) => {
+        const resolved = _scheduleEntryToUtcRange({ date: seg.date, start: item.start, end: item.end });
+        if (resolved.error) throw new Error(resolved.error);
+        return { startInstant: resolved.startUtcIso, endInstant: resolved.endUtcIso };
+      });
+      const durationMinutes = Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0;
+      shiftFinancials = canonicalWeeklyShiftFinancialSegment({
+        mode: weeklyRateMethod,
+        startInstant: startUtcIso,
+        endInstant: endUtcIso,
+        timeZone: tzId,
+        breakEvidence: exactIntervals.length ? { exactIntervals } : { durationMinutes },
+        bankHolidayDates: Array.isArray(policy_override?.bh_list)
+          ? policy_override.bh_list
+          : (policy_override?.bhList instanceof Set ? Array.from(policy_override.bhList) : []),
+        payRates: pay,
+        chargeRates: chg,
+        sign,
+      });
+    } else {
+      const durationMinutes = Number(seg.break_mins ?? seg.break_minutes ?? 0) || 0;
+      const hasExactBreak = (
+        (Array.isArray(seg.breaks) && seg.breaks.some((item) => item && (String(item.start || '').trim() || String(item.end || '').trim())))
+        || String(seg.break_start || '').trim()
+        || String(seg.break_end || '').trim()
+      );
+      if (durationMinutes > 0 && !hasExactBreak) {
+        const splitInput = await resolveBucketsFromSchedule(env, contract, [seg], policy_override, {
+          return_rate_portions: true,
+        });
+        shiftFinancials = canonicalWeeklyShiftFinancialSegment({
+          mode: 'SPLIT_RATE_WINDOWS',
+          ratePortions: splitInput.ratePortions,
+          breakMinutes: splitInput.durationBreakMinutes,
+          durationBreakTieRule: policy_override?.duration_break_tie_rule || 'EARLIEST_LONGEST_PORTION',
+          payRates: pay,
+          chargeRates: chg,
+          sign,
+        });
+      } else {
+        const mins = await resolveBucketsFromSchedule(env, contract, [seg], policy_override);
+        shiftFinancials = canonicalWeeklyShiftFinancialSegment({
+          mode: 'SPLIT_RATE_WINDOWS',
+          bucketMinutes: mins,
+          breakMinutes: durationMinutes,
+          payRates: pay,
+          chargeRates: chg,
+          sign,
+        });
+      }
+    }
 
-    const hDayRaw   = +(asNumberLocal(mins.day)   / 60).toFixed(2);
-    const hNightRaw = +(asNumberLocal(mins.night) / 60).toFixed(2);
-    const hSatRaw   = +(asNumberLocal(mins.sat)   / 60).toFixed(2);
-    const hSunRaw   = +(asNumberLocal(mins.sun)   / 60).toFixed(2);
-    const hBhRaw    = +(asNumberLocal(mins.bh)    / 60).toFixed(2);
-
-    const hDay   = round2(hDayRaw * sign);
-    const hNight = round2(hNightRaw * sign);
-    const hSat   = round2(hSatRaw * sign);
-    const hSun   = round2(hSunRaw * sign);
-    const hBh    = round2(hBhRaw * sign);
+    const hDay   = shiftFinancials.hours.day;
+    const hNight = shiftFinancials.hours.night;
+    const hSat   = shiftFinancials.hours.sat;
+    const hSun   = shiftFinancials.hours.sun;
+    const hBh    = shiftFinancials.hours.bh;
 
     sumDay += hDay; sumNight += hNight; sumSat += hSat; sumSun += hSun; sumBh += hBh;
 
-    const payExRaw = round2(
-      hDayRaw   * asNumberLocal(pay.day) +
-      hNightRaw * asNumberLocal(pay.night) +
-      hSatRaw   * asNumberLocal(pay.sat) +
-      hSunRaw   * asNumberLocal(pay.sun) +
-      hBhRaw    * asNumberLocal(pay.bh)
-    );
-
-    const chgExRaw = round2(
-      hDayRaw   * asNumberLocal(chg.day) +
-      hNightRaw * asNumberLocal(chg.night) +
-      hSatRaw   * asNumberLocal(chg.sat) +
-      hSunRaw   * asNumberLocal(chg.sun) +
-      hBhRaw    * asNumberLocal(chg.bh)
-    );
-
-    const payEx = round2(payExRaw * sign);
-    const chgEx = round2(chgExRaw * sign);
+    const payEx = shiftFinancials.payAmount;
+    const chgEx = shiftFinancials.chargeAmount;
 
     sumPay += payEx;
     sumChg += chgEx;
@@ -171958,7 +172794,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
   }
 
   // Ensure we never drop invoice-locked segments that are not present in schedule (immutability), non-correction only
-  if (!isCorrection) {
+  if (!isCorrection && ignore_locked_segments_for_preview !== true) {
     try {
       for (const [, p] of preserved.entries()) {
         if (!p || !p.is_locked || !p.seg_obj) continue;
@@ -193923,6 +194759,8 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
     return null;
   };
 
+  // WP-32: the correlation identity is generated BEFORE the attempt (WP-14c rule 3).
+  const qrRestoreGuardRefusalCorrelationId = weeklySourceGuardRefusalCorrelationId('broker');
   const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_restore_version`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -193936,6 +194774,13 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
 
   if (!rpcRes.ok) {
     const t = await rpcRes.text().catch(() => '');
+    await recordWeeklySourceGuardRefusalFromResponseBody(
+      env,
+      t,
+      'broker:timesheet_qr_restore_version',
+      user?.id || null,
+      qrRestoreGuardRefusalCorrelationId
+    );
     const moved = tryParseMovedFromRpcError(t);
     if (moved) {
       return withCORS(
@@ -194178,6 +195023,8 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
   };
 
   // Call SQL RPC — operate on CURRENT id
+  // WP-32: the correlation identity is generated BEFORE the attempt (WP-14c rule 3).
+  const qrRefuseGuardRefusalCorrelationId = weeklySourceGuardRefusalCorrelationId('broker');
   const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/timesheet_qr_refuse_and_reset`, {
     method: 'POST',
     headers: { ...sbHeaders(env), Prefer: 'return=representation' },
@@ -194191,6 +195038,13 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
 
   if (!rpcRes.ok) {
     const t = await rpcRes.text().catch(() => '');
+    await recordWeeklySourceGuardRefusalFromResponseBody(
+      env,
+      t,
+      'broker:timesheet_qr_refuse_and_reset',
+      user?.id || null,
+      qrRefuseGuardRefusalCorrelationId
+    );
     const moved = tryParseMovedFromRpcError(t);
     if (moved) {
       return withCORS(
@@ -198484,8 +199338,55 @@ export const timesheetRouteSortInternals = Object.freeze({
   createTimesheetRouteComparator,
   displayedTimesheetRouteLabel
 });
+export const weeklySourceOfficePresentationInternals = Object.freeze({
+  unwrapWeeklySourceOfficePresentation,
+  attachWeeklySourceOfficeTimesheetPresentation
+});
 export const candidateWeeklyScheduleInternals = Object.freeze({
   candidateScheduleLocalTimeAliases
+});
+// WP-23 / Gate 13 hostile finance review F2.  The Office Authorise route and the
+// routing decision that sends a Weekly Source week to the first-authorisation
+// wrapper, exposed for executed proof exactly as
+// `weeklySourceOfficePresentationInternals` already is.  Nothing here changes
+// what the route does: the same function object the router mounts is exported.
+export const weeklySourceFirstAuthorisationInternals = Object.freeze({
+  weeklySourceAuthoriseRouting,
+  handleTimesheetAuthoriseGeneric,
+  handleContractWeekManualAuthorise,
+  WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
+  WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
+});
+// TEST-only reachability to the exact production Weekly Source orchestration
+// objects.  The local PostgreSQL journey harness imports these references so it
+// can drive the same upload/finalisation/protected-pay calculation path that the
+// router mounts.  No HTTP route exposes this object and no production branch is
+// changed by the export.
+export const weeklySourceScenarioJourneyInternals = Object.freeze({
+  calculateWeeklyProtectedSnapshot,
+  buildWeeklyCorrectFinalServiceSnapshot,
+});
+// WP-37: the exact post-commit follow-up runner the Worker injects into the
+// Weekly Source acceptance route, so a proof can drive the same object rather
+// than a stand-in (`tests/weekly-source/wp37-mode-a-route-e2e.mjs`).
+export const weeklySourceModeAInternals = Object.freeze({
+  runImportReviewPostCommit
+});
+// Gate 11 / FTI-024: exported references to the exact report owners mounted by
+// the router, so release tests exercise the real CSV/print/JSON formatting and
+// not a duplicate formatter.
+export const weeklySourceReportInternals = Object.freeze({
+  handleReportTimesheets,
+  handleReportInvoices,
+  weeklySourceHoursReportColumns,
+});
+// FTI-024: this is the exact production renderer.  The bounded test runtime is
+// a dependency seam only; no HTTP route can provide it and production callers
+// continue to invoke the same function with their existing five arguments.
+export const weeklySourceInvoiceRenderInternals = Object.freeze({
+  renderInvoiceBundleAndStoreForTest(env, req, invoiceId, testRuntime) {
+    return _renderInvoiceBundleAndStore(env, req, invoiceId, null, { force_regen: true }, testRuntime);
+  },
 });
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
@@ -198548,6 +199449,23 @@ export default {
       });
     }
 
+    if (req.method === 'POST' && p === '/internal/weekly-source-delivery/v1/run') {
+      return handleWeeklySourceDeliveryRuntime(req, env, {
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        managerControlRpc: (schema, functionName, args) =>
+          managerControlPlaneRpc(env, schema, functionName, args),
+        candidatePushFetch: (request) => {
+          if (!env.WEEKLY_SOURCE_CANDIDATE_PUSH?.fetch) {
+            throw new Error('WEEKLY_PUSH_BINDING_UNAVAILABLE');
+          }
+          return env.WEEKLY_SOURCE_CANDIDATE_PUSH.fetch(request);
+        },
+        sendManagerEmail: (payload) => postToPowerAutomate(env, payload, 'system'),
+        renderCompletedPack: (renderEnv, job) =>
+          renderWeeklySourceCompletedPackArtifact(renderEnv, job),
+      });
+    }
+
     const candidateAppResponse = await handleCandidateAppRequest(
       req,
       env,
@@ -198604,6 +199522,97 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
         rpc: (functionName, args, options) => sbRpc(env, functionName, args, options)
       });
       if (invoiceAsyncResponse) return withCORS(env, req, invoiceAsyncResponse);
+
+      const weeklySourceUploadOwner = createWeeklySourceUploadPublicationOwner({
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        loadFileBytes: (runtimeEnv, fileKey, options) =>
+          loadWeeklySourceFileBytes(runtimeEnv, fileKey, options),
+        parseWeeklySourceFile
+      });
+      const weeklySourceResponse = await dispatchWeeklySourceRequest(req, env, ctx, {
+        requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),
+        rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
+        acceptUpload: weeklySourceUploadOwner.acceptUpload,
+        // WP-37 (WP-31 hostile review of WP-04, finding F2). The Mode A
+        // acceptance route now runs the ESTABLISHED import-review post-commit
+        // follow-up after the reference-apply owner commits, exactly as the
+        // ordinary Imports route does, so `25 §9`'s "Complete coverage may
+        // auto-authorise" completes on the Weekly Source route instead of
+        // stopping at `auto_authorise_timesheet_ids`. No second authorisation
+        // path is introduced: this is the same runner object.
+        runImportReviewPostCommit: (runtimeEnv, details) =>
+          runImportReviewPostCommit(runtimeEnv ?? env, details),
+        orchestrateProtectedAction: ({ action, request }) => orchestrateWeeklyProtectedAction({
+          action,
+          request,
+          dependencies: {
+            dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+            calculateWeeklySnapshot: (calculationInput) =>
+              calculateWeeklyProtectedSnapshot(env, calculationInput),
+            c1RawRpc: createWeeklySourceC1RawRpc({
+              baseUrl: env.SUPABASE_URL,
+              headers: sbHeaders(env),
+              fetchImpl: fetch
+            })
+          }
+        }),
+        orchestrateFinalisation: ({ request, actor, env: runtimeEnv, ctx: runtimeContext }) =>
+          orchestrateWeeklySourceFinalisation({
+            request,
+            actor,
+            env: runtimeEnv,
+            ctx: runtimeContext,
+            dependencies: {
+              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              buildOrdinaryServiceSnapshot: (calculationInput) =>
+                buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
+            }
+          }),
+        recoverFinalisedPay: ({ request, actor, env: runtimeEnv, ctx: runtimeContext }) =>
+          recoverWeeklySourceFinalisationPayProjection({
+            request,
+            actor,
+            env: runtimeEnv,
+            ctx: runtimeContext,
+            dependencies: {
+              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              buildOrdinaryServiceSnapshot: (calculationInput) =>
+                buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
+            }
+          }),
+        previewCorrectFinalSource: ({ request, actor, env: runtimeEnv, ctx: runtimeContext }) =>
+          orchestrateWeeklyCorrectFinalPreview({
+            request,
+            actor,
+            env: runtimeEnv,
+            ctx: runtimeContext,
+            dependencies: {
+              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              stageReplacementSource: weeklySourceUploadOwner.stageReplacementSource,
+              rebuildReplacementProjection: weeklySourceUploadOwner.rebuildReplacementProjection,
+              buildOrdinaryServiceSnapshot: (calculationInput) =>
+                buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
+            }
+          }),
+        applyCorrectFinalSource: ({ request, actor, env: runtimeEnv, ctx: runtimeContext }) =>
+          orchestrateWeeklyCorrectFinalApply({
+            request,
+            actor,
+            env: runtimeEnv,
+            ctx: runtimeContext,
+            dependencies: {
+              dataRpc: (functionName, args, options) => sbRpcRecordingGuardRefusal(env, functionName, args, options),
+              stageReplacementSource: weeklySourceUploadOwner.stageReplacementSource,
+              rebuildReplacementProjection: weeklySourceUploadOwner.rebuildReplacementProjection,
+              buildOrdinaryServiceSnapshot: (calculationInput) =>
+                buildWeeklyCorrectFinalServiceSnapshot(env, calculationInput)
+            }
+          }),
+        loadFileBytes: (runtimeEnv, fileKey, options) =>
+          loadWeeklySourceFileBytes(runtimeEnv, fileKey, options)
+      });
+      if (weeklySourceResponse) return withCORS(env, req, weeklySourceResponse);
 
       // Durable import review is contract-gated and must be resolved before the
       // legacy/generic import routes below can match the same business action.

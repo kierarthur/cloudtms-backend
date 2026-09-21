@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "WEEKLY_SOURCE_CONTROLLING_LEDGER_MANIFEST_V2",
+  "packVersion": "PLAN_6_2_2026-09-17",
+  "packLocation": {
+    "rule": "The sealed pack is read-only and is never copied into this repository and never edited. CLOUDTMS_WEEKLY_SOURCE_PACK_ROOT names the sealed pack root in place; the harness opens every pinned file for reading only, and refuses a pack root inside the backend worktree.",
+    "provedRoots": [
+      "P:\\",
+      "<workspace>\\.codex-worktrees\\weekly-source-plan6-20260915\\plan6-pack-audit-20260916\\CloudTMS_Weekly_Source_Reconciliation_Pre_Implementation_Pack_Plan_6_2026-09-15"
+    ],
+    "note": "P: is a Windows subst of the second path. Both spellings deliver identical bytes, so the pinned SHA-256 values below hold for either. The directory name still says Plan 6 / 2026-09-15; its content is Plan 6.2 (reconciliation report 03 section 0)."
+  },
+  "files": {
+    "acceptance-tests.csv": {
+      "rows": 967,
+      "sha256": "f37c110c233654b818c2d191f0f943ed461d25effceaad90a4995cca869bd49e",
+      "controlSet": "acceptance",
+      "idField": "id"
+    },
+    "protected-functionality-matrix.csv": {
+      "rows": 29,
+      "sha256": "814e75c46a236d967ec60ba6cedbbf6db485fb2ca2953168bc0457d4d6672723",
+      "controlSet": "protected",
+      "idField": "Protection ID"
+    },
+    "combination-coverage-matrix.csv": {
+      "rows": 25,
+      "sha256": "4141ac24586852b7598e3bfe989f070b27b99c0c3a043e8d74d044b0c1a993a7",
+      "controlSet": "models",
+      "idField": "Model case ID"
+    },
+    "generated-case-ledger.csv": {
+      "rows": 967,
+      "sha256": "38a872e8f3ecd6f8529de33c15afb00fe9a3fc16a41950b301074c1a3dd08f3f",
+      "controlSet": null,
+      "idField": "test_id"
+    },
+    "testing-harness-work-items.csv": {
+      "rows": 31,
+      "sha256": "6248ca62f027ec8378720ca18019db87fa058c3720774fd7a02c97a46131a65f",
+      "controlSet": null,
+      "idField": "work_item"
+    },
+    "live-implementation-ledger.csv": {
+      "rows": 64,
+      "sha256": "704e593fc882378c2dd467ca949131fbd406af2ecfe810459206427888eaa26b",
+      "controlSet": "requirements",
+      "idField": "requirement_id"
+    },
+    "source-pay-invoice-scenario-matrix.csv": {
+      "rows": 106,
+      "sha256": "a49106f4457bf03105f8624084577909c8f1d3eb8c2b06a97fd46525aa16ae2d",
+      "controlSet": "spi",
+      "idField": "scenario_id"
+    },
+    "invoice-issue-real-route-matrix.csv": {
+      "rows": 14,
+      "sha256": "b90d0212c122587bcb369d72a0fb110ccb6161f8c62d2303fedbdfa806472f68",
+      "controlSet": "iss",
+      "idField": "issue_case"
+    },
+    "ui-lifecycle-state-matrix.csv": {
+      "rows": 22,
+      "sha256": "addf4305af314b7e5a39ce42518da5add73b9b31a5fb8ebcca54b80d78fbd20d",
+      "controlSet": "ui",
+      "idField": "ui_state"
+    },
+    "financial-touchpoint-impact-matrix.csv": {
+      "rows": 60,
+      "sha256": "d178eb0810b194492ffe5b5f1e912536cf859128823f0d5a949e29779770dc16",
+      "controlSet": "fti",
+      "idField": "touchpoint_id"
+    },
+    "cross-system-gap-ledger.csv": {
+      "rows": 41,
+      "sha256": "49054aac85870569e2f818c5fd389e7e8fac8b1c45b231d96e05fa1500a359d8",
+      "controlSet": "xsg",
+      "idField": "gap_id"
+    },
+    "handover2-acceptance-contract.csv": {
+      "rows": 41,
+      "sha256": "548f38543bac81c37e1eb321654bda4b39365e5dc7855fd503e4cfb412c877a1",
+      "controlSet": "h2",
+      "idField": "contract_id"
+    }
+  },
+  "proofFiles": {
+    "proof/32_PENDING_PUBLICATION_OWNER_SPECIFICATION_20260917.md": {
+      "sha256": "a65c53b3b07bf6e09af968e2b7cc07ebc1a847f595a9cbc4259a12dedbc35c51",
+      "controlSet": "proofs",
+      "section": "12",
+      "rows": 44,
+      "authority": "R1-R44 are not acceptance ids. They exist only as the rollback-contained PostgreSQL 17.11 proof table of proof/32 section 12, and are cited by 26_PLAN_6_2_IMPLEMENTATION_AND_PROOF_LEDGER.md gate 4, handover2-acceptance-contract.csv H2-040 and cross-system-gap-ledger.csv XSG-041. The pack publishes no CSV for them, so the harness derives the ids from the pinned proof file itself rather than carrying an unpinned copy."
+    }
+  },
+  "reviewedExpectedResultSupersessions": {
+    "NHSBR-019": {
+      "acceptanceText": "Exact and all four named same-sign one-penny outcomes persist and admit; every invoice presentation uses the exact signed source Commission plus Total Cost pence while Candidate pay retains the CloudTMS calculation",
+      "generatedCaseText": "Exact and all four named same-sign one-penny outcomes persist and admit; every invoice presentation uses exact signed source pence while Candidate pay retains the CloudTMS calculation",
+      "authority": "Plan 6.2 keeps the single acceptance/generated wording divergence recorded in Plan 6: the acceptance row names the source Commission plus Total Cost pence and the generated row names exact signed source pence. Verified across all 967 current rows; no other acceptance/generated wording drift is permitted."
+    }
+  }
+}

@@ -199,6 +199,41 @@ test('manager-review timesheet requires only the Candidate signature and renders
   );
 });
 
+test('completed informational timesheet accepts only the Candidate signature and renders one official page', async () => {
+  const signature = {
+    r2_key: 'candidate-app/test/workflow/candidate-signature.png',
+    sha256: 'b'.repeat(64),
+    media_type: 'image/png',
+    size_bytes: 68
+  };
+  const model = fixture({
+    form_variant: 'ELECTRONIC_CANDIDATE_INFORMATIONAL',
+    signatures: { candidate: signature, authoriser: {} },
+    wording: {
+      ...fixture().wording,
+      header: { lines: ['Completed Timesheet provided for your information.'] },
+      client_declaration: {
+        title: 'For information',
+        lines: ['No approval, signature or other action is required.']
+      }
+    }
+  });
+  assert.equal(validateFrozenTimesheetPresentationModel(model), model);
+  const rendered = await renderOfficialTimesheetPdfBytes(model, {
+    candidate_signature: {
+      data_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZP8sAAAAASUVORK5CYII='
+    }
+  });
+  assert.equal(rendered.page_count, 1);
+  await assert.rejects(
+    Promise.resolve().then(() => validateFrozenTimesheetPresentationModel({
+      ...model,
+      signatures: { candidate: signature, authoriser: { ...signature, r2_key: 'manager.png' } }
+    })),
+    error => error?.code === 'TIMESHEET_SIGNATURE_ASSET_INVALID'
+  );
+});
+
 test('official renderer emits exactly one A4 landscape page with additional units', async () => {
   const model = fixture({
     additional_units_section: {

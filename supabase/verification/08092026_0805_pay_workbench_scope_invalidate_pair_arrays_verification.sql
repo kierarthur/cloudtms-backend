@@ -18,12 +18,14 @@ DECLARE
   v_expected_direct_callers text[] := ARRAY[
     'private.pay_workbench_candidate_dirty_cohort_stage_v1(p_job_id uuid, p_candidate_id uuid, p_now_utc timestamp with time zone)',
     'private.pay_workbench_financial_scope_dirty_transition_v1()',
+    'private.weekly_source_entitlement_publish_core_v1(p_request jsonb, p_publication_mode text, p_lock_result jsonb, p_pending_bundle_id uuid, p_worker_id text, p_worker_run_id uuid, p_census jsonb, p_proof jsonb)',
     'public.candidate_pay_method_change_refresh_scope_v1(p_candidate_id uuid, p_source_method text, p_target_method text)',
     'public.pay_timesheet_summary_pay_state_refresh_trigger()',
     'public.pay_workbench_contract_client_dirty_fanout_chunk(p_job_id uuid, p_cursor_json jsonb, p_limit integer)',
     'public.pay_workbench_dirty_event_enqueue(p_job_type text, p_scope_kind text, p_scope_id text, p_candidate_id uuid, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_payload_json jsonb, p_reason text, p_priority integer, p_run_at_utc timestamp with time zone)',
     'public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb)',
-    'public.pay_workbench_repair_invalid_dirty_apply_jobs_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)'
+    'public.pay_workbench_repair_invalid_dirty_apply_jobs_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)',
+    'public.weekly_source_first_authorisation_withdraw_v1(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid)'
   ]::text[];
   v_rows_from_count integer := 0;
   v_pair_candidate_unnest_count integer := 0;

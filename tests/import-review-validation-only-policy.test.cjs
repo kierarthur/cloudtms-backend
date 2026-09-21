@@ -19,9 +19,12 @@ test('Weekly candidate-did-not-work evidence is a locked validation-only record'
   assert.match(migration, /never authorises an hours, TSFIN, invoice, payment or other financial mutation/i);
 });
 
-test('resolution RPC re-proves the current submitted Weekly comparison and is server-only', () => {
+test('legacy candidate-did-not-work RPC is server-only and fails closed before its historical implementation', () => {
   assert.match(resolver, /_import_review_assert_actor_v1/);
-  assert.match(resolver, /hr_weekly_validation_preview\(p_import_id\)/);
+  assert.match(
+    resolver,
+    /_import_review_assert_actor_v1[\s\S]*?HR_WEEKLY_CANDIDATE_NOT_WORKED_ROUTE_RETIRED[\s\S]*?hr_weekly_validation_preview\(p_import_id\)/
+  );
   assert.match(resolver, /match_status'='HR_ONLY/);
   assert.match(resolver, /jsonb_array_length\(t\.actual_schedule_json\)>0/);
   assert.match(resolver, /jsonb_array_length\(tf\.invoice_breakdown_json->'segments'\)>0/);
@@ -30,20 +33,21 @@ test('resolution RPC re-proves the current submitted Weekly comparison and is se
   assert.match(resolver, /grant execute on function[\s\S]*postgres,service_role/i);
 });
 
-test('Weekly preview excludes only the confirmed HR row and returns OVERRIDDEN', () => {
-  assert.match(preview, /confirmed_hr_exceptions/);
+test('historical candidate-did-not-work rows are audit-only and cannot suppress current Weekly comparison', () => {
+  assert.match(preview, /Historical candidate-did-not-work confirmations remain immutable audit/);
+  assert.match(preview, /confirmed_hr_exceptions as \([\s\S]*?from hr_exception_evidence he[\s\S]*?where false/);
   assert.match(preview, /hr_day_totals_effective/);
   assert.match(preview, /exception_evidence_fingerprint/);
-  assert.match(preview, /when coalesce\(g\.confirmed_exception_count,0\)>0 then 'OVERRIDDEN'/);
   assert.match(preview, /confirmed_exceptions_json/);
   assert.match(preview, /t\.revoked_at is null/);
   assert.match(preview, /t\.archived_at_utc is null/);
 });
 
-test('catalog exposes the resolution only for a proved omitted Weekly shift', () => {
-  assert.match(core, /WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET/);
-  assert.match(core, /WEEKLY_CANDIDATE_DID_NOT_WORK/);
-  assert.match(core, /nullif\(o\.comparison_json->>'hr_row_id',''\)::uuid/);
+test('catalog sends roster-only Weekly mismatches to the existing manager email and exposes no legacy resolution choice', () => {
+  assert.doesNotMatch(core, /omitted_shifts as \(/);
+  assert.doesNotMatch(core, /from omitted_shifts o/);
+  assert.doesNotMatch(core, /'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET'/);
+  assert.match(core, /coalesce\(cx\.value->>'match_status','MATCH'\) <> 'MATCH'/);
   assert.match(core, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
   assert.match(core, /Passed with confirmed exception/);
   assert.match(core, /import_review_weekly_validation_resolutions[\s\S]*EVIDENCE_CHANGED/);
@@ -84,10 +88,11 @@ test('UI state accepts the Emails section but persists only opaque expansion tok
   assert.doesNotMatch(core, /v::text ~\* '\(recipient\|email\|amount/);
 });
 
-test('Worker exposes one bounded intent-only resolution route', () => {
+test('legacy Worker route is bounded and its database owner now fails closed as retired', () => {
   assert.match(worker, /hr_weekly_candidate_not_worked_resolution_save_v1/);
   assert.match(worker, /weekly-candidate-not-worked/);
   assert.match(worker, /typeof body\.confirmed !== 'boolean'/);
   assert.match(worker, /p_action_id: sha256\(body\.action_id/);
+  assert.match(resolver, /HR_WEEKLY_CANDIDATE_NOT_WORKED_ROUTE_RETIRED/);
   assert.doesNotMatch(worker, /weekly-candidate-not-worked[\s\S]{0,1800}(?:hours|pay|charge|invoice)_value/i);
 });

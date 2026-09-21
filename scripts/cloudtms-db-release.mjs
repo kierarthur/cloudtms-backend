@@ -9,6 +9,7 @@ import {
   repoRoot, shellGitHead, validateExpectedDatabase, validateTarget,
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
+import { requireWeeklySourceHandover2Approval } from './weekly-source-external-approval.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const options = Object.fromEntries(rest.map(arg => {
@@ -137,9 +138,15 @@ function runBankingPayCatalogPreapply(pendingRepeatables) {
   const tempRoot = path.resolve(os.tmpdir());
   const tempDir = fs.mkdtempSync(path.join(tempRoot, 'cloudtms-banking-pay-preapply-'));
   const output = path.join(tempDir, 'catalog-preapply.sql');
+  const pendingList = path.join(tempDir, 'pending-repeatables.json');
   try {
     const generator = path.join(repoRoot, 'supabase', 'verification', 'generate_banking_pay_catalog_preapply_check.mjs');
-    const result = spawnSync(process.execPath, [generator, output, ...pendingRepeatables], {
+    // A NEW release can contain hundreds of repeatable paths. Passing every
+    // path as a Windows command-line argument breaches the platform command
+    // length before the unchanged rehearsal can run, so transport the same
+    // ordered list through a task-owned temporary JSON file.
+    fs.writeFileSync(pendingList, JSON.stringify(pendingRepeatables), 'utf8');
+    const result = spawnSync(process.execPath, [generator, output, '--pending-json', pendingList], {
       cwd: repoRoot,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -309,6 +316,11 @@ function applyRelease() {
   const expectedHash = canonicalContractHash(expected);
   const customerKey = options['customer-key'] ?? process.env.CLOUDTMS_CUSTOMER_KEY ?? '';
   const current = inventory();
+  // Weekly Source and HANDOVER 2 share one database release.  Refuse every
+  // mutating release mode until HANDOVER 2 has approved the exact two owned
+  // repeatable definitions by content hash.  This is an installation safety
+  // boundary, not a runtime feature switch, and runs before any release DDL.
+  requireWeeklySourceHandover2Approval({ repoRoot, release, inventory: current });
   const releaseId = `${release.releaseId}-${mode.toLowerCase()}-${gitCommit.slice(0, 12)}`;
   const releaseVerifierContext = {
     expectedDatabase,

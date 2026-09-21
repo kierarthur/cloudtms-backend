@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "WEEKLY_SOURCE_PROTECTED_DIFFERENTIAL_AUTHORITIES_V1",
+  "surface": "database rows and projections",
+  "authorities": [
+    {
+      "protectionId": "PROT-INV-001",
+      "requirementId": "INV-REQ-001",
+      "reason": "Add immutable final-source invoice admission and source-only line ownership while Candidate evidence, protected pay and payment state remain outside invoice authority."
+    },
+    {
+      "protectionId": "PROT-INVDOC-001",
+      "requirementId": "SRC-REQ-008",
+      "reason": "Render and issue frozen source movements through the existing invoice lifecycle while refusing recalculation from mutable Timesheet, TSFIN or Contract data."
+    },
+    {
+      "protectionId": "PROT-ISSUED-001",
+      "requirementId": "INV-REQ-004",
+      "reason": "Attach the source placement guard so later source corrections append movements and never edit issued source economics."
+    },
+    {
+      "protectionId": "PROT-ORDINV-001",
+      "requirementId": "INV-REQ-002",
+      "reason": "Dispatch sealed source invoices through narrow source validation while preserving the complete ordinary evidence and consolidation route."
+    },
+    {
+      "protectionId": "PROT-DAILY-001",
+      "requirementId": "SRC-REQ-001",
+      "reason": "Add the managed-root rotation guard and service-only access discipline while every unmanaged Daily Timesheet outcome remains unchanged."
+    },
+    {
+      "protectionId": "PROT-ORDW-001",
+      "requirementId": "SRC-REQ-001",
+      "reason": "Route source-managed Weekly imports through their explicit authority while ordinary Weekly non-source Timesheets retain their existing evidence and processing behavior."
+    },
+    {
+      "protectionId": "PROT-PAY-001",
+      "requirementId": "SRC-REQ-011",
+      "reason": "Add managed-root protection before existing authorisation owners while ordinary authorisation, invoice locks and pay eligibility remain unchanged."
+    },
+    {
+      "protectionId": "PROT-EXP-001",
+      "requirementId": "EXP-REQ-001",
+      "reason": "Add the configured source-fixed expense branch while ordinary receipt and mileage expense evidence, VAT, invoice and payment behavior remain unchanged."
+    },
+    {
+      "protectionId": "PROT-CONTRACT-001",
+      "requirementId": "CON-REQ-001",
+      "reason": "Add source-eligible Contract selection and managed-root guards while unrelated Contract creation and selection rules remain unchanged."
+    },
+    {
+      "protectionId": "PROT-EXPORT-001",
+      "requirementId": "UX-REQ-004",
+      "reason": "Add explicit source, submitted and paid truth fields without changing unrelated report rows, ordering or the meaning of existing Hours fields."
+    },
+    {
+      "protectionId": "PROT-SETTINGS-001",
+      "requirementId": "CFG-REQ-001",
+      "reason": "Add relevant-only Weekly Source settings while preserving unrelated settings defaults and behavior."
+    },
+    {
+      "protectionId": "PROT-SEC-001",
+      "requirementId": "SEC-REQ-001",
+      "reason": "Narrow new and touched financial mutation owners to service-only access without adding any browser-executable or cross-tenant authority."
+    },
+    {
+      "protectionId": "PROT-AUDIT-001",
+      "requirementId": "SRC-REQ-002",
+      "reason": "Append source lineage and decision history to existing immutable audit projections without deleting or rewriting historical events."
+    },
+    {
+      "protectionId": "PROT-ADV-001",
+      "requirementId": "UNA-001",
+      "reason": "Add the approved family-wide invoice and TSFIN census to the existing unauthorise owner while leaving ADVANCE_THIS_PAYMENT creation, timing, meaning and consumption unchanged."
+    },
+    {
+      "protectionId": "PROT-SUMMARY-001",
+      "requirementId": "QRY-001",
+      "reason": "Add the concise final-source waiting state required by the no-submission query policy to the existing Timesheet Summary projection without removing existing fields or actions."
+    },
+    {
+      "protectionId": "PROT-ROTATION-001",
+      "requirementId": "ROT-001",
+      "reason": "Add the mandatory managed-root guard across every rotation entry point while unmanaged Timesheet results, locks and audit outcomes remain unchanged."
+    },
+    {
+      "protectionId": "PROT-UNAUTH-001",
+      "requirementId": "UNA-001",
+      "reason": "Add the approved family-wide invoice and TSFIN census to ordinary unauthorise while preserving its existing result contract and refusing every paid or invoiced family member."
+    }
+  ]
+}

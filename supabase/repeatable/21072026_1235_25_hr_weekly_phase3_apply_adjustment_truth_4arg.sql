@@ -110,6 +110,10 @@ declare
   v_schedule jsonb;
   v_hint jsonb;
 
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E15a).
+  v_weekly_source_guard jsonb;
+  v_weekly_source_family record;
+
   v_try int;
 begin
   -- ---- Validate import exists and is HEALTHROSTER ----
@@ -175,6 +179,37 @@ begin
   where nullif(btrim(x.row_json->>'external_row_key'), '') is not null
   on conflict (external_row_key) do nothing;
 
+
+  -- WP-09b review finding F1: the per-row managed-root guard below must read
+  -- its verdict under the compatible locks of proof/34 section 5.  Every base
+  -- Timesheet family named by the selected rows is therefore locked here, once,
+  -- in the deadlock-free trimmed-then-raw order and before this owner writes
+  -- anything, so a first authorisation that holds the family and commits cannot
+  -- overtake an unlocked read.  Rows carrying no usable Timesheet identity are
+  -- left to the existing per-row handling.
+  for v_weekly_source_family in
+    select distinct btrim(family_timesheet.booking_id) as trimmed_booking_id,
+      family_timesheet.booking_id as booking_id
+    from (
+      select distinct
+        nullif(btrim(coalesce(selected_row.row_json->>'timesheet_id','')),'')::uuid as timesheet_id
+      from tmp_phase3_by_key selected_row
+      where nullif(btrim(coalesce(selected_row.row_json->>'timesheet_id','')),'')
+        ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    ) weekly_source_scope
+    join public.timesheets family_timesheet
+      on family_timesheet.timesheet_id=weekly_source_scope.timesheet_id
+    where family_timesheet.booking_id is not null
+      and btrim(family_timesheet.booking_id)<>''
+    order by 1,2
+  loop
+    perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.trimmed_booking_id));
+    if v_weekly_source_family.booking_id<>v_weekly_source_family.trimmed_booking_id then
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.booking_id));
+    end if;
+    perform 1 from public.timesheets locked_member
+    where locked_member.booking_id=v_weekly_source_family.booking_id for update;
+  end loop;
   -- ---- Process each selected key ----
   foreach v_key in array v_selected_keys loop
     select t.row_json
@@ -268,6 +303,53 @@ begin
     if v_base_timesheet_id is null then
       raise exception using message='CORRECTION_BASE_TIMESHEET_REQUIRED', errcode='P0001',
         detail=jsonb_build_object('code','CORRECTION_BASE_TIMESHEET_REQUIRED','external_row_key',v_key)::text;
+    end if;
+
+    -- Plan 6.2 G6-11 (proof/34 section 3, entry point E15a): the base Timesheet
+    -- this correction row promotes, re-parents or demotes.  Checked before this
+    -- owner's first write.  An unmanaged family is unaffected.
+    v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(v_base_timesheet_id);
+    -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+    -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+    -- protected family whose identity cannot be resolved, to a family carrying
+    -- protected pay evidence but no authorisation row
+    -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+    -- unauthorised-Timesheet contradiction, which must never be allowed to
+    -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+    -- family -- including a malformed one -- keeps exactly the behaviour it had
+    -- before this feature was installed.  Absent, null and non-boolean take the
+    -- unsafe value at every read (Part 1 addendum rule 4).
+    if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+         and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+       or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+       or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+      raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+        using errcode='55000', detail=jsonb_build_object(
+          'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+          'entry_point','E15a:public.hr_weekly_phase3_apply_adjustment_truth(uuid,text[],jsonb,uuid)',
+          'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+          'refusal_basis', case
+            -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+            -- canonical booking-reference collision and must be named as one.
+            -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+            -- release, so the order of this edit and WP-03's rename cannot open a gap in
+            -- which Office stops seeing the ruled name.
+            when v_weekly_source_guard->>'reason' in (
+                   'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+              then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              then 'WEEKLY_SOURCE_MANAGED_ROOT'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+              then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+            when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+              then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+            else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+          'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+          'timesheet_id', v_base_timesheet_id,
+          'external_row_key', v_key,
+          'reason', v_weekly_source_guard->>'reason'
+        )::text;
     end if;
 
     begin
@@ -889,5 +971,5 @@ end;
 $function$;
 -- CloudTMS deployment metadata preserved from the installed TEST definition.
 ALTER FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(uuid, text[], jsonb, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(uuid, text[], jsonb, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(uuid, text[], jsonb, uuid) TO postgres, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(uuid, text[], jsonb, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.hr_weekly_phase3_apply_adjustment_truth(uuid, text[], jsonb, uuid) TO postgres, service_role;

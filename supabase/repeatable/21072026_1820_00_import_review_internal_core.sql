@@ -3457,7 +3457,11 @@ begin
       select p.row_json,p.timesheet_id,p.candidate_id,
         d.hr_row_id shift_hr_row_id,d.client_id shift_client_id,
         d.contract_id shift_contract_id,d.source_identity shift_source_identity,
-        d.evidence_fingerprint shift_evidence_fingerprint,d.summary_json shift_summary_json
+        d.evidence_fingerprint shift_evidence_fingerprint,d.summary_json shift_summary_json,
+        workflow.state workflow_state,
+        workflow.worker_submitted_at_utc,
+        workflow.manager_approved_at_utc,
+        workflow.updated_at_utc workflow_updated_at_utc
       from preview_rows p
       join eligible_validation_groups g on g.candidate_id=p.candidate_id
         and g.week_ending_date=p.row_json->>'week_ending_date'
@@ -3466,14 +3470,46 @@ begin
         and d.summary_json->>'source_route' not like '%DAILY%'
         and d.summary_json->>'authority_mode'='VALIDATION_ONLY'
         and d.action_kind='NO_ACTION' and not d.blocking
+      left join lateral (
+        select w.state,w.worker_submitted_at_utc,w.manager_approved_at_utc,w.updated_at_utc
+        from public.candidate_submission_workflows w
+        where w.candidate_id=p.candidate_id
+          and w.contract_id=d.contract_id
+          and w.week_ending_date=nullif(p.row_json->>'week_ending_date','')::date
+          and w.scope='WEEKLY'
+          and w.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')
+          and w.state not in ('CANCELLED','EXPIRED','SUPERSEDED','REFUSED','REJECTED')
+        order by w.generation desc,w.updated_at_utc desc,w.id desc
+        limit 1
+      ) workflow on true
       where p.row_json->>'overall_status'='MISSING_TIMESHEET'
-    ), omitted_shifts as (
-      select p.*,cx.value comparison_json
-      from preview_rows p
-      join eligible_validation_groups g on g.candidate_id=p.candidate_id
-        and g.week_ending_date=p.row_json->>'week_ending_date'
-      cross join lateral jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
-      where p.timesheet_id is not null and cx.value->>'match_status'='HR_ONLY'
+    ), missing_timesheet_status as (
+      select m.*,
+        case
+          when m.workflow_state in ('READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL')
+            and m.manager_approved_at_utc is null
+            then 'WEEKLY_TIMESHEET_AWAITING_MANAGER_APPROVAL'
+          when m.workflow_state is null or m.workflow_state in ('CREATED','WORKER_DRAFT')
+            then 'WEEKLY_TIMESHEET_NOT_SUBMITTED'
+          else 'WEEKLY_TIMESHEET_COMPLETING'
+        end missing_reason_code,
+        case
+          when m.workflow_state in ('READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL')
+            and m.manager_approved_at_utc is null
+            then 'MANAGER_APPROVAL_PENDING'
+          when m.workflow_state is null or m.workflow_state in ('CREATED','WORKER_DRAFT')
+            then 'TIMESHEET_NOT_SUBMITTED'
+          else 'TIMESHEET_COMPLETION_PENDING'
+        end missing_difference_code,
+        case
+          when m.workflow_state in ('READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL')
+            and m.manager_approved_at_utc is null
+            then 'Waiting for manager approval'
+          when m.workflow_state is null or m.workflow_state in ('CREATED','WORKER_DRAFT')
+            then 'Waiting for candidate to submit'
+          else 'Waiting for completed timesheet'
+        end missing_outcome_label
+      from missing_timesheets m
     ), confirmed_exceptions as (
       select p.*,cx.value exception_json
       from preview_rows p
@@ -3481,44 +3517,21 @@ begin
       where p.timesheet_id is not null
     )
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
-        'WEEKLY_TIMESHEET_NOT_SUBMITTED',m.shift_hr_row_id)),
+        m.missing_reason_code,m.shift_hr_row_id)),
       'ADVISORY','BLOCKED',
-      concat_ws(':','weekly-timesheet-not-submitted',m.shift_hr_row_id),
+      concat_ws(':','weekly-timesheet-incomplete',m.shift_hr_row_id),
       m.shift_source_identity,
       m.shift_hr_row_id,null::uuid,null::uuid,m.shift_client_id,m.candidate_id,m.shift_contract_id,null::uuid,
-      public._import_review_hash_v1(concat_ws('|','weekly-timesheet-not-submitted-v2',
-        m.shift_evidence_fingerprint,m.row_json::text)),
+      public._import_review_hash_v1(concat_ws('|','weekly-timesheet-incomplete-v3',
+        m.shift_evidence_fingerprint,m.row_json::text,m.workflow_state,m.workflow_updated_at_utc)),
       false,false,true,
       jsonb_strip_nulls(m.shift_summary_json||jsonb_build_object(
-        'reason_code','WEEKLY_TIMESHEET_NOT_SUBMITTED','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
+        'reason_code',m.missing_reason_code,'source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
         'candidate_name',m.row_json->>'candidate_name','week_ending_date',m.row_json->>'week_ending_date',
-        'difference_codes',jsonb_build_array('TIMESHEET_NOT_SUBMITTED'),
-        'outcome_label','Request timesheet from candidate'))
-    from missing_timesheets m
-    union all
-    select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
-        'WEEKLY_CANDIDATE_DID_NOT_WORK',o.comparison_json->>'hr_row_id')),
-      'ADVISORY','BLOCKED',
-      concat_ws(':','weekly-candidate-did-not-work',o.comparison_json->>'hr_row_id'),
-      concat_ws('|',o.timesheet_id,o.comparison_json->>'work_date',
-        o.comparison_json->>'healthroster_start',o.comparison_json->>'healthroster_end'),
-      nullif(o.comparison_json->>'hr_row_id','')::uuid,o.timesheet_id,null::uuid,o.client_id,o.candidate_id,o.contract_id,null::uuid,
-      o.comparison_json->>'exception_evidence_fingerprint',
-      false,false,true,
-      jsonb_build_object(
-        'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET','source_route','HR_WEEKLY','authority_mode','VALIDATION_ONLY',
-        'resolution_kind','WEEKLY_CANDIDATE_DID_NOT_WORK',
-        'candidate_name',o.row_json->>'candidate_name','week_ending_date',o.row_json->>'week_ending_date',
-        'work_date',o.comparison_json->>'work_date',
-        'imported_evidence',jsonb_strip_nulls(jsonb_build_object(
-          'work_date',o.comparison_json->>'work_date','start',o.comparison_json->>'healthroster_start',
-          'end',o.comparison_json->>'healthroster_end',
-          'break_minutes',nullif(o.comparison_json->>'healthroster_break_mins','')::integer,
-          'reference',o.comparison_json->>'ref_after')),
-        'current_evidence',jsonb_build_object('timesheet_id',o.timesheet_id),
-        'difference_codes',jsonb_build_array('HR_ONLY'),
-        'outcome_label','Confirm candidate did not work this shift')
-    from omitted_shifts o
+        'candidate_workflow_state',m.workflow_state,
+        'difference_codes',jsonb_build_array(m.missing_difference_code),
+        'outcome_label',m.missing_outcome_label))
+    from missing_timesheet_status m
     union all
     select public._import_review_hash_v1(concat_ws('|','action-v1',p_import_id,
         'WEEKLY_CANDIDATE_DID_NOT_WORK',c.exception_json->>'hr_row_id')),
@@ -3571,7 +3584,7 @@ begin
           from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
           left join public.hr_rows hr on hr.id=nullif(cx.value->>'hr_row_id','')::uuid
           where (
-            coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+            coalesce(cx.value->>'match_status','MATCH') <> 'MATCH'
             or coalesce((cx.value->>'ref_changed')::boolean,false)
           )),'[]'::jsonb) email_comparisons,
         coalesce((select jsonb_agg(day_json.value order by day_json.value->>'date')
@@ -3581,13 +3594,12 @@ begin
             from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
             where cx.value->>'work_date'=day_json.value->>'date'
               and (
-                coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+                coalesce(cx.value->>'match_status','MATCH') <> 'MATCH'
                 or coalesce((cx.value->>'ref_changed')::boolean,false)
               )
           )),'[]'::jsonb) email_days,
         coalesce((select jsonb_agg(to_jsonb(fr.value))
-          from jsonb_array_elements_text(coalesce(p.row_json->'failure_reasons','[]'::jsonb)) fr(value)
-          where fr.value<>'HealthRoster has a shift not present on the timesheet.'),'[]'::jsonb) email_failure_reasons
+          from jsonb_array_elements_text(coalesce(p.row_json->'failure_reasons','[]'::jsonb)) fr(value)),'[]'::jsonb) email_failure_reasons
       from preview_rows p
     ), routed as (
       select p.*,public._import_review_hash_v1(concat_ws('|','HEALTHROSTER_WEEKLY','validation-email-v2',
@@ -3611,7 +3623,7 @@ begin
         and coalesce((p.row_json->>'has_mismatch')::boolean,false)
         and exists (
           select 1 from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
-          where coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
+          where coalesce(cx.value->>'match_status','MATCH') <> 'MATCH'
             or coalesce((cx.value->>'ref_changed')::boolean,false)
         )
     ), email_actions as (
@@ -4053,6 +4065,8 @@ declare
   v_fingerprint text;
   v_changed integer:=0; v_retired integer:=0; v_inserted integer:=0;
   v_blockers integer; v_selected integer; v_status text; v_auto integer:=0;
+  v_weekly_source_guard jsonb; v_weekly_source_root uuid;
+  v_weekly_source_family record;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   select * into v_state from public.import_review_states where import_id=p_import_id for update;
@@ -4063,6 +4077,89 @@ begin
   if p_expected_state_version is not null and v_state.state_version<>p_expected_state_version then
     raise exception 'IMPORT_REVIEW_VERSION_CONFLICT' using errcode='40001',detail=v_state.state_version::text;
   end if;
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E9).  This refresh
+  -- supersedes the current import_review_decisions rows, which drive a later
+  -- Timesheet version.  A later source cycle over an authorised
+  -- Weekly-Source-managed root is a Weekly Source amendment, never a rotation,
+  -- so the refresh refuses here: before this owner's first write and while it
+  -- holds the import_review_states row lock taken above.  Ordinary imports,
+  -- whose decisions bind no managed root, are unaffected.
+  -- WP-09b review finding F1: the verdict is read under the compatible locks of
+  -- proof/34 section 5, taken here for every bound family in the deadlock-free
+  -- trimmed-then-raw order, so a first authorisation that holds the family and
+  -- commits cannot be overtaken by this owner.  Still before any write.
+  for v_weekly_source_family in
+    select distinct btrim(family_timesheet.booking_id) as trimmed_booking_id,
+      family_timesheet.booking_id as booking_id
+    from public.import_review_decisions decision
+    join public.timesheets family_timesheet
+      on family_timesheet.timesheet_id=decision.timesheet_id
+    where decision.import_id=p_import_id
+      and decision.is_current
+      and decision.timesheet_id is not null
+      and family_timesheet.booking_id is not null
+      and btrim(family_timesheet.booking_id)<>''
+    order by 1,2
+  loop
+    perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.trimmed_booking_id));
+    if v_weekly_source_family.booking_id<>v_weekly_source_family.trimmed_booking_id then
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.booking_id));
+    end if;
+    perform 1 from public.timesheets locked_member
+    where locked_member.booking_id=v_weekly_source_family.booking_id for update;
+  end loop;
+  for v_weekly_source_root in
+    select distinct decision.timesheet_id
+    from public.import_review_decisions decision
+    where decision.import_id=p_import_id
+      and decision.is_current
+      and decision.timesheet_id is not null
+    order by 1
+  loop
+    v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+    -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+    -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+    -- protected family whose identity cannot be resolved, to a family carrying
+    -- protected pay evidence but no authorisation row
+    -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+    -- unauthorised-Timesheet contradiction, which must never be allowed to
+    -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+    -- family -- including a malformed one -- keeps exactly the behaviour it had
+    -- before this feature was installed.  Absent, null and non-boolean take the
+    -- unsafe value at every read (Part 1 addendum rule 4).
+    if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+         and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+       or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+       or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+      raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+        using errcode='55000',detail=jsonb_build_object(
+          'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+          'entry_point','E9:public._import_review_refresh_core_v1',
+          'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+          'refusal_basis', case
+            -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+            -- canonical booking-reference collision and must be named as one.
+            -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+            -- release, so the order of this edit and WP-03's rename cannot open a gap in
+            -- which Office stops seeing the ruled name.
+            when v_weekly_source_guard->>'reason' in (
+                   'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+              then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+              then 'WEEKLY_SOURCE_MANAGED_ROOT'
+            when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+              then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+            when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+              then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+            else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+          'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+          'import_id',p_import_id,
+          'timesheet_id',v_weekly_source_root,
+          'reason',v_weekly_source_guard->>'reason'
+        )::text;
+    end if;
+  end loop;
   v_generation:=v_state.preview_generation+1;
 
   create temporary table if not exists pg_temp.review_next_actions on commit drop as

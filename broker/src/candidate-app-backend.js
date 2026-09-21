@@ -19,6 +19,11 @@ import {
 } from './mytms-manager-control-adapter.js';
 import { buildTsq2PagePayload } from './timesheet-qr-payload.js';
 import { decodeCandidatePaperQrTextsFromJpeg } from './candidate-paper-page-image.js';
+// WP-32 / WP-23 handoff N3, HANDOVER 2 round-5 ruling A2 and contract decision D13.
+import {
+  isManagedRootGuardRefusal,
+  recordGuardRefusalAfterRollback
+} from './weekly-source/guard-refusal-record.mjs';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -1062,8 +1067,83 @@ async function selectedCandidateSessionResponse(env, claims, sessionId, rotation
   };
 }
 
+// ---------------------------------------------------------------------------
+// WP-32 — the durable caller's record of a managed-root guard refusal.
+//
+// HANDOVER 2 round-5 ruling A2 / contract decision D13.  The owner is WP-14c's
+// `public.weekly_source_guard_refusal_record_after_rollback_v1`; the module is
+// WP-23's `weekly-source/guard-refusal-record.mjs`; WP-23 handoff N3 hands the
+// remaining call sites here with a three-line recipe, which is what follows.
+//
+// WP-14c's four caller rules: a NEW transaction that has not written (the record
+// is its own PostgREST request); only after the rollback (only ever from a
+// `catch`); the SAME correlation identity the attempt carried (generated before
+// the attempt, below); and a failure of the record must never change the outcome
+// of the refusal — `recordGuardRefusalAfterRollback` is total, and the extra
+// `try`/`catch` here covers the predicate and the log as well, so nothing on
+// this path can raise.
+// ---------------------------------------------------------------------------
+
+function candidateAppGuardRefusalCorrelationId() {
+  try {
+    const unique = globalThis.crypto?.randomUUID?.();
+    const fallback = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    return `ws62-broker:candidate-app:${unique || fallback}`;
+  } catch {
+    return `ws62-broker:candidate-app:${Date.now().toString(36)}`;
+  }
+}
+
+// Only the one unambiguous Office actor key is read.  A Candidate session id or a
+// workflow id is NOT an actor, so anything else is reported absent rather than
+// guessed; WP-14c's owner accepts a null actor.
+function candidateAppGuardRefusalActor(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const value = args.p_actor_user_id;
+  return (typeof value === 'string' && value.trim()) ? value.trim() : null;
+}
+
+async function recordCandidateAppGuardRefusal(rpc, error, correlationId, name, args) {
+  try {
+    if (!isManagedRootGuardRefusal(error)) return;
+    try {
+      console.warn('[WEEKLY_SOURCE_GUARD_REFUSAL] ' + JSON.stringify({
+        caller: `broker:candidate-app:${name}`,
+        correlation_id: correlationId
+      }));
+    } catch {}
+    await recordGuardRefusalAfterRollback({
+      rpc: (functionName, functionArgs, functionOptions) =>
+        rpc(functionName, functionArgs, functionOptions),
+      error,
+      correlationId,
+      caller: `broker:candidate-app:${name}`,
+      actorUserId: candidateAppGuardRefusalActor(args)
+    });
+  } catch {
+    // WP-14c rule 4: a failure of the record must never change the refusal.
+  }
+}
+
 async function rpcCall(deps, name, args, options = undefined) {
-  const result = await deps.rpc(name, args, options);
+  // WP-32: this is the Candidate app's single RPC funnel, so the recipe applied
+  // once here covers every guarded entry point the Candidate surface reaches
+  // (E1a, E3, E10, E11, E23).  `unwrapRpc` stays OUTSIDE the catch: a shape
+  // failure is not a database refusal and must not be recorded as one.
+  const guardRefusalCorrelationId = candidateAppGuardRefusalCorrelationId();
+  let result;
+  try {
+    result = await deps.rpc(name, args, options);
+  } catch (error) {
+    await recordCandidateAppGuardRefusal(
+      (functionName, functionArgs, functionOptions) => deps.rpc(functionName, functionArgs, functionOptions),
+      error,
+      guardRefusalCorrelationId,
+      name,
+      args
+    );
+    throw error;
+  }
   return unwrapRpc(result, name);
 }
 
@@ -2296,10 +2376,39 @@ async function verifyPaperReturnStagedReceipt(env, value) {
 
 function managerRouteAuthority(request) {
   const authorityKind = upper(request.headers.get('x-cloudtms-manager-route-authority'));
-  if (!['MANAGER_EMAIL', 'MANAGER_PHONE'].includes(authorityKind)) {
+  if (!['MANAGER_EMAIL', 'MANAGER_PHONE', 'WEEKLY_QUERY_MANAGER_EMAIL'].includes(authorityKind)) {
     throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
   }
   if (authorityKind === 'MANAGER_PHONE') return { authority_kind: authorityKind };
+  if (authorityKind === 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    const authority = {
+      authority_kind: authorityKind,
+      manager_route_ticket_id: text(request.headers.get('x-cloudtms-manager-route-ticket')).toLowerCase(),
+      route_revision: Number(request.headers.get('x-cloudtms-manager-route-revision')),
+      review_batch_route_hmac: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-batch-hmac')
+      ).toLowerCase(),
+      recipient_generation_route_hmac: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-recipient-generation-hmac')
+      ).toLowerCase(),
+      original_membership_hash: text(
+        request.headers.get('x-cloudtms-manager-route-weekly-membership-hash')
+      ).toLowerCase(),
+      credential_generation: Number(
+        request.headers.get('x-cloudtms-manager-route-credential-generation')
+      )
+    };
+    if (!UUID_RE.test(authority.manager_route_ticket_id)
+        || !Number.isSafeInteger(authority.route_revision) || authority.route_revision < 1
+        || !SHA256_RE.test(authority.review_batch_route_hmac)
+        || !SHA256_RE.test(authority.recipient_generation_route_hmac)
+        || !SHA256_RE.test(authority.original_membership_hash)
+        || !Number.isSafeInteger(authority.credential_generation)
+        || authority.credential_generation < 1) {
+      throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+    }
+    return authority;
+  }
   const authority = {
     authority_kind: authorityKind,
     manager_route_ticket_id: text(request.headers.get('x-cloudtms-manager-route-ticket')).toLowerCase(),
@@ -6118,6 +6227,30 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
   throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
 }
 
+async function handleCandidateWeeklySourceRequest(
+  request, env, deps, requestId, action
+) {
+  const access = await verifyCandidateAccess(request, env);
+  const id = requireUuid(requestId, 'WEEKLY_SOURCE_CANDIDATE_REQUEST_NOT_FOUND');
+  const rpcArgs = candidateRpcArgs(access, env, { p_request_id: id });
+  if (action === 'GET') {
+    return jsonResponse(200, await rpcCall(
+      deps, 'weekly_source_candidate_app_request_get_v1', rpcArgs
+    ));
+  }
+  const body = await readJson(request);
+  if (!isObject(body) || Array.isArray(body)) {
+    throw new CandidateHttpError(400, 'WEEKLY_SOURCE_CANDIDATE_REQUEST_INVALID');
+  }
+  const rpcName = action === 'DRAFT'
+    ? 'weekly_source_candidate_app_draft_save_atomic_v1'
+    : 'weekly_source_candidate_app_submit_atomic_v1';
+  return jsonResponse(200, await rpcCall(deps, rpcName, {
+    ...rpcArgs,
+    p_body: body
+  }));
+}
+
 async function handleAddMissingWeek(request, env, deps, contractId) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
@@ -8955,6 +9088,139 @@ async function appendPdfBytes(target, sourceBytes) {
   for (const page of pages) target.addPage(page);
 }
 
+/**
+ * Render the immutable attachment used by the optional Weekly Source
+ * completed-Timesheet informational copy.  This deliberately does not call a
+ * Candidate workflow transition: CHECK_ONLY renders the already signed
+ * Candidate submission as an informational document, while invoice-evidence
+ * mode combines the already-final signed component PDFs byte-for-byte at page
+ * level.  The caller must still commit the returned identity through the
+ * database's atomic completed-pack-copy owner.
+ */
+export async function renderWeeklySourceCompletedPackArtifact(env, rawJob) {
+  const job = isObject(rawJob) ? rawJob : {};
+  const workflowId = requireUuid(job.workflow_id, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+  const generation = requireInteger(
+    job.workflow_generation, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID', 1
+  );
+  const timesheetId = requireUuid(
+    job.timesheet_id, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID'
+  );
+  const renderInputSha256 = text(job.render_input_sha256).toLowerCase();
+  const mode = upper(job.document_mode);
+  if (!SHA256_RE.test(renderInputSha256)
+      || !['CHECK_ONLY', 'INVOICE_EVIDENCE_REQUIRED'].includes(mode)) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+  }
+
+  let bytes;
+  let pageCount;
+  if (mode === 'CHECK_ONLY') {
+    const componentId = requireUuid(
+      job.candidate_signature_component_id,
+      'WEEKLY_COMPLETED_PACK_RENDER_INVALID'
+    );
+    const state = await loadRenderState(env, {
+      workflow_id: workflowId,
+      workflow_generation: generation,
+      component_id: componentId
+    });
+    if (text(state.timesheet?.booking_id).trim() !== text(job.timesheet_family).trim()
+        || upper(state.workflow?.state) !== 'WORKER_SUBMITTED'
+        || upper(state.workflow?.route) !== 'ELECTRONIC') {
+      throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+    }
+    const { model, assets } = await buildOfficialCandidateModel(
+      env, {}, state, 'REVIEW'
+    );
+    model.form_variant = 'ELECTRONIC_CANDIDATE_INFORMATIONAL';
+    model.wording = {
+      ...model.wording,
+      header: {
+        lines: ['Completed Timesheet provided for your information.']
+      },
+      client_declaration: {
+        title: 'For information',
+        lines: ['No approval, signature or other action is required.']
+      }
+    };
+    validateFrozenTimesheetPresentationModel(model);
+    const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
+    bytes = rendered.pdf_bytes;
+    pageCount = Number(rendered.page_count);
+  } else {
+    const components = Array.isArray(job.components) ? job.components : [];
+    if (!components.length) {
+      throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+    }
+    const combined = await PDFDocument.create({ updateMetadata: false });
+    let priorOrdinal = 0;
+    for (const component of components) {
+      const ordinal = Number(component?.review_ordinal);
+      const expectedHash = text(component?.content_sha256).toLowerCase();
+      const expectedSize = Number(component?.byte_size);
+      const expectedPages = Number(component?.page_count);
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal < priorOrdinal
+          || !SHA256_RE.test(expectedHash)
+          || !Number.isSafeInteger(expectedSize) || expectedSize < 1
+          || !Number.isSafeInteger(expectedPages) || expectedPages < 1
+          || upper(component?.media_type) !== 'APPLICATION/PDF') {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INVALID');
+      }
+      const source = await r2Bytes(env, component.storage_key, expectedHash);
+      if (source.media_type !== 'application/pdf' || source.bytes.byteLength !== expectedSize) {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+      }
+      const sourcePdf = await PDFDocument.load(source.bytes, {
+        ignoreEncryption: false, updateMetadata: false
+      });
+      if (sourcePdf.getPageCount() !== expectedPages) {
+        throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_STALE');
+      }
+      await appendPdfBytes(combined, source.bytes);
+      priorOrdinal = ordinal;
+    }
+    pageCount = combined.getPageCount();
+    bytes = new Uint8Array(await combined.save({ useObjectStreams: false }));
+  }
+
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 1
+      || !Number.isSafeInteger(pageCount) || pageCount < 1) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_INCOMPLETE');
+  }
+  const digest = await sha256Hex(bytes);
+  const environment = environmentName(env).toLowerCase();
+  const storageKey = [
+    'weekly-source', environment, 'completed-pack-copy', workflowId,
+    String(generation), `${renderInputSha256}-${digest}.pdf`
+  ].join('/');
+  const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
+    purpose: 'weekly-source-completed-pack-copy',
+    workflow_id: workflowId,
+    workflow_generation: String(generation),
+    timesheet_id: timesheetId,
+    document_mode: mode,
+    render_input_sha256: renderInputSha256,
+    content_policy_version: 'WEEKLY_COMPLETED_PACK_COPY_CONTENT_V1',
+    page_count: String(pageCount)
+  });
+  if (stored.sha256 !== digest) {
+    throw new CandidateHttpError(409, 'WEEKLY_COMPLETED_PACK_RENDER_CONFLICT');
+  }
+  const weekEnding = text(job.week_ending_date).slice(0, 10);
+  return Object.freeze({
+    workflow_id: workflowId,
+    render_input_sha256: renderInputSha256,
+    storage_key: storageKey,
+    final_document_sha256: digest,
+    filename: `Completed_Timesheet_${/^\d{4}-\d{2}-\d{2}$/.test(weekEnding) ? weekEnding : workflowId}.pdf`,
+    media_type: 'application/pdf',
+    byte_size: bytes.byteLength,
+    page_count: pageCount,
+    content_policy_version: 'WEEKLY_COMPLETED_PACK_COPY_CONTENT_V1'
+  });
+}
+
 async function drawCandidatePaperPageQr(page, qrText, {
   x, y, size, label = 'Page QR'
 }) {
@@ -10251,8 +10517,39 @@ const CANDIDATE_NOTIFICATION_COPY = Object.freeze({
   EXPENSE_CANCELLED: 'An expense was cancelled. You can add it again as a new expense if needed.',
   PAPER_PACK_READY: 'Your printed signing documents are ready.',
   RESUBMISSION_REQUIRED: 'A timesheet needs to be submitted again.',
-  EXPENSE_CLAIM_CANCELLED: 'Your pending expense claim was cancelled because its Timesheet was deleted.'
+  EXPENSE_CLAIM_CANCELLED: 'Your pending expense claim was cancelled because its Timesheet was deleted.',
+  TIMESHEET_HOURS_UPDATED: 'The approved hours for your Timesheet have changed. Open your Timesheet to review them.'
 });
+
+// WP-44 F3.  The already-agreed hours-only notification
+// (`04_MODAL_POLICY.json interactionPolicies.candidateTimesheetDisplay.approvedHoursChangedPush`)
+// is `The approved hours for your Timesheet at {client}, week ending
+// {week_ending}, have changed. Open your Timesheet to review them.`  The row
+// this renders from is written by the Weekly Source hours push, whose
+// `template_params` carry `week_ending_date` and no Client name, so the Client
+// clause is emitted only when a Client name is actually present.  Nothing here
+// adds a figure, a rate, or any of the internal words the Candidate boundary
+// forbids (HANDOVER 2 addendum R8A section 2): `Approved hours` is the one
+// label that addendum expressly permits.
+function ukDateFromIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text(value));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+function approvedHoursChangedMessage(parameters) {
+  const clientName = text(parameters?.client_name)
+    .replace(/[ -]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const weekEnding = ukDateFromIsoDate(parameters?.week_ending_date);
+  if (clientName && weekEnding) {
+    return `The approved hours for your Timesheet at ${clientName}, week ending ${weekEnding}, `
+      + 'have changed. Open your Timesheet to review them.';
+  }
+  if (weekEnding) {
+    return `The approved hours for your Timesheet for the week ending ${weekEnding} have changed. `
+      + 'Open your Timesheet to review them.';
+  }
+  return CANDIDATE_NOTIFICATION_COPY.TIMESHEET_HOURS_UPDATED;
+}
 
 function candidateNotificationMessage(eventType, parameters = {}) {
   const expenseCategory = ({
@@ -10299,6 +10596,9 @@ function candidateNotificationMessage(eventType, parameters = {}) {
   }
   if (eventType === 'CLAIM_CANCELLED') {
     return `Your whole claim was cancelled.${reasonSentence} Start again if you need to submit it.`;
+  }
+  if (eventType === 'TIMESHEET_HOURS_UPDATED') {
+    return approvedHoursChangedMessage(parameters);
   }
   return CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update.';
 }
@@ -11582,6 +11882,224 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
   }
 }
 
+function weeklyManagerExactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false;
+  const keys = Object.keys(value).sort();
+  const requiredSet = new Set(required);
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every((key) => allowed.has(key))
+    && keys.filter((key) => requiredSet.has(key)).length === required.length;
+}
+
+function weeklyManagerHours(start, end, breakMinutes) {
+  const startText = text(start);
+  const endText = text(end);
+  const breakValue = Number(breakMinutes);
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(startText)
+      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(endText)
+      || !Number.isSafeInteger(breakValue) || breakValue < 0 || breakValue > 720) {
+    throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  }
+  return { start: startText, end: endText, break_minutes: breakValue };
+}
+
+async function weeklyManagerRouteBatch(request, env, deps, expectedBatchId) {
+  const authority = managerRouteAuthority(request);
+  if (authority.authority_kind !== 'WEEKLY_QUERY_MANAGER_EMAIL') {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const batchId = requireUuid(expectedBatchId, 'MANAGER_SECURE_LINK_INVALID').toLowerCase();
+  const expectedBatchHmac = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'weekly-query-review-batch-v1', batchId
+  );
+  if (expectedBatchHmac !== authority.review_batch_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const credential = bearerToken(request);
+  if (!credential) throw new CandidateHttpError(401, 'MANAGER_SECURE_LINK_INVALID');
+  const raw = await deps.rpc('weekly_source_manager_review_get_v1', {
+    p_request: {
+      credential_hash: await sha256Hex(credential),
+      control_plane_ticket_id: authority.manager_route_ticket_id
+    }
+  });
+  if (raw?.ok !== true
+      || requireUuid(raw.review_batch_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase() !== batchId
+      || requireInteger(raw.review_batch_version, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1)
+        !== authority.credential_generation
+      || requireInteger(raw.credential_generation, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1)
+        !== authority.credential_generation
+      || requireSha256(raw.original_membership_hash, 'MANAGER_DEPENDENCY_UNAVAILABLE')
+        !== authority.original_membership_hash) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const recipientGenerationId = requireUuid(
+    raw.recipient_generation_id, 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  ).toLowerCase();
+  const expectedGenerationHmac = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'weekly-query-recipient-generation-v1', recipientGenerationId
+  );
+  if (expectedGenerationHmac !== authority.recipient_generation_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  const responseFingerprint = requireSha256(
+    raw.response_fingerprint, 'MANAGER_DEPENDENCY_UNAVAILABLE'
+  );
+  const totalCount = requireInteger(raw.total_count, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  const completedCount = requireInteger(raw.completed_count, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  const expiresAt = new Date(raw.expires_at_utc);
+  if (!Number.isFinite(expiresAt.getTime()) || completedCount > totalCount
+      || !Array.isArray(raw.items) || raw.items.length + completedCount !== totalCount
+      || raw.items.length > 500) {
+    throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+  }
+  const clients = [];
+  const clientIndex = new Map();
+  const issueIds = new Set();
+  for (const row of raw.items) {
+    const issueId = requireUuid(row?.review_item_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const clientId = requireUuid(row?.client_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const candidateId = requireUuid(row?.candidate_id, 'MANAGER_DEPENDENCY_UNAVAILABLE').toLowerCase();
+    const issueFamily = upper(row?.issue_family);
+    const workDate = text(row?.work_date);
+    const sourceStart = text(row?.source_start_instant);
+    if (issueIds.has(issueId)
+        || !['HOURS_DIFFER', 'NHSP_ABSENT', 'SOURCE_ABSENT', 'HEALTHROSTER_NOT_FINALISED'].includes(issueFamily)
+        || !/^\d{4}-\d{2}-\d{2}$/.test(workDate)
+        || !Number.isFinite(Date.parse(sourceStart))) {
+      throw new CandidateHttpError(503, 'MANAGER_DEPENDENCY_UNAVAILABLE');
+    }
+    issueIds.add(issueId);
+    const candidateHours = weeklyManagerHours(
+      row.candidate_start, row.candidate_end, row.candidate_break_minutes
+    );
+    const systemHours = issueFamily === 'HOURS_DIFFER'
+      ? weeklyManagerHours(row.system_start, row.system_end, row.system_break_minutes)
+      : null;
+    let client = clientIndex.get(clientId);
+    if (!client) {
+      client = { client_id: clientId, client_name: text(row.client_name), candidates: [] };
+      client.candidateIndex = new Map();
+      clientIndex.set(clientId, client);
+      clients.push(client);
+    }
+    let candidate = client.candidateIndex.get(candidateId);
+    if (!candidate) {
+      candidate = { candidate_id: candidateId, candidate_name: text(row.candidate_name), issues: [] };
+      client.candidateIndex.set(candidateId, candidate);
+      client.candidates.push(candidate);
+    }
+    candidate.issues.push({
+      issue_id: issueId,
+      incident_episode: requireInteger(row.incident_episode, 'MANAGER_DEPENDENCY_UNAVAILABLE', 1),
+      current_fact_version: requireSha256(row.current_fact_version, 'MANAGER_DEPENDENCY_UNAVAILABLE'),
+      issue_family: issueFamily,
+      work_date: workDate,
+      source_start_instant: sourceStart,
+      candidate_hours: candidateHours,
+      system_hours: systemHours,
+      candidate_requested_review: row.candidate_response === 'Candidate requested your review'
+    });
+  }
+  for (const client of clients) delete client.candidateIndex;
+  return {
+    authority,
+    credentialHash: await sha256Hex(credential),
+    publicBatch: {
+      ok: true,
+      review_batch_id: batchId,
+      review_batch_version: authority.credential_generation,
+      response_fingerprint: responseFingerprint,
+      expires_at_utc: expiresAt.toISOString(),
+      total_count: totalCount,
+      completed_count: completedCount,
+      clients
+    }
+  };
+}
+
+function weeklyManagerResponseItems(body) {
+  if (!weeklyManagerExactKeys(body, [
+    'review_batch_version', 'response_fingerprint', 'idempotency_key', 'responses'
+  ]) || !Number.isSafeInteger(Number(body.review_batch_version))
+      || Number(body.review_batch_version) < 1
+      || !SHA256_RE.test(text(body.response_fingerprint))
+      || !UUID_RE.test(text(body.idempotency_key))
+      || !Array.isArray(body.responses) || body.responses.length < 1 || body.responses.length > 500) {
+    throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+  }
+  const seen = new Set();
+  const responses = body.responses.map((response) => {
+    if (!weeklyManagerExactKeys(response, [
+      'issue_id', 'incident_episode', 'current_fact_version', 'response_code'
+    ], ['intended_hours'])) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    const issueId = requireUuid(response.issue_id, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID').toLowerCase();
+    const responseCode = upper(response.response_code);
+    if (seen.has(issueId)
+        || !['SYSTEM_CORRECT', 'CANDIDATE_DID_NOT_WORK', 'MANAGER_CORRECTED_SOURCE'].includes(responseCode)) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    seen.add(issueId);
+    const item = {
+      review_item_id: issueId,
+      incident_episode: requireInteger(
+        response.incident_episode, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID', 1
+      ),
+      current_fact_version: requireSha256(
+        response.current_fact_version, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID'
+      ),
+      response_kind: responseCode
+    };
+    if (responseCode === 'MANAGER_CORRECTED_SOURCE') {
+      if (!weeklyManagerExactKeys(response.intended_hours, ['start', 'end', 'break_minutes'])) {
+        throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+      }
+      const hours = weeklyManagerHours(
+        response.intended_hours.start,
+        response.intended_hours.end,
+        response.intended_hours.break_minutes
+      );
+      item.intended_start = hours.start;
+      item.intended_end = hours.end;
+      item.intended_break_minutes = hours.break_minutes;
+    } else if (Object.prototype.hasOwnProperty.call(response, 'intended_hours')) {
+      throw new CandidateHttpError(400, 'MANAGER_WEEKLY_QUERY_RESPONSE_INVALID');
+    }
+    return item;
+  });
+  return {
+    reviewBatchVersion: Number(body.review_batch_version),
+    responseFingerprint: text(body.response_fingerprint).toLowerCase(),
+    idempotencyKey: text(body.idempotency_key).toLowerCase(),
+    responses
+  };
+}
+
+async function handleWeeklyManagerQuery(request, env, deps, reviewBatchId, submit = false) {
+  const current = await weeklyManagerRouteBatch(request, env, deps, reviewBatchId);
+  if (!submit) return jsonResponse(200, current.publicBatch);
+  const input = weeklyManagerResponseItems(await readJson(request));
+  if (input.reviewBatchVersion !== current.publicBatch.review_batch_version
+      || input.responseFingerprint !== current.publicBatch.response_fingerprint) {
+    throw new CandidateHttpError(409, 'MANAGER_WEEKLY_QUERY_BATCH_STALE');
+  }
+  await deps.rpc('weekly_source_manager_review_respond_atomic_v1', {
+    p_request: {
+      credential_hash: current.credentialHash,
+      control_plane_ticket_id: current.authority.manager_route_ticket_id,
+      request_idempotency_key: input.idempotencyKey,
+      review_batch_version: input.reviewBatchVersion,
+      response_fingerprint: input.responseFingerprint,
+      responses: input.responses
+    }
+  });
+  const refreshed = await weeklyManagerRouteBatch(request, env, deps, reviewBatchId);
+  return jsonResponse(200, refreshed.publicBatch);
+}
+
 function routeMatch(path, pattern) {
   const actual = path.split('/').filter(Boolean);
   const expected = pattern.split('/').filter(Boolean);
@@ -11624,7 +12142,28 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/workflows`) return await handleWorkflowCreate(request, env, deps);
     if (request.method === 'GET' && path === `${CANDIDATE_PREFIX}/notifications`) return await handleNotifications(request, env, deps);
 
-    let match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId`);
+    let match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId`);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'GET'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId/draft`);
+    if (match) {
+      if (request.method !== 'PUT') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'DRAFT'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/weekly-source/requests/:requestId/submit`);
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleCandidateWeeklySourceRequest(
+        request, env, deps, match.requestId, 'SUBMIT'
+      );
+    }
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId`);
     if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/detail`);
     if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
@@ -11660,6 +12199,21 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
       return await handleAccountAction(request, env, deps, 'MARK_NOTIFICATION_READ', {
         notification_id: match.notificationId
       });
+    }
+
+    match = routeMatch(path, `${MANAGER_PREFIX}/weekly-query-batches/:reviewBatchId`);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleWeeklyManagerQuery(
+        request, env, deps, match.reviewBatchId, false
+      );
+    }
+    match = routeMatch(path, `${MANAGER_PREFIX}/weekly-query-batches/:reviewBatchId/responses`);
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleWeeklyManagerQuery(
+        request, env, deps, match.reviewBatchId, true
+      );
     }
 
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/:action`);
@@ -11889,3 +12443,13 @@ export const candidateAppBackendInternals = Object.freeze({
   environmentName
 });
 
+
+// WP-32.  Exposed so the wired recorder can be DRIVEN against a real refusal
+// raised by the real installed guard, rather than asserted from the source text.
+// Nothing in the shipped route path reads this object.
+export const candidateAppGuardRefusalInternals = Object.freeze({
+  candidateAppGuardRefusalCorrelationId,
+  candidateAppGuardRefusalActor,
+  recordCandidateAppGuardRefusal,
+  rpcCall
+});

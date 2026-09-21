@@ -1265,6 +1265,15 @@ facts as materialized (
 ),
 classified as materialized (
   select f.*,
+    -- Weekly Source Plan 6.2, Gate 7 item G7-3 (24 section 11, 25 section 4).
+    -- ONE early call into the source-aware issue validator.  It answers
+    -- "not a source invoice" for every ordinary invoice and returns this array
+    -- unchanged, so the ordinary asynchronous issue route is byte-identical.
+    -- This is the single hard-blocker gate for the whole asynchronous route:
+    -- private._invoice_issue_advance_core_v8 and
+    -- private._invoice_batch_issue_classification_v2 both take their blockers
+    -- from here and add none of their own.
+    private.weekly_source_invoice_issue_blockers_v1(f.invoice_id,
     array_remove(array[
       case when f.request_key is null then 'REQUEST_KEY_REQUIRED' end,
       case when f.request_key_count>1 then 'REQUEST_KEY_DUPLICATE' end,
@@ -1322,7 +1331,7 @@ classified as materialized (
           >=p_evaluation_date
         then 'EARLY_ISSUE_NOT_ALLOWED' end,
       case when f.conflicting_issue then 'CONFLICTING_ISSUE_OPERATION' end
-    ],null)::text[] blockers
+    ],null)::text[]) blockers
   from facts f
 )
 select c.request_key,c.invoice_id,

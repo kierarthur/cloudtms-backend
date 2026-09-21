@@ -17,7 +17,21 @@ BEGIN
       ('public.bulk_authorise_dataset_v1(jsonb)', '88880fc433528df687f6eb83983679ad0afc0cc8e6913971de7848874e3a4e71'),
       ('public.bulk_process_dataset_v1(jsonb)', 'b8faea3c39aed9d29108bb0dbb9ba8372c50cfff3733796d970b66814020a648'),
       ('public.bulk_timesheet_row_patch_v1(jsonb)', 'adc4f93bb1ef1186bdbb25438566da8f6548a305d61dc229505c075e69128af6'),
-      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', 'ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19'),
+      -- MOVED at the Plan 6.2 final seals pass (WP-15d), 18 September 2026,
+      -- under HANDOVER 2 round-5 Part C, which approves both runtime-definition
+      -- pin movements for this identity.  Previous pin
+      -- ac3a122f00af03e35bb2c40e82ddb114571f7252a6ac31d9bfec23d7cb3afc19.
+      -- Measured on a full NEW build from empty; the pre-Plan-6.2 template
+      -- reproduces the previous pin exactly, and the definition diff between the
+      -- two is 52 added lines and ZERO removed lines: one jsonb variable and one
+      -- private.weekly_source_managed_root_guard_v1 call with its refusal branch
+      -- (Plan 6.2 G6-11).  Owner (postgres), prosecdef, ACL
+      -- (postgres=X/postgres service_role=X/postgres) and proconfig
+      -- (search_path=public) are unchanged.  No payment, settlement, provider or
+      -- remittance line is touched.  Part C's stated value e874efb37025... was
+      -- withdrawn by WP-09b; every figure in every earlier report is stale and
+      -- this one was taken fresh.  Full record: IMPL\reports\WP-15d_REPORT.md.
+      ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', 'd05fe8c683bfe6dc5a850d57360a2d1ef303fd184773cafb2a8a6ebbf018f21f'),
       ('public.pay_workbench_mark_finance_case_dirty()', '50962ed4c2a7acdbf2a9e38d741d5cb017d56bb1501a92b76b8c980837cd7f08'),
       ('public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)', 'afff514075f85f88642783e6b72db24b64e922b4112274473f67e33c92694d79'),
       ('public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)', '09e28665f4fde5fac02310592c53de7b1cf0336c01a7cec5b182d8e1346666d8'),

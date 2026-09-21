@@ -935,6 +935,42 @@
       "sha256": "cd306f4f2c4ad1e4fd84faac3ceed432fc03875e0cf3af1eb3cabafb07c5d54a"
     },
     {
+      "path": "supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql",
+      "sha256": "1fc7833c7054cb56da725d15280ff757f3b78e1046b80f12c337020695374c0d"
+    },
+    {
+      "path": "supabase/migrations/15092026_2310_weekly_source_delivery_targets.sql",
+      "sha256": "4a8d11cecf697329b4cd019f7a194276476e79d2f43714a946ac8217c7f62b96"
+    },
+    {
+      "path": "supabase/migrations/15092026_2335_weekly_source_finalisation_pay_orchestration.sql",
+      "sha256": "b45715070254d4c0c411500fc4933f62d1f42b545d6d9db475a57b18fc33351c"
+    },
+    {
+      "path": "supabase/migrations/18092026_0900_weekly_source_withdrawal_supersession.sql",
+      "sha256": "8287055ad7bb8cca88430d25b9affabd101f28fe331769ce6aef67a94e45f0c7"
+    },
+    {
+      "path": "supabase/migrations/18092026_1500_weekly_source_external_publication_arrival.sql",
+      "sha256": "171cac481346929dd3e9b0bf9de2ee4b3933339b71e2f791381365fa6b63784a"
+    },
+    {
+      "path": "supabase/migrations/18092026_1520_weekly_source_pending_release_review_items.sql",
+      "sha256": "be3a84fcad4b122cc93b6dc5ac7428d17d4d20366bf99903e13f2e6645daf767"
+    },
+    {
+      "path": "supabase/migrations/18092026_1740_weekly_source_banking_pay_absence.sql",
+      "sha256": "0f78238b2069c533130b236ce3a026752e8c5158c1ab160819250c4f3144d19a"
+    },
+    {
+      "path": "supabase/migrations/21092026_1817_weekly_source_audit_event_order.sql",
+      "sha256": "b71629e38b3041d0b9d3040236bf6269a0cfd36db0044b611cee66dbfc9a485e"
+    },
+    {
+      "path": "supabase/migrations/21092026_2012_invoice_discounting_ledger_revision.sql",
+      "sha256": "37c51a6bdbadceb521b669b2405b153c2a712f7748545b9a8de0db1f27c53c31"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

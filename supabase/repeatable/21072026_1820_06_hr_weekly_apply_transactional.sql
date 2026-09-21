@@ -243,6 +243,11 @@ declare
 
   v_sqlstate text;
   v_err text;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E14).
+  v_weekly_source_guard jsonb;
+  v_weekly_source_root uuid;
+  v_weekly_source_family record;
 begin
   v_steps := v_steps || jsonb_build_array(jsonb_build_object('step','START'));
 
@@ -806,6 +811,79 @@ begin
     if cardinality(v_reauthorise_timesheet_ids)>100 then
       raise exception 'IMPORT_REVIEW_REAUTHORISE_SCOPE_TOO_LARGE' using errcode='54000';
     end if;
+    -- Plan 6.2 G6-11 (proof/34 section 3, entry point E14): an authorised
+    -- Weekly-Source-managed root may never be unauthorised, re-pointed or
+    -- re-promoted by an import apply.  Checked before this owner's first write
+    -- of any kind, which is the canonical bulk unauthorise immediately below.
+    -- Weekly Source withdraws a first authorisation only through its own
+    -- withdrawal owner (proof/36).  An unmanaged family is unaffected.
+    -- WP-09b review finding F1: the guard verdict must be read under the
+    -- compatible locks of proof/34 section 5, not before them.  Every family in
+    -- scope is locked here first, in the deadlock-free trimmed-then-raw order,
+    -- and still before this owner's first write, so a first authorisation that
+    -- holds the family and commits cannot overtake an unlocked read.
+    for v_weekly_source_family in
+      select distinct btrim(family_timesheet.booking_id) as trimmed_booking_id,
+        family_timesheet.booking_id as booking_id
+      from unnest(coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])) as scope(timesheet_id)
+      join public.timesheets family_timesheet
+        on family_timesheet.timesheet_id=scope.timesheet_id
+      where family_timesheet.booking_id is not null
+        and btrim(family_timesheet.booking_id)<>''
+      order by 1,2
+    loop
+      perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.trimmed_booking_id));
+      if v_weekly_source_family.booking_id<>v_weekly_source_family.trimmed_booking_id then
+        perform pg_advisory_xact_lock(hashtext(v_weekly_source_family.booking_id));
+      end if;
+      perform 1 from public.timesheets locked_member
+      where locked_member.booking_id=v_weekly_source_family.booking_id for update;
+    end loop;
+    foreach v_weekly_source_root in array coalesce(v_reauthorise_timesheet_ids,array[]::uuid[])
+    loop
+      v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+      -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+      -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+      -- protected family whose identity cannot be resolved, to a family carrying
+      -- protected pay evidence but no authorisation row
+      -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+      -- unauthorised-Timesheet contradiction, which must never be allowed to
+      -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+      -- family -- including a malformed one -- keeps exactly the behaviour it had
+      -- before this feature was installed.  Absent, null and non-boolean take the
+      -- unsafe value at every read (Part 1 addendum rule 4).
+      if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+           and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+         or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+         or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+        raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+          using errcode='55000',detail=jsonb_build_object(
+            'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+            'entry_point','E14:public.hr_weekly_apply_transactional',
+            'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+            'refusal_basis', case
+              -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+              -- canonical booking-reference collision and must be named as one.
+              -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+              -- release, so the order of this edit and WP-03's rename cannot open a gap in
+              -- which Office stops seeing the ruled name.
+              when v_weekly_source_guard->>'reason' in (
+                     'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+              when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                then 'WEEKLY_SOURCE_MANAGED_ROOT'
+              when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+              when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+              else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+            'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+            'timesheet_id',v_weekly_source_root,
+            'reason',v_weekly_source_guard->>'reason'
+          )::text;
+      end if;
+    end loop;
     if cardinality(v_reauthorise_timesheet_ids)>0 then
       select coalesce(jsonb_agg(jsonb_build_object(
         'timesheet_id',target_id::text,
@@ -1435,6 +1513,55 @@ begin
 
           v_ensure_timesheet_missing_reference_count := v_ensure_timesheet_missing_reference_count + 1;
           v_base_week_ts_id := null;
+        end if;
+      end if;
+
+      -- Plan 6.2 G6-11 (proof/34 section 3, entry point E14): the base-week
+      -- root this pair is about to re-point or promote.  Checked before the
+      -- first write to that family in this iteration.  An unmanaged family is
+      -- unaffected.
+      if v_base_week_ts_id is not null then
+        v_weekly_source_guard:=private.weekly_source_managed_root_guard_v1(v_base_week_ts_id);
+        -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+        -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+        -- protected family whose identity cannot be resolved, to a family carrying
+        -- protected pay evidence but no authorisation row
+        -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+        -- unauthorised-Timesheet contradiction, which must never be allowed to
+        -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+        -- family -- including a malformed one -- keeps exactly the behaviour it had
+        -- before this feature was installed.  Absent, null and non-boolean take the
+        -- unsafe value at every read (Part 1 addendum rule 4).
+        if (coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+             and (coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  or coalesce((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+           or coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+           or (v_weekly_source_guard->>'protected_target_ownership_state') is not null then
+          raise exception 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+            using errcode='55000',detail=jsonb_build_object(
+              'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+              'entry_point','E14:public.hr_weekly_apply_transactional',
+              'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+              'refusal_basis', case
+                -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                -- canonical booking-reference collision and must be named as one.
+                -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                -- which Office stops seeing the ruled name.
+                when v_weekly_source_guard->>'reason' in (
+                       'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                  then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                  then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                  then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                  then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+              'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+              'timesheet_id',v_base_week_ts_id,
+              'reason',v_weekly_source_guard->>'reason'
+            )::text;
         end if;
       end if;
 
@@ -2440,9 +2567,10 @@ begin
   -- A validation-only Weekly timesheet is eligible for configured
   -- auto-authorisation only when the immutable coverage says omissions are
   -- meaningful and every segment on the whole timesheet has one exact
-  -- HealthRoster match whose reference has been durably written.  Processing
-  -- one selected row, one day or one matching segment can never authorise the
-  -- rest of the timesheet by implication.
+  -- HealthRoster match. A durable reference is additionally required only
+  -- where the frozen effective Timesheet policy says a reference is required
+  -- before pay. Processing one selected row, one day or one matching segment
+  -- can never authorise the rest of the timesheet by implication.
   select coalesce(array_agg(distinct vr.timesheet_id order by vr.timesheet_id),array[]::uuid[])
   into v_validation_auto_authorise_timesheet_ids
   from tmp_val_rows vr
@@ -2471,6 +2599,15 @@ begin
       else 0
     end as segment_count
   ) whole_timesheet
+  cross join lateral (
+    select public.contract_settings_effective_get_v1(
+      vr.client_id,
+      vr.contract_id,
+      nullif(vr.row_json->>'week_ending_date','')::date,
+      'IMPORT',
+      vr.timesheet_id
+    ) as payload
+  ) effective_settings
   where vu.new_status='VALIDATION_OK'::public.validation_status_enum
     and vu.new_pre_validated=true
     and hi.coverage_mode in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES')
@@ -2495,7 +2632,13 @@ begin
           or lower(coalesce(comparison.value->>'match','false')) in ('true','1')
         )
         and lower(coalesce(comparison.value->>'time_match','false')) in ('true','1')
-        and nullif(btrim(comparison.value->>'ref_after'),'') is not null
+        and (
+          not coalesce(
+            (effective_settings.payload#>>'{values,require_reference_to_pay}')::boolean,
+            false
+          )
+          or nullif(btrim(comparison.value->>'ref_after'),'') is not null
+        )
         and nullif(btrim(comparison.value->>'work_date'),'') is not null
         and nullif(btrim(comparison.value->>'timesheet_start'),'') is not null
         and nullif(btrim(comparison.value->>'timesheet_end'),'') is not null
@@ -2511,8 +2654,16 @@ begin
             and to_char((date_trunc('minute',matched_shift.end_utc) at time zone 'Europe/London'),'HH24:MI')=
               comparison.value->>'timesheet_end'
             and coalesce(matched_shift.break_mins,0)=coalesce(nullif(btrim(comparison.value->>'timesheet_break_mins'),'')::integer,0)
-            and matched_shift.ref_num=comparison.value->>'ref_after'
-            and matched_shift.hr_request_id=comparison.value->>'ref_after'
+            and (
+              not coalesce(
+                (effective_settings.payload#>>'{values,require_reference_to_pay}')::boolean,
+                false
+              )
+              or (
+                matched_shift.ref_num=comparison.value->>'ref_after'
+                and matched_shift.hr_request_id=comparison.value->>'ref_after'
+              )
+            )
         )
       )
     );

@@ -1196,8 +1196,8 @@ test('final route conversion is signed-state aware, stale-safe, reasoned, retent
   assert.match(route, /REQUIRED_FINAL_PAGE_PROOF_INCOMPLETE/i);
   assert.match(route, /contract_row\.candidate_id/i);
   assert.match(route, /expires_at_utc<=p_now_utc/i);
-  assert.match(route, /revoke all on function public\.timesheet_qr_restore_version\(uuid,uuid,text,uuid\)[\s\S]*from public,anon/i);
-  assert.match(route, /grant execute on function public\.timesheet_qr_restore_version\(uuid,uuid,text,uuid\)[\s\S]*to authenticated,service_role/i);
+  assert.match(route, /revoke all on function public\.timesheet_qr_restore_version\(uuid,uuid,text,uuid\)[\s\S]*from public,anon,authenticated/i);
+  assert.match(route, /grant execute on function public\.timesheet_qr_restore_version\(uuid,uuid,text,uuid\)[\s\S]*to service_role/i);
   assert.match(sql.foundation, /"resubmission_required":true/i);
   assert.match(sql.foundation, /candidate_submission_route_intent[\s\S]*'PAPER'[\s\S]*sheet_scope\s*=\s*'WEEKLY'/i);
   assert.doesNotMatch(sql.foundation, /candidate_submission_route_intent\s*=\s*'PAPER'[\s\S]{0,300}sheet_scope\s+in\s*\([\s\S]{0,150}'DAILY'/i);

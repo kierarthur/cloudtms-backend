@@ -156,11 +156,11 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /when not coalesce\(f\.import_authoritative,false\) then 'NO_ACTION'/);
   assert.match(body, /Validate candidate timesheet/);
   assert.match(body, /WEEKLY_TIMESHEET_NOT_SUBMITTED/);
-  assert.match(body, /WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET/);
+  assert.doesNotMatch(body, /'reason_code','WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET'/);
   assert.match(body, /DAILY_TIMESHEET_NOT_SUBMITTED/);
   assert.match(body, /DAILY_SHIFT_ABSENT_FROM_TIMESHEET/);
   assert.match(body, /Candidate timesheet states they did not work this shift/);
-  assert.match(body, /match_status','MATCH'\) not in \('MATCH','HR_ONLY'\)/);
+  assert.match(body, /match_status','MATCH'\) <> 'MATCH'/);
   assert.match(body, /validation-email-v2/);
   assert.match(body, /and not coalesce\(m\.contract_rate_complete,false\) then 'CONTRACT_RATES_INCOMPLETE'/);
   assert.match(body, /source_route_eligible',coalesce\(o\.route_eligible,false\)/);
@@ -171,12 +171,14 @@ test('weekly action classification consumes the established phase2 mapping autho
   assert.match(body, /timesheet_start/);
 });
 
-test('HealthRoster query emails contain only shifts requiring Temporary Staffing attention', () => {
+test('HealthRoster query emails include every Weekly Timesheet-authority mismatch', () => {
   const catalogue = functionBody(coreSql, '_import_review_action_catalog_core_v1');
   const enqueue = functionBody(emailSql, 'timesheet_query_email_enqueue_v1');
 
   assert.match(catalogue, /email_comparisons/);
-  assert.match(catalogue, /coalesce\(cx\.value->>'match_status','MATCH'\) not in \('MATCH','HR_ONLY'\)/);
+  assert.match(catalogue, /coalesce\(cx\.value->>'match_status','MATCH'\) <> 'MATCH'/);
+  assert.doesNotMatch(catalogue, /match_status','MATCH'\) not in \('MATCH','HR_ONLY'\)/);
+  assert.doesNotMatch(catalogue, /where fr\.value<>'HealthRoster has a shift not present on the timesheet\.'/);
   assert.match(catalogue, /or coalesce\(\(cx\.value->>'ref_changed'\)::boolean,false\)/);
   assert.match(catalogue, /email_days/);
   assert.match(catalogue, /weekly-query-evidence-v2/);
@@ -217,8 +219,12 @@ test('a missing Weekly timesheet retains one server-owned imported-evidence acti
   assert.match(preview, /'ref_after', hf\.hr_request_id/);
   assert.match(catalogue, /d\.hr_row_id shift_hr_row_id/);
   assert.match(catalogue, /m\.shift_summary_json\|\|jsonb_build_object/);
-  assert.match(catalogue, /weekly-timesheet-not-submitted-v2/);
-  assert.match(catalogue, /'WEEKLY_TIMESHEET_NOT_SUBMITTED',m\.shift_hr_row_id/);
+  assert.match(catalogue, /weekly-timesheet-incomplete-v3/);
+  assert.match(catalogue, /WEEKLY_TIMESHEET_AWAITING_MANAGER_APPROVAL/);
+  assert.match(catalogue, /Waiting for candidate to submit/);
+  assert.match(catalogue, /Waiting for manager approval/);
+  assert.match(catalogue, /Waiting for completed timesheet/);
+  assert.match(catalogue, /candidate_submission_workflows/);
 });
 
 test('Daily automatic and saved resolution both enforce the active mapped role and band', () => {
@@ -374,6 +380,9 @@ test('configured auto-authorisation keeps mandatory corrections separate and adm
   assert.match(weeklyApplySql, /hi\.coverage_mode in \('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES'\)/);
   assert.match(weeklyApplySql, /whole_timesheet\.segment_count=jsonb_array_length\(vr\.row_json->'comparisons'\)/);
   assert.match(weeklyApplySql, /time_match','false'/);
+  assert.match(weeklyApplySql, /contract_settings_effective_get_v1\(/);
+  assert.match(weeklyApplySql, /values,require_reference_to_pay/);
+  assert.match(weeklyApplySql, /not coalesce\([\s\S]*?require_reference_to_pay[\s\S]*?or nullif\(btrim\(comparison\.value->>'ref_after'\),''\) is not null/);
   assert.match(weeklyApplySql, /matched_shift\.ref_num=comparison\.value->>'ref_after'/);
   assert.match(weeklyApplySql, /'HEALTHROSTER'::public\.hr_source_enum,true/);
   assert.doesNotMatch(weeklyApplySql, /hi\.coverage_mode='PARTIAL'[\s\S]*?v_validation_auto_authorise_timesheet_ids/);

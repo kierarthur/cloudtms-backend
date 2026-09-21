@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PDFDocument } from 'pdf-lib';
@@ -1937,6 +1937,95 @@ test('timesheet page boundary defaults to Current and validates the explicit His
     assert.equal(invalid.status, 400);
     assert.equal((await invalid.json()).error_code, 'CANDIDATE_VIEW_INVALID');
     assert.equal(rpcCalls.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Weekly source Candidate routes preserve one authenticated session and exact RPC boundary', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000076';
+  const candidateId = '00000000-0000-4000-8000-000000000077';
+  const requestId = '00000000-0000-4000-8000-000000000078';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId,
+    id: sessionId,
+    account_id: '00000000-0000-4000-8000-000000000079',
+    selected_candidate_id: candidateId,
+    environment: 'TEST',
+    status: 'ACTIVE',
+    rotation: 3,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    assert.match(String(url), /candidate_app_sessions/);
+    return Response.json([session]);
+  };
+  const calls = [];
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { ok: true, request_id: requestId, rpc_name: name };
+    }
+  };
+  const mutationBody = {
+    request_version: 1,
+    request_fingerprint: 'a'.repeat(64),
+    scope_id: '00000000-0000-4000-8000-00000000007a',
+    scope_version: 1,
+    scope_fingerprint: 'b'.repeat(64),
+    responses: [],
+    idempotency_key: '00000000-0000-4000-8000-00000000007b'
+  };
+  try {
+    const cases = [
+      ['GET', `/candidate-app/v1/weekly-source/requests/${requestId}`, null,
+        'weekly_source_candidate_app_request_get_v1'],
+      ['PUT', `/candidate-app/v1/weekly-source/requests/${requestId}/draft`, mutationBody,
+        'weekly_source_candidate_app_draft_save_atomic_v1'],
+      ['POST', `/candidate-app/v1/weekly-source/requests/${requestId}/submit`, {
+        ...mutationBody, submission_kind: 'RESPONSES_ONLY'
+      }, 'weekly_source_candidate_app_submit_atomic_v1']
+    ];
+    for (const [method, path, body, rpcName] of cases) {
+      const response = await handleCandidateAppRequest(new Request(`https://private.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(body ? { 'content-type': 'application/json' } : {})
+        },
+        ...(body ? { body: JSON.stringify(body) } : {})
+      }), env, {}, deps);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).rpc_name, rpcName);
+    }
+    assert.deepEqual(calls.map(call => call.name), cases.map(entry => entry[3]));
+    for (const call of calls) {
+      assert.equal(call.args.p_session_id, sessionId);
+      assert.equal(call.args.p_environment, 'TEST');
+      assert.equal(call.args.p_request_id, requestId);
+      assert.match(call.args.p_now_utc, /^\d{4}-\d{2}-\d{2}T/);
+    }
+    assert.equal(calls[0].args.p_body, undefined);
+    assert.deepEqual(calls[1].args.p_body, mutationBody);
+    assert.equal(calls[2].args.p_body.submission_kind, 'RESPONSES_ONLY');
+
+    const wrongMethod = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/weekly-source/requests/${requestId}/draft`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}` }
+      }
+    ), env, {}, deps);
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(calls.length, 3, 'wrong method must not reach a database RPC');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -9546,6 +9635,84 @@ test('private manager routes reject wrong HTTP methods before any RPC mutation',
     assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');
   }
   assert.equal(rpcCalls, 0);
+});
+
+test('weekly manager query route returns only the closed grouped hours contract', async () => {
+  const batchId = '10000000-0000-4000-8000-000000000081';
+  const ticketId = '10000000-0000-4000-8000-000000000082';
+  const recipientGenerationId = '10000000-0000-4000-8000-000000000083';
+  const clientId = '10000000-0000-4000-8000-000000000084';
+  const candidateId = '10000000-0000-4000-8000-000000000085';
+  const issueId = '10000000-0000-4000-8000-000000000086';
+  const secret = 'test-weekly-manager-route-secret-not-live';
+  const canonicalHmac = (namespace, value) => createHmac('sha256', secret)
+    .update(`${namespace}\u001f${JSON.stringify(value)}`).digest('hex');
+  const membershipHash = 'a'.repeat(64);
+  const request = new Request(
+    `https://private.test/candidate-manager/v1/weekly-query-batches/${batchId}`,
+    { headers: {
+      authorization: 'Bearer weekly-manager-opaque-token',
+      'x-cloudtms-manager-route-authority': 'WEEKLY_QUERY_MANAGER_EMAIL',
+      'x-cloudtms-manager-route-ticket': ticketId,
+      'x-cloudtms-manager-route-revision': '1',
+      'x-cloudtms-manager-route-weekly-batch-hmac': canonicalHmac(
+        'weekly-query-review-batch-v1', batchId
+      ),
+      'x-cloudtms-manager-route-weekly-recipient-generation-hmac': canonicalHmac(
+        'weekly-query-recipient-generation-v1', recipientGenerationId
+      ),
+      'x-cloudtms-manager-route-weekly-membership-hash': membershipHash,
+      'x-cloudtms-manager-route-credential-generation': '1'
+    } }
+  );
+  const response = await handleCandidateAppRequest(request, {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST', MYTMS_MANAGER_ROUTE_HMAC_SECRET: secret
+  }, {}, {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'weekly_source_manager_review_get_v1');
+      assert.equal(args.p_request.control_plane_ticket_id, ticketId);
+      assert.equal(
+        args.p_request.credential_hash,
+        createHash('sha256').update('weekly-manager-opaque-token').digest('hex')
+      );
+      return {
+        ok: true, review_batch_id: batchId, review_batch_version: 1,
+        response_fingerprint: 'b'.repeat(64),
+        recipient_generation_id: recipientGenerationId,
+        original_membership_hash: membershipHash, credential_generation: 1,
+        expires_at_utc: '2026-09-22T12:00:00.000Z', total_count: 1,
+        completed_count: 0, remaining_count: 1,
+        items: [{
+          review_item_id: issueId, incident_episode: 1,
+          current_fact_version: 'c'.repeat(64), client_id: clientId,
+          client_name: 'Trust One', candidate_id: candidateId,
+          candidate_name: 'Nurse One', work_date: '2026-09-15',
+          source_start_instant: '2026-09-15T08:00:00.000Z',
+          candidate_start: '09:00', candidate_end: '18:00', candidate_break_minutes: 30,
+          system_start: '09:00', system_end: '17:00', system_break_minutes: 30,
+          issue_family: 'HOURS_DIFFER', candidate_response: 'Candidate requested your review',
+          pay_rate: 999, invoice_total: 999
+        }]
+      };
+    }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true, review_batch_id: batchId, review_batch_version: 1,
+    response_fingerprint: 'b'.repeat(64), expires_at_utc: '2026-09-22T12:00:00.000Z',
+    total_count: 1, completed_count: 0,
+    clients: [{ client_id: clientId, client_name: 'Trust One', candidates: [{
+      candidate_id: candidateId, candidate_name: 'Nurse One', issues: [{
+        issue_id: issueId, incident_episode: 1, current_fact_version: 'c'.repeat(64),
+        issue_family: 'HOURS_DIFFER', work_date: '2026-09-15',
+        source_start_instant: '2026-09-15T08:00:00.000Z',
+        candidate_hours: { start: '09:00', end: '18:00', break_minutes: 30 },
+        system_hours: { start: '09:00', end: '17:00', break_minutes: 30 },
+        candidate_requested_review: true
+      }]
+    }] }]
+  });
 });
 
 test('manager approval authority is matched to the current request before a decisive mutation', async () => {

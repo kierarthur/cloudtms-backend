@@ -188,6 +188,9 @@ AS $function$
 DECLARE
   v_preview jsonb;
   v_result jsonb;
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E23).
+  v_weekly_source_guard jsonb;
+  v_weekly_source_root uuid;
   v_contract_id uuid;
   v_contract_start date;
   v_contract_end date;
@@ -203,6 +206,72 @@ DECLARE
 BEGIN
   v_preview := public.timesheet_weekly_chain_delete_preview(p_timesheet_id, p_actor_user_id);
   v_contract_id := NULLIF(v_preview ->> 'contract_id', '')::uuid;
+
+  -- Plan 6.2 G6-11 (proof/34 section 3, entry point E23).  The delete base
+  -- owner carries the same refusal under its own locks; this call covers the
+  -- upgrade path, where the base body is not recreated because the rename block
+  -- above is already satisfied.  Checked before any write of this chain.  An
+  -- unmanaged family is unaffected.
+  FOR v_weekly_source_root IN
+    SELECT DISTINCT target.timesheet_id
+    FROM (
+      SELECT p_timesheet_id AS timesheet_id
+      UNION
+      SELECT unnest(COALESCE(p_expected_timesheet_ids, ARRAY[]::uuid[]))
+      UNION
+      SELECT NULLIF(element.value, '')::uuid
+      FROM jsonb_array_elements_text(
+        CASE WHEN jsonb_typeof(v_preview -> 'timesheet_ids') = 'array'
+          THEN v_preview -> 'timesheet_ids' ELSE '[]'::jsonb END
+      ) AS element(value)
+    ) AS target(timesheet_id)
+    WHERE target.timesheet_id IS NOT NULL
+    ORDER BY 1
+  LOOP
+    v_weekly_source_guard := private.weekly_source_managed_root_guard_v1(v_weekly_source_root);
+    -- HANDOVER 2 round-5 ruling B3 and A4 (18 September 2026).  The refusal is
+    -- NARROWED: it applies to a Weekly-Source managed root, to a bound or
+    -- protected family whose identity cannot be resolved, to a family carrying
+    -- protected pay evidence but no authorisation row
+    -- (PROTECTED_ROOT_AUTHORITY_MISSING), and to the live-record-on-an-
+    -- unauthorised-Timesheet contradiction, which must never be allowed to
+    -- continue merely because managed is false.  An unrelated, UNBOUND ordinary
+    -- family -- including a malformed one -- keeps exactly the behaviour it had
+    -- before this feature was installed.  Absent, null and non-boolean take the
+    -- unsafe value at every read (Part 1 addendum rule 4).
+    IF (COALESCE((v_weekly_source_guard->>'managed')::boolean, true)
+         and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
+              or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
+       or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+       or (v_weekly_source_guard->>'protected_target_ownership_state') is not null THEN
+      RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
+        USING ERRCODE = '55000',
+              DETAIL = jsonb_build_object(
+                'code','WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED',
+                'entry_point','E23:public.timesheet_weekly_chain_delete_apply',
+                'block_reason','WEEKLY_SOURCE_MANAGED_ROOT',
+                'refusal_basis', case
+                  -- HANDOVER 2 round-5 Part E: the trim-equivalent split family is a
+                  -- canonical booking-reference collision and must be named as one.
+                  -- WP-03 handoff N20: accept BOTH the installed token and the ruled name for one
+                  -- release, so the order of this edit and WP-03's rename cannot open a gap in
+                  -- which Office stops seeing the ruled name.
+                  when v_weekly_source_guard->>'reason' in (
+                         'FAMILY_SPLIT_BY_WHITESPACE','BOOKING_REFERENCE_CANONICAL_COLLISION')
+                    then 'BOOKING_REFERENCE_CANONICAL_COLLISION'
+                  when coalesce((v_weekly_source_guard->>'managed')::boolean, true) and coalesce((v_weekly_source_guard->>'ok')::boolean, true)
+                    then 'WEEKLY_SOURCE_MANAGED_ROOT'
+                  when coalesce((v_weekly_source_guard->>'managed')::boolean, true)
+                    then 'WEEKLY_SOURCE_BOUND_OR_PROTECTED_ROOT_UNRESOLVABLE'
+                  when coalesce((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
+                    then 'AUTHORISATION_RECORD_WITHOUT_AUTHORISED_TIMESHEET'
+                  else 'PROTECTED_ROOT_AUTHORITY_MISSING' end,
+                'integrity_failure', not coalesce((v_weekly_source_guard->>'ok')::boolean,false),
+                'timesheet_id', v_weekly_source_root,
+                'reason', v_weekly_source_guard->>'reason'
+              )::text;
+    END IF;
+  END LOOP;
 
   v_result := private.timesheet_weekly_chain_delete_apply_base_v1(
     p_timesheet_id,
