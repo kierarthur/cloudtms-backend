@@ -815,15 +815,29 @@ async function processReadyTasks({
       });
       serviceSnapshot = validateServiceSnapshot(built, task.root_context);
     } catch (error) {
+      const errorCode = boundedErrorCode(
+        error,
+        'WEEKLY_SOURCE_FINALISATION_PAY_PREPARATION_FAILED',
+      );
+      const errorDetailCode = boundedErrorCode(
+        { code: error?.message },
+        'WEEKLY_SOURCE_FINALISATION_PAY_PREPARATION_DETAIL_UNAVAILABLE',
+      );
+      try {
+        console.warn(JSON.stringify({
+          event: 'weekly_source_finalisation_pay_preparation_required',
+          error_code: errorCode,
+          error_detail_code: errorDetailCode,
+          task_id: task.task_id,
+          final_revision_id: run.final_revision_id,
+        }));
+      } catch {}
       return sourceFinalisedResult(
         'FINALISED_PAY_PREPARATION_REQUIRED',
         sourceFinalisation,
         run,
         {
-          pay_projection_error_code: boundedErrorCode(
-            error,
-            'WEEKLY_SOURCE_FINALISATION_PAY_PREPARATION_FAILED',
-          ),
+          pay_projection_error_code: errorCode,
           pay_projection_task_id: task.task_id,
         },
       );
