@@ -71,10 +71,72 @@ create table public.settings_defaults (
   ts_attach_to_invoice boolean not null default true,
   healthroster_import_auto_authorise_default boolean not null default false,
   nhsp_import_auto_authorise_default boolean not null default false,
+  auto_authorise_on_validation boolean not null default false,
   reversal_complete_financials_date public.correction_financials_date_basis_enum not null default 'PAID_DATE',
   reversal_replacement_financials_date public.correction_financials_date_basis_enum not null default 'PAID_DATE',
   updated_at timestamptz not null default now()
 );
+
+create table public.settings_finance_windows (
+  id uuid primary key default gen_random_uuid(),
+  date_from date not null,
+  date_to date,
+  vat_rate_pct numeric not null,
+  erni_pct numeric not null,
+  holiday_pay_pct numeric not null,
+  apply_holiday_to text,
+  apply_erni_to text,
+  margin_includes jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  mileage_pay_defaults numeric,
+  mileage_charge_defaults numeric
+);
+
+create function public.settings_finance_pick(p_date date default null)
+returns table (
+  id uuid,
+  date_from date,
+  date_to date,
+  vat_rate_pct numeric,
+  erni_pct numeric,
+  holiday_pay_pct numeric,
+  mileage_pay_defaults numeric,
+  mileage_charge_defaults numeric,
+  apply_holiday_to text,
+  apply_erni_to text,
+  margin_includes jsonb,
+  source text
+)
+language sql
+stable
+as $$
+  with params as (
+    select coalesce(p_date,(now() at time zone 'Europe/London')::date) d
+  ), pick as (
+    select w.*,'FINANCE_WINDOWS'::text source
+    from public.settings_finance_windows w
+    cross join params p
+    where w.date_from<=p.d and (w.date_to is null or w.date_to>=p.d)
+    order by w.date_from desc
+    limit 1
+  ), fallback as (
+    select w.*,'FINANCE_WINDOWS_EARLIEST_FALLBACK'::text source
+    from public.settings_finance_windows w
+    order by w.date_from asc
+    limit 1
+  )
+  select p.id,p.date_from,p.date_to,p.vat_rate_pct,p.erni_pct,
+    p.holiday_pay_pct,p.mileage_pay_defaults,p.mileage_charge_defaults,
+    p.apply_holiday_to,p.apply_erni_to,p.margin_includes,p.source
+  from pick p
+  union all
+  select f.id,f.date_from,f.date_to,f.vat_rate_pct,f.erni_pct,
+    f.holiday_pay_pct,f.mileage_pay_defaults,f.mileage_charge_defaults,
+    f.apply_holiday_to,f.apply_erni_to,f.margin_includes,f.source
+  from fallback f
+  where not exists(select 1 from pick);
+$$;
 
 create table public.clients (
   id uuid primary key default gen_random_uuid(),
@@ -141,7 +203,7 @@ create table public.client_settings (
   erni_pct numeric,
   apply_holiday_to text,
   apply_erni_to text,
-  margin_includes text,
+  margin_includes jsonb,
   hr_validation_required boolean not null default false,
   ts_reference_required boolean not null default false,
   week_ending_weekday integer,
@@ -183,15 +245,37 @@ create table public.contracts (
   display_site text,
   band text,
   pay_method_snapshot text not null default 'PAYE',
+  rates_json jsonb not null default '{}'::jsonb,
+  std_hours_json jsonb,
   default_submission_mode public.submission_mode_enum,
   overrideclientsettings boolean not null default false,
+  auto_invoice boolean not null default false,
+  require_reference_to_pay boolean not null default false,
+  require_reference_to_invoice boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  bucket_labels_json jsonb,
+  mileage_pay_rate numeric(10,2),
+  mileage_charge_rate numeric(10,2),
+  additional_rates_json jsonb,
   no_timesheet_required boolean,
+  daily_calc_of_invoices boolean,
+  group_nightsat_sunbh boolean,
   is_nhsp boolean,
   autoprocess_hr boolean,
+  requires_hr boolean,
+  hr_attach_to_invoice boolean,
+  ts_attach_to_invoice boolean,
   weekly_timesheet_source public.weekly_timesheet_source_enum not null default 'NONE',
   self_bill boolean not null default false,
+  reference_number_required_to_issue_invoice boolean,
   send_manual_invoices_to_different_email boolean,
-  manual_invoices_alt_email_address text
+  manual_invoices_alt_email_address text,
+  is_ad_hoc boolean not null default false,
+  healthroster_import_auto_authorise_override boolean,
+  nhsp_import_auto_authorise_override boolean,
+  send_ts_queries_to_different_email boolean not null default false,
+  ts_queries_alt_email_address text
 );
 
 create table public.timesheets (

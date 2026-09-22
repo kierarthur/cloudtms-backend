@@ -98,6 +98,26 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /create table public\.tms_users[\s\S]*?\bdisplay_name\s+text/i,
     'Candidate runtime fixture must expose the system-actor display name'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.settings_defaults[\s\S]*?\bauto_authorise_on_validation\s+boolean\s+not\s+null\s+default\s+false/i,
+    'Candidate runtime fixture must expose the global validation authority setting'
+  );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.settings_finance_windows\s*\(/i,
+    'Candidate runtime fixture must expose the dated finance-window baseline'
+  );
+  assert.match(
+    candidateRuntimeFixture,
+    /create function public\.settings_finance_pick\s*\(/i,
+    'Candidate runtime fixture must expose the effective finance-window picker'
+  );
+  assert.match(
+    candidateRuntimeFixture,
+    /create table public\.client_settings[\s\S]*?\bmargin_includes\s+jsonb/i,
+    'Candidate runtime fixture must match the production JSON finance-policy shape'
+  );
   assert.ok(
     candidateRuntimeWorkflow.indexOf('supabase/migrations/26082026_2057_candidate_system_actor_seed.sql')
       < candidateRuntimeWorkflow.indexOf('supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql'),
@@ -141,6 +161,9 @@ test('Candidate runtime gate finishes with every current authority', () => {
   const installPaths = [...installBlock.matchAll(/^\s*(\S+\.sql)\s*$/gm)].map(match => match[1]);
   const breakModeMigration = 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql';
   const settingsAuthorityMigration = 'supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql';
+  const managerPolicyReceiptMigration = 'supabase/migrations/26082026_0042_candidate_manager_authoriser_policy_receipts.sql';
+  const managerPolicyOwner = 'supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql';
+  const settingsAuthorityOwner = 'supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql';
   const settingsCanvasRepair = 'supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql';
   const settingsProcessedDailyOriginRepair = 'supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql';
   const settingsAuthorityConsumer = 'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql';
@@ -154,6 +177,14 @@ test('Candidate runtime gate finishes with every current authority', () => {
   const firstRepeatableIndex = installPaths.findIndex(entry => entry.startsWith('supabase/repeatable/'));
   assert.ok(migrationIndex >= 0, 'break-entry schema migration is missing');
   assert.ok(installPaths.includes(settingsAuthorityMigration), 'settings-authority schema migration is missing');
+  assert.ok(installPaths.includes(managerPolicyReceiptMigration), 'manager-policy receipt migration is missing');
+  assert.ok(installPaths.includes(managerPolicyOwner), 'manager-policy owner is missing');
+  assert.ok(installPaths.includes(settingsAuthorityOwner), 'effective settings owner is missing');
+  assert.ok(
+    installPaths.indexOf(managerPolicyReceiptMigration) < installPaths.indexOf(managerPolicyOwner)
+      && installPaths.indexOf(managerPolicyOwner) < installPaths.indexOf(settingsAuthorityOwner),
+    'manager-policy storage and resolver must precede the effective settings owner that calls them'
+  );
   assert.ok(installPaths.includes(settingsCanvasRepair), 'historical missing Client settings repair is missing');
   assert.ok(installPaths.includes(settingsProcessedDailyOriginRepair), 'processed Daily Client settings origin repair is missing');
   assert.ok(helperIndex >= 0, 'break-entry precedence helper owner is missing');

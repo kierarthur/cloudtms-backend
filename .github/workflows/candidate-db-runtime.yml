@@ -19,6 +19,8 @@ on:
       - 'supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql'
       - 'supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql'
       - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
+      - 'supabase/migrations/26082026_0042_candidate_manager_authoriser_policy_receipts.sql'
+      - 'supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql'
       - 'supabase/migrations/26082026_2057_candidate_system_actor_seed.sql'
       - 'supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql'
       - 'supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql'
@@ -190,11 +192,13 @@ jobs:
             supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql
             supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql
             supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
+            supabase/migrations/26082026_0042_candidate_manager_authoriser_policy_receipts.sql
             supabase/migrations/26082026_2057_candidate_system_actor_seed.sql
             supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql
             supabase/migrations/02092026_1105_candidate_paper_cancel_lookup_indexes.sql
             supabase/migrations/03092026_0015_candidate_paper_pack_email_authority_repair.sql
             supabase/migrations/03092026_1640_contract_settings_authority_snapshot.sql
+            supabase/repeatable/26082026_0043_candidate_manager_authoriser_policy_v2.sql
             supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql
             supabase/migrations/04092026_1515_client_settings_missing_canvas_v1.sql
             supabase/migrations/04092026_1610_client_settings_processed_daily_origin_backdate_v1.sql
