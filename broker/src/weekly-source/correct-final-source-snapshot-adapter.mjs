@@ -334,7 +334,12 @@ export function adaptWeeklyCorrectFinalServiceSnapshot(input = {}) {
   const root = object(input.rootContext, 'Prepared root');
   const timesheetContext = object(input.timesheetContext, 'Timesheet context');
   const weeklyContext = object(input.weeklyContext, 'Weekly context');
-  const currentFinancial = object(timesheetContext.out_cur_fin, 'Current financial record');
+  // A source-authoritative Timesheet can reach its first finalisation before it
+  // has any TSFIN row.  The ordinary calculator already treats that valid
+  // starting point as zero preserved extras; keep the same behaviour here.
+  const currentFinancial = timesheetContext.out_cur_fin == null
+    ? Object.freeze({})
+    : object(timesheetContext.out_cur_fin, 'Current financial record');
   const timesheet = object(timesheetContext.out_timesheet, 'Current Timesheet');
   const contract = object(weeklyContext.out_contract, 'Current Contract');
   object(weeklyContext.out_cw, 'Current Contract week');

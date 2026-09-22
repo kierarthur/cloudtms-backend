@@ -3079,7 +3079,7 @@ async function buildWeeklyCorrectFinalServiceSnapshot(env, input = {}) {
   const contractWeek = weeklyContext?.out_cw;
   const contract = weeklyContext?.out_contract;
   const frozenValues = timesheet?.settings_authority_json?.values;
-  if (!timesheet || !currentFinancial || !contractWeek || !contract
+  if (!timesheet || !contractWeek || !contract
       || !frozenValues || typeof frozenValues !== 'object' || Array.isArray(frozenValues)) {
     const error = new Error('WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID');
     error.code = 'WEEKLY_SOURCE_CORRECTION_CALCULATION_CONTEXT_INVALID';

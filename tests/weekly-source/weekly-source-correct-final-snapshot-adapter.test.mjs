@@ -189,6 +189,24 @@ test('builds the exact closed service snapshot and preserves additional units, m
   assert.equal(Object.keys(snapshot.tsfin_snapshot_json).length, 48);
 });
 
+test('builds the first source-authoritative financial snapshot when no current financial row exists', () => {
+  const input = fixture();
+  input.timesheetContext.out_cur_fin = null;
+
+  const snapshot = adaptWeeklyCorrectFinalServiceSnapshot(input).tsfin_snapshot_json;
+
+  assert.deepEqual(snapshot.additional_units_json, {});
+  assert.equal(snapshot.additional_pay_ex_vat, 0);
+  assert.equal(snapshot.expenses_pay_ex_vat, 0);
+  assert.equal(snapshot.expenses_charge_ex_vat, 0);
+  assert.equal(snapshot.mileage_units, 0);
+  assert.equal(snapshot.mileage_pay_ex_vat, 0);
+  assert.equal(snapshot.total_pay_ex_vat, 130);
+  assert.equal(snapshot.total_charge_ex_vat, 260);
+  assert.equal(snapshot.margin_ex_vat, 112.06);
+  assert.equal(snapshot.processing_status, 'PENDING_AUTH');
+});
+
 test('replaces ordinary receipt expenses only when the prepared source supplies source-approved expenses', () => {
   const input = fixture();
   input.rootContext.expected_source_expenses = [{
