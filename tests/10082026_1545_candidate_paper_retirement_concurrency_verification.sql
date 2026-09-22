@@ -248,6 +248,8 @@ delete from public.timesheets
 where timesheet_id='b5200000-0000-4000-8000-000000000004';
 delete from public.contracts
 where id='b5200000-0000-4000-8000-000000000003';
+delete from public.client_settings
+where client_id='b5200000-0000-4000-8000-000000000002';
 delete from public.clients
 where id='b5200000-0000-4000-8000-000000000002';
 delete from public.candidates
