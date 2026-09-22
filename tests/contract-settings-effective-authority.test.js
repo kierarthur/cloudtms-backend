@@ -169,8 +169,8 @@ test('invoice consumers use each real Timesheet frozen authority, not current Cl
 });
 
 test('invoice precheck preserves frozen history and excludes only unsafe unsnapshotted history', () => {
-  assert.match(invoicePrecheck, /when coalesce\(ts\.settings_authority_json,'\{\}'::jsonb\)<>'\{\}'::jsonb[\s\S]*?contract_settings_effective_get_v1\([\s\S]*?ts\.timesheet_id/);
-  assert.match(invoicePrecheck, /when ts\.is_current=true and ts\.revoked_at is null[\s\S]*?contract_settings_effective_get_v1\(/);
+  assert.match(invoicePrecheck, /when coalesce\(ts\.settings_authority_json,'\{\}'::jsonb\)<>'\{\}'::jsonb[\s\S]*?_timesheet_settings_authority_frozen_v1\(ts\.timesheet_id\)/);
+  assert.match(invoicePrecheck, /when ts\.is_current=true and ts\.revoked_at is null[\s\S]*?_contract_settings_effective_core_v1\(/);
   assert.match(invoicePrecheck, /where \(ts\.is_current=true and ts\.revoked_at is null\)[\s\S]*?or coalesce\(ts\.settings_authority_json,'\{\}'::jsonb\)<>'\{\}'::jsonb/);
   assert.doesNotMatch(invoicePrecheck, /from public\.client_settings/);
 });
@@ -186,12 +186,9 @@ test('invoice presentation release fails closed instead of certifying a deferred
 });
 
 test('Office summaries resolve planned and unprocessed Daily rows live but invoices require frozen Timesheet authority', () => {
-  assert.match(timesheetSummary, /contract_settings_effective_get_v1/);
+  assert.match(timesheetSummary, /_contract_settings_effective_core_v1/);
   assert.match(timesheetSummary, /cw\.settings_authority_json IS NULL OR cw\.settings_authority_json='\{\}'::jsonb/);
-  assert.match(invoicePrecheck, /contract_settings_effective_get_v1/);
-  for (const source of [timesheetSummary, invoicePrecheck]) {
-    assert.doesNotMatch(source, /private\._contract_settings_effective_core_v1/);
-  }
+  assert.match(invoicePrecheck, /_contract_settings_effective_core_v1/);
   assert.match(invoicePrecheck, /case when ts\.sheet_scope='DAILY'::public\.timesheet_scope_enum then 'DAILY' else 'INVOICE' end/);
   for (const source of [timesheetSummary, invoicePrecheck]) {
     assert.doesNotMatch(source, /from public\.client_settings/);

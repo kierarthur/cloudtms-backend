@@ -235,22 +235,12 @@ cross join lateral (
     -- authority frozen on that immutable Timesheet identity.  Do not ask the
     -- current-only resolver to reinterpret it from today's Client settings.
     when coalesce(ts.settings_authority_json,'{}'::jsonb)<>'{}'::jsonb
-      then public.contract_settings_effective_get_v1(
-        tf.client_id,
-        ts.contract_id,
-        coalesce(
-          (ts.worked_start_iso at time zone 'Europe/London')::date,
-          (ts.scheduled_start_iso at time zone 'Europe/London')::date,
-          ts.week_ending_date
-        ),
-        'INVOICE',
-        ts.timesheet_id
-      )
+      then private._timesheet_settings_authority_frozen_v1(ts.timesheet_id)
     -- Current records which have not yet frozen authority retain the existing
     -- Daily first-use path.  Processed Weekly/current records still fail closed
     -- in the shared resolver if their authority is unexpectedly absent.
     when ts.is_current=true and ts.revoked_at is null
-      then public.contract_settings_effective_get_v1(
+      then private._contract_settings_effective_core_v1(
         tf.client_id,
         ts.contract_id,
         coalesce(

@@ -3733,8 +3733,7 @@ test('HealthRoster invoice support obeys effective attachment policy and renders
     precheck,
     /authority\.settings_json#>>'\{values,hr_attach_to_invoice\}'\)::boolean,true\)[\s\S]*as effective_hr_attach_to_invoice/i,
   );
-  assert.match(precheck, /public\.contract_settings_effective_get_v1/i);
-  assert.doesNotMatch(precheck, /private\._contract_settings_effective_core_v1/i);
+  assert.match(precheck, /private\._contract_settings_effective_core_v1/i);
   assert.doesNotMatch(precheck, /from\s+public\.client_settings|join\s+public\.client_settings/i);
   assert.match(
     sourceCollector,

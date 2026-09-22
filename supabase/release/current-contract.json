@@ -37891,6 +37891,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_settings_authority_frozen_get_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e7cbffe9b25487a1486830321f54575a41a532955775923747e48162d204d9f6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, pg_temp"
       ],
       "schema": "public",
@@ -164213,7 +164237,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "7495e30eac31c6bcc7701094a4130a683e8f6b661e1d1d448358e02f28bb57d1"
+      "view_definition_sha256": "440ca1b1e6ca93d036bf4e78096bb0f1f0a2c0e312ea7fbe394bbdf7fd733d1e"
     },
     {
       "acl": [
@@ -164423,7 +164447,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "d91dbf1069b6cb26949b5dd081728537d0cabfa34c77c1aa7fe771ead130ee3e"
+      "view_definition_sha256": "da446690aac20c966c4c59c6c01187f04e1a78389b13e078a2b3593301c8a7a2"
     },
     {
       "acl": [
