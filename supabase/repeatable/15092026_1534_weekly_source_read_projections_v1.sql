@@ -1236,6 +1236,22 @@ begin
       'system_hours',case when source_row.start_at_local is null then pg_catalog.chr(8212)
         else to_char(source_row.start_at_local,'HH24:MI')||'-'||to_char(source_row.end_at_local,'HH24:MI')
           ||' ('||coalesce(source_row.break_minutes,0)||' min break)' end,
+      'actual_hours',case when source_row.start_at_local is null then pg_catalog.chr(8212)
+        else to_char(source_row.start_at_local,'HH24:MI')||'-'||to_char(source_row.end_at_local,'HH24:MI')
+          ||' ('||coalesce(source_row.break_minutes,0)||' min break)' end,
+      'movement',case charge.row_sign_kind
+        when 'FULL_NEGATIVE' then 'Reversal'
+        when 'POSITIVE' then 'Positive'
+        else case when coalesce(source_row.actual_net_minutes,0)<0 then 'Reversal' else 'Positive' end end,
+      'commission',case when source_row.source_commission_pence is null then pg_catalog.chr(8212)
+        else case when source_row.source_commission_pence<0 then '-£' else '£' end
+          ||to_char(pg_catalog.abs(source_row.source_commission_pence)::numeric/100,'FM9999999990.00') end,
+      'total_cost',case when source_row.source_total_cost_pence is null then pg_catalog.chr(8212)
+        else case when source_row.source_total_cost_pence<0 then '-£' else '£' end
+          ||to_char(pg_catalog.abs(source_row.source_total_cost_pence)::numeric/100,'FM9999999990.00') end,
+      'invoice_charge',case when source_row.source_shift_charge_pence is null then pg_catalog.chr(8212)
+        else case when source_row.source_shift_charge_pence<0 then '-£' else '£' end
+          ||to_char(pg_catalog.abs(source_row.source_shift_charge_pence)::numeric/100,'FM9999999990.00') end,
       'status',pg_catalog.jsonb_build_object('text','Ready','tone','positive'),
       'actions','[]'::jsonb
     ) order by private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) collate "C",

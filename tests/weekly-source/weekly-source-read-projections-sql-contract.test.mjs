@@ -39,6 +39,11 @@ test('workspace projects complete unloaded selections, plain detail/reminder act
   assert.match(source, /'label','view details'/);
   assert.match(source, /'candidate_hours'/);
   assert.match(source, /'system_hours'/);
+  assert.match(source, /'actual_hours'/);
+  assert.match(source, /'movement',case charge\.row_sign_kind/);
+  assert.match(source, /'commission'.*source_row\.source_commission_pence/s);
+  assert.match(source, /'total_cost'.*source_row\.source_total_cost_pence/s);
+  assert.match(source, /'invoice_charge'.*source_row\.source_shift_charge_pence/s);
   assert.match(source, /'label','remind candidate'.*?'candidate_generation_id'.*?'projection_publication_id'/s);
   assert.match(source, /candidate_manual_reminder_available_at_utc|manual_reminder_available_at_utc/);
   assert.match(source, /current_pay_cycle.*last_4_pay_cycles.*last_13_pay_cycles/s);

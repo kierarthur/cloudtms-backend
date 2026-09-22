@@ -174,6 +174,130 @@ insert into public.candidate_app_global_membership_links(
   'db000000-0000-4000-8000-000000000001','d3000000-0000-4000-8000-000000000001',1,'ACTIVE'
 );
 
+-- A real NHSP final-source row used to prove that the Office Finalise payload
+-- contains the exact source hours and source pence the NHSP table displays.
+-- It joins the existing NHSP group only after the no-return cycle above, so it
+-- cannot change that cycle's attestation population.
+insert into public.clients(id,name,ts_queries_email,vat_chargeable)
+values ('d2000000-0000-4000-8000-000000000004','NHSP display Trust',null,true);
+insert into public.candidates(id,tms_ref,first_name,last_name,display_name,email)
+values ('d3000000-0000-4000-8000-000000000003','READ-003','Taylor','Nurse','Taylor Nurse','taylor@example.invalid');
+insert into public.contracts(
+  id,candidate_id,client_id,start_date,end_date,pay_method_snapshot,rates_json,
+  self_bill,weekly_timesheet_source,no_timesheet_required,requires_hr,autoprocess_hr,
+  overrideclientsettings,require_reference_to_pay
+) values (
+  'd4000000-0000-4000-8000-000000000003','d3000000-0000-4000-8000-000000000003',
+  'd2000000-0000-4000-8000-000000000004','2026-01-01','2026-12-31','PAYE','{}',
+  true,'NHSP',false,false,false,true,false
+);
+insert into public.weekly_source_groups(
+  id,environment,agency_id,code,display_name,source_family,cutoff_weekday,
+  cutoff_local_time,nhsp_report_heading_name
+) values (
+  'd5000000-0000-4000-8000-000000000003','TEST','d0000000-0000-4000-8000-000000000002',
+  'READ_VERIFY_NHSP','Read verification NHSP','NHSP',3,'15:00','NHSP display Trust'
+);
+insert into public.weekly_source_group_clients(
+  source_group_id,client_id,valid_from,created_by_user_id
+) values (
+  'd5000000-0000-4000-8000-000000000003','d2000000-0000-4000-8000-000000000004',
+  '2026-09-07','d1000000-0000-4000-8000-000000000001'
+);
+insert into public.weekly_source_client_policies(
+  source_group_id,client_id,effective_from,authority_mode,document_mode,self_bill_enabled,
+  candidate_queries_enabled,manager_queries_enabled,created_by_user_id
+) values (
+  'd5000000-0000-4000-8000-000000000003','d2000000-0000-4000-8000-000000000004',
+  '2026-09-07','SOURCE_AUTHORITY','CHECK_ONLY',true,false,false,
+  'd1000000-0000-4000-8000-000000000001'
+);
+insert into public.weekly_source_cycles(
+  id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
+) values (
+  'd6000000-0000-4000-8000-000000000004','d5000000-0000-4000-8000-000000000003',
+  '2026-09-13','2026-09-16 14:00:00+00','OPEN',1,'NONE'
+);
+insert into public.weekly_source_report_scopes(
+  id,source_cycle_id,environment,agency_id,source_group_id,client_id,cutoff_at_utc,
+  version,state,projection_state
+) values (
+  'dc000000-0000-4000-8000-000000000001','d6000000-0000-4000-8000-000000000004',
+  'TEST','d0000000-0000-4000-8000-000000000002','d5000000-0000-4000-8000-000000000003',
+  'd2000000-0000-4000-8000-000000000004','2026-09-16 14:00:00+00',1,'OPEN','NONE'
+);
+insert into public.weekly_source_uploads(
+  id,source_cycle_id,report_scope_id,original_filename,content_sha256,byte_count,
+  source_format_profile_id,parser_version,normaliser_version,header_coordinate_map_hash,
+  declared_scope_fingerprint,coverage_proof_kind,physical_row_count,accepted_count,
+  row_manifest_hash,state,uploaded_by_user_id,file_metadata_json
+) values (
+  'd7000000-0000-4000-8000-000000000003','d6000000-0000-4000-8000-000000000004',
+  'dc000000-0000-4000-8000-000000000001','nhsp-display.xlsx',decode(repeat('91',32),'hex'),100,
+  '32222222-2222-4222-8222-222222222222','verify','verify',decode(repeat('92',32),'hex'),
+  decode(repeat('93',32),'hex'),'NHSP_TRUST_REPORT_SCOPE',1,1,decode(repeat('94',32),'hex'),
+  'CURRENT','d1000000-0000-4000-8000-000000000001','{"nhsp_report_number":"1741227"}'::jsonb
+);
+insert into public.weekly_work_events(
+  id,candidate_id,client_id,work_date,identity_kind,
+  durable_identity_hash,first_source_group_id,source_format_profile_id
+) values (
+  'd9000000-0000-4000-8000-000000000004','d3000000-0000-4000-8000-000000000003',
+  'd2000000-0000-4000-8000-000000000004','2026-09-08','SCHEDULE_TUPLE',
+  decode(repeat('95',32),'hex'),'d5000000-0000-4000-8000-000000000003',
+  '32222222-2222-4222-8222-222222222222'
+);
+insert into public.weekly_source_upload_rows(
+  id,upload_id,source_row_ordinal,external_source_key,source_candidate_identity,
+  source_client_identity,work_date,start_at_local,end_at_local,break_minutes,
+  actual_net_minutes,row_finalisation_state,source_commission_pence,source_total_cost_pence,
+  source_shift_charge_pence,source_money_parse_state,normalised_row_hash,bounded_raw_columns_json
+) values (
+  'dd000000-0000-4000-8000-000000000001','d7000000-0000-4000-8000-000000000003',1,
+  'nhsp-display-shift','Taylor Nurse','NHSP display Trust','2026-09-08',
+  '2026-09-08 09:00','2026-09-08 17:00',30,450,'SOURCE_WORKED',1000,9000,10000,
+  'VALID',decode(repeat('96',32),'hex'),'{}'
+);
+insert into public.weekly_source_row_resolutions(
+  id,upload_row_id,generation,candidate_id,client_id,contract_id,work_event_id,
+  paid_minutes,rate_classifications_json,mapping_state,contract_selection_method,
+  work_event_match_kind,work_event_match_fingerprint,qualification_profile_fingerprint,
+  qualifying_contract_count,qualifying_contract_set_hash,source_row_fingerprint,
+  contract_and_rate_fingerprint,effective_policy_fingerprint
+) values (
+  'de000000-0000-4000-8000-000000000001','dd000000-0000-4000-8000-000000000001',1,
+  'd3000000-0000-4000-8000-000000000003','d2000000-0000-4000-8000-000000000004',
+  'd4000000-0000-4000-8000-000000000003','d9000000-0000-4000-8000-000000000004',
+  450,'{}','RESOLVED','AUTO_UNIQUE','NEW_SCHEDULE_TUPLE',decode(repeat('97',32),'hex'),
+  decode(repeat('98',32),'hex'),1,decode(repeat('99',32),'hex'),decode(repeat('9a',32),'hex'),
+  decode(repeat('9b',32),'hex'),decode(repeat('9c',32),'hex')
+);
+insert into public.weekly_source_charge_checks(
+  id,upload_row_id,row_resolution_id,generation,row_sign_kind,
+  source_commission_pence,source_total_cost_pence,source_shift_charge_pence,
+  calculated_segment_charge_pence,source_charge_difference_pence,
+  comparison_profile_version,comparison_result,comparison_reason_code,phase_severity,
+  charge_calculation_fingerprint
+) values (
+  'df000000-0000-4000-8000-000000000001','dd000000-0000-4000-8000-000000000001',
+  'de000000-0000-4000-8000-000000000001',1,'POSITIVE',1000,9000,10000,10000,0,
+  'NHSP_TWO_COMPONENT_PENCE_V1','EXACT','EXACT','NONE',decode(repeat('9d',32),'hex')
+);
+insert into public.weekly_source_projection_publications(
+  id,source_cycle_id,authority_scope_kind,report_scope_id,upload_id,authority_scope_version,
+  projection_generation,comparison_manifest_hash,issue_set_hash,state,published_at_utc
+) values (
+  'd8000000-0000-4000-8000-000000000003','d6000000-0000-4000-8000-000000000004',
+  'NHSP_REPORT_SCOPE','dc000000-0000-4000-8000-000000000001',
+  'd7000000-0000-4000-8000-000000000003',1,1,decode(repeat('9e',32),'hex'),
+  decode(repeat('9f',32),'hex'),'CURRENT',pg_catalog.transaction_timestamp()
+);
+update public.weekly_source_report_scopes
+set current_complete_upload_id='d7000000-0000-4000-8000-000000000003',
+    current_projection_publication_id='d8000000-0000-4000-8000-000000000003',
+    projection_state='CURRENT'
+where id='dc000000-0000-4000-8000-000000000001';
+
 do $test$
 declare
   v_sync jsonb;
@@ -192,6 +316,7 @@ declare
   v_accept_request_multi jsonb;
   v_no_shifts jsonb;
   v_no_shifts_workspace jsonb;
+  v_nhsp_workspace jsonb;
   v_original_ask_request jsonb;
   v_stale_rejected boolean:=false;
   v_invalid_rejected boolean:=false;
@@ -287,6 +412,22 @@ begin
     and pg_catalog.jsonb_array_length(v_workspace#>'{queries,rows,0,accept_system_hours_action,payload,selection,group_selection_proofs}')=1
     and (v_workspace#>>'{queries,rows,0,accept_system_hours_action,enabled}')::boolean,
     'expanded group did not return every eligible shift');
+
+  v_nhsp_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','finalise',
+    'source_group_id','d5000000-0000-4000-8000-000000000003',
+    'source_cycle_id','d6000000-0000-4000-8000-000000000004',
+    'client_id','d2000000-0000-4000-8000-000000000004',
+    'report_scope_id','dc000000-0000-4000-8000-000000000001',
+    'projection_publication_id','d8000000-0000-4000-8000-000000000003'
+  ));
+  perform pg_temp.assert_true(
+    v_nhsp_workspace#>>'{finalise,ready,rows,0,actual_hours}'='09:00-17:00 (30 min break)'
+    and v_nhsp_workspace#>>'{finalise,ready,rows,0,movement}'='Positive'
+    and v_nhsp_workspace#>>'{finalise,ready,rows,0,commission}'='£10.00'
+    and v_nhsp_workspace#>>'{finalise,ready,rows,0,total_cost}'='£90.00'
+    and v_nhsp_workspace#>>'{finalise,ready,rows,0,invoice_charge}'='£100.00',
+    'NHSP Finalise row did not expose exact source hours and authoritative source pence');
 
   v_history:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','history',

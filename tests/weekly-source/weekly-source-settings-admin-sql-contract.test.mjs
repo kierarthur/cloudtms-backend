@@ -33,6 +33,20 @@ test('Weekly source settings have one service-only durable owner and CAS saves',
   assert.doesNotMatch(sql, /pay_workbench|banking_pay|create_draft|payment_execution|settlement/i);
 });
 
+test('first Client settings persist from 1900 without making later edits retroactive', async () => {
+  const sql = await read('supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql');
+  const start = sql.indexOf('create or replace function public.weekly_source_client_settings_save_atomic_v1');
+  const end = sql.indexOf('create or replace function public.weekly_source_contract_settings_save_atomic_v1', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const save = sql.slice(start, end);
+  assert.match(save, /v_membership_effective_from:=case when v_membership_history_count=0[\s\S]*date '1900-01-01'/);
+  assert.match(save, /v_policy_effective_from:=case when v_policy_history_count=0[\s\S]*date '1900-01-01'/);
+  assert.match(save, /values \(v_group_id,v_client,v_membership_effective_from,v_actor\)/);
+  assert.match(save, /v_group_id,v_client,v_policy_effective_from,v_prior_end/);
+  assert.match(sql, /case when v_policy\.effective_from=date '1900-01-01'[\s\S]*then v_scope_date else v_policy\.effective_from end/);
+});
+
 test('Global secure-link lifetime replaces the hard-coded manager expiry', async () => {
   const schema = await read('supabase/migrations/15092026_1534_weekly_source_plan6_schema.sql');
   const delivery = await read('supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql');

@@ -252,7 +252,13 @@ begin
 
     v_settings:=pg_catalog.jsonb_build_object(
       'source_group_id',v_group.id,
-      'effective_from',v_policy.effective_from,
+      -- A first Client policy is deliberately stored from 1900-01-01 so an
+      -- existing prior-week source file can be imported immediately.  Present
+      -- the requested scope date as the next editable date, however, so a
+      -- later settings change creates a new effective-dated row instead of
+      -- rewriting that historical baseline.
+      'effective_from',case when v_policy.effective_from=date '1900-01-01'
+        then v_scope_date else v_policy.effective_from end,
       'authority_mode',v_policy.authority_mode,
       'document_mode',v_policy.document_mode,
       'self_bill_enabled',v_policy.self_bill_enabled,
@@ -1041,6 +1047,10 @@ declare
   v_expense_supported boolean;
   v_prior_end date;
   v_nhsp_group_count integer;
+  v_membership_history_count integer;
+  v_policy_history_count integer;
+  v_membership_effective_from date;
+  v_policy_effective_from date;
 begin
   perform private._weekly_source_settings_assert_request_v1(
     p_request,array[
@@ -1225,10 +1235,18 @@ begin
   for update of membership;
   if found then v_old_group_id:=v_membership.source_group_id; end if;
 
+  select pg_catalog.count(*) into v_membership_history_count
+  from public.weekly_source_group_clients membership
+  join public.weekly_source_groups source_group on source_group.id=membership.source_group_id
+  where membership.client_id=v_client
+    and source_group.agency_id=v_agency and source_group.environment=v_environment;
+  v_membership_effective_from:=case when v_membership_history_count=0
+    then date '1900-01-01' else v_effective_from end;
+
   if v_old_group_id is null then
     insert into public.weekly_source_group_clients(
       source_group_id,client_id,valid_from,created_by_user_id
-    ) values (v_group_id,v_client,v_effective_from,v_actor)
+    ) values (v_group_id,v_client,v_membership_effective_from,v_actor)
     returning * into v_membership;
   elsif v_old_group_id<>v_group_id then
     if v_membership.valid_from=v_effective_from then
@@ -1254,6 +1272,13 @@ begin
     for update;
     v_policy_found:=found;
   end if;
+  select pg_catalog.count(*) into v_policy_history_count
+  from public.weekly_source_client_policies policy
+  join public.weekly_source_groups source_group on source_group.id=policy.source_group_id
+  where policy.client_id=v_client
+    and source_group.agency_id=v_agency and source_group.environment=v_environment;
+  v_policy_effective_from:=case when v_policy_history_count=0
+    then date '1900-01-01' else v_effective_from end;
   if v_policy_found and v_policy.effective_from=v_effective_from then
     update public.weekly_source_client_policies
     set source_group_id=v_group_id,authority_mode=v_authority,document_mode=v_document,
@@ -1282,7 +1307,7 @@ begin
       candidate_queries_enabled,manager_queries_enabled,manager_query_recipient,
       completed_pack_copy_enabled,completed_pack_recipient,created_by_user_id
     ) values (
-      v_group_id,v_client,v_effective_from,v_prior_end,
+      v_group_id,v_client,v_policy_effective_from,v_prior_end,
       v_authority,v_document,v_self_bill,v_correction,
       v_source_expenses,v_source_expense_vat,v_rate_method,v_tie_rule,
       v_candidate_queries,v_manager_queries,v_manager_recipient,

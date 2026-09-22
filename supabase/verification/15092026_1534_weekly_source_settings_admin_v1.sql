@@ -143,6 +143,31 @@ begin
      or (v_response->>'configured')::boolean is not true then
     raise exception 'Client settings/default manager recipient proof failed';
   end if;
+  if v_response->'settings'->>'effective_from'<>current_date::text
+     or not exists(
+       select 1 from public.weekly_source_group_clients membership
+       where membership.client_id=v_source_client and membership.source_group_id=v_group
+         and membership.valid_from=date '1900-01-01'
+     )
+     or not exists(
+       select 1 from public.weekly_source_client_policies policy
+       where policy.client_id=v_source_client and policy.source_group_id=v_group
+         and policy.effective_from=date '1900-01-01'
+     ) then
+    raise exception 'first Client settings were not stored from the 1900 baseline';
+  end if;
+  v_response:=public.weekly_source_client_settings_get_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
+    'client_id',v_source_client,'effective_date',current_date-7
+  ));
+  if (v_response->>'configured')::boolean is not true
+     or v_response->'settings'->>'effective_from'<>(current_date-7)::text then
+    raise exception 'first Client settings do not cover a prior-week source date';
+  end if;
+  v_response:=public.weekly_source_client_settings_get_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
+    'client_id',v_source_client,'effective_date',current_date
+  ));
 
   v_version:=v_response->>'settings_version';
   v_response:=public.weekly_source_client_settings_save_atomic_v1(pg_catalog.jsonb_build_object(
