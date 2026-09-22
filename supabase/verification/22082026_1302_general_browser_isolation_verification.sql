@@ -383,8 +383,20 @@ begin
   -- 13bbb357c119f705b01b7336d72997b1.  The routine is registered in both
   -- independent Weekly Source ACL sets, owned by the release owner, has a
   -- fixed search_path, and preserves zero browser-executable routines.
-  if v_count<>790 or v_service_missing<>75 or v_browser_executable<>0
-     or v_hash<>'13bbb357c119f705b01b7336d72997b1' then
+  --
+  -- The service-view bridge introduced for the approved-hours projection adds
+  -- exactly one further service-only wrapper:
+  --
+  --   public.timesheet_settings_authority_frozen_get_v1(pg_catalog.uuid)
+  --     |svc=true|anon=false|auth=false
+  --
+  -- The protected TEST release rehearsal measured 791 / 75 / 0 with hash
+  -- 46bd8e9cf5bf76e053b0d06bb973ed4e.  The wrapper is SECURITY DEFINER,
+  -- owned by the release owner, has a fixed search_path, and preserves both
+  -- the historical unrelated service_missing count and zero browser-executable
+  -- routines.
+  if v_count<>791 or v_service_missing<>75 or v_browser_executable<>0
+     or v_hash<>'46bd8e9cf5bf76e053b0d06bb973ed4e' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;
