@@ -372,8 +372,19 @@ begin
   -- This is the sole 788 -> 789 membership change.  It is registered in the
   -- Weekly Source ACL contract and preserves both the historical unrelated
   -- service_missing count and zero browser-executable routines.
-  if v_count<>789 or v_service_missing<>75 or v_browser_executable<>0
-     or v_hash<>'9174b0459732514d17f987720c6079f8' then
+  --
+  -- Stage 8's NHSP Trust-to-Client report-scope owner adds exactly one further
+  -- service-only routine:
+  --
+  --   public.weekly_source_nhsp_report_scope_resolve_atomic_v1(pg_catalog.jsonb)
+  --     |svc=true|anon=false|auth=false
+  --
+  -- The protected TEST upgrade measured 790 / 75 / 0 with hash
+  -- 13bbb357c119f705b01b7336d72997b1.  The routine is registered in both
+  -- independent Weekly Source ACL sets, owned by the release owner, has a
+  -- fixed search_path, and preserves zero browser-executable routines.
+  if v_count<>790 or v_service_missing<>75 or v_browser_executable<>0
+     or v_hash<>'13bbb357c119f705b01b7336d72997b1' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;
