@@ -823,11 +823,21 @@ async function processReadyTasks({
         { code: error?.message },
         'WEEKLY_SOURCE_FINALISATION_PAY_PREPARATION_DETAIL_UNAVAILABLE',
       );
+      const databaseErrorCode = boundedErrorCode(
+        { code: error?.json?.code },
+        'DATABASE_ERROR_CODE_UNAVAILABLE',
+      );
+      const databaseErrorMessageCode = boundedErrorCode(
+        { code: error?.json?.message },
+        'DATABASE_ERROR_MESSAGE_UNAVAILABLE',
+      );
       try {
         console.warn(JSON.stringify({
           event: 'weekly_source_finalisation_pay_preparation_required',
           error_code: errorCode,
           error_detail_code: errorDetailCode,
+          database_error_code: databaseErrorCode,
+          database_error_message_code: databaseErrorMessageCode,
           task_id: task.task_id,
           final_revision_id: run.final_revision_id,
         }));
