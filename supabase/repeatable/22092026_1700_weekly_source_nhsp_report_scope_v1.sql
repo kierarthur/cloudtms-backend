@@ -3,6 +3,8 @@
 -- browser cannot choose that Trust or manufacture a report scope: this
 -- service-only owner resolves the exact saved Client membership and creates
 -- the one idempotent weekly report scope needed by the existing upload owner.
+-- Its service grant is sealed by the Weekly Source ACL contract and generated
+-- database contract shipped in the same release.
 
 \set ON_ERROR_STOP on
 

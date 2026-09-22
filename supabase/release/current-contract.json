@@ -9044,7 +9044,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "2ba07db7c4ed1f2b812be9be064bce4117ae9c8602f5c193a37909a6421801af"
+      "definition_sha256": "2e49a5b5482b68ca1f1c62a7efd3fc55d0397f39fbc4e992bb6f49e0d2875172"
     },
     {
       "acl": [
@@ -41299,6 +41299,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "8313a12e2fa54263e05a3bca52cd090044d3cddf745dbe8294c763d4e5c7fc71"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, extensions, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_nhsp_report_scope_resolve_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "040fe38e1b59243da499d76c494410aa62cd98eb380ad1b171dc90686cb6f0cd"
     },
     {
       "acl": [
