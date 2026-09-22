@@ -428,6 +428,18 @@ begin
     and v_nhsp_workspace#>>'{finalise,ready,rows,0,total_cost}'='£90.00'
     and v_nhsp_workspace#>>'{finalise,ready,rows,0,invoice_charge}'='£100.00',
     'NHSP Finalise row did not expose exact source hours and authoritative source pence');
+  v_nhsp_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','finalise',
+    'source_group_id','d5000000-0000-4000-8000-000000000003',
+    'source_cycle_id','d6000000-0000-4000-8000-000000000004',
+    'client_id','d2000000-0000-4000-8000-000000000004',
+    'report_scope_id','dc000000-0000-4000-8000-000000000001',
+    'projection_publication_id','d8000000-0000-4000-8000-000000000003',
+    'sort_key','actual_hours','sort_direction','desc'
+  ));
+  perform pg_temp.assert_true(
+    v_nhsp_workspace#>>'{finalise,ready,rows,0,actual_hours}'='09:00-17:00 (30 min break)',
+    'NHSP Finalise did not accept and apply the approved Actual hours sort');
 
   v_history:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','history',

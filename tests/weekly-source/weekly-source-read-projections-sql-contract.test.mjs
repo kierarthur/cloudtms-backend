@@ -50,6 +50,25 @@ test('workspace projects complete unloaded selections, plain detail/reminder act
   assert.match(source, /offset v_offset limit v_limit/);
 });
 
+test('every policy-visible Finalise column has a server-side two-state sort contract', async () => {
+  const [source, verification] = (await Promise.all([
+    readFile(readSqlPath, 'utf8'), readFile(verifySqlPath, 'utf8'),
+  ])).map(lower);
+  const finaliseKeys = [
+    'candidate', 'day_date', 'client', 'system_hours', 'actual_hours', 'movement',
+    'commission', 'total_cost', 'invoice_charge', 'status', 'problem', 'job_role',
+    'contract', 'outcome',
+  ];
+  const allowlist = source.match(/v_tab='finalise' and v_sort_key not in \(([\s\S]*?)\)\)/)?.[1] || '';
+  for (const key of finaliseKeys) {
+    assert.match(allowlist, new RegExp(`'${key}'`), `Finalise sort key ${key} is not admitted`);
+    assert.match(source, new RegExp(`v_sort_key(?:=| in \\()([\\s\\S]{0,80})'${key}'|v_sort_key='${key}'`),
+      `Finalise sort key ${key} has no ordering expression`);
+  }
+  assert.match(verification, /'sort_key','actual_hours','sort_direction','desc'/);
+  assert.match(verification, /nhsp finalise did not accept and apply the approved actual hours sort/);
+});
+
 test('guarded accept proves complete groups, permits a selected shift subset and delegates one atomic union', async () => {
   const source = lower(await readFile(readSqlPath, 'utf8'));
   assert.match(source, /v_action not in \('ask_candidates','send_manager_now','accept_system_hours'\)/);

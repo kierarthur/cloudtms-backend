@@ -608,7 +608,11 @@ begin
     case v_tab when 'imports' then 'uploaded' when 'history' then 'when' else 'candidate' end);
   if (v_tab='imports' and v_sort_key not in ('file','uploaded','rows','coverage','report','cutoff','status','final_source'))
      or (v_tab='queries' and v_sort_key not in ('candidate','client','issues','candidate_asked','manager_informed','status','age'))
-     or (v_tab='finalise' and v_sort_key not in ('candidate','day_date','client','status'))
+     or (v_tab='finalise' and v_sort_key not in (
+       'candidate','day_date','client','system_hours','actual_hours','movement',
+       'commission','total_cost','invoice_charge','status','problem','job_role',
+       'contract','outcome'
+     ))
      or (v_tab='history' and v_sort_key not in ('when','source','event','by','detail')) then
     raise exception 'WEEKLY_SOURCE_WORKSPACE_SORT_INVALID' using errcode='22023';
   end if;
@@ -1254,7 +1258,46 @@ begin
           ||to_char(pg_catalog.abs(source_row.source_shift_charge_pence)::numeric/100,'FM9999999990.00') end,
       'status',pg_catalog.jsonb_build_object('text','Ready','tone','positive'),
       'actions','[]'::jsonb
-    ) order by private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) collate "C",
+    ) order by
+      case when v_sort_key='candidate' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) end collate "C" asc,
+      case when v_sort_key='candidate' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) end collate "C" desc,
+      case when v_sort_key='day_date' and v_sort_direction='asc' then source_row.work_date end asc,
+      case when v_sort_key='day_date' and v_sort_direction='desc' then source_row.work_date end desc,
+      case when v_sort_key='client' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(client.name,source_row.source_client_identity,'')) end collate "C" asc,
+      case when v_sort_key='client' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(client.name,source_row.source_client_identity,'')) end collate "C" desc,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.start_at_local end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.start_at_local end desc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.end_at_local end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.end_at_local end desc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.break_minutes end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.break_minutes end desc nulls last,
+      case when v_sort_key='movement' and v_sort_direction='asc' then
+        case charge.row_sign_kind when 'FULL_NEGATIVE' then 'Reversal' when 'POSITIVE' then 'Positive'
+          else case when coalesce(source_row.actual_net_minutes,0)<0 then 'Reversal' else 'Positive' end end end asc,
+      case when v_sort_key='movement' and v_sort_direction='desc' then
+        case charge.row_sign_kind when 'FULL_NEGATIVE' then 'Reversal' when 'POSITIVE' then 'Positive'
+          else case when coalesce(source_row.actual_net_minutes,0)<0 then 'Reversal' else 'Positive' end end end desc,
+      case when v_sort_key='commission' and v_sort_direction='asc' then source_row.source_commission_pence end asc nulls last,
+      case when v_sort_key='commission' and v_sort_direction='desc' then source_row.source_commission_pence end desc nulls last,
+      case when v_sort_key='total_cost' and v_sort_direction='asc' then source_row.source_total_cost_pence end asc nulls last,
+      case when v_sort_key='total_cost' and v_sort_direction='desc' then source_row.source_total_cost_pence end desc nulls last,
+      case when v_sort_key='invoice_charge' and v_sort_direction='asc' then source_row.source_shift_charge_pence end asc nulls last,
+      case when v_sort_key='invoice_charge' and v_sort_direction='desc' then source_row.source_shift_charge_pence end desc nulls last,
+      case when v_sort_key='status' and v_sort_direction='asc' then 'Ready' end asc,
+      case when v_sort_key='status' and v_sort_direction='desc' then 'Ready' end desc,
+      case when v_sort_key='job_role' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.role_band_source,'')) end collate "C" asc,
+      case when v_sort_key='job_role' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.role_band_source,'')) end collate "C" desc,
+      case when v_sort_key='contract' and v_sort_direction='asc' then resolution.contract_id end asc nulls last,
+      case when v_sort_key='contract' and v_sort_direction='desc' then resolution.contract_id end desc nulls last,
+      case when v_sort_key='outcome' and v_sort_direction='asc' then source_row.row_finalisation_state end asc,
+      case when v_sort_key='outcome' and v_sort_direction='desc' then source_row.row_finalisation_state end desc,
+      private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) collate "C",
       source_row.work_date,source_row.start_at_local,source_row.id),'[]'::jsonb)
     into v_rows
     from public.weekly_source_upload_rows source_row
@@ -1304,7 +1347,62 @@ begin
           else 'View details' end,
         'enabled',true,'payload',pg_catalog.jsonb_build_object('upload_row_id',source_row.id)
       ))
-    ) order by source_row.work_date,source_row.source_candidate_identity,source_row.id),'[]'::jsonb)
+    ) order by
+      case when v_sort_key='candidate' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,source_row.source_candidate_identity,'')) end collate "C" asc,
+      case when v_sort_key='candidate' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,source_row.source_candidate_identity,'')) end collate "C" desc,
+      case when v_sort_key='day_date' and v_sort_direction='asc' then source_row.work_date end asc,
+      case when v_sort_key='day_date' and v_sort_direction='desc' then source_row.work_date end desc,
+      case when v_sort_key='client' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.source_client_identity,'')) end collate "C" asc,
+      case when v_sort_key='client' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.source_client_identity,'')) end collate "C" desc,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.start_at_local end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.start_at_local end desc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.end_at_local end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.end_at_local end desc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='asc' then source_row.break_minutes end asc nulls last,
+      case when v_sort_key in ('system_hours','actual_hours') and v_sort_direction='desc' then source_row.break_minutes end desc nulls last,
+      case when v_sort_key='movement' and v_sort_direction='asc'
+        then case when coalesce(source_row.actual_net_minutes,0)<0 then 'Reversal' else 'Positive' end end asc,
+      case when v_sort_key='movement' and v_sort_direction='desc'
+        then case when coalesce(source_row.actual_net_minutes,0)<0 then 'Reversal' else 'Positive' end end desc,
+      case when v_sort_key='commission' and v_sort_direction='asc' then source_row.source_commission_pence end asc nulls last,
+      case when v_sort_key='commission' and v_sort_direction='desc' then source_row.source_commission_pence end desc nulls last,
+      case when v_sort_key='total_cost' and v_sort_direction='asc' then source_row.source_total_cost_pence end asc nulls last,
+      case when v_sort_key='total_cost' and v_sort_direction='desc' then source_row.source_total_cost_pence end desc nulls last,
+      case when v_sort_key='invoice_charge' and v_sort_direction='asc' then source_row.source_shift_charge_pence end asc nulls last,
+      case when v_sort_key='invoice_charge' and v_sort_direction='desc' then source_row.source_shift_charge_pence end desc nulls last,
+      case when v_sort_key='status' and v_sort_direction='asc' then case
+        when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'
+        when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'Not finalised'
+        when charge.phase_severity='FINALISATION_BLOCKER' then 'Charge needs checking'
+        else 'Needs correction' end end asc,
+      case when v_sort_key='status' and v_sort_direction='desc' then case
+        when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'
+        when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'Not finalised'
+        when charge.phase_severity='FINALISATION_BLOCKER' then 'Charge needs checking'
+        else 'Needs correction' end end desc,
+      case when v_sort_key='problem' and v_sort_direction='asc' then case
+        when resolution.mapping_state is distinct from 'RESOLVED' then 'Link this row before finalising'
+        when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'This shift is not finalised'
+        when charge.phase_severity='FINALISATION_BLOCKER' then 'Check the charge for this shift'
+        else 'Check the hours for this shift' end end asc,
+      case when v_sort_key='problem' and v_sort_direction='desc' then case
+        when resolution.mapping_state is distinct from 'RESOLVED' then 'Link this row before finalising'
+        when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'This shift is not finalised'
+        when charge.phase_severity='FINALISATION_BLOCKER' then 'Check the charge for this shift'
+        else 'Check the hours for this shift' end end desc,
+      case when v_sort_key='job_role' and v_sort_direction='asc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.role_band_source,'')) end collate "C" asc,
+      case when v_sort_key='job_role' and v_sort_direction='desc'
+        then private.weekly_source_query_ascii_fold_v1(coalesce(source_row.role_band_source,'')) end collate "C" desc,
+      case when v_sort_key='contract' and v_sort_direction='asc' then resolution.contract_id end asc nulls last,
+      case when v_sort_key='contract' and v_sort_direction='desc' then resolution.contract_id end desc nulls last,
+      case when v_sort_key='outcome' and v_sort_direction='asc' then source_row.row_finalisation_state end asc,
+      case when v_sort_key='outcome' and v_sort_direction='desc' then source_row.row_finalisation_state end desc,
+      source_row.work_date,private.weekly_source_query_ascii_fold_v1(source_row.source_candidate_identity) collate "C",source_row.id),'[]'::jsonb)
     into v_rows
     from public.weekly_source_upload_rows source_row
     left join lateral (select latest.* from public.weekly_source_row_resolutions latest
