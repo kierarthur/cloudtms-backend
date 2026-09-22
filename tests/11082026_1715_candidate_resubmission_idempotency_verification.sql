@@ -511,6 +511,7 @@ delete from private.candidate_daily_entitlements
 where environment='TEST'
   and candidate_id='b7080000-0000-4000-8000-000000000002';
 delete from public.candidates where id='b7080000-0000-4000-8000-000000000002';
+delete from public.client_settings where client_id='b7080000-0000-4000-8000-000000000001';
 delete from public.clients where id='b7080000-0000-4000-8000-000000000001';
 delete from public.audit_events where object_id_text like 'b7080000-0000-4000-8000-%';
 update public.settings_defaults

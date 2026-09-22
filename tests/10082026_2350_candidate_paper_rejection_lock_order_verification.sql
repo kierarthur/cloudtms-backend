@@ -270,7 +270,7 @@ begin
   delete from public.timesheets
   where booking_id in ('PAPER-LOCK-HOURS','PAPER-LOCK-EXPENSE');
   delete from public.client_settings
-  where id='b5300000-0000-4000-8000-000000000004';
+  where client_id='b5300000-0000-4000-8000-000000000003';
   delete from public.contracts
   where id='b5300000-0000-4000-8000-000000000005';
   delete from public.clients
