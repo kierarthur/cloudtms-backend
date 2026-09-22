@@ -146,22 +146,35 @@ test('pre-final NHSP unverifiable money remains accepted checking evidence with 
 
 test('NHSP preview resolves the server-owned report heading before parsing', async () => {
   const calls = [];
+  let parseCount = 0;
   const owner = createWeeklySourceUploadPublicationOwner({
     rpc: async (name, args) => {
       calls.push([name, args.p_request ?? args]);
       if (name === 'weekly_source_upload_context_v1') {
+        const request = args.p_request ?? args;
         return {
           ok: true,
           ...context,
           authority_scope_version: 1,
           nhsp_report_heading_name: 'Exact Heading',
-          client_name: 'Trust One',
+          report_scope_id: request.report_scope_id ?? null,
+          client_id: request.report_scope_id ? ID.client : null,
+          client_name: request.report_scope_id ? 'Trust One' : null,
         };
+      }
+      if (name === 'weekly_source_nhsp_report_scope_resolve_atomic_v1') {
+        assert.equal(args.p_request.trust_name, 'Trust One');
+        return { ok: true, report_scope_id: ID.group, client_id: ID.client };
       }
       throw new Error(`Unexpected RPC ${name}`);
     },
   });
-  const parsed = { ok: true, profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1 };
+  const parsed = {
+    ok: true,
+    profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+    scope: { trust: 'Trust One' },
+    rows: [{ trust: 'Trust One' }],
+  };
   const result = await owner.previewUpload({
     body: {
       source_group_id: ID.group,
@@ -176,17 +189,23 @@ test('NHSP preview resolves the server-owned report heading before parsing', asy
     bytes: new Uint8Array([1]),
     actor: { id: ID.actor },
     parseWeeklySourceFile: async (_bytes, options) => {
-      assert.deepEqual(options, {
-        profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
-        configuredNhspReportHeadingName: 'Exact Heading',
-        expectedTrust: 'Trust One',
-      });
+      parseCount += 1;
+      assert.equal(options.profileId, WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1);
+      assert.equal(options.configuredNhspReportHeadingName, 'Exact Heading');
+      assert.equal(options.expectedTrust, parseCount === 1 ? null : 'Trust One');
       return parsed;
     },
   });
   assert.equal(result.parsed, parsed);
-  assert.deepEqual(calls.map(([name]) => name), ['weekly_source_upload_context_v1']);
+  assert.equal(parseCount, 2);
+  assert.deepEqual(calls.map(([name]) => name), [
+    'weekly_source_upload_context_v1',
+    'weekly_source_nhsp_report_scope_resolve_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
   assert.equal(calls[0][1].operation, 'DISCOVER_SCOPE');
+  assert.equal(result.accept_context.report_scope_id, ID.group);
+  assert.equal(result.accept_context.client_id, ID.client);
 });
 
 test('acceptUpload stages, seals and publishes a complete unresolved census without browser economics', async () => {

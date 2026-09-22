@@ -134,6 +134,25 @@ function parserOptions(body, context) {
   };
 }
 
+function nhspFinalTrust(parsed) {
+  const trusts = new Map();
+  const add = (value) => {
+    const name = text(value);
+    if (name) trusts.set(upper(name), name);
+  };
+  add(parsed?.scope?.trust);
+  for (const value of parsed?.scope?.trusts ?? []) add(value);
+  for (const row of parsed?.rows ?? []) add(row?.trust ?? row?.clientName ?? row?.client);
+  if (trusts.size !== 1) {
+    fail(
+      trusts.size ? 'WEEKLY_SOURCE_NHSP_TRUST_AMBIGUOUS' : 'WEEKLY_SOURCE_NHSP_TRUST_REQUIRED',
+      trusts.size ? 'The final backing report contains more than one Trust.' : 'The final backing report does not identify a Trust.',
+      409,
+    );
+  }
+  return [...trusts.values()][0];
+}
+
 function chunks(values, size) {
   const result = [];
   for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
@@ -620,7 +639,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
   return Object.freeze({
     async previewUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {
       const actorUserId = requiredUuid(actor?.id, 'Office user');
-      const context = validateContext(await rpc(
+      let context = validateContext(await rpc(
         dependencies,
         'weekly_source_upload_context_v1',
         scopeRequest(body, actorUserId),
@@ -629,7 +648,25 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
       if (typeof parseWeeklySourceFile !== 'function') {
         fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);
       }
-      const parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
+      let parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
+      if (parsed?.ok === true && parsed.profileId === 'NHSP_FINAL_BACKING_V1'
+          && !context.report_scope_id) {
+        const resolved = await rpc(dependencies, 'weekly_source_nhsp_report_scope_resolve_atomic_v1', {
+          actor_user_id: actorUserId,
+          source_group_id: context.source_group_id,
+          source_cycle_id: context.source_cycle_id,
+          trust_name: nhspFinalTrust(parsed),
+        });
+        if (!resolved?.ok || !resolved.report_scope_id) {
+          fail('WEEKLY_SOURCE_NHSP_REPORT_SCOPE_UNAVAILABLE', 'The Trust could not be prepared for this report.', 502);
+        }
+        context = validateContext(await rpc(
+          dependencies,
+          'weekly_source_upload_context_v1',
+          scopeRequest({ ...body, report_scope_id: resolved.report_scope_id }, actorUserId),
+        ));
+        parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
+      }
       if (parsed?.ok !== true) {
         const reason = upper(parsed?.fatalErrors?.[0]?.code) || 'WEEKLY_SOURCE_PARSE_REJECTED';
         await rpc(dependencies, 'weekly_source_upload_attempt_record_atomic_v1', {
@@ -652,7 +689,17 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           reason_code: reason,
         });
       }
-      return { parsed, context };
+      return {
+        parsed,
+        context,
+        accept_context: {
+          source_group_id: context.source_group_id,
+          source_cycle_id: context.source_cycle_id,
+          report_scope_id: context.report_scope_id ?? null,
+          client_id: context.client_id ?? null,
+          authority_scope_version: context.authority_scope_version,
+        },
+      };
     },
 
     async recordUploadPreview({ body = {}, parsed, actor }) {

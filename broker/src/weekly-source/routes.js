@@ -728,10 +728,13 @@ async function handleUploadPreview(req, env, dependencies, user) {
   const body = await readJsonBody(req, 64 * 1024);
   const { fileKey, bytes } = await loadUploadBytes(body, env, dependencies);
   let parsed;
+  let acceptContext = {};
   if (typeof dependencies.previewUpload === 'function') {
-    ({ parsed } = await dependencies.previewUpload({
+    const result = await dependencies.previewUpload({
       body, bytes, actor: user, env, fileKey, parseWeeklySourceFile,
-    }));
+    });
+    parsed = result?.parsed;
+    acceptContext = result?.accept_context ?? {};
   } else {
     const parserOptions = plainObject(body.parser_options ?? {}, 'WEEKLY_SOURCE_PARSER_OPTIONS_INVALID', 'Source options');
     parsed = await parseWeeklySourceFile(bytes, parserOptions);
@@ -744,6 +747,7 @@ async function handleUploadPreview(req, env, dependencies, user) {
     ok: parsed.ok === true,
     file_key: fileKey,
     preview: parsed,
+    accept_context: acceptContext,
   });
 }
 

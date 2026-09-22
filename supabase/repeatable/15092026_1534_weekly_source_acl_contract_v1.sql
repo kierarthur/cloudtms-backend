@@ -478,6 +478,7 @@ as $function$
     -- outcome. Both are service-only SECURITY DEFINER entry points.
     ('public.weekly_source_mode_a_dispatch_atomic_v1(jsonb)'),
     ('public.weekly_source_mode_a_reference_apply_atomic_v1(jsonb)'),
+    ('public.weekly_source_nhsp_report_scope_resolve_atomic_v1(jsonb)'),
     ('public.weekly_source_no_shifts_attest_atomic_v1(jsonb)'),
     ('public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)'),
     ('public.weekly_source_office_notification_ack_atomic_v1(jsonb)'),

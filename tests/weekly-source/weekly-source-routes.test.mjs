@@ -94,7 +94,10 @@ test('upload preview delegates parsing to the server-owned context resolver', as
       loadFileBytes: async () => new Uint8Array([1, 2, 3]),
       previewUpload: async (input) => {
         calls.push(input);
-        return { parsed: { ok: true, profileId: 'NHSP_FINAL_BACKING_V1' } };
+        return {
+          parsed: { ok: true, profileId: 'NHSP_FINAL_BACKING_V1' },
+          accept_context: { report_scope_id: '82000000-0000-4000-8000-000000000003' },
+        };
       },
       recordUploadPreview: async () => assert.fail('legacy preview recorder must not run'),
     }),
@@ -104,7 +107,9 @@ test('upload preview delegates parsing to the server-owned context resolver', as
   assert.equal(calls[0].actor.id, ACTOR_ID);
   assert.equal(calls[0].body.file_key, 'weekly-source/test.xlsx');
   assert.equal(calls[0].bytes.byteLength, 3);
-  assert.equal((await response.json()).preview.profileId, 'NHSP_FINAL_BACKING_V1');
+  const payload = await response.json();
+  assert.equal(payload.preview.profileId, 'NHSP_FINAL_BACKING_V1');
+  assert.equal(payload.accept_context.report_scope_id, '82000000-0000-4000-8000-000000000003');
 });
 
 test('timesheet presentation accepts only a canonical UUID and injects the Office actor', async () => {
