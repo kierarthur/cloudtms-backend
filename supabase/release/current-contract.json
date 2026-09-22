@@ -1,7 +1,4 @@
 {
-
-
-
   "enums": [
     {
       "name": "candidate_assignment_enum",
@@ -3452,6 +3449,19 @@
         "service_role"
       ],
       "table": "weekly_source_billing_movements",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "weekly_source_charge_acceptances",
       "using": "true",
       "schema": "public",
       "command": "ALL",
@@ -9015,7 +9025,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "d69878b06e77010bdb3789844bc6b6da920becf598fbc50180523477270fe8c7"
+      "definition_sha256": "ccd740f61db6cb238bb86f728d7f57782bd4906464009044bf5f9ad2dea75cb4"
     },
     {
       "acl": [
@@ -9034,7 +9044,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "32f60869bd102adb7cf7c6d9639cc0694cb9c24f920c03115481b9b05541d9af"
+      "definition_sha256": "2ba07db7c4ed1f2b812be9be064bce4117ae9c8602f5c193a37909a6421801af"
     },
     {
       "acl": [
@@ -9053,7 +9063,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "fc03402e3f60a9c0b32ee6bc1af396b3c71b561ff8df0b012f2ca8b9d7eed86e"
+      "definition_sha256": "e00d04cbc47884a5d31088f64fe74095e93eac693ec78a34753607ebd7642c73"
     },
     {
       "acl": [
@@ -9073,6 +9083,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "a7d0a2b1d0c5ca9f501731fc28d2d8f24403cf7a69ddce081696be7e8800e788"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_weekly_source_completed_pack_copy_eligibility_v1(p_workflow_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e7bf0ff94f7bef58c0628994ae589f3e141e7ce2f2699d9de1424306dfbd5248"
     },
     {
       "acl": [
@@ -9141,6 +9170,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_weekly_source_pending_counter_reset_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2cb969b049f37cf911db75e3b0c88bbf10dc49db37af0deb4c6cd0c441837c8e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -9167,7 +9215,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e14e06d349ad78bf0dcece9c908b52f2ec6211a65186cdeca2d3c19f077de719"
+      "definition_sha256": "5e51393e1cec22e1cce4de8b7581399644b82bfede6f26c93239750403c8c8ab"
     },
     {
       "acl": [
@@ -12007,7 +12055,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "a9337180884f384b5acb2eb471a5e87e984c53f024fa0779ba87bd048300cc68"
+      "definition_sha256": "0097f7157748f6e0177205df9cdc1bd6149aa445a9dd2f0f1f1b8a550bddbc33"
     },
     {
       "acl": [
@@ -12045,7 +12093,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "0c9dce83811833cedd1c78e34804fd864202e8ec2bee1d95b6072cb5991ee6b7"
+      "definition_sha256": "1bd416ed446cbd4581127c7af6d4a2296e746e7735331afd9d48fa052bacfe85"
     },
     {
       "acl": [
@@ -12202,7 +12250,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "561832d05e842c3a84dcdd97c32fbce683ae8090bc3864cdd385979fe3645b3c"
+      "definition_sha256": "6fe1e22d5b69b400f7a42cbe57d7acc2ff97e677cbd31acb3fb948be0f82b84e"
     },
     {
       "acl": [
@@ -12468,7 +12516,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "683d856999bf77a16a8038a6d27635a8f5cebc394f9c98bacf7d1735d8e9e81f"
+      "definition_sha256": "40981b0318c53009504e0caff9332ad0742daa033b061165524a932093899dc4"
     },
     {
       "acl": [
@@ -12943,7 +12991,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8ba4be28a93b705dd3add0c796adf5206a24b49024d95421abb1bea42cb3ff3f"
+      "definition_sha256": "7ff08ff08fd5a68ad7a62221d87a33fd27b2dfb8e55a347872e4178a8431b5d2"
     },
     {
       "acl": [
@@ -13183,6 +13231,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_charge_acceptance_policy_fingerprint_v1()",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "4052de45e318635637d7e5f2e46e8f23f96475e999fd337022bcee334795de88"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, private, extensions, pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -13209,7 +13276,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "cf21ef41a63f3b41e316166323e573e86d447f37f9f77c4e6b22970723e8086a"
+      "definition_sha256": "d6585c14d6c7eb42ea8be18138f8c909260010691f021a7535a255d447fc3d0d"
     },
     {
       "acl": [
@@ -13267,6 +13334,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "ca238d8c959de7f29dbbbe86494f954d91ebb72b6e67c290d618f54945a05706"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_cutoff_admission_assert_v1(p_upload_id uuid, p_profile_code text, p_cutoff_at_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "55503d69bf965a7e73c4c178f72361692cb64717be7a590ac75c6366c7d2eaca"
     },
     {
       "acl": [
@@ -13627,7 +13713,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b90b2746f82c05a103d2b1c45837fe4a84ce036a49c796f1bce16cf76f24c47f"
+      "definition_sha256": "54b559e0ab1593720aca649ab21f53e8a8efd93a0b838b7dc62f438931337302"
     },
     {
       "acl": [
@@ -13665,7 +13751,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c30a3f423b55158eee8370ae5a855239746ba11adf7a906eb981f945e8faf249"
+      "definition_sha256": "20b96d07da3e254ed004076e01ebd805a781669dd9f0fc1b99bb9a940ab4b018"
     },
     {
       "acl": [
@@ -13760,7 +13846,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8d89f69442033c384c53a9c2585ac7ff05fb54470ad877afca63ec51bbe80394"
+      "definition_sha256": "e1bf0ee4386a03d89d391a3a8e5be9fc3c6cc16e2160c8e2c42066f585dea896"
     },
     {
       "acl": [
@@ -13813,11 +13899,11 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
-      "identity": "weekly_source_finalisation_insert_current_movement_v1(p_transition_id uuid, p_nhsp_upload_row_id uuid, p_final_revision_id uuid, p_finalisation_cycle_id uuid, p_source_profile_kind text, p_movement_role text, p_source_line_kind text, p_row_resolution_id uuid, p_economic_snapshot_id uuid, p_invoice_timesheet_id uuid, p_source_validation_charge_pence bigint, p_invoice_presentation_charge_pence bigint, p_price_check_result text, p_price_check_fingerprint bytea, p_source_facts_json jsonb, p_correction_unit_id uuid, p_prior_movement_id uuid)",
+      "identity": "weekly_source_finalisation_insert_current_movement_v1(p_transition_id uuid, p_nhsp_upload_row_id uuid, p_final_revision_id uuid, p_finalisation_cycle_id uuid, p_source_profile_kind text, p_movement_role text, p_source_line_kind text, p_row_resolution_id uuid, p_economic_snapshot_id uuid, p_invoice_timesheet_id uuid, p_source_validation_charge_pence bigint, p_invoice_presentation_charge_pence bigint, p_price_check_result text, p_price_check_fingerprint bytea, p_charge_acceptance_id uuid, p_source_facts_json jsonb, p_correction_unit_id uuid, p_prior_movement_id uuid)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "59fb6b5be4842e24572fe8d05183753e4442cf1f41e242dfce11547ae835738f"
+      "definition_sha256": "9ccfaa3a835b1b298453f3abbca86ebf7d5061ff8e62a33fe8ae31227bfe4437"
     },
     {
       "acl": [
@@ -14026,7 +14112,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7427c0df72f03d58987725ae0e53eb7583c8766c3236a3486477f2f65d87540f"
+      "definition_sha256": "d394db1295bc7fdbab118d03632cd937794c240711869ffc424394502f214714"
     },
     {
       "acl": [
@@ -14159,7 +14245,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ff3d3af3efb73a089a85fe6af3798a8c0c24272bda6d52fe1c80482e4a039630"
+      "definition_sha256": "aaa0fd9131910cccee01fab5d48423bfdd35d7ce5a02c24d87ecfe08900b65b9"
     },
     {
       "acl": [
@@ -14414,7 +14500,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6325b5a5718e1ddf92e72fe65c81a0f5d2ae2617ea82d2ad27c411b76a2b9c4e"
+      "definition_sha256": "16cd9c5ab42e64c5ebc45a71790c7bb92ed9ef3e15cdd5fddb81605f4a175c33"
     },
     {
       "acl": [
@@ -14452,7 +14538,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c68d1baaa8a1046a8940d75445248b711d21106be57947afe2d52e6ba38e9e33"
+      "definition_sha256": "6073eb783049606bba434518acf814c9cdeea7952224b335b16713137c225047"
     },
     {
       "acl": [
@@ -14490,7 +14576,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4a087c3e64bfe9c71c24d3d70bb46952255a48deda7000b7a3eee92368ea8da7"
+      "definition_sha256": "e6caf1ca614da62eda2dd66466291f5563cde5f65d2015a4a2a42062b9a6d565"
     },
     {
       "acl": [
@@ -14547,7 +14633,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "04536470677b7b6b140f4b94ae10f58c819fe27e599e93554b627fccdd8efad8"
+      "definition_sha256": "06da29d3a145b216121d4cd5fd183259b343aaffab035131aa6c58fec6febbcf"
     },
     {
       "acl": [
@@ -14566,7 +14652,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "fb37d9583995ca9ed7211d6c62741441ea05e7b4406bf412445618012b183e7d"
+      "definition_sha256": "416bdc4655d1a8369a21983103dfcdf349bda2d8e4450d95d6bd37f756ecde5b"
     },
     {
       "acl": [
@@ -14585,7 +14671,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5572cbdb18739946512391439fc675c8e79bd571d30dd3cd5df94e8953e245fa"
+      "definition_sha256": "2e9e92da64dd78a7dd0451018363471286194f19327fd97ef313383154b00d32"
     },
     {
       "acl": [
@@ -14616,6 +14702,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_invoice_tsfin_first_authorisation_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b461e1b345944a150a6e62420b940b869422e35d127ad9924d4281978508db38"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -14623,7 +14728,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "0970960b49aa195c8f32c59d76f51b93eb7abab53cbd32ed3cd37949d5cbb8af"
+      "definition_sha256": "e8f5508f0d7e962e00a5e1b7a696dd1d677c0290e8f9fd6b2bccc2ccf4f72336"
     },
     {
       "acl": [
@@ -14642,7 +14747,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "31364787e04b3d88725cae3e2f787a85ad80f75643ce2e9cd149967e385dec51"
+      "definition_sha256": "0db5152fcae25629a19ad327ee3f97af2c1b810704ff7326fb7353e5fa67be08"
     },
     {
       "acl": [
@@ -14742,7 +14847,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "94d479da0978cafe81fcb2ea669bbf21e055fecc246bb126319a555befaad046"
+      "definition_sha256": "eb0738c2eecbf8bb3d08abf5b4db75ae9c9ef8c2102c047dfa66422c8f72fb2a"
     },
     {
       "acl": [
@@ -14762,6 +14867,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "32dad7e04717a24bde73a540c1ed14cb5bca9d7ffb3c8bf3b8d9e09d469a5e21"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_mode_a_refuse_operation_v1(p_source_cycle_id uuid, p_upload_id uuid, p_publication_id uuid, p_timesheet_id uuid, p_actor_user_id uuid, p_result_code text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "34e64ea6133cb60e1bb08825a46688f428ef235714182cf10d01e16acb04dcec"
     },
     {
       "acl": [
@@ -15291,6 +15415,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_ordinary_projection_active_movements_v1(p_root_timesheet_id uuid, p_through_final_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "00426cf8f9a24251bb557d1a6ce6467da9912a6b735f1058f90480c9df615195"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -15336,7 +15479,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "3f980cfc54605997b62fb7820f77258a592232fd3a60a6e8e0d4d52cee8a53c1"
+      "definition_sha256": "a7dca9fad9c80ab5144abc2c42a7a0cc21a53f530456966cffd9d7fcd1db4659"
     },
     {
       "acl": [
@@ -15355,7 +15498,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "978e0ef191e41ce7580a014a84c84951cd58b8d19cf5e43f9c2d6a7a5a5075b6"
+      "definition_sha256": "49627fa0f7f5883a662d4a8a243a38dd5c324269f6b57b632d5542c5f98390f7"
     },
     {
       "acl": [
@@ -15488,7 +15631,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "9a0cec474da535f1c7da5faeac4fcb9578c33b9f3f08b9ba70c876e1ae8109b8"
+      "definition_sha256": "46eb05b08faa362f28352bcb1c797adf1f036fa37b713c016c55ac2c50c66b86"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_overlap_admission_assert_v1(p_upload_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "6f85dc06f1151c73522d713a72cdf7d70f3903da4e9f80482e0de98740b477c2"
     },
     {
       "acl": [
@@ -15526,7 +15688,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "49d361b3259e5cf6db90a6826166786b0a6ffec931048bae0b9dad078ae1d0ad"
+      "definition_sha256": "8a12647a2bba751cfa234314a25c59e3c09e46b62c0a0c59931b99939b085518"
     },
     {
       "acl": [
@@ -15678,7 +15840,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a93e770f79f1f7a2060fe29aaeecb415ba06925982ca3616443fca1773c24af9"
+      "definition_sha256": "d3e92dfa66146b3208434d7f531ea952a2bd52e2ab26407bdc408087889c55bb"
     },
     {
       "acl": [
@@ -15773,7 +15935,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f49961258ff354ed3d0770d925b08a499754b15dd8094e98beebfb4b17f2f4bf"
+      "definition_sha256": "6b741435f1ab8b5b9ffee94c9c35328be1025c01c6cb46c0a84296933a2d46ed"
     },
     {
       "acl": [
@@ -16077,7 +16239,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "30c3337ab8dcadbae09d7ba7f4d6d8f8975c9f03e5ab57ffaa73559fb943dcf0"
+      "definition_sha256": "b32f3fac9b04ae0b0352bf1aae27db5d15ba6ef892254c392450466e791cf58c"
     },
     {
       "acl": [
@@ -16267,7 +16429,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cf236492bbb6773e85c61add6fafa9c752ab52362995d64504dff5b8cbc28543"
+      "definition_sha256": "47813874967b384029942ba8f45715d6a434c69b265102692035bd6fd6c9b277"
     },
     {
       "acl": [
@@ -16287,6 +16449,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b3fc7df648dd83db6d4a3d79530ccb3c15eddfbf579ca17e82dfd2f5db7bceca"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_query_manager_row_owned_v1(p_recipient_route_id uuid, p_incident_id uuid, p_incident_episode integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "2c96fdf3cabc6731b9df2bbbaa6d317b8e5552fc9a1b63020a4077792ef90899"
     },
     {
       "acl": [
@@ -16731,6 +16912,30 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_summary_pay_delayed_v1(p_timesheet_id uuid, p_contract_id uuid, p_client_id uuid, p_week_ending_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7a2434607d24533fdf1a82e4e84ef911710cd5f67a6caf192c0d0b519801ea3f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
@@ -16856,7 +17061,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5686c380bbafaa0abce4e04c345f9c49f25ddd4fee28151cd0e894013481d95c"
+      "definition_sha256": "fafcd2994a7933e03bb16233644a24686f9d6fe7c2d37760f460e52a1ffa9bd5"
     },
     {
       "acl": [
@@ -17047,6 +17252,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "0f2a6ee5525bcd885db5e55da7ac5c4bdbd9048a5e94b7dd25bdbe35b140eb7c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_work_event_schedule_compatible_v1(p_work_event_id uuid, p_start_at_local timestamp without time zone, p_end_at_local timestamp without time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "79b7d5ad288843f83ffbbc988551fbeb2d60e868177e164377760ea3fe2160f2"
     },
     {
       "acl": [
@@ -24333,7 +24557,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a1aa33cc6da14b1a8f8273f7c42d08898215ea279cb27bdf3ee90797761cc1f7"
+      "definition_sha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8"
     },
     {
       "acl": [
@@ -26009,7 +26233,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d450265508128df7c30b398e5806d16ffda9b2da7a256447ef43ba495c4a9c92"
+      "definition_sha256": "54ac94c2644a8d7db47fcd65818c3ca5defd9a6a968352dc63172e87885d3bd8"
     },
     {
       "acl": [
@@ -26081,7 +26305,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e930d13cc8fe35cebe82e9e851e83f770bc55176f1cd49b368ab0c319ea308e3"
+      "definition_sha256": "d4280107db960db290d515b52dae737b8ec6739561e60579f28acb170d246bb2"
     },
     {
       "acl": [
@@ -26105,7 +26329,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c072b35a5ed8469a95cc61514871d678355e776461a9f2704ae21dd4428d3e5d"
+      "definition_sha256": "d95461ceaed1328ab49251fe282176c358068d9ea6f7b32c6f6abe07951c3aaf"
     },
     {
       "acl": [
@@ -26225,7 +26449,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "79abe617b4392537c94e857748436ba8b7d7a2aeefe9942b54ed40cd6a5f41d5"
+      "definition_sha256": "18f97238a4a007fec0b4cb215743bed8a57b1a77a6f362895d0bedb5ad177dfe"
     },
     {
       "acl": [
@@ -26273,7 +26497,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8df653f67abf2a22e71c8274d5c33d156935535e4d59fcf8d70b8d469274db8e"
+      "definition_sha256": "7cc8038e72842f2b342221cb015fb02f8b3f07f306bd4eb6fc57ea58963f7081"
     },
     {
       "acl": [
@@ -31460,7 +31684,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d07107bbb827348183bd76c5c54347c4763835fdd0c7b4e30816c6acb5ed897f"
+      "definition_sha256": "7bb210f6f426c431eaba667377bb602adf616b643aeac3104236e0cb49d1f51d"
     },
     {
       "acl": [
@@ -31590,7 +31814,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "07f6cd72847357e1fe8a9e4eab9a231594fb97fce4aaaa60ec98aa42cd29af81"
+      "definition_sha256": "03a05a5d784beb5845125cc398166ebfbb221aa9e65022e2d7ea4a54d92fb83f"
     },
     {
       "acl": [
@@ -31857,7 +32081,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "53c213b94143df5391608dba2e6719aa0257301495d16fcec50c8b79b1627408"
+      "definition_sha256": "0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715"
     },
     {
       "acl": [
@@ -32867,7 +33091,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e"
+      "definition_sha256": "ffeae1a1a2a06e80dc5cd2cd1ac0ffe964b658c9000badc7410a1b3a8afd9fd0"
     },
     {
       "acl": [
@@ -33779,7 +34003,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18"
+      "definition_sha256": "8308ceb4c35e1020a221b91e8e73f026dff4fb33bd61c6f88c885e09bf7923d3"
     },
     {
       "acl": [
@@ -37703,7 +37927,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "17cd8a485893d352485c8877d1b5a72b2817c8c28b754c43b3f9810f117fc38e"
+      "definition_sha256": "5134f64f78a63e4969bd12bfed334155c0be4200fa07fd85212cabb3b7a9d75a"
     },
     {
       "acl": [
@@ -37727,7 +37951,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "828ac7ba3bf5785373840eafd40bf06b5272b9d1b853eb42916f844521b8a25d"
+      "definition_sha256": "98288a6945b3e1c9c0c28baca2caffb0349aeac5510f8badded0cadcb81a3026"
     },
     {
       "acl": [
@@ -37751,7 +37975,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6ad78b7b5dc02839bf834f8d6683744ab8ce9cd3ff50bf8bd8b41bd605e2ecea"
+      "definition_sha256": "858e4807646590d802c92111ce7b572d95ecfec16f99e8a8a4948ec2a44ceab3"
     },
     {
       "acl": [
@@ -39259,7 +39483,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "645212360847f82f838c136ced36dcf410a0624aa010d3fe49b9bcba80ed83f9"
+      "definition_sha256": "de8b1db37df1d8b8d7fbe58ba83b4f8a33838051eb2b1ba10e6cb613e110c0af"
     },
     {
       "acl": [
@@ -39831,7 +40055,31 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6d8a0cbad676ae89b78a305f19089036a66acae840ea517cfeaf3937a880de3b"
+      "definition_sha256": "75cf229922c87b82b467a48f48bc92c8699ee8c5d9cf8da1fbfe4b6fe4a8ecce"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_charge_accept_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1a09d0d4320e21894b04d4f6e8ba0d8d5ca5405e950f1b6435d64a0bff039445"
     },
     {
       "acl": [
@@ -39879,7 +40127,79 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "64b8c33f1632c1c70a8852ea9ba9ff658187b64db5cf2687cfa353afca487c68"
+      "definition_sha256": "23b777a3bb4f76c578d4135cdfe4e6baadcaf4ca25afb46b148392a01b97c76e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_completed_pack_copy_commit_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "35c3cd5837a97faba623d1c5154224dbfc8f7ef48bd2a5ba16f2a9533e9eb6dc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_completed_pack_copy_due_list_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "017355d469559e7cfe05767ab43b500604394ed290292968985f1458c2cf6637"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_completed_pack_copy_status_sync_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e364db5604014480f1d889572479d8e804ada4b658b7aa55b895cfe0d545bf59"
     },
     {
       "acl": [
@@ -39971,11 +40291,35 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
+      "identity": "weekly_source_correct_final_cancel_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6606ff4febb392eddf828d82201fc5f35857e2b55eb06717d7b5d2953f82d7af"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
       "identity": "weekly_source_correct_final_open_atomic_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6f73cdf2e88ca150cd9e2900c70390402e7fbd7c299b07f41c32a136b598e8e8"
+      "definition_sha256": "6a4ea25baca32523231a2c864c0e17c6144a0d40fd3050278c5d6a7db1af1699"
     },
     {
       "acl": [
@@ -40407,7 +40751,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "73ab3c8c64e02128278590747f09f00dc35ffb11c3bfebc65ec3a2d4cc4f0152"
+      "definition_sha256": "a411952b6bbcb23bfa549393c2cf09286019378a1c75408362d05051bfd15644"
     },
     {
       "acl": [
@@ -40479,7 +40823,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "73dfc596d3faee61aaafa4d6590ea1d7b32b90593f769ac282871cb7c97c7a26"
+      "definition_sha256": "33a0581a446f1719e2e4456fc46d343c03bd56d4098b7c88c70b32bf11659317"
     },
     {
       "acl": [
@@ -40503,7 +40847,31 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4a90ff0321bfed539293a90deadf8b4d38757faf246db430737f6467fc45fcd8"
+      "definition_sha256": "2ec11a835053c95a400dba831f5aef14b69356b83f0f8954f624f48758596854"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_invoice_report_rows_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f37f7126a112ae0f158b5a5f33999423c677f335c9feca9e9872aa02c984c435"
     },
     {
       "acl": [
@@ -40527,7 +40895,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "314760e6b7ddb668365e5fd319fd7864eb25c8704c8221dc1f93083df2f660e2"
+      "definition_sha256": "bdd05c1ea6979661f4e7d6fe19f07b7767456c35a44bd09f8bceb6c61b481c89"
     },
     {
       "acl": [
@@ -40575,7 +40943,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "803eb61f503af1e7aff315aa22e24278231ee92abc0cc5a8639cfa3bf7755dfe"
+      "definition_sha256": "ee54360ffa37d1e74a8506db44ba1d4ac05390534b703c5713c81a4c7841bd90"
     },
     {
       "acl": [
@@ -40667,6 +41035,30 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
+      "identity": "weekly_source_message_dispatch_snapshot_failure_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7d3cdf7947627b11c0f3ca6652fccd2ce37d03fbd846ef459a4a429276ee819c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
       "identity": "weekly_source_message_dispatch_submission_start_atomic_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "v",
@@ -40719,7 +41111,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a6e9da541ce3e051d392c8b595eb310c999ce05d63c93c0b9b327b79e22499e6"
+      "definition_sha256": "31e7965be34ad6875ea183f322c984173dfacd84b40dd8de207975b7cee09cf4"
     },
     {
       "acl": [
@@ -40791,7 +41183,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6bc141196e4a5af9c01fa124e7f60a5825fb940a8a24a1d2ee549fa4c5a7d4bc"
+      "definition_sha256": "2f2b443371ff33618a522b44a20c705058cac76dcffcc1d7f6782d61b29d853e"
     },
     {
       "acl": [
@@ -40815,7 +41207,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c6a2c09d9ef06b99fcd8eca540fad408a03d44e93936a352bbf30b734989c66e"
+      "definition_sha256": "bc804d9c8b600f72d0439978d1a1234a8ee69ff6e0a682a966f80001608c9e4b"
     },
     {
       "acl": [
@@ -40863,7 +41255,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d126300e3059acc774d657b68814371dd6b0102e2121ac20c972ca83c3672bff"
+      "definition_sha256": "78574551f242ff8b67a8da82cce140382130276c1571ba71adb72b7f66d6fb92"
     },
     {
       "acl": [
@@ -40887,7 +41279,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "53304a5939a104c19c402f6b5ed06a83d3f8fc10ea1901c781a04b6424d344e4"
+      "definition_sha256": "8313a12e2fa54263e05a3bca52cd090044d3cddf745dbe8294c763d4e5c7fc71"
     },
     {
       "acl": [
@@ -41007,7 +41399,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4b485b170c978b736568e0a01ea089e5f36a968b44e6adbf4d3e3802e01dc128"
+      "definition_sha256": "5f68e2e4f7030d784b1c9b7d51d1412a18ae34429ae0c72233e30ceb0ca0a02d"
     },
     {
       "acl": [
@@ -41031,7 +41423,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7d74ef36e8e6c214074486783f6629dbca81060022699fa74f4deabad4b3dbbf"
+      "definition_sha256": "d23fb839fe4b51d169cdbc11200e7e01adaf5d7921963cf477c74426fdac4577"
     },
     {
       "acl": [
@@ -41055,7 +41447,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "28d758e90bb6ecfb2d16556fbbdae850f0e43523d7f598016b76b9e56a48ce6f"
+      "definition_sha256": "e47658b0722fac8f4f5c802f270f10bc119b543d83defebf71ce8b6f480330b9"
     },
     {
       "acl": [
@@ -41079,7 +41471,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "917851d77ae0f135b587a159ccaf06ef398b5d5a844d04453bba52c35702a95c"
+      "definition_sha256": "ac6784af2d4b90c08e042dd6bc12b0f9716ab9bdf0c76201bbdb0388cf199fbc"
     },
     {
       "acl": [
@@ -41223,7 +41615,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dc1f1ceeb9635dae5b5c0aa515e21f4445ca24298bee743873fc30c707d68908"
+      "definition_sha256": "2bdd365d7f1cf7cdfba44823d490e0929356d12b10c9dabfa26c055b6cd39894"
     },
     {
       "acl": [
@@ -41295,7 +41687,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1eed53c74b09a89cf38162a5da2896e42c3da21dacbcf69c9925ceb858c61cc9"
+      "definition_sha256": "950ec90d3034cbf9fcb502eed44e46cc59c74550f61810d1faed455803015eb8"
     },
     {
       "acl": [
@@ -41319,7 +41711,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "29a582cb98c2a9a2fd74fa8059a60b14eccde5c47f95adbc3e5e61dadda07588"
+      "definition_sha256": "874ed62db6193ca455d89e42b2f571d2c37280bcf64856135d86d5be06aa22fe"
     },
     {
       "acl": [
@@ -41415,7 +41807,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "06815aa2f9c9bec942990c336ad96f2f0dbbb0fc041ad8f8aaf997d7f0b38ec6"
+      "definition_sha256": "af3b2f649b92a9218e11bb30d1e30794eec7fd7c2445b999a80965b6baa8df2f"
     },
     {
       "acl": [
@@ -41511,7 +41903,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8cdfa13a6482d1137106373a6422c249dee6f2635b338f2bc3dde2c32349046d"
+      "definition_sha256": "92ba2b860a0fcba0712b743dc21006c3e83b37fcc32fdc737a5928a2029f5e90"
     },
     {
       "acl": [
@@ -41607,7 +41999,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a8ceff4912e6bc2a4523fad511d91bec5b97fbf308347995798a68cfba856ecd"
+      "definition_sha256": "555bcba417b984996eb7b60b7e82c347de0f93a90bff60eb59cb67ed95be833a"
     },
     {
       "acl": [
@@ -41655,7 +42047,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3cce1f14ddccfcb45b748081e46780597938f5879c0ad8be536b311229db0df6"
+      "definition_sha256": "d8bc07fbeb06c16783f6cfce27d6f67315e53ec689975110642660e77621f3c7"
     },
     {
       "acl": [
@@ -41679,7 +42071,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "38f5ba89a4907d5a72e34e5e77a8c4f345b5124bd1eec556804415261fcbf83b"
+      "definition_sha256": "c3eba3823e9aa902edd085c819f2e60b9a379bb5f9c88c7ecccf80c9753fd7ee"
     }
   ],
   "triggers": [
@@ -44142,6 +44534,20 @@
     },
     {
       "name": "weekly_source_immutable_record_guard",
+      "table": "weekly_source_charge_acceptances",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_record_guard BEFORE DELETE OR UPDATE ON weekly_source_charge_acceptances FOR EACH ROW EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_truncate_guard",
+      "table": "weekly_source_charge_acceptances",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_charge_acceptances FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_immutable_record_guard",
       "table": "weekly_source_charge_checks",
       "schema": "public",
       "enabled": "O",
@@ -44405,6 +44811,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_pending_entitlement_bundles FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_pending_counter_reset_guard",
+      "table": "weekly_source_pending_entitlement_bundles",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_pending_counter_reset_guard BEFORE UPDATE ON weekly_source_pending_entitlement_bundles FOR EACH ROW WHEN (new.technical_failure_count < old.technical_failure_count) EXECUTE FUNCTION private._weekly_source_pending_counter_reset_guard_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -62513,6 +62926,76 @@
     {
       "acl": [
         {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "audit_events_event_sequence_seq",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
           "grantee": "anon",
           "grantable": false,
           "privilege": "SELECT"
@@ -63721,6 +64204,22 @@
           "generated": ""
         },
         {
+          "name": "event_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "a",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_sequence_is_authoritative",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "id",
           "type": "uuid",
           "default": "gen_random_uuid()",
@@ -63778,6 +64277,14 @@
         }
       ],
       "indexes": [
+        {
+          "name": "audit_events_event_sequence_uq",
+          "definition": "CREATE UNIQUE INDEX audit_events_event_sequence_uq ON public.audit_events USING btree (event_sequence)"
+        },
+        {
+          "name": "audit_events_object_sequence_idx",
+          "definition": "CREATE INDEX audit_events_object_sequence_idx ON public.audit_events USING btree (object_type, object_id_text, event_sequence)"
+        },
         {
           "name": "audit_events_pkey",
           "definition": "CREATE UNIQUE INDEX audit_events_pkey ON public.audit_events USING btree (id)"
@@ -91509,6 +92016,14 @@
           "identity": "",
           "not_null": false,
           "generated": ""
+        },
+        {
+          "name": "ledger_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -91539,6 +92054,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (id_ref, invoice_id)"
+        },
+        {
+          "name": "id_consolidation_run_lines_revision_positive_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (ledger_revision IS NULL OR ledger_revision > 0)"
         }
       ],
       "view_definition_sha256": null
@@ -91919,6 +92442,14 @@
           "generated": ""
         },
         {
+          "name": "ledger_revision",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "updated_at_utc",
           "type": "timestamp with time zone",
           "default": "now()",
@@ -91947,6 +92478,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (invoice_id)"
+        },
+        {
+          "name": "id_invoice_ledger_revision_positive_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (ledger_revision > 0)"
         }
       ],
       "view_definition_sha256": null
@@ -136155,6 +136694,14 @@
           "generated": ""
         },
         {
+          "name": "charge_acceptance_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "contract_id",
           "type": "uuid",
           "default": null,
@@ -136477,6 +137024,14 @@
           "definition": "CHECK (jsonb_typeof(canonical_pay_vector_json) = 'object'::text)"
         },
         {
+          "name": "weekly_source_billing_movements_charge_acceptance_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (charge_acceptance_id) REFERENCES weekly_source_charge_acceptances(id) ON DELETE RESTRICT"
+        },
+        {
           "name": "weekly_source_billing_movements_check",
           "type": "c",
           "deferred": false,
@@ -136514,7 +137069,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (source_profile_kind <> 'NHSP_TRUST_BACKING_REPORT'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])))"
+          "definition": "CHECK (source_profile_kind <> 'NHSP_TRUST_BACKING_REPORT'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])))"
         },
         {
           "name": "weekly_source_billing_movements_check5",
@@ -136522,7 +137077,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (source_line_kind <> 'SOURCE_FIXED_EXPENSE'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = 'NOT_APPLICABLE'::text)"
+          "definition": "CHECK ((price_check_result = ANY (ARRAY['ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])) = (charge_acceptance_id IS NOT NULL))"
         },
         {
           "name": "weekly_source_billing_movements_check6",
@@ -136530,7 +137085,15 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (source_profile_kind = 'NHSP_TRUST_BACKING_REPORT'::text OR (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])))"
+          "definition": "CHECK (source_line_kind <> 'SOURCE_FIXED_EXPENSE'::text OR source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND price_check_result = 'NOT_APPLICABLE'::text)"
+        },
+        {
+          "name": "weekly_source_billing_movements_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_profile_kind = 'NHSP_TRUST_BACKING_REPORT'::text OR (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])) AND charge_acceptance_id IS NULL)"
         },
         {
           "name": "weekly_source_billing_movements_contract_id_fkey",
@@ -136642,7 +137205,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text]))"
+          "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text]))"
         },
         {
           "name": "weekly_source_billing_movements_prior_fk",
@@ -136699,6 +137262,344 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_charge_acceptances",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "acceptance_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "acceptance_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "acceptance_policy_fingerprint",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "accepted_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "charge_calculation_fingerprint",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "charge_check_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_and_rate_fingerprint",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effective_policy_fingerprint",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "row_resolution_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_row_fingerprint",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_upload_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_upload_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "upload_row_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_charge_acceptances_acceptance_hash_key",
+          "definition": "CREATE UNIQUE INDEX weekly_source_charge_acceptances_acceptance_hash_key ON public.weekly_source_charge_acceptances USING btree (acceptance_hash)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_charge_check_id_key",
+          "definition": "CREATE UNIQUE INDEX weekly_source_charge_acceptances_charge_check_id_key ON public.weekly_source_charge_acceptances USING btree (charge_check_id)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_charge_acceptances_pkey ON public.weekly_source_charge_acceptances USING btree (id)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_row_idx",
+          "definition": "CREATE INDEX weekly_source_charge_acceptances_row_idx ON public.weekly_source_charge_acceptances USING btree (upload_row_id, row_resolution_id, charge_check_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_charge_accepta_acceptance_policy_fingerprin_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(acceptance_policy_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_accepta_charge_calculation_fingerpri_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(charge_calculation_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_accepta_contract_and_rate_fingerprin_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(contract_and_rate_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_accepta_effective_policy_fingerprint_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(effective_policy_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_acceptance_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(acceptance_hash) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_acceptance_hash_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (acceptance_hash)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_acceptance_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (acceptance_kind = ANY (ARRAY['ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text]))"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_accepted_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (accepted_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_charge_check_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (charge_check_id) REFERENCES weekly_source_charge_checks(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_charge_check_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (charge_check_id)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_row_resolution_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (row_resolution_id) REFERENCES weekly_source_row_resolutions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_source_row_fingerprint_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(source_row_fingerprint) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_source_upload_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(source_upload_hash) = 32)"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_source_upload_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_upload_id) REFERENCES weekly_source_uploads(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_charge_acceptances_upload_row_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (upload_row_id) REFERENCES weekly_source_upload_rows(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null
@@ -137012,7 +137913,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((comparison_result <> ALL (ARRAY['MISMATCH'::text, 'UNVERIFIABLE'::text])) OR (phase_severity = ANY (ARRAY['PROVISIONAL_WARNING'::text, 'FINALISATION_BLOCKER'::text])))"
+          "definition": "CHECK ((comparison_result <> ALL (ARRAY['MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text])) OR (phase_severity = ANY (ARRAY['PROVISIONAL_WARNING'::text, 'FINALISATION_BLOCKER'::text])))"
         },
         {
           "name": "weekly_source_charge_checks_check6",
@@ -137020,7 +137921,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((comparison_result = ANY (ARRAY['MISMATCH'::text, 'UNVERIFIABLE'::text])) OR blocker_code IS NULL)"
+          "definition": "CHECK ((comparison_result = ANY (ARRAY['MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text])) OR blocker_code IS NULL)"
         },
         {
           "name": "weekly_source_charge_checks_check7",
@@ -137028,10 +137929,18 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (row_sign_kind <> 'POSITIVE'::text OR comparison_result = 'UNVERIFIABLE'::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0)"
+          "definition": "CHECK (comparison_result <> 'ZERO_SOURCE_CHARGE'::text OR source_commission_pence = 0 AND source_total_cost_pence = 0 AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence <> 0 AND blocker_code IS NULL)"
         },
         {
           "name": "weekly_source_charge_checks_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (row_sign_kind <> 'POSITIVE'::text OR comparison_result = 'UNVERIFIABLE'::text OR source_commission_pence >= 0 AND source_total_cost_pence >= 0 AND (source_shift_charge_pence > 0 AND calculated_segment_charge_pence > 0 OR comparison_result = 'ZERO_SOURCE_CHARGE'::text AND source_shift_charge_pence = 0 AND calculated_segment_charge_pence > 0))"
+        },
+        {
+          "name": "weekly_source_charge_checks_check9",
           "type": "c",
           "deferred": false,
           "validated": true,
@@ -137052,7 +137961,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'UNVERIFIABLE'::text]))"
+          "definition": "CHECK (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text]))"
         },
         {
           "name": "weekly_source_charge_checks_generation_check",
@@ -138610,7 +139519,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'UNVERIFIABLE'::text]))"
+          "definition": "CHECK (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text, 'UNVERIFIABLE'::text]))"
         },
         {
           "name": "weekly_source_contract_qualification_observa_upload_row_id_fkey",
@@ -138666,7 +139575,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (qualification_passed = (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])))"
+          "definition": "CHECK (qualification_passed = (comparison_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'MISMATCH'::text, 'ZERO_SOURCE_CHARGE'::text])))"
         },
         {
           "name": "weekly_source_contract_qualification_observations_pkey",
@@ -144543,6 +145452,14 @@
           "generated": ""
         },
         {
+          "name": "charge_acceptance_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "charge_bh",
           "type": "numeric(10,2)",
           "default": null,
@@ -145033,6 +145950,14 @@
           "definition": "FOREIGN KEY (old_internal_movement_id) REFERENCES weekly_source_billing_movements(id) ON DELETE RESTRICT"
         },
         {
+          "name": "weekly_source_invoice_presentation_li_charge_acceptance_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (charge_acceptance_id) REFERENCES weekly_source_charge_acceptances(id) ON DELETE RESTRICT"
+        },
+        {
           "name": "weekly_source_invoice_presentation_lin_billing_movement_id_fkey",
           "type": "f",
           "deferred": false,
@@ -145046,7 +145971,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text]))"
+          "definition": "CHECK (price_check_result = ANY (ARRAY['NOT_APPLICABLE'::text, 'EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text]))"
         },
         {
           "name": "weekly_source_invoice_presentation_line_billing_movement_id_key",
@@ -145142,10 +146067,18 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (origin_kind <> 'NHSP_PHYSICAL_ROW'::text OR amount_authority = 'VALIDATED_SOURCE_PENCE'::text AND source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text])))"
+          "definition": "CHECK (origin_kind <> 'NHSP_PHYSICAL_ROW'::text OR amount_authority = 'VALIDATED_SOURCE_PENCE'::text AND source_validation_charge_pence IS NOT NULL AND invoice_presentation_charge_pence = source_validation_charge_pence AND (price_check_result = ANY (ARRAY['EXACT'::text, 'SOURCE_ROUNDING_EQUIVALENT'::text, 'ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])))"
         },
         {
           "name": "weekly_source_invoice_presentation_lines_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((price_check_result = ANY (ARRAY['ACCEPTED_DISPARITY'::text, 'ACCEPTED_ZERO'::text])) = (charge_acceptance_id IS NOT NULL))"
+        },
+        {
+          "name": "weekly_source_invoice_presentation_lines_check7",
           "type": "c",
           "deferred": false,
           "validated": true,
@@ -163936,5 +164869,4 @@
     }
   ],
   "contract_version": 5
-
 }

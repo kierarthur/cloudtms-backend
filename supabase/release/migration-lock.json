@@ -971,6 +971,10 @@
       "sha256": "37c51a6bdbadceb521b669b2405b153c2a712f7748545b9a8de0db1f27c53c31"
     },
     {
+      "path": "supabase/migrations/22092026_1226_client_initial_settings_baseline_test_repair.sql",
+      "sha256": "5a1e32a28b531c89299e491d892e061b0ec419fc08607123e48db6b0c56b2445"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
