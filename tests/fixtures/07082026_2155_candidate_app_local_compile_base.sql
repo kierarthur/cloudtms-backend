@@ -233,6 +233,24 @@ create table public.client_settings (
   reversal_replacement_financials_date public.correction_financials_date_basis_enum
 );
 
+-- Runtime verifiers deliberately create bare Client rows instead of invoking
+-- the production Client-create RPC. Mirror that RPC's invariant in this
+-- disposable fixture so settings-authority tests exercise a valid Client.
+create function private._candidate_test_client_settings_seed_v1()
+returns trigger
+language plpgsql
+set search_path=''
+as $$
+begin
+  insert into public.client_settings(client_id) values(new.id);
+  return new;
+end;
+$$;
+
+create trigger candidate_test_client_settings_seed_v1
+after insert on public.clients
+for each row execute function private._candidate_test_client_settings_seed_v1();
+
 create table public.contracts (
   id uuid primary key default gen_random_uuid(),
   candidate_id uuid not null references public.candidates(id),

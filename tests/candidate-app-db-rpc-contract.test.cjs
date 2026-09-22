@@ -118,6 +118,11 @@ test('Candidate runtime gate finishes with every current authority', () => {
     /create table public\.client_settings[\s\S]*?\bmargin_includes\s+jsonb/i,
     'Candidate runtime fixture must match the production JSON finance-policy shape'
   );
+  assert.match(
+    candidateRuntimeFixture,
+    /create trigger candidate_test_client_settings_seed_v1[\s\S]*?after insert on public\.clients/i,
+    'raw runtime-test Clients must receive the settings canvas created by the production Client route'
+  );
   assert.ok(
     candidateRuntimeWorkflow.indexOf('supabase/migrations/26082026_2057_candidate_system_actor_seed.sql')
       < candidateRuntimeWorkflow.indexOf('supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql'),
