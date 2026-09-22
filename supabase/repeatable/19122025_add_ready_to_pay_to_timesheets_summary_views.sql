@@ -313,7 +313,7 @@ ts_base AS (
   LEFT JOIN candidates c ON c.id = COALESCE(tf.candidate_id, ct.candidate_id)
   LEFT JOIN clients cli ON cli.id = COALESCE(tf.client_id, ct.client_id)
   CROSS JOIN LATERAL (
-    SELECT private._contract_settings_effective_core_v1(
+    SELECT public.contract_settings_effective_get_v1(
       COALESCE(tf.client_id, ct.client_id),
       COALESCE(ts.contract_id, cw.contract_id),
       COALESCE(
@@ -471,7 +471,7 @@ planned_weeks AS (
   CROSS JOIN LATERAL (
     SELECT CASE
       WHEN cw.settings_authority_json IS NULL OR cw.settings_authority_json='{}'::jsonb
-        THEN private._contract_settings_effective_core_v1(
+        THEN public.contract_settings_effective_get_v1(
           ct.client_id,ct.id,cw.week_ending_date,'WEEKLY',NULL::uuid)
       ELSE cw.settings_authority_json
     END AS settings_json
@@ -2327,7 +2327,7 @@ ts_base AS (
   LEFT JOIN candidates c ON c.id = COALESCE(tf.candidate_id, ct.candidate_id)
   LEFT JOIN clients cli ON cli.id = COALESCE(tf.client_id, ct.client_id)
   CROSS JOIN LATERAL (
-    SELECT private._contract_settings_effective_core_v1(
+    SELECT public.contract_settings_effective_get_v1(
       COALESCE(tf.client_id, ct.client_id),
       COALESCE(ts.contract_id, cw.contract_id),
       COALESCE(
@@ -2488,7 +2488,7 @@ planned_weeks AS (
   CROSS JOIN LATERAL (
     SELECT CASE
       WHEN cw.settings_authority_json IS NULL OR cw.settings_authority_json='{}'::jsonb
-        THEN private._contract_settings_effective_core_v1(
+        THEN public.contract_settings_effective_get_v1(
           ct.client_id,ct.id,cw.week_ending_date,'WEEKLY',NULL::uuid)
       ELSE cw.settings_authority_json
     END AS settings_json

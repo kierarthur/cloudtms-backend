@@ -1883,7 +1883,8 @@ test('contract override controls HealthRoster invoice validation through the fro
     canonicalSummaryViews,
     /from\s+public\.client_settings|join\s+public\.client_settings/i,
   );
-  assert.match(canonicalSummaryViews, /private\._contract_settings_effective_core_v1/i);
+  assert.match(canonicalSummaryViews, /public\.contract_settings_effective_get_v1/i);
+  assert.doesNotMatch(canonicalSummaryViews, /private\._contract_settings_effective_core_v1/i);
 });
 
 test('normalised timesheet evidence adopts the exact registered asset revision', () => {

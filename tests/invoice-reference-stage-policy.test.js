@@ -61,6 +61,7 @@ test('the canonical precheck retains frozen contract-over-client authority for e
     precheck,
     /authority\.settings_json#>>'\{values,reference_number_required_to_issue_invoice\}'\)::boolean,[\s\S]*false[\s\S]*as reference_number_required_to_issue_invoice/i,
   );
-  assert.match(precheck, /private\._contract_settings_effective_core_v1/i);
+  assert.match(precheck, /public\.contract_settings_effective_get_v1/i);
+  assert.doesNotMatch(precheck, /private\._contract_settings_effective_core_v1/i);
   assert.doesNotMatch(precheck, /from\s+public\.client_settings|join\s+public\.client_settings/i);
 });
