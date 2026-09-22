@@ -13,7 +13,7 @@ const section = (startMarker, endMarker) => {
   return source.slice(start, end);
 };
 
-test('started Contract updates compare actual protected values and do not reject unrelated safe saves', () => {
+test('Contract updates lock protected values only after real Timesheet progression', () => {
   const update = section('async function handleContractsUpdate', 'async function handleContractsReplace');
   for (const field of [
     'candidate_id', 'client_id', 'role', 'band', 'pay_method_snapshot',
@@ -24,15 +24,51 @@ test('started Contract updates compare actual protected values and do not reject
   assert.match(update, /compareString/);
   assert.match(update, /compareTri/);
   assert.match(update, /changedCore\.length/);
-  assert.match(update, /Core contract details cannot be changed after the contract has started/);
+  assert.match(update, /if \(hasProgressedTimesheets\)/);
+  assert.match(update, /processed, authorised, invoiced or paid/);
+  assert.doesNotMatch(update, /contractHasStarted/);
+  assert.doesNotMatch(update, /todayYmdForContractLock/);
 });
 
-test('Contract replacement uses the same lifecycle locks and preserves week-ending authority once weeks exist', () => {
+test('Contract replacement uses the same progression lock and preserves week-ending authority once weeks exist', () => {
   const replace = section('async function handleContractsReplace', 'async function handleContractsDelete');
   assert.match(replace, /compareString/);
   assert.match(replace, /compareTri/);
   assert.match(replace, /changedCore\.length/);
+  assert.match(replace, /if \(hasProgressedTimesheets\)/);
+  assert.doesNotMatch(replace, /contractHasStarted/);
+  assert.doesNotMatch(replace, /todayYmdForContractLock/);
   assert.match(replace, /Week-ending day cannot be changed after contract weeks have been created/);
+});
+
+test('Contract progression census ignores planned and unprocessed records but sees every irreversible rail', () => {
+  const census = section(
+    'async function contractHasProgressedTimesheetEvidence',
+    '/** Numeric guard */'
+  );
+  assert.match(census, /authorised_at_server=not\.is\.null/);
+  assert.match(census, /timesheets_financials/);
+  for (const field of [
+    'processed_at_utc',
+    'authorised_at_utc',
+    'locked_by_invoice_id',
+    'paid_at_utc'
+  ]) assert.match(census, new RegExp(`${field}\\.not\\.is\\.null`), `missing progression rail ${field}`);
+  assert.doesNotMatch(census, /contract_weeks/);
+  assert.doesNotMatch(census, /is_current=eq\.true/);
+});
+
+test('Contract writes persist the canonical weekly source alongside the legacy route flags', () => {
+  const create = section('async function handleContractsCreate', 'async function handleContractsList');
+  const update = section('async function handleContractsUpdate', 'async function handleContractsReplace');
+  const replace = section('async function handleContractsReplace', 'async function handleContractsDelete');
+  for (const owner of [create, update, replace]) {
+    assert.match(owner, /weekly_timesheet_source/);
+    assert.match(owner, /\['NONE','NHSP','HEALTHROSTER'\]/);
+  }
+  assert.match(create, /is_nhsp === true \? 'NHSP' : \(autoprocess_hr === true \? 'HEALTHROSTER' : 'NONE'\)/);
+  assert.match(update, /eff_is_nhsp === true \? 'NHSP' : \(eff_autoprocess_hr === true \? 'HEALTHROSTER' : 'NONE'\)/);
+  assert.match(replace, /patch\.is_nhsp === true \? 'NHSP' : \(patch\.autoprocess_hr === true \? 'HEALTHROSTER' : 'NONE'\)/);
 });
 
 test('Contract date boundaries use actual protected work dates rather than whole week edges', () => {

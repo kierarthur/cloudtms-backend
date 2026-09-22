@@ -7678,6 +7678,60 @@ async function sbGetOne(env, url) {
   return (rows && rows[0]) || null;
 }
 
+/**
+ * A Contract becomes financially immutable only after one of its Timesheets
+ * has genuinely progressed. The Contract start date, planned contract_weeks,
+ * and merely-created/unprocessed Timesheet rows are deliberately not locks.
+ *
+ * Inspect all physical Timesheet versions and all financial history rather
+ * than only current rows. That prevents a rotated/replaced Timesheet from
+ * making an already-processed Contract editable again.
+ */
+async function contractHasProgressedTimesheetEvidence(env, contractId) {
+  const id = String(contractId || '').trim();
+  if (!id) return false;
+
+  const authorisedTimesheet = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(id)}` +
+      `&authorised_at_server=not.is.null` +
+      `&select=timesheet_id&limit=1`
+  );
+  if (authorisedTimesheet) return true;
+
+  const pageSize = 250;
+  for (let offset = 0; ; offset += pageSize) {
+    const { rows } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?contract_id=eq.${enc(id)}` +
+        `&select=timesheet_id` +
+        `&order=timesheet_id.asc` +
+        `&limit=${pageSize}&offset=${offset}`
+    );
+    const timesheetIds = [...new Set(
+      (rows || []).map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean)
+    )];
+
+    for (let index = 0; index < timesheetIds.length; index += 75) {
+      const ids = timesheetIds.slice(index, index + 75);
+      const progressedFinancial = await sbGetOne(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets_financials` +
+          `?timesheet_id=in.(${ids.map(enc).join(',')})` +
+          `&or=(processed_at_utc.not.is.null,authorised_at_utc.not.is.null,locked_by_invoice_id.not.is.null,paid_at_utc.not.is.null)` +
+          `&select=id&limit=1`
+      );
+      if (progressedFinancial) return true;
+    }
+
+    if ((rows || []).length < pageSize) break;
+  }
+
+  return false;
+}
+
 /** Numeric guard */
 const n = (v) => (v == null || Number.isNaN(Number(v))) ? 0 : Number(v);
 
@@ -7923,6 +7977,14 @@ async function handleContractsCreate(env, req) {
     ? clampBool(body.self_bill, false)
     : clampBool(clientSettings?.self_bill, false);
 
+  const requestedWeeklySource = String(body.weekly_timesheet_source || '').trim().toUpperCase();
+  if (requestedWeeklySource && !['NONE','NHSP','HEALTHROSTER'].includes(requestedWeeklySource)) {
+    return withCORS(env, req, badRequest('weekly_timesheet_source must be NONE, NHSP or HEALTHROSTER'));
+  }
+  const weekly_timesheet_source = requestedWeeklySource || (
+    is_nhsp === true ? 'NHSP' : (autoprocess_hr === true ? 'HEALTHROSTER' : 'NONE')
+  );
+
   // Derive Contract auto_invoice from the dated Client authority when not explicitly supplied.
   const auto_invoice = hasAutoInvoice
     ? clampBool(body.auto_invoice, false)
@@ -8073,6 +8135,7 @@ async function handleContractsCreate(env, req) {
       autoprocess_hr,
       requires_hr,
       no_timesheet_required,
+      weekly_timesheet_source,
       daily_calc_of_invoices,
       group_nightsat_sunbh,
       self_bill,
@@ -11073,20 +11136,17 @@ async function handleContractsUpdate(env, req, contractId) {
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  const hasSubmitted = !!(await sbGetOne(
+  const hasAnyTimesheets = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
   ));
+  const hasProgressedTimesheets = await contractHasProgressedTimesheetEvidence(env, contractId);
   const hasWeeks = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
-  const todayYmdForContractLock = toYmd(new Date());
-  const contractHasStarted = hasSubmitted || !!(
-    current.start_date && todayYmdForContractLock && String(current.start_date) <= String(todayYmdForContractLock)
-  );
-  if (contractHasStarted) {
+  if (hasProgressedTimesheets) {
     const changedCore = [];
     const normString = (value) => value == null ? '' : String(value).trim();
     const normUpper = (value) => normString(value).toUpperCase();
@@ -11108,7 +11168,7 @@ async function handleContractsUpdate(env, req, contractId) {
     ].forEach(compareTri);
     if (changedCore.length) {
       return withCORS(env, req, badRequest(
-        `Core contract details cannot be changed after the contract has started. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
+        `Core contract details cannot be changed after a Timesheet has been processed, authorised, invoiced or paid. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
       ));
     }
   }
@@ -11167,7 +11227,7 @@ async function handleContractsUpdate(env, req, contractId) {
   }
 
   // ✅ UPDATED: default_submission_mode is only persisted when overrideclientsettings=true,
-  // and MUST NOT be implicitly cleared/changed when hasSubmitted=true.
+  // and MUST NOT be implicitly cleared/changed once a Timesheet has progressed.
   if ('default_submission_mode' in body) {
     const raw = body.default_submission_mode;
     const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
@@ -11182,7 +11242,7 @@ async function handleContractsUpdate(env, req, contractId) {
       : !!current.overrideclientsettings;
 
     if (!effOverride) {
-      if (!hasSubmitted) {
+      if (!hasProgressedTimesheets) {
         patch.default_submission_mode = null;
       }
     } else {
@@ -11193,7 +11253,7 @@ async function handleContractsUpdate(env, req, contractId) {
       ? !!patch.overrideclientsettings
       : !!current.overrideclientsettings;
 
-    if (!hasSubmitted && !effOverride && current.default_submission_mode != null) {
+    if (!hasProgressedTimesheets && !effOverride && current.default_submission_mode != null) {
       patch.default_submission_mode = null;
     }
   }
@@ -11247,6 +11307,19 @@ async function handleContractsUpdate(env, req, contractId) {
   const eff_autoprocess_hr = Object.prototype.hasOwnProperty.call(patch, 'autoprocess_hr') ? patch.autoprocess_hr : current.autoprocess_hr;
   const eff_no_ts = Object.prototype.hasOwnProperty.call(patch, 'no_timesheet_required') ? patch.no_timesheet_required : current.no_timesheet_required;
 
+  const routeWasSupplied = [
+    'weekly_timesheet_source', 'is_nhsp', 'autoprocess_hr', 'no_timesheet_required'
+  ].some((key) => Object.prototype.hasOwnProperty.call(body, key));
+  if (routeWasSupplied) {
+    const requestedWeeklySource = String(body.weekly_timesheet_source || '').trim().toUpperCase();
+    if (requestedWeeklySource && !['NONE','NHSP','HEALTHROSTER'].includes(requestedWeeklySource)) {
+      return withCORS(env, req, badRequest('weekly_timesheet_source must be NONE, NHSP or HEALTHROSTER'));
+    }
+    patch.weekly_timesheet_source = requestedWeeklySource || (
+      eff_is_nhsp === true ? 'NHSP' : (eff_autoprocess_hr === true ? 'HEALTHROSTER' : 'NONE')
+    );
+  }
+
   if (eff_is_nhsp === true && eff_autoprocess_hr === true) {
     return withCORS(env, req, badRequest('Invalid contract route: is_nhsp=true and autoprocess_hr=true cannot both be true.'));
   }
@@ -11268,7 +11341,7 @@ async function handleContractsUpdate(env, req, contractId) {
     }
   }
 
-  if (hasSubmitted) {
+  if (hasProgressedTimesheets) {
     if ('candidate_id' in body || 'client_id' in body || 'rates_json' in body || 'pay_method_snapshot' in body) {
       return withCORS(env, req, badRequest('Cannot change candidate/client/rates/pay_method after timesheets have been submitted'));
     }
@@ -11336,7 +11409,7 @@ async function handleContractsUpdate(env, req, contractId) {
 
     if (changed.length) {
       return withCORS(env, req, badRequest(
-        `Cannot change contract settings because real timesheets already exist for this contract. Blocked fields: ${changed.join(', ')}`
+        `Cannot change contract settings because a Timesheet has been processed, authorised, invoiced or paid. Blocked fields: ${changed.join(', ')}`
       ));
     }
   } else {
@@ -11394,7 +11467,7 @@ async function handleContractsUpdate(env, req, contractId) {
   }
 
   if ('week_ending_weekday_snapshot' in body) {
-    if (hasSubmitted || hasWeeks) {
+    if (hasAnyTimesheets || hasWeeks) {
       extraWarnings.push('Week-ending day change ignored because weeks/timesheets exist.');
     } else {
       let we = Number(body.week_ending_weekday_snapshot);
@@ -11416,7 +11489,7 @@ async function handleContractsUpdate(env, req, contractId) {
       patch.week_ending_weekday_snapshot = we;
     }
   } else {
-    if (!hasSubmitted && !hasWeeks && ('client_id' in patch) && patch.client_id && patch.client_id !== current.client_id) {
+    if (!hasAnyTimesheets && !hasWeeks && ('client_id' in patch) && patch.client_id && patch.client_id !== current.client_id) {
       try {
         const authority = await loadPolicy(
           env,
@@ -11728,10 +11801,11 @@ async function handleContractsReplace(env, req, contractId) {
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
 
-  const hasSubmitted = !!(await sbGetOne(
+  const hasAnyTimesheets = !!(await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/timesheets?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
   ));
+  const hasProgressedTimesheets = await contractHasProgressedTimesheetEvidence(env, contractId);
 
   const hasWeeks = !!(await sbGetOne(
     env,
@@ -11838,14 +11912,9 @@ async function handleContractsReplace(env, req, contractId) {
     desiredDefaultSubmissionMode = parsed;
   }
 
-  // Core authority is immutable once a contract has started, even where a
-  // contract has only planned weeks. Compare values rather than rejecting the
-  // presence of unchanged fields so safe edits can still be saved.
-  const todayYmdForContractLock = toYmd(new Date());
-  const contractHasStarted = hasSubmitted || !!(
-    current.start_date && todayYmdForContractLock && String(current.start_date) <= String(todayYmdForContractLock)
-  );
-  if (contractHasStarted) {
+  // Core authority becomes immutable only after real lifecycle progression.
+  // Planned weeks and unprocessed Timesheets remain editable.
+  if (hasProgressedTimesheets) {
     const changedCore = [];
     const normString = (value) => value == null ? '' : String(value).trim();
     const normUpper = (value) => normString(value).toUpperCase();
@@ -11885,7 +11954,7 @@ async function handleContractsReplace(env, req, contractId) {
 
     if (changedCore.length) {
       return withCORS(env, req, badRequest(
-        `Core contract details cannot be changed after the contract has started. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
+        `Core contract details cannot be changed after a Timesheet has been processed, authorised, invoiced or paid. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
       ));
     }
   }
@@ -11899,7 +11968,7 @@ async function handleContractsReplace(env, req, contractId) {
     return withCORS(env, req, badRequest('Week-ending day cannot be changed after contract weeks have been created.'));
   }
 
-  if (hasSubmitted) {
+  if (hasProgressedTimesheets) {
     // Treat omitted fields as “no change” (defensive)
     const effCandidateId = ('candidate_id' in body) ? body.candidate_id : current.candidate_id;
     const effClientId    = ('client_id'    in body) ? body.client_id    : current.client_id;
@@ -11958,13 +12027,13 @@ async function handleContractsReplace(env, req, contractId) {
   if (overrideclientsettings === true) {
     default_submission_mode_to_store = desiredDefaultSubmissionMode ?? null;
   } else {
-    default_submission_mode_to_store = hasSubmitted ? (current.default_submission_mode ?? null) : null;
+    default_submission_mode_to_store = hasProgressedTimesheets ? (current.default_submission_mode ?? null) : null;
   }
 
   const extraWarnings = [];
   let wew;
 
-  if (hasSubmitted) {
+  if (hasAnyTimesheets) {
     wew = Number(current.week_ending_weekday_snapshot ?? 0);
   } else {
     if ('week_ending_weekday_snapshot' in body) {
@@ -12082,6 +12151,8 @@ async function handleContractsReplace(env, req, contractId) {
     group_nightsat_sunbh:  ('group_nightsat_sunbh' in body)  ? boolOrNull(body.group_nightsat_sunbh, !!current.group_nightsat_sunbh) : (current.group_nightsat_sunbh ?? null),
     self_bill:             ('self_bill' in body)             ? boolOrNull(body.self_bill, !!current.self_bill) : (current.self_bill ?? null),
 
+    weekly_timesheet_source: current.weekly_timesheet_source ?? null,
+
     hr_attach_to_invoice:  ('hr_attach_to_invoice' in body)  ? boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice) : (current.hr_attach_to_invoice ?? null),
     ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
     timesheet_break_entry_mode: replacementBreakEntryMode,
@@ -12133,7 +12204,17 @@ async function handleContractsReplace(env, req, contractId) {
     }
   }
 
-  if (hasSubmitted) {
+  if (!hasProgressedTimesheets) {
+    const requestedWeeklySource = String(body.weekly_timesheet_source || '').trim().toUpperCase();
+    if (requestedWeeklySource && !['NONE','NHSP','HEALTHROSTER'].includes(requestedWeeklySource)) {
+      return withCORS(env, req, badRequest('weekly_timesheet_source must be NONE, NHSP or HEALTHROSTER'));
+    }
+    patch.weekly_timesheet_source = requestedWeeklySource || (
+      patch.is_nhsp === true ? 'NHSP' : (patch.autoprocess_hr === true ? 'HEALTHROSTER' : 'NONE')
+    );
+  }
+
+  if (hasProgressedTimesheets) {
     const changed = [];
     const curTri = (v) => (v === undefined ? null : v);
 
@@ -12172,7 +12253,7 @@ async function handleContractsReplace(env, req, contractId) {
 
     if (changed.length) {
       return withCORS(env, req, badRequest(
-        `Cannot change contract settings because real timesheets already exist for this contract. Blocked fields: ${changed.join(', ')}`
+        `Cannot change contract settings because a Timesheet has been processed, authorised, invoiced or paid. Blocked fields: ${changed.join(', ')}`
       ));
     }
   }
@@ -12192,7 +12273,7 @@ async function handleContractsReplace(env, req, contractId) {
     patch.rates_json = cleaned;
   }
 
-  if (hasSubmitted) {
+  if (hasProgressedTimesheets) {
     patch.candidate_id = current.candidate_id;
     patch.client_id    = current.client_id;
     patch.pay_method_snapshot = String(current.pay_method_snapshot || patch.pay_method_snapshot || '').toUpperCase();
@@ -12225,7 +12306,7 @@ async function handleContractsReplace(env, req, contractId) {
 
   if (!body.skip_generate_weeks) {
     if (weekdayChanged) {
-      if (!hasSubmitted) {
+      if (!hasAnyTimesheets) {
         const delAllDraft = await fetch(
           `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&timesheet_id=is.null`,
           { method:'DELETE', headers: { ...sbHeaders(env), 'Prefer':'return-minimal' } }
