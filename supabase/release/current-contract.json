@@ -13504,7 +13504,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fda62471850c241738a31d13ece861a288b0438b65123391bea47ea8743438bc"
+      "definition_sha256": "dca4ecea6f239821906683aba1c73f23fd9741d16d824e0e1f59b769db106302"
     },
     {
       "acl": [
@@ -13656,7 +13656,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f94d51743f2270bfc97c5f405da4563d7e0503c892efaebf883a46850c60a519"
+      "definition_sha256": "3dcfcdcb300204c12a99d0f2e9c8b39eb92a45b99161323a72a8433275968975"
     },
     {
       "acl": [
@@ -14395,7 +14395,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "26c5b66a3359039173ab257e079359a785a04ad5927ee596c6b6d75edf2f99bf"
+      "definition_sha256": "5ed761948aecddcf66e1d75c1f7f8fd8b2d161eacd5ab47a83bd39e3672ebcdd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_inventory_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b940224aa62890da55e0431de403e5108dd056e07cefc8e28b128f3990bc6e03"
     },
     {
       "acl": [
@@ -14924,6 +14943,101 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "f4532ad60e8335643c5a1e5aa3b3010d36868f766a39b14feb99379e1496006b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_begin_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "96798c5a9ee683aae3e064c3461924cf3d20a701ac5cc4eac9e7174b611ec59d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_end_v1(p_frame uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a52dfb2bb7d40c4419a6ff7a0654bbcbd531602a84e6f490f72902b3c8207517"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_seal_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c0c8ae42bd7b670ec4e239a949dd314b2c9043af6285ac85e17ddb090ca2a3bf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_storage_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1d4e5b0a5253ae108c995924564183c7fddaa1b7497b45796b5c3abe86ffc29e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observe_effect_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e2a74b3c1429ba2fe739d3028756b9d56c89f3d142372f478b38975acf4073ad"
     },
     {
       "acl": [
@@ -31684,7 +31798,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7bb210f6f426c431eaba667377bb602adf616b643aeac3104236e0cb49d1f51d"
+      "definition_sha256": "d07107bbb827348183bd76c5c54347c4763835fdd0c7b4e30816c6acb5ed897f"
     },
     {
       "acl": [
@@ -31814,7 +31928,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "03a05a5d784beb5845125cc398166ebfbb221aa9e65022e2d7ea4a54d92fb83f"
+      "definition_sha256": "07f6cd72847357e1fe8a9e4eab9a231594fb97fce4aaaa60ec98aa42cd29af81"
     },
     {
       "acl": [
@@ -32081,7 +32195,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715"
+      "definition_sha256": "53c213b94143df5391608dba2e6719aa0257301495d16fcec50c8b79b1627408"
     },
     {
       "acl": [
@@ -33091,7 +33205,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ffeae1a1a2a06e80dc5cd2cd1ac0ffe964b658c9000badc7410a1b3a8afd9fd0"
+      "definition_sha256": "1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e"
     },
     {
       "acl": [
@@ -34003,7 +34117,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8308ceb4c35e1020a221b91e8e73f026dff4fb33bd61c6f88c885e09bf7923d3"
+      "definition_sha256": "5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18"
     },
     {
       "acl": [
@@ -40631,7 +40745,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c462324e3e0cab0ca2708da9588ce7d39b8df495cd8d900fafc8674a8b75a055"
+      "definition_sha256": "25d0b9aea97597b0df94695d2d36956e9dcde80e6562ec8e7b7a9864fdc86b20"
     },
     {
       "acl": [
@@ -42076,6 +42190,20 @@
   ],
   "triggers": [
     {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_candidate_scope_registry",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON private.banking_pay_workbench_candidate_scope_registry FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_timesheet_scope_state",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON private.banking_pay_workbench_timesheet_scope_state FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
       "name": "candidate_daily_authority_transitions_immutable",
       "table": "candidate_daily_authority_transitions",
       "schema": "private",
@@ -42258,6 +42386,13 @@
       "definition": "CREATE CONSTRAINT TRIGGER trg_pay_workbench_scope_change_finalize_v1 AFTER INSERT ON banking_pay_scope_change_transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_change_finalize_trg_v1()"
     },
     {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_scope_change_transactions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON banking_pay_scope_change_transactions FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
       "name": "trg_bpay_wb_line_work_touch_updated_at_utc",
       "table": "banking_pay_workbench_candidate_line_work",
       "schema": "public",
@@ -42277,6 +42412,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_pay_workbench_scope_job_stage_v1 BEFORE INSERT OR UPDATE ON banking_pay_workbench_jobs FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_job_stage_trg_v1()"
+    },
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_jobs",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON banking_pay_workbench_jobs FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
     },
     {
       "name": "trg_banking_pay_preview_selection_carry_apply",
@@ -44610,6 +44752,13 @@
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_entitlement_head_components FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
     },
     {
+      "name": "ws_inventory_changed_v1",
+      "table": "weekly_source_entitlement_head_components",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_inventory_changed_v1 BEFORE INSERT OR DELETE OR UPDATE ON weekly_source_entitlement_head_components FOR EACH ROW EXECUTE FUNCTION private.weekly_source_inventory_changed_v1()"
+    },
+    {
       "name": "weekly_source_audit_entitlement_head",
       "table": "weekly_source_entitlement_heads",
       "schema": "public",
@@ -44664,6 +44813,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_entitlement_heads FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "ws_inventory_changed_v1",
+      "table": "weekly_source_entitlement_heads",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_inventory_changed_v1 BEFORE INSERT OR DELETE OR UPDATE ON weekly_source_entitlement_heads FOR EACH ROW EXECUTE FUNCTION private.weekly_source_inventory_changed_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",

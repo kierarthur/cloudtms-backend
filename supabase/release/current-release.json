@@ -178,7 +178,8 @@
     "supabase/verification/17092026_1500_weekly_source_row_admission_guards_v1.sql",
     "supabase/verification/17092026_0900_weekly_source_installed_writer_census_v1.sql",
     "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql",
-    "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql"
+    "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
+    "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -323,6 +324,7 @@
     "supabase/verification/17092026_1500_weekly_source_row_admission_guards_v1.sql",
     "supabase/verification/17092026_0900_weekly_source_installed_writer_census_v1.sql",
     "supabase/verification/19092026_1645_weekly_source_completed_pack_copy_v1.sql",
-    "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql"
+    "supabase/verification/20092026_2300_weekly_source_ordinary_unauthorise_family_invoice_census_v1.sql",
+    "supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql"
   ]
 }

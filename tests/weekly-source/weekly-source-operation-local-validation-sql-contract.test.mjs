@@ -47,6 +47,12 @@ test('Withdrawal includes protected-hours effects before sealing and preserves t
   assert.match(source,/scope_state_row\.candidate_id is distinct from v_candidate_id/);
 });
 
+test('The installed SB02 verifier is mandatory for both release modes',()=>{
+  const release=JSON.parse(readFileSync(new URL('../../supabase/release/current-release.json',import.meta.url),'utf8'));
+  const verifier='supabase/verification/22092026_1052_weekly_source_operation_local_validation_v1.sql';
+  for(const mode of ['verificationFiles','newVerificationFiles']) assert.equal(release[mode].filter(file=>file===verifier).length,1,mode);
+});
+
 test('Withdrawal independently validates every captured scope before success/seal',()=>{
   const body=source.slice(source.indexOf('CREATE OR REPLACE FUNCTION private.weekly_source_invalidation_contract_assert_v1'),source.indexOf('CREATE OR REPLACE FUNCTION private.weekly_source_entitlement_head_inventory_assert_v1'));
   for(const reason of ['SCOPE_ROW_MISSING_OR_DELETED','SCOPE_FOR_A_DIFFERENT_CANDIDATE','SCOPE_CARRIES_A_DIFFERENT_TOKEN','SCOPE_OUTSIDE_THE_DECLARED_SCOPE']) assert.ok(body.includes(reason),reason);
