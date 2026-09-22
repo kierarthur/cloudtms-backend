@@ -138,3 +138,13 @@ test('Dedicated NHSP contracts derive source authority without the HealthRoster 
     /true,'NHSP',false,false,false,true[\s\S]*dedicated NHSP source-authority derivation proof failed[\s\S]*dedicated NHSP settings save proof failed/i,
   );
 });
+
+test('NHSP uses one server-owned source group and clients do not choose it', async () => {
+  const sql = await read('supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql');
+  assert.match(sql, /weekly-source-settings-nhsp-group:/i);
+  assert.match(sql, /WEEKLY_SOURCE_NHSP_GROUP_ALREADY_EXISTS/);
+  assert.match(sql, /WEEKLY_SOURCE_NHSP_GROUP_CARDINALITY_INVALID/);
+  assert.match(sql, /if v_family='NHSP' then[\s\S]*WEEKLY_SOURCE_NHSP_GROUP_REQUIRED[\s\S]*select source_group\.id into strict v_group_id/i);
+  assert.match(sql, /'source_group_id',case when v_derived_family='NHSP' then v_default_group_id else null end/i);
+  assert.match(sql, /v_group_id:=nullif\(v_input->>'source_group_id',''\)::uuid/i);
+});

@@ -134,6 +134,8 @@ declare
   v_settings jsonb;
   v_capabilities jsonb;
   v_version text;
+  v_default_group_id uuid;
+  v_nhsp_group_count integer;
 begin
   if p_client_id is null or not exists(select 1 from public.clients client where client.id=p_client_id) then
     raise exception 'WEEKLY_SOURCE_SETTINGS_CLIENT_NOT_FOUND' using errcode='22023';
@@ -175,6 +177,25 @@ begin
     and v_self_bill_count=1
     and ((v_derived_authority='SOURCE_AUTHORITY' and v_derived_self_bill)
       or (v_derived_authority='TIMESHEET_AUTHORITY' and not v_derived_self_bill));
+
+  if v_derived_family='NHSP' then
+    select pg_catalog.count(*) into v_nhsp_group_count
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=p_agency_id
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and source_group.active;
+    if v_nhsp_group_count>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_GROUP_CARDINALITY_INVALID' using errcode='55000';
+    elsif v_nhsp_group_count=1 then
+      select source_group.id into strict v_default_group_id
+      from public.weekly_source_groups source_group
+      where source_group.agency_id=p_agency_id
+        and source_group.environment=v_environment
+        and source_group.source_family='NHSP'
+        and source_group.active;
+    end if;
+  end if;
 
   select pg_catalog.count(*) into v_membership_count
   from public.weekly_source_group_clients membership
@@ -267,7 +288,7 @@ begin
     );
   else
     v_settings:=pg_catalog.jsonb_build_object(
-      'source_group_id',null,
+      'source_group_id',case when v_derived_family='NHSP' then v_default_group_id else null end,
       'effective_from',v_scope_date,
       'authority_mode',v_derived_authority,
       'document_mode',v_derived_document,
@@ -286,7 +307,7 @@ begin
       'completed_pack_recipient',null
     );
     v_version:=pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
-      'UNCONFIGURED:'||p_client_id::text||':'||v_scope_date::text||':'||coalesce(v_derived_family,'')||':'||coalesce(v_derived_authority,''),
+      'UNCONFIGURED:'||p_client_id::text||':'||v_scope_date::text||':'||coalesce(v_derived_family,'')||':'||coalesce(v_derived_authority,'')||':'||coalesce(v_default_group_id::text,''),
       'UTF8'),'sha256'),'hex');
     v_capabilities:=pg_catalog.jsonb_build_object(
       'source_family',v_derived_family,
@@ -795,11 +816,24 @@ begin
   end;
   perform private._weekly_source_settings_require_admin_v1(v_actor);
   v_environment:=private._weekly_source_settings_deployment_v1(v_agency,p_request->>'environment');
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'weekly-source-settings-nhsp-group:'||v_agency::text||':'||v_environment,0
+  ));
   if (v_code is not null and v_code !~ '^[A-Z][A-Z0-9_]{1,79}$')
      or pg_catalog.char_length(v_name) not between 1 and 160
      or v_family not in ('NHSP','ROSTER') or v_weekday not between 0 and 6
      or ((v_family='NHSP')<>(v_heading is not null)) then
     raise exception 'WEEKLY_SOURCE_GROUP_SETTINGS_VALUES_INVALID' using errcode='22023';
+  end if;
+  if v_family='NHSP' and exists(
+    select 1
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=v_agency
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and (v_id is null or source_group.id<>v_id)
+  ) then
+    raise exception 'WEEKLY_SOURCE_NHSP_GROUP_ALREADY_EXISTS' using errcode='55000';
   end if;
 
   if v_id is null then
@@ -908,6 +942,7 @@ declare
   v_completed_recipient text;
   v_expense_supported boolean;
   v_prior_end date;
+  v_nhsp_group_count integer;
 begin
   perform private._weekly_source_settings_assert_request_v1(
     p_request,array[
@@ -931,7 +966,7 @@ begin
     v_client:=(p_request->>'client_id')::uuid;
     v_expected:=pg_catalog.btrim(p_request->>'expected_settings_version');
     v_effective_from:=coalesce(nullif(v_input->>'effective_from','')::date,current_date);
-    v_group_id:=(v_input->>'source_group_id')::uuid;
+    v_group_id:=nullif(v_input->>'source_group_id','')::uuid;
     v_correction:=nullif(pg_catalog.upper(pg_catalog.btrim(v_input->>'self_bill_correction_presentation')),'');
     v_source_expenses:=(v_input->>'source_fixed_expenses_enabled')::boolean;
     v_source_expense_vat:=(v_input->>'source_expense_vat_enabled')::boolean;
@@ -1001,6 +1036,24 @@ begin
      or (v_input ? 'document_mode' and v_input->>'document_mode'<>v_document)
      or (v_input ? 'self_bill_enabled' and (v_input->>'self_bill_enabled')::boolean<>v_self_bill) then
     raise exception 'WEEKLY_SOURCE_CLIENT_READ_ONLY_POLICY_MISMATCH' using errcode='22023';
+  end if;
+
+  if v_family='NHSP' then
+    select pg_catalog.count(*) into v_nhsp_group_count
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=v_agency
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and source_group.active;
+    if v_nhsp_group_count<>1 then
+      raise exception 'WEEKLY_SOURCE_NHSP_GROUP_REQUIRED' using errcode='55000';
+    end if;
+    select source_group.id into strict v_group_id
+    from public.weekly_source_groups source_group
+    where source_group.agency_id=v_agency
+      and source_group.environment=v_environment
+      and source_group.source_family='NHSP'
+      and source_group.active;
   end if;
 
   select * into v_group from public.weekly_source_groups source_group
