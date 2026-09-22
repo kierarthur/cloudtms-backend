@@ -113,6 +113,11 @@ test('finalisation follow-up is durable, plain and can only continue or explicit
   assert.doesNotMatch(source, /'label','retry approved hours update'/);
 });
 
+test('the workspace cannot offer finalisation before the authoritative cutoff', async () => {
+  const source = lower(await readFile(readSqlPath, 'utf8'));
+  assert.match(source, /v_finalise_enabled:=v_blocker_count=0[\s\S]*?statement_timestamp\(\)>=coalesce\([\s\S]*?scope\.cutoff_at_utc[\s\S]*?v_cycle\.cutoff_at_utc[\s\S]*?v_cycle\.state not in \('finalising','finalised'\)/);
+});
+
 test('rollback verifier covers unloaded paging, stale failure, mixed eligibility, exact accept, no-shifts and ACL', async () => {
   const verification = lower(await readFile(verifySqlPath, 'utf8'));
   for (const evidence of [

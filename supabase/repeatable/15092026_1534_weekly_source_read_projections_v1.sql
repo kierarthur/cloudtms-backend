@@ -1320,6 +1320,11 @@ begin
       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
     v_finalise_enabled:=v_blocker_count=0
       and (v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' or v_rate_warning_unaccepted_count=0)
+      and pg_catalog.statement_timestamp()>=coalesce(
+        (select scope.cutoff_at_utc from public.weekly_source_report_scopes scope
+          where scope.id=v_report_scope_id),
+        v_cycle.cutoff_at_utc
+      )
       and v_cycle.state not in ('FINALISING','FINALISED');
     v_finalise_payload:=pg_catalog.jsonb_build_object(
       'source_cycle_id',v_cycle.id,'authority_scope_kind',v_publication.authority_scope_kind,
