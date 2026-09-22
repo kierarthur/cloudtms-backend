@@ -144,6 +144,51 @@ test('pre-final NHSP unverifiable money remains accepted checking evidence with 
   assert.equal(adapted.normalisedRows[0].source_shift_charge_pence, null);
 });
 
+test('NHSP preview resolves the server-owned report heading before parsing', async () => {
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc: async (name, args) => {
+      calls.push([name, args.p_request ?? args]);
+      if (name === 'weekly_source_upload_context_v1') {
+        return {
+          ok: true,
+          ...context,
+          authority_scope_version: 1,
+          nhsp_report_heading_name: 'Exact Heading',
+          client_name: 'Trust One',
+        };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  });
+  const parsed = { ok: true, profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1 };
+  const result = await owner.previewUpload({
+    body: {
+      source_group_id: ID.group,
+      source_cycle_id: ID.cycle,
+      client_id: ID.client,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+      parser_options: {
+        profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+        configuredNhspReportHeadingName: 'Browser must not control this',
+      },
+    },
+    bytes: new Uint8Array([1]),
+    actor: { id: ID.actor },
+    parseWeeklySourceFile: async (_bytes, options) => {
+      assert.deepEqual(options, {
+        profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1,
+        configuredNhspReportHeadingName: 'Exact Heading',
+        expectedTrust: 'Trust One',
+      });
+      return parsed;
+    },
+  });
+  assert.equal(result.parsed, parsed);
+  assert.deepEqual(calls.map(([name]) => name), ['weekly_source_upload_context_v1']);
+  assert.equal(calls[0][1].operation, 'DISCOVER_SCOPE');
+});
+
 test('acceptUpload stages, seals and publishes a complete unresolved census without browser economics', async () => {
   const calls = [];
   let appliedRows;

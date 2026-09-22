@@ -78,6 +78,35 @@ test('Office notification query refuses unknown fields and cannot accept a brows
   assert.equal((await response.json()).error_code, 'WEEKLY_SOURCE_NOTIFICATIONS_QUERY_INVALID');
 });
 
+test('upload preview delegates parsing to the server-owned context resolver', async () => {
+  const calls = [];
+  const response = await dispatchWeeklySourceRequest(
+    jsonRequest('/api/weekly-source/v1/uploads/preview', {
+      file_key: 'weekly-source/test.xlsx',
+      source_group_id: '82000000-0000-4000-8000-000000000001',
+      source_cycle_id: '82000000-0000-4000-8000-000000000002',
+      profile_id: 'NHSP_FINAL_BACKING_V1',
+      parser_options: { profileId: 'NHSP_FINAL_BACKING_V1' },
+    }),
+    {},
+    {},
+    officeDependencies({
+      loadFileBytes: async () => new Uint8Array([1, 2, 3]),
+      previewUpload: async (input) => {
+        calls.push(input);
+        return { parsed: { ok: true, profileId: 'NHSP_FINAL_BACKING_V1' } };
+      },
+      recordUploadPreview: async () => assert.fail('legacy preview recorder must not run'),
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].actor.id, ACTOR_ID);
+  assert.equal(calls[0].body.file_key, 'weekly-source/test.xlsx');
+  assert.equal(calls[0].bytes.byteLength, 3);
+  assert.equal((await response.json()).preview.profileId, 'NHSP_FINAL_BACKING_V1');
+});
+
 test('timesheet presentation accepts only a canonical UUID and injects the Office actor', async () => {
   const calls = [];
   const response = await dispatchWeeklySourceRequest(
@@ -349,6 +378,7 @@ test('the Worker mounts the single route before legacy import review and outside
   assert.equal(worker.slice(mount, legacy).includes('recoverFinalisedPay:'), true);
   assert.equal(worker.slice(mount, legacy).includes('orchestrateWeeklySourceFinalisation'), true);
   assert.equal(worker.slice(mount, legacy).includes('recoverWeeklySourceFinalisationPayProjection'), true);
+  assert.equal(worker.slice(mount, legacy).includes('previewUpload:'), true);
   assert.equal(worker.slice(mount, legacy).includes('recordUploadPreview:'), true);
   assert.equal(worker.slice(mount, legacy).includes('acceptUpload:'), true);
   assert.match(worker, /createWeeklySourceUploadPublicationOwner\s*\(/);

@@ -618,6 +618,43 @@ async function stageParsed(dependencies, body, parsed, context, actorUserId) {
 
 export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
   return Object.freeze({
+    async previewUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {
+      const actorUserId = requiredUuid(actor?.id, 'Office user');
+      const context = validateContext(await rpc(
+        dependencies,
+        'weekly_source_upload_context_v1',
+        scopeRequest(body, actorUserId),
+      ));
+      requireSelectedClient(context);
+      if (typeof parseWeeklySourceFile !== 'function') {
+        fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);
+      }
+      const parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
+      if (parsed?.ok !== true) {
+        const reason = upper(parsed?.fatalErrors?.[0]?.code) || 'WEEKLY_SOURCE_PARSE_REJECTED';
+        await rpc(dependencies, 'weekly_source_upload_attempt_record_atomic_v1', {
+          actor_user_id: actorUserId,
+          environment: context.environment,
+          agency_id: context.agency_id,
+          source_group_id: context.source_group_id,
+          source_cycle_id: context.source_cycle_id,
+          report_scope_id: context.report_scope_id,
+          client_id: context.client_id,
+          purpose: body.purpose ?? 'ORDINARY',
+          correction_session_id: body.correction_session_id ?? null,
+          original_filename: text(body.original_filename || body.filename || body.file_key).slice(0, 255),
+          byte_count: parsed?.fileFacts?.byteLength,
+          content_sha256: parsed?.sourceFileSha256,
+          parser_version: parsed?.parserVersion,
+          profile_version: parsed?.profileId ? `${parsed.profileId}:${parsed.profileVersion}` : null,
+          normaliser_version: WEEKLY_SOURCE_UPLOAD_PUBLICATION_OWNER_VERSION,
+          result: 'REJECTED',
+          reason_code: reason,
+        });
+      }
+      return { parsed, context };
+    },
+
     async recordUploadPreview({ body = {}, parsed, actor }) {
       const actorUserId = requiredUuid(actor?.id, 'Office user');
       const context = validateContext(await rpc(

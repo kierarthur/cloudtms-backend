@@ -727,9 +727,17 @@ async function loadUploadBytes(body, env, dependencies) {
 async function handleUploadPreview(req, env, dependencies, user) {
   const body = await readJsonBody(req, 64 * 1024);
   const { fileKey, bytes } = await loadUploadBytes(body, env, dependencies);
-  const parserOptions = plainObject(body.parser_options ?? {}, 'WEEKLY_SOURCE_PARSER_OPTIONS_INVALID', 'Source options');
-  const parsed = await parseWeeklySourceFile(bytes, parserOptions);
-  if (typeof dependencies.recordUploadPreview === 'function') {
+  let parsed;
+  if (typeof dependencies.previewUpload === 'function') {
+    ({ parsed } = await dependencies.previewUpload({
+      body, bytes, actor: user, env, fileKey, parseWeeklySourceFile,
+    }));
+  } else {
+    const parserOptions = plainObject(body.parser_options ?? {}, 'WEEKLY_SOURCE_PARSER_OPTIONS_INVALID', 'Source options');
+    parsed = await parseWeeklySourceFile(bytes, parserOptions);
+  }
+  if (typeof dependencies.previewUpload !== 'function'
+      && typeof dependencies.recordUploadPreview === 'function') {
     await dependencies.recordUploadPreview({ body, parsed, actor: user, env, fileKey });
   }
   return jsonResponse(200, {

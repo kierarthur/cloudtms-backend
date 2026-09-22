@@ -199613,6 +199613,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       const weeklySourceResponse = await dispatchWeeklySourceRequest(req, env, ctx, {
         requireUser: (runtimeEnv, request, roles) => requireUser(runtimeEnv, request, roles),
         rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+        previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
         acceptUpload: weeklySourceUploadOwner.acceptUpload,
         // WP-37 (WP-31 hostile review of WP-04, finding F2). The Mode A
