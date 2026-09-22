@@ -77,7 +77,13 @@ begin
   ) values(v_manual,v_contract,'FINAL-MANUAL','2026-08-08','WEEKLY','MANUAL','HOURS','RECEIVED');
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
-  ) values(v_manual_week,v_contract,'2026-08-08','OPEN','MANUAL',v_manual);
+  ) values(v_manual_week,v_contract,'2026-08-08','OPEN','ELECTRONIC',null);
+  -- Mirror the real route-rotation sequence: the settings authority first
+  -- snapshots the effective ELECTRONIC policy, then the atomic route owner
+  -- links the already-created MANUAL row without changing that frozen policy.
+  update public.contract_weeks
+  set submission_mode_snapshot='MANUAL',timesheet_id=v_manual
+  where id=v_manual_week;
   insert into public.timesheets_financials(
     timesheet_id,candidate_id,client_id,basis,processing_status,total_hours
   ) values(v_manual,v_candidate,v_client,'CONTRACT_WEEKLY','UNPROCESSED',8);
