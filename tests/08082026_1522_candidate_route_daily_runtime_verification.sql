@@ -222,6 +222,7 @@ declare
   v_client uuid:='95200000-0000-0000-0000-000000000001';
   v_candidate uuid:='95200000-0000-0000-0000-000000000002';
   v_contract uuid:='95200000-0000-0000-0000-000000000003';
+  v_manual_contract uuid:='95200000-0000-0000-0000-000000000024';
   v_account uuid:='95200000-0000-0000-0000-000000000004';
   v_session uuid:='95200000-0000-0000-0000-000000000005';
   v_actor uuid:='95200000-0000-0000-0000-000000000006';
@@ -246,20 +247,21 @@ begin
   insert into public.clients(id,name) values(v_client,'Runtime Client');
   insert into public.candidates(id,email,active,key_norm)
   values(v_candidate,'route-daily@example.test',true,null);
-  insert into public.client_settings(
-    id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-    candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone,
-    candidate_expense_invoice_email
-  ) values(
-    gen_random_uuid(),v_client,'2026-01-01','ELECTRONIC',6,true,true,
-    'expenses@example.test'
-  );
+  update public.client_settings set
+    effective_from='2026-01-01',
+    default_submission_mode='ELECTRONIC',
+    week_ending_weekday=6,
+    candidate_expenses_require_separate_timesheet=true,
+    allow_daily_manager_authorise_on_phone=true,
+    candidate_expense_invoice_email='expenses@example.test'
+  where client_id=v_client;
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
-    default_submission_mode,weekly_timesheet_source,role,band
+    default_submission_mode,weekly_timesheet_source,role,band,overrideclientsettings
   ) values
-    (v_contract,v_candidate,v_client,'2026-01-01','2026-12-31',6,'ELECTRONIC','NONE','NURSE','Band 5'),
-    (v_import_contract,v_candidate,v_client,'2026-01-01','2026-12-31',6,'ELECTRONIC','NHSP','NURSE','Band 5');
+    (v_contract,v_candidate,v_client,'2026-01-01','2026-12-31',6,'ELECTRONIC','NONE','NURSE','Band 5',false),
+    (v_manual_contract,v_candidate,v_client,'2026-01-01','2026-12-31',6,'MANUAL','NONE','NURSE','Band 5',true),
+    (v_import_contract,v_candidate,v_client,'2026-01-01','2026-12-31',6,'ELECTRONIC','NHSP','NURSE','Band 5',false);
   insert into public.timesheets(
     timesheet_id,contract_id,week_ending_date,line_type,submission_mode,sheet_scope,
     r2_nurse_key,r2_auth_key,qr_status,qr_token,scheduled_start_iso,scheduled_end_iso,
@@ -267,8 +269,8 @@ begin
     job_title_norm,band,booking_id,candidate_submission_route_intent
   ) values
     (v_electronic_ts,v_contract,'2026-08-08','HOURS','ELECTRONIC','WEEKLY','candidate/e','manager/e',null,null,null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
-    (v_manual_ts,v_contract,'2026-08-01','HOURS','MANUAL','WEEKLY',null,null,null,null,null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
-    (v_qr_ts,v_contract,'2026-07-25','HOURS','MANUAL','WEEKLY',null,null,'PENDING','fixture-qr',null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
+    (v_manual_ts,v_manual_contract,'2026-08-01','HOURS','MANUAL','WEEKLY',null,null,null,null,null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
+    (v_qr_ts,v_manual_contract,'2026-07-25','HOURS','MANUAL','WEEKLY',null,null,'PENDING','fixture-qr',null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
     (v_import_ts,v_import_contract,'2026-08-08','HOURS','ELECTRONIC','WEEKLY','candidate/i','manager/i',null,null,null,null,null,null,null,null,null,null,'NURSE','Band 5',null,null),
     (v_daily_ts,v_contract,'2026-08-08','HOURS','MANUAL','DAILY',null,null,null,null,
       '2026-08-08 08:00:00+01','2026-08-08 18:00:00+01',
@@ -279,8 +281,8 @@ begin
     id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id
   ) values
     (v_electronic_week,v_contract,'2026-08-08',0,'OPEN','ELECTRONIC',v_electronic_ts),
-    (v_manual_week,v_contract,'2026-08-01',0,'OPEN','MANUAL',v_manual_ts),
-    (v_qr_week,v_contract,'2026-07-25',0,'OPEN','MANUAL',v_qr_ts),
+    (v_manual_week,v_manual_contract,'2026-08-01',0,'OPEN','MANUAL',v_manual_ts),
+    (v_qr_week,v_manual_contract,'2026-07-25',0,'OPEN','MANUAL',v_qr_ts),
     (v_import_week,v_import_contract,'2026-08-08',0,'OPEN','ELECTRONIC',v_import_ts);
   insert into public.timesheets_financials(
     timesheet_id,candidate_id,client_id,total_hours,processing_status,worked_start_iso,worked_end_iso,
@@ -310,7 +312,13 @@ begin
      or private._candidate_route_family_v1(v_manual_ts,v_manual_week)->>'route_family'<>'MANUAL_NON_QR'
      or private._candidate_route_family_v1(v_qr_ts,v_qr_week)->>'route_family'<>'QR'
      or private._candidate_route_family_v1(v_import_ts,v_import_week)->>'route_family'<>'IMPORT_AUTHORITATIVE' then
-    raise exception 'candidate route-family resolution failed';
+    raise exception 'candidate route-family resolution failed: electronic=%, manual=%, qr=%, import=%, manual_timesheet_mode=%, manual_week_mode=%',
+      private._candidate_route_family_v1(v_electronic_ts,v_electronic_week)->>'route_family',
+      private._candidate_route_family_v1(v_manual_ts,v_manual_week)->>'route_family',
+      private._candidate_route_family_v1(v_qr_ts,v_qr_week)->>'route_family',
+      private._candidate_route_family_v1(v_import_ts,v_import_week)->>'route_family',
+      (select submission_mode::text from public.timesheets where timesheet_id=v_manual_ts),
+      (select submission_mode_snapshot::text from public.contract_weeks where id=v_manual_week);
   end if;
   begin
     perform public.candidate_no_work_atomic_v1(
@@ -359,7 +367,7 @@ begin
   v_result:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST','95200000-0000-0000-0000-000000000022','CREATE',1,
     jsonb_build_object('workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','PAPER',
-      'contract_id',v_contract,'contract_week_id',v_qr_week,
+      'contract_id',v_manual_contract,'contract_week_id',v_qr_week,
       'target_timesheet_id',v_qr_ts,'week_ending_date','2026-07-25'),
     'route-daily:qr-paper',v_now
   );
