@@ -145,7 +145,8 @@ begin
            when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
          end),
          pg_catalog.count(distinct case
-           when coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
            else 'TIMESHEET_AUTHORITY'
          end),
          pg_catalog.count(distinct contract.self_bill),
@@ -154,7 +155,8 @@ begin
            when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
          end),
          pg_catalog.min(case
-           when coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
            else 'TIMESHEET_AUTHORITY'
          end),
          pg_catalog.bool_and(contract.self_bill)
@@ -967,7 +969,8 @@ begin
            when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
          end),
          pg_catalog.count(distinct case
-           when coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
            else 'TIMESHEET_AUTHORITY'
          end),
          pg_catalog.count(distinct contract.self_bill),
@@ -976,7 +979,8 @@ begin
            when contract.weekly_timesheet_source::text='HEALTHROSTER' then 'ROSTER'
          end),
          pg_catalog.min(case
-           when coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
+           when contract.weekly_timesheet_source::text='NHSP'
+             or coalesce(contract.no_timesheet_required,false) then 'SOURCE_AUTHORITY'
            else 'TIMESHEET_AUTHORITY'
          end),
          pg_catalog.bool_and(contract.self_bill)

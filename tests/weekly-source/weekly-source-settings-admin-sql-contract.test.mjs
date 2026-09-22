@@ -124,3 +124,17 @@ test('Settings verifier retains the explicit source and Timesheet contract autho
     /self_bill,weekly_timesheet_source,no_timesheet_required,requires_hr,autoprocess_hr,\s*overrideclientsettings[\s\S]*true,'HEALTHROSTER',true,true,true,true[\s\S]*false,'HEALTHROSTER',false,true,false,true/i,
   );
 });
+
+test('Dedicated NHSP contracts derive source authority without the HealthRoster no-timesheet flag', async () => {
+  const sql = await read('supabase/repeatable/15092026_1534_weekly_source_settings_admin_v1.sql');
+  const authorityDerivations = sql.match(
+    /when contract\.weekly_timesheet_source::text='NHSP'\s+or coalesce\(contract\.no_timesheet_required,false\) then 'SOURCE_AUTHORITY'/gi,
+  ) ?? [];
+  assert.equal(authorityDerivations.length, 4);
+
+  const verification = await read('supabase/verification/15092026_1534_weekly_source_settings_admin_v1.sql');
+  assert.match(
+    verification,
+    /true,'NHSP',false,false,false,true[\s\S]*dedicated NHSP source-authority derivation proof failed[\s\S]*dedicated NHSP settings save proof failed/i,
+  );
+});

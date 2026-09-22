@@ -8,9 +8,12 @@ declare
   v_agency uuid:='9a100000-0000-4000-8000-000000000002';
   v_source_client uuid:='9a100000-0000-4000-8000-000000000011';
   v_timesheet_client uuid:='9a100000-0000-4000-8000-000000000012';
+  v_nhsp_client uuid:='9a100000-0000-4000-8000-000000000013';
   v_source_contract uuid:='9a100000-0000-4000-8000-000000000021';
   v_timesheet_contract uuid:='9a100000-0000-4000-8000-000000000022';
+  v_nhsp_contract uuid:='9a100000-0000-4000-8000-000000000023';
   v_group uuid;
+  v_nhsp_group uuid;
   v_response jsonb;
   v_version text;
   v_global_version bigint;
@@ -20,7 +23,8 @@ begin
   values (v_actor,'weekly-settings-proof@example.invalid','admin','not-a-real-password','Settings proof',true);
   insert into public.clients(id,name,ts_queries_email) values
     (v_source_client,'Settings source authority','manager-default@example.invalid'),
-    (v_timesheet_client,'Settings Timesheet authority','existing-manager-route@example.invalid');
+    (v_timesheet_client,'Settings Timesheet authority','existing-manager-route@example.invalid'),
+    (v_nhsp_client,'Settings dedicated NHSP authority','nhsp-manager@example.invalid');
   insert into public.contracts(
     id,client_id,start_date,end_date,pay_method_snapshot,rates_json,
     self_bill,weekly_timesheet_source,no_timesheet_required,requires_hr,autoprocess_hr,
@@ -29,7 +33,9 @@ begin
     (v_source_contract,v_source_client,current_date-7,current_date+365,'PAYE','{}',
      true,'HEALTHROSTER',true,true,true,true),
     (v_timesheet_contract,v_timesheet_client,current_date-7,current_date+365,'PAYE','{}',
-     false,'HEALTHROSTER',false,true,false,true);
+     false,'HEALTHROSTER',false,true,false,true),
+    (v_nhsp_contract,v_nhsp_client,current_date-7,current_date+365,'PAYE','{}',
+     true,'NHSP',false,false,false,true);
 
   v_response:=public.weekly_source_source_group_save_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
@@ -45,6 +51,23 @@ begin
       and source_group.agency_id=v_agency and source_group.environment='TEST'
   ) then
     raise exception 'source group server scope/default code proof failed';
+  end if;
+
+  v_response:=public.weekly_source_source_group_save_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
+    'source_group',pg_catalog.jsonb_build_object(
+      'display_name','Settings proof NHSP','source_family','NHSP',
+      'cutoff_weekday',3,'cutoff_local_time','15:00',
+      'nhsp_report_heading_name','Settings proof agency','active',true
+    )
+  ));
+  v_nhsp_group:=(v_response->>'saved_source_group_id')::uuid;
+  if v_nhsp_group is null or not exists(
+    select 1 from public.weekly_source_groups source_group
+    where source_group.id=v_nhsp_group and source_group.source_family='NHSP'
+      and source_group.agency_id=v_agency and source_group.environment='TEST'
+  ) then
+    raise exception 'NHSP source group proof failed';
   end if;
 
   v_response:=public.weekly_source_global_settings_get_v1(pg_catalog.jsonb_build_object(
@@ -100,6 +123,7 @@ begin
      or (v_response->>'configured')::boolean is not true then
     raise exception 'Client settings/default manager recipient proof failed';
   end if;
+
   v_version:=v_response->>'settings_version';
   v_response:=public.weekly_source_client_settings_save_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
@@ -132,6 +156,38 @@ begin
     where cycle.source_group_id=v_group and cycle.projection_state<>'NONE'
   ) or v_response->'settings'->>'duration_break_tie_rule' is not null then
     raise exception 'open preview staleness/whole-shift child clearing proof failed';
+  end if;
+
+  v_response:=public.weekly_source_client_settings_get_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
+    'client_id',v_nhsp_client,'effective_date',current_date
+  ));
+  if (v_response->>'eligible')::boolean is not true
+     or v_response->'settings'->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or v_response->'settings'->>'document_mode'<>'CHECK_ONLY'
+     or (v_response->'settings'->>'self_bill_enabled')::boolean is not true then
+    raise exception 'dedicated NHSP source-authority derivation proof failed';
+  end if;
+  v_version:=v_response->>'settings_version';
+  v_response:=public.weekly_source_client_settings_save_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
+    'client_id',v_nhsp_client,'expected_settings_version',v_version,
+    'settings',pg_catalog.jsonb_build_object(
+      'source_group_id',v_nhsp_group,'effective_from',current_date,
+      'authority_mode','SOURCE_AUTHORITY','document_mode','CHECK_ONLY','self_bill_enabled',true,
+      'self_bill_correction_presentation',null,
+      'source_fixed_expenses_enabled',false,'source_expense_vat_enabled',false,
+      'weekly_rate_classification_method','SPLIT_RATE_WINDOWS',
+      'duration_break_tie_rule','EARLIEST_LONGEST_PORTION',
+      'candidate_queries_enabled',true,'manager_queries_enabled',true,
+      'manager_query_recipient',null,'completed_pack_copy_enabled',false,
+      'completed_pack_recipient',null
+    )
+  ));
+  if (v_response->>'configured')::boolean is not true
+     or v_response->'settings'->>'authority_mode'<>'SOURCE_AUTHORITY'
+     or v_response->'settings'->>'manager_query_recipient'<>'nhsp-manager@example.invalid' then
+    raise exception 'dedicated NHSP settings save proof failed';
   end if;
 
   v_response:=public.weekly_source_client_settings_get_v1(pg_catalog.jsonb_build_object(
