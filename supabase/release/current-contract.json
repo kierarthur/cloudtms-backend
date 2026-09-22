@@ -9268,6 +9268,25 @@
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "_weekly_source_settings_ensure_open_cycle_v1(p_source_group_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5bc97ce24ab6800fe753af8cb68054778c5c5c6fff15ae59d4836a4e1e98806e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_weekly_source_settings_group_list_v1(p_agency_id uuid, p_environment text, p_source_family text, p_active_only boolean)",
       "parallel": "u",
       "volatility": "s",
@@ -14112,7 +14131,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d394db1295bc7fdbab118d03632cd937794c240711869ffc424394502f214714"
+      "definition_sha256": "94680b1246d8fcca80e6bf1f6149d802bd363e33fb25f6ff36635c0bad4ca8ed"
     },
     {
       "acl": [
@@ -31684,7 +31703,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7bb210f6f426c431eaba667377bb602adf616b643aeac3104236e0cb49d1f51d"
+      "definition_sha256": "d07107bbb827348183bd76c5c54347c4763835fdd0c7b4e30816c6acb5ed897f"
     },
     {
       "acl": [
@@ -31814,7 +31833,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "03a05a5d784beb5845125cc398166ebfbb221aa9e65022e2d7ea4a54d92fb83f"
+      "definition_sha256": "07f6cd72847357e1fe8a9e4eab9a231594fb97fce4aaaa60ec98aa42cd29af81"
     },
     {
       "acl": [
@@ -32081,7 +32100,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715"
+      "definition_sha256": "53c213b94143df5391608dba2e6719aa0257301495d16fcec50c8b79b1627408"
     },
     {
       "acl": [
@@ -33091,7 +33110,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ffeae1a1a2a06e80dc5cd2cd1ac0ffe964b658c9000badc7410a1b3a8afd9fd0"
+      "definition_sha256": "1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e"
     },
     {
       "acl": [
@@ -34003,7 +34022,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8308ceb4c35e1020a221b91e8e73f026dff4fb33bd61c6f88c885e09bf7923d3"
+      "definition_sha256": "5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18"
     },
     {
       "acl": [
@@ -41303,7 +41322,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "00a8c609cb7642f315b75c1ef69968beb7d441230850d376f70723625e23f16b"
+      "definition_sha256": "4c6d5fe9fdaf4231e5282ceeecdf3082a842a66714cb53d98307485261027046"
     },
     {
       "acl": [
@@ -41423,7 +41442,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "d23fb839fe4b51d169cdbc11200e7e01adaf5d7921963cf477c74426fdac4577"
+      "definition_sha256": "3cefb9041dda6ebbf899b1f2973651c4b65b4635d91886597e1b4a8505d32898"
     },
     {
       "acl": [
@@ -41759,7 +41778,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0b56ffd02b284ef7f83b63a011f66aa1c28c8a5b29614f38e1a2fe58db268f5a"
+      "definition_sha256": "ac678c2ad00d13de583ba347935af699e65c2f5fbf65869b987b885eab754a9d"
     },
     {
       "acl": [

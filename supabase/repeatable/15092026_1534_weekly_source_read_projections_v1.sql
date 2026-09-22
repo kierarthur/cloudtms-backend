@@ -558,6 +558,9 @@ declare
   v_document_mode text:='CHECK_ONLY';
   v_import_journey jsonb:='{}'::jsonb;
   v_import_attention_rows jsonb:='[]'::jsonb;
+  v_context_client_name text;
+  v_context_cutoff timestamptz;
+  v_nhsp_report_number text;
 begin
   perform private.weekly_source_query_require_service_v1();
   if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
@@ -603,7 +606,7 @@ begin
   end if;
   v_sort_key:=coalesce(nullif(pg_catalog.lower(pg_catalog.btrim(p_request->>'sort_key')),''),
     case v_tab when 'imports' then 'uploaded' when 'history' then 'when' else 'candidate' end);
-  if (v_tab='imports' and v_sort_key not in ('file','uploaded','rows','coverage','status','final_source'))
+  if (v_tab='imports' and v_sort_key not in ('file','uploaded','rows','coverage','report','cutoff','status','final_source'))
      or (v_tab='queries' and v_sort_key not in ('candidate','client','issues','candidate_asked','manager_informed','status','age'))
      or (v_tab='finalise' and v_sort_key not in ('candidate','day_date','client','status'))
      or (v_tab='history' and v_sort_key not in ('when','source','event','by','detail')) then
@@ -968,6 +971,10 @@ begin
         'coverage',case when upload.confirmed_coverage_start_local_date is null then 'Not confirmed'
           else to_char(upload.confirmed_coverage_start_local_date,'DD Mon YYYY')||' to '
             ||to_char(upload.confirmed_coverage_end_local_date,'DD Mon YYYY') end,
+        'report',case when v_group.source_family='NHSP' then coalesce(
+          nullif(pg_catalog.btrim(upload.file_metadata_json->>'nhsp_report_number'),''),'Not confirmed') else null end,
+        'cutoff',case when v_group.source_family='NHSP' then coalesce(
+          to_char(scope.cutoff_at_utc at time zone 'Europe/London','FMDD Mon YYYY · HH24:MI'),'Not confirmed') else null end,
         'status',pg_catalog.jsonb_build_object('text',case upload.state
           when 'CURRENT' then 'Current' when 'SUPERSEDED' then 'Superseded'
           when 'SEALED' then 'Ready' else initcap(pg_catalog.replace(upload.state,'_',' ')) end,
@@ -984,17 +991,26 @@ begin
         case when v_sort_key='file' and v_sort_direction='desc' then upload.original_filename end desc,
         case when v_sort_key='rows' and v_sort_direction='asc' then upload.accepted_count end asc,
         case when v_sort_key='rows' and v_sort_direction='desc' then upload.accepted_count end desc,
+        case when v_sort_key='report' and v_sort_direction='asc' then upload.file_metadata_json->>'nhsp_report_number' end asc nulls last,
+        case when v_sort_key='report' and v_sort_direction='desc' then upload.file_metadata_json->>'nhsp_report_number' end desc nulls last,
+        case when v_sort_key='cutoff' and v_sort_direction='asc' then scope.cutoff_at_utc end asc nulls last,
+        case when v_sort_key='cutoff' and v_sort_direction='desc' then scope.cutoff_at_utc end desc nulls last,
         case when v_sort_direction='asc' then upload.uploaded_at_utc end asc,
         case when v_sort_direction='desc' then upload.uploaded_at_utc end desc,
         upload.id
       ) position
       from public.weekly_source_uploads upload
+      left join public.weekly_source_report_scopes scope on scope.id=upload.report_scope_id
       where upload.source_cycle_id=v_cycle.id
       order by
         case when v_sort_key='file' and v_sort_direction='asc' then upload.original_filename end asc,
         case when v_sort_key='file' and v_sort_direction='desc' then upload.original_filename end desc,
         case when v_sort_key='rows' and v_sort_direction='asc' then upload.accepted_count end asc,
         case when v_sort_key='rows' and v_sort_direction='desc' then upload.accepted_count end desc,
+        case when v_sort_key='report' and v_sort_direction='asc' then upload.file_metadata_json->>'nhsp_report_number' end asc nulls last,
+        case when v_sort_key='report' and v_sort_direction='desc' then upload.file_metadata_json->>'nhsp_report_number' end desc nulls last,
+        case when v_sort_key='cutoff' and v_sort_direction='asc' then scope.cutoff_at_utc end asc nulls last,
+        case when v_sort_key='cutoff' and v_sort_direction='desc' then scope.cutoff_at_utc end desc nulls last,
         case when v_sort_direction='asc' then upload.uploaded_at_utc end asc,
         case when v_sort_direction='desc' then upload.uploaded_at_utc end desc,
         upload.id
@@ -1515,25 +1531,51 @@ begin
       pg_catalog.jsonb_build_object('value','LAST_13_PAY_CYCLES','label','Last 13 pay cycles')
     ));
 
-  select pg_catalog.jsonb_build_array(
-    pg_catalog.jsonb_build_object('key','journey','label','Journey',
-      'value',case when v_authority_mode='TIMESHEET_AUTHORITY'
-        then 'Signed Timesheet decides hours' else 'Client system decides hours' end,
-      'options','[]'::jsonb),
-    pg_catalog.jsonb_build_object('key','source_group','label','Source','value',v_group.id,
-      'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label',item.display_name)
-        order by private.weekly_source_query_ascii_fold_v1(item.display_name) collate "C",item.id)
-        from public.weekly_source_groups item where item.active),'[]'::jsonb)),
-    pg_catalog.jsonb_build_object('key','cycle','label','Week','value',v_cycle.id,
-      'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'))
-        order by item.finalisation_week_ending desc,item.id)
-        from public.weekly_source_cycles item where item.source_group_id=v_group.id),'[]'::jsonb)),
-    pg_catalog.jsonb_build_object('key','client','label','Client','value',coalesce(v_client_id::text,''),
-      'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',client.id,'label',client.name)
-        order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)
-        from public.weekly_source_group_clients membership join public.clients client on client.id=membership.client_id
-        where membership.source_group_id=v_group.id and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)),'[]'::jsonb))
-  ) into v_controls;
+  if v_client_id is not null then
+    select client.name into v_context_client_name from public.clients client where client.id=v_client_id;
+  end if;
+  v_context_cutoff:=v_cycle.cutoff_at_utc;
+  if v_report_scope_id is not null then
+    select scope.cutoff_at_utc into v_context_cutoff
+    from public.weekly_source_report_scopes scope where scope.id=v_report_scope_id;
+  end if;
+  if v_group.source_family='NHSP' then
+    v_nhsp_report_number:=nullif(pg_catalog.btrim(v_upload.file_metadata_json->>'nhsp_report_number'),'');
+    select pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('key','source_group','label','Source','value',v_group.id,
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'value',item.id,'label',case when item.source_family='NHSP' then 'NHSP backing report' else item.display_name end)
+          order by private.weekly_source_query_ascii_fold_v1(item.display_name) collate "C",item.id)
+          from public.weekly_source_groups item where item.active),'[]'::jsonb)),
+      pg_catalog.jsonb_build_object('key','client','label','Trust','value',coalesce(v_client_id::text,''),
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',client.id,'label',client.name)
+          order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)
+          from public.weekly_source_group_clients membership join public.clients client on client.id=membership.client_id
+          where membership.source_group_id=v_group.id and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)),'[]'::jsonb)),
+      pg_catalog.jsonb_build_object('key','report','label','Report number','value',coalesce(v_nhsp_report_number,'Not confirmed'),'options','[]'::jsonb),
+      pg_catalog.jsonb_build_object('key','cutoff','label','Cutoff','value',to_char(v_context_cutoff at time zone 'Europe/London','DD/MM/YYYY HH24:MI'),'options','[]'::jsonb)
+    ) into v_controls;
+  else
+    select pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('key','journey','label','Journey',
+        'value',case when v_authority_mode='TIMESHEET_AUTHORITY'
+          then 'Signed Timesheet decides hours' else 'Client system decides hours' end,
+        'options','[]'::jsonb),
+      pg_catalog.jsonb_build_object('key','source_group','label','Source','value',v_group.id,
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label',item.display_name)
+          order by private.weekly_source_query_ascii_fold_v1(item.display_name) collate "C",item.id)
+          from public.weekly_source_groups item where item.active),'[]'::jsonb)),
+      pg_catalog.jsonb_build_object('key','cycle','label','Week','value',v_cycle.id,
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'))
+          order by item.finalisation_week_ending desc,item.id)
+          from public.weekly_source_cycles item where item.source_group_id=v_group.id),'[]'::jsonb)),
+      pg_catalog.jsonb_build_object('key','client','label','Client','value',coalesce(v_client_id::text,''),
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',client.id,'label',client.name)
+          order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",client.id)
+          from public.weekly_source_group_clients membership join public.clients client on client.id=membership.client_id
+          where membership.source_group_id=v_group.id and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)),'[]'::jsonb))
+    ) into v_controls;
+  end if;
 
   v_cycle_label:='Week ending '||to_char(v_cycle.finalisation_week_ending,'FMDD Mon YYYY');
   v_cycle_state_label:=case v_cycle.state when 'OPEN' then 'Before cutoff'
@@ -1546,9 +1588,11 @@ begin
     'contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_workspace_version,
     'profile',pg_catalog.jsonb_build_object(
       'id',coalesce(v_profile.profile_code,case when v_group.source_family='NHSP' then 'NHSP_FINAL_BACKING_V1' else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end),
-      'label',v_group.display_name,
+      'label',case when v_group.source_family='NHSP' then 'NHSP backing report' else v_group.display_name end,
       'finalise_label',case when v_group.source_family='NHSP' then 'Finalise report' else 'Finalise source' end),
-    'context',pg_catalog.jsonb_build_object('subtitle',v_cycle_label,'cycle_state',v_cycle_state_label,
+    'context',pg_catalog.jsonb_build_object('subtitle',case when v_group.source_family='NHSP' then
+        'NHSP backing report'||case when v_context_client_name is null then '' else ' · '||v_context_client_name end
+      else v_cycle_label end,'cycle_state',v_cycle_state_label,
       'cycle_tone',v_cycle_state_tone,'controls',v_controls),
     'selected',pg_catalog.jsonb_build_object('source_group_id',v_group.id,'source_cycle_id',v_cycle.id,
       'client_id',v_client_id,'report_scope_id',v_report_scope_id,'projection_publication_id',v_publication_id),
@@ -4642,6 +4686,11 @@ begin
   end if;
   if not found then
     raise exception 'WEEKLY_SOURCE_NO_SHIFTS_CYCLE_STALE' using errcode='40001';
+  end if;
+  if v_all_complete then
+    perform private._weekly_source_settings_ensure_open_cycle_v1(
+      v_group_id,v_now
+    );
   end if;
 
   return pg_catalog.jsonb_build_object(

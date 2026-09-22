@@ -505,6 +505,14 @@ begin
     'source_cycle_id','d6000000-0000-4000-8000-000000000002'
   ));
   perform pg_temp.assert_true(
+    v_no_shifts_workspace#>>'{profile,label}'='NHSP backing report'
+    and v_no_shifts_workspace#>>'{context,controls,0,label}'='Source'
+    and v_no_shifts_workspace#>>'{context,controls,1,label}'='Trust'
+    and v_no_shifts_workspace#>>'{context,controls,2,label}'='Report number'
+    and v_no_shifts_workspace#>>'{context,controls,3,label}'='Cutoff'
+    and pg_catalog.jsonb_array_length(v_no_shifts_workspace#>'{context,controls}')=4,
+    'NHSP workspace did not return the locked Source, Trust, Report number and Cutoff context');
+  perform pg_temp.assert_true(
     v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,command}'='NO_SHIFTS_TO_IMPORT'
     and nullif(v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,context,trust}','') is not null
     and nullif(v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,context,cutoff}','') is not null
@@ -546,7 +554,16 @@ begin
   ));
   perform pg_temp.assert_true(v_no_shifts->>'cycle_state'='FINALISED'
     and (select state from public.weekly_source_cycles
-      where id='d6000000-0000-4000-8000-000000000002')='FINALISED',
+      where id='d6000000-0000-4000-8000-000000000002')='FINALISED'
+    and exists(
+      select 1 from public.weekly_source_cycles next_cycle
+      where next_cycle.source_group_id='d5000000-0000-4000-8000-000000000002'
+        and next_cycle.finalisation_week_ending=
+          (select finalisation_week_ending+7 from public.weekly_source_cycles
+           where id='d6000000-0000-4000-8000-000000000002')
+        and next_cycle.state='OPEN' and next_cycle.version=0
+        and next_cycle.projection_state='NONE'
+    ),
     'all-client completion did not finalise the group cycle');
   v_no_shifts:=public.weekly_source_no_shifts_attest_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','d1000000-0000-4000-8000-000000000001',

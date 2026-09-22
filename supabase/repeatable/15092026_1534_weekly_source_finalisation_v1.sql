@@ -2681,6 +2681,16 @@ begin
     end if;
   end if;
 
+  if p_correction_session_id is null and exists(
+    select 1
+    from public.weekly_source_cycles cycle
+    where cycle.id=v_cycle.id and cycle.state='FINALISED'
+  ) then
+    perform private._weekly_source_settings_ensure_open_cycle_v1(
+      v_group.id,v_finalised_at
+    );
+  end if;
+
   return pg_catalog.jsonb_build_object(
     'ok',true,'status',case when p_correction_session_id is null
       then 'FINALISED' else 'CORRECTED' end,'idempotent',false,

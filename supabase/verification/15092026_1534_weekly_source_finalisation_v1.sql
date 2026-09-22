@@ -30,6 +30,30 @@ begin
 end;
 $function$;
 
+create function pg_temp.remove_empty_successor(
+  p_source_group_id uuid,
+  p_finalisation_week_ending date
+) returns void language plpgsql as $function$
+begin
+  if exists(
+    select 1 from public.weekly_source_cycles cycle
+    where cycle.source_group_id=p_source_group_id
+      and cycle.finalisation_week_ending=p_finalisation_week_ending
+      and (cycle.state<>'OPEN' or cycle.version<>0 or cycle.projection_state<>'NONE'
+        or cycle.current_complete_upload_id is not null
+        or exists(select 1 from public.weekly_source_uploads upload where upload.source_cycle_id=cycle.id))
+  ) then
+    raise exception 'ASSERTION_FAILED: the successor cycle was not an empty server-created OPEN cycle';
+  end if;
+  delete from public.weekly_source_cycles cycle
+  where cycle.source_group_id=p_source_group_id
+    and cycle.finalisation_week_ending=p_finalisation_week_ending
+    and cycle.state='OPEN' and cycle.version=0 and cycle.projection_state='NONE'
+    and cycle.current_complete_upload_id is null
+    and not exists(select 1 from public.weekly_source_uploads upload where upload.source_cycle_id=cycle.id);
+end;
+$function$;
+
 create function pg_temp.roster_cycle(
   p_cycle_id uuid,
   p_upload_id uuid,
@@ -65,6 +89,24 @@ declare
   v_link_kind text;
   v_rows jsonb:='[]'::jsonb;
 begin
+  if exists(
+    select 1 from public.weekly_source_cycles cycle
+    where cycle.source_group_id=p_source_group_id
+      and cycle.finalisation_week_ending=p_finalisation_week_ending
+      and cycle.id<>p_cycle_id
+      and (cycle.state<>'OPEN' or cycle.version<>0 or cycle.projection_state<>'NONE'
+        or cycle.current_complete_upload_id is not null
+        or exists(select 1 from public.weekly_source_uploads upload where upload.source_cycle_id=cycle.id))
+  ) then
+    raise exception 'ASSERTION_FAILED: the successor cycle was not an empty server-created OPEN cycle';
+  end if;
+  delete from public.weekly_source_cycles cycle
+  where cycle.source_group_id=p_source_group_id
+    and cycle.finalisation_week_ending=p_finalisation_week_ending
+    and cycle.id<>p_cycle_id
+    and cycle.state='OPEN' and cycle.version=0 and cycle.projection_state='NONE'
+    and cycle.current_complete_upload_id is null
+    and not exists(select 1 from public.weekly_source_uploads upload where upload.source_cycle_id=cycle.id);
   insert into public.weekly_source_cycles(
     id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
   ) values (
@@ -1417,6 +1459,9 @@ select pg_temp.assert_true(
 
 -- A later empty Trust backing report is authoritative only for its own
 -- physical contents.  It must not infer reversals from rows present in BR-001.
+select pg_temp.remove_empty_successor(
+  'b0000000-0000-4000-8000-000000000005','2026-09-20'
+);
 insert into public.weekly_source_cycles(
   id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
 ) values (
@@ -1505,6 +1550,9 @@ select pg_temp.assert_true(
 -- A two-pence discrepancy is not source rounding.  Projection may publish it
 -- for Office review, but finalisation must reject it atomically and leave the
 -- report scope open with no lineage, revision, manifest or movement residue.
+select pg_temp.remove_empty_successor(
+  'b0000000-0000-4000-8000-000000000005','2026-09-27'
+);
 insert into public.weekly_source_cycles(
   id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
 ) values (

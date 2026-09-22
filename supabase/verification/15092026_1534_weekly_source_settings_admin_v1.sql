@@ -52,6 +52,26 @@ begin
   ) then
     raise exception 'source group server scope/default code proof failed';
   end if;
+  if (select pg_catalog.count(*) from public.weekly_source_cycles cycle
+      where cycle.source_group_id=v_group)<>1
+     or not exists(
+       select 1 from public.weekly_source_cycles cycle
+       where cycle.source_group_id=v_group and cycle.state='OPEN'
+         and cycle.projection_state='NONE' and cycle.version=0
+         and extract(dow from cycle.finalisation_week_ending)=0
+         and (cycle.cutoff_at_utc at time zone 'Europe/London')::date=
+           cycle.finalisation_week_ending+3
+         and (cycle.cutoff_at_utc at time zone 'Europe/London')::time='15:00'::time
+     ) then
+    raise exception 'source group did not create its exact first open cycle';
+  end if;
+  perform private._weekly_source_settings_ensure_open_cycle_v1(
+    v_group,pg_catalog.transaction_timestamp()
+  );
+  if (select pg_catalog.count(*) from public.weekly_source_cycles cycle
+      where cycle.source_group_id=v_group)<>1 then
+    raise exception 'first-cycle replay created a duplicate cycle';
+  end if;
 
   v_response:=public.weekly_source_source_group_save_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',
@@ -136,10 +156,9 @@ begin
     raise exception 'completed-pack recipient default proof failed';
   end if;
 
-  insert into public.weekly_source_cycles(
-    source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
-  ) values (v_group,current_date+4,pg_catalog.transaction_timestamp()+interval '4 days',
-            'OPEN',4,'FAILED');
+  update public.weekly_source_cycles
+  set state='OPEN',version=4,projection_state='FAILED'
+  where source_group_id=v_group;
   v_version:=v_response->>'settings_version';
   v_response:=public.weekly_source_client_settings_save_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id',v_actor,'agency_id',v_agency,'environment','TEST',

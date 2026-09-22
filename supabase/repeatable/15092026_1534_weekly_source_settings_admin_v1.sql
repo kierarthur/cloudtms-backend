@@ -764,6 +764,98 @@ begin
 end;
 $function$;
 
+-- The source-group settings owner is also the creation boundary for the first
+-- usable cycle.  Finalisation and the explicit no-shifts route reuse this
+-- helper to open the next cycle only after the prior one is genuinely closed.
+-- This keeps ordinary reads stable/read-only and makes cycle creation atomic
+-- with the state transition that requires it.
+create or replace function private._weekly_source_settings_ensure_open_cycle_v1(
+  p_source_group_id uuid,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+) returns uuid
+language plpgsql
+volatile
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_group public.weekly_source_groups%rowtype;
+  v_cycle_id uuid;
+  v_open_count integer;
+  v_latest_week_ending date;
+  v_local_now timestamp;
+  v_cutoff_date date;
+  v_target_week_ending date;
+  v_cutoff_at_utc timestamptz;
+  v_days_to_cutoff integer;
+begin
+  if p_source_group_id is null or p_now_utc is null then
+    raise exception 'WEEKLY_SOURCE_CYCLE_ENSURE_REQUEST_INVALID' using errcode='22023';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'weekly-source-cycle-lifecycle:'||p_source_group_id::text,0
+  ));
+  select * into v_group
+  from public.weekly_source_groups source_group
+  where source_group.id=p_source_group_id
+  for update;
+  if not found or not v_group.active then
+    raise exception 'WEEKLY_SOURCE_CYCLE_GROUP_NOT_ACTIVE' using errcode='22023';
+  end if;
+
+  select pg_catalog.count(*),pg_catalog.min(cycle.id::text)::uuid
+  into v_open_count,v_cycle_id
+  from public.weekly_source_cycles cycle
+  where cycle.source_group_id=v_group.id
+    and cycle.state<>'FINALISED';
+  if v_open_count>1 then
+    raise exception 'WEEKLY_SOURCE_MULTIPLE_OPEN_CYCLES' using errcode='55000';
+  end if;
+  if v_open_count=1 then
+    return v_cycle_id;
+  end if;
+
+  select pg_catalog.max(cycle.finalisation_week_ending)
+  into v_latest_week_ending
+  from public.weekly_source_cycles cycle
+  where cycle.source_group_id=v_group.id;
+  if v_latest_week_ending is not null then
+    v_target_week_ending:=v_latest_week_ending+7;
+    v_cutoff_date:=v_target_week_ending+v_group.cutoff_weekday;
+  else
+    v_local_now:=p_now_utc at time zone v_group.timezone;
+    v_days_to_cutoff:=((v_group.cutoff_weekday-
+      extract(dow from v_local_now)::integer)+7)%7;
+    if v_days_to_cutoff=0 and v_local_now::time>=v_group.cutoff_local_time then
+      v_days_to_cutoff:=7;
+    end if;
+    v_cutoff_date:=v_local_now::date+v_days_to_cutoff;
+    v_target_week_ending:=v_cutoff_date-
+      extract(dow from v_cutoff_date)::integer;
+  end if;
+  v_cutoff_at_utc:=(v_cutoff_date+v_group.cutoff_local_time)
+    at time zone v_group.timezone;
+
+  insert into public.weekly_source_cycles(
+    source_group_id,finalisation_week_ending,cutoff_at_utc,
+    state,version,projection_state
+  ) values (
+    v_group.id,v_target_week_ending,v_cutoff_at_utc,
+    'OPEN',0,'NONE'
+  )
+  on conflict (source_group_id,finalisation_week_ending) do nothing
+  returning id into v_cycle_id;
+  if v_cycle_id is null then
+    select cycle.id into strict v_cycle_id
+    from public.weekly_source_cycles cycle
+    where cycle.source_group_id=v_group.id
+      and cycle.finalisation_week_ending=v_target_week_ending
+      and cycle.state<>'FINALISED';
+  end if;
+  return v_cycle_id;
+end;
+$function$;
+
 create or replace function public.weekly_source_source_group_save_atomic_v1(
   p_request jsonb
 ) returns jsonb
@@ -886,6 +978,12 @@ begin
         version=version+1,updated_at_utc=pg_catalog.transaction_timestamp(),
         updated_by_user_id=v_actor
     where id=v_id;
+  end if;
+
+  if v_active then
+    perform private._weekly_source_settings_ensure_open_cycle_v1(
+      v_id,pg_catalog.transaction_timestamp()
+    );
   end if;
 
   return pg_catalog.jsonb_build_object(
@@ -1460,6 +1558,10 @@ revoke all on function private._weekly_source_settings_contract_shape_v1(uuid,te
   from public,anon,authenticated,service_role;
 revoke all on function private._weekly_source_settings_stale_open_v1(uuid,uuid)
   from public,anon,authenticated,service_role;
+alter function private._weekly_source_settings_ensure_open_cycle_v1(uuid,timestamptz)
+  owner to current_user;
+revoke all on function private._weekly_source_settings_ensure_open_cycle_v1(uuid,timestamptz)
+  from public,anon,authenticated,service_role;
 
 comment on function public.weekly_source_client_settings_save_atomic_v1(jsonb) is
   'CAS/effective-dated service-only Client settings owner. Inapplicable controls are refused and open projections are made stale.';
@@ -1468,7 +1570,7 @@ comment on function public.weekly_source_contract_settings_save_atomic_v1(jsonb)
 comment on function public.weekly_source_global_settings_save_atomic_v1(jsonb) is
   'CAS service-only owner for Weekly source query timing and secure-manager-link lifetime.';
 comment on function public.weekly_source_source_group_save_atomic_v1(jsonb) is
-  'CAS service-only source-group owner scoped by server-supplied Agency and environment.';
+  'CAS service-only source-group owner scoped by server-supplied Agency and environment; active groups atomically own one current open cycle.';
 
 notify pgrst, 'reload schema';
 
