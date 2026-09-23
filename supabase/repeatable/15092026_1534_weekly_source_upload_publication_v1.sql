@@ -215,7 +215,18 @@ begin
   ) or v_profile.version<>1 then
     raise exception 'WEEKLY_SOURCE_PROFILE_NOT_ADMITTED' using errcode='22023';
   end if;
-  if (v_profile.container_kind='XLSX') is distinct from (v_workbook_fingerprint is not null) then
+  -- An approved workbook profile may also arrive as one self-contained
+  -- data-bearing HTML table (including NHSP's Excel-exported .xls). Only
+  -- the server parser identifies that container; HTML has no OOXML part to
+  -- fingerprint, while an actual XLSX must retain its selected-part proof.
+  if v_profile.container_kind='XLSX' then
+    if pg_catalog.upper(pg_catalog.btrim(coalesce(v_summary->>'source_kind','XLSX')))
+       not in ('XLSX','HTML')
+       or (pg_catalog.upper(pg_catalog.btrim(coalesce(v_summary->>'source_kind','XLSX')))='XLSX')
+          is distinct from (v_workbook_fingerprint is not null) then
+      raise exception 'WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED' using errcode='22023';
+    end if;
+  elsif v_workbook_fingerprint is not null then
     raise exception 'WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED' using errcode='22023';
   end if;
   if v_profile.profile_code in ('NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1') then

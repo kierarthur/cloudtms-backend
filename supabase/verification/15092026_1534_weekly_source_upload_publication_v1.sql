@@ -305,7 +305,9 @@ create function pg_temp.nhsp_begin(
   p_client_id uuid,
   p_report_number text,
   p_content_hash text,
-  p_parser_version text default 'WEEKLY_SOURCE_STRICT_V1'
+  p_parser_version text default 'WEEKLY_SOURCE_STRICT_V1',
+  p_source_kind text default 'XLSX',
+  p_force_fingerprint boolean default false
 ) returns jsonb language plpgsql as $function$
 begin
   return public.weekly_source_upload_stage_begin_atomic_v1(
@@ -317,14 +319,17 @@ begin
       'source_cycle_id','90000000-0000-4000-8000-000000000031',
       'report_scope_id',p_scope_id,
       'client_id',p_client_id,
-      'original_filename','nhsp-'||p_report_number||'.xlsx',
+      'original_filename','nhsp-'||p_report_number||
+        case when p_source_kind='HTML' then '.xls' else '.xlsx' end,
       'content_sha256',p_content_hash,
       'byte_count',2048,
       'profile_code','NHSP_FINAL_BACKING_V1',
       'profile_version',1,
       'parser_version',p_parser_version,
       'normaliser_version','NHSP_BACKING_NORMALISER_V1',
-      'workbook_part_and_sheet_fingerprint',repeat('1',64),
+      'workbook_part_and_sheet_fingerprint',
+        case when p_source_kind='HTML' and not p_force_fingerprint then null
+             else repeat('1',64) end,
       'header_coordinate_map_json',pg_catalog.jsonb_build_object(
         'Actual Start','L','Actual End','M','Actual Break','N','Actual Total','O',
         'Commission','P','Total Cost','Q','FMC','R'
@@ -344,7 +349,9 @@ begin
         'nhsp_report_number',p_report_number,
         'nhsp_report_heading_name','Example Trust'
       ),
-      'parser_summary_json',pg_catalog.jsonb_build_object('fatal_errors',0)
+      'parser_summary_json',pg_catalog.jsonb_build_object(
+        'fatal_errors',0,'source_kind',p_source_kind
+      )
     )
   );
 end;
@@ -1053,6 +1060,45 @@ begin
      where logical_upload_id=v_a and result='DUPLICATE'),
     'Duplicate attempt did not point to its original logical upload'
   );
+
+  -- The real NHSP backing report can be a self-contained HTML table carrying
+  -- an .xls filename. It has exact source-cell evidence but no OOXML part.
+  v_result:=pg_temp.nhsp_begin(
+    '90000000-0000-4000-8000-000000000050','90000000-0000-4000-8000-000000000040',
+    'BR-HTML',repeat('9',64),'WEEKLY_SOURCE_STRICT_V1','HTML'
+  );
+  perform pg_temp.assert_true(
+    v_result->>'status'='STAGING'
+      and (select workbook_part_and_sheet_fingerprint is null
+                 and parser_summary_json->>'source_kind'='HTML'
+           from public.weekly_source_uploads
+           where id=(v_result->>'logical_upload_id')::uuid),
+    'Self-contained NHSP HTML backing report did not stage without an OOXML fingerprint'
+  );
+  begin
+    perform pg_temp.nhsp_begin(
+      '90000000-0000-4000-8000-000000000050','90000000-0000-4000-8000-000000000040',
+      'BR-HTML-FORGED-PART',repeat('8',64),'WEEKLY_SOURCE_STRICT_V1','HTML',true
+    );
+    raise exception 'HTML_WITH_OOXML_FINGERPRINT_UNEXPECTEDLY_PASSED';
+  exception when sqlstate '22023' then
+    perform pg_temp.assert_true(
+      sqlerrm='WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED',
+      'HTML with forged OOXML evidence failed for the wrong reason'
+    );
+  end;
+  begin
+    perform pg_temp.nhsp_begin(
+      '90000000-0000-4000-8000-000000000050','90000000-0000-4000-8000-000000000040',
+      'BR-UNKNOWN-CONTAINER',repeat('7',64),'WEEKLY_SOURCE_STRICT_V1','CSV'
+    );
+    raise exception 'UNKNOWN_WORKBOOK_CONTAINER_UNEXPECTEDLY_PASSED';
+  exception when sqlstate '22023' then
+    perform pg_temp.assert_true(
+      sqlerrm='WEEKLY_SOURCE_WORKBOOK_FINGERPRINT_REQUIRED',
+      'Unknown workbook container failed for the wrong reason'
+    );
+  end;
 
   begin
     update public.weekly_source_physical_rows set classification='HEADER'

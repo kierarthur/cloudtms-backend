@@ -377,6 +377,9 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
       parser_summary_json: {
         parser_version: parsed.parserVersion,
         adapter_version: WEEKLY_SOURCE_UPLOAD_ADAPTER_VERSION,
+        // The source bytes, not an .xls/.xlsx filename, determine whether a
+        // worksheet fingerprint is meaningful. The server parser owns this.
+        source_kind: parsed.sourceKind,
         selected_worksheet: parsed.selectedWorksheet,
         row_counts: parsed.rowCounts,
         warning_count: parsed.warnings?.length ?? 0,

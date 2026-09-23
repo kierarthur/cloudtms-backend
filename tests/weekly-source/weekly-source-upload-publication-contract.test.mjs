@@ -6,6 +6,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const contextSql = read('../../supabase/repeatable/15092026_1534_weekly_source_upload_context_v1.sql');
 const verifierSql = read('../../supabase/verification/15092026_1534_weekly_source_upload_context_v1.sql');
 const publicationVerifierSql = read('../../supabase/verification/15092026_1534_weekly_source_upload_publication_v1.sql');
+const publicationSql = read('../../supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql');
 const ownerSource = read('../../broker/src/weekly-source/upload-publication-owner.mjs');
 const adapterSource = read('../../broker/src/weekly-source/upload-staging-adapter.mjs');
 const modeADispatchSql = read('../../supabase/repeatable/17092026_0800_weekly_source_mode_a_dispatch_v1.sql');
@@ -65,6 +66,9 @@ test('staging adapter explicitly owns physical, money, expense and workbook prov
   assert.match(adapterSource, /moneyEvidence/);
   assert.match(adapterSource, /expenseEvidence/);
   assert.match(adapterSource, /workbook_part_and_sheet_fingerprint/);
+  assert.match(adapterSource, /source_kind: parsed\.sourceKind/);
+  assert.match(publicationSql, /v_summary->>'source_kind'/);
+  assert.match(publicationSql, /not in \('XLSX','HTML'\)/);
   assert.match(adapterSource, /header_coordinate_map_json/);
   assert.match(adapterSource, /nhsp_report_number/);
   assert.match(adapterSource, /saved_finalisation_profile_map/);

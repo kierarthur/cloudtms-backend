@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { parseWeeklySourceFile, WEEKLY_SOURCE_PROFILE_IDS } from '../../../broker/src/weekly-source/index.js';
+import { adaptWeeklySourceParserOutput } from '../../../broker/src/weekly-source/upload-staging-adapter.mjs';
 
 const evidenceRoot = process.env.CLOUDTMS_WEEKLY_SOURCE_EVIDENCE_DIR;
 const evidenceAvailable = Boolean(evidenceRoot && fs.existsSync(evidenceRoot));
@@ -125,5 +126,22 @@ test('Step 6 real reports satisfy the production profiles', { skip: !step6Eviden
     assert.equal(result.selectedWorksheet.physicalRowCount, fixture.physicalRows);
     for (const [field, column] of Object.entries(fixture.columns)) assert.equal(result.resolvedColumnMap[field].column, column);
     assert.deepEqual(result.rowCounts, fixture.expected);
+    if (fixture.relativePath.endsWith('.xls')) {
+      const staged = adaptWeeklySourceParserOutput(result, {
+        actor_user_id: '90000000-0000-4000-8000-000000000001',
+        original_filename: path.basename(fixture.relativePath),
+      }, {
+        environment: 'TEST',
+        agency_id: '90000000-0000-4000-8000-000000000002',
+        source_group_id: '90000000-0000-4000-8000-000000000030',
+        source_cycle_id: '90000000-0000-4000-8000-000000000031',
+        report_scope_id: '90000000-0000-4000-8000-000000000050',
+        client_id: '90000000-0000-4000-8000-000000000040',
+      });
+      assert.equal(result.sourceKind, 'HTML');
+      assert.equal(result.selectedWorksheet.workbookPartAndSheetFingerprint, null);
+      assert.equal(staged.beginRequest.parser_summary_json.source_kind, 'HTML');
+      assert.equal(staged.beginRequest.workbook_part_and_sheet_fingerprint, null);
+    }
   }
 });
