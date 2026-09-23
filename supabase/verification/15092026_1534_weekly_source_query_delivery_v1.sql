@@ -2399,6 +2399,22 @@ select pg_temp.assert_true(
   'NHSP missing-or-not-yet-authorised wording policy is absent'
 );
 
+-- The earlier query-delivery repeatable is also replayed during upgrades.
+-- It must not replace the later target-delivery claim contract with its
+-- pre-target version or manager email dispatch will remain leased forever.
+select pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.weekly_source_message_dispatch_claim_v1(jsonb)'::pg_catalog.regprocedure
+  ) like '%manager_recipient_route_id%'
+  and pg_catalog.pg_get_functiondef(
+    'public.weekly_source_message_dispatch_claim_v1(jsonb)'::pg_catalog.regprocedure
+  ) like '%manager_recipient_fingerprint%'
+  and pg_catalog.pg_get_functiondef(
+    'public.weekly_source_message_dispatch_claim_v1(jsonb)'::pg_catalog.regprocedure
+  ) like '%command.target_set_state%'
+  ,'manager target-delivery claim contract was overwritten'
+);
+
 select 'weekly_source_query_delivery_v1: rollback verification passed' as result;
 
 rollback;

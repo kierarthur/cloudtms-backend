@@ -1239,21 +1239,23 @@ begin
   with eligible as (
     select command.id
     from public.weekly_message_dispatch_commands command
-    where (
+    where command.target_set_state='NOT_PREPARED'
+      and (
         (command.state in ('READY','FAILED')
-         and coalesce(command.next_attempt_at_utc,'-infinity'::timestamptz)<=pg_catalog.transaction_timestamp())
+          and coalesce(command.next_attempt_at_utc,'-infinity'::timestamptz)
+            <=pg_catalog.transaction_timestamp())
         or
-        (command.state in ('LEASED','SUBMISSION_STARTED')
-         and command.lease_expires_at_utc<=pg_catalog.transaction_timestamp())
+        (command.state='LEASED'
+          and command.lease_expires_at_utc<=pg_catalog.transaction_timestamp())
       )
     order by command.next_attempt_at_utc nulls first,command.id
     limit v_limit
     for update skip locked
   ), claimed as (
     update public.weekly_message_dispatch_commands command
-    set state=case when command.state='SUBMISSION_STARTED' then 'SUBMISSION_STARTED' else 'LEASED' end,
-        lease_owner=v_worker,lease_token=v_token,
-        lease_expires_at_utc=pg_catalog.transaction_timestamp()+pg_catalog.make_interval(secs=>v_lease_seconds)
+    set state='LEASED',lease_owner=v_worker,lease_token=v_token,
+        lease_expires_at_utc=pg_catalog.transaction_timestamp()
+          +pg_catalog.make_interval(secs=>v_lease_seconds)
     from eligible where command.id=eligible.id
     returning command.*
   )
@@ -1261,9 +1263,15 @@ begin
     pg_catalog.jsonb_build_object(
       'dispatch_command_id',claimed.id,'lease_token',claimed.lease_token,
       'lease_expires_at_utc',claimed.lease_expires_at_utc,
+      'environment',claimed.environment,'agency_id',claimed.agency_id,
       'audience_kind',intent.audience_kind,'tranche_kind',claimed.tranche_kind,
       'candidate_id',candidate_generation.candidate_id,
+      'candidate_generation_id',claimed.candidate_generation_id,
+      'manager_recipient_route_id',claimed.recipient_route_id,
       'manager_recipient',route.protected_recipient_address,
+      'manager_recipient_fingerprint',case when route.id is null then null
+        else pg_catalog.encode(route.normalised_recipient_hash,'hex') end,
+      'message_intent_id',intent.id,'message_render_id',render.id,
       'subject_text',render.subject_text,'html_body',render.html_body,
       'plain_body',render.plain_body,'provider_idempotency_key',render.provider_idempotency_key,
       'rendered_content_hash',pg_catalog.encode(render.rendered_content_hash,'hex'),
