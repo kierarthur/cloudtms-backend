@@ -21,6 +21,8 @@ declare
   v_contract uuid:='b4000000-0000-0000-0000-000000000003';
   v_week uuid:='b4000000-0000-0000-0000-000000000004';
   v_timesheet uuid:='b4000000-0000-0000-0000-000000000005';
+  v_account uuid:='b4000000-0000-0000-0000-000000000006';
+  v_hours_workflow uuid:='b4000000-0000-0000-0000-000000000007';
   v_capabilities jsonb;
   v_placement jsonb;
 begin
@@ -88,6 +90,32 @@ begin
   set candidate_expense_invoice_email='expenses@example.test'
   where client_id=v_client;
 
+  -- A source-authority Candidate submission is immutable hours evidence before
+  -- final source materialises TSFIN. It must permit only a separate expense
+  -- carrier and must not copy Candidate hours into the source Timesheet.
+  update public.timesheets_financials
+  set total_hours=0
+  where timesheet_id=v_timesheet and is_current;
+  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
+  values(v_account,'TEST','expense-admission-runtime@example.test','ACTIVE');
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    policy_snapshot_json,input_snapshot_json,idempotency_key
+  ) values(
+    v_hours_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','ELECTRONIC',
+    'WORKER_SUBMITTED',1,v_contract,v_week,v_timesheet,v_timesheet,current_date,
+    '{}'::jsonb,
+    jsonb_build_object(
+      'actual_schedule_json',jsonb_build_array(jsonb_build_object(
+        'date',current_date,'start_time','09:00','end_time','17:00','break_minutes',30
+      )),
+      'additional_units_week','{}'::jsonb,
+      'additional_units_per_day','{}'::jsonb
+    ),
+    'candidate-hours-before-source-finalisation'
+  );
+
   v_capabilities:=private._candidate_record_capabilities_v1(
     v_timesheet,v_week,'{}'::jsonb
   );
@@ -102,7 +130,7 @@ begin
   );
   if v_placement->>'placement'<>'CREATE_CARRIER'
      or v_placement->>'reason_code'<>'NO_SAFE_CARRIER' then
-    raise exception 'configured separated expense claim did not retain carrier placement: %',v_placement;
+    raise exception 'submitted source-authority hours did not open the separate expense carrier before finalisation: %',v_placement;
   end if;
 end;
 $candidate_expense_email_admission$;

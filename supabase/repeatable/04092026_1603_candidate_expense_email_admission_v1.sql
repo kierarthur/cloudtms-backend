@@ -428,6 +428,54 @@ begin
       )
   ) into v_positive_work;
   if not v_positive_work then
+    -- Source-authority hours are deliberately not written into TSFIN before
+    -- finalisation. A server-validated, immutable Candidate submission is
+    -- nevertheless sufficient evidence that this is a worked week and may
+    -- open the existing separate expense carrier. The expense never lands on
+    -- the source-owned Timesheet and still follows manager approval.
+    select exists(
+      select 1
+      from public.candidate_submission_workflows w
+      cross join lateral (
+        select
+          coalesce(
+            w.input_snapshot_json#>'{hours_submission,timesheet_patch_json,actual_schedule_json}',
+            w.input_snapshot_json#>'{timesheet_patch_json,actual_schedule_json}',
+            w.input_snapshot_json->'actual_schedule_json',
+            '[]'::jsonb
+          ) as actual_schedule_json,
+          coalesce(
+            w.input_snapshot_json#>'{hours_submission,timesheet_patch_json,additional_units_week}',
+            w.input_snapshot_json#>'{timesheet_patch_json,additional_units_week}',
+            w.input_snapshot_json->'additional_units_week',
+            '{}'::jsonb
+          ) as additional_units_week,
+          coalesce(
+            w.input_snapshot_json#>'{hours_submission,timesheet_patch_json,additional_units_per_day}',
+            w.input_snapshot_json#>'{timesheet_patch_json,additional_units_per_day}',
+            w.input_snapshot_json->'additional_units_per_day',
+            '{}'::jsonb
+          ) as additional_units_per_day
+      ) submitted
+      where w.candidate_id=p_candidate_id
+        and w.contract_id=v_contract.id
+        and w.week_ending_date=v_anchor_week.week_ending_date
+        and w.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')
+        and w.state in (
+          'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+          'READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL',
+          'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+          'READY_TO_FINALISE','RECEIVED','FINALISED'
+        )
+        and (
+          (pg_catalog.jsonb_typeof(submitted.actual_schedule_json)='array'
+            and pg_catalog.jsonb_array_length(submitted.actual_schedule_json)>0)
+          or private._candidate_json_numeric_sum(submitted.additional_units_week)>0
+          or private._candidate_json_numeric_sum(submitted.additional_units_per_day)>0
+        )
+    ) into v_positive_work;
+  end if;
+  if not v_positive_work then
     return jsonb_build_object(
       'ok',true,'placement','BLOCKED','reason_code','NO_POSITIVE_WORKED_TIME',
       'anchor_timesheet_id',p_anchor_timesheet_id,'anchor_contract_week_id',v_anchor_week.id,

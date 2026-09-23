@@ -569,6 +569,30 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "weekly_source_workbench_inventory_install_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "weekly_source_workbench_inventory_install_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "weekly_source_workbench_inventory_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "weekly_source_workbench_inventory_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -4244,7 +4268,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8b1e8e1a1ef6fcee3d80d8bb4fe17c3bb70c0784e6dd74868d8ec3d6e76392fa"
+      "definition_sha256": "44bac6aec4c19215c6cee149e9ca7cce15ef23046596a72bd2b5b62fc7c9ed4a"
     },
     {
       "acl": [
@@ -6572,7 +6596,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5fc16ab6420a6c50c3a66433cec942b6075a75d96ca2b8a806d6fd4e589633b9"
+      "definition_sha256": "9e0916b5348a5f9047fa1904b7b1ad8ae20b6319f7c25e45676f8c4bcf9094c7"
     },
     {
       "acl": [
@@ -9044,7 +9068,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "2e49a5b5482b68ca1f1c62a7efd3fc55d0397f39fbc4e992bb6f49e0d2875172"
+      "definition_sha256": "2ba07db7c4ed1f2b812be9be064bce4117ae9c8602f5c193a37909a6421801af"
     },
     {
       "acl": [
@@ -9215,7 +9239,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8a5c0d82ffd223df3d3c6b61f200a402dfa548373ff163ddbaf80763f919e01a"
+      "definition_sha256": "7c016b9074fd992ffdf399dce35804affd4a481e7ec7eed8758436283b75e227"
     },
     {
       "acl": [
@@ -9254,25 +9278,6 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "ec67828e131823f9e9a20bda658cc85cb4a4e9a16fb426a1a2935c27dda9b8e9"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, pg_temp"
-      ],
-      "schema": "private",
-      "identity": "_weekly_source_settings_ensure_open_cycle_v1(p_source_group_id uuid, p_now_utc timestamp with time zone)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "5bc97ce24ab6800fe753af8cb68054778c5c5c6fff15ae59d4836a4e1e98806e"
     },
     {
       "acl": [
@@ -12074,7 +12079,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "0097f7157748f6e0177205df9cdc1bd6149aa445a9dd2f0f1f1b8a550bddbc33"
+      "definition_sha256": "a9337180884f384b5acb2eb471a5e87e984c53f024fa0779ba87bd048300cc68"
     },
     {
       "acl": [
@@ -12112,7 +12117,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "1bd416ed446cbd4581127c7af6d4a2296e746e7735331afd9d48fa052bacfe85"
+      "definition_sha256": "ca059ceb8f8100ad731ef5ef6458f5a7834b32c7f3c44795060ebd5a5b4ddd6e"
     },
     {
       "acl": [
@@ -12873,25 +12878,6 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
-      "identity": "weekly_source_candidate_contract_week_view_merge_v1(p_contract_week_id uuid, p_now_utc timestamp with time zone)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": true,
-      "definition_sha256": "f96124539b72d2133269c821ed0fa97fe002c90d9878b2c2993b41909f6472f9"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=public, private, pg_catalog, pg_temp"
-      ],
-      "schema": "private",
       "identity": "weekly_source_candidate_current_rows_v1(p_projection_publication_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_week_ending date)",
       "parallel": "u",
       "volatility": "s",
@@ -13067,7 +13053,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "eee1314d002a37b129bf16496ca15d7d047bd57fac5999b8492662b7af86aaeb"
+      "definition_sha256": "d760eb7eee06e30862113e480d1a3ac5d3341be31fc9927c245fcf9673b3b59e"
     },
     {
       "acl": [
@@ -13181,7 +13167,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "188bfe1cfa30022553776cb4349db71b05cbf6934fe17fff5a2a03e69f3b72ba"
+      "definition_sha256": "c3afe98be192862965cfa90f02e78fed94a7f55345a95818747793bace88af9b"
     },
     {
       "acl": [
@@ -13542,7 +13528,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fda62471850c241738a31d13ece861a288b0438b65123391bea47ea8743438bc"
+      "definition_sha256": "dca4ecea6f239821906683aba1c73f23fd9741d16d824e0e1f59b769db106302"
     },
     {
       "acl": [
@@ -13694,7 +13680,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f94d51743f2270bfc97c5f405da4563d7e0503c892efaebf883a46850c60a519"
+      "definition_sha256": "3dcfcdcb300204c12a99d0f2e9c8b39eb92a45b99161323a72a8433275968975"
     },
     {
       "acl": [
@@ -14150,7 +14136,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "94680b1246d8fcca80e6bf1f6149d802bd363e33fb25f6ff36635c0bad4ca8ed"
+      "definition_sha256": "d394db1295bc7fdbab118d03632cd937794c240711869ffc424394502f214714"
     },
     {
       "acl": [
@@ -14433,7 +14419,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "26c5b66a3359039173ab257e079359a785a04ad5927ee596c6b6d75edf2f99bf"
+      "definition_sha256": "5ed761948aecddcf66e1d75c1f7f8fd8b2d161eacd5ab47a83bd39e3672ebcdd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_inventory_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b940224aa62890da55e0431de403e5108dd056e07cefc8e28b128f3990bc6e03"
     },
     {
       "acl": [
@@ -14973,6 +14978,101 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_begin_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "96798c5a9ee683aae3e064c3461924cf3d20a701ac5cc4eac9e7174b611ec59d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_end_v1(p_frame uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a52dfb2bb7d40c4419a6ff7a0654bbcbd531602a84e6f490f72902b3c8207517"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_seal_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c0c8ae42bd7b670ec4e239a949dd314b2c9043af6285ac85e17ddb090ca2a3bf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observation_storage_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1d4e5b0a5253ae108c995924564183c7fddaa1b7497b45796b5c3abe86ffc29e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_observe_effect_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e2a74b3c1429ba2fe739d3028756b9d56c89f3d142372f478b38975acf4073ad"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -15251,7 +15351,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "0b30480ebec9c23b36026f27808c6c2a2f8d27c2503544b485daa58f259a89e8"
+      "definition_sha256": "df1518e34e1ae14307b2e240ba123cceca3767985704338a9a98892405413f5e"
     },
     {
       "acl": [
@@ -17309,6 +17409,63 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "79b7d5ad288843f83ffbbc988551fbeb2d60e868177e164377760ea3fe2160f2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "weekly_source_workbench_inventory_install_page_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d1a524f4f0ecf766b48d02c60d7d5c783e38f114e0bad60e962a54f3520f2101"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "weekly_source_workbench_inventory_seed_page_v1(p_head_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "40a0e4017d1d1671d661945d1790b958460cfb16633b2a2a0833cfe43693df42"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "weekly_source_workbench_inventory_track_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "72328357982372c533d2e714070ef79757db528bce89bada1296338f0bb4f66d"
     },
     {
       "acl": [
@@ -22486,7 +22643,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "2482f8d4b79ad745274bf85eb6c0045e42b1a4b1c5ae806969901e83e4b7b04e"
+      "definition_sha256": "c925d1e261c8d8a679966a213b33b935962decde7465052c2b0e6ebc909c9910"
     },
     {
       "acl": [
@@ -24571,7 +24728,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "61547db0a88a8aa4d98ea9a2adc19bbef93f198fed108e73932932c5b5c22e11"
+      "definition_sha256": "617c4f658a4e9d99ded9dbca54cc4f90b5ad3ce8621bf2fcdb8de4b7672bc464"
     },
     {
       "acl": [
@@ -24595,7 +24752,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1a132a38423d477d6ecd424579ccad3af75d26f7f4d49e851259a41934080be8"
+      "definition_sha256": "a1aa33cc6da14b1a8f8273f7c42d08898215ea279cb27bdf3ee90797761cc1f7"
     },
     {
       "acl": [
@@ -25929,7 +26086,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "137e95208a89e1a46bd83fffc1e9645987d52d73e9360f9c01c7a478b6ebd911"
+      "definition_sha256": "25360afa9506cd02fff9cc12dced57910e6c5b158530f65c4c3a7861246067f1"
     },
     {
       "acl": [
@@ -37910,30 +38067,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, extensions, pg_temp"
-      ],
-      "schema": "public",
-      "identity": "timesheet_settings_authority_frozen_get_v1(p_timesheet_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": true,
-      "definition_sha256": "e7cbffe9b25487a1486830321f54575a41a532955775923747e48162d204d9f6"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "service_role",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
         "search_path=public, pg_temp"
       ],
       "schema": "public",
@@ -40189,7 +40322,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6c915d14a2981afe356dbdfc4f42aaead2223d4785549f554963654596824979"
+      "definition_sha256": "513931bf19f0e79e71885f483a52b6723ec6075d47829150cc634b8ff9ec69c7"
     },
     {
       "acl": [
@@ -40693,7 +40826,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c462324e3e0cab0ca2708da9588ce7d39b8df495cd8d900fafc8674a8b75a055"
+      "definition_sha256": "25d0b9aea97597b0df94695d2d36956e9dcde80e6562ec8e7b7a9864fdc86b20"
     },
     {
       "acl": [
@@ -41358,30 +41491,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public, private, extensions, pg_catalog, pg_temp"
-      ],
-      "schema": "public",
-      "identity": "weekly_source_nhsp_report_scope_resolve_atomic_v1(p_request jsonb)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "040fe38e1b59243da499d76c494410aa62cd98eb380ad1b171dc90686cb6f0cd"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
-        {
-          "grantee": "service_role",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
@@ -41845,7 +41954,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ac678c2ad00d13de583ba347935af699e65c2f5fbf65869b987b885eab754a9d"
+      "definition_sha256": "0b56ffd02b284ef7f83b63a011f66aa1c28c8a5b29614f38e1a2fe58db268f5a"
     },
     {
       "acl": [
@@ -42013,7 +42122,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "79faac0aa05d51ffe6459ea41be7ceb932791343d49da17e8ee0017858da423a"
+      "definition_sha256": "65720f72453f856f1c2f6a56f4ff302a3397a5b84112787d19a7bc53911948ca"
     },
     {
       "acl": [
@@ -42161,6 +42270,20 @@
     }
   ],
   "triggers": [
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_candidate_scope_registry",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON private.banking_pay_workbench_candidate_scope_registry FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_timesheet_scope_state",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON private.banking_pay_workbench_timesheet_scope_state FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
     {
       "name": "candidate_daily_authority_transitions_immutable",
       "table": "candidate_daily_authority_transitions",
@@ -42344,6 +42467,13 @@
       "definition": "CREATE CONSTRAINT TRIGGER trg_pay_workbench_scope_change_finalize_v1 AFTER INSERT ON banking_pay_scope_change_transactions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_change_finalize_trg_v1()"
     },
     {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_scope_change_transactions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON banking_pay_scope_change_transactions FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
       "name": "trg_bpay_wb_line_work_touch_updated_at_utc",
       "table": "banking_pay_workbench_candidate_line_work",
       "schema": "public",
@@ -42363,6 +42493,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_pay_workbench_scope_job_stage_v1 BEFORE INSERT OR UPDATE ON banking_pay_workbench_jobs FOR EACH ROW EXECUTE FUNCTION pay_workbench_scope_job_stage_trg_v1()"
+    },
+    {
+      "name": "ws_operation_effect_capture_v1",
+      "table": "banking_pay_workbench_jobs",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON banking_pay_workbench_jobs FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
     },
     {
       "name": "trg_banking_pay_preview_selection_carry_apply",
@@ -44696,6 +44833,20 @@
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_entitlement_head_components FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
     },
     {
+      "name": "weekly_source_workbench_inventory_component",
+      "table": "weekly_source_entitlement_head_components",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_workbench_inventory_component AFTER INSERT OR DELETE OR UPDATE ON weekly_source_entitlement_head_components FOR EACH ROW EXECUTE FUNCTION private.weekly_source_workbench_inventory_track_v1()"
+    },
+    {
+      "name": "ws_inventory_changed_v1",
+      "table": "weekly_source_entitlement_head_components",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_inventory_changed_v1 BEFORE INSERT OR DELETE OR UPDATE ON weekly_source_entitlement_head_components FOR EACH ROW EXECUTE FUNCTION private.weekly_source_inventory_changed_v1()"
+    },
+    {
       "name": "weekly_source_audit_entitlement_head",
       "table": "weekly_source_entitlement_heads",
       "schema": "public",
@@ -44750,6 +44901,20 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_entitlement_heads FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "weekly_source_workbench_inventory_head",
+      "table": "weekly_source_entitlement_heads",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_workbench_inventory_head AFTER INSERT ON weekly_source_entitlement_heads FOR EACH ROW EXECUTE FUNCTION private.weekly_source_workbench_inventory_track_v1()"
+    },
+    {
+      "name": "ws_inventory_changed_v1",
+      "table": "weekly_source_entitlement_heads",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER ws_inventory_changed_v1 BEFORE INSERT OR DELETE OR UPDATE ON weekly_source_entitlement_heads FOR EACH ROW EXECUTE FUNCTION private.weekly_source_inventory_changed_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -63005,6 +63170,306 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (btrim(refusal_code) <> ''::text AND length(refusal_code) <= 200)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_workbench_inventory_install_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "complete",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_head",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "page_calls",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scan_through",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "singleton",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_workbench_inventory_install_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_workbench_inventory_install_v1_pkey ON private.weekly_source_workbench_inventory_install_v1 USING btree (singleton)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_workbench_inventory_install_v1_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (last_head IS NULL OR scan_through IS NOT NULL AND last_head <= scan_through)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_install_v1_page_calls_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (page_calls >= 0)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_install_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (singleton)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_install_v1_singleton_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (singleton)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "weekly_source_workbench_inventory_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "bootstrap_last_ordinal",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "complete",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "emittable_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "head_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "invalid_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_workbench_inventory_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_workbench_inventory_v1_pkey ON private.weekly_source_workbench_inventory_v1 USING btree (head_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "weekly_source_workbench_inventory__bootstrap_last_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bootstrap_last_ordinal >= 0)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (emittable_count <= component_count AND invalid_count <= component_count)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_component_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_count >= 0)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_emittable_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (emittable_count >= 0)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_head_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (head_id) REFERENCES weekly_source_entitlement_heads(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_invalid_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (invalid_count >= 0)"
+        },
+        {
+          "name": "weekly_source_workbench_inventory_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (head_id)"
         }
       ],
       "view_definition_sha256": null
@@ -140804,6 +141269,10 @@
         {
           "name": "weekly_source_entitlement_head_components_pkey",
           "definition": "CREATE UNIQUE INDEX weekly_source_entitlement_head_components_pkey ON public.weekly_source_entitlement_head_components USING btree (id)"
+        },
+        {
+          "name": "weekly_source_head_components_emittable_ordinal_idx",
+          "definition": "CREATE INDEX weekly_source_head_components_emittable_ordinal_idx ON public.weekly_source_entitlement_head_components USING btree (head_id, component_ordinal) WHERE ((component_kind = 'WORKED_TIME'::text) OR (round(\nCASE\n    WHEN exclude_from_pay THEN (0)::numeric\n    ELSE COALESCE(pay_ex_vat, (0)::numeric)\nEND, 2) <> (0)::numeric))"
         }
       ],
       "options": [],
@@ -164256,7 +164725,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "440ca1b1e6ca93d036bf4e78096bb0f1f0a2c0e312ea7fbe394bbdf7fd733d1e"
+      "view_definition_sha256": "7495e30eac31c6bcc7701094a4130a683e8f6b661e1d1d448358e02f28bb57d1"
     },
     {
       "acl": [
@@ -164466,7 +164935,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "da446690aac20c966c4c59c6c01187f04e1a78389b13e078a2b3593301c8a7a2"
+      "view_definition_sha256": "d91dbf1069b6cb26949b5dd081728537d0cabfa34c77c1aa7fe771ead130ee3e"
     },
     {
       "acl": [
