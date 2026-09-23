@@ -9114,6 +9114,30 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_weekly_source_completed_pack_copy_claim_event_valid_v1(p_mail mail_outbox)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "a10e821f663ececc69e7e7257bb2744ce3d85a884bd1c7f317082e3ab5f9b246"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
@@ -25925,7 +25949,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2ccb89f809201f0f429cd7b082ef706cd1d3336d985ceb5b718fe968567e5d54"
+      "definition_sha256": "452cac58cea47a47d64fb848ea6b4cfc39d995a9b21811e7fdc565caf294ad7f"
     },
     {
       "acl": [

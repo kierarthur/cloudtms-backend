@@ -10,6 +10,80 @@
 
 begin;
 
+-- The generic mail claimant runs as service_role, which must not receive
+-- direct SELECT on Weekly Source fact tables.  This narrow owner-owned
+-- predicate validates only the event binding for an informational copy.
+create or replace function private._weekly_source_completed_pack_copy_claim_event_valid_v1(
+  p_mail public.mail_outbox
+) returns boolean
+language plpgsql
+stable
+security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_valid boolean:=false;
+begin
+  if p_mail.id is null
+    or p_mail.email_type is distinct from 'WEEKLY_COMPLETED_TIMESHEET_COPY'
+  then
+    return false;
+  end if;
+
+  select exists (
+    select 1
+    from public.weekly_completed_pack_copy_events event
+    join public.timesheets event_timesheet
+      on event_timesheet.timesheet_id=event.timesheet_id
+    join public.candidate_submission_workflows workflow
+      on workflow.id::text=p_mail.payment_scope_json->>'candidate_workflow_id'
+    where event.id::text=p_mail.payment_scope_json->>'completed_pack_copy_event_id'
+      and event.id::text=p_mail.attachments->0->>'completed_pack_copy_event_id'
+      and event.state='READY'
+      and event.timesheet_id=p_mail.context_id
+      and event.timesheet_id::text=p_mail.payment_scope_json->>'timesheet_id'
+      and event.timesheet_revision=case
+        when coalesce(p_mail.payment_scope_json->>'timesheet_revision','')
+          ~ '^[1-9][0-9]{0,8}$'
+        then (p_mail.payment_scope_json->>'timesheet_revision')::integer end
+      and btrim(event_timesheet.booking_id)
+        =p_mail.payment_scope_json->>'timesheet_family'
+      and event_timesheet.contract_id=workflow.contract_id
+      and event.completion_generation=case
+        when coalesce(p_mail.payment_scope_json->>'candidate_workflow_generation','')
+          ~ '^[1-9][0-9]{0,8}$'
+        then (p_mail.payment_scope_json->>'candidate_workflow_generation')::integer end
+      and workflow.generation=event.completion_generation
+      and workflow.id::text=p_mail.attachments->0->>'candidate_workflow_id'
+      and p_mail.payment_scope_json->>'candidate_workflow_generation'
+        =p_mail.attachments->0->>'candidate_workflow_generation'
+      and workflow.candidate_signed_at_utc is not null
+      and ((event.document_mode='CHECK_ONLY'
+            and workflow.state='WORKER_SUBMITTED')
+        or (event.document_mode='INVOICE_EVIDENCE_REQUIRED'
+            and workflow.state='FINALISED'))
+      and event.document_mode=p_mail.payment_scope_json->>'document_mode'
+      and event.recipient_snapshot=lower(btrim(p_mail."to"))
+      and encode(event.final_document_hash,'hex')
+        =lower(p_mail.attachments->0->>'sha256')
+      and lower(p_mail.attachments->0->>'sha256')
+        =lower(p_mail.payment_scope_json->>'final_document_sha256')
+      and p_mail.attachment_total_bytes=case
+        when coalesce(p_mail.attachments->0->>'size_bytes','')
+          ~ '^[1-9][0-9]{0,18}$'
+        then (p_mail.attachments->0->>'size_bytes')::bigint end
+  ) into v_valid;
+  return v_valid;
+end;
+$function$;
+
+alter function private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)
+  owner to postgres;
+revoke all on function private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)
+  from public,anon,authenticated,service_role;
+grant execute on function private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)
+  to service_role;
+
 create or replace function private._weekly_source_completed_pack_copy_eligibility_v1(
   p_workflow_id uuid
 ) returns jsonb

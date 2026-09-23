@@ -553,6 +553,32 @@ begin
 end;
 $claim_guard$;
 
+-- Exercise the real PostgREST mail-sender role.  Weekly Source facts remain
+-- unreadable as tables to that role; only the narrow owner predicate may
+-- inspect the event while the generic claimant admits this exact message.
+select pg_temp.assert_true(
+  not has_table_privilege('service_role',
+    'public.weekly_completed_pack_copy_events','SELECT'),
+  'service role unexpectedly has direct completed-copy event access'
+);
+update public.mail_outbox
+set attempt_lease_token=null,
+    attempt_leased_at_utc=null,
+    attempt_lease_expires_at_utc=null
+where context_id='e5060000-0000-4000-8000-000000000001'
+  and payment_scope_json->>'completed_pack_copy_authority'
+    ='WEEKLY_COMPLETED_PACK_COPY_V1';
+set local role service_role;
+select pg_temp.assert_true(
+  (select count(*)
+   from public.email_outbox_claim_ready_batch(
+     10,'weekly-copy-service-role-proof',5
+   ) claimed
+   where claimed.context_id='e5060000-0000-4000-8000-000000000001')=1,
+  'service-role sender cannot claim the valid informational copy'
+);
+reset role;
+
 -- A later policy edit cannot redirect the immutable event or its already
 -- queued command. A genuinely re-signed generation is nevertheless a new
 -- completion and becomes due exactly once.
