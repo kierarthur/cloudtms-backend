@@ -1152,7 +1152,7 @@ begin
             where submitted_workflow.environment=v_environment
               and submitted_workflow.candidate_id=v_candidate_id
               and submitted_workflow.contract_id=v_contract.id
-              and submitted_workflow.contract_week_id=v_week.id
+              and submitted_workflow.contract_week_id=v_anchor_week.id
               and submitted_workflow.week_ending_date=v_canonical_week_ending_date
               and submitted_workflow.anchor_timesheet_id=v_anchor_week.timesheet_id
               and submitted_workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')

@@ -19,7 +19,7 @@ test('the final closure restores only the exact current duplicate-expense owner'
   const currentOwner = read(currentOwnerPath);
   const finalClosure = read(finalClosurePath);
 
-  assert.equal(sha256(historical), 'c97d70a12b3d4c1ffb48c75e974b16d9de56dfb39e3281dbabcd12940fd00cb7');
+  assert.equal(sha256(historical), 'a544bd4b79adbf26a98d09db79d97b34a8e94f4077b535aa5b82d2bb0aff95ee');
   assert.equal(sha256(currentOwner), 'fb09f450e5e54fa2b2678446aa9473270a673d14434b42d21d16d5c06177bf9e');
   assert.match(finalClosure, /^\\set ON_ERROR_STOP on$/m);
   assert.match(finalClosure, /^\\ir 27082026_1436_candidate_withdrawal_read_authority_v1\.sql$/m);
