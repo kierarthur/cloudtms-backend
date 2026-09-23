@@ -4655,6 +4655,10 @@ function pounds(value) {
   return Number.isFinite(amount) ? `£${amount.toFixed(2)}` : null;
 }
 
+function mileageUnitLabel(value) {
+  return Number(value) === 1 ? 'mile' : 'miles';
+}
+
 function expenseSummaryDisplayLines(workflow) {
   const { expenseSubmission, claim } = expenseClaim(workflow);
   const mileage = Number(claim.mileage_units ?? expenseSubmission.mileage_units ?? expenseSubmission.total_mileage);
@@ -4664,7 +4668,7 @@ function expenseSummaryDisplayLines(workflow) {
     ['Other', claim.other_pay_ex_vat ?? expenseSubmission.other_amount]
   ];
   const lines = [];
-  if (Number.isFinite(mileage) && mileage !== 0) lines.push(`Mileage: ${mileage} miles`);
+  if (Number.isFinite(mileage) && mileage !== 0) lines.push(`Mileage: ${mileage} ${mileageUnitLabel(mileage)}`);
   for (const [label, value] of values) {
     const formatted = pounds(value);
     if (formatted && Number(value) !== 0) lines.push(`${label}: ${formatted}`);
@@ -4986,7 +4990,7 @@ async function renderExpensePage(env, contract, state, phase) {
   }
   if (isMileageEvidence) {
     const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
-    const label = `Total mileage for this claim: ${mileageUnits} miles`;
+    const label = `Total mileage for this claim: ${mileageUnits} ${mileageUnitLabel(mileageUnits)}`;
     page.drawRectangle({
       x: 36, y: isPaperReturn ? 654 : 716, width: isPaperReturn ? 395 : 523, height: 38,
       color: rgb(0.9, 0.95, 0.98), borderColor: rgb(0.1, 0.42, 0.62), borderWidth: 1
@@ -5085,7 +5089,7 @@ async function renderCandidateExpenseSummaryPdf(env, job) {
     page.drawText(label, { x: 56, y: y + 3, size: 11, font: regular });
     const evidenceCount = Number(evidenceCounts[category] || 0);
     const detail = category === 'MILEAGE'
-      ? `${Number(totals.mileage_units || 0)} miles · ${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`
+      ? `${Number(totals.mileage_units || 0)} ${mileageUnitLabel(totals.mileage_units || 0)} · ${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`
       : `${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`;
     page.drawText(detail.slice(0, 58), {
       x: 175, y: y + 3, size: 9, font: regular, color: rgb(0.25, 0.3, 0.38)

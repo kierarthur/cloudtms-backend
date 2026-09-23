@@ -261,6 +261,7 @@ test('printed Mileage carries each accepted photograph as a normal evidence page
   );
   assert.match(render, /const isMileageEvidence = upper\(component\.component_kind\) === 'MILEAGE_FORM'/);
   assert.match(render, /Total mileage for this claim:/);
+  assert.match(render, /mileageUnitLabel\(mileageUnits\)/);
   assert.match(render, /await drawCandidatePaperPageQr\(page, paperReturnQrText/);
   assert.match(render, /page\.drawText\('Manager signature'/);
   assert.match(render, /page\.drawText\('Date'/);
