@@ -249,7 +249,8 @@ as $function$
       resolution.work_event_id,resolution.source_row_fingerprint,
       resolution.contract_and_rate_fingerprint,resolution.effective_policy_fingerprint,
       (date_trunc('week',row.work_date)::date+6) week_ending,
-      lineage.timesheet_id,route_context.value route_context
+      coalesce(lineage.timesheet_id,root_contract_week.timesheet_id) timesheet_id,
+      route_context.value route_context
     from cycle_context
     join public.weekly_source_upload_rows row on row.upload_id=cycle_context.upload_id
     join lateral (
@@ -259,8 +260,19 @@ as $function$
     ) resolution on resolution.mapping_state='RESOLVED'
     left join public.weekly_source_row_timesheet_lineages lineage
       on lineage.row_resolution_id=resolution.id
+    left join lateral (
+      select contract_week.timesheet_id
+      from public.contract_weeks contract_week
+      where contract_week.contract_id=resolution.contract_id
+        and contract_week.week_ending_date=(date_trunc('week',row.work_date)::date+6)
+        and contract_week.additional_seq=0
+        and not contract_week.is_adjustment
+        and contract_week.status<>'CANCELLED'::public.contract_week_status_enum
+      order by contract_week.created_at desc,contract_week.id desc
+      limit 1
+    ) root_contract_week on true
     left join public.timesheets timesheet
-      on timesheet.timesheet_id=lineage.timesheet_id
+      on timesheet.timesheet_id=coalesce(lineage.timesheet_id,root_contract_week.timesheet_id)
      and timesheet.is_current and timesheet.revoked_at is null
      and timesheet.archived_at_utc is null
      and timesheet.sheet_scope='WEEKLY' and timesheet.line_type='HOURS'

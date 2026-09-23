@@ -180,6 +180,13 @@ insert into public.candidate_app_global_membership_links(
 -- cannot change that cycle's attestation population.
 insert into public.clients(id,name,ts_queries_email,vat_chargeable)
 values ('d2000000-0000-4000-8000-000000000004','NHSP display Trust',null,true);
+insert into public.client_settings(
+  id,client_id,effective_from,hr_validation_required,autoprocess_hr,
+  self_bill_no_invoices_sent,no_timesheet_required,requires_hr
+) values (
+  'd2100000-0000-4000-8000-000000000004','d2000000-0000-4000-8000-000000000004',
+  '2026-01-01',false,false,true,false,false
+);
 insert into public.candidates(id,tms_ref,first_name,last_name,display_name,email)
 values ('d3000000-0000-4000-8000-000000000003','READ-003','Taylor','Nurse','Taylor Nurse','taylor@example.invalid');
 insert into public.contracts(
@@ -271,6 +278,26 @@ insert into public.weekly_source_row_resolutions(
   450,'{}','RESOLVED','AUTO_UNIQUE','NEW_SCHEDULE_TUPLE',decode(repeat('97',32),'hex'),
   decode(repeat('98',32),'hex'),1,decode(repeat('99',32),'hex'),decode(repeat('9a',32),'hex'),
   decode(repeat('9b',32),'hex'),decode(repeat('9c',32),'hex')
+);
+-- Before finalisation there is deliberately no immutable source-row lineage.
+-- The candidate's signed current Contract-week Timesheet must nevertheless
+-- suppress a false CANDIDATE_TIMESHEET_MISSING issue in the Office query view.
+insert into public.timesheets(
+  timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+  worked_start_iso,worked_end_iso,break_minutes,worked_minutes,week_ending_date,
+  r2_nurse_key,img_sha256_nurse,contract_id,sheet_scope,line_type,actual_schedule_json
+) values (
+  'da000000-0000-4000-8000-000000000003','READ-N','taylor-nurse','nhsp-display-trust',
+  'ward-n','nurse','2026-09-08 09:00:00+00','2026-09-08 17:00:00+00',30,450,
+  '2026-09-13','verify/taylor.png',repeat('c',64),
+  'd4000000-0000-4000-8000-000000000003','WEEKLY','HOURS',
+  '[{"date":"2026-09-08","start":"09:00","end":"17:00","break_minutes":30}]'
+);
+insert into public.contract_weeks(
+  id,contract_id,week_ending_date,additional_seq,status,timesheet_id
+) values (
+  'ca000000-0000-4000-8000-000000000003','d4000000-0000-4000-8000-000000000003',
+  '2026-09-13',0,'SUBMITTED','da000000-0000-4000-8000-000000000003'
 );
 insert into public.weekly_source_charge_checks(
   id,upload_row_id,row_resolution_id,generation,row_sign_kind,
@@ -440,6 +467,18 @@ begin
   perform pg_temp.assert_true(
     v_nhsp_workspace#>>'{finalise,ready,rows,0,actual_hours}'='09:00-17:00 (30 min break)',
     'NHSP Finalise did not accept and apply the approved Actual hours sort');
+
+  v_nhsp_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','queries',
+    'source_group_id','d5000000-0000-4000-8000-000000000003',
+    'source_cycle_id','d6000000-0000-4000-8000-000000000004',
+    'client_id','d2000000-0000-4000-8000-000000000004',
+    'report_scope_id','dc000000-0000-4000-8000-000000000001',
+    'projection_publication_id','d8000000-0000-4000-8000-000000000003'
+  ));
+  perform pg_temp.assert_true(
+    (v_nhsp_workspace#>>'{queries,total_count}')::integer=0,
+    'signed current Contract-week Timesheet was falsely reported missing before lineage creation');
 
   v_history:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','history',
