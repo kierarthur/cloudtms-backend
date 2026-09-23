@@ -50,6 +50,15 @@ test('workspace projects complete unloaded selections, plain detail/reminder act
   assert.match(source, /offset v_offset limit v_limit/);
 });
 
+test('selected NHSP Trust cannot replace the current query publication with an older final-report scope', async () => {
+  const source = lower(await readFile(readSqlPath, 'utf8'));
+  const workspace = source.split('create or replace function public.weekly_source_office_workspace_v1(')[1]
+    .split('create or replace function private.weekly_source_office_money_text_v1(')[0];
+  assert.match(workspace, /if v_tab='queries' and v_cycle\.current_projection_publication_id is not null then[\s\S]*?v_publication_id:=v_cycle\.current_projection_publication_id;[\s\S]*?else[\s\S]*?weekly_source_report_scopes/s);
+  assert.match(workspace, /weekly_source_workspace_publication_stale/);
+  assert.match(workspace, /from private\.weekly_source_office_query_groups_v1\(v_cycle\.id,v_publication\.id,v_filters\)/);
+});
+
 test('every policy-visible Finalise column has a server-side two-state sort contract', async () => {
   const [source, verification] = (await Promise.all([
     readFile(readSqlPath, 'utf8'), readFile(verifySqlPath, 'utf8'),

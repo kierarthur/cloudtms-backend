@@ -690,16 +690,28 @@ begin
     end if;
   end if;
 
-  if v_publication_id is null and v_report_scope_id is not null then
-    select current_projection_publication_id into v_publication_id
-    from public.weekly_source_report_scopes where id=v_report_scope_id;
-  end if;
-  if v_publication_id is null and v_client_id is not null and v_group.source_family='NHSP' then
-    select scope.current_projection_publication_id,scope.id
-    into v_publication_id,v_report_scope_id
-    from public.weekly_source_report_scopes scope
-    where scope.source_cycle_id=v_cycle.id and scope.client_id=v_client_id
-    order by scope.cutoff_at_utc desc,scope.id desc limit 1;
+  -- Queries are a cycle-wide pre-finalisation journey. An NHSP report scope
+  -- can retain an older final backing publication while a newer complete
+  -- previously-released upload is current for the cycle. Never let the
+  -- selected Trust's report scope hide that current candidate work.
+  if v_tab='queries' and v_cycle.current_projection_publication_id is not null then
+    if v_publication_id is not null
+       and v_publication_id is distinct from v_cycle.current_projection_publication_id then
+      raise exception 'WEEKLY_SOURCE_WORKSPACE_PUBLICATION_STALE' using errcode='40001';
+    end if;
+    v_publication_id:=v_cycle.current_projection_publication_id;
+  else
+    if v_publication_id is null and v_report_scope_id is not null then
+      select current_projection_publication_id into v_publication_id
+      from public.weekly_source_report_scopes where id=v_report_scope_id;
+    end if;
+    if v_publication_id is null and v_client_id is not null and v_group.source_family='NHSP' then
+      select scope.current_projection_publication_id,scope.id
+      into v_publication_id,v_report_scope_id
+      from public.weekly_source_report_scopes scope
+      where scope.source_cycle_id=v_cycle.id and scope.client_id=v_client_id
+      order by scope.cutoff_at_utc desc,scope.id desc limit 1;
+    end if;
   end if;
   if v_publication_id is null then
     v_publication_id:=v_cycle.current_projection_publication_id;
