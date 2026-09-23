@@ -499,6 +499,7 @@ declare
   v_anchor_week_id uuid;
   v_target_capabilities jsonb;
   v_route_authority jsonb;
+  v_weekly_source_candidate_request_allowed boolean:=false;
   v_daily_input jsonb;
   v_daily_patch jsonb;
   v_expected_save_hash bytea;
@@ -1188,12 +1189,62 @@ begin
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.timesheet_id else v_week.timesheet_id end,
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.id else v_week.id end
       );
+      -- Source-authority hours remain read-only unless the server has an exact,
+      -- live Candidate request for this Candidate, Contract and week.  This is
+      -- the only admission used by the Candidate app to create its signed-hours
+      -- draft for either a missing Timesheet (SUBMIT_TIMESHEET) or an exact
+      -- discrepancy revision (CHECK_HOURS).  The final Weekly Source submit RPC
+      -- rechecks the same request, scope and fingerprint before materialising
+      -- anything, so this cannot become a general import-authoritative editor.
+      if v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'
+         and v_workflow_kind='CONTRACT_HOURS'
+         and v_route='ELECTRONIC' then
+        select exists(
+          select 1
+          from public.weekly_timesheet_submission_requests submission
+          join public.weekly_candidate_outreach_generations generation
+            on generation.candidate_cohort_id=submission.candidate_cohort_id
+           and generation.source_cycle_id=submission.source_cycle_id
+           and generation.candidate_id=submission.candidate_id
+           and generation.generation_number=submission.request_generation
+           and generation.request_kind='SUBMIT_TIMESHEET'
+          join public.weekly_timesheet_submission_request_memberships membership
+            on membership.submission_request_id=submission.id
+          where v_week.timesheet_id is null
+            and submission.candidate_id=v_candidate_id
+            and submission.state in ('ACTIVE','PARTLY_SUBMITTED')
+            and generation.state='ACTIVE'
+            and generation.deadline_at_utc>=p_now_utc
+            and membership.state='WAITING'
+            and membership.contract_id=v_contract.id
+            and membership.week_ending=v_canonical_week_ending_date
+        ) or exists(
+          select 1
+          from public.weekly_candidate_outreach_generations generation
+          join public.weekly_candidate_outreach_memberships membership
+            on membership.candidate_generation_id=generation.id
+          join public.weekly_discrepancy_incidents incident
+            on incident.id=membership.incident_id
+          join public.weekly_issue_comparison_revisions comparison
+            on comparison.id=incident.current_comparison_revision_id
+          where v_week.timesheet_id is not null
+            and generation.candidate_id=v_candidate_id
+            and generation.request_kind='CHECK_HOURS'
+            and generation.state='ACTIVE'
+            and generation.deadline_at_utc>=p_now_utc
+            and membership.state='ACTIONABLE'
+            and membership.comparison_revision_id=incident.current_comparison_revision_id
+            and comparison.candidate_timesheet_id=v_week.timesheet_id
+            and comparison.contract_id=v_contract.id
+        ) into v_weekly_source_candidate_request_allowed;
+      end if;
       -- A later separate expense starts on the neutral ELECTRONIC draft route.
       -- Its approval-method step may then select PHONE, EMAIL or PAPER even
       -- when the completed worked Timesheet used the QR/PAPER family.
       if v_route_authority->>'route_family'='MANUAL_NON_QR'
          or (v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'
-           and v_workflow_kind<>'CONTRACT_EXPENSE') then
+           and v_workflow_kind<>'CONTRACT_EXPENSE'
+           and not v_weekly_source_candidate_request_allowed) then
         raise exception 'CANDIDATE_RECORD_VIEW_ONLY' using errcode='55000',detail=v_route_authority::text;
       end if;
       if (v_route_authority->>'route_family'='QR' and v_route<>'PAPER'
@@ -1219,7 +1270,10 @@ begin
           );
           if coalesce((v_target_capabilities->>'candidate_mutation_locked')::boolean,false)
              or coalesce((v_target_capabilities->>'protected')::boolean,false)
-             or not coalesce((v_target_capabilities->>'can_edit_hours')::boolean,false) then
+             or (
+               not coalesce((v_target_capabilities->>'can_edit_hours')::boolean,false)
+               and not v_weekly_source_candidate_request_allowed
+             ) then
             raise exception 'CANDIDATE_RECORD_MUTATION_LOCKED' using errcode='55000';
           end if;
         end if;

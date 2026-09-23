@@ -212,11 +212,11 @@ values (
 insert into public.client_settings(
   id,client_id,effective_from,default_submission_mode,week_ending_weekday,
   hr_validation_required,autoprocess_hr,self_bill_no_invoices_sent,
-  no_timesheet_required,requires_hr
+  no_timesheet_required,requires_hr,is_nhsp
 ) values (
   'fa210000-0000-4000-8000-000000000001',
   'fa200000-0000-4000-8000-000000000001','2026-01-01','ELECTRONIC',0,
-  true,false,false,false,true
+  true,false,false,false,true,false
 );
 insert into public.candidates(
   id,tms_ref,first_name,last_name,display_name,email,active,key_norm,opt_in_email
@@ -397,11 +397,14 @@ declare
   v_final jsonb;
   v_material_request jsonb;
   v_material_replay jsonb;
+  v_workflow_create jsonb;
   v_workflow uuid:='fae00000-0000-4000-8000-000000000001';
   v_signature uuid:='faf00000-0000-4000-8000-000000000001';
   v_injected boolean:=false;
   v_rejected boolean:=false;
   v_conflict boolean:=false;
+  v_blocked boolean:=false;
+  v_block_error text;
 begin
   v_sync:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','fa100000-0000-4000-8000-000000000001',
@@ -457,6 +460,13 @@ begin
     )
   );
   v_generation:=(v_ask->>'candidate_generation_id')::uuid;
+
+  -- Switch the fixture to a valid Roster source-authority route only after the
+  -- server has created the request. This keeps notification setup independent
+  -- while proving the Candidate workflow admission against the real route.
+  update public.client_settings
+  set autoprocess_hr=true,no_timesheet_required=true,requires_hr=false
+  where id='fa210000-0000-4000-8000-000000000001';
 
   v_request:=public.weekly_source_candidate_app_request_get_v1(
     'fad00000-0000-4000-8000-000000000001','TEST',v_generation,v_now
@@ -581,19 +591,26 @@ begin
     if sqlerrm<>'WEEKLY_SOURCE_CANDIDATE_ALL_OPEN_ISSUES_REQUIRED' then raise; end if;
   end;
 
-  insert into public.candidate_submission_workflows(
-    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,
-    generation,contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
-    week_ending_date,idempotency_key
-  ) values (
-    v_workflow,'TEST','fac00000-0000-4000-8000-000000000001',
-    'fa300000-0000-4000-8000-000000000001','CONTRACT_HOURS','WEEKLY',
-    'ELECTRONIC','WORKER_DRAFT',1,'fa400000-0000-4000-8000-000000000001',
-    'fab00000-0000-4000-8000-000000000001',
-    'faa00000-0000-4000-8000-000000000001',
-    'faa00000-0000-4000-8000-000000000001','2026-09-06',
-    'candidate-weekly-app-workflow'
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',v_workflow,'CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fab00000-0000-4000-8000-000000000001',
+      'week_ending_date','2026-09-06',
+      'target_timesheet_id','faa00000-0000-4000-8000-000000000001',
+      'input_snapshot','{}'::jsonb
+    ),'candidate-weekly-app-workflow',v_now
   );
+  perform pg_temp.assert_true(
+    v_workflow_create->>'workflow_id'=v_workflow::text
+    and v_workflow_create->>'state'='WORKER_DRAFT'
+    and (v_workflow_create->>'generation')::integer=1,
+    'active CHECK_HOURS request did not admit the real Candidate workflow create path'
+  );
+  update public.client_settings
+  set autoprocess_hr=false,no_timesheet_required=false,requires_hr=true
+  where id='fa210000-0000-4000-8000-000000000001';
   insert into public.candidate_submission_components(
     id,workflow_id,workflow_generation,component_no,timesheet_id,component_kind,
     document_role,state,storage_key,media_type,byte_size,source_content_sha256,
@@ -1008,25 +1025,74 @@ begin
     )
   );
   v_generation:=(v_ask->>'candidate_generation_id')::uuid;
-  insert into public.candidate_submission_workflows(
-    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,
-    generation,contract_id,contract_week_id,week_ending_date,idempotency_key
-  ) values
-    ('fc500000-0000-4000-8000-000000000001','TEST',
-     'fac00000-0000-4000-8000-000000000001','fa300000-0000-4000-8000-000000000001',
-     'CONTRACT_HOURS','WEEKLY','ELECTRONIC','WORKER_DRAFT',1,
-     'fa400000-0000-4000-8000-000000000001','fc400000-0000-4000-8000-000000000001',
-     '2026-08-16','late-submit-exact'),
-    ('fc500000-0000-4000-8000-000000000002','TEST',
-     'fac00000-0000-4000-8000-000000000001','fa300000-0000-4000-8000-000000000001',
-     'CONTRACT_HOURS','WEEKLY','ELECTRONIC','WORKER_DRAFT',1,
-     'fa400000-0000-4000-8000-000000000001','fc400000-0000-4000-8000-000000000002',
-     '2026-08-23','late-submit-mismatch'),
-    ('fc500000-0000-4000-8000-000000000003','TEST',
-     'fac00000-0000-4000-8000-000000000001','fa300000-0000-4000-8000-000000000001',
-     'CONTRACT_HOURS','WEEKLY','ELECTRONIC','WORKER_DRAFT',1,
-     'fa400000-0000-4000-8000-000000000001','fc400000-0000-4000-8000-000000000003',
-     '2026-08-30','late-submit-missing');
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,status,submission_mode_snapshot,
+    day_entries_json,totals_json
+  ) values (
+    'fc400000-0000-4000-8000-000000000004',
+    'fa400000-0000-4000-8000-000000000001','2026-08-09','OPEN','MANUAL','[]','{}'
+  );
+  update public.client_settings
+  set autoprocess_hr=true,no_timesheet_required=true,requires_hr=false
+  where id='fa210000-0000-4000-8000-000000000001';
+
+  -- Import-authoritative hours are not a general editor.  The fourth week is
+  -- deliberately outside the exact three-scope server request and must remain
+  -- closed even though the same Candidate and Contract have an active request.
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      'fad00000-0000-4000-8000-000000000001','TEST',
+      'fc500000-0000-4000-8000-000000000010','CREATE',null,
+      pg_catalog.jsonb_build_object(
+        'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+        'contract_id','fa400000-0000-4000-8000-000000000001',
+        'contract_week_id','fc400000-0000-4000-8000-000000000004',
+        'week_ending_date','2026-08-09','input_snapshot','{}'::jsonb
+      ),'weekly-source-no-request-must-fail',v_now
+    );
+  exception when sqlstate '55000' then
+    v_block_error:=sqlerrm;
+    v_blocked:=sqlerrm='CANDIDATE_RECORD_VIEW_ONLY';
+  end;
+  perform pg_temp.assert_true(v_blocked,
+    'import-authoritative Candidate hours opened outside the server-owned request; result='
+      ||coalesce(v_block_error,'NO_ERROR'));
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000001','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fc400000-0000-4000-8000-000000000001',
+      'week_ending_date','2026-08-16','input_snapshot','{}'::jsonb
+    ),'late-submit-exact',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'first SUBMIT_TIMESHEET scope did not admit the real workflow create path');
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000002','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fc400000-0000-4000-8000-000000000002',
+      'week_ending_date','2026-08-23','input_snapshot','{}'::jsonb
+    ),'late-submit-mismatch',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'second SUBMIT_TIMESHEET scope did not admit the real workflow create path');
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000003','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fc400000-0000-4000-8000-000000000003',
+      'week_ending_date','2026-08-30','input_snapshot','{}'::jsonb
+    ),'late-submit-missing',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'third SUBMIT_TIMESHEET scope did not admit the real workflow create path');
   insert into public.candidate_submission_components(
     id,workflow_id,workflow_generation,component_no,component_kind,document_role,
     state,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,

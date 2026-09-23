@@ -3372,8 +3372,7 @@ begin
     started_at_utc,reminder_due_at_utc,deadline_at_utc,membership_hash
   )
   select source_group.environment,source_group.agency_id,v_cycle_id,v_candidate_id,v_cohort.id,
-    coalesce((select pg_catalog.max(request_generation)+1 from public.weekly_timesheet_submission_requests
-              where source_cycle_id=v_cycle_id and candidate_id=v_candidate_id),1),
+    v_generation.generation_number,
     (v_guard->>'upload_id')::uuid,v_publication_id,'ACTIVE',v_generation.started_at_utc,
     v_generation.reminder_due_at_utc,v_generation.deadline_at_utc,v_hash
   from public.weekly_source_cycles cycle
