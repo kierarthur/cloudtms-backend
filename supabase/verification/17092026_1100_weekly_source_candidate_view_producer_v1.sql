@@ -476,6 +476,86 @@ begin
 end;
 $before_auth$;
 
+-- ---------------------------------------------------------------------------
+-- 4.1 A SUBMIT_TIMESHEET request is addressed by the public outreach
+--     generation id used in the notification/deep link, never by the private
+--     submission-request row id.  The membership remains the scope id.
+-- ---------------------------------------------------------------------------
+savepoint before_submit_request_identity;
+
+insert into public.weekly_route_activations(
+  id,source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+  activated_by_user_id,activated_at_utc
+) values (
+  'c6100000-0000-4000-8000-000000000001','c6000000-0000-4000-8000-000000000001',
+  'c3000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000001',
+  'CANDIDATE','CANDIDATE_FIRST','c1000000-0000-4000-8000-000000000001',
+  '2026-09-01 09:00:00+00'
+);
+insert into public.weekly_candidate_cohorts(
+  id,source_cycle_id,candidate_id,client_id,manager_recipient_route_key
+) values (
+  'c6200000-0000-4000-8000-000000000001','c6000000-0000-4000-8000-000000000001',
+  'c3000000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000001',
+  decode(repeat('61',32),'hex')
+);
+insert into public.weekly_candidate_outreach_generations(
+  id,source_cycle_id,candidate_cohort_id,candidate_id,client_id,
+  generation_number,activation_id,trigger_kind,request_kind,route_mode,
+  started_at_utc,reminder_due_at_utc,deadline_at_utc,
+  manual_reminder_available_at_utc,state,membership_hash
+) values (
+  'c6300000-0000-4000-8000-000000000001','c6000000-0000-4000-8000-000000000001',
+  'c6200000-0000-4000-8000-000000000001','c3000000-0000-4000-8000-000000000001',
+  'c2000000-0000-4000-8000-000000000001',1,
+  'c6100000-0000-4000-8000-000000000001','OFFICE_ASK','SUBMIT_TIMESHEET',
+  'CANDIDATE_FIRST','2026-09-01 09:00:00+00','2026-09-01 15:00:00+00',
+  '2026-09-01 21:00:00+00','2026-09-01 10:00:00+00','ACTIVE',
+  decode(repeat('62',32),'hex')
+);
+update public.weekly_candidate_cohorts
+set current_generation_id='c6300000-0000-4000-8000-000000000001'
+where id='c6200000-0000-4000-8000-000000000001';
+insert into public.weekly_timesheet_submission_requests(
+  id,environment,agency_id,source_cycle_id,candidate_id,candidate_cohort_id,
+  request_generation,current_upload_id,current_projection_publication_id,state,
+  started_at_utc,reminder_due_at_utc,deadline_at_utc,membership_hash
+) values (
+  'c6400000-0000-4000-8000-000000000001','TEST','c0000000-0000-4000-8000-000000000001',
+  'c6000000-0000-4000-8000-000000000001','c3000000-0000-4000-8000-000000000001',
+  'c6200000-0000-4000-8000-000000000001',1,
+  'c7000000-0000-4000-8000-000000000001','c8000000-0000-4000-8000-000000000001',
+  'ACTIVE','2026-09-01 09:00:00+00','2026-09-01 15:00:00+00',
+  '2026-09-01 21:00:00+00',decode(repeat('63',32),'hex')
+);
+insert into public.weekly_timesheet_submission_request_memberships(
+  id,submission_request_id,ordinal,week_ending,client_id,contract_id,
+  expected_source_fingerprint,state
+) values (
+  'c6500000-0000-4000-8000-000000000001','c6400000-0000-4000-8000-000000000001',
+  1,'2026-09-06','c2000000-0000-4000-8000-000000000001',
+  'c4000000-0000-4000-8000-000000000001',decode(repeat('64',32),'hex'),'WAITING'
+);
+
+do $submit_request_identity$
+declare
+  v jsonb;
+begin
+  v:=private.weekly_source_candidate_view_v1('cc000000-0000-4000-8000-000000000001');
+  perform pg_temp.assert_eq(v->>'request_kind','SUBMIT_TIMESHEET',
+    'the candidate view exposes the submission request kind');
+  perform pg_temp.assert_eq(v->>'request_id','c6300000-0000-4000-8000-000000000001',
+    'request_id is the public outreach generation used by the deep link');
+  perform pg_temp.assert_true(v->>'request_id' is distinct from
+    'c6400000-0000-4000-8000-000000000001',
+    'the private submission row id must never replace the public request id');
+  perform pg_temp.assert_eq(v->>'scope_id','c6500000-0000-4000-8000-000000000001',
+    'scope_id is the exact contract-week membership');
+end;
+$submit_request_identity$;
+
+rollback to savepoint before_submit_request_identity;
+
 update public.timesheets set authorised_at_server=now()
 where timesheet_id='cc000000-0000-4000-8000-000000000001';
 

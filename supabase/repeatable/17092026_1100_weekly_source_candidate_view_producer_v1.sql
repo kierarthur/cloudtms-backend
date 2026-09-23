@@ -180,16 +180,23 @@ begin
       'request_id',v_request_id,'scope_id',v_scope_id,'request_kind','CHECK_HOURS');
   end if;
 
-  select submission.id,membership.id,'SUBMIT_TIMESHEET'
+  select generation.id,membership.id,'SUBMIT_TIMESHEET'
     into v_request_id,v_scope_id,v_kind
   from public.weekly_timesheet_submission_requests submission
+  join public.weekly_candidate_outreach_generations generation
+    on generation.candidate_cohort_id=submission.candidate_cohort_id
+   and generation.source_cycle_id=submission.source_cycle_id
+   and generation.candidate_id=submission.candidate_id
+   and generation.generation_number=submission.request_generation
+   and generation.request_kind='SUBMIT_TIMESHEET'
+   and generation.state not in ('SUPERSEDED','CANCELLED')
   join public.weekly_timesheet_submission_request_memberships membership
     on membership.submission_request_id=submission.id
   where submission.candidate_id=v_candidate_id
     and submission.state not in ('SUPERSEDED','CANCELLED')
     and membership.contract_id=v_contract_id
     and membership.week_ending=v_week
-  order by submission.request_generation desc,submission.id desc,membership.id
+  order by generation.generation_number desc,generation.id desc,membership.id
   limit 1;
   if v_request_id is not null then
     return pg_catalog.jsonb_build_object(

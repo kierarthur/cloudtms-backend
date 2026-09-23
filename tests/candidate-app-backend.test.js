@@ -1340,6 +1340,50 @@ test('Candidate notification projection closes internal database payloads and li
   assert.equal(JSON.stringify(notification).includes('workflow_generation'), false);
 });
 
+test('Weekly Source submission notifications preserve the public request deep link and policy copy', () => {
+  const requestId = '00000000-0000-4000-8000-000000000069';
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000068',
+    workflow_id: null,
+    timesheet_id: null,
+    event_type: 'WEEKLY_SOURCE_REQUEST',
+    template_key: 'weekly-source-submit-timesheet-v1',
+    template_params: {
+      request_id: requestId,
+      request_kind: 'SUBMIT_TIMESHEET',
+      timesheet_count: 1,
+      week_ending_label: '13 September 2026',
+      client_name: 'CloudTMS Stage 8 NHSP Test Trust',
+      provider_detail: 'must not return'
+    },
+    deep_link_json: { destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId },
+    state: 'UNREAD', created_at_utc: '2026-09-23T01:54:25.000Z', read_at_utc: null
+  });
+  assert.equal(notification.payload_json.message,
+    'Submit your Weekly Timesheet for the week ending 13 September 2026 at CloudTMS Stage 8 NHSP Test Trust so your hours can be checked.');
+  assert.deepEqual(notification.deep_link_json, {
+    destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId
+  });
+  assert.equal(JSON.stringify(notification).includes('provider_detail'), false);
+
+  const reminder = safeCandidateNotification({
+    ...notification,
+    event_type: 'WEEKLY_SOURCE_REMINDER',
+    template_params: {
+      request_id: requestId,
+      request_kind: 'SUBMIT_TIMESHEET',
+      timesheet_count: 2,
+      client_name: 'CloudTMS Stage 8 NHSP Test Trust'
+    },
+    deep_link_json: { destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId }
+  });
+  assert.equal(reminder.payload_json.message,
+    '2 Weekly Timesheets at CloudTMS Stage 8 NHSP Test Trust are still waiting to be submitted.');
+  assert.deepEqual(reminder.deep_link_json, {
+    destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId
+  });
+});
+
 test('linked expense cancellation notification explains the reject-before-delete cause', () => {
   const workflowId = '00000000-0000-4000-8000-000000000072';
   const notification = safeCandidateNotification({

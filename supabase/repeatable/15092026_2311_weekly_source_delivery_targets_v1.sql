@@ -1039,6 +1039,9 @@ declare
   v_event_type text;
   v_template_key text;
   v_dedupe_key text;
+  v_client_name text;
+  v_timesheet_count integer;
+  v_week_ending date;
 begin
   if new.audience_kind<>'CANDIDATE' then return new; end if;
   if new.tranche_kind not in (
@@ -1093,6 +1096,28 @@ begin
     else 'weekly-source-check-hours-v1' end;
   v_dedupe_key:='weekly-source-message-intent:'||new.id::text;
 
+  if v_request_kind='SUBMIT_TIMESHEET' then
+    select client.name into strict v_client_name
+    from public.clients client
+    where client.id=v_generation.client_id;
+
+    select pg_catalog.count(*)::integer,pg_catalog.min(membership.week_ending)
+      into v_timesheet_count,v_week_ending
+    from public.weekly_timesheet_submission_requests submission
+    join public.weekly_timesheet_submission_request_memberships membership
+      on membership.submission_request_id=submission.id
+    where submission.candidate_cohort_id=v_generation.candidate_cohort_id
+      and submission.source_cycle_id=v_generation.source_cycle_id
+      and submission.candidate_id=v_generation.candidate_id
+      and submission.request_generation=v_generation.generation_number
+      and submission.state not in ('SUPERSEDED','CANCELLED')
+      and membership.state='WAITING';
+    if coalesce(v_timesheet_count,0)<1 or v_week_ending is null then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_SUBMISSION_SCOPE_NOT_FOUND'
+        using errcode='55000';
+    end if;
+  end if;
+
   insert into public.candidate_notifications(
     account_id,candidate_id,workflow_id,timesheet_id,event_type,
     preference_category,template_key,template_params,deep_link_json,
@@ -1106,7 +1131,12 @@ begin
       'tranche_kind',new.tranche_kind,
       'due_at_utc',new.due_at_utc,
       'deadline_at_utc',v_generation.deadline_at_utc
-    ),
+    )||case when v_request_kind='SUBMIT_TIMESHEET' then
+      pg_catalog.jsonb_build_object(
+        'timesheet_count',v_timesheet_count,
+        'week_ending_label',pg_catalog.to_char(v_week_ending,'FMDD FMMonth YYYY'),
+        'client_name',v_client_name
+      ) else '{}'::jsonb end,
     pg_catalog.jsonb_build_object(
       'destination','WEEKLY_SOURCE_REQUEST','request_id',v_generation.id
     ),

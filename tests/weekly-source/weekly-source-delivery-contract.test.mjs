@@ -28,6 +28,11 @@ test('database delivery contract is per-target, durable, bounded and browser-den
   assert.match(repeatable, /insert into public\.candidate_notifications/i);
   assert.match(repeatable, /WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE/i);
   assert.match(repeatable, /REQUEST_RETIRED/i);
+  assert.match(repeatable, /'destination','WEEKLY_SOURCE_REQUEST','request_id',v_generation\.id/i);
+  assert.match(repeatable, /'timesheet_count',v_timesheet_count/i);
+  assert.match(repeatable, /'week_ending_label',pg_catalog\.to_char\(v_week_ending,'FMDD FMMonth YYYY'\)/i);
+  assert.match(repeatable, /'client_name',v_client_name/i);
+  assert.match(repeatable, /WEEKLY_SOURCE_CANDIDATE_SUBMISSION_SCOPE_NOT_FOUND/i);
   for (const signature of [
     'weekly_source_candidate_notification_intent_v1\\(\\)',
     'weekly_source_candidate_notification_retire_v1\\(\\)',

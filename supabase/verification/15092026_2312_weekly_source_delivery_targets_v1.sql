@@ -63,6 +63,21 @@ begin
        'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
      ) not ilike '%WEEKLY_SOURCE_CANDIDATE_APP_UNAVAILABLE%'
      or pg_catalog.pg_get_functiondef(
+       'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
+     ) not ilike '%WEEKLY_SOURCE_CANDIDATE_SUBMISSION_SCOPE_NOT_FOUND%'
+     or pg_catalog.pg_get_functiondef(
+       'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
+     ) not ilike '%''destination'',''WEEKLY_SOURCE_REQUEST'',''request_id'',v_generation.id%'
+     or pg_catalog.pg_get_functiondef(
+       'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
+     ) not ilike '%''timesheet_count'',v_timesheet_count%'
+     or pg_catalog.pg_get_functiondef(
+       'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
+     ) not ilike '%''week_ending_label'',pg_catalog.to_char(v_week_ending,''FMDD FMMonth YYYY'')%'
+     or pg_catalog.pg_get_functiondef(
+       'private.weekly_source_candidate_notification_intent_v1()'::pg_catalog.regprocedure
+     ) not ilike '%''client_name'',v_client_name%'
+     or pg_catalog.pg_get_functiondef(
        'public.weekly_source_message_dispatch_target_start_atomic_v1(jsonb)'::pg_catalog.regprocedure
      ) not ilike '%SUBMISSION_STARTED%'
      or pg_catalog.pg_get_functiondef(

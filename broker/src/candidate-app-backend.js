@@ -10600,6 +10600,31 @@ function candidateNotificationMessage(eventType, parameters = {}) {
   if (eventType === 'TIMESHEET_HOURS_UPDATED') {
     return approvedHoursChangedMessage(parameters);
   }
+  if (eventType === 'WEEKLY_SOURCE_REQUEST'
+      || eventType === 'WEEKLY_SOURCE_REMINDER') {
+    const requestKind = upper(parameters?.request_kind);
+    if (requestKind === 'SUBMIT_TIMESHEET') {
+      const count = Number(parameters?.timesheet_count);
+      const clientName = text(parameters?.client_name)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      const weekEnding = text(parameters?.week_ending_label)
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (eventType === 'WEEKLY_SOURCE_REMINDER') {
+        if (Number.isInteger(count) && count > 1 && clientName) {
+          return `${count} Weekly Timesheets at ${clientName} are still waiting to be submitted.`;
+        }
+        if (clientName) return `1 Weekly Timesheet at ${clientName} is still waiting to be submitted.`;
+        return 'Your Weekly Timesheet is still waiting to be submitted.';
+      }
+      if (Number.isInteger(count) && count > 1 && clientName) {
+        return `You have ${count} Weekly Timesheets to submit at ${clientName} so your hours can be checked.`;
+      }
+      if (weekEnding && clientName) {
+        return `Submit your Weekly Timesheet for the week ending ${weekEnding} at ${clientName} so your hours can be checked.`;
+      }
+      return 'Please submit your Weekly Timesheet so your hours can be checked.';
+    }
+  }
   return CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update.';
 }
 
@@ -10614,14 +10639,18 @@ function safeCandidateNotification(row) {
   const storedLink = isObject(source.deep_link_json) ? source.deep_link_json : {};
   const eventType = upper(source.event_type);
   const storedType = text(storedLink.type).toLowerCase();
+  const storedDestination = upper(storedLink.destination);
   const workflowId = optionalUuid(source.workflow_id) || optionalUuid(storedLink.workflow_id)
     || optionalUuid(parameters.workflow_id);
   const timesheetId = optionalUuid(source.timesheet_id) || optionalUuid(storedLink.timesheet_id)
     || optionalUuid(parameters.timesheet_id);
   const contractWeekId = optionalUuid(storedLink.contract_week_id)
     || optionalUuid(parameters.contract_week_id);
+  const requestId = optionalUuid(storedLink.request_id) || optionalUuid(parameters.request_id);
   let destination = 'HOME';
-  if (storedType === 'daily') destination = 'DAILY';
+  if (storedDestination === 'WEEKLY_SOURCE_REQUEST' && requestId) {
+    destination = 'WEEKLY_SOURCE_REQUEST';
+  } else if (storedType === 'daily') destination = 'DAILY';
   else if (storedType === 'account') destination = 'ACCOUNT';
   else if (storedType === 'workflow' && workflowId) destination = 'WORKFLOW_DETAIL';
   else if ((storedType === 'timesheet' || storedType === 'paper_pack') && timesheetId) {
@@ -10643,6 +10672,7 @@ function safeCandidateNotification(row) {
   if (workflowId) deepLink.workflow_id = workflowId;
   if (timesheetId) deepLink.timesheet_id = timesheetId;
   if (contractWeekId) deepLink.contract_week_id = contractWeekId;
+  if (destination === 'WEEKLY_SOURCE_REQUEST') deepLink.request_id = requestId;
   return {
     id: source.id,
     event_type: eventType || 'UPDATE',
