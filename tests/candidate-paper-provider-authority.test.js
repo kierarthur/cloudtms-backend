@@ -169,3 +169,62 @@ test('ordinary non-Candidate mail bypasses Candidate provider authority', async 
   assert.deepEqual(result, { candidate_bound: false, authorised: true });
   assert.equal(called, false);
 });
+
+test('claimed informational completed Timesheet copy does not enter Candidate PAPER permit', async () => {
+  const completed = {
+    id: outboxId,
+    type: 'TIMESHEET_GENERAL',
+    email_type: 'WEEKLY_COMPLETED_TIMESHEET_COPY',
+    recipient_kind: 'CLIENT_INFORMATIONAL_COPY',
+    context_kind: 'timesheets',
+    attachments_ready: true,
+    attachment_delivery_policy: 'ATTACH',
+    attempt_lease_token: lease,
+    attachments: [{ r2_key: 'timesheet-pdf/test.pdf', sha256: manifest }],
+    payment_scope_json: {
+      candidate_workflow_id: workflowId,
+      candidate_workflow_generation: 3,
+      completed_pack_copy_event_id: 'b5400000-0000-4000-8000-000000000003',
+      completed_pack_copy_authority: 'WEEKLY_COMPLETED_PACK_COPY_V1',
+      informational_only: true,
+      changes_pay: false,
+      changes_invoice: false
+    }
+  };
+  let called = false;
+  const fetchImpl = async () => { called = true; throw new Error('must not enter PAPER permit'); };
+  const authorised = await candidatePaperProviderAuthorityCurrent({
+    env: { SUPABASE_URL: 'https://test.example.invalid' },
+    claimedRow: completed,
+    currentLeaseToken: lease,
+    fetchImpl,
+    headers: {}
+  });
+  assert.deepEqual(authorised, { candidate_bound: true, authorised: true, reason: null });
+  assert.equal(called, false);
+
+  for (const invalid of [
+    { ...completed, attempt_lease_token: 'another-lease' },
+    { ...completed, attachments_ready: false },
+    { ...completed, payment_scope_json: { ...completed.payment_scope_json,
+      candidate_mail_authority: 'CANDIDATE_PAPER_V1' } },
+    { ...completed, payment_scope_json: { ...completed.payment_scope_json,
+      paper_return_manifest_sha256: manifest } },
+    { ...completed, payment_scope_json: { ...completed.payment_scope_json,
+      candidate_manager_mail_kind: 'INITIAL' } }
+  ]) {
+    const rejected = await candidatePaperProviderAuthorityCurrent({
+      env: { SUPABASE_URL: 'https://test.example.invalid' },
+      claimedRow: invalid,
+      currentLeaseToken: lease,
+      fetchImpl,
+      headers: {}
+    });
+    assert.deepEqual(rejected, {
+      candidate_bound: true,
+      authorised: false,
+      reason: 'WEEKLY_COMPLETED_COPY_PROVIDER_BINDING_INVALID'
+    });
+  }
+  assert.equal(called, false);
+});

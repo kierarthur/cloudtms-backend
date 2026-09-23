@@ -541,8 +541,21 @@ begin
 
   update public.mail_outbox
   set attachments=jsonb_set(
-    attachments,'{0,sha256}',to_jsonb(payment_scope_json->>'final_document_sha256')
-  )
+        attachments,'{0,sha256}',to_jsonb(payment_scope_json->>'final_document_sha256')
+      ),
+      payment_scope_json=jsonb_set(
+        payment_scope_json,'{candidate_mail_authority}',to_jsonb('CANDIDATE_PAPER_V1'::text)
+      )
+  where id=v_outbox_id;
+  select count(*) into v_claimed
+  from public.email_outbox_claim_ready_batch(10,'weekly-copy-paper-marker-proof',5) claimed
+  where claimed.id=v_outbox_id;
+  if v_claimed<>0 then
+    raise exception 'VERIFY_FAILED: completed-copy email with PAPER marker was claimable';
+  end if;
+
+  update public.mail_outbox
+  set payment_scope_json=payment_scope_json-'candidate_mail_authority'
   where id=v_outbox_id;
   select count(*) into v_claimed
   from public.email_outbox_claim_ready_batch(10,'weekly-copy-valid-proof',5) claimed

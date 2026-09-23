@@ -179,6 +179,10 @@ begin
           and mo.payment_scope_json->>'informational_only'='true'
           and mo.payment_scope_json->>'changes_pay'='false'
           and mo.payment_scope_json->>'changes_invoice'='false'
+          and nullif(btrim(coalesce(
+            mo.payment_scope_json->>'candidate_mail_authority','')),'') is null
+          and not (mo.payment_scope_json ? 'paper_return_manifest_sha256')
+          and not (mo.payment_scope_json ? 'candidate_manager_mail_kind')
           and mo.body_html !~* 'href=|https?://'
           and mo.body_text !~* 'https?://'
           and jsonb_typeof(mo.attachments)='array'
