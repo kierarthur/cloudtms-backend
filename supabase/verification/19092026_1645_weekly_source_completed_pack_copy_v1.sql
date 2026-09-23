@@ -515,6 +515,44 @@ begin
 end;
 $prove$;
 
+-- The generic mail drainer must claim the real informational copy without
+-- opening the guarded Candidate manager/paper or Banking Pay mail routes.
+-- A changed attachment hash must remain unclaimable.
+do $claim_guard$
+declare
+  v_outbox_id uuid;
+  v_claimed integer;
+begin
+  select outbox.id into strict v_outbox_id
+  from public.mail_outbox outbox
+  where outbox.payment_scope_json->>'completed_pack_copy_authority'
+    ='WEEKLY_COMPLETED_PACK_COPY_V1'
+    and outbox.context_id='e5060000-0000-4000-8000-000000000001';
+
+  update public.mail_outbox
+  set attachments=jsonb_set(attachments,'{0,sha256}',to_jsonb(repeat('f',64)))
+  where id=v_outbox_id;
+  select count(*) into v_claimed
+  from public.email_outbox_claim_ready_batch(10,'weekly-copy-forged-proof',5) claimed
+  where claimed.id=v_outbox_id;
+  if v_claimed<>0 then
+    raise exception 'VERIFY_FAILED: forged completed-copy attachment was claimable';
+  end if;
+
+  update public.mail_outbox
+  set attachments=jsonb_set(
+    attachments,'{0,sha256}',to_jsonb(payment_scope_json->>'final_document_sha256')
+  )
+  where id=v_outbox_id;
+  select count(*) into v_claimed
+  from public.email_outbox_claim_ready_batch(10,'weekly-copy-valid-proof',5) claimed
+  where claimed.id=v_outbox_id;
+  if v_claimed<>1 then
+    raise exception 'VERIFY_FAILED: valid completed-copy message was not claimable';
+  end if;
+end;
+$claim_guard$;
+
 -- A later policy edit cannot redirect the immutable event or its already
 -- queued command. A genuinely re-signed generation is nevertheless a new
 -- completion and becomes due exactly once.

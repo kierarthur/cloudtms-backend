@@ -163,6 +163,75 @@ begin
               )
           )
         )
+        or (
+          -- The completed Weekly Timesheet copy is informational, not a
+          -- manager-approval or paper-return command.  Admit only the exact
+          -- immutable completion event and its single rendered PDF; leave
+          -- every existing Candidate and payment-mail branch unchanged.
+          mo.email_type='WEEKLY_COMPLETED_TIMESHEET_COPY'
+          and mo.type='TIMESHEET_GENERAL'
+          and mo.recipient_kind='CLIENT_INFORMATIONAL_COPY'
+          and mo.context_kind='timesheets'
+          and mo.attachments_ready=true
+          and mo.attachment_delivery_policy='ATTACH'
+          and mo.payment_scope_json->>'completed_pack_copy_authority'
+            ='WEEKLY_COMPLETED_PACK_COPY_V1'
+          and mo.payment_scope_json->>'informational_only'='true'
+          and mo.payment_scope_json->>'changes_pay'='false'
+          and mo.payment_scope_json->>'changes_invoice'='false'
+          and mo.body_html !~* 'href=|https?://'
+          and mo.body_text !~* 'https?://'
+          and jsonb_typeof(mo.attachments)='array'
+          and jsonb_array_length(mo.attachments)=1
+          and nullif(btrim(coalesce(mo.attachments->0->>'r2_key','')),'') is not null
+          and lower(coalesce(mo.attachments->0->>'content_type',''))='application/pdf'
+          and coalesce(mo.attachments->0->>'sha256','') ~ '^[0-9a-f]{64}$'
+          and coalesce(mo.attachments->0->>'size_bytes','') ~ '^[1-9][0-9]{0,18}$'
+          and coalesce(mo.attachments->0->>'page_count','') ~ '^[1-9][0-9]{0,8}$'
+          and exists (
+            select 1
+            from public.weekly_completed_pack_copy_events event
+            join public.timesheets event_timesheet
+              on event_timesheet.timesheet_id=event.timesheet_id
+            join public.candidate_submission_workflows workflow
+              on workflow.id::text=mo.payment_scope_json->>'candidate_workflow_id'
+            where event.id::text=mo.payment_scope_json->>'completed_pack_copy_event_id'
+              and event.id::text=mo.attachments->0->>'completed_pack_copy_event_id'
+              and event.state='READY'
+              and event.timesheet_id=mo.context_id
+              and event.timesheet_id::text=mo.payment_scope_json->>'timesheet_id'
+              and event.timesheet_revision=case
+                when coalesce(mo.payment_scope_json->>'timesheet_revision','')
+                  ~ '^[1-9][0-9]{0,8}$'
+                then (mo.payment_scope_json->>'timesheet_revision')::integer end
+              and btrim(event_timesheet.booking_id)
+                =mo.payment_scope_json->>'timesheet_family'
+              and event_timesheet.contract_id=workflow.contract_id
+              and event.completion_generation=case
+                when coalesce(mo.payment_scope_json->>'candidate_workflow_generation','')
+                  ~ '^[1-9][0-9]{0,8}$'
+                then (mo.payment_scope_json->>'candidate_workflow_generation')::integer end
+              and workflow.generation=event.completion_generation
+              and workflow.id::text=mo.attachments->0->>'candidate_workflow_id'
+              and mo.payment_scope_json->>'candidate_workflow_generation'
+                =mo.attachments->0->>'candidate_workflow_generation'
+              and workflow.candidate_signed_at_utc is not null
+              and ((event.document_mode='CHECK_ONLY'
+                    and workflow.state='WORKER_SUBMITTED')
+                or (event.document_mode='INVOICE_EVIDENCE_REQUIRED'
+                    and workflow.state='FINALISED'))
+              and event.document_mode=mo.payment_scope_json->>'document_mode'
+              and event.recipient_snapshot=lower(btrim(mo."to"))
+              and encode(event.final_document_hash,'hex')
+                =lower(mo.attachments->0->>'sha256')
+              and lower(mo.attachments->0->>'sha256')
+                =lower(mo.payment_scope_json->>'final_document_sha256')
+              and mo.attachment_total_bytes=case
+                when coalesce(mo.attachments->0->>'size_bytes','')
+                  ~ '^[1-9][0-9]{0,18}$'
+                then (mo.attachments->0->>'size_bytes')::bigint end
+          )
+        )
       )
       and (
         upper(coalesce(mo.type,''))<>'INVOICE'
