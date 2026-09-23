@@ -540,8 +540,8 @@ begin
   v_stage:=public.weekly_source_message_render_stage_atomic_v1(pg_catalog.jsonb_build_object(
     'message_intent_id',v_manager_intent,
     'projection_publication_id','e8000000-0000-4000-8000-000000000002',
-    'membership_hash',v_render_input->>'membership_hash','policy_version','1.7.0',
-    'renderer_version','1.3.0','structure_version','1.0.0',
+    'membership_hash',v_render_input->>'membership_hash','policy_version','1.8.0',
+    'renderer_version','1.4.0','structure_version','1.0.0',
     'subject_text','Timesheet queries requiring your review - 1 shift',
     'html_body','<html><body><table><tr><td>Alex Nurse</td><td>Tue 1 Sep 2026</td><td>09:00-19:00 (30 min break)</td><td>09:00-17:00 (30 min break)</td></tr></table><a href="https://example.invalid/review">Review all queries</a></body></html>',
     'plain_body','Alex Nurse - Tue 1 Sep 2026 - 09:00-19:00 (30 min break) - 09:00-17:00 (30 min break). Review all queries.',
@@ -809,8 +809,8 @@ begin
   v_stage:=public.weekly_source_message_render_stage_atomic_v1(pg_catalog.jsonb_build_object(
     'message_intent_id',v_second_manager_intent,
     'projection_publication_id','e8000000-0000-4000-8000-000000000002',
-    'membership_hash',v_render_input->>'membership_hash','policy_version','1.7.0',
-    'renderer_version','1.3.0','structure_version','1.0.0',
+    'membership_hash',v_render_input->>'membership_hash','policy_version','1.8.0',
+    'renderer_version','1.4.0','structure_version','1.0.0',
     'subject_text','Timesheet queries requiring your review - 2 shifts',
     'html_body','<html><body><table><tr><td>Alex Nurse</td><td>Wed 2 Sep 2026</td><td>20:00-08:00 (60 min break)</td></tr><tr><td>Robin Nurse</td><td>Thu 3 Sep 2026</td><td>08:00-17:00 (30 min break)</td><td>08:00-16:00 (30 min break)</td></tr></table><a href="https://example.invalid/review-2">Review all queries</a></body></html>',
     'plain_body','Alex Nurse - Wed 2 Sep 2026 - 20:00-08:00 (60 min break). Robin Nurse - Thu 3 Sep 2026 - 08:00-17:00 (30 min break) - 08:00-16:00 (30 min break). Review all queries.',
@@ -1901,7 +1901,7 @@ begin
       ),
       'projection_publication_id','e8000000-0000-4000-8000-000000000004',
       'membership_hash',v_render_input->>'membership_hash',
-      'policy_version','1.7.0','renderer_version','1.3.0','structure_version','1.0.0',
+      'policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
       'subject_text',pg_catalog.format(
         'Timesheet queries requiring your review - %s %s',
         v_render_input->>'shift_count',

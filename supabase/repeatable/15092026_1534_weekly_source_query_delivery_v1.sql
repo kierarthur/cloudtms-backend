@@ -315,7 +315,7 @@ begin
   join public.weekly_source_groups source_group on source_group.id=incident.source_group_id;
   return pg_catalog.jsonb_build_object(
     'ok',true,'audience_kind','MANAGER','tranche_kind',v_intent.tranche_kind,
-    'policy_version','1.7.0','renderer_version','1.3.0','structure_version','1.0.0',
+    'policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
     'membership_hash',pg_catalog.encode(v_membership_hash,'hex'),
     'shift_count',v_shift_count,'client_count',v_client_count,
     'candidate_count',v_candidate_count,'rows',v_rows
@@ -1973,7 +1973,7 @@ begin
     if v_generation.state<>'ACTIVE' or v_route.current_generation_id<>v_generation.id then
       raise exception 'WEEKLY_SOURCE_MANAGER_MESSAGE_STALE' using errcode='40001';
     end if;
-    if v_policy_version<>'1.7.0' or v_renderer_version<>'1.3.0'
+    if v_policy_version<>'1.8.0' or v_renderer_version<>'1.4.0'
        or v_structure_version<>'1.0.0' or v_subject is null or v_html is null then
       raise exception 'WEEKLY_SOURCE_MANAGER_RENDER_POLICY_INVALID' using errcode='22023';
     end if;

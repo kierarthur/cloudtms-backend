@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   WEEKLY_MANAGER_EMAIL_POLICY,
   renderWeeklyManagerQueryEmail,
 } from '../../../broker/src/weekly-source/manager-email.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const janeOne = { issueId: 'q-001', workDate: '2026-09-01', sourceStartInstant: '2026-09-01T08:00:00Z', start: '09:00', end: '18:00', breakMinutes: 30, systemStart: '09:00', systemEnd: '17:00', systemBreakMinutes: 30, issueFamily: 'HOURS_DIFFER', candidateRequested: true };
 const janeMissing = { issueId: 'q-002', workDate: '2026-09-02', sourceStartInstant: '2026-09-02T07:00:00Z', start: '08:00', end: '16:00', breakMinutes: 30, systemAbsent: true, issueFamily: 'NHSP_ABSENT', candidateRequested: true };
@@ -64,4 +69,19 @@ test('NHSP wording is scoped and candidate-request text appears only after a pos
   assert.match(result.html, /Not shown in system/);
   assert.doesNotMatch(result.html, /Candidate requested your review/);
   assert.equal(WEEKLY_MANAGER_EMAIL_POLICY.rendererVersion, '1.4.0');
+});
+
+test('database staging accepts the exact current manager email renderer versions', async () => {
+  const delivery = await readFile(
+    path.join(root, 'supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql'),
+    'utf8',
+  );
+  const policyVersion = WEEKLY_MANAGER_EMAIL_POLICY.policyVersion.replaceAll('.', '\\.');
+  const rendererVersion = WEEKLY_MANAGER_EMAIL_POLICY.rendererVersion.replaceAll('.', '\\.');
+  assert.match(delivery, new RegExp(
+    `'policy_version','${policyVersion}','renderer_version','${rendererVersion}'`,
+  ));
+  assert.match(delivery, new RegExp(
+    `v_policy_version<>'${policyVersion}' or v_renderer_version<>'${rendererVersion}'`,
+  ));
 });
