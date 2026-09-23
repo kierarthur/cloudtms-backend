@@ -705,6 +705,10 @@ begin
     and pg_catalog.jsonb_array_length(v_no_shifts_workspace#>'{context,controls}')=4,
     'NHSP workspace did not return the locked Source, Trust, Report number and Cutoff context');
   perform pg_temp.assert_true(
+    v_no_shifts_workspace#>>'{finalise,tracker,cycle_id}'='d6000000-0000-4000-8000-000000000002'
+    and v_no_shifts_workspace#>>'{finalise,tracker,cycle_options,0,value}'='d6000000-0000-4000-8000-000000000002',
+    'NHSP finalisation tracker did not expose its selected week as a filter');
+  perform pg_temp.assert_true(
     v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,command}'='NO_SHIFTS_TO_IMPORT'
     and nullif(v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,context,trust}','') is not null
     and nullif(v_no_shifts_workspace#>>'{finalise,tracker,rows,0,actions,0,context,cutoff}','') is not null

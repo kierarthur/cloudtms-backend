@@ -41637,7 +41637,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8d386758ad80a87c28d0efc00e38d5a99fc2b486dd51286649618d2d1fd99015"
+      "definition_sha256": "c3dcf55a4df3e6f95b58d3d7ca23dfc8a6d0d097c4427180a69105bb8da43611"
     },
     {
       "acl": [

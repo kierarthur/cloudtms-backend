@@ -1497,6 +1497,11 @@ begin
 
   select pg_catalog.jsonb_build_object(
     'title','Finalisation progress','cycle_label','Week ending '||to_char(v_cycle.finalisation_week_ending,'FMDD Mon YYYY'),
+    'cycle_id',v_cycle.id,
+    'cycle_options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'))
+      order by item.finalisation_week_ending desc,item.id)
+      from public.weekly_source_cycles item where item.source_group_id=v_group.id),'[]'::jsonb),
     'complete',not exists(
       select 1 from public.weekly_source_group_clients membership
       where membership.source_group_id=v_group.id
