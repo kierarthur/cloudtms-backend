@@ -5009,12 +5009,43 @@ begin
 end;
 $acl$;
 
+-- This repeatable can be replayed after the target-delivery upgrade. Preserve
+-- its per-target boundary rather than reviving the retired whole-command rail.
+create or replace function public.weekly_source_message_dispatch_submission_start_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+begin
+  -- A replay of this earlier repeatable must not reopen whole-command delivery.
+  perform private.weekly_source_query_require_service_v1();
+  raise exception 'WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED' using errcode='55000';
+end;
+$function$;
+
+create or replace function public.weekly_source_message_dispatch_result_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+begin
+  perform private.weekly_source_query_require_service_v1();
+  raise exception 'WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED' using errcode='55000';
+end;
+$function$;
+
 comment on function public.weekly_source_query_sync_atomic_v1(jsonb) is
   'Service-only, non-financial synchronisation of current Weekly source discrepancy facts.';
 comment on function public.weekly_source_manager_review_respond_atomic_v1(jsonb) is
   'Service-only broker boundary for receipt-first, partial manager review responses.';
 comment on function public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb) is
-  'Service-only durable pre-provider submission fence; this function performs no provider call.';
+  'Retired whole-command submission route; per-target dispatch is required.';
 comment on function public.weekly_source_manager_route_prepare_atomic_v1(jsonb) is
   'Service-only reservation of the exact manager review batch and credential generation before remote registration and deterministic email rendering.';
 

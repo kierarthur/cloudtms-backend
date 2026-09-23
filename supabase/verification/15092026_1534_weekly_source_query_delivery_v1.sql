@@ -2412,6 +2412,12 @@ select pg_temp.assert_true(
   and pg_catalog.pg_get_functiondef(
     'public.weekly_source_message_dispatch_claim_v1(jsonb)'::pg_catalog.regprocedure
   ) like '%command.target_set_state%'
+  and pg_catalog.pg_get_functiondef(
+    'public.weekly_source_message_dispatch_submission_start_atomic_v1(jsonb)'::pg_catalog.regprocedure
+  ) like '%WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED%'
+  and pg_catalog.pg_get_functiondef(
+    'public.weekly_source_message_dispatch_result_atomic_v1(jsonb)'::pg_catalog.regprocedure
+  ) like '%WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED%'
   ,'manager target-delivery claim contract was overwritten'
 );
 
