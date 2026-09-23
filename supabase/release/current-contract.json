@@ -4244,7 +4244,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "44bac6aec4c19215c6cee149e9ca7cce15ef23046596a72bd2b5b62fc7c9ed4a"
+      "definition_sha256": "8b1e8e1a1ef6fcee3d80d8bb4fe17c3bb70c0784e6dd74868d8ec3d6e76392fa"
     },
     {
       "acl": [
@@ -6610,7 +6610,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "2d0462a13bd4304b2cdfd3f3862ebe02b1be3114e4eb4f11ad5549b72ca1c5a1"
+      "definition_sha256": "40e9512976fa6e2b10e66131d9a107a178c6ff6ea16f997a1652f21233749dab"
     },
     {
       "acl": [
@@ -12859,6 +12859,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "35769932d6f9efa345915c0f32f662ce9d2e1f010ad631136d7a47d4c52fa842"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_candidate_contract_week_view_merge_v1(p_contract_week_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f96124539b72d2133269c821ed0fa97fe002c90d9878b2c2993b41909f6472f9"
     },
     {
       "acl": [
@@ -22467,7 +22486,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c925d1e261c8d8a679966a213b33b935962decde7465052c2b0e6ebc909c9910"
+      "definition_sha256": "2482f8d4b79ad745274bf85eb6c0045e42b1a4b1c5ae806969901e83e4b7b04e"
     },
     {
       "acl": [

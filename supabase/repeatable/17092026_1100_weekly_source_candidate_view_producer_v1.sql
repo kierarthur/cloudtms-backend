@@ -846,6 +846,88 @@ begin
 end;
 $function$;
 
+-- A first Candidate submission is contract-week owned until its signed
+-- Timesheet is materialised.  The request projection deliberately targets that
+-- contract-week, so it must be able to publish the same server-owned request
+-- and scope identities before a Timesheet id exists.  This is not a general
+-- import-authoritative edit bypass: without an active SUBMIT_TIMESHEET request
+-- for this exact Candidate, Contract and week the merge remains an empty no-op.
+create or replace function private.weekly_source_candidate_contract_week_view_merge_v1(
+  p_contract_week_id uuid,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_week public.contract_weeks%rowtype;
+  v_contract public.contracts%rowtype;
+  v_policy jsonb;
+  v_request jsonb;
+begin
+  if p_contract_week_id is null then return '{}'::jsonb; end if;
+
+  select * into v_week
+  from public.contract_weeks
+  where id=p_contract_week_id;
+  if not found or v_week.timesheet_id is not null then return '{}'::jsonb; end if;
+
+  select * into v_contract
+  from public.contracts
+  where id=v_week.contract_id;
+  if not found then return '{}'::jsonb; end if;
+
+  if not exists(
+    select 1
+    from public.weekly_source_group_clients membership
+    join public.weekly_source_groups source_group
+      on source_group.id=membership.source_group_id
+    where membership.client_id=v_contract.client_id
+      and source_group.active
+      and v_week.week_ending_date
+          between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+  ) then
+    return '{}'::jsonb;
+  end if;
+
+  v_request:=private.weekly_source_candidate_view_request_v1(
+    pg_catalog.jsonb_build_object(
+      'timesheet_id',null,
+      'candidate_id',v_contract.candidate_id,
+      'client_id',v_contract.client_id,
+      'contract_id',v_contract.id,
+      'week_ending_date',pg_catalog.to_char(v_week.week_ending_date,'YYYY-MM-DD')
+    )
+  );
+  if v_request->>'request_kind' is distinct from 'SUBMIT_TIMESHEET'
+     or v_request->>'request_id' is null
+     or v_request->>'scope_id' is null then
+    return '{}'::jsonb;
+  end if;
+
+  v_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_week.week_ending_date);
+
+  return pg_catalog.jsonb_build_object(
+    'weekly_source_candidate_view',pg_catalog.jsonb_build_object(
+      'request_id',v_request->'request_id',
+      'scope_id',v_request->'scope_id',
+      'request_kind',v_request->'request_kind',
+      'submitted_timesheet','[]'::jsonb,
+      'submitted_additional_units_week','[]'::jsonb,
+      'submitted_additional_units_per_day','[]'::jsonb,
+      'approved_hours_to_be_paid','[]'::jsonb,
+      'approved_hours_differ',false,
+      'expense_entry_mode',case
+        when coalesce((v_policy->>'source_fixed_expenses_enabled')::boolean,false)
+          then 'NOT_AVAILABLE' else 'SEPARATE_TIMESHEET' end
+    )
+  );
+end;
+$function$;
+
 -- ---------------------------------------------------------------------------
 -- G9-4: the Office Unauthorise action-state bridge.
 --
@@ -999,6 +1081,7 @@ alter function private.weekly_source_candidate_hours_shape_v1(jsonb) owner to po
 alter function private.weekly_source_candidate_hours_differ_v1(jsonb,jsonb) owner to postgres;
 alter function private.weekly_source_candidate_view_v1(uuid,timestamptz) owner to postgres;
 alter function private.weekly_source_candidate_view_merge_v1(uuid,timestamptz) owner to postgres;
+alter function private.weekly_source_candidate_contract_week_view_merge_v1(uuid,timestamptz) owner to postgres;
 alter function private.weekly_source_office_authorisation_state_v1(uuid) owner to postgres;
 alter function private.weekly_source_office_unauthorise_action_state_v1(uuid) owner to postgres;
 
@@ -1017,6 +1100,8 @@ revoke all on function private.weekly_source_candidate_hours_differ_v1(jsonb,jso
 revoke all on function private.weekly_source_candidate_view_v1(uuid,timestamptz)
   from public,anon,authenticated,service_role;
 revoke all on function private.weekly_source_candidate_view_merge_v1(uuid,timestamptz)
+  from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_candidate_contract_week_view_merge_v1(uuid,timestamptz)
   from public,anon,authenticated,service_role;
 revoke all on function private.weekly_source_office_authorisation_state_v1(uuid)
   from public,anon,authenticated,service_role;

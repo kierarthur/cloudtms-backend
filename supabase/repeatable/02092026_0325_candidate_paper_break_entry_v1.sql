@@ -168,7 +168,13 @@ begin
   return v_result||jsonb_build_object(
     'break_entry',v_context,
     'weekly_entry',v_weekly_context
-  )||private.weekly_source_candidate_view_merge_v1(v_timesheet_id,p_now_utc);
+  )||case
+    when v_timesheet_id is not null then
+      private.weekly_source_candidate_view_merge_v1(v_timesheet_id,p_now_utc)
+    else
+      private.weekly_source_candidate_contract_week_view_merge_v1(
+        v_contract_week_id,p_now_utc)
+    end;
 end
 $function$;
 

@@ -540,6 +540,7 @@ insert into public.weekly_timesheet_submission_request_memberships(
 do $submit_request_identity$
 declare
   v jsonb;
+  v_contract_week_merge jsonb;
 begin
   v:=private.weekly_source_candidate_view_v1('cc000000-0000-4000-8000-000000000001');
   perform pg_temp.assert_eq(v->>'request_kind','SUBMIT_TIMESHEET',
@@ -551,6 +552,32 @@ begin
     'the private submission row id must never replace the public request id');
   perform pg_temp.assert_eq(v->>'scope_id','c6500000-0000-4000-8000-000000000001',
     'scope_id is the exact contract-week membership');
+
+  -- The real first-submission shape has no Timesheet yet.  Removing only the
+  -- Contract Week's Timesheet binding reproduces that state while retaining
+  -- the same active server-owned request and scope identities.
+  update public.contract_weeks
+  set timesheet_id=null,status='OPEN'
+  where id='cd000000-0000-4000-8000-000000000001';
+  v_contract_week_merge:=
+    private.weekly_source_candidate_contract_week_view_merge_v1(
+      'cd000000-0000-4000-8000-000000000001');
+  perform pg_temp.assert_eq(
+    v_contract_week_merge#>>'{weekly_source_candidate_view,request_id}',
+    'c6300000-0000-4000-8000-000000000001',
+    'a first submission contract-week exposes the public request id');
+  perform pg_temp.assert_eq(
+    v_contract_week_merge#>>'{weekly_source_candidate_view,scope_id}',
+    'c6500000-0000-4000-8000-000000000001',
+    'a first submission contract-week exposes the exact membership scope');
+  perform pg_temp.assert_eq(
+    v_contract_week_merge#>>'{weekly_source_candidate_view,request_kind}',
+    'SUBMIT_TIMESHEET',
+    'only the server-owned first-submission request unlocks the week');
+  perform pg_temp.assert_eq(
+    v_contract_week_merge#>>'{weekly_source_candidate_view,expense_entry_mode}',
+    'SEPARATE_TIMESHEET',
+    'ordinary self-bill candidate expenses remain on a separate Timesheet');
 end;
 $submit_request_identity$;
 
@@ -1665,6 +1692,18 @@ begin
        'weekly_source_candidate_view_merge_v1','')))::text,
     length('weekly_source_candidate_view_merge_v1')::text,
     'exactly one additive call in candidate_app_timesheet_detail_v2');
+  perform pg_temp.assert_eq(
+    (length(pg_get_functiondef(to_regprocedure(
+       'public.candidate_app_timesheet_detail_v2(uuid,text,uuid,uuid,uuid,timestamptz)')))
+     -length(replace(pg_get_functiondef(to_regprocedure(
+       'public.candidate_app_timesheet_detail_v2(uuid,text,uuid,uuid,uuid,timestamptz)')),
+       'weekly_source_candidate_contract_week_view_merge_v1','')))::text,
+    length('weekly_source_candidate_contract_week_view_merge_v1')::text,
+    'exactly one first-submission contract-week call in candidate_app_timesheet_detail_v2');
+  perform pg_temp.assert_eq(
+    private.weekly_source_candidate_contract_week_view_merge_v1(
+      'cd000000-0000-4000-8000-000000000002')::text,'{}',
+    'an ordinary bound Contract Week receives no source-request unlock');
 end;
 $ordinary$;
 
