@@ -1796,7 +1796,12 @@ begin
                     and money.money_field_kind in ('COMMISSION','TOTAL_COST','FMC')
                     and money.parse_state='VALID'
                     and not money.formula_present
-                    and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN')
+                    and (
+                      (v_upload.parser_summary_json->>'source_kind'='HTML'
+                       and money.source_kind='HTML_DECODED_TEXT')
+                      or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                          and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+                    )
                     and nullif(money.cell_coordinate,'') is not null)<>3
              or (select money.parsed_pence from public.weekly_source_money_cell_evidence money
                  where money.upload_id=source_row.upload_id
@@ -1819,7 +1824,12 @@ begin
           where money.upload_id=v_upload.id
             and (
               money.source_file_sha256 is distinct from v_upload.content_sha256
-              or money.source_kind not in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN')
+              or not (
+                (v_upload.parser_summary_json->>'source_kind'='HTML'
+                 and money.source_kind='HTML_DECODED_TEXT')
+                or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                    and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+              )
               or nullif(money.cell_coordinate,'') is null
               or (money.formula_present is distinct from (money.parse_state='FORMULA'))
               or (money.money_field_kind='BOTTOM_TOTAL_COST'
@@ -1906,7 +1916,12 @@ begin
            and (
              money.money_field_kind not in ('COMMISSION','TOTAL_COST')
              or money.source_file_sha256 is distinct from v_upload.content_sha256
-             or money.source_kind not in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN')
+             or not (
+               (v_upload.parser_summary_json->>'source_kind'='HTML'
+                and money.source_kind='HTML_DECODED_TEXT')
+               or (coalesce(v_upload.parser_summary_json->>'source_kind','XLSX')='XLSX'
+                   and money.source_kind in ('XLSX_NUMERIC_TOKEN','XLSX_STRING_TOKEN'))
+             )
              or nullif(money.cell_coordinate,'') is null
              or (money.formula_present is distinct from (money.parse_state='FORMULA'))
            )

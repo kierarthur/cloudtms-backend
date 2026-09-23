@@ -360,7 +360,8 @@ $function$;
 create function pg_temp.nhsp_stage_rows(
   p_upload_id uuid,
   p_suffix text,
-  p_zero_charge boolean default false
+  p_zero_charge boolean default false,
+  p_money_source_kind text default 'XLSX_NUMERIC_TOKEN'
 )
 returns void language plpgsql as $function$
 declare
@@ -411,7 +412,7 @@ begin
       'money_evidence',pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object(
           'source_row_ordinal',2,'money_field_kind','COMMISSION','source_column_index',15,
-          'cell_coordinate','P2','source_kind','XLSX_NUMERIC_TOKEN',
+          'cell_coordinate','P2','source_kind',p_money_source_kind,
           'original_token',case when p_zero_charge then '0' else '5' end,
           'decoded_token',case when p_zero_charge then '0.00' else '5.00' end,
           'cell_type_marker','n','formula_present',false,'parse_state','VALID',
@@ -419,7 +420,7 @@ begin
         ),
         pg_catalog.jsonb_build_object(
           'source_row_ordinal',2,'money_field_kind','TOTAL_COST','source_column_index',16,
-          'cell_coordinate','Q2','source_kind','XLSX_NUMERIC_TOKEN',
+          'cell_coordinate','Q2','source_kind',p_money_source_kind,
           'original_token',case when p_zero_charge then '0' else '15' end,
           'decoded_token',case when p_zero_charge then '0.00' else '15.00' end,
           'cell_type_marker','n','formula_present',false,'parse_state','VALID',
@@ -427,7 +428,7 @@ begin
         ),
         pg_catalog.jsonb_build_object(
           'source_row_ordinal',2,'money_field_kind','FMC','source_column_index',17,
-          'cell_coordinate','R2','source_kind','XLSX_NUMERIC_TOKEN',
+          'cell_coordinate','R2','source_kind',p_money_source_kind,
           'original_token','0','decoded_token','0.00','cell_type_marker','n',
           'formula_present',false,'parse_state','VALID','parsed_pence',0
         )
@@ -1074,6 +1075,35 @@ begin
            from public.weekly_source_uploads
            where id=(v_result->>'logical_upload_id')::uuid),
     'Self-contained NHSP HTML backing report did not stage without an OOXML fingerprint'
+  );
+  perform pg_temp.nhsp_stage_rows(
+    (v_result->>'logical_upload_id')::uuid,'TRUST-HTML',false,'HTML_DECODED_TEXT'
+  );
+  v_result:=public.weekly_source_upload_seal_atomic_v1(
+    pg_catalog.jsonb_build_object(
+      'actor_user_id','90000000-0000-4000-8000-000000000001',
+      'upload_id',(v_result->>'logical_upload_id')::uuid
+    )
+  );
+  perform pg_temp.assert_true(
+    v_result->>'status'='CURRENT',
+    'Self-contained NHSP HTML backing report did not seal decoded money evidence'
+  );
+  v_result:=pg_temp.nhsp_begin(
+    '90000000-0000-4000-8000-000000000050','90000000-0000-4000-8000-000000000040',
+    'BR-HTML-WRONG-MONEY-KIND',repeat('6',64),'WEEKLY_SOURCE_STRICT_V1','HTML'
+  );
+  perform pg_temp.nhsp_stage_rows((v_result->>'logical_upload_id')::uuid,'TRUST-HTML-WRONG');
+  v_result:=public.weekly_source_upload_seal_atomic_v1(
+    pg_catalog.jsonb_build_object(
+      'actor_user_id','90000000-0000-4000-8000-000000000001',
+      'upload_id',(v_result->>'logical_upload_id')::uuid
+    )
+  );
+  perform pg_temp.assert_true(
+    v_result->>'status'='REJECTED'
+      and v_result->>'reason_code'='WEEKLY_SOURCE_NHSP_MONEY_EVIDENCE_INVALID',
+    'HTML with XLSX money evidence was not rejected at seal'
   );
   begin
     perform pg_temp.nhsp_begin(

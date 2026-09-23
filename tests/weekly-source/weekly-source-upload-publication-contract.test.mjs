@@ -69,6 +69,7 @@ test('staging adapter explicitly owns physical, money, expense and workbook prov
   assert.match(adapterSource, /source_kind: parsed\.sourceKind/);
   assert.match(publicationSql, /v_summary->>'source_kind'/);
   assert.match(publicationSql, /not in \('XLSX','HTML'\)/);
+  assert.match(publicationSql, /v_upload\.parser_summary_json->>'source_kind'='HTML'[\s\S]*money\.source_kind='HTML_DECODED_TEXT'/);
   assert.match(adapterSource, /header_coordinate_map_json/);
   assert.match(adapterSource, /nhsp_report_number/);
   assert.match(adapterSource, /saved_finalisation_profile_map/);
