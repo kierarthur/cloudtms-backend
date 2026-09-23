@@ -163,8 +163,11 @@ end;
 $function$;
 
 -- Keep the complete action collection aligned with the authoritative primary
--- action. A current Candidate workflow may not expose a parallel Add Expenses
--- choice merely because the underlying record permits later expenses.
+-- action. An ordinary current Candidate workflow may not expose a parallel Add
+-- Expenses choice merely because the underlying record permits later expenses.
+-- A source-authority hours-only workflow is the deliberate exception: its
+-- Candidate expenses belong to a separate expense carrier and must remain
+-- available while the submitted hours wait for Office/source finalisation.
 create or replace function private._candidate_timesheet_action_contract_v1(
   p_candidate_status_code text,
   p_workflows jsonb,
@@ -423,6 +426,18 @@ begin
      and (
        jsonb_array_length(coalesce(p_workflows,'[]'::jsonb))=0
        or coalesce(v_primary->>'code','')='ENTER_TIMESHEET'
+       or (
+         p_capabilities->>'route_family'='IMPORT_AUTHORITATIVE'
+         and p_capabilities->>'record_role'='IMPORT_HOURS'
+         and coalesce((p_capabilities->>'effective_separation')::boolean,false)
+         and not exists(
+           select 1
+           from jsonb_array_elements(coalesce(p_workflows,'[]'::jsonb)) workflow_item
+           where workflow_item->>'workflow_kind'='CONTRACT_EXPENSE'
+             and coalesce(workflow_item->>'state','')
+                   not in ('FINALISED','SUPERSEDED','CANCELLED')
+         )
+       )
      ) then
     v_actions:=v_actions||jsonb_build_array(jsonb_build_object(
       'code','ADD_EXPENSES','label','Add Expenses','method','POST',

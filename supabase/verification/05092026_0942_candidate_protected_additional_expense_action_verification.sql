@@ -139,6 +139,61 @@ begin
     raise exception 'Pre-approval submission exposed a parallel expense claim: %',
       v_action_contract;
   end if;
+
+  -- Source-authority hours are Candidate-signed evidence only. They never own
+  -- Candidate expenses, so a separate expense carrier remains available while
+  -- those hours wait for Office/source finalisation.
+  v_workflows:=jsonb_build_array(jsonb_build_object(
+    'workflow_id',v_workflow,'workflow_kind','CONTRACT_HOURS',
+    'state','WORKER_SUBMITTED','generation',2,'detail_action_owner',true,
+    'updated_at_utc',now()
+  ));
+  v_action_contract:=private._candidate_timesheet_action_contract_v1(
+    'RECEIVED',v_workflows,
+    jsonb_build_object(
+      'can_edit_hours',false,
+      'can_edit_expenses',true,
+      'route_family','IMPORT_AUTHORITATIVE',
+      'record_role','IMPORT_HOURS',
+      'effective_separation',true
+    ),
+    v_timesheet,v_week,now()
+  );
+  if not exists(
+    select 1
+    from jsonb_array_elements(v_action_contract->'available_actions') item
+    where item->>'code'='ADD_EXPENSES'
+  ) then
+    raise exception 'Source-authority submitted hours lost the separate expense carrier action: %',
+      v_action_contract;
+  end if;
+
+  -- Once that separate claim exists, the Candidate must continue it rather
+  -- than opening a second carrier in parallel.
+  v_workflows:=v_workflows||jsonb_build_array(jsonb_build_object(
+    'workflow_id',gen_random_uuid(),'workflow_kind','CONTRACT_EXPENSE',
+    'state','WORKER_DRAFT','generation',1,'detail_action_owner',false,
+    'updated_at_utc',now()-interval '1 second'
+  ));
+  v_action_contract:=private._candidate_timesheet_action_contract_v1(
+    'RECEIVED',v_workflows,
+    jsonb_build_object(
+      'can_edit_hours',false,
+      'can_edit_expenses',true,
+      'route_family','IMPORT_AUTHORITATIVE',
+      'record_role','IMPORT_HOURS',
+      'effective_separation',true
+    ),
+    v_timesheet,v_week,now()
+  );
+  if exists(
+    select 1
+    from jsonb_array_elements(v_action_contract->'available_actions') item
+    where item->>'code'='ADD_EXPENSES'
+  ) then
+    raise exception 'Source-authority hours exposed a second parallel expense carrier: %',
+      v_action_contract;
+  end if;
 end;
 $verification$;
 
