@@ -1663,7 +1663,7 @@ begin
     select pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object('key','source_group','label','Source','value',v_group.id,
         'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-          'value',item.id,'label',case when item.source_family='NHSP' then 'NHSP backing report' else item.display_name end)
+          'value',item.id,'label',case when item.source_family='NHSP' then 'NHSP' else item.display_name end)
           order by private.weekly_source_query_ascii_fold_v1(item.display_name) collate "C",item.id)
           from public.weekly_source_groups item where item.active),'[]'::jsonb)),
       pg_catalog.jsonb_build_object('key','client','label','Trust','value',coalesce(v_client_id::text,''),
@@ -1707,10 +1707,10 @@ begin
     'contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_workspace_version,
     'profile',pg_catalog.jsonb_build_object(
       'id',coalesce(v_profile.profile_code,case when v_group.source_family='NHSP' then 'NHSP_FINAL_BACKING_V1' else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end),
-      'label',case when v_group.source_family='NHSP' then 'NHSP backing report' else v_group.display_name end,
+      'label',case when v_group.source_family='NHSP' then 'NHSP' else v_group.display_name end,
       'finalise_label',case when v_group.source_family='NHSP' then 'Finalise report' else 'Finalise source' end),
     'context',pg_catalog.jsonb_build_object('subtitle',case when v_group.source_family='NHSP' then
-        'NHSP backing report'||case when v_context_client_name is null then '' else ' · '||v_context_client_name end
+        'NHSP'||case when v_context_client_name is null then '' else ' · '||v_context_client_name end
       else v_cycle_label end,'cycle_state',v_cycle_state_label,
       'cycle_tone',v_cycle_state_tone,'controls',v_controls),
     'selected',pg_catalog.jsonb_build_object('source_group_id',v_group.id,'source_cycle_id',v_cycle.id,

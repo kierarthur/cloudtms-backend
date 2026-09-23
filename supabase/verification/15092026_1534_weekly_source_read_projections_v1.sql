@@ -658,7 +658,7 @@ begin
     'source_cycle_id','d6000000-0000-4000-8000-000000000002'
   ));
   perform pg_temp.assert_true(
-    v_no_shifts_workspace#>>'{profile,label}'='NHSP backing report'
+    v_no_shifts_workspace#>>'{profile,label}'='NHSP'
     and v_no_shifts_workspace#>>'{context,controls,0,label}'='Source'
     and v_no_shifts_workspace#>>'{context,controls,1,label}'='Trust'
     and v_no_shifts_workspace#>>'{context,controls,2,label}'='Report number'
