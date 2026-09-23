@@ -979,6 +979,10 @@
       "sha256": "53f179df9be1673c698bac3b5438de0d2d4e1d305b22ed0f9cf9825e327ddebc"
     },
     {
+      "path": "supabase/migrations/23092026_1454_enable_test_candidate_push_notifications.sql",
+      "sha256": "2afb1e82d3f5698bde60bf2a8a66ef508f6e9b4150f2b155259a6a609d830c29"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
