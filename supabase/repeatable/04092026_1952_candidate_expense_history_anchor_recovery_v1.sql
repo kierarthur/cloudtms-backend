@@ -497,6 +497,7 @@ declare
   v_client_id uuid;
   v_anchor_candidate_count integer:=0;
   v_anchor_week_id uuid;
+  v_anchor_submitted_work boolean:=false;
   v_target_capabilities jsonb;
   v_route_authority jsonb;
   v_weekly_source_candidate_request_allowed boolean:=false;
@@ -1120,7 +1121,57 @@ begin
         if v_workflow_kind='CONTRACT_EXPENSE'
            and coalesce((private._candidate_record_capabilities_v1(v_anchor_week.timesheet_id,v_anchor_week.id,'{}'::jsonb)->>'hours_value')::numeric,0)<=0
            and coalesce((private._candidate_record_capabilities_v1(v_anchor_week.timesheet_id,v_anchor_week.id,'{}'::jsonb)->>'additional_units_value')::numeric,0)<=0 then
-          raise exception 'CANDIDATE_WORKFLOW_ANCHOR_NOT_WORKED' using errcode='22023';
+          -- Import-authoritative hours remain outside TSFIN until source
+          -- finalisation.  The immutable Candidate hours submission for this
+          -- exact anchor is positive worked-week evidence, while the expense
+          -- itself still opens as a separate manager-approved workflow.
+          select exists(
+            select 1
+            from public.candidate_submission_workflows submitted_workflow
+            cross join lateral (
+              select
+                coalesce(
+                  submitted_workflow.input_snapshot_json#>'{hours_submission,timesheet_patch_json,actual_schedule_json}',
+                  submitted_workflow.input_snapshot_json#>'{timesheet_patch_json,actual_schedule_json}',
+                  submitted_workflow.input_snapshot_json->'actual_schedule_json',
+                  '[]'::jsonb
+                ) as actual_schedule_json,
+                coalesce(
+                  submitted_workflow.input_snapshot_json#>'{hours_submission,timesheet_patch_json,additional_units_week}',
+                  submitted_workflow.input_snapshot_json#>'{timesheet_patch_json,additional_units_week}',
+                  submitted_workflow.input_snapshot_json->'additional_units_week',
+                  '{}'::jsonb
+                ) as additional_units_week,
+                coalesce(
+                  submitted_workflow.input_snapshot_json#>'{hours_submission,timesheet_patch_json,additional_units_per_day}',
+                  submitted_workflow.input_snapshot_json#>'{timesheet_patch_json,additional_units_per_day}',
+                  submitted_workflow.input_snapshot_json->'additional_units_per_day',
+                  '{}'::jsonb
+                ) as additional_units_per_day
+            ) submitted
+            where submitted_workflow.environment=v_environment
+              and submitted_workflow.candidate_id=v_candidate_id
+              and submitted_workflow.contract_id=v_contract.id
+              and submitted_workflow.contract_week_id=v_week.id
+              and submitted_workflow.week_ending_date=v_canonical_week_ending_date
+              and submitted_workflow.anchor_timesheet_id=v_anchor_week.timesheet_id
+              and submitted_workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')
+              and submitted_workflow.state in (
+                'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+                'READY_FOR_MANAGER_APPROVAL','AWAITING_MANAGER_APPROVAL',
+                'MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+                'READY_TO_FINALISE','RECEIVED','FINALISED'
+              )
+              and (
+                (pg_catalog.jsonb_typeof(submitted.actual_schedule_json)='array'
+                  and pg_catalog.jsonb_array_length(submitted.actual_schedule_json)>0)
+                or private._candidate_json_numeric_sum(submitted.additional_units_week)>0
+                or private._candidate_json_numeric_sum(submitted.additional_units_per_day)>0
+              )
+          ) into v_anchor_submitted_work;
+          if not v_anchor_submitted_work then
+            raise exception 'CANDIDATE_WORKFLOW_ANCHOR_NOT_WORKED' using errcode='22023';
+          end if;
         end if;
       elsif v_workflow_kind='CONTRACT_EXPENSE' then
         -- A terminal workflow does not invalidate its immutable anchor receipt.

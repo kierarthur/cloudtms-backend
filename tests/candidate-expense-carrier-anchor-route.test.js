@@ -44,6 +44,10 @@ test('expense workflow creation derives eligibility from the worked anchor while
   );
   assert.match(
     repeatable,
+    /Import-authoritative hours remain outside TSFIN until source[\s\S]*submitted_workflow\.anchor_timesheet_id=v_anchor_week\.timesheet_id[\s\S]*submitted_workflow\.workflow_kind in \('CONTRACT_HOURS','CONTRACT_COMBINED'\)[\s\S]*jsonb_array_length\(submitted\.actual_schedule_json\)>0[\s\S]*if not v_anchor_submitted_work then[\s\S]*CANDIDATE_WORKFLOW_ANCHOR_NOT_WORKED/i
+  );
+  assert.match(
+    repeatable,
     /route_family'='QR' and v_route<>'PAPER'[\s\S]*v_workflow_kind<>'CONTRACT_EXPENSE'/i
   );
   assert.doesNotMatch(
