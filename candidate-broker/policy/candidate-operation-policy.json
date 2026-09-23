@@ -163,9 +163,9 @@
       "route_selection_owner": "CONTROL_PLANE_SESSION",
       "agency_context_required": true,
       "agency_route_required": true,
-      "data_plane_dispatch_required": false,
+      "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "MEMBERSHIP_CONTROL_NON_DISPATCH",
+      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
       "preserves_business_rpc_meaning": true
     },
     {

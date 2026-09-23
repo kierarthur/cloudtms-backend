@@ -783,6 +783,78 @@ test('stale central access fails before either private agency binding is called'
   }
 });
 
+test('notification preferences update only the centrally selected agency and sync that membership', async () => {
+  const originalFetch = globalThis.fetch;
+  const second = {
+    membership: '50000000-0000-4000-8000-000000000003',
+    agency: '50000000-0000-4000-8000-000000000004',
+    candidate: '50000000-0000-4000-8000-000000000005',
+    dataPlane: '50000000-0000-4000-8000-000000000006',
+    routeVersionId: '50000000-0000-4000-8000-000000000007'
+  };
+  const selected = [
+    { membership: IDS.membership, agency: IDS.agency, candidate: IDS.candidate,
+      dataPlane: IDS.dataPlane, routeVersionId: '10000000-0000-4000-8000-000000000007',
+      binding: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST', version: 7 },
+    { ...second, binding: 'CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND', version: 1 }
+  ];
+  let current = 0;
+  const privateCalls = [0, 0];
+  const synced = [];
+  const preferences = {
+    push: false, timesheet_expense_attention: true, office_rejection: true,
+    resubmission_required: true
+  };
+  const env = orchestratorEnvironment(
+    async () => { privateCalls[0] += 1; return Response.json({ ok: true, notification_preferences: preferences }); },
+    async () => { privateCalls[1] += 1; return Response.json({ ok: true, notification_preferences: preferences }); }
+  );
+  env.WEEKLY_SOURCE_DELIVERY_SERVICE_SECRET = 'test-weekly-delivery-actor-secret-that-is-not-live';
+  globalThis.fetch = async request => {
+    const pathname = new URL(request.url).pathname;
+    if (pathname.endsWith('/agency_route_context_resolve_v1')) {
+      const route = selected[current];
+      return Response.json({
+        ok: true, global_session_id: IDS.session, global_account_id: IDS.account,
+        session_epoch: 12, membership_id: route.membership, membership_generation: 3,
+        local_candidate_id: route.candidate, agency_id: route.agency,
+        agency_display_name: 'Selected TEST agency', environment_label: 'TEST',
+        data_plane_id: route.dataPlane, registry_binding_key: route.binding,
+        route_version_id: route.routeVersionId, route_version: route.version,
+        internal_only: true
+      });
+    }
+    assert.equal(pathname, '/rest/v1/rpc/weekly_push_preferences_sync_v1');
+    const body = await request.json();
+    synced.push(body.p_request);
+    return Response.json({ ok: true, status: 'SYNCED' });
+  };
+  try {
+    const token = await centralAccessToken(env);
+    for (current = 0; current < selected.length; current += 1) {
+      const response = await handleCandidateBrokerRequest(new Request(
+        'https://candidate-api.test.example/candidate-app/v1/account/preferences', {
+          method: 'PATCH',
+          headers: {
+            origin: 'https://candidate.test.example', authorization: `Bearer ${token}`,
+            'cf-connecting-ip': '192.0.2.22', 'content-type': 'application/json'
+          },
+          body: JSON.stringify({ notification_preferences: preferences,
+            idempotency_key: `notification-selected-agency-${current}` })
+        }
+      ), env);
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      assert.deepEqual(privateCalls, current === 0 ? [1, 0] : [1, 1]);
+      assert.equal(synced[current].agency_id, selected[current].agency);
+      assert.equal(synced[current].membership_id, selected[current].membership);
+      assert.deepEqual(synced[current].preferences,
+        { push: false, timesheet_expense_attention: true });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('global login auto-selects exactly one agency and returns no internal route identifier', async () => {
   const originalFetch = globalThis.fetch;
   const env = orchestratorEnvironment(async () => {
