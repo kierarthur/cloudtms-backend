@@ -72,6 +72,20 @@ begin
   from public.clients client where client.id=v_contract.client_id;
   if not found then return null; end if;
 
+  -- Ordinary weekly Timesheets have no Weekly Source configuration.  They
+  -- must not make this source-only copy sweep fail before it reaches an
+  -- eligible client.  A partially configured source client still proceeds
+  -- to the authoritative policy resolver and fails closed there.
+  if not exists (
+    select 1 from public.weekly_source_group_clients membership
+    where membership.client_id=v_contract.client_id
+  ) and not exists (
+    select 1 from public.weekly_source_client_policies policy
+    where policy.client_id=v_contract.client_id
+  ) then
+    return null;
+  end if;
+
   v_policy:=private._weekly_source_effective_policy_v1(
     v_contract.client_id,v_contract.id,
     coalesce(v_workflow.week_ending_date,v_timesheet.week_ending_date)

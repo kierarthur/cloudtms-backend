@@ -167,6 +167,59 @@ insert into public.candidate_submission_workflows(
    'e5060000-0000-4000-8000-000000000002','2026-09-13','pack-evidence-1',
    '2026-09-10 10:00+00','{}',decode(repeat('21',32),'hex'),'2026-09-10 10:00+00');
 
+-- A genuine ordinary weekly workflow must not abort the source-only sweep.
+-- It intentionally has no Weekly Source group membership or client policy.
+insert into public.clients(id,name) values
+  ('e5020000-0000-4000-8000-000000000003','Ordinary Weekly Client');
+insert into public.client_settings(client_id,effective_from,vat_rate_pct) values
+  ('e5020000-0000-4000-8000-000000000003','2026-01-01',20);
+insert into public.contracts(
+  id,candidate_id,client_id,start_date,end_date,pay_method_snapshot,rates_json,
+  week_ending_weekday_snapshot,default_submission_mode,role,self_bill,
+  no_timesheet_required,autoprocess_hr
+) values (
+  'e5040000-0000-4000-8000-000000000003','e5030000-0000-4000-8000-000000000001',
+  'e5020000-0000-4000-8000-000000000003','2026-01-01','2026-12-31','PAYE','{}',0,
+  'ELECTRONIC','Nurse',false,false,false
+);
+insert into public.timesheets(
+  timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+  worked_start_iso,worked_end_iso,break_minutes,worked_minutes,week_ending_date,
+  contract_id,submission_mode,sheet_scope,line_type,actual_schedule_json
+) values (
+  'e5060000-0000-4000-8000-000000000004','PACK-FAMILY-ORDINARY','casey-source',
+  'ordinary-weekly-client','ward-c','nurse','2026-09-14 09:00+00','2026-09-14 17:00+00',30,450,
+  '2026-09-20','e5040000-0000-4000-8000-000000000003','MANUAL','WEEKLY','HOURS',
+  '[{"date":"2026-09-14","start":"09:00","end":"17:00","break_minutes":30}]'
+);
+insert into public.contract_weeks(
+  id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,
+  day_entries_json,totals_json
+) values (
+  'e5070000-0000-4000-8000-000000000003','e5040000-0000-4000-8000-000000000003',
+  '2026-09-20','SUBMITTED','ELECTRONIC','e5060000-0000-4000-8000-000000000004','[]','{}'
+);
+insert into public.candidate_submission_workflows(
+  id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+  contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,idempotency_key,
+  worker_submitted_at_utc,immutable_submission_json,immutable_submission_sha256,
+  candidate_signed_at_utc
+) values (
+  'e5090000-0000-4000-8000-000000000003','TEST','e5080000-0000-4000-8000-000000000001',
+  'e5030000-0000-4000-8000-000000000001','CONTRACT_HOURS','WEEKLY','ELECTRONIC',
+  'WORKER_SUBMITTED',1,'e5040000-0000-4000-8000-000000000003',
+  'e5070000-0000-4000-8000-000000000003',
+  'e5060000-0000-4000-8000-000000000004','e5060000-0000-4000-8000-000000000004',
+  '2026-09-20','pack-ordinary-1','2026-09-17 10:00+00','{}',
+  decode(repeat('31',32),'hex'),'2026-09-17 10:00+00'
+);
+select pg_temp.assert_true(
+  private._weekly_source_completed_pack_copy_eligibility_v1(
+    'e5090000-0000-4000-8000-000000000003'
+  ) is null,
+  'ordinary weekly workflow entered the source-only completed-pack copy route'
+);
+
 insert into public.candidate_submission_components(
   id,workflow_id,workflow_generation,component_no,timesheet_id,component_kind,
   document_role,state,storage_key,media_type,byte_size,source_content_sha256,
