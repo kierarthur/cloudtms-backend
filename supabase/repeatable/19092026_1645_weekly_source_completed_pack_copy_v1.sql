@@ -76,12 +76,15 @@ begin
   -- must not make this source-only copy sweep fail before it reaches an
   -- eligible client.  A partially configured source client still proceeds
   -- to the authoritative policy resolver and fails closed there.
-  if not exists (
+  if v_contract.weekly_timesheet_source is null and not exists (
     select 1 from public.weekly_source_group_clients membership
     where membership.client_id=v_contract.client_id
   ) and not exists (
     select 1 from public.weekly_source_client_policies policy
     where policy.client_id=v_contract.client_id
+  ) and not exists (
+    select 1 from public.weekly_source_contract_policies policy
+    where policy.contract_id=v_contract.id
   ) then
     return null;
   end if;
