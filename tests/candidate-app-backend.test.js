@@ -9700,10 +9700,10 @@ test('weekly manager query route returns only the closed grouped hours contract'
       'x-cloudtms-manager-route-ticket': ticketId,
       'x-cloudtms-manager-route-revision': '1',
       'x-cloudtms-manager-route-weekly-batch-hmac': canonicalHmac(
-        'weekly-query-review-batch-v1', batchId
+        'weekly-query-manager-review-batch-v1', batchId
       ),
       'x-cloudtms-manager-route-weekly-recipient-generation-hmac': canonicalHmac(
-        'weekly-query-recipient-generation-v1', recipientGenerationId
+        'weekly-query-manager-recipient-generation-v1', recipientGenerationId
       ),
       'x-cloudtms-manager-route-weekly-membership-hash': membershipHash,
       'x-cloudtms-manager-route-credential-generation': '1'

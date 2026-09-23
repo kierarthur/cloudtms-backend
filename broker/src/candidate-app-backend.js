@@ -11941,7 +11941,7 @@ async function weeklyManagerRouteBatch(request, env, deps, expectedBatchId) {
   }
   const batchId = requireUuid(expectedBatchId, 'MANAGER_SECURE_LINK_INVALID').toLowerCase();
   const expectedBatchHmac = await requestHmacSha256(
-    managerRouteHmacSecret(env), 'weekly-query-review-batch-v1', batchId
+    managerRouteHmacSecret(env), 'weekly-query-manager-review-batch-v1', batchId
   );
   if (expectedBatchHmac !== authority.review_batch_route_hmac) {
     throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
@@ -11968,7 +11968,7 @@ async function weeklyManagerRouteBatch(request, env, deps, expectedBatchId) {
     raw.recipient_generation_id, 'MANAGER_DEPENDENCY_UNAVAILABLE'
   ).toLowerCase();
   const expectedGenerationHmac = await requestHmacSha256(
-    managerRouteHmacSecret(env), 'weekly-query-recipient-generation-v1', recipientGenerationId
+    managerRouteHmacSecret(env), 'weekly-query-manager-recipient-generation-v1', recipientGenerationId
   );
   if (expectedGenerationHmac !== authority.recipient_generation_route_hmac) {
     throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
