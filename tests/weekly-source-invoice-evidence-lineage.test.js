@@ -7,6 +7,7 @@ const worker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 
 const sql = readFileSync(new URL('../supabase/repeatable/24092026_1440_weekly_source_invoice_evidence_lookup_v1.sql', import.meta.url), 'utf8');
 const acl = readFileSync(new URL('../supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql', import.meta.url), 'utf8');
 const aclVerification = readFileSync(new URL('../supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql', import.meta.url), 'utf8');
+const releaseRunner = readFileSync(new URL('../scripts/cloudtms-db-invoice-evidence-lookup-release.mjs', import.meta.url), 'utf8');
 const start = worker.indexOf('async function weeklySourceInvoiceEvidenceRows(');
 const end = worker.indexOf('\nasync function handleInvoiceSourceEvidenceDownload(', start);
 assert.ok(start > 0 && end > start);
@@ -34,6 +35,17 @@ test('exact service-only SQL links only CURRENT invoice bindings to a final revi
   assert.doesNotMatch(sql, /grant\s+select\s+on\s+public\.weekly_source_/i);
   assert.match(acl, /\('public\.weekly_source_invoice_evidence_v1\(jsonb\)'\)/);
   assert.match(aclVerification, /'public\.weekly_source_invoice_evidence_v1\(jsonb\)'/);
+});
+
+test('protected component release strips the ACL verifier rollback and checks installed routine after commit', () => {
+  assert.match(aclVerification, /^begin;$/m);
+  assert.match(aclVerification, /^rollback;$/m);
+  assert.match(releaseRunner, /checks\(aclChecks, true\)/);
+  assert.match(releaseRunner, /return withoutMeta\.replace\(\/\^\\s\*begin;/);
+  assert.match(releaseRunner, /\.replace\(\/\^\\s\*rollback;/);
+  assert.match(releaseRunner, /WEEKLY_SOURCE_EVIDENCE_LOOKUP_INSTALL_NOT_VISIBLE/);
+  assert.match(releaseRunner, /Installed lookup\/ACL\/ledger did not match exact source after commit/);
+  assert.match(releaseRunner, /false_verified_reason/);
 });
 
 test('Worker accepts only the actor-scoped RPC result and never queries protected tables', async () => {
