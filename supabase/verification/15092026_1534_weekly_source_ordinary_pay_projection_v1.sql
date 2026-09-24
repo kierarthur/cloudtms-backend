@@ -2024,16 +2024,20 @@ begin
   perform pg_temp.assert_true(pg_temp.wp52_paid(v_root1)='8.00|80.00|160.00',
     'row order P1 setup: the first report must pay 8.00 h / 80.00, got '
       ||pg_temp.wp52_paid(v_root1));
-  r2:=pg_temp.wp52_report('p2a',c2,'2029-01-13','2026-08-02T10:02:00Z',
+  -- Each independent report starts two weeks after the preceding report.  The
+  -- genuine correction owner may create the intervening following-week cycle;
+  -- using consecutive fixture weeks would make the verifier collide with work
+  -- it is specifically exercising rather than expose a product defect.
+  r2:=pg_temp.wp52_report('p2a',c2,'2029-01-20','2026-08-02T10:02:00Z',
     pg_catalog.jsonb_build_array(v_pos8),null);
   v_root2:=(r2->>'root_timesheet_id')::uuid;
   perform pg_temp.assert_true(pg_temp.wp52_paid(v_root2)='8.00|80.00|160.00',
     'row order P2 setup: the first report must pay 8.00 h / 80.00, got '
       ||pg_temp.wp52_paid(v_root2));
 
-  r1:=pg_temp.wp52_report('p1b',c1,'2029-01-20','2026-08-02T10:03:00Z',
+  r1:=pg_temp.wp52_report('p1b',c1,'2029-02-03','2026-08-02T10:03:00Z',
     pg_catalog.jsonb_build_array(v_neg8,v_pos9),v_root1);
-  r2:=pg_temp.wp52_report('p2b',c2,'2029-01-27','2026-08-02T10:04:00Z',
+  r2:=pg_temp.wp52_report('p2b',c2,'2029-02-17','2026-08-02T10:04:00Z',
     pg_catalog.jsonb_build_array(v_pos9,v_neg8),v_root2);
   v_paid1:=pg_temp.wp52_paid(v_root1);
   v_paid2:=pg_temp.wp52_paid(v_root2);
@@ -2058,15 +2062,15 @@ begin
   -- ORIGINAL line arriving last.  14 s4.2.5: "a negative and a later positive
   -- may appear in different reports and cycles".
   c3:=pg_temp.wp52_candidate('perm-split-reversal-last');
-  r3:=pg_temp.wp52_report('p3a',c3,'2029-02-03','2026-08-02T10:05:00Z',
+  r3:=pg_temp.wp52_report('p3a',c3,'2029-03-03','2026-08-02T10:05:00Z',
     pg_catalog.jsonb_build_array(v_pos8),null);
   v_root3:=(r3->>'root_timesheet_id')::uuid;
-  r3:=pg_temp.wp52_report('p3b',c3,'2029-02-10','2026-08-02T10:06:00Z',
+  r3:=pg_temp.wp52_report('p3b',c3,'2029-03-17','2026-08-02T10:06:00Z',
     pg_catalog.jsonb_build_array(v_pos9),v_root3);
   perform pg_temp.assert_true(pg_temp.wp52_paid(v_root3)='9.00|90.00|180.00',
     'the re-issued 9 h line must become the current position, got '
       ||pg_temp.wp52_paid(v_root3));
-  r3:=pg_temp.wp52_report('p3c',c3,'2029-02-17','2026-08-02T10:07:00Z',
+  r3:=pg_temp.wp52_report('p3c',c3,'2029-03-31','2026-08-02T10:07:00Z',
     pg_catalog.jsonb_build_array(v_neg8),v_root3);
   v_paid3:=pg_temp.wp52_paid(v_root3);
   perform pg_temp.assert_true(v_paid3='9.00|90.00|180.00',
@@ -2080,10 +2084,10 @@ begin
 
   -- SENTINEL that must DIFFER: the shift is reversed and never re-issued.
   c4:=pg_temp.wp52_candidate('sentinel-no-reissue');
-  r4:=pg_temp.wp52_report('p4a',c4,'2029-02-24','2026-08-02T10:08:00Z',
+  r4:=pg_temp.wp52_report('p4a',c4,'2029-04-14','2026-08-02T10:08:00Z',
     pg_catalog.jsonb_build_array(v_pos8),null);
   v_root4:=(r4->>'root_timesheet_id')::uuid;
-  r4:=pg_temp.wp52_report('p4b',c4,'2029-03-03','2026-08-02T10:09:00Z',
+  r4:=pg_temp.wp52_report('p4b',c4,'2029-04-28','2026-08-02T10:09:00Z',
     pg_catalog.jsonb_build_array(v_neg8),v_root4);
   v_paid4:=pg_temp.wp52_paid(v_root4);
   perform pg_temp.assert_true(v_paid4='0.00|0.00|0.00',
@@ -2098,7 +2102,7 @@ begin
   -- the negative invoices, and Candidate pay for the Wednesday is untouched.
   -- Driven in BOTH physical orders for the same reason as above.
   c5:=pg_temp.wp52_candidate('mixed-root');
-  r5:=pg_temp.wp52_report('p5a',c5,'2029-03-10','2026-08-02T10:10:00Z',
+  r5:=pg_temp.wp52_report('p5a',c5,'2029-05-12','2026-08-02T10:10:00Z',
     pg_catalog.jsonb_build_array(
       '{"date":"2026-09-14","start":"09:00","end":"17:00","charge":-16000}'::jsonb,
       '{"date":"2026-09-16","start":"09:00","end":"17:00","charge":16000}'::jsonb),null);
@@ -2120,7 +2124,7 @@ begin
     'the mixed root must invoice GBP 160.00 less GBP 160.00');
 
   c6:=pg_temp.wp52_candidate('mixed-root-permuted');
-  r6:=pg_temp.wp52_report('p6a',c6,'2029-03-17','2026-08-02T10:11:00Z',
+  r6:=pg_temp.wp52_report('p6a',c6,'2029-05-26','2026-08-02T10:11:00Z',
     pg_catalog.jsonb_build_array(
       '{"date":"2026-09-16","start":"09:00","end":"17:00","charge":16000}'::jsonb,
       '{"date":"2026-09-14","start":"09:00","end":"17:00","charge":-16000}'::jsonb),null);
