@@ -26,7 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 2
+          # Exact rollback sources are pinned to the commits which produced the
+          # currently installed TEST ledger entries, not merely this branch's parent.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
@@ -58,6 +60,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.source-gate.outputs.commit }}
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
