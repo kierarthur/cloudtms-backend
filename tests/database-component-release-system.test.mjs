@@ -30,8 +30,11 @@ test('component authority is an exact TEST-only two-file allowlist', () => {
   assert.equal(manifest.environment, 'TEST');
   assert.equal(manifest.mode, 'COMPONENT_UPGRADE');
   assert.deepEqual(manifest.files.map((item) => item.path), expectedFiles);
-  assert.ok(manifest.files.every((item) => /^[0-9a-f]{64}$/.test(item.beforeSha256)
-    && /^[0-9a-f]{64}$/.test(item.afterSha256)));
+  assert.ok(manifest.files.every((item) => /^[0-9a-f]{40}$/.test(item.beforeCommit)
+    && /^[0-9a-f]{64}$/.test(item.beforeSourceSha256)
+    && /^[0-9a-f]{64}$/.test(item.beforeClosureSha256)
+    && /^[0-9a-f]{64}$/.test(item.afterSourceSha256)
+    && /^[0-9a-f]{64}$/.test(item.afterClosureSha256)));
   assert.deepEqual(manifest.excludedOpenScope, openStage2);
   assert.ok(openStage2.every((file) => !manifest.verificationFiles.includes(file)));
 });

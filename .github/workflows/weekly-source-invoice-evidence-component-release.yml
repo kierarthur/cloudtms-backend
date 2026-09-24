@@ -91,6 +91,9 @@ jobs:
       - name: Read-only component plan
         shell: bash
         run: npm run db:component:plan 2>&1 | tee "$RUNNER_TEMP/component-plan.json"
+      - name: Rollback-contained component rehearsal
+        shell: bash
+        run: npm run db:component:rehearse 2>&1 | tee "$RUNNER_TEMP/component-rehearsal.json"
       - name: Apply exact component and verify installed definitions
         if: inputs.phase == 'APPLY'
         shell: bash

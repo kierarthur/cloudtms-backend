@@ -7,13 +7,19 @@
   "files": [
     {
       "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
-      "beforeSha256": "36d06763de69da62fa8e14c32a16cac0dd1dd4fe70237067a0a5c67de885acb1",
-      "afterSha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7"
+      "beforeCommit": "dd0a9ce17261e583a754730f2b3553fe27d369f5",
+      "beforeSourceSha256": "36d06763de69da62fa8e14c32a16cac0dd1dd4fe70237067a0a5c67de885acb1",
+      "beforeClosureSha256": "fb4bbdef0352a5f0d62306e45d41603d4dfbaa8ab95dfac8e92cb73263d06887",
+      "afterSourceSha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7",
+      "afterClosureSha256": "71f61324e46bf57060b70fd7d1f347ce47bb170b317d3a6a4f9a3024b20b4f8f"
     },
     {
       "path": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
-      "beforeSha256": "df46cb9c43dcfd66443f7292414e8029e0236524436bc69412d1f2ec5084f74b",
-      "afterSha256": "9bebd84c3229edb3d2b4e0d93b694f019d981b838f634a6fcedb16b2a2add26c"
+      "beforeCommit": "f74802b6155a694035f059b8242aaaec3b716925",
+      "beforeSourceSha256": "df46cb9c43dcfd66443f7292414e8029e0236524436bc69412d1f2ec5084f74b",
+      "beforeClosureSha256": "b9db157d7859f6d3449d6adbd11d849c47cb7d3da71e8911c2e986cf4420dea3",
+      "afterSourceSha256": "9bebd84c3229edb3d2b4e0d93b694f019d981b838f634a6fcedb16b2a2add26c",
+      "afterClosureSha256": "8b9449f90aac619dc55e744c579c44de3bbe5e9b742809ec7746e299891c23da"
     }
   ],
   "verificationFiles": [

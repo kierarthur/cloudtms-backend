@@ -56,16 +56,19 @@ function readManifest() {
   }
   if (!/^[0-9a-f]{40}$/.test(manifest.baseCommit)) throw new Error('Invalid component base commit');
   for (const item of manifest.files) {
-    if (!/^[0-9a-f]{64}$/.test(item.beforeSha256)
-        || !/^[0-9a-f]{64}$/.test(item.afterSha256)) {
+    if (!/^[0-9a-f]{40}$/.test(item.beforeCommit)
+        || !/^[0-9a-f]{64}$/.test(item.beforeSourceSha256)
+        || !/^[0-9a-f]{64}$/.test(item.beforeClosureSha256)
+        || !/^[0-9a-f]{64}$/.test(item.afterSourceSha256)
+        || !/^[0-9a-f]{64}$/.test(item.afterClosureSha256)) {
       throw new Error(`Invalid component hash for ${item.path}`);
     }
     const actual = sha256(fs.readFileSync(path.join(repoRoot, item.path)));
-    if (actual !== item.afterSha256) throw new Error(`Current component source hash mismatch: ${item.path}`);
-    const result = spawnSync('git', ['show', `${manifest.baseCommit}:${item.path}`], {
+    if (actual !== item.afterSourceSha256) throw new Error(`Current component source hash mismatch: ${item.path}`);
+    const result = spawnSync('git', ['show', `${item.beforeCommit}:${item.path}`], {
       cwd: repoRoot, encoding: null, maxBuffer: 32 * 1024 * 1024,
     });
-    if (result.status !== 0 || sha256(result.stdout) !== item.beforeSha256) {
+    if (result.status !== 0 || sha256(result.stdout) !== item.beforeSourceSha256) {
       throw new Error(`Base component source hash mismatch: ${item.path}`);
     }
   }
@@ -107,10 +110,11 @@ function ledgerState(manifest) {
   return manifest.files.map((item) => {
     const actual = installed.get(item.path);
     if (!actual) throw new Error(`Required repeatable ledger entry is missing: ${item.path}`);
-    if (![item.beforeSha256, item.afterSha256].includes(actual)) {
+    if (![item.beforeClosureSha256, item.afterClosureSha256].includes(actual)) {
       throw new Error(`Unrecognised installed repeatable hash: ${item.path}`);
     }
-    return { ...item, installedSha256: actual, pending: actual !== item.afterSha256 };
+    return { ...item, installedClosureSha256: actual,
+      pending: actual !== item.afterClosureSha256 };
   });
 }
 
@@ -138,11 +142,11 @@ function gitBytes(commit, relative) {
 
 function atomicSql(manifest, useAfter, releaseId) {
   const bodies = manifest.files.map((item) => executableBody(
-    useAfter ? fs.readFileSync(path.join(repoRoot, item.path)) : gitBytes(manifest.baseCommit, item.path),
+    useAfter ? fs.readFileSync(path.join(repoRoot, item.path)) : gitBytes(item.beforeCommit, item.path),
     item.path,
   ));
   const ledger = manifest.files.map((item) => {
-    const hash = useAfter ? item.afterSha256 : item.beforeSha256;
+    const hash = useAfter ? item.afterClosureSha256 : item.beforeClosureSha256;
     return `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id)
       values (${sqlLiteral(item.path)},${sqlLiteral(hash)},${sqlLiteral(releaseId)})
       on conflict(path) do update set closure_sha256=excluded.closure_sha256,
@@ -177,6 +181,16 @@ function runVerifiers(manifest) {
   for (const file of manifest.verificationFiles) psql({ file });
 }
 
+function verifierPrelude(relative, stopMarker = null) {
+  let source = fs.readFileSync(path.join(repoRoot, relative), 'utf8').replace(/^\uFEFF/, '');
+  if (stopMarker) {
+    const index = source.indexOf(stopMarker);
+    if (index < 0) throw new Error(`Rehearsal stop marker is absent: ${relative}`);
+    source = source.slice(0, index);
+  }
+  return source.replace(/^\s*\\(?:set|pset)\b.*$/gim, '').trim();
+}
+
 function installedDefinitionReceipt() {
   const identities = [
     'public.weekly_source_invoice_batch_candidates_v1(jsonb)',
@@ -188,7 +202,7 @@ function installedDefinitionReceipt() {
     'public.weekly_source_no_shifts_attest_atomic_v1(jsonb)',
   ];
   return JSON.parse(psql({ sql: `select pg_catalog.jsonb_object_agg(identity,
-      pg_catalog.encode(pg_catalog.digest(pg_catalog.pg_get_functiondef(identity::regprocedure),'sha256'),'hex'))
+      pg_catalog.md5(pg_catalog.pg_get_functiondef(identity::regprocedure)))
     from pg_catalog.unnest(array[${identities.map(sqlLiteral).join(',')}]::text[]) identity;` }));
 }
 
@@ -206,6 +220,38 @@ function plan() {
   assertTestTarget();
   const state = ledgerState(manifest);
   console.log(JSON.stringify({ componentId: COMPONENT_ID, environment: 'TEST', phase: 'PLAN', files: state }, null, 2));
+}
+
+function rehearse() {
+  const manifest = checkSource();
+  assertTestTarget();
+  ledgerState(manifest);
+  const before = installedDefinitionReceipt();
+  const definitions = manifest.files.map((item) => executableBody(
+    fs.readFileSync(path.join(repoRoot, item.path)), item.path,
+  ));
+  const invoiceCatalogueChecks = verifierPrelude(
+    manifest.verificationFiles[0],
+    '\\set weekly_source_verification_outer_transaction true',
+  );
+  const componentChecks = verifierPrelude(manifest.verificationFiles[2]);
+  runAtomic(mapLogicalPostgresOwnerSql([
+    '\\set ON_ERROR_STOP on',
+    'begin;',
+    "set local lock_timeout='10s';",
+    "set local statement_timeout='120s';",
+    ...definitions,
+    invoiceCatalogueChecks,
+    componentChecks,
+    'rollback;',
+    '',
+  ].join('\n\n')), 'rehearse');
+  const after = installedDefinitionReceipt();
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    throw new Error('Rollback rehearsal changed an installed definition');
+  }
+  console.log(JSON.stringify({ componentId: COMPONENT_ID, environment: 'TEST',
+    phase: 'REHEARSE_ROLLBACK', rolledBack: true, installedDefinitionsUnchanged: true }, null, 2));
 }
 
 function apply() {
@@ -236,5 +282,6 @@ function apply() {
 
 if (command === 'check') checkSource();
 else if (command === 'plan') plan();
+else if (command === 'rehearse') rehearse();
 else if (command === 'apply') apply();
-else throw new Error('Usage: cloudtms-db-component-release.mjs check|plan|apply --environment=TEST');
+else throw new Error('Usage: cloudtms-db-component-release.mjs check|plan|rehearse|apply --environment=TEST');
