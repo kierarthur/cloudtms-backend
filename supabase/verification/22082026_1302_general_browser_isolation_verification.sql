@@ -395,8 +395,19 @@ begin
   -- owned by the release owner, has a fixed search_path, and preserves both
   -- the historical unrelated service_missing count and zero browser-executable
   -- routines.
-  if v_count<>791 or v_service_missing<>75 or v_browser_executable<>0
-     or v_hash<>'46bd8e9cf5bf76e053b0d06bb973ed4e' then
+  -- The independently VERIFIED invoice-evidence component (c5938c551981,
+  -- protected TEST run 36003314658) adds exactly:
+  --   public.weekly_source_invoice_evidence_v1(pg_catalog.jsonb)
+  --     |svc=true|anon=false|auth=false
+  -- On 25 September the complete live identity difference against the local
+  -- sealed 791-function catalogue was this one addition, with no removals.
+  -- Adding that exact ACL row to the verifier's own local census reproduced
+  -- TEST's 792 / 75 / 0 / 50de1833423a306fcc4a0502d30ae59f exactly.
+  -- The installed definition is SECURITY DEFINER with fixed
+  -- search_path=pg_catalog,pg_temp and grants only owner and service_role.
+  -- This updates the inventory seal; it does not change any grants.
+  if v_count<>792 or v_service_missing<>75 or v_browser_executable<>0
+     or v_hash<>'50de1833423a306fcc4a0502d30ae59f' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

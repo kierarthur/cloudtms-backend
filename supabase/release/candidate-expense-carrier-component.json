@@ -21,7 +21,7 @@
     },
     {
       "path": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
-      "sha256": "db64001ac70875613afedec2c0d6396c347a558f4c64a8faffbd82887a303f18"
+      "sha256": "d0c358d2dbb9d0b975e611ffc33a2cdcf1d7d9d82f254fdea8f7ae33a342c73b"
     },
     {
       "path": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
