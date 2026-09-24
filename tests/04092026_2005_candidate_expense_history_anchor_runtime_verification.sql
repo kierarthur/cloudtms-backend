@@ -7,6 +7,11 @@
 
 begin;
 
+insert into public.settings_defaults(
+  id,candidate_manager_email_templates_sha256,candidate_home_announcement_sha256
+) values (1,decode(repeat('01',32),'hex'),decode(repeat('02',32),'hex'))
+on conflict (id) do nothing;
+
 update public.settings_defaults
 set candidate_app_feature_flags_json=coalesce(candidate_app_feature_flags_json,'{}'::jsonb)
   || jsonb_build_object(

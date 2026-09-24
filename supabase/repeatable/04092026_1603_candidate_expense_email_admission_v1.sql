@@ -294,7 +294,12 @@ begin
     'has_active_submission_workflow',v_has_active_submission_workflow,
     'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected
       and not v_candidate_mutation_locked and not v_paid,
-    'candidate_expenses_allowed',v_expense_route_allowed and v_expense_admission_ready and (
+    -- An empty import-authoritative hours root cannot anchor an expense claim.
+    -- Additional expense carriers remain editable, and an ordinary non-source
+    -- Timesheet retains its existing capability unchanged.
+    'candidate_expenses_allowed',v_expense_route_allowed and v_expense_admission_ready
+      and (not v_import or coalesce(v_week.additional_seq,0)>0
+        or v_hours>0 or v_additional>0 or v_has_worked_schedule) and (
       not v_protected or v_hours<>0 or v_additional<>0 or v_import
     ),
     'candidate_paper_submission_allowed',v_paper_route_allowed and not v_protected and not v_candidate_mutation_locked,
@@ -311,7 +316,9 @@ begin
     -- Authorised hours remain immutable, but can still anchor the separately
     -- allocated Candidate expense carrier. The placement resolver forbids
     -- SAME_RECORD when candidate_mutation_locked is true.
-    'can_edit_expenses',v_expense_route_allowed and v_expense_admission_ready and (
+    'can_edit_expenses',v_expense_route_allowed and v_expense_admission_ready
+      and (not v_import or coalesce(v_week.additional_seq,0)>0
+        or v_hours>0 or v_additional>0 or v_has_worked_schedule) and (
       (
         not v_protected and (
           v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS')

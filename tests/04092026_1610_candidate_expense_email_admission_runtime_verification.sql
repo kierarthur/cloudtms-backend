@@ -4,6 +4,13 @@
 
 begin;
 
+-- Fresh release clones have the schema but no Office settings row. Keep the
+-- fixture self-contained; the outer transaction removes this seed afterward.
+insert into public.settings_defaults(
+  id,candidate_manager_email_templates_sha256,candidate_home_announcement_sha256
+) values (1,decode(repeat('01',32),'hex'),decode(repeat('02',32),'hex'))
+on conflict (id) do nothing;
+
 update public.settings_defaults
 set candidate_app_feature_flags_json=jsonb_build_object(
   'candidate_app_reads',true,
@@ -66,7 +73,7 @@ begin
 
   insert into public.timesheets_financials(
     timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,1,v_candidate,v_client,8,'UNPROCESSED');
+  ) values(v_timesheet,1,v_candidate,v_client,0,'UNPROCESSED');
 
   v_capabilities:=private._candidate_record_capabilities_v1(
     v_timesheet,v_week,'{}'::jsonb
@@ -90,12 +97,32 @@ begin
   set candidate_expense_invoice_email='expenses@example.test'
   where client_id=v_client;
 
+  -- A pre-finalisation source week with no positive worked time must not
+  -- create an expense claim, even though it already has a root Timesheet.
+  v_capabilities:=private._candidate_record_capabilities_v1(
+    v_timesheet,v_week,'{}'::jsonb
+  );
+  if coalesce((v_capabilities->>'candidate_expenses_allowed')::boolean,true)
+     or coalesce((v_capabilities->>'can_edit_expenses')::boolean,true) then
+    raise exception 'zero-work source root falsely offered expense entry: %',v_capabilities;
+  end if;
+  v_placement:=public.expense_placement_resolve_v1(
+    v_candidate,'TEST',v_timesheet,v_week,'{}'::jsonb,now()
+  );
+  if v_placement->>'placement'<>'BLOCKED'
+     or v_placement->>'reason_code'<>'CANDIDATE_RECORD_VIEW_ONLY' then
+    raise exception 'zero-work pre-finalisation anchor was not refused: %',v_placement;
+  end if;
+
   -- A source-authority Candidate submission is immutable hours evidence before
   -- final source materialises TSFIN. It must permit only a separate expense
   -- carrier and must not copy Candidate hours into the source Timesheet.
-  update public.timesheets_financials
-  set total_hours=0
-  where timesheet_id=v_timesheet and is_current;
+  update public.timesheets set
+    actual_schedule_json=jsonb_build_array(jsonb_build_object(
+      'date',current_date,'start','09:00','end','17:00',
+      'break_entry',jsonb_build_object('break_minutes',30)
+    )),worked_minutes=450
+  where timesheet_id=v_timesheet;
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','expense-admission-runtime@example.test','ACTIVE');
   insert into public.candidate_submission_workflows(
