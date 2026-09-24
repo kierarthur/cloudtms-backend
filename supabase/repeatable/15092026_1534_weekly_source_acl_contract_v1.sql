@@ -450,6 +450,7 @@ as $function$
     ('public.weekly_source_invoice_batch_admit_atomic_v1(jsonb)'),
     ('public.weekly_source_invoice_batch_candidates_v1(jsonb)'),
     ('public.weekly_source_invoice_edit_context_v1(jsonb)'),
+    ('public.weekly_source_invoice_evidence_v1(jsonb)'),
     ('public.weekly_source_invoice_move_atomic_v1(jsonb)'),
     -- The source-backed invoice/report projection is read by the broker only.
     -- Keep it on the same service-only allowlist as the invoice edit and move

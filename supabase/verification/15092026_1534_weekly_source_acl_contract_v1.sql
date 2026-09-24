@@ -343,6 +343,7 @@ declare
     'public.weekly_source_invoice_batch_admit_atomic_v1(jsonb)',
     'public.weekly_source_invoice_batch_candidates_v1(jsonb)',
     'public.weekly_source_invoice_edit_context_v1(jsonb)',
+    'public.weekly_source_invoice_evidence_v1(jsonb)',
     'public.weekly_source_invoice_move_atomic_v1(jsonb)',
     'public.weekly_source_invoice_report_rows_v1(jsonb)',
     'public.weekly_source_later_change_decide_atomic_v1(jsonb)',
