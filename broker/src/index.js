@@ -156135,6 +156135,133 @@ function invoiceEmailDeliveryPolicySummary(invoiceAsyncDetail) {
   };
 }
 
+// Invoice evidence follows CURRENT bindings, not a report number on the
+// invoice header. A moved line therefore carries its own source report.
+async function weeklySourceInvoiceEvidenceRows(env, invoiceId) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(String(invoiceId || ''))) throw new Error('INVALID_INVOICE_ID');
+  const readPages = async (table, query) => {
+    const rows = [];
+    for (let offset = 0; offset < 10000; offset += 1000) {
+      const url = `${env.SUPABASE_URL}/rest/v1/${table}?${query}&limit=1000&offset=${offset}`;
+      const result = await sbFetch(env, url);
+      const page = Array.isArray(result?.rows) ? result.rows : [];
+      rows.push(...page);
+      if (page.length < 1000) return rows;
+    }
+    throw new Error('WEEKLY_SOURCE_EVIDENCE_CENSUS_LIMIT');
+  };
+  const inFilter = (ids) => `in.(${ids.map(id => encodeURIComponent(id)).join(',')})`;
+  const chunks = (values) => {
+    const out = [];
+    for (let i = 0; i < values.length; i += 100) out.push(values.slice(i, i + 100));
+    return out;
+  };
+  const collect = async (table, ids, column, select, mapColumn = 'id') => {
+    const rows = [];
+    for (const part of chunks(ids)) {
+      rows.push(...await readPages(table,
+        `select=${select}&${column}=${inFilter(part)}`));
+    }
+    return rows.filter(row => uuid.test(String(row?.[mapColumn] || '')));
+  };
+  const ids = (rows, key) => [...new Set(rows.map(row => String(row?.[key] || '')).filter(id => uuid.test(id)))];
+  const bindings = await readPages('weekly_source_invoice_line_bindings',
+    `select=presentation_line_id&invoice_id=eq.${encodeURIComponent(invoiceId)}&state=eq.CURRENT`);
+  const presentationIds = ids(bindings, 'presentation_line_id');
+  if (!presentationIds.length) return [];
+  const presentations = await collect('weekly_source_invoice_presentation_lines',
+    presentationIds, 'id', 'id,final_revision_id');
+  const revisions = await collect('weekly_source_final_revisions',
+    ids(presentations, 'final_revision_id'), 'id', 'id,upload_id');
+  const uploads = await collect('weekly_source_uploads', ids(revisions, 'upload_id'), 'id',
+    'id,original_filename,content_sha256,byte_count,uploaded_at_utc,file_metadata_json');
+  if (presentations.length !== presentationIds.length
+      || revisions.length !== ids(presentations, 'final_revision_id').length
+      || uploads.length !== ids(revisions, 'upload_id').length) {
+    throw new Error('WEEKLY_SOURCE_EVIDENCE_LINEAGE_INCOMPLETE');
+  }
+  return uploads.map(upload => ({
+    upload_id: upload.id,
+    filename: upload.original_filename,
+    uploaded_at_utc: upload.uploaded_at_utc,
+    byte_count: upload.byte_count,
+    // Never return a storage key or a generic presign grant to the browser.
+    download_available: true,
+    _source_sha256: upload.content_sha256,
+    _source_file_r2_key: upload.file_metadata_json?.source_file_r2_key || null
+  }));
+}
+
+async function handleInvoiceSourceEvidenceDownload(env, req, invoiceId, uploadId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  try {
+    const context = unwrapRpcJsonb(await sbRpc(env, 'weekly_source_invoice_edit_context_v1', {
+      p_request: { actor_user_id: user.id, invoice_id: invoiceId }
+    }), 'weekly_source_invoice_edit_context_v1');
+    if (context?.is_weekly_source_invoice !== true) return withCORS(env, req, notFound('Invoice not found'));
+    const evidence = (await weeklySourceInvoiceEvidenceRows(env, invoiceId))
+      .find(row => row.upload_id === uploadId);
+    if (!evidence) return withCORS(env, req, notFound('Source report not found on invoice'));
+    const expected = String(evidence._source_sha256 || '').replace(/^\\x/i, '').toLowerCase();
+    const expectedSize = Number(evidence.byte_count);
+    if (!/^[0-9a-f]{64}$/.test(expected) || !Number.isSafeInteger(expectedSize)
+        || expectedSize < 1 || expectedSize > 25 * 1024 * 1024) {
+      throw new Error('WEEKLY_SOURCE_EVIDENCE_DIGEST_INVALID');
+    }
+    const bucket = env.R2_BUCKET || env.R2;
+    if (!bucket?.get) throw new Error('WEEKLY_SOURCE_EVIDENCE_STORAGE_UNAVAILABLE');
+    const matches = async (key) => {
+      if (!isOfficeFileDownloadKeyAllowed(env, key)) return null;
+      const object = await bucket.get(key);
+      if (!object || object.size !== expectedSize) return null;
+      const bytes = await object.arrayBuffer();
+      const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+        .map(value => value.toString(16).padStart(2, '0')).join('');
+      return digest === expected ? bytes : null;
+    };
+    let bytes = null;
+    const storedKey = String(evidence._source_file_r2_key || '').replace(/^\/+/, '').trim();
+    if (storedKey) bytes = await matches(storedKey);
+    if (!bytes) {
+      // Older admitted uploads did not persist the R2 locator. Search only
+      // bounded upload-date prefixes and return a byte-identical object, never
+      // a filename/size-only match or an arbitrary browser-supplied key.
+      const uploaded = new Date(evidence.uploaded_at_utc);
+      if (Number.isNaN(uploaded.getTime()) || !bucket.list) throw new Error('WEEKLY_SOURCE_EVIDENCE_LOCATOR_MISSING');
+      for (const dayOffset of [0, -1, 1]) {
+        const day = new Date(uploaded.getTime() + dayOffset * 86400000)
+          .toISOString().slice(0, 10).replace(/-/g, '');
+        let cursor;
+        for (let page = 0; page < 10 && !bytes; page++) {
+          const listing = await bucket.list({ prefix: `files/${day}/`, limit: 1000, ...(cursor ? { cursor } : {}) });
+          for (const object of listing.objects || []) {
+            if (object.size !== expectedSize) continue;
+            bytes = await matches(object.key);
+            if (bytes) break;
+          }
+          if (bytes || !listing.truncated || !listing.cursor) break;
+          cursor = listing.cursor;
+        }
+        if (bytes) break;
+      }
+    }
+    if (!bytes) return withCORS(env, req, notFound('Verified source report file not found'));
+    const filename = String(evidence.filename || 'source-report.xlsx')
+      .replace(/[/\\]/g, '_').replace(/[\r\n"]/g, '');
+    return withCORS(env, req, new Response(bytes, { status: 200, headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': String(bytes.byteLength),
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store'
+    } }));
+  } catch {
+    return withCORS(env, req, serverError('Source report is not available right now'));
+  }
+}
+
 async function handleGetInvoice(env, req, invoiceId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return unauthorized();
@@ -156184,6 +156311,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         : (invoice.header_snapshot_json && typeof invoice.header_snapshot_json === 'object' ? invoice.header_snapshot_json : {});
 
     let weeklySourceInvoice = null;
+    let weeklySourceEvidence = [];
     if (String(header_snapshot_json?.schema_version || '').trim()
         === 'WEEKLY_SOURCE_SELF_BILL_INVOICE_V1') {
       weeklySourceInvoice = unwrapRpcJsonb(await sbRpc(
@@ -156194,6 +156322,10 @@ async function handleGetInvoice(env, req, invoiceId) {
       if (weeklySourceInvoice?.is_weekly_source_invoice !== true) {
         throw new Error('WEEKLY_SOURCE_INVOICE_EDIT_CONTEXT_INVALID');
       }
+      weeklySourceEvidence = (await weeklySourceInvoiceEvidenceRows(env, invoiceId))
+        .map(({ upload_id, filename, uploaded_at_utc, byte_count, download_available }) => ({
+          upload_id, filename, uploaded_at_utc, byte_count, download_available
+        }));
     }
 
     const lineRows = Array.isArray(manifest.lines) ? manifest.lines : [];
@@ -156416,6 +156548,7 @@ async function handleGetInvoice(env, req, invoiceId) {
         timesheet_reference_sources_by_id,
 
         weekly_source_invoice: weeklySourceInvoice,
+        weekly_source_evidence: weeklySourceEvidence,
 
         correspondence
       }));
@@ -156449,7 +156582,8 @@ async function handleGetInvoice(env, req, invoiceId) {
       // ✅ reference sources now come from the RPC (no extra DB reads here)
       timesheet_reference_sources_by_id,
 
-      weekly_source_invoice: weeklySourceInvoice
+      weekly_source_invoice: weeklySourceInvoice,
+      weekly_source_evidence: weeklySourceEvidence
     }));
   } catch {
     return withCORS(env, req, serverError('Failed to fetch invoice'));
@@ -201220,6 +201354,14 @@ async function handleTimesheetBulkAuthoriseWatch(env, req, timesheetId = null) {
       if (req.method === 'POST' && p === '/api/invoices/create-expenses')    return handleCreateInvoiceExpenses(env, req);
       // NEW: per-week, segment-based TSFIN invoicer
       if (req.method === 'POST' && p === '/api/invoices/tsfin/by-week')      return handleCreateInvoiceTsfinByWeek(env, req);
+
+      {
+        const sourceEvidence = matchPath(p, '/api/invoices/:invoice_id/source-evidence/:upload_id/download');
+        if (sourceEvidence && req.method === 'GET') {
+          return handleInvoiceSourceEvidenceDownload(env, req,
+            sourceEvidence.invoice_id, sourceEvidence.upload_id);
+        }
+      }
 
       {
         const inv = matchPath(p, '/api/invoices/:invoice_id');

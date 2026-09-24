@@ -327,6 +327,9 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
   const count = (classification) => physicalRows.filter((row) => row.classification === classification).length;
   const metadata = {
     client_id: context.client_id ?? null,
+    // The bytes at this key were read and hashed before admission. Retain the
+    // storage locator for later invoice evidence; it is never a browser grant.
+    source_file_r2_key: text(body.file_key) || null,
     ...(parsed.profileId === 'NHSP_FINAL_BACKING_V1' ? {
       nhsp_report_number: parsed.scope?.backingReportNumber,
       nhsp_report_heading_name: parsed.scope?.reportHeadingName,
