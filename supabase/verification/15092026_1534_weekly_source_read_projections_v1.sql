@@ -3654,9 +3654,10 @@ begin
     'private.weekly_source_office_candidate_phase_v1(uuid,timestamptz)'
   ]::text[] loop
     perform pg_temp.assert_true(
-      (select proowner::regrole::text from pg_catalog.pg_proc
-        where oid=pg_catalog.to_regprocedure(v_definition))='postgres',
-      v_definition||' is not owned by postgres');
+      (select proowner from pg_catalog.pg_proc
+        where oid=pg_catalog.to_regprocedure(v_definition))
+          =(current_user::pg_catalog.regrole)::oid,
+      v_definition||' is not owned by the mapped logical database owner');
     perform pg_temp.assert_true(
       not pg_catalog.has_function_privilege('anon',v_definition,'EXECUTE')
       and not pg_catalog.has_function_privilege('authenticated',v_definition,'EXECUTE')
