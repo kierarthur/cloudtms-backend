@@ -1,0 +1,85 @@
+name: Candidate expense carrier repair (protected TEST)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: PLAN is read-only; APPLY installs the exact expense-carrier routine component
+        required: true
+        type: choice
+        options: [PLAN, APPLY]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-database-release-TEST
+  cancel-in-progress: false
+
+jobs:
+  source-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@11.12.1
+      - run: npm ci --engine-strict
+      - run: npm run security:toolchain
+      - run: npm run security:dependencies
+      - run: npm run security:secrets
+      - run: npm run db:check
+      - run: npm run db:contract:coupling
+      - run: node scripts/cloudtms-db-expense-carrier-release.mjs check
+      - run: npm test
+      - run: node --test tests/candidate-expense-carrier-release.test.mjs
+      - id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: source-gate
+    runs-on: ubuntu-latest
+    environment: database-test
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_TEST }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_TEST }}
+      CLOUDTMS_EXPECTED_DATABASE: ${{ vars.MIGET_DATABASE_NAME_TEST }}
+      CLOUDTMS_ENVIRONMENT: TEST
+      CLOUDTMS_LOGICAL_POSTGRES_OWNER: CURRENT_USER
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.source-gate.outputs.commit }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@11.12.1
+      - run: npm ci --engine-strict
+      - name: Install PostgreSQL client
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get update -qq -o Acquire::Retries=3
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get install -y -qq postgresql-client
+          fi
+      - name: Fixed-target and branch gate
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}"
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}"
+          test -n "${CLOUDTMS_EXPECTED_DATABASE:-}"
+          if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
+            [[ "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" ]]
+            [[ "$GITHUB_REF" == "refs/heads/test" ]]
+            echo "CLOUDTMS_RELEASE_APPROVAL=APPLY TEST COMPONENT candidate-expense-carrier-repair-20260924 ${{ needs.source-gate.outputs.commit }}" >> "$GITHUB_ENV"
+          fi
+      - run: node scripts/cloudtms-db-expense-carrier-release.mjs plan
+      - run: node scripts/cloudtms-db-expense-carrier-release.mjs rehearse
+      - if: inputs.phase == 'APPLY'
+        run: node scripts/cloudtms-db-expense-carrier-release.mjs apply

@@ -5010,6 +5010,25 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_empty_provisional_expense_cleanup_v1(p_environment text, p_contract_week_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4f750fec4fe0f767b672aaa1d5b0e6eedb8d3d1ab03490e707faf0acbb350834"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_evidence_lineage_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -6307,6 +6326,25 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
+      "identity": "_candidate_provisional_expense_carrier_v1(p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "6f22f963b99ebcf0ecdc2ab5cebfc69e63641e7ee98cfbb039d7269dfa74aaa4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
       "identity": "_candidate_qr_pack_ready_notification_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -6463,7 +6501,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "38d2134c1bec55d8246fa5056dc1e5bf4edca68a7637d4d19dc659be162f973a"
+      "definition_sha256": "362b8665af77d0edc6b49a2d74218aa0a9fb6002e232dbc19b06c545c79f520c"
     },
     {
       "acl": [
@@ -22710,7 +22748,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "71a81cebd153f783cfdfecdd5a9abebb7b5851353e071635fb4187efabf20c86"
+      "definition_sha256": "21f4d6377708ec8fb568c0bcd5be4aa85f26abe8bde6a4cec92eb9ff45303900"
     },
     {
       "acl": [
@@ -23430,7 +23468,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9e8e246304d875782683e38c81b9b7342ac02bac30840866ca0e3a6c55149b12"
+      "definition_sha256": "991e576a84aa6d9f6ff96626f4b8fdd9208e4608070f35ecd7720719f7ad4f17"
     },
     {
       "acl": [
@@ -24330,6 +24368,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_reservations_v1(p_environment text, p_actor_user_id uuid, p_contract_week_ids uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "bea35c93b2a0d68083348457bb45400385377592e8c3e8a30f25b44b0d5e1636"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
@@ -24555,7 +24617,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "16b154df708e4d601e5da32f74f11ee42615ebc0d05a68b40847cf9b892fd194"
+      "definition_sha256": "b703cdfa84ddef19e941743b4d54fc81635696756bfc19854b2c7819e98691e4"
     },
     {
       "acl": [
@@ -24747,7 +24809,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7e2ccf1c1258747beb2a30d9a63904cbeef5119cb5b51c7e7646c8a0bab4f3ae"
+      "definition_sha256": "9b636481e7c3abd63e0cbe51a82ec5c73a5e523fd9c6822fec9fcfb65230970e"
     },
     {
       "acl": [
@@ -25541,7 +25603,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "12c08be5bcc02fd23bdbb2dfec717ea2af4f4ffb912ec471e35eac55eebdd508"
+      "definition_sha256": "bd7d2042ff5f272fa76bbc11bbc876afa8d23be842fe73c335f21de069a58ac4"
     },
     {
       "acl": [
@@ -26105,7 +26167,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c96572c5b2fcd9464862d93febcc3a6661f04f5167b24686602ecae33040014f"
+      "definition_sha256": "3da6e083304001c9a0dee9fbea1176eb852aa17a94c57fd6aba1419cf6d5ffd7"
     },
     {
       "acl": [

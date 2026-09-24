@@ -153,8 +153,11 @@ begin
   -- none of the 163, so browser_executable stays 0, and service_missing stays 9
   -- because the added routine is granted. Full record and the both-direction
   -- proof: IMPL\reports\WP-15d_REPORT.md.
-  if v_count<>163 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'30ab67eac33606d24d9832e5f79b1681' then
+  -- 24 September: the exact service-only Office provisional expense reader
+  -- adds one public routine. Measured on PostgreSQL 17 after the isolated
+  -- carrier closure: 164 / 9 / 0; no existing routine grants were changed.
+  if v_count<>164 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'25f6a076e7e3da2b8954199a7659f236' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

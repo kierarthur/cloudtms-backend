@@ -1,0 +1,455 @@
+{
+  "formatVersion": 1,
+  "componentId": "candidate-expense-carrier-repair-20260924",
+  "environment": "TEST",
+  "database": "cloudtms_test_clone",
+  "baseCommit": "9f643380",
+  "scope": "Provisional self-bill expense carrier lifecycle and Office status; no Banking Pay installation or late source-hours unlock.",
+  "source": {
+    "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+    "sha256": "601632e8d04152c4789e18e12585eb21c8ee9697a9b52884b250683f7c25d597",
+    "closureSha256": "96d33ee8880cf721e8dc45bf4d51e782e5bd30cb5423843b1174cb22f30712bf"
+  },
+  "verifiers": [
+    {
+      "path": "supabase/verification/24092026_2300_candidate_provisional_expense_carrier_verification.sql",
+      "sha256": "8e8294dbecd274df714ec4f771c55f018b622b4f39c9c0eabaf97c5ed242b6de"
+    },
+    {
+      "path": "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
+      "sha256": "506b61a23336b1ee381591ffba3cd2453165675c33ba2f04d348ea904cbd97d4"
+    },
+    {
+      "path": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "sha256": "db64001ac70875613afedec2c0d6396c347a558f4c64a8faffbd82887a303f18"
+    },
+    {
+      "path": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "sha256": "0feb5cdf864c893a9015e2955f5051673ca57d0eb1323b711dbac939a8d62d02"
+    },
+    {
+      "path": "supabase/verification/05092026_0735_candidate_expense_cancel_authority_verification.sql",
+      "sha256": "f3e80b19c5e85e1e8b04588e383ca5777faa451d39c3ed2e1388c05798e87717"
+    },
+    {
+      "path": "supabase/verification/05092026_0942_candidate_protected_additional_expense_action_verification.sql",
+      "sha256": "8b22c09e81139e3cc3032e71a46206fc77a7e91011fdf651aa5d7da54a064298"
+    },
+    {
+      "path": "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+      "sha256": "676742eec620099f188fd6ddd0c87246e58a096a51f1a6f3f728a88ac0c19fbf"
+    },
+    {
+      "path": "supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql",
+      "sha256": "85e3879cf552e2374aa9a7ed78973fc1b54b19cd87a931d2f720689b22e0c8d9"
+    },
+    {
+      "path": "supabase/verification/31082026_0605_candidate_empty_expense_carrier_action_verification.sql",
+      "sha256": "d54b8f3bd086719186e279658debaaca2daac7fa8ec05906984fe3692dfec03b"
+    },
+    {
+      "path": "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
+      "sha256": "73842f8c6593f5b37d1886709f489760efb9b90a86e2b3e03d5fc0a33da92e0b"
+    },
+    {
+      "path": "supabase/verification/06092026_2358_candidate_advanced_expense_policy_verification.sql",
+      "sha256": "86817ae1154349f82e39a25fd03329f7746d158b5764b371f4fb780281a57c39"
+    }
+  ],
+  "beforeRoutines": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_route_family_v1(p_timesheet_id uuid, p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "38d2134c1bec55d8246fa5056dc1e5bf4edca68a7637d4d19dc659be162f973a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_app_timesheet_page_v1(p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "71a81cebd153f783cfdfecdd5a9abebb7b5851353e071635fb4187efabf20c86"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_component_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expense_component_id uuid, p_expected_component_generation integer, p_action text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9e8e246304d875782683e38c81b9b7342ac02bac30840866ca0e3a6c55149b12"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "lock_timeout=5s",
+        "search_path=pg_catalog, public, private, pg_temp",
+        "statement_timeout=120s"
+      ],
+      "schema": "public",
+      "identity": "candidate_submission_finalize_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "16b154df708e4d601e5da32f74f11ee42615ebc0d05a68b40847cf9b892fd194"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_workflow_cancel_atomic_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7e2ccf1c1258747beb2a30d9a63904cbeef5119cb5b51c7e7646c8a0bab4f3ae"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_week_delete_planned(p_contract_week_id uuid, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "12c08be5bcc02fd23bdbb2dfec717ea2af4f4ffb912ec471e35eac55eebdd508"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "expense_carrier_resolve_or_create_atomic_v1(p_candidate_id uuid, p_environment text, p_anchor_timesheet_id uuid, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c96572c5b2fcd9464862d93febcc3a6661f04f5167b24686602ecae33040014f"
+    }
+  ],
+  "afterRoutines": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_empty_provisional_expense_cleanup_v1(p_environment text, p_contract_week_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4f750fec4fe0f767b672aaa1d5b0e6eedb8d3d1ab03490e707faf0acbb350834"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_provisional_expense_carrier_v1(p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "6f22f963b99ebcf0ecdc2ab5cebfc69e63641e7ee98cfbb039d7269dfa74aaa4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_route_family_v1(p_timesheet_id uuid, p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "362b8665af77d0edc6b49a2d74218aa0a9fb6002e232dbc19b06c545c79f520c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_app_timesheet_page_v1(p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "21f4d6377708ec8fb568c0bcd5be4aa85f26abe8bde6a4cec92eb9ff45303900"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_expense_component_action_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expense_component_id uuid, p_expected_component_generation integer, p_action text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "991e576a84aa6d9f6ff96626f4b8fdd9208e4608070f35ecd7720719f7ad4f17"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_office_expense_reservations_v1(p_environment text, p_actor_user_id uuid, p_contract_week_ids uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "bea35c93b2a0d68083348457bb45400385377592e8c3e8a30f25b44b0d5e1636"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "lock_timeout=5s",
+        "search_path=pg_catalog, public, private, pg_temp",
+        "statement_timeout=120s"
+      ],
+      "schema": "public",
+      "identity": "candidate_submission_finalize_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone, p_daily_materialisation_json jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b703cdfa84ddef19e941743b4d54fc81635696756bfc19854b2c7819e98691e4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_workflow_cancel_atomic_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9b636481e7c3abd63e0cbe51a82ec5c73a5e523fd9c6822fec9fcfb65230970e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "contract_week_delete_planned(p_contract_week_id uuid, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "bd7d2042ff5f272fa76bbc11bbc876afa8d23be842fe73c335f21de069a58ac4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "expense_carrier_resolve_or_create_atomic_v1(p_candidate_id uuid, p_environment text, p_anchor_timesheet_id uuid, p_expected_row_signature text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "3da6e083304001c9a0dee9fbea1176eb852aa17a94c57fd6aba1419cf6d5ffd7"
+    }
+  ]
+}
