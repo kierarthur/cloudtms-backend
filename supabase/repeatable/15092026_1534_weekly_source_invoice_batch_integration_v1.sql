@@ -605,6 +605,21 @@ begin
             'start_at_local',presentation.start_at_local,
             'end_at_local',presentation.end_at_local,
             'break_minutes',presentation.break_minutes,
+            -- Display-only source facts. Never use reference, ward or band as
+            -- a movement identity or as an invoice amount authority.
+            'source_reference',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'reference_number')
+              else presentation.booking_reference_snapshot end,
+            'source_ward',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'ward') else null end,
+            'source_trust',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'trust') else null end,
+            'source_hospital',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.bounded_raw_columns_json->>'hospital') else null end,
+            'source_band',case when pg_catalog.count(distinct source_row.id)=1
+              then pg_catalog.min(source_row.role_band_source) else null end,
+            'timesheet_id',case when pg_catalog.count(distinct movement.invoice_timesheet_id)=1
+              then pg_catalog.min(movement.invoice_timesheet_id::text)::uuid else null end,
             'description',presentation.description_snapshot,
             'bound_movement_count',pg_catalog.count(*)::integer,
             -- A presentation that binds more than one movement is the narrowly
@@ -628,6 +643,10 @@ begin
         from public.weekly_source_invoice_line_bindings binding
         join public.weekly_source_invoice_presentation_lines presentation
           on presentation.id=binding.presentation_line_id
+        join public.weekly_source_billing_movements movement
+          on movement.id=binding.billing_movement_id
+        left join public.weekly_source_upload_rows source_row
+          on source_row.id=movement.nhsp_upload_row_id
         where binding.invoice_id=v_invoice.id and binding.state='CURRENT'
         group by presentation.id,presentation.presentation_hash,presentation.line_kind,
           presentation.origin_kind,presentation.correction_role,presentation.work_event_id,

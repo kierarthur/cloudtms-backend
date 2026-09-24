@@ -3952,21 +3952,57 @@ begin
         pg_catalog.jsonb_build_object('row_key','approved-'||source_row.id::text,
           'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
           'hours',to_char(source_row.start_at_local,'HH24:MI')||'-'||to_char(source_row.end_at_local,'HH24:MI'),
+          'reference_number',source_row.bounded_raw_columns_json->>'reference_number',
           'break_text',coalesce(source_row.break_minutes,0)||' min','state',case when incident.id is null then 'READY' else 'MISMATCH' end,
           'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end) row_value
       from public.weekly_source_upload_rows source_row
-      join lateral (select current_resolution.* from public.weekly_source_row_resolutions current_resolution
-        where current_resolution.upload_row_id=source_row.id order by current_resolution.generation desc,current_resolution.id desc limit 1) resolution
-        on resolution.mapping_state='RESOLVED'
+      join public.weekly_source_final_revisions final_revision
+        on final_revision.upload_id=source_row.upload_id
+       and final_revision.source_cycle_id=v_cycle.id
+       and final_revision.state='CURRENT'
+      join public.weekly_source_billing_movements movement
+        on movement.nhsp_upload_row_id=source_row.id
+       and movement.final_revision_id=final_revision.id
+       and movement.movement_role='POSITIVE'
+       and movement.invoice_timesheet_id=any(v_root_family)
       left join public.weekly_discrepancy_incidents incident
-        on incident.source_cycle_id=v_publication.source_cycle_id and incident.work_event_id=resolution.work_event_id and incident.state='OPEN'
-      where v_publication.id is not null and source_row.upload_id=v_publication.upload_id
-        and resolution.candidate_id=v_contract.candidate_id and resolution.client_id=v_contract.client_id
-        and resolution.contract_id=v_contract.id
+        on incident.source_cycle_id=final_revision.source_cycle_id
+       and incident.work_event_id=movement.work_event_id and incident.state='OPEN'
+      where movement.candidate_id=v_contract.candidate_id and movement.actual_client_id=v_contract.client_id
+        and movement.contract_id=v_contract.id
         and (date_trunc('week',source_row.work_date)::date+6)=v_timesheet.week_ending_date
         and source_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
         and not exists(select 1 from public.weekly_exceptional_pay_family_events event
-          where event.family_id=v_family.id and event.durable_work_event_id=resolution.work_event_id and event.state='WAIT'
+          where event.family_id=v_family.id and event.durable_work_event_id=movement.work_event_id and event.state='WAIT'
+            and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest
+              where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))
+      union all
+      select snapshot.work_date,snapshot.start_at_local,'approved-'||snapshot.id::text,
+        pg_catalog.jsonb_build_object('row_key','approved-'||snapshot.id::text,
+          'day_date',to_char(snapshot.work_date,'Dy FMDD Mon YYYY'),
+          'hours',to_char(snapshot.start_at_local,'HH24:MI')||'-'||to_char(snapshot.end_at_local,'HH24:MI'),
+          'reference_number',coalesce(source_row.bounded_raw_columns_json->>'reference_number',
+            source_row.bounded_raw_columns_json->>'booking_reference'),
+          'break_text',snapshot.break_minutes||' min',
+          'state',case when incident.id is null then 'READY' else 'MISMATCH' end,
+          'status_text',case when incident.id is null then 'Ready' else 'Needs attention' end)
+      from public.weekly_source_final_snapshot_lines snapshot
+      join public.weekly_source_final_revisions final_revision
+        on final_revision.id=snapshot.final_revision_id
+       and final_revision.source_cycle_id=v_cycle.id
+       and final_revision.state='CURRENT'
+      join public.weekly_source_upload_rows source_row on source_row.id=snapshot.upload_row_id
+      left join public.weekly_discrepancy_incidents incident
+        on incident.source_cycle_id=final_revision.source_cycle_id
+       and incident.work_event_id=snapshot.work_event_id and incident.state='OPEN'
+      where snapshot.candidate_id=v_contract.candidate_id and snapshot.client_id=v_contract.client_id
+        and snapshot.contract_id=v_contract.id
+        and (date_trunc('week',snapshot.work_date)::date+6)=v_timesheet.week_ending_date
+        and exists(select 1 from public.weekly_source_row_timesheet_lineages lineage
+          where lineage.row_resolution_id=snapshot.row_resolution_id
+            and lineage.timesheet_id=any(v_root_family))
+        and not exists(select 1 from public.weekly_exceptional_pay_family_events event
+          where event.family_id=v_family.id and event.durable_work_event_id=snapshot.work_event_id and event.state='WAIT'
             and event.event_sequence=(select max(latest.event_sequence) from public.weekly_exceptional_pay_family_events latest
               where latest.family_id=event.family_id and latest.durable_work_event_id=event.durable_work_event_id))
       union all
