@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { checkSource, unwrap, installationSql, verificationSql, manifest, run } from '../scripts/cloudtms-db-expense-carrier-release.mjs';
+import { checkSource, unwrap, installationSql, verificationSql, releaseLedgerSql, manifest, run } from '../scripts/cloudtms-db-expense-carrier-release.mjs';
+
+test('rehearsal and apply share FK-safe transactional release bookkeeping', () => {
+  const sql = releaseLedgerSql('a'.repeat(40));
+  assert(sql.indexOf('insert into private.cloudtms_database_releases') < sql.indexOf('insert into private.cloudtms_repeatable_ledger'));
+  assert.doesNotMatch(sql, /^\s*(?:commit|rollback);\s*$/mi);
+  const source = fs.readFileSync(new URL('../scripts/cloudtms-db-expense-carrier-release.mjs', import.meta.url), 'utf8');
+  assert.match(source, /releaseLedgerSql\(shellGitHead\(\)\)/);
+  assert.match(source, /releaseLedgerSql\(commit\)/);
+});
 
 test('exact ten-routine generated component source and hashes agree', () => {
   assert.equal(checkSource(), true);

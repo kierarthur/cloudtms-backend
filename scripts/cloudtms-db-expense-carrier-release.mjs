@@ -148,6 +148,18 @@ function verifyInstalledReadOnly(expected) {
   }
 }
 
+export function releaseLedgerSql(commit) {
+  const releaseId = manifest.componentId + '-' + commit.slice(0, 12);
+  const contractHash = sha256(JSON.stringify(manifest.afterRoutines));
+  // The repeatable row has a non-deferrable FK to its release parent.
+  // Both writes remain inside the installation transaction.
+  return 'insert into private.cloudtms_database_releases(release_id,git_commit,repository_contract_sha256,installed_contract_sha256,install_mode,status,completed_at_utc,evidence_json) values ('
+    + [releaseId, commit, contractHash, contractHash, 'UPGRADE', 'VERIFIED'].map(quote).join(',')
+    + ",clock_timestamp(),jsonb_build_object('contract','CLOUDTMS_TEST_COMPONENT_RELEASE_V1','scope','provisional expense carriers only','banking_pay_stage2_closed',false));\n"
+    + 'insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values ('
+    + [manifest.source.path, manifest.source.closureSha256, releaseId].map(quote).join(',') + ');\n';
+}
+
 export function run(command) {
   checkSource();
   if (command === 'check') return { component: manifest.componentId, source: 'PASS' };
@@ -164,7 +176,8 @@ export function run(command) {
     return { component: manifest.componentId, phase: 'PLAN', pending: !installed, database: manifest.database };
   }
   if (command === 'rehearse') {
-    psql({ sql: opening + installationSql({ installed, repair: true }) + '\nrollback;' });
+    psql({ sql: opening + installationSql({ installed, repair: true })
+      + (installed ? '' : releaseLedgerSql(shellGitHead())) + '\nrollback;' });
     if (psql({ sql: ledgerSql }) !== ledger) throw new Error('Rehearsal changed ledger');
     return { component: manifest.componentId, phase: 'REHEARSE', rolledBack: true };
   }
@@ -173,16 +186,11 @@ export function run(command) {
     throw new Error('Missing exact commit-bound TEST approval');
   }
   const releaseId = manifest.componentId + '-' + commit.slice(0, 12);
-  const contractHash = sha256(JSON.stringify(manifest.afterRoutines));
   psql({ sql: opening
     + "do $ledger$ begin if coalesce((select closure_sha256 from private.cloudtms_repeatable_ledger where path="
     + quote(manifest.source.path) + "),'')<>" + quote(ledger) + " then raise exception 'EXPENSE_COMPONENT_LEDGER_CHANGED'; end if; end $ledger$;\n"
     + installationSql({ installed, repair: true }) + '\n'
-    + (installed ? '' : 'insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values ('
-      + [manifest.source.path, manifest.source.closureSha256, releaseId].map(quote).join(',') + ');\n'
-      + 'insert into private.cloudtms_database_releases(release_id,git_commit,repository_contract_sha256,installed_contract_sha256,install_mode,status,completed_at_utc,evidence_json) values ('
-      + [releaseId, commit, contractHash, contractHash, 'UPGRADE', 'VERIFIED'].map(quote).join(',')
-      + ",clock_timestamp(),jsonb_build_object('contract','CLOUDTMS_TEST_COMPONENT_RELEASE_V1','scope','provisional expense carriers only','banking_pay_stage2_closed',false));\n")
+    + (installed ? '' : releaseLedgerSql(commit))
     + "notify pgrst,'reload schema';\ncommit;" });
   // Installation identity proof only; user-journey testing is a later step.
   verifyInstalledReadOnly(manifest.afterRoutines);
