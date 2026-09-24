@@ -1,0 +1,116 @@
+name: Weekly Source invoice evidence component release (protected TEST)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: PLAN is read-only; APPLY installs the exact reviewed component
+        required: true
+        type: choice
+        options: [PLAN, APPLY]
+
+permissions:
+  contents: read
+
+# This is deliberately the same TEST release lock used by the full release.
+concurrency:
+  group: cloudtms-database-release-TEST
+  cancel-in-progress: false
+
+jobs:
+  source-gate:
+    name: Prove the fixed component authority
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@11.12.1
+      - run: npm ci --engine-strict
+      - run: npm run security:toolchain
+      - run: npm run security:dependencies
+      - run: npm run security:secrets
+      - run: npm run db:check
+      - run: npm run db:component:check
+      - run: node --test tests/database-component-release-system.test.mjs
+      - id: commit
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: ${{ inputs.phase }} fixed Weekly Source component on TEST
+    needs: source-gate
+    runs-on: ubuntu-latest
+    environment: database-test
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_TEST }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_TEST }}
+      CLOUDTMS_EXPECTED_DATABASE: ${{ vars.MIGET_DATABASE_NAME_TEST }}
+      CLOUDTMS_ENVIRONMENT: TEST
+      CLOUDTMS_LOGICAL_POSTGRES_OWNER: CURRENT_USER
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.source-gate.outputs.commit }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm install --global npm@11.12.1
+      - run: npm ci --engine-strict
+      - name: Install PostgreSQL client
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get update -qq \
+              -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+            sudo env DEBIAN_FRONTEND=noninteractive timeout 180s apt-get install -y -qq \
+              -o Acquire::Retries=3 postgresql-client
+          fi
+          psql --version
+      - name: Validate fixed protected TEST target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected TEST database URL"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected TEST target locator"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected TEST database name"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
+            [[ "${GITHUB_REPOSITORY}" == "kierarthur/cloudtms-backend" ]] || { echo "APPLY is restricted to the canonical repository"; exit 1; }
+            [[ "${GITHUB_REF}" == "refs/heads/test" ]] || { echo "APPLY is restricted to the test branch head"; exit 1; }
+            echo "CLOUDTMS_RELEASE_APPROVAL=APPLY TEST COMPONENT weekly-source-invoice-evidence-20260924 ${{ needs.source-gate.outputs.commit }}" >> "$GITHUB_ENV"
+          fi
+      - name: Read-only component plan
+        shell: bash
+        run: npm run db:component:plan 2>&1 | tee "$RUNNER_TEMP/component-plan.json"
+      - name: Apply exact component and verify installed definitions
+        if: inputs.phase == 'APPLY'
+        shell: bash
+        run: npm run db:component:apply 2>&1 | tee "$RUNNER_TEMP/component-apply.json"
+      - name: Upload non-secret release receipt
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: weekly-source-component-${{ inputs.phase }}-${{ needs.source-gate.outputs.commit }}
+          path: ${{ runner.temp }}/component-*.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Release summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Fixed Weekly Source TEST component release"
+            echo "- Phase: ${{ inputs.phase }}"
+            echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
+            echo "- Scope: exactly two Weekly Source repeatables"
+            echo "- Banking Pay Stage 2: unchanged and still open"
+          } >> "$GITHUB_STEP_SUMMARY"

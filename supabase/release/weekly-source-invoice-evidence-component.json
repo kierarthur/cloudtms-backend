@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "componentId": "weekly-source-invoice-evidence-20260924",
+  "environment": "TEST",
+  "mode": "COMPONENT_UPGRADE",
+  "baseCommit": "e339efc032c1b357a27dfc96051b053f02d6dafa",
+  "files": [
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+      "beforeSha256": "36d06763de69da62fa8e14c32a16cac0dd1dd4fe70237067a0a5c67de885acb1",
+      "afterSha256": "b58117b6ca5e7da905cc4bc3b8c562f29d9644f6caa90bb33e468b0bd0e0e0f7"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "beforeSha256": "df46cb9c43dcfd66443f7292414e8029e0236524436bc69412d1f2ec5084f74b",
+      "afterSha256": "9bebd84c3229edb3d2b4e0d93b694f019d981b838f634a6fcedb16b2a2add26c"
+    }
+  ],
+  "verificationFiles": [
+    "supabase/verification/15092026_1534_weekly_source_invoice_batch_integration_v1.sql",
+    "supabase/verification/15092026_1534_weekly_source_read_projections_v1.sql",
+    "supabase/verification/24092026_1800_weekly_source_invoice_evidence_component_v1.sql"
+  ],
+  "nodeTests": [
+    "tests/database-component-release-system.test.mjs"
+  ],
+  "excludedOpenScope": [
+    "supabase/verification/17092026_0610_weekly_source_withdrawal_supersession_v1.sql",
+    "supabase/verification/17092026_0800_weekly_source_workbench_seams_v1.sql",
+    "supabase/verification/17092026_1400_weekly_source_ordinary_authorisation_guard_v1.sql"
+  ],
+  "policy": "This manifest installs only its two exact Weekly Source definitions. It does not close, waive, execute or alter the excluded Banking Pay Stage 2 scope."
+}
