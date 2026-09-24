@@ -541,7 +541,15 @@ begin
   end;
   perform pg_temp.assert_true(v_stale_rejected,
     'stale workspace replay did not fail before further action');
-  perform pg_temp.assert_true((select count(*) from public.weekly_candidate_outreach_generations)=1,
+  perform pg_temp.assert_true((
+    select count(*)
+    from public.weekly_candidate_outreach_generations generation
+    where generation.source_cycle_id='d6000000-0000-4000-8000-000000000001'
+      and generation.candidate_id in (
+        'd3000000-0000-4000-8000-000000000001',
+        'd3000000-0000-4000-8000-000000000002'
+      )
+  )=1,
     'stale replay produced a partial Candidate action');
 
   v_workspace_after_ask:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
@@ -575,7 +583,14 @@ begin
   );
   perform pg_temp.assert_true((v_send->>'selected_count')::integer=2
     and (v_send->>'included_count')::integer=2
-    and (select count(*) from public.weekly_manager_recipient_generations where state='ACTIVE')=1,
+    and (
+      select count(*)
+      from public.weekly_manager_recipient_generations generation
+      join public.weekly_manager_recipient_routes route
+        on route.id=generation.recipient_route_id
+      where route.source_cycle_id='d6000000-0000-4000-8000-000000000001'
+        and generation.state='ACTIVE'
+    )=1,
     'manager action did not expand the full unloaded filter into one recipient route');
 
   v_workspace_after_send:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
@@ -608,7 +623,8 @@ begin
   end;
   perform pg_temp.assert_true(v_accept_stale
     and (select count(*) from public.weekly_discrepancy_incidents
-      where candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=2,
+      where source_cycle_id='d6000000-0000-4000-8000-000000000001'
+        and candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=2,
     'tampered complete-group proof did not roll back before acceptance');
 
   begin
@@ -620,13 +636,15 @@ begin
     );
     perform pg_temp.assert_true((v_accept->>'included_issue_count')::integer=1
       and (select count(*) from public.weekly_discrepancy_incidents
-        where candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=1,
+        where source_cycle_id='d6000000-0000-4000-8000-000000000001'
+          and candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=1,
       'one selected shift did not resolve independently');
     raise exception 'VERIFY_ACCEPT_INDIVIDUAL_ROLLBACK';
   exception when raise_exception then
     if sqlerrm<>'VERIFY_ACCEPT_INDIVIDUAL_ROLLBACK' then raise; end if;
   end;
-  perform pg_temp.assert_true((select count(*) from public.weekly_discrepancy_incidents where state='OPEN')=3,
+  perform pg_temp.assert_true((select count(*) from public.weekly_discrepancy_incidents
+    where source_cycle_id='d6000000-0000-4000-8000-000000000001' and state='OPEN')=3,
     'individual acceptance proof did not remain isolated for later checks');
 
   begin
@@ -641,7 +659,8 @@ begin
     v_accept_extra_rejected:=true;
   end;
   perform pg_temp.assert_true(v_accept_extra_rejected
-    and (select count(*) from public.weekly_discrepancy_incidents where state='OPEN')=3,
+    and (select count(*) from public.weekly_discrepancy_incidents
+      where source_cycle_id='d6000000-0000-4000-8000-000000000001' and state='OPEN')=3,
     'an incident outside the proved group was not rejected atomically');
 
   v_accept_request_multi:=pg_catalog.jsonb_set(
@@ -668,27 +687,32 @@ begin
     v_accept_empty_group_rejected:=true;
   end;
   perform pg_temp.assert_true(v_accept_empty_group_rejected
-    and (select count(*) from public.weekly_discrepancy_incidents where state='OPEN')=3,
+    and (select count(*) from public.weekly_discrepancy_incidents
+      where source_cycle_id='d6000000-0000-4000-8000-000000000001' and state='OPEN')=3,
     'a selected group without a selected shift was not rejected atomically');
 
   begin
     v_accept:=public.weekly_source_office_bulk_query_action_atomic_v1(v_accept_request_multi);
     perform pg_temp.assert_true((v_accept->>'included_issue_count')::integer=3
-      and (select count(*) from public.weekly_discrepancy_incidents where state='OPEN')=0,
+      and (select count(*) from public.weekly_discrepancy_incidents
+        where source_cycle_id='d6000000-0000-4000-8000-000000000001' and state='OPEN')=0,
       'the exact multi-group union did not resolve atomically');
     raise exception 'VERIFY_ACCEPT_MULTI_ROLLBACK';
   exception when raise_exception then
     if sqlerrm<>'VERIFY_ACCEPT_MULTI_ROLLBACK' then raise; end if;
   end;
-  perform pg_temp.assert_true((select count(*) from public.weekly_discrepancy_incidents where state='OPEN')=3,
+  perform pg_temp.assert_true((select count(*) from public.weekly_discrepancy_incidents
+    where source_cycle_id='d6000000-0000-4000-8000-000000000001' and state='OPEN')=3,
     'multi-group acceptance proof did not remain isolated for the final group check');
 
   v_accept:=public.weekly_source_office_bulk_query_action_atomic_v1(v_accept_request);
   perform pg_temp.assert_true((v_accept->>'included_issue_count')::integer=2
     and (select count(*) from public.weekly_discrepancy_incidents
-      where candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=0
+      where source_cycle_id='d6000000-0000-4000-8000-000000000001'
+        and candidate_id='d3000000-0000-4000-8000-000000000001' and state='OPEN')=0
     and (select count(*) from public.weekly_discrepancy_incidents
-      where candidate_id='d3000000-0000-4000-8000-000000000002' and state='OPEN')=1,
+      where source_cycle_id='d6000000-0000-4000-8000-000000000001'
+        and candidate_id='d3000000-0000-4000-8000-000000000002' and state='OPEN')=1,
     'inner group acceptance was incomplete or crossed the selected group');
 
   v_no_shifts_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
