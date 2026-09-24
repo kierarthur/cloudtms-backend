@@ -172,8 +172,8 @@ test('closed backend operation policy is byte-semantically attested and classifi
   assert.equal(createHash('sha256').update(JSON.stringify(source)).digest('hex'),
     CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256);
   assert.equal(CANDIDATE_OPERATION_POLICY.length, 68);
-  assert.equal(CANDIDATE_OPERATION_POLICY.filter((entry) => entry.data_plane_dispatch_required).length, 55);
-  assert.equal(CANDIDATE_OPERATION_POLICY.filter((entry) => !entry.data_plane_dispatch_required).length, 13);
+  assert.equal(CANDIDATE_OPERATION_POLICY.filter((entry) => entry.data_plane_dispatch_required).length, 56);
+  assert.equal(CANDIDATE_OPERATION_POLICY.filter((entry) => !entry.data_plane_dispatch_required).length, 12);
   assert.equal(new Set(CANDIDATE_OPERATION_POLICY.map((entry) => entry.operation_id)).size, 68);
   assert.ok(CANDIDATE_OPERATION_POLICY.every((entry) => (
     entry.client_agency_selector_allowed === false && entry.preserves_business_rpc_meaning === true
