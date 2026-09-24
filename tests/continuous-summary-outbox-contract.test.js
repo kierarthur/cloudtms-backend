@@ -31,7 +31,7 @@ test('Candidate Submission sort stays server-bounded and exposes the exact displ
   assert.doesNotMatch(contractsHandler, /candidateSubmissionSort/);
   assert.match(source, /const scanPageSize = 200/);
   assert.match(source, /if \(keptRows\.length > keepCount\) keptRows\.length = keepCount/);
-  assert.match(source, /candidate_office_summary_status_label = candidateOfficeSummaryStatusLabel/);
+  assert.match(source, /candidate_office_summary_status_label = row\.candidate_expense_reservation\?\.label\s*\|\| candidateOfficeSummaryStatusLabel\(row\.candidate_office_projection\)/);
 });
 
 test('Timesheet Route sort uses the final display label without projecting every scanned row', () => {

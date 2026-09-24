@@ -395,8 +395,8 @@ begin
   -- owned by the release owner, has a fixed search_path, and preserves both
   -- the historical unrelated service_missing count and zero browser-executable
   -- routines.
-  -- The independently VERIFIED invoice-evidence component (c5938c551981,
-  -- protected TEST run 36003314658) adds exactly:
+  -- The independently VERIFIED invoice-evidence lookup component, repaired
+  -- by 9f643380 under protected TEST run 36012712323, adds exactly:
   --   public.weekly_source_invoice_evidence_v1(pg_catalog.jsonb)
   --     |svc=true|anon=false|auth=false
   -- On 25 September the complete live identity difference against the local

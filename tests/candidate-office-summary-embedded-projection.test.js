@@ -240,6 +240,7 @@ test('targeted Summary patch exposes only the agreed visible state and current i
   });
 
   assert.deepEqual(Object.keys(patch).sort(), [
+    'candidate_expense_reservation','candidate_expense_reservation_error',
     'backend_row_signature','candidate_office_projection','candidate_office_projection_error',
     'candidate_office_projection_loaded','candidate_office_projection_not_applicable','contract_week_id',
     'current_identity','display_route_label','expected_row_signature','expense_route_kind','id','is_expense_only','margin_ex_vat','processing_status',

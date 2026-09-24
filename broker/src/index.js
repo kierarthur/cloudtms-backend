@@ -26,6 +26,7 @@
  */
 
 import * as XLSX from 'xlsx';
+import { attachExpenseReservationSummaries } from './candidate-expense-reservation-summary.mjs';
 // QR code generation
 import QRCode from 'qrcode';
 import {
@@ -87159,6 +87160,7 @@ function candidateOfficeSummaryStatusLabel(projection) {
 
 async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpcRecordingGuardRefusal) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
+  await attachExpenseReservationSummaries(env, actorUserId, output, rpc, unwrapRpcJsonb);
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
   const pending = [];
   const chunks = [];
@@ -87191,7 +87193,7 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
   }
 
   if (!pending.length) {
-    output.forEach((row) => { row.candidate_office_summary_status_label = ''; });
+    output.forEach((row) => { row.candidate_office_summary_status_label = row.candidate_expense_reservation?.label || ''; });
     return output;
   }
   if (!['TEST', 'LIVE'].includes(environment)) {
@@ -87263,7 +87265,8 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
     }
   }));
   output.forEach((row) => {
-    row.candidate_office_summary_status_label = candidateOfficeSummaryStatusLabel(row.candidate_office_projection);
+    row.candidate_office_summary_status_label = row.candidate_expense_reservation?.label
+      || candidateOfficeSummaryStatusLabel(row.candidate_office_projection);
   });
   return output;
 }
@@ -87310,6 +87313,8 @@ function candidateTimesheetSummaryCompactPatch(row) {
     candidate_office_projection_loaded: row?.candidate_office_projection_loaded === true,
     candidate_office_projection_not_applicable: row?.candidate_office_projection_not_applicable === true,
     candidate_office_projection: row?.candidate_office_projection || null,
+    candidate_expense_reservation: row?.candidate_expense_reservation || null,
+    candidate_expense_reservation_error: row?.candidate_expense_reservation_error || null,
     candidate_office_projection_error: row?.candidate_office_projection_error || null
   };
 }
