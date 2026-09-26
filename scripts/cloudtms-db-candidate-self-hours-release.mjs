@@ -239,7 +239,10 @@ function definitions() {
   return bodies.join('\n\n') + `\n
 alter function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) owner to postgres;
 revoke all on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) from public,anon,authenticated;
-grant execute on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) to service_role;`;
+grant execute on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) to service_role;
+alter function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) owner to postgres;
+revoke all on function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) from public,anon,authenticated;
+grant execute on function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) to service_role;`;
 }
 
 function plan() {
