@@ -5,7 +5,7 @@
 --
 -- Proves:
 --   * the produced payload is exactly the MyTMS contract's
---     `CandidateWeeklySourceView` (nine required members, no others);
+--     `CandidateWeeklySourceView` (ten produced members, no others);
 --   * `UI-019`, `UI-020` and `UI-021` payloads from database states that
 --     genuinely produce them, including `NAI-MYT-001`'s rule that no approved
 --     hours exist before Office authorisation;
@@ -1005,8 +1005,8 @@ begin
   perform pg_temp.assert_eq(v_keys,
     'approved_hours_differ,approved_hours_to_be_paid,expense_entry_mode,'
     ||'request_id,request_kind,scope_id,submitted_additional_units_per_day,'
-    ||'submitted_additional_units_week,submitted_timesheet',
-    'CandidateWeeklySourceView members, exactly and only the nine required');
+    ||'submitted_additional_units_week,submitted_day_off_dates,submitted_timesheet',
+    'CandidateWeeklySourceView members, exactly and only the ten produced');
 
   perform pg_temp.assert_eq(jsonb_typeof(v->'submitted_timesheet'),'array','submitted is an array');
   perform pg_temp.assert_eq(jsonb_typeof(v->'approved_hours_to_be_paid'),'array','approved is an array');
@@ -1762,7 +1762,7 @@ begin
      from jsonb_object_keys(v_source->'weekly_source_candidate_view') as k(key)),
     'approved_hours_differ,approved_hours_to_be_paid,expense_entry_mode,'
     ||'request_id,request_kind,scope_id,submitted_additional_units_per_day,'
-    ||'submitted_additional_units_week,submitted_timesheet',
+    ||'submitted_additional_units_week,submitted_day_off_dates,submitted_timesheet',
     'the RPC emits the contract shape');
 
   v_ordinary:=public.candidate_app_timesheet_detail_v2(

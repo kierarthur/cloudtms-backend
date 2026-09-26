@@ -1240,13 +1240,9 @@ begin
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.timesheet_id else v_week.timesheet_id end,
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.id else v_week.id end
       );
-      -- Source-authority hours remain read-only unless the server has an exact,
-      -- live Candidate request for this Candidate, Contract and week.  This is
-      -- the only admission used by the Candidate app to create its signed-hours
-      -- draft for either a missing Timesheet (SUBMIT_TIMESHEET) or an exact
-      -- discrepancy revision (CHECK_HOURS).  The final Weekly Source submit RPC
-      -- rechecks the same request, scope and fingerprint before materialising
-      -- anything, so this cannot become a general import-authoritative editor.
+      -- Source-authority hours use either an exact live Office request or the
+      -- candidate-initiated CHECK_ONLY week route.  This only admits a draft;
+      -- the dedicated signed submit RPC rechecks all source and week guards.
       if v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'
          and v_workflow_kind='CONTRACT_HOURS'
          and v_route='ELECTRONIC' then
@@ -1288,6 +1284,22 @@ begin
             and comparison.candidate_timesheet_id=v_week.timesheet_id
             and comparison.contract_id=v_contract.id
         ) into v_weekly_source_candidate_request_allowed;
+        if not v_weekly_source_candidate_request_allowed then
+          v_weekly_source_candidate_request_allowed:=
+            v_canonical_week_ending_date-6 <= (p_now_utc at time zone 'Europe/London')::date
+            and v_week.additional_seq=0 and not v_week.is_adjustment
+            and v_week.status not in (
+              'AUTHORISED'::public.contract_week_status_enum,
+              'INVOICED'::public.contract_week_status_enum,
+              'CANCELLED'::public.contract_week_status_enum
+            )
+            and (private._weekly_source_effective_policy_v1(
+              v_contract.client_id,v_contract.id,v_canonical_week_ending_date
+            )->>'authority_mode')='SOURCE_AUTHORITY'
+            and (private._weekly_source_effective_policy_v1(
+              v_contract.client_id,v_contract.id,v_canonical_week_ending_date
+            )->>'document_mode')='CHECK_ONLY';
+        end if;
       end if;
       -- A later separate expense starts on the neutral ELECTRONIC draft route.
       -- Its approval-method step may then select PHONE, EMAIL or PAPER even

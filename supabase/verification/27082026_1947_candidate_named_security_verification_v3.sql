@@ -156,8 +156,11 @@ begin
   -- 24 September: the exact service-only Office provisional expense reader
   -- adds one public routine. Measured on PostgreSQL 17 after the isolated
   -- carrier closure: 164 / 9 / 0; no existing routine grants were changed.
-  if v_count<>164 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'25f6a076e7e3da2b8954199a7659f236' then
+  -- 26 September: candidate-initiated signed CHECK_ONLY hours adds exactly one
+  -- service-only public SECURITY DEFINER entry; browser access remains zero.
+  -- Measured on the complete PostgreSQL 17 NEW catalogue: 165 / 9 / 0.
+  if v_count<>165 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'5fe9d64913a1eb75837ea0b98a16e752' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

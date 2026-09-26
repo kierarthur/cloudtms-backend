@@ -125,6 +125,12 @@ select pg_temp.assert_true(
   ) is not null,
   'source-authoritative Candidate evidence owner is absent'
 );
+select pg_temp.assert_true(
+  pg_catalog.to_regprocedure(
+    'public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamp with time zone)'
+  ) is not null,
+  'candidate-initiated signed source-check RPC is absent'
+);
 
 do $catalog$
 declare
@@ -134,7 +140,8 @@ begin
     'public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamp with time zone)',
     'public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)',
     'public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)',
-    'public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)'
+    'public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamp with time zone)',
+    'public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamp with time zone)'
   ] loop
     if not pg_catalog.has_function_privilege('service_role',v_signature,'EXECUTE')
        or pg_catalog.has_function_privilege('anon',v_signature,'EXECUTE')
@@ -398,6 +405,9 @@ declare
   v_material_request jsonb;
   v_material_replay jsonb;
   v_workflow_create jsonb;
+  v_self_root uuid;
+  v_self_first_hash text;
+  v_self_revision_body jsonb;
   v_workflow uuid:='fae00000-0000-4000-8000-000000000001';
   v_signature uuid:='faf00000-0000-4000-8000-000000000001';
   v_injected boolean:=false;
@@ -1030,15 +1040,14 @@ begin
     day_entries_json,totals_json
   ) values (
     'fc400000-0000-4000-8000-000000000004',
-    'fa400000-0000-4000-8000-000000000001','2026-08-09','OPEN','MANUAL','[]','{}'
+    'fa400000-0000-4000-8000-000000000001','2026-09-13','OPEN','MANUAL','[]','{}'
   );
   update public.client_settings
   set autoprocess_hr=true,no_timesheet_required=true,requires_hr=false
   where id='fa210000-0000-4000-8000-000000000001';
 
-  -- Import-authoritative hours are not a general editor.  The fourth week is
-  -- deliberately outside the exact three-scope server request and must remain
-  -- closed even though the same Candidate and Contract have an active request.
+  -- A future source-authoritative week remains closed before its UK week starts,
+  -- even though the same Candidate and Contract have another active request.
   begin
     perform public.candidate_workflow_transition_atomic_v1(
       'fad00000-0000-4000-8000-000000000001','TEST',
@@ -1047,7 +1056,7 @@ begin
         'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
         'contract_id','fa400000-0000-4000-8000-000000000001',
         'contract_week_id','fc400000-0000-4000-8000-000000000004',
-        'week_ending_date','2026-08-09','input_snapshot','{}'::jsonb
+        'week_ending_date','2026-09-13','input_snapshot','{}'::jsonb
       ),'weekly-source-no-request-must-fail',v_now
     );
   exception when sqlstate '55000' then
@@ -1055,8 +1064,242 @@ begin
     v_blocked:=sqlerrm='CANDIDATE_RECORD_VIEW_ONLY';
   end;
   perform pg_temp.assert_true(v_blocked,
-    'import-authoritative Candidate hours opened outside the server-owned request; result='
+    'candidate source hours opened before the week began; result='
       ||coalesce(v_block_error,'NO_ERROR'));
+
+  -- A started CHECK_ONLY week needs no import, source cycle or Office request.
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,status,submission_mode_snapshot,
+    day_entries_json,totals_json
+  ) values (
+    'fc400000-0000-4000-8000-000000000005',
+    'fa400000-0000-4000-8000-000000000001','2026-08-09','OPEN','MANUAL','[]','{}'
+  );
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000004','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fc400000-0000-4000-8000-000000000005',
+      'week_ending_date','2026-08-09','input_snapshot','{}'::jsonb
+    ),'candidate-self-started-week',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'a started CHECK_ONLY week did not admit the candidate draft');
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,component_kind,document_role,
+    state,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,
+    required,review_render_state,final_signed_render_state,created_at_utc
+  ) values (
+    'fc600000-0000-4000-8000-000000000004',
+    'fc500000-0000-4000-8000-000000000004',1,1,
+    'CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE','IMMUTABLE',
+    'verify/self-started-week.png','image/png',256,decode(repeat('44',32),'hex'),
+    v_now,false,'NOT_REQUIRED','NOT_REQUIRED',v_now
+  );
+  -- A signature cannot turn a partially declared week into a submission.
+  v_blocked:=false;
+  begin
+    perform public.weekly_source_candidate_self_submit_atomic_v1(
+      'fad00000-0000-4000-8000-000000000001','TEST',
+      pg_catalog.jsonb_build_object(
+        'workflow_id','fc500000-0000-4000-8000-000000000004',
+        'expected_workflow_generation',1,
+        'candidate_signature_component_id','fc600000-0000-4000-8000-000000000004',
+        'candidate_signed_at_utc',v_now,
+        'immutable_submission',pg_catalog.jsonb_build_object(
+          'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'row_key','candidate-incomplete','date','2026-08-03','start','09:00','end','17:00',
+            'break_minutes',30
+          )),
+          'day_off_dates',pg_catalog.jsonb_build_array(
+            '2026-08-04','2026-08-05','2026-08-06','2026-08-07','2026-08-08'
+          )
+        ),
+        'idempotency_key','fc700000-0000-4000-8000-000000000014'
+      ),v_now
+    );
+  exception when sqlstate '22023' then
+    v_blocked:=sqlerrm='WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE';
+  end;
+  perform pg_temp.assert_true(v_blocked,
+    'an incomplete seven-day Candidate week was accepted');
+  v_final:=public.weekly_source_candidate_self_submit_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    pg_catalog.jsonb_build_object(
+      'workflow_id','fc500000-0000-4000-8000-000000000004',
+      'expected_workflow_generation',1,
+      'candidate_signature_component_id','fc600000-0000-4000-8000-000000000004',
+      'candidate_signed_at_utc',v_now,
+      'immutable_submission',pg_catalog.jsonb_build_object(
+        'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'row_key','candidate-self','date','2026-08-03','start','09:00','end','17:00',
+          'break_minutes',30
+        )),
+        'day_off_dates',pg_catalog.jsonb_build_array(
+          '2026-08-04','2026-08-05','2026-08-06','2026-08-07','2026-08-08','2026-08-09'
+        )
+      ),
+      'idempotency_key','fc700000-0000-4000-8000-000000000004'
+    ),v_now
+  );
+  perform pg_temp.assert_true(
+    v_final->>'request_kind'='SELF_SUBMIT'
+    and v_final->>'generation'='2'
+    and (select timesheet_id is not null from public.contract_weeks
+      where id='fc400000-0000-4000-8000-000000000005')
+    and not exists(select 1 from public.timesheets_financials
+      where timesheet_id=(v_final->>'timesheet_id')::uuid),
+    'candidate-initiated signed evidence did not remain a non-financial root Timesheet'
+  );
+  v_self_root:=(v_final->>'timesheet_id')::uuid;
+  v_self_first_hash:=v_final->>'timesheet_hash';
+  -- A later whole-week correction has a new signed workflow but stays on the
+  -- same source-check root, with the earlier immutable signature retained.
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000006','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fc400000-0000-4000-8000-000000000005',
+      'week_ending_date','2026-08-09','input_snapshot','{}'::jsonb
+    ),'candidate-self-revision',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'a corrected signed week could not start a new immutable workflow');
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,component_kind,document_role,
+    state,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,
+    required,review_render_state,final_signed_render_state,created_at_utc
+  ) values (
+    'fc600000-0000-4000-8000-000000000006',
+    'fc500000-0000-4000-8000-000000000006',1,1,
+    'CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE','IMMUTABLE',
+    'verify/self-revision.png','image/png',256,decode(repeat('46',32),'hex'),
+    v_now,false,'NOT_REQUIRED','NOT_REQUIRED',v_now
+  );
+  v_self_revision_body:=pg_catalog.jsonb_build_object(
+      'workflow_id','fc500000-0000-4000-8000-000000000006',
+      'expected_workflow_generation',1,
+      'candidate_signature_component_id','fc600000-0000-4000-8000-000000000006',
+      'candidate_signed_at_utc',v_now,
+      'immutable_submission',pg_catalog.jsonb_build_object(
+        'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'row_key','candidate-self-revision','date','2026-08-03',
+          'start','10:00','end','18:00','break_minutes',30
+        )),
+        'day_off_dates',pg_catalog.jsonb_build_array(
+          '2026-08-04','2026-08-05','2026-08-06','2026-08-07','2026-08-08','2026-08-09'
+        )
+      ),
+      'idempotency_key','fc700000-0000-4000-8000-000000000006'
+    );
+  v_final:=public.weekly_source_candidate_self_submit_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    v_self_revision_body,v_now
+  );
+  perform pg_temp.assert_true(
+    (v_final->>'timesheet_id')::uuid=v_self_root
+    and v_final->>'timesheet_hash'<>v_self_first_hash
+    and exists(select 1 from public.candidate_submission_components
+      where id='fc600000-0000-4000-8000-000000000004' and state='IMMUTABLE')
+    and not exists(select 1 from public.timesheets_financials
+      where timesheet_id=v_self_root),
+    'a corrected Candidate statement changed root/finance or lost signed history'
+  );
+  v_replay:=public.weekly_source_candidate_self_submit_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    v_self_revision_body,v_now
+  );
+  perform pg_temp.assert_true(
+    v_replay->>'idempotent_replay'='true'
+    and v_replay->>'timesheet_id'=v_final->>'timesheet_id'
+    and v_replay->>'timesheet_hash'=v_final->>'timesheet_hash',
+    'a retry of the signed Candidate correction did not return its original receipt'
+  );
+  -- The current UK week has begun. Future days can be declared off, but a
+  -- future worked shift cannot be signed before it has happened.
+  v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    'fc500000-0000-4000-8000-000000000005','CREATE',null,
+    pg_catalog.jsonb_build_object(
+      'workflow_kind','CONTRACT_HOURS','scope','WEEKLY','route','ELECTRONIC',
+      'contract_id','fa400000-0000-4000-8000-000000000001',
+      'contract_week_id','fab00000-0000-4000-8000-000000000001',
+      'week_ending_date','2026-09-06',
+      'target_timesheet_id','faa00000-0000-4000-8000-000000000001',
+      'input_snapshot','{}'::jsonb
+    ),'candidate-self-current-week',v_now
+  );
+  perform pg_temp.assert_true(v_workflow_create->>'state'='WORKER_DRAFT',
+    'current started CHECK_ONLY week did not admit a Candidate draft');
+  insert into public.candidate_submission_components(
+    id,workflow_id,workflow_generation,component_no,component_kind,document_role,
+    state,storage_key,media_type,byte_size,source_content_sha256,immutable_at_utc,
+    required,review_render_state,final_signed_render_state,created_at_utc
+  ) values (
+    'fc600000-0000-4000-8000-000000000005',
+    'fc500000-0000-4000-8000-000000000005',1,1,
+    'CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE','IMMUTABLE',
+    'verify/self-current-week.png','image/png',256,decode(repeat('45',32),'hex'),
+    v_now,false,'NOT_REQUIRED','NOT_REQUIRED',v_now
+  );
+  v_blocked:=false;
+  begin
+    perform public.weekly_source_candidate_self_submit_atomic_v1(
+      'fad00000-0000-4000-8000-000000000001','TEST',
+      pg_catalog.jsonb_build_object(
+        'workflow_id','fc500000-0000-4000-8000-000000000005',
+        'expected_workflow_generation',1,
+        'candidate_signature_component_id','fc600000-0000-4000-8000-000000000005',
+        'candidate_signed_at_utc',v_now,
+        'immutable_submission',pg_catalog.jsonb_build_object(
+          'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'row_key','candidate-future','date','2026-09-03','start','09:00','end','17:00',
+            'break_minutes',30
+          )),
+          'day_off_dates',pg_catalog.jsonb_build_array(
+            '2026-08-31','2026-09-01','2026-09-02','2026-09-04',
+            '2026-09-05','2026-09-06'
+          )
+        ),
+        'idempotency_key','fc700000-0000-4000-8000-000000000015'
+      ),v_now
+    );
+  exception when sqlstate '22023' then
+    v_blocked:=sqlerrm='WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE';
+  end;
+  perform pg_temp.assert_true(v_blocked,
+    'a future worked shift was accepted in the current week');
+  v_final:=public.weekly_source_candidate_self_submit_atomic_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',
+    pg_catalog.jsonb_build_object(
+      'workflow_id','fc500000-0000-4000-8000-000000000005',
+      'expected_workflow_generation',1,
+      'candidate_signature_component_id','fc600000-0000-4000-8000-000000000005',
+      'candidate_signed_at_utc',v_now,
+      'immutable_submission',pg_catalog.jsonb_build_object(
+        'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'row_key','candidate-current','date','2026-08-31','start','09:00','end','17:00',
+          'break_minutes',30
+        )),
+        'day_off_dates',pg_catalog.jsonb_build_array(
+          '2026-09-01','2026-09-02','2026-09-03','2026-09-04',
+          '2026-09-05','2026-09-06'
+        )
+      ),
+      'idempotency_key','fc700000-0000-4000-8000-000000000005'
+    ),v_now
+  );
+  perform pg_temp.assert_true(
+    v_final->>'request_kind'='SELF_SUBMIT'
+    and v_final->>'generation'='2'
+    and not exists(select 1 from public.timesheets_financials
+      where timesheet_id=(v_final->>'timesheet_id')::uuid),
+    'current-week completed days-off evidence did not stay non-financial'
+  );
   v_workflow_create:=public.candidate_workflow_transition_atomic_v1(
     'fad00000-0000-4000-8000-000000000001','TEST',
     'fc500000-0000-4000-8000-000000000001','CREATE',null,
@@ -1127,7 +1370,9 @@ begin
       'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'row_key','late-exact','date','2026-08-10','start','09:00','end','17:00',
         'break_minutes',30
-      )),'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb
+      )),'day_off_dates',pg_catalog.jsonb_build_array(
+        '2026-08-11','2026-08-12','2026-08-13','2026-08-14','2026-08-15','2026-08-16'
+      ),'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb
     ),'responses','[]'::jsonb,
     'idempotency_key','fc700000-0000-4000-8000-000000000001'
   );
@@ -1189,7 +1434,9 @@ begin
       'actual_schedule_json',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'row_key','late-mismatch','date','2026-08-17','start','09:00','end','18:00',
         'break_minutes',30
-      )),'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb
+      )),'day_off_dates',pg_catalog.jsonb_build_array(
+        '2026-08-18','2026-08-19','2026-08-20','2026-08-21','2026-08-22','2026-08-23'
+      ),'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb
     ),'responses','[]'::jsonb,
     'idempotency_key','fc700000-0000-4000-8000-000000000002'
   );
@@ -1234,6 +1481,8 @@ begin
           'row_key','late-absent','date','2026-08-25','start','09:00','end','17:00',
           'break_minutes',30
         )
+      ),'day_off_dates',pg_catalog.jsonb_build_array(
+        '2026-08-26','2026-08-27','2026-08-28','2026-08-29','2026-08-30'
       ),'additional_units_week','{}'::jsonb,'additional_units_per_day','{}'::jsonb
     ),'responses','[]'::jsonb,
     'idempotency_key','fc700000-0000-4000-8000-000000000003'

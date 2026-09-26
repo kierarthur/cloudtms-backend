@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "componentId": "candidate-source-self-hours-20260926",
+  "environment": "TEST",
+  "database": "cloudtms_test_clone",
+  "baseCommit": "1d9be2239d4627ef4d6ebcab55d5294e37377afa",
+  "files": [
+    {
+      "path": "supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql",
+      "beforeSourceSha256": "8ae60ceb0f7e5d567f1c9ccb05f93413957c5d299ef19efcf9bf136541e7012d",
+      "beforeClosureSha256": "f260b04190197708acb59e23def49628b54d24c3ee58865da53dec9215b8de1f",
+      "afterSourceSha256": "8543b535b6ab807cc095352b849e479ea0d3132a191cd44650558e472a6b2ca0",
+      "afterClosureSha256": "122b0683afd6e4b057240e713a97ed0e6c0df64cb958f8cfe1f03a05a1632785"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql",
+      "beforeSourceSha256": "a544bd4b79adbf26a98d09db79d97b34a8e94f4077b535aa5b82d2bb0aff95ee",
+      "beforeClosureSha256": "8688c5bf3c84f780f3613489581cd3fa8d95888a94fcfc008393687a6319b455",
+      "afterSourceSha256": "d1a29a5c5fe927796bd90d262102ec6a68a8d905c9620422c825d6965cb9eb7b",
+      "afterClosureSha256": "ed254d7ce9783e467fbc2ecf0adf047572babec3d90397fcb8165e90c866ed62"
+    },
+    {
+      "path": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
+      "beforeSourceSha256": "3b1fcf95f4b2dc787b655224e0731e8994a7a5cb33a779bcb935c0e312b3648d",
+      "beforeClosureSha256": "c7100c8a358754365085d85da3eb3eae98c92843e0fa14c054fd67b072030db0",
+      "afterSourceSha256": "9e6ce489c46e1df3fb8c369fd40dbca14d47e566a4388e30913b20bc15305b3e",
+      "afterClosureSha256": "676657ea2dee4c5e0e101545b7199a45cf5fe56d6330a0380243623887fbde17"
+    },
+    {
+      "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "beforeSourceSha256": "1ee154e5446e1f2cc783ddfb6ccdfc8e3c22a68fa6ff2e9e19ac2d1e58b1ab1b",
+      "beforeClosureSha256": "e43934086fd1d2152c4eea86f52ef27d16778269b39424e27838c8364c18954b",
+      "afterSourceSha256": "a202638f247443744372870da770ec5630eaeeae31a7ee714ac8700f1f9641e9",
+      "afterClosureSha256": "b89237c63c8c98e124a0ca58d1bc6aa408ce701897f50acc35802f504503de18"
+    },
+    {
+      "path": "supabase/repeatable/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+      "beforeSourceSha256": "ecffdb5942e72cf78876a7400d4547249e07f1551042560103700f47f1d0fd72",
+      "beforeClosureSha256": "7fdc4db6cedfa1ac9c1358ac0c67d52d247068534d844d9ea278c32eca6a4af0",
+      "afterSourceSha256": "c2da271a545f8791995398ae2cb0bfa6e12035e1febe0bcbfae6dac0a2556b56",
+      "afterClosureSha256": "ab7ff3caf44d217f26616dc8cc98bbe4b53993ec192d9d8e48ed4990f096844d"
+    }
+  ],
+  "routineIdentities": [
+    "private._candidate_record_capabilities_v1(p_timesheet_id uuid, p_contract_week_id uuid, p_proposed_claim jsonb)",
+    "private._weekly_source_acl_service_rpc_contract_v1()",
+    "private.weekly_source_candidate_app_assert_new_week_submission_v1(p_scope jsonb, p_immutable_submission jsonb)",
+    "private.weekly_source_candidate_app_assert_week_revision_v1(p_scope jsonb, p_api_responses jsonb, p_internal_responses jsonb, p_immutable_submission jsonb)",
+    "private.weekly_source_candidate_view_v1(p_timesheet_id uuid, p_now_utc timestamp with time zone)",
+    "public.candidate_workflow_transition_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+    "public.weekly_source_candidate_check_materialise_atomic_v1(p_request jsonb, p_now_utc timestamp with time zone)",
+    "public.weekly_source_candidate_self_submit_atomic_v1(p_session_id uuid, p_environment text, p_body jsonb, p_now_utc timestamp with time zone)"
+  ],
+  "measuredBeforeDefinitionOverrides": {
+    "private._weekly_source_acl_service_rpc_contract_v1()": "6f91f60014cf2b4400e35442dcb952e21a814609b0340a1b93e870c497ff616f",
+    "public.candidate_workflow_transition_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)": "e598a02a7296d4f91a4d3bf1205f411a831c8fd65a2d1bc24f671f7152ebade0"
+  },
+  "measuredBeforeRoutineContractSha256": "cf52ad92b62de86d167bd9b9414ccbdd60ea559c969a970490c60a9465403bb4",
+  "verifiers": [
+    "supabase/verification/15092026_1534_weekly_source_acl_contract_v1.sql",
+    "supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+    "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
+    "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql"
+  ],
+  "policy": "Only candidate-initiated CHECK_ONLY hours definitions on agency TEST. Banking Pay Stage 2, LIVE, and unrelated current-catalogue drift remain outside this component."
+}

@@ -956,7 +956,7 @@ begin
      or exists(select 1 from pg_catalog.jsonb_object_keys(p_immutable_submission) key
                where key not in (
                  'break_entry_context','actual_schedule_json','schedule_json','break_entry',
-                 'worked_minutes','reference_number','additional_units_week',
+                 'worked_minutes','reference_number','day_off_dates','additional_units_week',
                  'additional_units_per_day','timesheet_patch_json','hours_submission'
                )) then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_REVISION_INVALID' using errcode='22023';
@@ -1065,7 +1065,7 @@ begin
      or exists(select 1 from pg_catalog.jsonb_object_keys(p_immutable_submission) key
                where key not in (
                  'break_entry_context','actual_schedule_json','schedule_json','break_entry',
-                 'worked_minutes','reference_number','additional_units_week',
+                 'worked_minutes','reference_number','day_off_dates','additional_units_week',
                  'additional_units_per_day','timesheet_patch_json','hours_submission'
                )) then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_SUBMISSION_INVALID' using errcode='22023';
@@ -2017,6 +2017,8 @@ declare
   v_completion jsonb;
   v_result jsonb;
   v_kind text;
+  v_day_off_dates jsonb;
+  v_today date;
 begin
   perform private.weekly_source_query_require_service_v1();
   if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object'
@@ -2032,8 +2034,9 @@ begin
        )
      )
      or pg_catalog.jsonb_typeof(p_request->'immutable_submission')<>'object'
-     or coalesce(p_request->>'request_fingerprint','') !~ '^[0-9a-f]{64}$'
-     or coalesce(p_request->>'scope_fingerprint','') !~ '^[0-9a-f]{64}$' then
+     or (coalesce(p_request->>'request_kind','')<>'SELF_SUBMIT'
+       and (coalesce(p_request->>'request_fingerprint','') !~ '^[0-9a-f]{64}$'
+         or coalesce(p_request->>'scope_fingerprint','') !~ '^[0-9a-f]{64}$')) then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
   end if;
   begin
@@ -2053,7 +2056,7 @@ begin
     raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
   end;
   v_kind:=pg_catalog.upper(pg_catalog.btrim(coalesce(p_request->>'request_kind','')));
-  if v_kind not in ('CHECK_HOURS','SUBMIT_TIMESHEET') then
+  if v_kind not in ('CHECK_HOURS','SUBMIT_TIMESHEET','SELF_SUBMIT') then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_MATERIALISATION_REQUEST_INVALID' using errcode='22023';
   end if;
   perform private.weekly_source_candidate_app_assert_hours_only_v1(
@@ -2092,6 +2095,7 @@ begin
   end if;
   select * into strict v_account from public.candidate_app_accounts
   where id=v_account_id and environment=v_workflow.environment and status='ACTIVE';
+  if v_kind<>'SELF_SUBMIT' then
   select * into strict v_generation from public.weekly_candidate_outreach_generations
   where id=v_candidate_generation_id and candidate_id=v_candidate_id
     and request_kind=v_kind and state='ACTIVE' for update;
@@ -2123,6 +2127,29 @@ begin
      or v_scope->>'completion_state'='COMPLETE' then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_SCOPE_STALE' using errcode='40001';
   end if;
+  else
+    v_scope:=pg_catalog.jsonb_build_object(
+      'contract_id',v_workflow.contract_id,
+      'contract_week_id',v_workflow.contract_week_id,
+      'week_ending_date',v_workflow.week_ending_date
+    );
+    v_today:=(p_now_utc at time zone 'Europe/London')::date;
+    if v_workflow.week_ending_date-6>v_today then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_NOT_STARTED' using errcode='55000';
+    end if;
+    if exists(
+      select 1 from public.weekly_timesheet_submission_request_memberships membership
+      join public.weekly_timesheet_submission_requests submission
+        on submission.id=membership.submission_request_id
+      where submission.candidate_id=v_candidate_id
+        and submission.state in ('ACTIVE','PARTLY_SUBMITTED','OVERDUE')
+        and membership.state='WAITING'
+        and membership.contract_id=v_workflow.contract_id
+        and membership.week_ending=v_workflow.week_ending_date
+    ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_USE_ACTIVE_REQUEST' using errcode='55000';
+    end if;
+  end if;
   if v_workflow.contract_id is distinct from (v_scope->>'contract_id')::uuid
      or v_workflow.contract_week_id is distinct from (v_scope->>'contract_week_id')::uuid
      or v_workflow.week_ending_date is distinct from (v_scope->>'week_ending_date')::date then
@@ -2143,7 +2170,7 @@ begin
   end if;
   select * into strict v_contract from public.contracts
   where id=v_workflow.contract_id and candidate_id=v_candidate_id
-    and client_id=v_generation.client_id
+    and (v_kind='SELF_SUBMIT' or client_id=v_generation.client_id)
     and v_workflow.week_ending_date>=start_date
     and v_workflow.week_ending_date-6<=end_date;
   if (private._weekly_source_effective_policy_v1(
@@ -2196,11 +2223,41 @@ begin
   v_schedule:=private.weekly_source_candidate_app_schedule_v1(
     v_schedule_input,v_units_day
   );
+  v_today:=(p_now_utc at time zone 'Europe/London')::date;
+  if v_kind in ('SELF_SUBMIT','SUBMIT_TIMESHEET') then
+    v_day_off_dates:=p_request->'immutable_submission'->'day_off_dates';
+    if pg_catalog.jsonb_typeof(v_day_off_dates)<>'array'
+       or pg_catalog.jsonb_array_length(v_day_off_dates)>7
+       or exists(
+         select 1 from pg_catalog.jsonb_array_elements_text(v_day_off_dates) value
+         where value !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+       ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE' using errcode='22023';
+    end if;
+    if exists(
+      select 1 from pg_catalog.generate_series(
+        v_workflow.week_ending_date-6,v_workflow.week_ending_date,interval '1 day'
+      ) day_value
+      where (select case when pg_catalog.count(*)>0 then 1 else 0 end
+             from pg_catalog.jsonb_array_elements(v_schedule) row_value
+             where (row_value->>'date')::date=day_value::date)
+          +(select pg_catalog.count(*) from pg_catalog.jsonb_array_elements_text(v_day_off_dates) off_date
+            where off_date::date=day_value::date)<>1
+    ) or exists(
+      select 1 from pg_catalog.jsonb_array_elements_text(v_day_off_dates) off_date
+      where off_date::date not between v_workflow.week_ending_date-6 and v_workflow.week_ending_date
+    ) or exists(
+      select 1 from pg_catalog.jsonb_array_elements(v_schedule) row_value
+      where (case when (row_value->>'end')::time<=(row_value->>'start')::time
+        then (row_value->>'date')::date+1+(row_value->>'end')::time
+        else (row_value->>'date')::date+(row_value->>'end')::time end)
+          at time zone 'Europe/London'>p_now_utc
+    ) then
+      raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_INCOMPLETE' using errcode='22023';
+    end if;
+  end if;
   perform private.weekly_source_candidate_app_units_week_v1(v_units_week);
   perform private.weekly_source_candidate_app_units_day_v1(v_units_day,null);
-  if v_kind='SUBMIT_TIMESHEET' and pg_catalog.jsonb_array_length(v_schedule)=0 then
-    raise exception 'WEEKLY_SOURCE_CANDIDATE_WEEK_SUBMISSION_EMPTY' using errcode='22023';
-  end if;
   if exists(
     select 1 from pg_catalog.jsonb_array_elements(v_schedule) item
     where (item->>'date')::date not between
@@ -2717,6 +2774,71 @@ begin
 end;
 $function$;
 
+-- Candidate-initiated signed CHECK_ONLY evidence does not require an import
+-- cycle or an Office outreach generation.  The materialisation owner performs
+-- the same workflow, signature, root-week and financial-state checks.
+create or replace function public.weekly_source_candidate_self_submit_atomic_v1(
+  p_session_id uuid,
+  p_environment text,
+  p_body jsonb,
+  p_now_utc timestamptz default pg_catalog.transaction_timestamp()
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_context jsonb;
+  v_candidate_id uuid;
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  v_context:=private._candidate_session_context_v1(
+    p_session_id,p_environment,null,p_now_utc,true
+  );
+  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+  if v_candidate_id is null then
+    raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000';
+  end if;
+  if p_body is null or pg_catalog.jsonb_typeof(p_body)<>'object'
+     or exists(select 1 from pg_catalog.jsonb_object_keys(p_body) key
+       where key not in (
+         'workflow_id','expected_workflow_generation','candidate_signature_component_id',
+         'candidate_signed_at_utc','immutable_submission','idempotency_key'
+       )) or pg_catalog.jsonb_typeof(p_body->'immutable_submission')<>'object' then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID' using errcode='22023';
+  end if;
+  begin
+    select * into strict v_workflow from public.candidate_submission_workflows
+    where id=(p_body->>'workflow_id')::uuid
+      and candidate_id=v_candidate_id
+      and account_id=(v_context->>'account_id')::uuid;
+    perform (p_body->>'expected_workflow_generation')::integer;
+    perform (p_body->>'candidate_signature_component_id')::uuid;
+    perform (p_body->>'candidate_signed_at_utc')::timestamptz;
+    perform (p_body->>'idempotency_key')::uuid;
+  exception when others then
+    raise exception 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID' using errcode='22023';
+  end;
+  v_result:=public.weekly_source_candidate_check_materialise_atomic_v1(
+    pg_catalog.jsonb_build_object(
+      'account_id',(v_context->>'account_id')::uuid,
+      'candidate_id',v_candidate_id,
+      'request_kind','SELF_SUBMIT',
+      'workflow_id',v_workflow.id,
+      'expected_workflow_generation',(p_body->>'expected_workflow_generation')::integer,
+      'candidate_signature_component_id',(p_body->>'candidate_signature_component_id')::uuid,
+      'candidate_signed_at_utc',(p_body->>'candidate_signed_at_utc')::timestamptz,
+      'immutable_submission',p_body->'immutable_submission',
+      'request_idempotency_key',(p_body->>'idempotency_key')::uuid
+    ),p_now_utc
+  );
+  return v_result;
+end;
+$function$;
+
 alter function private.weekly_source_candidate_app_units_week_v1(jsonb) owner to postgres;
 alter function private.weekly_source_candidate_app_units_day_v1(jsonb,date) owner to postgres;
 alter function private.weekly_source_candidate_app_break_v1(jsonb,integer) owner to postgres;
@@ -2735,6 +2857,7 @@ alter function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,
 alter function public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamptz) owner to postgres;
 alter function public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamptz) owner to postgres;
 alter function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) owner to postgres;
+alter function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) owner to postgres;
 
 revoke all on function private.weekly_source_candidate_app_units_week_v1(jsonb) from public,anon,authenticated,service_role;
 revoke all on function private.weekly_source_candidate_app_units_day_v1(jsonb,date) from public,anon,authenticated,service_role;
@@ -2754,9 +2877,11 @@ revoke all on function public.weekly_source_candidate_check_materialise_atomic_v
 revoke all on function public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamptz) from public,anon,authenticated;
 revoke all on function public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamptz) from public,anon,authenticated;
 revoke all on function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) from public,anon,authenticated;
+revoke all on function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) from public,anon,authenticated;
 grant execute on function public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamptz) to service_role;
 grant execute on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) to service_role;
 grant execute on function public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamptz) to service_role;
 grant execute on function public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz) to service_role;
+grant execute on function public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz) to service_role;
 
 commit;

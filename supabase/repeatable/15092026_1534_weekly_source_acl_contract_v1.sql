@@ -401,6 +401,7 @@ as $function$
     ('public.weekly_source_candidate_app_draft_save_atomic_v1(uuid,text,uuid,jsonb,timestamptz)'),
     ('public.weekly_source_candidate_app_request_get_v1(uuid,text,uuid,timestamptz)'),
     ('public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz)'),
+    ('public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz)'),
     ('public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz)'),
     ('public.weekly_source_candidate_hours_push_v1(jsonb)'),
     ('public.weekly_source_candidate_query_get_v1(jsonb)'),

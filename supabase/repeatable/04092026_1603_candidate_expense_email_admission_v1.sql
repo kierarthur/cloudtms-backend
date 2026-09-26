@@ -34,6 +34,7 @@ declare
   v_accommodation numeric:=0;
   v_other numeric:=0;
   v_import boolean:=false;
+  v_source_self_allowed boolean:=false;
   v_protected boolean:=false;
   v_paid boolean:=false;
   v_effective_pay_status text:='UNPAID';
@@ -171,6 +172,17 @@ begin
   end if;
 
   v_import:=coalesce((v_route->>'import_authoritative')::boolean,false);
+  if v_import and v_week.id is not null and v_contract.id is not null
+     and v_week.additional_seq=0 and not v_week.is_adjustment
+     and v_week.week_ending_date-6 <= (pg_catalog.transaction_timestamp() at time zone 'Europe/London')::date then
+    v_source_self_allowed:=
+      (private._weekly_source_effective_policy_v1(
+        v_contract.client_id,v_contract.id,v_week.week_ending_date
+      )->>'authority_mode')='SOURCE_AUTHORITY'
+      and (private._weekly_source_effective_policy_v1(
+        v_contract.client_id,v_contract.id,v_week.week_ending_date
+      )->>'document_mode')='CHECK_ONLY';
+  end if;
   if v_timesheet.timesheet_id is not null then
     select coalesce(
       case when coalesce(summary_pay_cache.summary_state_applies,false)
@@ -282,6 +294,14 @@ begin
     'expense_value',v_expenses,
     'effective_separation',v_separate,
     'import_authoritative',v_import,
+    'candidate_source_self_entry_allowed',v_source_self_allowed
+      and not v_protected and not v_candidate_mutation_locked and not v_paid
+      and v_fin.timesheet_id is null
+      and coalesce(v_week.status not in (
+        'AUTHORISED'::public.contract_week_status_enum,
+        'INVOICED'::public.contract_week_status_enum,
+        'CANCELLED'::public.contract_week_status_enum
+      ),false),
     'route_family',v_route_family,
     'effective_submission_mode',v_route->'effective_submission_mode',
     'protected',v_protected,

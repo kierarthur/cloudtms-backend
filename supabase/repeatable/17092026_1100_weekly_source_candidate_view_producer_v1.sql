@@ -716,6 +716,7 @@ declare
   v_timesheet public.timesheets%rowtype;
   v_request jsonb;
   v_submitted jsonb:='[]'::jsonb;
+  v_day_off_dates jsonb:='[]'::jsonb;
   v_units_week jsonb:='[]'::jsonb;
   v_units_day jsonb:='[]'::jsonb;
   v_entitlement jsonb;
@@ -746,6 +747,12 @@ begin
       v_timesheet.additional_units_week);
     v_units_day:=private.weekly_source_candidate_app_units_day_v1(
       v_timesheet.additional_units_per_day,null);
+    select coalesce(workflow.immutable_submission_json->'day_off_dates','[]'::jsonb)
+      into v_day_off_dates
+    from public.candidate_submission_workflows workflow
+    where workflow.id=v_timesheet.candidate_workflow_id
+      and workflow.generation=v_timesheet.candidate_workflow_generation;
+    v_day_off_dates:=coalesce(v_day_off_dates,'[]'::jsonb);
   end if;
 
   -- WP-11e G3.  THE APPROVED HOURS ARE READ FROM THE ENTITLEMENT RESOLVER
@@ -810,6 +817,7 @@ begin
     'scope_id',v_request->'scope_id',
     'request_kind',v_request->'request_kind',
     'submitted_timesheet',v_submitted,
+    'submitted_day_off_dates',v_day_off_dates,
     'submitted_additional_units_week',v_units_week,
     'submitted_additional_units_per_day',v_units_day,
     'approved_hours_to_be_paid',v_approved,

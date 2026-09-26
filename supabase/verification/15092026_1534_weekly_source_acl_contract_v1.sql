@@ -302,6 +302,7 @@ declare
     'public.weekly_source_candidate_query_get_v1(jsonb)',
     'public.weekly_source_candidate_reminder_atomic_v1(jsonb)',
     'public.weekly_source_candidate_response_submit_atomic_v1(jsonb)',
+    'public.weekly_source_candidate_self_submit_atomic_v1(uuid,text,jsonb,timestamptz)',
     'public.weekly_source_charge_accept_atomic_v1(jsonb)',
     -- Stage 5 / PHD-017: completed-Timesheet informational-copy producer.
     'public.weekly_source_completed_pack_copy_commit_atomic_v1(jsonb)',
