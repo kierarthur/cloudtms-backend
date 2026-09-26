@@ -124,22 +124,24 @@ function runSql(sql, name) {
 }
 
 function behaviorSql() {
-  // The real TEST root must remain readable even if its optional source
-  // policy is absent. This is read-only and contained by the release txn.
-  return `do $candidate_bootstrap_behavior$ declare
+  // Inject the exact observed resolver error behind a savepoint. The
+  // temporary definition is rolled back before the enclosing rehearsal ends.
+  return `savepoint candidate_bootstrap_policy_injection;
+  create or replace function private._weekly_source_effective_policy_v1(uuid,uuid,date)
+  returns jsonb language plpgsql stable security definer
+  set search_path to 'pg_catalog','pg_temp' as $mock_policy$
+  begin
+    raise exception 'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID' using errcode='55000';
+  end $mock_policy$;
+  do $candidate_bootstrap_behavior$ declare
     v_week public.contract_weeks%rowtype;
     v_capabilities jsonb;
   begin
     select cw.* into v_week from public.contract_weeks cw
-    join public.contracts c on c.id=cw.contract_id
-    where cw.week_ending_date between '2026-09-01'::date and '2026-10-01'::date
+    where cw.week_ending_date between '2026-01-01'::date and '2026-12-31'::date
       and cw.week_ending_date-6 <= (pg_catalog.transaction_timestamp() at time zone 'Europe/London')::date
-      and cw.additional_seq=0 and not cw.is_adjustment
+      and cw.additional_seq=0 and coalesce(cw.is_adjustment,false)=false
       and (private._candidate_route_family_v1(cw.timesheet_id,cw.id)->>'import_authoritative')='true'
-      and (select count(*) from public.weekly_source_group_clients gc
-           join public.weekly_source_groups g on g.id=gc.source_group_id
-           where gc.client_id=c.client_id and g.active
-             and cw.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))<>1
     order by cw.week_ending_date desc,cw.id limit 1;
     if v_week.id is null then raise exception 'CANDIDATE_BOOTSTRAP_TEST_ROOT_MISSING'; end if;
     v_capabilities:=private._candidate_record_capabilities_v1(
@@ -147,7 +149,9 @@ function behaviorSql() {
     if v_capabilities is null or not (v_capabilities ? 'candidate_source_self_entry_allowed')
       or v_capabilities->>'candidate_source_self_entry_allowed' <> 'false'
       then raise exception 'CANDIDATE_BOOTSTRAP_CAPABILITY_MISSING'; end if;
-  end $candidate_bootstrap_behavior$;`;
+  end $candidate_bootstrap_behavior$;
+  rollback to savepoint candidate_bootstrap_policy_injection;
+  release savepoint candidate_bootstrap_policy_injection;`;
 }
 
 function run(command) {
@@ -168,9 +172,9 @@ set local statement_timeout='120s';
 select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0));`;
   const before = snapshotSql('candidate_bootstrap_before');
   const after = snapshotSql('candidate_bootstrap_after');
-  const change = `${before}\n${definition()}\n${after}\n${assertSql('candidate_bootstrap_before','candidate_bootstrap_after',installed,contract.after)}\n${behaviorSql()}`;
+  const change = `${before}\n${definition()}\n${after}\n${assertSql('candidate_bootstrap_before','candidate_bootstrap_after',installed,contract.after)}`;
   if (command === 'rehearse') {
-    runSql(`${opening}\n${change}\nrollback;`, 'rehearse');
+    runSql(`${opening}\n${change}\n${behaviorSql()}\nrollback;`, 'rehearse');
     if (JSON.stringify(selected(exportContract())) !== JSON.stringify(installed)) {
       throw new Error('Rollback rehearsal changed installed routine');
     }
