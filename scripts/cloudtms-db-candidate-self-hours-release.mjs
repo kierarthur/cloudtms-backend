@@ -199,9 +199,9 @@ function assertCatalogue(beforeTable, afterTable) {
     if ${outsideSql(beforeTable)} is distinct from ${outsideSql(afterTable)}
       then raise exception 'CANDIDATE_SELF_HOURS_OUTSIDE_CATALOGUE_CHANGED: %',
         (select pg_catalog.left(pg_catalog.string_agg(coalesce(b.key,a.key),',' order by coalesce(b.key,a.key)),2000)
-         from (select row->>'schema'||'.'||row->>'identity' as key,row as value
+         from (select (row->>'schema')||'.'||(row->>'identity') as key,row as value
                from pg_catalog.jsonb_array_elements(${outsideSql(beforeTable)}->'routines') row) b
-         full join (select row->>'schema'||'.'||row->>'identity' as key,row as value
+         full join (select (row->>'schema')||'.'||(row->>'identity') as key,row as value
                     from pg_catalog.jsonb_array_elements(${outsideSql(afterTable)}->'routines') row) a using (key)
          where b.value is distinct from a.value); end if;
   end $candidate_component_catalogue$;`;
