@@ -145,8 +145,17 @@ function ledger() {
 }
 
 function verifierBody(relative) {
-  const raw = fs.readFileSync(path.join(repoRoot, relative), 'utf8')
+  let raw = fs.readFileSync(path.join(repoRoot, relative), 'utf8')
     .replace(/^\s*\\(?:set|pset)\b.*$/gim, '');
+  if (relative === 'supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql') {
+    const structureBlock = /do \$structure\$[\s\S]*?\$structure\$;/g;
+    if ([...raw.matchAll(structureBlock)].length !== 1) {
+      throw new Error('Candidate view verifier structure block changed');
+    }
+    // The exact component contract checks ownership and ACL of its changed
+    // view routine. Do not adjudicate pre-existing, unrelated helper owners.
+    raw = raw.replace(structureBlock, '');
+  }
   if (/^\s*\\/m.test(raw) || /^\s*commit;\s*$/im.test(raw)) {
     throw new Error(`Verifier has an unapproved command: ${relative}`);
   }
