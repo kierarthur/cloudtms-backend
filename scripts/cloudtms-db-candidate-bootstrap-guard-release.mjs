@@ -127,7 +127,8 @@ function behaviorSql() {
   // Inject the exact observed resolver error behind a savepoint. The
   // temporary definition is rolled back before the enclosing rehearsal ends.
   return `savepoint candidate_bootstrap_policy_injection;
-  create or replace function private._weekly_source_effective_policy_v1(uuid,uuid,date)
+  create or replace function private._weekly_source_effective_policy_v1(
+    p_client_id uuid,p_contract_id uuid,p_work_date date)
   returns jsonb language plpgsql stable security definer
   set search_path to 'pg_catalog','pg_temp' as $mock_policy$
   begin
