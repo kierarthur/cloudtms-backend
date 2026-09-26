@@ -6255,6 +6255,30 @@ async function handleCandidateWeeklySourceRequest(
   }));
 }
 
+async function handleCandidateWeeklySourceSelfSubmit(request, env, deps, workflowId) {
+  const access = await verifyCandidateAccess(request, env);
+  const body = await readJson(request);
+  if (!isObject(body) || Array.isArray(body)) {
+    throw new CandidateHttpError(400, 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID');
+  }
+  const id = requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  return jsonResponse(200, await rpcCall(
+    deps, 'weekly_source_candidate_self_submit_atomic_v1',
+    candidateRpcArgs(access, env, { p_body: {
+      workflow_id: id,
+      expected_workflow_generation: generation,
+      candidate_signature_component_id: requireUuid(
+        body.candidate_signature_component_id, 'WEEKLY_SOURCE_CANDIDATE_SELF_SUBMIT_INVALID'
+      ),
+      candidate_signed_at_utc: text(body.candidate_signed_at_utc),
+      immutable_submission: body.immutable_submission,
+      idempotency_key: idempotencyKey
+    } })
+  ));
+}
+
 async function handleAddMissingWeek(request, env, deps, contractId) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
@@ -12223,6 +12247,9 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     match = routeMatch(path, `${CANDIDATE_PREFIX}/uploads/:ticket`);
     if (match && request.method === 'PUT') return await handleComponentUpload(request, env, deps, match.ticket);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/actions/:action`);
+    if (match && request.method === 'POST' && match.action === 'self-submit-source-hours') {
+      return await handleCandidateWeeklySourceSelfSubmit(request, env, deps, match.workflowId);
+    }
     if (match && request.method === 'POST') return await handleWorkflowAction(request, env, deps, match.workflowId, match.action, ctx);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/components/:componentId/document`);
     if (match && request.method === 'GET') return await handleDocumentStream(request, env, deps, 'candidate', match.workflowId, match.componentId);

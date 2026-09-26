@@ -368,7 +368,7 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/actions/{action}
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
-        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation, remove-expense, withdraw-expense, cancel-expense, withdraw-entire-claim, cancel-entire-claim, begin-expense-update, abort-expense-update, resubmit-expense-category, create-updated-documents]}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, self-submit-source-hours, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation, remove-expense, withdraw-expense, cancel-expense, withdraw-entire-claim, cancel-entire-claim, begin-expense-update, abort-expense-update, resubmit-expense-category, create-updated-documents]}}
       requestBody: {$ref: '#/components/requestBodies/WorkflowActionBody'}
       x-cloudtms-advanced-expense-action-contracts:
         begin-expense-update: {$ref: '#/components/schemas/CandidateExpenseUpdateBeginRequestV1'}

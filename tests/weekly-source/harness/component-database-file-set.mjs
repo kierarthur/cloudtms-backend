@@ -110,6 +110,10 @@ export const WEEKLY_SOURCE_COMPONENT_REPEATABLES = Object.freeze([
   // the post-baseline effective-settings owner before Weekly Source verifiers
   // call it on a genuinely NEW database.
   'supabase/repeatable/03092026_1641_contract_settings_effective_authority_v1.sql',
+  // Candidate-initiated CHECK_ONLY hours use the current Candidate capability
+  // and workflow owners, not the older definitions in the pre-Plan-6 baseline.
+  'supabase/repeatable/04092026_1603_candidate_expense_email_admission_v1.sql',
+  'supabase/repeatable/04092026_1952_candidate_expense_history_anchor_recovery_v1.sql',
 ]);
 
 function canonicalOrder(left, right) {

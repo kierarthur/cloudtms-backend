@@ -24,6 +24,7 @@ const functionSource = name => {
 const materialise = functionSource('public.weekly_source_candidate_check_materialise_atomic_v1');
 const compareSync = functionSource('private.weekly_source_candidate_submission_compare_sync_v1');
 const submit = functionSource('public.weekly_source_candidate_app_submit_atomic_v1');
+const selfSubmit = functionSource('public.weekly_source_candidate_self_submit_atomic_v1');
 
 const position = (source, value, label) => {
   const found = source.indexOf(value);
@@ -39,11 +40,16 @@ test('the Candidate materialisation seam is service-only and its internal compar
   assert.match(compareSync, /weekly_source_query_require_service_v1\(\)/i);
 });
 
-test('only the Plan 6 whole-week submit path invokes the narrow owner', () => {
+test('only the Office-request and candidate-initiated signed paths invoke the narrow owner', () => {
   assert.equal(
     (submit.match(/weekly_source_candidate_check_materialise_atomic_v1\s*\(/gi) || []).length,
     1,
   );
+  assert.equal((selfSubmit.match(/weekly_source_candidate_check_materialise_atomic_v1\s*\(/gi) || []).length, 1);
+  assert.match(selfSubmit, /_candidate_session_context_v1[\s\S]*selected_candidate_id/i);
+  assert.match(selfSubmit, /'request_kind','SELF_SUBMIT'/i);
+  assert.match(owner, /revoke all on function public\.weekly_source_candidate_self_submit_atomic_v1\(uuid,text,jsonb,timestamptz\) from public,anon,authenticated;/i);
+  assert.match(owner, /grant execute on function public\.weekly_source_candidate_self_submit_atomic_v1\(uuid,text,jsonb,timestamptz\) to service_role;/i);
   assert.doesNotMatch(submit, /candidate_workflow_transition_atomic_v1/i);
   assert.match(submit, /v_scope->>'request_kind'='CHECK_HOURS'[\s\S]*weekly_source_candidate_app_assert_week_revision_v1/i);
   assert.match(submit, /else[\s\S]*weekly_source_candidate_app_assert_new_week_submission_v1/i);

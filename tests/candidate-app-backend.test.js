@@ -2038,7 +2038,14 @@ test('Weekly source Candidate routes preserve one authenticated session and exac
         'weekly_source_candidate_app_draft_save_atomic_v1'],
       ['POST', `/candidate-app/v1/weekly-source/requests/${requestId}/submit`, {
         ...mutationBody, submission_kind: 'RESPONSES_ONLY'
-      }, 'weekly_source_candidate_app_submit_atomic_v1']
+      }, 'weekly_source_candidate_app_submit_atomic_v1'],
+      ['POST', '/candidate-app/v1/workflows/00000000-0000-4000-8000-00000000007c/actions/self-submit-source-hours', {
+        generation: 1,
+        candidate_signature_component_id: '00000000-0000-4000-8000-00000000007d',
+        candidate_signed_at_utc: '2026-09-25T10:00:00Z',
+        immutable_submission: { actual_schedule_json: [], day_off_dates: [] },
+        idempotency_key: mutationBody.idempotency_key
+      }, 'weekly_source_candidate_self_submit_atomic_v1']
     ];
     for (const [method, path, body, rpcName] of cases) {
       const response = await handleCandidateAppRequest(new Request(`https://private.test${path}`, {
@@ -2056,12 +2063,18 @@ test('Weekly source Candidate routes preserve one authenticated session and exac
     for (const call of calls) {
       assert.equal(call.args.p_session_id, sessionId);
       assert.equal(call.args.p_environment, 'TEST');
-      assert.equal(call.args.p_request_id, requestId);
+      assert.equal(call.args.p_request_id, call.name === 'weekly_source_candidate_self_submit_atomic_v1'
+        ? undefined : requestId);
       assert.match(call.args.p_now_utc, /^\d{4}-\d{2}-\d{2}T/);
     }
     assert.equal(calls[0].args.p_body, undefined);
     assert.deepEqual(calls[1].args.p_body, mutationBody);
     assert.equal(calls[2].args.p_body.submission_kind, 'RESPONSES_ONLY');
+    assert.deepEqual(calls[3].args.p_body.day_off_dates, undefined);
+    assert.equal(calls[3].args.p_body.workflow_id, '00000000-0000-4000-8000-00000000007c');
+    assert.equal(calls[3].args.p_body.expected_workflow_generation, 1);
+    assert.equal(calls[3].args.p_body.generation, undefined);
+    assert.deepEqual(calls[3].args.p_body.immutable_submission.day_off_dates, []);
 
     const wrongMethod = await handleCandidateAppRequest(new Request(
       `https://private.test/candidate-app/v1/weekly-source/requests/${requestId}/draft`, {
@@ -2069,7 +2082,7 @@ test('Weekly source Candidate routes preserve one authenticated session and exac
       }
     ), env, {}, deps);
     assert.equal(wrongMethod.status, 405);
-    assert.equal(calls.length, 3, 'wrong method must not reach a database RPC');
+    assert.equal(calls.length, 4, 'wrong method must not reach a database RPC');
   } finally {
     globalThis.fetch = originalFetch;
   }
