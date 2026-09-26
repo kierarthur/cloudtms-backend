@@ -187,7 +187,19 @@ function assertCatalogue(beforeTable, afterTable, expectedBefore = expectedBefor
     if ${selectedSql(beforeTable)} is distinct from ${quote(JSON.stringify(expectedBefore))}::jsonb
       then raise exception 'CANDIDATE_SELF_HOURS_BEFORE_CONTRACT_MISMATCH'; end if;
     if ${selectedSql(afterTable)} is distinct from ${quote(JSON.stringify(selected(currentContract())))}::jsonb
-      then raise exception 'CANDIDATE_SELF_HOURS_AFTER_CONTRACT_MISMATCH'; end if;
+      then raise exception 'CANDIDATE_SELF_HOURS_AFTER_CONTRACT_MISMATCH: %',
+        (select pg_catalog.left(pg_catalog.string_agg(
+          coalesce((a.value->>'schema')||'.'||(a.value->>'identity'),
+                   (e.value->>'schema')||'.'||(e.value->>'identity'))||'['||
+          coalesce((select pg_catalog.string_agg(k,',' order by k)
+                    from pg_catalog.jsonb_object_keys(coalesce(a.value,'{}'::jsonb)||coalesce(e.value,'{}'::jsonb)) k
+                    where a.value->k is distinct from e.value->k),'')||']',
+          ';' order by coalesce((a.value->>'schema')||'.'||(a.value->>'identity'),
+                                (e.value->>'schema')||'.'||(e.value->>'identity'))),2000)
+         from pg_catalog.jsonb_array_elements(${selectedSql(afterTable)}) a(value)
+         full join pg_catalog.jsonb_array_elements(${quote(JSON.stringify(selected(currentContract())))}::jsonb) e(value)
+           on (a.value->>'schema')=(e.value->>'schema') and (a.value->>'identity')=(e.value->>'identity')
+         where a.value is distinct from e.value); end if;
     if ${outsideSql(beforeTable)} is distinct from ${outsideSql(afterTable)}
       then raise exception 'CANDIDATE_SELF_HOURS_OUTSIDE_CATALOGUE_CHANGED: %',
         (select pg_catalog.left(pg_catalog.string_agg(coalesce(b.key,a.key),',' order by coalesce(b.key,a.key)),2000)
