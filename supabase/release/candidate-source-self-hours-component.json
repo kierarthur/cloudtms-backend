@@ -62,5 +62,5 @@
     "supabase/verification/17092026_1100_weekly_source_candidate_view_producer_v1.sql",
     "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql"
   ],
-  "policy": "Only candidate-initiated CHECK_ONLY hours definitions on agency TEST. Banking Pay Stage 2, LIVE, and unrelated current-catalogue drift remain outside this component."
+  "policy": "Install only the eight candidate-initiated CHECK_ONLY hours routines on agency TEST. The five containing repeatable files are pinned as source authority, but their full-file ledger hashes remain unchanged because unrelated installed routines must be preserved. Banking Pay Stage 2, LIVE, and unrelated current-catalogue drift remain outside this component."
 }

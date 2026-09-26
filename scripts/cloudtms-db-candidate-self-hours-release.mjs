@@ -112,6 +112,9 @@ function check() {
   if (expectedBeforeRoutines().length !== 7 || selected(after).length !== 8) {
     throw new Error('Candidate component before/after routine cardinality changed');
   }
+  if ((definitions().match(/^create or replace function/gim) ?? []).length !== 8) {
+    throw new Error('The isolated component must define exactly eight routines');
+  }
   console.log(JSON.stringify({ componentId, phase: 'CHECK', files: 5, changedRoutines: 8 }));
 }
 
@@ -139,17 +142,6 @@ function ledger() {
     return { ...file, installedHash: installed.hash, priorRelease: installed.release,
       pending: installed.hash !== file.afterClosureSha256 };
   });
-}
-
-function unwrapSource(relative) {
-  const source = fs.readFileSync(path.join(repoRoot, relative), 'utf8')
-    .replace(/^\s*\\set\s+ON_ERROR_STOP\s+on\s*$/gim, '');
-  if ((source.match(/^\s*begin;\s*$/gim) ?? []).length !== 1
-      || (source.match(/^\s*commit;\s*$/gim) ?? []).length !== 1
-      || /^\s*\\/m.test(source)) {
-    throw new Error(`Unexpected SQL transaction boundary: ${relative}`);
-  }
-  return source.replace(/^\s*(?:begin|commit);\s*$/gim, '').trim();
 }
 
 function verifierBody(relative) {
@@ -190,9 +182,9 @@ function outsideSql(table) {
     from ${table} snapshot)`;
 }
 
-function assertCatalogue(beforeTable, afterTable) {
+function assertCatalogue(beforeTable, afterTable, expectedBefore = expectedBeforeRoutines()) {
   return `do $candidate_component_catalogue$ begin
-    if ${selectedSql(beforeTable)} is distinct from ${quote(JSON.stringify(expectedBeforeRoutines()))}::jsonb
+    if ${selectedSql(beforeTable)} is distinct from ${quote(JSON.stringify(expectedBefore))}::jsonb
       then raise exception 'CANDIDATE_SELF_HOURS_BEFORE_CONTRACT_MISMATCH'; end if;
     if ${selectedSql(afterTable)} is distinct from ${quote(JSON.stringify(selected(currentContract())))}::jsonb
       then raise exception 'CANDIDATE_SELF_HOURS_AFTER_CONTRACT_MISMATCH'; end if;
@@ -218,7 +210,25 @@ function runAtomic(sql, phase) {
   }
 }
 
-function definitions() { return manifest.files.map(file => unwrapSource(file.path)).join('\n\n'); }
+function definitions() {
+  const sources = manifest.files.map(file => fs.readFileSync(path.join(repoRoot, file.path), 'utf8'));
+  const bodies = manifest.routineIdentities.map(identity => {
+    const name = identity.slice(0, identity.indexOf('('));
+    const matches = sources.flatMap(source => [...source.matchAll(/^create or replace function\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*\(/gim)]
+      .filter(match => match[1].toLowerCase() === name)
+      .map(match => {
+        const end = source.indexOf('\n$function$;', match.index);
+        if (end < 0) throw new Error(`Cannot isolate selected routine: ${identity}`);
+        return source.slice(match.index, end + '\n$function$;'.length);
+      }));
+    if (matches.length !== 1) throw new Error(`Selected routine is not unique: ${identity}`);
+    return matches[0];
+  });
+  return bodies.join('\n\n') + `\n
+alter function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) owner to postgres;
+revoke all on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) from public,anon,authenticated;
+grant execute on function public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz) to service_role;`;
+}
 
 function plan() {
   check(); requireTestTarget();
@@ -235,14 +245,8 @@ function assertAlreadyInstalled() {
 function rehearse() {
   check(); requireTestTarget();
   const state = ledger();
-  if (state.some(row => !row.pending) && state.some(row => row.pending)) {
-    throw new Error('Partial installed component is not an approved starting state');
-  }
-  if (state.every(row => !row.pending)) {
-    assertAlreadyInstalled();
-    console.log(JSON.stringify({ componentId, phase: 'REHEARSE', alreadyInstalled: true }));
-    return;
-  }
+  const installed = selected(exportContract());
+  const alreadyInstalled = JSON.stringify(installed) === JSON.stringify(selected(currentContract()));
   const verifiers = manifest.verifiers.map((file, index) =>
     `savepoint candidate_component_verifier_${index};\n${verifierBody(file)}\n`
     + `rollback to savepoint candidate_component_verifier_${index};\n`
@@ -250,9 +254,9 @@ function rehearse() {
   runAtomic(`\\set ON_ERROR_STOP on\nbegin;\nset local lock_timeout='10s';\nset local statement_timeout='120s';\n`
     + `select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0));\n`
     + `${snapshotSql('candidate_component_before')}\n${definitions()}\n`
-    + `${snapshotSql('candidate_component_after')}\n${assertCatalogue('candidate_component_before','candidate_component_after')}\n`
+    + `${snapshotSql('candidate_component_after')}\n${assertCatalogue('candidate_component_before','candidate_component_after',alreadyInstalled ? selected(currentContract()) : expectedBeforeRoutines())}\n`
     + `${verifiers}\nrollback;`, 'rehearse');
-  console.log(JSON.stringify({ componentId, phase: 'REHEARSE', rolledBack: true,
+  console.log(JSON.stringify({ componentId, phase: 'REHEARSE', rolledBack: true, alreadyInstalled,
     verifiedFiles: manifest.verifiers }));
 }
 
@@ -268,23 +272,14 @@ function apply() {
     throw new Error('Hosted APPLY requires the protected canonical TEST branch workflow');
   }
   const state = ledger();
-  if (state.some(row => !row.pending) && state.some(row => row.pending)) {
-    throw new Error('Partial installed component is not an approved starting state');
-  }
-  if (state.every(row => !row.pending)) {
+  if (JSON.stringify(selected(exportContract())) === JSON.stringify(selected(currentContract()))) {
     assertAlreadyInstalled();
-    console.log(JSON.stringify({ componentId, phase: 'APPLY', alreadyInstalled: true }));
+    console.log(JSON.stringify({ componentId, phase: 'APPLY', alreadyInstalled: true,
+      fullRepeatablesInstalled: state.every(row => !row.pending) }));
     return;
   }
   const releaseId = `${componentId}-${commit.slice(0, 12)}`;
   const componentHash = sha256(JSON.stringify(selected(currentContract())));
-  const ledgerSql = state.map(row => `do $ledger_check$ begin
-    update private.cloudtms_repeatable_ledger
-    set closure_sha256=${quote(row.afterClosureSha256)},last_release_id=${quote(releaseId)},
-        applied_at_utc=pg_catalog.clock_timestamp()
-    where path=${quote(row.path)} and closure_sha256=${quote(row.beforeClosureSha256)};
-    if not found then raise exception 'CANDIDATE_COMPONENT_LEDGER_CONFLICT'; end if;
-    end $ledger_check$;`).join('\n');
   runAtomic(`\\set ON_ERROR_STOP on\nbegin;\nset local lock_timeout='10s';\nset local statement_timeout='120s';\n`
     + `select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('cloudtms_database_release_admission_v1',0));\n`
     + `${snapshotSql('candidate_component_before')}\n${definitions()}\n`
@@ -294,20 +289,23 @@ function apply() {
       install_mode,status,completed_at_utc,evidence_json
     ) values (${quote(releaseId)},${quote(commit)},${quote(componentHash)},${quote(componentHash)},
       'UPGRADE','APPLYING',null,
-      ${quote(JSON.stringify({ component: componentId, scope: 'exact-eight-routine-delta' }))}::jsonb);
-    ${ledgerSql}
+      ${quote(JSON.stringify({ component: componentId, scope: 'exact-eight-routine-delta', fullRepeatablesInstalled: false }))}::jsonb);
     update private.cloudtms_database_releases
       set status='VERIFIED',completed_at_utc=pg_catalog.clock_timestamp()
       where release_id=${quote(releaseId)} and status='APPLYING';
     select pg_catalog.pg_notify('pgrst','reload schema');\ncommit;`, 'apply');
   const after = ledger();
-  if (after.some(row => row.pending)) throw new Error('Component ledger did not reach exact approved hashes');
+  if (JSON.stringify(after.map(row => row.installedHash))
+      !== JSON.stringify(state.map(row => row.installedHash))) {
+    throw new Error('Component installation unexpectedly changed a full repeatable ledger hash');
+  }
   const installed = exportContract();
   if (JSON.stringify(selected(installed)) !== JSON.stringify(selected(currentContract()))) {
     throw new Error('Installed Candidate routine contract does not match the release receipt');
   }
   console.log(JSON.stringify({ componentId, phase: 'APPLY', releaseId, database: manifest.database,
-    verified: true, files: after.map(row => row.path) }));
+    verified: true, routines: manifest.routineIdentities,
+    fullRepeatablesInstalled: false }));
 }
 
 if (command === 'check') check();
