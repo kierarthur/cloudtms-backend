@@ -26,6 +26,7 @@ declare
   v_timesheet public.timesheets%rowtype;
   v_fin public.timesheets_financials%rowtype;
   v_policy jsonb;
+  v_source_policy jsonb;
   v_hours numeric:=0;
   v_additional numeric:=0;
   v_expenses numeric:=0;
@@ -175,13 +176,29 @@ begin
   if v_import and v_week.id is not null and v_contract.id is not null
      and v_week.additional_seq=0 and not v_week.is_adjustment
      and v_week.week_ending_date-6 <= (pg_catalog.transaction_timestamp() at time zone 'Europe/London')::date then
-    v_source_self_allowed:=
-      (private._weekly_source_effective_policy_v1(
+    begin
+      v_source_policy:=private._weekly_source_effective_policy_v1(
         v_contract.client_id,v_contract.id,v_week.week_ending_date
-      )->>'authority_mode')='SOURCE_AUTHORITY'
-      and (private._weekly_source_effective_policy_v1(
-        v_contract.client_id,v_contract.id,v_week.week_ending_date
-      )->>'document_mode')='CHECK_ONLY';
+      );
+    exception
+      when sqlstate '55000' then
+        if sqlerrm not in (
+          'WEEKLY_SOURCE_GROUP_CARDINALITY_INVALID',
+          'WEEKLY_SOURCE_CLIENT_POLICY_CARDINALITY_INVALID',
+          'WEEKLY_SOURCE_CONTRACT_POLICY_CARDINALITY_INVALID',
+          'WEEKLY_SOURCE_COMPLETED_PACK_RECIPIENT_REQUIRED'
+        ) then raise; end if;
+        -- An invalid policy disables this optional read capability. The
+        -- candidate's other records must still load; admission stays strict.
+        v_source_policy:=null;
+      when sqlstate '22023' then
+        if sqlerrm <> 'WEEKLY_SOURCE_POLICY_SCOPE_NOT_FOUND' then raise; end if;
+        v_source_policy:=null;
+    end;
+    v_source_self_allowed:=coalesce(
+      (v_source_policy->>'authority_mode')='SOURCE_AUTHORITY'
+      and (v_source_policy->>'document_mode')='CHECK_ONLY',false
+    );
   end if;
   if v_timesheet.timesheet_id is not null then
     select coalesce(
