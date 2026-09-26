@@ -130,14 +130,22 @@ function behaviorSql() {
     v_week public.contract_weeks%rowtype;
     v_capabilities jsonb;
   begin
-    select * into v_week from public.contract_weeks
-    where contract_id='42b04c70-d2a2-4477-b4e9-437c0d16bf61'::uuid
-      and week_ending_date='2026-09-27'::date and additional_seq=0
-    order by id limit 1;
+    select cw.* into v_week from public.contract_weeks cw
+    join public.contracts c on c.id=cw.contract_id
+    where cw.week_ending_date between '2026-09-01'::date and '2026-10-01'::date
+      and cw.week_ending_date-6 <= (pg_catalog.transaction_timestamp() at time zone 'Europe/London')::date
+      and cw.additional_seq=0 and not cw.is_adjustment
+      and (private._candidate_route_family_v1(cw.timesheet_id,cw.id)->>'import_authoritative')='true'
+      and (select count(*) from public.weekly_source_group_clients gc
+           join public.weekly_source_groups g on g.id=gc.source_group_id
+           where gc.client_id=c.client_id and g.active
+             and cw.week_ending_date between gc.valid_from and coalesce(gc.valid_to,'infinity'::date))<>1
+    order by cw.week_ending_date desc,cw.id limit 1;
     if v_week.id is null then raise exception 'CANDIDATE_BOOTSTRAP_TEST_ROOT_MISSING'; end if;
     v_capabilities:=private._candidate_record_capabilities_v1(
       v_week.timesheet_id,v_week.id,'{}'::jsonb);
     if v_capabilities is null or not (v_capabilities ? 'candidate_source_self_entry_allowed')
+      or v_capabilities->>'candidate_source_self_entry_allowed' <> 'false'
       then raise exception 'CANDIDATE_BOOTSTRAP_CAPABILITY_MISSING'; end if;
   end $candidate_bootstrap_behavior$;`;
 }
