@@ -398,7 +398,7 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /validateExpectedDatabase[\s\S]*assertCurrentDatabase\(expectedDatabase\)/);
   assert.match(source, /select pg_catalog\.current_database\(\);/);
   assert.doesNotMatch(source, /marking existing migrations/);
-  assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+  assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*readerReleasePhases[\s\S]*for \(const item of phases\.ordinary\) psql\(\{ file: item\.path \}\)[\s\S]*prepareSourceReaders[\s\S]*readerActivationSql[\s\S]*recordInventory/);
   assert.match(source, /mode === 'NEW'[\s\S]*release\.newVerificationFiles/);
   const release = readJson('supabase/release/current-release.json');
   assert.ok(release.verificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));

@@ -29,6 +29,11 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.weekly_source_billing_movements'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_final_revisions'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -457,8 +462,8 @@ begin
   -- The guards decide nothing else: no Timesheet, financial, invoice or
   -- Banking Pay row exists after all of the above.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_billing_movements)=0
-    and (select pg_catalog.count(*) from public.weekly_source_final_revisions)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_billing_movements'::regclass)=0
+    and pg_temp.ws_verify_writes('public.weekly_source_final_revisions'::regclass)=0,
     'the admission guards must create no financial record');
 end;
 $row_admission_guards$;
@@ -471,7 +476,7 @@ select pg_catalog.jsonb_build_object(
                     where state='CURRENT' or state='SUPERSEDED'),
   'refused_reports',(select pg_catalog.count(*) from public.weekly_source_uploads
                      where state='REJECTED'),
-  'financial_records',(select pg_catalog.count(*) from public.weekly_source_billing_movements)
+  'financial_records',pg_temp.ws_verify_count('public.weekly_source_billing_movements'::regclass)
 );
 
 rollback;

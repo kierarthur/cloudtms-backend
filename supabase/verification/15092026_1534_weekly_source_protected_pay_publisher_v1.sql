@@ -91,8 +91,12 @@ insert into public.weekly_source_cycles(
 
 create temp table before_finance as
 select
-  (select count(*) from public.timesheets_financials) as financials,
-  (select count(*) from public.pay_batches) as pay_batches;
+  coalesce(sum(stats.n_tup_ins) filter (
+    where stats.relid in ('public.timesheets_financials'::regclass,
+                          'public.pay_batch_items'::regclass)),0) as financial_rows_inserted,
+  coalesce(sum(stats.n_tup_ins) filter (
+    where stats.relid='public.pay_batches'::regclass),0) as pay_batches_inserted
+from pg_catalog.pg_stat_xact_user_tables stats;
 
 create temp table first_result as
 select public.weekly_exceptional_pay_prepare_family_v1(
@@ -127,7 +131,11 @@ select pg_temp.assert_true(
 );
 select pg_temp.assert_true(
   (select count(*)=1 from public.weekly_exceptional_pay_target_families
-   where ownership_state='TARGET_MANAGED'
+   where id=(select (result->>'family_id')::uuid from first_result)
+     and candidate_id='e1000000-0000-4000-8000-000000000004'
+     and contract_id='e1000000-0000-4000-8000-000000000005'
+     and week_ending_date='2026-09-13'
+     and ownership_state='TARGET_MANAGED'
      and current_lifecycle_state='PENDING_APPROVAL'
      and current_generation_id is null),
   'preparation must establish one target-managed pending family without publishing entitlement'
@@ -155,14 +163,28 @@ select pg_temp.assert_true(
   'a source-absent protected shift must have one durable Office work event'
 );
 select pg_temp.assert_true(
-  (select count(*)=1 from public.weekly_exceptional_orchestration_runs
-   where request_kind='APPROVE' and state='RUNNING'),
+  (select count(*)=1 from public.weekly_exceptional_orchestration_runs run
+   where run.id=(select (result->>'orchestration_run_id')::uuid from first_result)
+     and request_kind='APPROVE' and state='RUNNING'),
   'preparation must create one service-owned orchestration run'
 );
 select pg_temp.assert_true(
-  (select financials=(select count(*) from public.timesheets_financials)
-          and pay_batches=(select count(*) from public.pay_batches)
-   from before_finance),
+  not exists(
+    select 1 from public.timesheets_financials financial
+    where financial.timesheet_id=(select (result->>'root_timesheet_id')::uuid from first_result)
+  )
+  and not exists(
+    select 1 from public.pay_batch_items item
+    where item.timesheet_id=(select (result->>'root_timesheet_id')::uuid from first_result)
+  )
+  and (select financial_rows_inserted=coalesce((
+          select sum(stats.n_tup_ins) from pg_catalog.pg_stat_xact_user_tables stats
+          where stats.relid in ('public.timesheets_financials'::regclass,
+                                'public.pay_batch_items'::regclass)),0)
+        and pay_batches_inserted=coalesce((
+          select sum(stats.n_tup_ins) from pg_catalog.pg_stat_xact_user_tables stats
+          where stats.relid='public.pay_batches'::regclass),0)
+       from before_finance),
   'family preparation must not create a financial snapshot, pay batch or Banking Pay row'
 );
 
@@ -190,9 +212,12 @@ select pg_temp.assert_true(
   'an exact retry must return the original identities without duplicate writes'
 );
 select pg_temp.assert_true(
-  (select count(*)=1 from public.weekly_exceptional_pay_target_families)
-  and (select count(*)=1 from public.weekly_exceptional_orchestration_runs)
-  and (select count(*)=1 from public.weekly_work_events),
+  (select count(*)=1 from public.weekly_exceptional_pay_target_families family
+   where family.id=(select (result->>'family_id')::uuid from first_result))
+  and (select count(*)=1 from public.weekly_exceptional_orchestration_runs run
+       where run.id=(select (result->>'orchestration_run_id')::uuid from first_result))
+  and (select count(*)=1 from public.weekly_work_events event
+       where event.id=(select (result->>'work_event_id')::uuid from first_result)),
   'an exact retry must leave every identity cardinality at one'
 );
 
@@ -216,9 +241,16 @@ select pg_temp.assert_true(
           and not (result->>'created_family')::boolean
           and (result->>'created_work_event')::boolean
    from additional_result)
-  and (select count(*)=1 from public.weekly_exceptional_pay_target_families)
-  and (select count(*)=2 from public.weekly_exceptional_orchestration_runs)
-  and (select count(*)=2 from public.weekly_work_events),
+  and (select (additional.result->>'family_id')=(first.result->>'family_id')
+       from additional_result additional cross join first_result first)
+  and (select count(*)=2 from public.weekly_exceptional_orchestration_runs run
+       where run.id in (
+         (select (result->>'orchestration_run_id')::uuid from first_result),
+         (select (result->>'orchestration_run_id')::uuid from additional_result)))
+  and (select count(*)=2 from public.weekly_work_events event
+       where event.id in (
+         (select (result->>'work_event_id')::uuid from first_result),
+         (select (result->>'work_event_id')::uuid from additional_result))),
   'a later protected shift must reuse the same complete weekly family'
 );
 

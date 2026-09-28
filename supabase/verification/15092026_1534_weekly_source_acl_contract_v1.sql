@@ -280,6 +280,8 @@ declare
     'private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)',
     'private.weekly_source_invoice_batch_snapshot_v1()',
     'private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)',
+    -- Narrow mail-outbox claim validator used by the generic service claimant.
+    'private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)',
     'private.weekly_source_managed_root_guard_decision_v1(uuid)',
     'private.weekly_source_office_authority_v1(uuid,text,uuid,uuid,date)',
     'public.weekly_exceptional_pay_action_context_v1(jsonb)',

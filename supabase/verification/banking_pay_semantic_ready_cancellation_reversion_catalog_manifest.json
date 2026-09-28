@@ -25,8 +25,9 @@
     {
       "schema": "public", "name": "_pay_active_settled_components",
       "identity_arguments": "p_timesheet_ids uuid[]",
-      "definition_sha256": "83fbc69805a7a4066385dcea1fd3cfa7cc015bf1d885ca82d353eb9cada8f43c",
-      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "definition_sha256": "a023675df9dd38f66b63461a5a8c4264dd19eae0a46de0ae8954a63556982b22",
+      "preapply_definition_sha256": "83fbc69805a7a4066385dcea1fd3cfa7cc015bf1d885ca82d353eb9cada8f43c",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public", "jit=off"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
@@ -132,8 +133,9 @@
     {
       "schema": "private", "name": "pay_workbench_recovery_selection_overlay_apply_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "a704f4ed3d34645ec262278aa20a85dc4fcafe5bf0cb64939974974f6a2c2c7f",
-      "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
+      "definition_sha256": "16216be15e2a0f7792985a5169f3429bce315f69d606d2a07a99a5269863e94e",
+      "preapply_definition_sha256": "a704f4ed3d34645ec262278aa20a85dc4fcafe5bf0cb64939974974f6a2c2c7f",
+      "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\"", "jit=off"],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/28082026_1427_banking_pay_modal_recovery_channel_scope.sql"]
     },
@@ -148,9 +150,10 @@
     {
       "schema": "public", "name": "pay_workbench_revalidate_zero_retained_recovery_headroom_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "805396585ab4d6f7cacec96a9c688d984f7733c8e443384399430b9514f84650",
+      "definition_sha256": "3877157212733157743a6fbd8acccb34ea33dbc8b27e0cd81fbb664dea04b0d4",
+      "preapply_definition_sha256": "805396585ab4d6f7cacec96a9c688d984f7733c8e443384399430b9514f84650",
       "owner": "postgres", "security_definer": true,
-      "proconfig": ["search_path=public", "plpgsql_check.mode=disabled", "plpgsql_check.profiler=off", "plpgsql_check.tracer=off", "plpgsql_check.constants_tracing=off", "plpgsql_check.cursors_leaks=off", "plpgsql_check.strict_cursors_leaks=off", "plpgsql_check.fatal_errors=off"],
+      "proconfig": ["search_path=public", "jit=off"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
@@ -351,8 +354,8 @@
     {
       "schema": "public", "name": "pay_timesheet_summary_pay_state_refresh_trigger",
       "identity_arguments": "",
-      "definition_sha256": "ffcee44c5e17076fbb2764dea5c7b23dd50236a81e402bf0d16d7d3629821ccb",
-      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
+      "definition_sha256": "eebad381e621378d5553d7ab34f6eae1ad143214df0fe0ac28dee718543c1953",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp", "plan_cache_mode=force_custom_plan"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}

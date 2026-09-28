@@ -10,6 +10,8 @@
 \set weekly_source_verification_correction_presentation 'FULL_REVERSAL_REPLACEMENT'
 \set weekly_source_verification_expense_vat_enabled false
 begin;
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.invoices'::regclass);
 \ir 15092026_1534_weekly_source_ordinary_pay_projection_v1.sql
 
 create function pg_temp.admit_all_manifests()
@@ -903,6 +905,8 @@ rollback;
 \set weekly_source_verification_correction_presentation 'NET_DIFFERENCE_PRESENTATION'
 \set weekly_source_verification_expense_vat_enabled true
 begin;
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.invoices'::regclass);
 -- The production FINAL_ISSUE renderer correctly refuses a self-bill without
 -- its legally required wording.  Establish that ordinary prerequisite before
 -- building the NET fixture so this proof exercises an actually issuable
@@ -1612,6 +1616,8 @@ begin
     from public.invoices candidate
     where candidate.client_id=source_header.client_id
       and candidate.id<>source_header.id
+      and candidate.id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+        where rel='public.invoices'::regclass)
       and candidate.status='DRAFT'
       and candidate.issued_at_utc is null
       and candidate.paid_at_utc is null
@@ -1621,10 +1627,15 @@ begin
     order by candidate.id limit 1
   ) destination on true
   where source_binding.state='CURRENT'
+    and source_binding.invoice_id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+      where rel='public.invoices'::regclass)
     and source_header.status='DRAFT'
     and source_header.issued_at_utc is null
     and source_header.paid_at_utc is null
     and presentation.companion_presentation_line_id is null
+    -- This proof requires two changed ledger amounts. Moving a zero-value
+    -- presentation is valid but produces no consolidation delta to freeze.
+    and (presentation.total_charge_ex_vat<>0 or presentation.vat_amount<>0)
     and not exists(select 1 from public.weekly_source_invoice_presentation_lines companion
                    where companion.companion_presentation_line_id=presentation.id)
   order by source_binding.invoice_id,presentation.id
@@ -1723,38 +1734,38 @@ begin
     'issue/unissue/reissue invented a duplicate invoice-discounting delta'
   );
 
-  -- Move one independently movable source presentation between two idle,
-  -- unissued invoices for the same Client through the real move owner.  The
-  -- next preview must contain both changed invoices with opposite signed
-  -- deltas, then cancel/rebuild/commit must converge to zero again.
-  select source_binding.invoice_id,destination.id,
+  -- Reuse the exact source/destination pair already proved above.  Searching
+  -- all installed invoices here made the verifier depend on unrelated seeded
+  -- or customer rows and, because fixture invoice UUIDs are random, could pick
+  -- a zero-value or otherwise unrelated presentation nondeterministically.
+  -- The next preview must contain both changed fixture invoices with opposite
+  -- signed deltas, then cancel/rebuild/commit must converge to zero again.
+  select source_binding.invoice_id,v_destination,
          presentation.id,presentation.presentation_hash
   into v_source,v_destination,v_presentation_id,v_presentation_hash
   from public.weekly_source_invoice_line_bindings source_binding
   join public.weekly_source_invoice_presentation_lines presentation
     on presentation.id=source_binding.presentation_line_id
   join public.invoices source_header on source_header.id=source_binding.invoice_id
-  join lateral (
-    select candidate.id
-    from public.invoices candidate
-    where candidate.client_id=source_header.client_id
-      and candidate.id<>source_header.id
-      and candidate.status='DRAFT'
-      and candidate.issued_at_utc is null
-      and candidate.paid_at_utc is null
-      and exists(select 1 from public.weekly_source_invoice_line_bindings destination_binding
-                 where destination_binding.invoice_id=candidate.id
-                   and destination_binding.state='CURRENT')
-    order by candidate.id limit 1
-  ) destination on true
-  where source_binding.state='CURRENT'
+  where source_binding.invoice_id=v_source
+    and source_binding.state='CURRENT'
     and source_header.status='DRAFT'
     and source_header.issued_at_utc is null
     and source_header.paid_at_utc is null
+    and exists(select 1 from public.invoices destination
+               where destination.id=v_destination
+                 and destination.client_id=source_header.client_id
+                 and destination.status='DRAFT'
+                 and destination.issued_at_utc is null
+                 and destination.paid_at_utc is null)
+    and exists(select 1 from public.weekly_source_invoice_line_bindings destination_binding
+               where destination_binding.invoice_id=v_destination
+                 and destination_binding.state='CURRENT')
     and presentation.companion_presentation_line_id is null
+    and (presentation.total_charge_ex_vat<>0 or presentation.vat_amount<>0)
     and not exists(select 1 from public.weekly_source_invoice_presentation_lines companion
                    where companion.companion_presentation_line_id=presentation.id)
-  order by source_binding.invoice_id,presentation.id
+  order by presentation.id
   limit 1;
   perform pg_temp.assert_true(v_source is not null and v_destination is not null,
     'invoice-discounting proof found no same-Client movable source presentation');

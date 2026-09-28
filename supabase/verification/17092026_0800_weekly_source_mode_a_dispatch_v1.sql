@@ -22,6 +22,20 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.weekly_discrepancy_events'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_discrepancy_incidents'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_exceptional_pay_target_families'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_message_delivery_failures'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_billing_movements'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_charge_checks'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_final_revisions'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_row_economic_snapshots'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_timesheet_authority_resolutions'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_timesheet_reference_apply_items'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_timesheet_source_comparisons'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 insert into public.settings_defaults(
@@ -347,17 +361,17 @@ begin
 
   -- ── 4. Boundaries ────────────────────────────────────────────────────────
   -- No source-authority artefact anywhere on the Mode A route.
-  if exists(select 1 from public.weekly_source_billing_movements)
-     or exists(select 1 from public.weekly_source_final_revisions)
-     or exists(select 1 from public.weekly_source_charge_checks)
-     or exists(select 1 from public.weekly_source_row_economic_snapshots)
-     or exists(select 1 from public.weekly_exceptional_pay_target_families) then
+  if (pg_temp.ws_verify_writes('public.weekly_source_billing_movements'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_source_final_revisions'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_source_charge_checks'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_source_row_economic_snapshots'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_exceptional_pay_target_families'::regclass)>0) then
     raise exception 'MODE_A_CROSSED_INTO_THE_SOURCE_AUTHORITY_ROUTE';
   end if;
   -- The Candidate is never queried, and no secure manager link is created.
-  if exists(select 1 from public.weekly_discrepancy_incidents)
-     or exists(select 1 from public.weekly_discrepancy_events)
-     or exists(select 1 from public.weekly_message_delivery_failures) then
+  if (pg_temp.ws_verify_writes('public.weekly_discrepancy_incidents'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_discrepancy_events'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_message_delivery_failures'::regclass)>0) then
     raise exception 'MODE_A_CREATED_A_CANDIDATE_OR_SECURE_QUERY';
   end if;
   -- Daily is untouched: every import this route created is HR_WEEKLY.
@@ -390,8 +404,8 @@ $mode_a_verification$;
 
 select pg_catalog.jsonb_build_object(
   'ok',true,'verification','weekly_source_mode_a_dispatch_v1',
-  'comparisons',(select count(*) from public.weekly_timesheet_source_comparisons),
-  'authority_resolutions',(select count(*) from public.weekly_timesheet_authority_resolutions),
+  'comparisons',pg_temp.ws_verify_count('public.weekly_timesheet_source_comparisons'::regclass),
+  'authority_resolutions',pg_temp.ws_verify_count('public.weekly_timesheet_authority_resolutions'::regclass),
   'reference_apply_operations',(
     select pg_catalog.jsonb_object_agg(state,count)
     from (
@@ -399,12 +413,12 @@ select pg_catalog.jsonb_build_object(
       from public.weekly_timesheet_reference_apply_operations group by state
     ) states
   ),
-  'reference_apply_items',(select count(*) from public.weekly_timesheet_reference_apply_items),
+  'reference_apply_items',pg_temp.ws_verify_count('public.weekly_timesheet_reference_apply_items'::regclass),
   'bridged_imports',(
     select count(*) from public.hr_imports
     where parser_version='WEEKLY_SOURCE_MODE_A_BRIDGE_V1'
   ),
-  'financial_writes',(select count(*) from public.weekly_source_billing_movements)
+  'financial_writes',pg_temp.ws_verify_count('public.weekly_source_billing_movements'::regclass)
 );
 
 rollback;

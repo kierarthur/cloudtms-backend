@@ -551,6 +551,30 @@ declare v_cycle uuid:=pg_catalog.gen_random_uuid(); v_scope uuid:=pg_catalog.gen
         v_upload uuid:=pg_catalog.gen_random_uuid(); v_pub uuid:=pg_catalog.gen_random_uuid();
         v_actor constant uuid:='f1000000-0000-4000-8000-000000000001';
 begin
+  -- Finalising an earlier fixture creates the next empty OPEN cycle.  Reuse of
+  -- this week by the permutation fixture is safe only for that exact empty
+  -- server-created successor; any populated or changed cycle is a real
+  -- contradiction and must fail rather than be hidden by the verifier.
+  if exists(
+    select 1 from public.weekly_source_cycles cycle
+    where cycle.source_group_id='57000000-0000-4000-8000-000000000005'
+      and cycle.finalisation_week_ending=p_week_ending
+      and cycle.id<>v_cycle
+      and (cycle.state<>'OPEN' or cycle.version<>0 or cycle.projection_state<>'NONE'
+        or cycle.current_complete_upload_id is not null
+        or exists(select 1 from public.weekly_source_uploads upload
+                  where upload.source_cycle_id=cycle.id))
+  ) then
+    raise exception 'ASSERTION_FAILED: the WP57 successor was not an empty server-created OPEN cycle';
+  end if;
+  delete from public.weekly_source_cycles cycle
+  where cycle.source_group_id='57000000-0000-4000-8000-000000000005'
+    and cycle.finalisation_week_ending=p_week_ending
+    and cycle.id<>v_cycle
+    and cycle.state='OPEN' and cycle.version=0 and cycle.projection_state='NONE'
+    and cycle.current_complete_upload_id is null
+    and not exists(select 1 from public.weekly_source_uploads upload
+                   where upload.source_cycle_id=cycle.id);
   insert into public.weekly_source_cycles(
     id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
   ) values (v_cycle,'57000000-0000-4000-8000-000000000005',p_week_ending,p_cutoff,'OPEN',1,

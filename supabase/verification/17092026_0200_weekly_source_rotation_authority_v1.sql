@@ -34,6 +34,10 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.weekly_source_root_authorisations'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -689,7 +693,7 @@ select pg_temp.assert_true(
 
 -- D8: the ensure owner writes no authorisation record of any kind.
 select pg_temp.assert_true(
-  (select count(*)=0 from public.weekly_source_root_authorisations),
+  pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass)=0,
   'D8/F3: the ensure owner must write no root authorisation'
 );
 
@@ -727,7 +731,11 @@ select public.weekly_source_timesheet_lineage_ensure_atomic_v1(
 select pg_temp.assert_true(
   (select count(distinct lineage.timesheet_id)=1
      and count(*)=2
-   from public.weekly_source_row_timesheet_lineages lineage),
+   from public.weekly_source_row_timesheet_lineages lineage
+   where lineage.row_resolution_id in(
+     select id from public.weekly_source_row_resolutions
+     where upload_row_id in('a3000000-0000-4000-8000-000000000021',
+                            'a3000000-0000-4000-8000-000000000022'))),
   'the two bound worked rows must share the one ordinary base Weekly Timesheet'
 );
 
@@ -748,7 +756,7 @@ declare
   v_seen text;
 begin
   begin
-    if (select count(*) from public.weekly_source_root_authorisations)<>0 then
+    if pg_temp.ws_verify_count('public.weekly_source_root_authorisations'::regclass)<>0 then
       raise exception 'ASSERTION_FAILED: G3 needs a root with no authorisation record';
     end if;
 
@@ -1073,6 +1081,9 @@ declare
 begin
   begin
     drop index public.weekly_source_root_authorisations_live_uq;
+    -- Banking Pay Stage 2 adds the family-level form of the same rule
+    -- (bpay_authorisation_live_family_v1); it must be unwound with it.
+    drop index if exists public.bpay_authorisation_live_family_v1;
     insert into public.weekly_source_root_authorisations(
       root_timesheet_id,family_booking_id,timesheet_version,authorisation_generation,
       authorised_row_signature,authorised_by_user_id

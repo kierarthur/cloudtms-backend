@@ -18,6 +18,15 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('private.weekly_source_entitlement_publication_receipts'::regclass);
+select pg_temp.ws_verify_watch('public.banking_pay_scope_change_transactions'::regclass);
+select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_entitlement_head_components'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_entitlement_heads'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_root_authorisations'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -1086,7 +1095,7 @@ begin
 
   -- Exactly one head, committed current, carrying its receipt digest and token.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=1,
+    pg_temp.ws_verify_count('public.weekly_source_entitlement_heads'::regclass)=1,
     'exactly one head row');
   perform pg_temp.assert_true(
     (select head_row.state='COMMITTED_CURRENT'
@@ -1099,7 +1108,8 @@ begin
         and head_row.root_timesheet_id='c0000000-0000-4000-8000-000000000006'
         and head_row.root_family_booking_id='WSPUB-0001'
         and head_row.decision_bundle_id='c0000000-0000-4000-8000-0000000000b1'
-       from public.weekly_source_entitlement_heads as head_row)
+       from public.weekly_source_entitlement_heads as head_row
+       where head_row.decision_bundle_id='c0000000-0000-4000-8000-0000000000b1')
     ,'the activated head carries its identity, its receipt digest and the one token');
   -- WP-01a review U2: every component of a post-decision head carries the
   -- bundle identity, so the H2-024 unique index actually binds.
@@ -1109,13 +1119,14 @@ begin
     'every component row carries (decision_bundle_id, bundle_revision)');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_entitlement_head_components
-      where component_sha256 is null)=0,
+      where component_sha256 is null
+        and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+          where rel='public.weekly_source_entitlement_head_components'::regclass))=0,
     'every component row carries its own content hash');
 
   -- Exactly one receipt, and it is the coordinator's own relation.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*)
-       from private.weekly_source_entitlement_publication_receipts)=1,
+    pg_temp.ws_verify_count('private.weekly_source_entitlement_publication_receipts'::regclass)=1,
     'exactly one receipt');
   perform pg_temp.assert_true(
     (select receipt_row.publication_mode='IMMEDIATE'
@@ -1125,7 +1136,8 @@ begin
         and receipt_row.scope_change_tx_token=v_token
         and receipt_row.census_json='{}'::jsonb
         and receipt_row.proof_json='{}'::jsonb
-       from private.weekly_source_entitlement_publication_receipts as receipt_row),
+       from private.weekly_source_entitlement_publication_receipts as receipt_row
+       where receipt_row.decision_bundle_id='c0000000-0000-4000-8000-0000000000b1'),
     'an IMMEDIATE receipt carries no Worker fields and empty census/proof objects');
 
   -- Decision D8 / proof/34 section 4: the head-publication coordinator updates
@@ -1162,7 +1174,7 @@ begin
   -- that token on the member root's scope-state row, and exactly one
   -- complete-scope WORKBENCH_CANDIDATE_DIRTY_APPLY job for the Candidate.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_scope_change_transactions)=1,
+    pg_temp.ws_verify_count('public.banking_pay_scope_change_transactions'::regclass)=1,
     'R25(1): exactly one scope-change transaction token');
   perform pg_temp.assert_true(
     (select scope_row.last_scope_change_tx_token=v_token
@@ -1315,9 +1327,8 @@ begin
 
   select coalesce(pg_catalog.array_agg(job_row.id),array[]::uuid[]) into v_jobs_before
     from public.banking_pay_workbench_jobs as job_row;
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
-  select pg_catalog.count(*) into v_receipts_before
-    from private.weekly_source_entitlement_publication_receipts;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
+  select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts_before;
 
   -- R9: an exact replay returns the SAME receipt, with no second invalidation
   -- and no second generation.
@@ -1327,14 +1338,15 @@ begin
     'R9: the replay must be reported as a replay');
   perform pg_temp.assert_true(
     (v_replay->'receipt'->>'id')::uuid
-    =(select receipt_row.id from private.weekly_source_entitlement_publication_receipts as receipt_row),
+    =(select receipt_row.id from private.weekly_source_entitlement_publication_receipts as receipt_row
+      where receipt_row.decision_bundle_id='c0000000-0000-4000-8000-0000000000b1'),
     'R9: the replay returns the already committed receipt');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from private.weekly_source_entitlement_publication_receipts)
+    pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)
     =v_receipts_before,
     'R9: no second receipt');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'R9: no second head');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.banking_pay_workbench_jobs
@@ -1358,9 +1370,9 @@ begin
     'R10: the refusal code is WEEKLY_SOURCE_PUBLICATION_REPLAY_CONFLICT, got '
       ||coalesce(v_replay->>'code','<null>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from private.weekly_source_entitlement_publication_receipts)
+    pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)
     =v_receipts_before
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
     and (select pg_catalog.count(*) from public.banking_pay_workbench_jobs
           where not (id=any(v_jobs_before)))=0,
     'R10: nothing changed');
@@ -1382,7 +1394,7 @@ declare
   v_result jsonb;
   v_heads_before bigint;
 begin
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
 
   -- R7: a head built from a superseded final revision must never become
   -- current (24 section 4.5 step 2, "revalidate the current source revision").
@@ -1405,7 +1417,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PUBLICATION_SOURCE_REVISION_STALE',
     'R7: a superseded source revision must refuse, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'R7: no write');
 
   -- R8: the compare-and-swap.  The caller believes there is no current head,
@@ -1422,7 +1434,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PUBLICATION_HEAD_CAS_CONFLICT',
     'R8: a stale expected current head must refuse, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'R8: no write');
 
   -- The declared before-position must equal the committed head's own
@@ -1572,9 +1584,8 @@ begin
     'a lock result that is not GRANTED must refuse');
 
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=1,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
+    and pg_temp.ws_verify_count('private.weekly_source_entitlement_publication_receipts'::regclass)=1,
     'none of the refusals above wrote anything');
 end
 $verify_publication_stale$;
@@ -1696,14 +1707,11 @@ begin
       ('R11 invalidation: the installed invalidator refuses','INVALIDATOR_REFUSES')
     ) as forced(label,kind)
   loop
-    select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
-    select pg_catalog.count(*) into v_components_before
-      from public.weekly_source_entitlement_head_components;
-    select pg_catalog.count(*) into v_receipts_before
-      from private.weekly_source_entitlement_publication_receipts;
-    select pg_catalog.count(*) into v_jobs_before from public.banking_pay_workbench_jobs;
-    select pg_catalog.count(*) into v_tokens_before
-      from public.banking_pay_scope_change_transactions;
+    select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
+    select pg_temp.ws_verify_writes('public.weekly_source_entitlement_head_components'::regclass) into v_components_before;
+    select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts_before;
+    select pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass) into v_jobs_before;
+    select pg_temp.ws_verify_writes('public.banking_pay_scope_change_transactions'::regclass) into v_tokens_before;
     select authorisation_row.current_entitlement_head_id into v_lineage_before
       from public.weekly_source_root_authorisations as authorisation_row
      where authorisation_row.root_timesheet_id='c0000000-0000-4000-8000-000000000016';
@@ -1752,22 +1760,19 @@ begin
     perform pg_temp.assert_true(v_failed,
       v_case.label||': the forced failure did not fail');
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+      pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
       v_case.label||': a head survived the rollback');
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*)
-         from public.weekly_source_entitlement_head_components)=v_components_before,
+      pg_temp.ws_verify_writes('public.weekly_source_entitlement_head_components'::regclass)=v_components_before,
       v_case.label||': a component survived the rollback');
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*)
-         from private.weekly_source_entitlement_publication_receipts)=v_receipts_before,
+      pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=v_receipts_before,
       v_case.label||': a receipt survived the rollback');
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*) from public.banking_pay_workbench_jobs)=v_jobs_before,
+      pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass)=v_jobs_before,
       v_case.label||': a dirty job survived the rollback');
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*)
-         from public.banking_pay_scope_change_transactions)=v_tokens_before,
+      pg_temp.ws_verify_writes('public.banking_pay_scope_change_transactions'::regclass)=v_tokens_before,
       v_case.label||': a scope-change token survived the rollback');
     perform pg_temp.assert_true(
       (select authorisation_row.current_entitlement_head_id
@@ -1963,7 +1968,7 @@ begin
       where bundle_row.decision_bundle_id='c0000000-0000-4000-8000-0000000000b6'),
     'U1: the accepted A-to-B decision carries the target root identity');
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
 
   -- U1: the TARGET root may not be swapped either.
   v_result:=private.weekly_source_entitlement_publish_core_v1(
@@ -2155,10 +2160,9 @@ begin
     'H2-024: a before-position that is not A-after union moved must refuse');
 
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'none of the H2-024 refusals wrote anything');
-  select pg_catalog.count(*) into v_receipts_before
-    from private.weekly_source_entitlement_publication_receipts;
+  select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts_before;
 
   -- ============ round-5 ruling, Part E: no PARTIAL move ===================
   -- "Not in scope for this release.  The supported operation is the
@@ -2185,9 +2189,8 @@ begin
     'Part E: a partial Contract-to-Contract move must be refused and explained, got '
       ||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=v_receipts_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
+    and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=v_receipts_before,
     'Part E: the partial-move refusal writes no head and no receipt');
   -- ================== end round-5 ruling, Part E ==========================
 
@@ -2231,7 +2234,9 @@ begin
     'the previous A head is superseded by the new one, not deleted');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_entitlement_heads
-      where state='COMMITTED_CURRENT')=2,
+      where state='COMMITTED_CURRENT'
+        and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+          where rel='public.weekly_source_entitlement_heads'::regclass))=2,
     'exactly one committed current head per member root');
 
   -- H2-036: one aligned invalidation for BOTH pairs, one job for the Candidate.
@@ -2277,7 +2282,9 @@ begin
     'A7: every persisted job carries a permitted registered reason');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_entitlement_heads
-      where state='COMMITTED_CURRENT')=2
+      where state='COMMITTED_CURRENT'
+        and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+          where rel='public.weekly_source_entitlement_heads'::regclass))=2
     and (select pg_catalog.count(*)
            from private.weekly_source_entitlement_publication_receipts
           where request_digest=(select request_digest
@@ -2286,7 +2293,7 @@ begin
                                  order by created_at_utc desc limit 1))=1,
     'A7: no duplicate publication and no duplicate financial effect');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_scope_change_transactions)=1,
+    pg_temp.ws_verify_count('public.banking_pay_scope_change_transactions'::regclass)=1,
     'H2-036: still exactly one scope-change token in the transaction');
 end
 $verify_publication_cross_contract$;
@@ -2301,7 +2308,7 @@ declare
   v_lock jsonb;
   v_heads_before bigint;
 begin
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
 
   -- WSPUB-0003 has no lineage generation at all: a head over it would never
   -- reach payroll, so publishing without authorising it is refused.
@@ -2398,7 +2405,7 @@ begin
       'whole_root_office_review',null));
   perform pg_temp.mk_bundle(v_request);
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_result:=private.weekly_source_entitlement_publish_core_v1(
     v_request,'IMMEDIATE',v_lock,null,null,null,'{}'::jsonb,'{}'::jsonb);
   perform pg_temp.assert_true(
@@ -2406,7 +2413,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PUBLICATION_TARGET_ALREADY_AUTHORISED',
     'an already authorised target must never be authorised again, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'the already-authorised refusal writes nothing');
   -- This bundle deliberately stops at the refusal and publishes nothing: the
   -- whole move above already left WSPUB-0001 certified zero and WSPUB-0002
@@ -2498,9 +2505,8 @@ begin
       'whole_root_office_review',null));
   perform pg_temp.mk_bundle(v_request);
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
-  select pg_catalog.count(*) into v_lineages_before
-    from public.weekly_source_root_authorisations;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
+  select pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass) into v_lineages_before;
 
   -- R11, fourth forced step: I-6 refuses AFTER the heads have been staged.
   v_failed:=false;
@@ -2517,9 +2523,8 @@ begin
     'R11: a refusal from interface I-6 must roll the publication back, got '
       ||coalesce(v_result::text,'<null>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
-    and (select pg_catalog.count(*)
-           from public.weekly_source_root_authorisations)=v_lineages_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
+    and pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass)=v_lineages_before,
     'R11: nothing survives a refusal from interface I-6');
 
   -- The legal new-B-root publication.
@@ -2553,7 +2558,7 @@ begin
                                           'c0000000-0000-4000-8000-000000000026'))=1,
     'H2-036: exactly one complete-scope job covers both roots of the A-to-B bundle');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_scope_change_transactions)=1,
+    pg_temp.ws_verify_count('public.banking_pay_scope_change_transactions'::regclass)=1,
     'H2-036: still exactly one scope-change token in the transaction');
 end
 $verify_publication_new_target_root$;
@@ -2615,7 +2620,9 @@ begin
   -- coordinator never touches a Workbench job.
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 
   -- No Banking Pay evidence exists for this family, so the installed census
   -- returns RELEASABLE and the entry point publishes through the core.
@@ -2645,7 +2652,7 @@ begin
   values ('c0000000-0000-4000-8000-00000000ba03','c0000000-0000-4000-8000-00000000ba02',
           'TIMESHEET_PAY','c0000000-0000-4000-8000-000000000006','PAYE',false,100.00);
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_request:=pg_temp.single_root_request(
       'c0000000-0000-4000-8000-0000000000bd',1,'c0000000-0000-4000-8000-0000000000cf',
       'c0000000-0000-4000-8000-0000000000dd','c0000000-0000-4000-8000-0000000000ce',
@@ -2663,7 +2670,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PUBLICATION_DEFERRED_PENDING_FREEZE',
     '24 section 4.4: a frozen root publishes nothing and saves the decision as pending');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'no head was written while the root was frozen');
   perform pg_temp.assert_true(
     (select head_row.state='COMMITTED_CURRENT'
@@ -2955,7 +2962,7 @@ begin
                                  'c0000000-0000-4000-8000-000000000036'),
     pg_catalog.jsonb_build_array('WSPUB-0001','WSPUB-0004'),
     pg_catalog.jsonb_build_array(1,1));
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_request:=pg_temp.ab_request('u2-silent','c0000000-0000-4000-8000-000000000036','WSPUB-0004',
     pg_catalog.jsonb_build_object(
       'timesheet_id','c0000000-0000-4000-8000-000000000036',
@@ -2975,7 +2982,7 @@ begin
     'U2: the refusal names the reason the root is not blank, got '
       ||coalesce((v_result->'detail'->'blank_check')::text,'<null>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
     and (select pg_catalog.count(*) from public.weekly_source_root_authorisations
           where root_timesheet_id='c0000000-0000-4000-8000-000000000036')=0,
     'U2: nothing was written and B was not authorised');
@@ -3052,7 +3059,7 @@ begin
 
   -- And the honest case: the accepted decision carries the review, the request
   -- quotes exactly it, and B is authorised — with the act left on the record.
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_request:=pg_temp.ab_request('u2-realreview','c0000000-0000-4000-8000-000000000036','WSPUB-0004',
     pg_catalog.jsonb_build_object(
       'timesheet_id','c0000000-0000-4000-8000-000000000036',
@@ -3120,7 +3127,7 @@ begin
                                    'c0000000-0000-4000-8000-000000000046'),
       pg_catalog.jsonb_build_array('WSPUB-0001','WSPUB-0005'),
       pg_catalog.jsonb_build_array(1,1));
-    select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+    select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
     v_request:=pg_temp.ab_request('f14-silent','c0000000-0000-4000-8000-000000000046','WSPUB-0005',
       pg_catalog.jsonb_build_object(
         'timesheet_id','c0000000-0000-4000-8000-000000000046',
@@ -3137,7 +3144,7 @@ begin
       null;
     end;
     perform pg_temp.assert_true(
-      (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+      pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
       'F14: the pointer guard rolled the whole publication back');
   end if;
 
@@ -3226,7 +3233,7 @@ begin
         and job_row.scope_change_generation is not null)=0,
     'ruling 6(3): no job for the Candidate is visible with a generation before commit');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_scope_change_transactions)=1,
+    pg_temp.ws_verify_count('public.banking_pay_scope_change_transactions'::regclass)=1,
     'ruling 6(1): one scope-change transaction token for the whole release transaction');
 
   -- Possibility TWO - NO registered DIRTY_TRIGGER path arises for the
@@ -3235,7 +3242,9 @@ begin
   -- 12b), then publish and look at what the publication alone added.
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   select coalesce(pg_catalog.array_agg(job_row.id),array[]::uuid[]) into v_jobs_before
     from public.banking_pay_workbench_jobs as job_row;
   v_request:=pg_temp.successor_request('r6-nodirty');
@@ -3277,13 +3286,13 @@ begin
     'ruling 6(1): every job the publication persisted is under the same '
       ||'controlling token');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_scope_change_transactions)=1,
+    pg_temp.ws_verify_count('public.banking_pay_scope_change_transactions'::regclass)=1,
     'ruling 6(1): still one token for the transaction');
 
   -- ============================ U5 ======================================
   -- DEFERRED mode does not trust the census it is handed, and requires the
   -- pending bundle to exist.
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_request:=pg_temp.single_root_request(
     'c0000000-0000-4000-8000-00000000d501',1,'c0000000-0000-4000-8000-00000000d502',
     'c0000000-0000-4000-8000-00000000d503','c0000000-0000-4000-8000-0000000000cf',
@@ -3311,7 +3320,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PUBLICATION_PENDING_BUNDLE_INVALID',
     'U5: a DEFERRED release needs a real pending bundle row, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'U5: neither DEFERRED refusal wrote anything');
 end
 $verify_publication_review_attacks$;
@@ -3440,7 +3449,7 @@ begin
     'D10 save: the stored request digests to the stored digest');
 
   -- ---- D10, point two: RELEASE time ----------------------------------
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   select pending_row.request_json into v_request
     from public.weekly_source_pending_entitlement_bundles as pending_row
    where pending_row.id=v_pending_id;
@@ -3504,7 +3513,7 @@ begin
       ||'integrity failure routed to MANUAL_REVIEW, with the digest the coordinator '
       ||'recomputed from the stored request, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'D10: the refused release wrote nothing');
   -- A1 control 1: nobody but the owner may write either column.  Proved from the
   -- catalogue rather than asserted: no table privilege of any kind is held by a
@@ -3686,7 +3695,7 @@ begin
   -- by the FAMILY key, so the coordinator sees that the family's head sits on a
   -- different physical root and refuses.  It never reaches I-7, and it never
   -- takes a TSFIN before-position for a root that has a head.
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   v_lock:=pg_temp.lock_result(
     pg_catalog.jsonb_build_array('c0000000-0000-4000-8000-000000000066'),
     pg_catalog.jsonb_build_array('WSPUB-0006'),
@@ -3721,7 +3730,7 @@ begin
     'F2: a rotated family with a head must never record an unproved or I-7 before-position, got '
       ||coalesce((v_result->'before_position_source')::text,'<none>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'F2: the refused rotated publication wrote nothing');
 
   -- ---- the mirror: the physical root has a head, the declared family has not -
@@ -3735,8 +3744,24 @@ begin
   -- the head-resolution loop, long before the authorisation and pointer checks,
   -- which is the point — the disagreement is caught at the earliest moment it
   -- can be seen.
+  -- Banking Pay Stage 2 pins an authorisation to its Timesheet's work revision
+  -- (foreign key bpay_authorisation_work_reference_v1), so an ordinary booking
+  -- change under a live authorisation is refused.  Prove that, then fabricate
+  -- the contradictory state the mirror guard exists for as a tamper, exactly as
+  -- this file tampers elsewhere (session_replication_role, rolled back).
+  if pg_catalog.to_regclass('public.bpay_authorisation_live_family_v1') is not null then
+    begin
+      update public.timesheets set booking_id='WSPUB-0007',is_current=true
+       where timesheet_id='c0000000-0000-4000-8000-000000000056';
+      raise exception 'ASSERTION_FAILED: Stage 2 must refuse a booking change under a live authorisation';
+    exception when foreign_key_violation then
+      null;
+    end;
+  end if;
+  set local session_replication_role='replica';
   update public.timesheets set booking_id='WSPUB-0007',is_current=true
    where timesheet_id='c0000000-0000-4000-8000-000000000056';
+  set local session_replication_role='origin';
   v_lock:=pg_temp.lock_result(
     pg_catalog.jsonb_build_array('c0000000-0000-4000-8000-000000000056'),
     pg_catalog.jsonb_build_array('WSPUB-0007'),
@@ -3760,7 +3785,7 @@ begin
     'F2 mirror: a physical root that carries a committed head must never take an I-7 or '
       ||'unproved before-position, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'F2 mirror: the refused publication wrote nothing');
 end
 $verify_publication_rotated_family$;
@@ -3887,9 +3912,8 @@ begin
   perform pg_temp.assert_true((v_result->>'ok')::boolean,
     'WP-07 F2 setup: A must regain a component to move, got '||v_result::text);
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
-  select pg_catalog.count(*) into v_authorisations_before
-    from public.weekly_source_root_authorisations;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
+  select pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass) into v_authorisations_before;
 
   -- The lock result carries BOTH physical members of the family, which is the
   -- member list WP-07b widens interface I-6 to read.  The coordinator reads it
@@ -3933,9 +3957,9 @@ begin
     'WP-07 F2: the refusal is the family-wide count, not the physical one, got '
       ||coalesce((v_result->'detail')::text,'<null>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_root_authorisations)
+    pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass)
       =v_authorisations_before
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'WP-07 F2: no second live generation and no head were written');
   -- And the state the finding is really about never arises.
   perform pg_temp.assert_true(
@@ -3961,7 +3985,7 @@ declare
 begin
   -- (a) A null Candidate is refused by the canonicaliser, BEFORE the serial
   --     gate, the locks, the census and interface I-5 are touched at all.
-  select pg_catalog.count(*) into v_jobs_before from public.banking_pay_workbench_jobs;
+  select pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass) into v_jobs_before;
   v_request:=pg_catalog.jsonb_set(
     pg_temp.single_root_request(
       'c0000000-0000-4000-8000-0000000000e1',1,'c0000000-0000-4000-8000-0000000000e3',
@@ -3975,7 +3999,7 @@ begin
     and v_result->'detail'->>'reason'='NULL_NOT_ALLOWED',
     'a null Candidate must be refused by the canonicaliser, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_workbench_jobs)=v_jobs_before,
+    pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass)=v_jobs_before,
     'a null Candidate must never reach the serial gate or queue a job');
 
   -- (b) A Candidate that does not own the Contract the request chose is refused

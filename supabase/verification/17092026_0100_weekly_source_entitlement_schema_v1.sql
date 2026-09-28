@@ -38,6 +38,11 @@
 \if :{?weekly_source_verification_outer_transaction}
 \else
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.weekly_source_entitlement_heads'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_timesheet_source_comparisons'::regclass);
+
 \endif
 set local request.jwt.claim.role='service_role';
 
@@ -1245,12 +1250,16 @@ begin
   -- may move.
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_entitlement_heads set component_count=99
-     where state='COMMITTED_CURRENT';
+     where state='COMMITTED_CURRENT'
+       and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+         where rel='public.weekly_source_entitlement_heads'::regclass);
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting a head component count');
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_entitlement_heads
        set entitlement_digest=pg_catalog.decode(pg_catalog.repeat('99',32),'hex')
-     where state='COMMITTED_CURRENT';
+     where state='COMMITTED_CURRENT'
+       and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+         where rel='public.weekly_source_entitlement_heads'::regclass);
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting a head entitlement digest');
   perform pg_temp.expect_failure($sql$
     delete from public.weekly_source_entitlement_heads;
@@ -1264,7 +1273,9 @@ begin
 
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_entitlement_heads
-      where state='COMMITTED_CURRENT')=1,
+      where state='COMMITTED_CURRENT'
+        and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+          where rel='public.weekly_source_entitlement_heads'::regclass))=1,
     'exactly one committed current head must exist for the root');
 end
 $verify_entitlement_heads$;
@@ -2158,28 +2169,35 @@ begin
 
   -- Every other column is immutable (proof/34 section 4; ROT-011).
   perform pg_temp.expect_failure($sql$
-    update public.weekly_source_root_authorisations set timesheet_version=2;
+    update public.weekly_source_root_authorisations set timesheet_version=2
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting the authorised version');
   perform pg_temp.expect_failure($sql$
-    update public.weekly_source_root_authorisations set family_booking_id='WSENT-9999';
+    update public.weekly_source_root_authorisations set family_booking_id='WSENT-9999'
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting the family booking id');
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_root_authorisations
-       set root_timesheet_id='b0000000-0000-4000-8000-000000000007';
+       set root_timesheet_id='b0000000-0000-4000-8000-000000000007'
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting the physical root id');
   perform pg_temp.expect_failure($sql$
-    update public.weekly_source_root_authorisations set authorised_row_signature='tampered';
+    update public.weekly_source_root_authorisations set authorised_row_signature='tampered'
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting the authorised row signature');
   perform pg_temp.expect_failure($sql$
-    update public.weekly_source_root_authorisations set authorisation_generation=7;
+    update public.weekly_source_root_authorisations set authorisation_generation=7
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','renumbering a generation');
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_root_authorisations
        set authorised_by_user_id='b0000000-0000-4000-8000-000000000001',
-           authorised_at_utc=pg_catalog.clock_timestamp();
+           authorised_at_utc=pg_catalog.clock_timestamp()
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_FACT','rewriting the authorisation actor and time');
   perform pg_temp.expect_failure($sql$
-    delete from public.weekly_source_root_authorisations;
+    delete from public.weekly_source_root_authorisations
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_IMMUTABLE_RECORD','deleting a root authorisation generation');
 
   -- A second LIVE generation for one root is impossible.
@@ -2199,7 +2217,8 @@ begin
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_root_authorisations
        set withdrawn_at_utc=pg_catalog.clock_timestamp(),
-           withdrawn_by_user_id='b0000000-0000-4000-8000-000000000001';
+           withdrawn_by_user_id='b0000000-0000-4000-8000-000000000001'
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'23514','','a withdrawn generation that still points at a head');
 
   update public.weekly_source_root_authorisations
@@ -2212,18 +2231,21 @@ begin
   -- A withdrawal is permanent (proof/36 section 6; WP-03 review F12).
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_root_authorisations
-       set withdrawn_at_utc=null,withdrawn_by_user_id=null;
+       set withdrawn_at_utc=null,withdrawn_by_user_id=null
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_ROOT_AUTHORISATION_WITHDRAWAL_IMMUTABLE',
   'clearing a withdrawal to bring a generation back to life');
   perform pg_temp.expect_failure($sql$
     update public.weekly_source_root_authorisations
        set withdrawn_by_user_id='b0000000-0000-4000-8000-000000000001',
-           withdrawn_at_utc=pg_catalog.clock_timestamp();
+           withdrawn_at_utc=pg_catalog.clock_timestamp()
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,'55000','WEEKLY_SOURCE_ROOT_AUTHORISATION_WITHDRAWAL_IMMUTABLE',
   'rewriting an existing withdrawal');
   perform pg_temp.expect_failure(pg_catalog.format($sql$
     update public.weekly_source_root_authorisations
-       set current_entitlement_head_id=%L;
+       set current_entitlement_head_id=%L
+     where root_timesheet_id='b0000000-0000-4000-8000-000000000006';
   $sql$,v_head),'55000','WEEKLY_SOURCE_ROOT_AUTHORISATION_WITHDRAWN',
   'giving a withdrawn generation an entitlement head again');
 
@@ -2242,11 +2264,13 @@ begin
     'generation 1 must remain as history after re-authorisation');
   perform pg_temp.assert_true(
     (select pg_catalog.count(distinct (root_timesheet_id,timesheet_version,family_booking_id))
-       from public.weekly_source_root_authorisations)=1,
+       from public.weekly_source_root_authorisations
+      where root_timesheet_id='b0000000-0000-4000-8000-000000000006')=1,
     'family, physical id and version must be identical across the two generations');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_root_authorisations
-      where withdrawn_at_utc is null)=1,
+      where withdrawn_at_utc is null
+        and root_timesheet_id='b0000000-0000-4000-8000-000000000006')=1,
     'exactly one live generation must remain after re-authorisation');
 end
 $verify_entitlement_lineage$;
@@ -2416,7 +2440,7 @@ begin
   );
 
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_timesheet_source_comparisons)=4,
+    pg_temp.ws_verify_count('public.weekly_timesheet_source_comparisons'::regclass)=4,
     'all four representable comparison shapes must store');
 
   -- A paired class still requires both sides.
@@ -2482,8 +2506,10 @@ select pg_catalog.jsonb_build_object(
   'verification','weekly_source_entitlement_schema_v1',
   'committed_current_heads',(
     select pg_catalog.count(*) from public.weekly_source_entitlement_heads
-     where state='COMMITTED_CURRENT'),
-  'heads',(select pg_catalog.count(*) from public.weekly_source_entitlement_heads),
+     where state='COMMITTED_CURRENT'
+       and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+         where rel='public.weekly_source_entitlement_heads'::regclass)),
+  'heads',pg_temp.ws_verify_count('public.weekly_source_entitlement_heads'::regclass),
   'head_components',(
     select pg_catalog.count(*) from public.weekly_source_entitlement_head_components),
   'decision_bundles',(

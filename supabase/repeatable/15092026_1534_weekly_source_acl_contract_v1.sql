@@ -377,6 +377,10 @@ as $function$
     ('private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)'),
     ('private.weekly_source_invoice_batch_snapshot_v1()'),
     ('private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)'),
+    -- Narrow mail-outbox claim validator.  The generic service claimant calls
+    -- it without direct table authority, so its deliberate service_role grant
+    -- belongs in this exact allowlist.
+    ('private._weekly_source_completed_pack_copy_claim_event_valid_v1(public.mail_outbox)'),
     -- Plan 6.2 final seals pass (WP-15d): sixteen routines that carry an
     -- installed service_role EXECUTE grant were absent from this allowlist,
     -- which is the whole of 'ACL/owner/search-path verification failed for

@@ -627,7 +627,8 @@ begin
     'cf600000-0000-4000-8000-000000000099',
     '2027-04-04','35555555-5555-4555-8555-555555555555',
     'UNUSED-EMPTY','NOT_APPLICABLE','2027-03-01 09:00','2027-03-01 17:00',
-    30,450,7500,15000,0,false,'2027-03-01','2027-03-01','2027-03-22'
+    30,450,7500,15000,0,false,'2027-03-01','2027-03-01','2027-03-22',
+    'cf000000-0000-4000-8000-000000000001'
   );
   update public.weekly_source_uploads
   set physical_row_count=3,accepted_count=3,row_manifest_hash=v_manifest_hash,
@@ -958,6 +959,31 @@ insert into public.weekly_source_contract_policies(
   'a0000000-0000-4000-8000-000000000001'
 );
 
+-- The inherited verification deliberately keeps several unfinished cycles in
+-- the ordinary roster group.  The correction journey is independent of those
+-- fixtures, so give it its own exact Source group rather than making the
+-- ensure-open-cycle owner choose among unrelated test history.
+insert into public.weekly_source_groups(
+  id,environment,agency_id,code,display_name,source_family,
+  cutoff_weekday,cutoff_local_time
+) values (
+  'cf000000-0000-4000-8000-000000000001','TEST',
+  'a0000000-0000-4000-8000-000000000006','CORRECT_FINAL_ISOLATED',
+  'Correct Final Isolated','ROSTER',3,'15:00'
+);
+-- One Client cannot belong to two Source groups for overlapping dates.  The
+-- inherited finalisation checks are complete at this point, so move their exact
+-- test-only binding and policy to the isolated correction group.  Everything
+-- remains inside this verifier's rollback transaction.
+update public.weekly_source_group_clients
+set source_group_id='cf000000-0000-4000-8000-000000000001'
+where id='a0000000-0000-4000-8000-000000000007'
+  and source_group_id='a0000000-0000-4000-8000-000000000005';
+update public.weekly_source_client_policies
+set source_group_id='cf000000-0000-4000-8000-000000000001'
+where id='a0000000-0000-4000-8000-000000000012'
+  and source_group_id='a0000000-0000-4000-8000-000000000005';
+
 select pg_temp.roster_cycle(
   'cf100000-0000-4000-8000-000000000001',
   'cf100000-0000-4000-8000-000000000002',
@@ -966,7 +992,8 @@ select pg_temp.roster_cycle(
   '2027-01-10','35555555-5555-4555-8555-555555555555',
   'CORRECT-FINAL-ROW','NOT_APPLICABLE','2026-12-31 09:00',
   '2026-12-31 17:00',30,450,7500,15000,1234,true,
-  '2026-12-31','2026-12-31','2026-12-31'
+  '2026-12-31','2026-12-31','2026-12-31',
+  'cf000000-0000-4000-8000-000000000001'
 );
 select pg_temp.finalise_cycle(
   'cf100000-0000-4000-8000-000000000001',
@@ -1254,7 +1281,8 @@ begin
       '2027-01-17','35555555-5555-4555-8555-555555555555',
       'CORRECT-FINAL-LATER-ROW','NOT_APPLICABLE','2026-12-30 09:00',
       '2026-12-30 17:00',30,450,7500,15000,0,true,
-      '2026-12-30','2026-12-30','2026-12-30'
+      '2026-12-30','2026-12-30','2026-12-30',
+      'cf000000-0000-4000-8000-000000000001'
     );
     perform pg_temp.finalise_cycle(
       'cf300000-0000-4000-8000-000000000010',

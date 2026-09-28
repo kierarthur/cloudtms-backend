@@ -10,6 +10,7 @@ import {
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 import { requireWeeklySourceHandover2Approval } from './weekly-source-external-approval.mjs';
+import { readerReleasePhases, prepareSourceReaders, readerActivationSql } from './weekly-source-reader-release.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const options = Object.fromEntries(rest.map(arg => {
@@ -392,7 +393,12 @@ function applyRelease() {
       item => baselineRepeatables.get(item.path) !== item.sha256
     );
     runBankingPayCatalogPreapply(pendingRepeatables.map(item => item.path));
-    for (const item of pendingRepeatables) psql({ file: item.path });
+    const phases = readerReleasePhases(pendingRepeatables, current.repeatables);
+    for (const item of phases.ordinary) psql({ file: item.path });
+    if (phases.readers.length) {
+      prepareSourceReaders(sql => psql({ sql }));
+      psql({ sql: readerActivationSql(phases.readers, file => fs.readFileSync(path.join(repoRoot, file), 'utf8')) });
+    }
     recordInventory(releaseId);
   } else if (mode === 'ADOPT') {
     const pre = compareExpected(release.contractPath);
@@ -415,9 +421,16 @@ function applyRelease() {
       psql({ sql: `insert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)});` });
     }
     runBankingPayCatalogPreapply(pendingRepeatables.map(item => item.path));
-    for (const item of pendingRepeatables) {
+    const phases = readerReleasePhases(pendingRepeatables, current.repeatables);
+    for (const item of phases.ordinary) {
       psql({ file: item.path });
       psql({ sql: `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();` });
+    }
+    if (phases.readers.length) {
+      prepareSourceReaders(sql => psql({ sql }));
+      psql({ sql: readerActivationSql(phases.readers,
+        file => fs.readFileSync(path.join(repoRoot, file), 'utf8'),
+        item => `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();`) });
     }
   }
   reloadPostgrestSchemaCache();
@@ -503,6 +516,9 @@ try {
     if (mode === 'NEW') {
       const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));
       if (count !== 0) throw new Error(`NEW requires an empty application schema; found ${count} objects`);
+    }
+    if (mode === 'NEW' || mode === 'UPGRADE') {
+      console.log('SOURCE READER ORDER: when either exact reader changes, install other pending authority first; resume bounded private inventory preparation; activate both reader definitions atomically only after completion. Existing reader definitions remain until activation. A 1000-call invocation quantum is resumable, not a population limit.');
     }
     console.log(`READ-ONLY PLAN PASSED: ${mode} -> ${environment}. No database changes were made.`);
   } else if (command === 'apply') applyRelease();

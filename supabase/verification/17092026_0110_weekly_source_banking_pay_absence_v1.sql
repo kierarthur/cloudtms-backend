@@ -43,6 +43,11 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
+select pg_temp.ws_verify_watch('private.weekly_source_banking_pay_absence'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -78,7 +83,9 @@ create function pg_temp.drain_workbench_jobs() returns void
 language sql as $function$
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 $function$;
 
 create function pg_temp.comparable(p_value jsonb) returns jsonb
@@ -641,7 +648,7 @@ begin
     and v_state->>'reason_code'='SETTING_ABSENT',
     'clearing must return the setting to absent, got '||v_state::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from private.weekly_source_banking_pay_absence)=0,
+    pg_temp.ws_verify_count('private.weekly_source_banking_pay_absence'::regclass)=0,
     'clearing must leave the relation empty');
   perform pg_temp.assert_true(
     private.weekly_source_banking_pay_boundary_notice_v1() is null,

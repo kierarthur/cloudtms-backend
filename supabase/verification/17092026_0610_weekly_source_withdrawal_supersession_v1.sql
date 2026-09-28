@@ -1125,24 +1125,28 @@ begin
        and p.proname='pay_workbench_unit_economic_occurrence_page_v1'),
     'A3: the selector must still consume only current committed heads');
   -- The three CALL-ONLY owners are pinned by hash, because nothing else in this
-  -- programme is editing them: all three repeatables are unchanged since
-  -- 15 September, and the values below were measured on the full local
-  -- PostgreSQL 17.11 NEW build taken BEFORE this package changed anything
-  -- (database banking_modal_v2_release0073_20260918, clone ws62_wp07c_a).
+  -- reader-repair programme is editing them. Authorise and invalidate retain
+  -- the 18 September NEW-build pins. Unauthorise retains the later PHD-022
+  -- source-owner correction as explained at its pin below.
   perform pg_temp.assert_true(
     (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
       join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      where n.nspname='public' and p.proname='timesheet_unauthorise_atomic')
-    ='8ee9b89389b6d6f7391740f9e696bb75'
+    -- PHD-022 was already integrated by 7020c683: canonical family locking,
+    -- historical-sibling invoice census and service-only entry. This verifier
+    -- must pin that retained owner, not the pre-PHD-022 body. The reader repair
+    -- does not alter the owner. Both old/new hashes were derived from Git source
+    -- and the new hash independently matched the clean NEW native definition.
+    ='e12dcdb94291d1e840bf8961e50be2cd'
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='timesheet_authorise_generic_atomic')
-    ='8c65681ae56129463f46e76f88578aed'
+    ='cd5f05df8e4be03dec4b3f1bc56adaa6'
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='private' and p.proname='pay_workbench_scope_invalidate_v1')
     ='0d26de465bc221f6a41043fb27c8d797',
-    'the three CALL-ONLY owners must be byte-identical to that same build');
+    'the three CALL-ONLY owners must match their retained source-owner pins');
   -- Exactly one definition of each, so the pins above cannot be satisfied by a
   -- second overload nobody noticed.
   perform pg_temp.assert_true(

@@ -3436,6 +3436,34 @@ from (values
   ('fd000000-0000-4000-8000-0000000000f5'::uuid,'fa000000-0000-4000-8000-0000000000f5','2027-01-25')
 ) as row_data(comparison_id,timesheet_id,work_date);
 
+-- Banking Pay Stage 2 (migration 26092026_0200, unique partial index
+-- bpay_authorisation_live_family_v1) makes a second live authorisation on one
+-- family impossible, which is the rule the first-authorisation owners already
+-- enforce in code.  Prove the database refuses it, then drop that index inside
+-- this rolled-back file so case (a) can still fabricate the contradictory state
+-- and prove the reader fails closed.
+do $g9_stage2_live_family$
+begin
+  if pg_catalog.to_regclass('public.bpay_authorisation_live_family_v1') is null then
+    return;
+  end if;
+  begin
+    insert into public.weekly_source_root_authorisations(
+      id,root_timesheet_id,family_booking_id,timesheet_version,authorisation_generation,
+      authorised_row_signature,authorised_by_user_id
+    ) values
+      ('e5000000-0000-4000-8000-0000000000f1','fa000000-0000-4000-8000-0000000000f1','G9-FC1',1,1,
+       'g9-fc1-a','d1000000-0000-4000-8000-000000000001'),
+      ('e5000000-0000-4000-8000-0000000000f2','fa000000-0000-4000-8000-0000000000f2','G9-FC1',2,1,
+       'g9-fc1-b','d1000000-0000-4000-8000-000000000001');
+    raise exception 'ASSERTION_FAILED: Stage 2 must refuse a second live authorisation on one family';
+  exception when unique_violation then
+    null;
+  end;
+end
+$g9_stage2_live_family$;
+drop index if exists public.bpay_authorisation_live_family_v1;
+
 insert into public.weekly_source_root_authorisations(
   id,root_timesheet_id,family_booking_id,timesheet_version,authorisation_generation,
   authorised_row_signature,authorised_by_user_id

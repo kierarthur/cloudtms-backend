@@ -103,6 +103,16 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.audit_events'::regclass);
+select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
+select pg_temp.ws_verify_watch('public.pay_advance_reservations'::regclass);
+select pg_temp.ws_verify_watch('public.pay_bank_transfers'::regclass);
+select pg_temp.ws_verify_watch('public.pay_batch_items'::regclass);
+select pg_temp.ws_verify_watch('public.ts_pay_adjustments'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_root_authorisations'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -145,7 +155,9 @@ create function pg_temp.drain_workbench_jobs() returns void
 language sql as $function$
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 $function$;
 
 create function pg_temp.current_signature(p_timesheet_id uuid) returns text
@@ -426,7 +438,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_TIMESHEET_ROTATED_BEFORE_AUTHORISATION',
     'ROT-001: an old physical id must be refused as stale, got '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_root_authorisations)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass)=0,
     'ROT-001: the stale path must write no authorisation row');
   perform pg_temp.assert_true(
     (select timesheet_row.authorised_at_server is null from public.timesheets timesheet_row
@@ -557,10 +569,10 @@ declare
   v_tokens integer;
   v_jobs integer;
 begin
-  select pg_catalog.count(*) into v_items_before from public.pay_batch_items;
-  select pg_catalog.count(*) into v_reservations_before from public.pay_advance_reservations;
-  select pg_catalog.count(*) into v_transfers_before from public.pay_bank_transfers;
-  select pg_catalog.count(*) into v_adjustments_before from public.ts_pay_adjustments;
+  select pg_temp.ws_verify_writes('public.pay_batch_items'::regclass) into v_items_before;
+  select pg_temp.ws_verify_writes('public.pay_advance_reservations'::regclass) into v_reservations_before;
+  select pg_temp.ws_verify_writes('public.pay_bank_transfers'::regclass) into v_transfers_before;
+  select pg_temp.ws_verify_writes('public.ts_pay_adjustments'::regclass) into v_adjustments_before;
 
   select * into v_generation1 from public.weekly_source_root_authorisations
    where root_timesheet_id='b7000000-0000-4000-8000-000000000301';
@@ -603,10 +615,10 @@ begin
 
   -- proof/36 section 5 step 2: no financial row of any kind is created.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.pay_batch_items)=v_items_before
-    and (select pg_catalog.count(*) from public.pay_advance_reservations)=v_reservations_before
-    and (select pg_catalog.count(*) from public.pay_bank_transfers)=v_transfers_before
-    and (select pg_catalog.count(*) from public.ts_pay_adjustments)=v_adjustments_before,
+    pg_temp.ws_verify_writes('public.pay_batch_items'::regclass)=v_items_before
+    and pg_temp.ws_verify_writes('public.pay_advance_reservations'::regclass)=v_reservations_before
+    and pg_temp.ws_verify_writes('public.pay_bank_transfers'::regclass)=v_transfers_before
+    and pg_temp.ws_verify_writes('public.ts_pay_adjustments'::regclass)=v_adjustments_before,
     'UNA-001: the withdrawal must create no Banking Pay or adjustment row');
 
   -- proof/36 section 5 step 6: the live generation is marked withdrawn and the
@@ -1778,7 +1790,9 @@ begin
    where action='WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAWN'
      and object_id_text='b7000000-0000-4000-8000-000000000306';
   select pg_catalog.count(*) into v_jobs_before
-    from public.banking_pay_workbench_jobs where status in ('QUEUED','RUNNING');
+    from public.banking_pay_workbench_jobs where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 
   -- The availability verdict says YES before the write path is called at all.
   v_avail:=public.weekly_source_first_authorisation_withdraw_available_v1(
@@ -2085,10 +2099,9 @@ begin
     'UNA-018: the first withdrawal must succeed, got '||v_first::text);
   perform pg_temp.drain_workbench_jobs();
 
-  select pg_catalog.count(*) into v_audit_before from public.audit_events;
-  select pg_catalog.count(*) into v_jobs_before from public.banking_pay_workbench_jobs;
-  select pg_catalog.count(*) into v_authorisations_before
-    from public.weekly_source_root_authorisations;
+  select pg_temp.ws_verify_writes('public.audit_events'::regclass) into v_audit_before;
+  select pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass) into v_jobs_before;
+  select pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass) into v_authorisations_before;
 
   -- The exact replay returns the recorded result and calls nothing.
   v_replay:=public.weekly_source_first_authorisation_withdraw_v1(
@@ -2102,9 +2115,9 @@ begin
     and (v_replay->>'withdrawn_at_utc')=(v_first->>'withdrawn_at_utc'),
     'UNA-018: the exact replay must return the recorded result, got '||v_replay::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.audit_events)=v_audit_before
-    and (select pg_catalog.count(*) from public.banking_pay_workbench_jobs)=v_jobs_before
-    and (select pg_catalog.count(*) from public.weekly_source_root_authorisations)
+    pg_temp.ws_verify_writes('public.audit_events'::regclass)=v_audit_before
+    and pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass)=v_jobs_before
+    and pg_temp.ws_verify_writes('public.weekly_source_root_authorisations'::regclass)
         =v_authorisations_before,
     'UNA-018: the replay must write nothing at all');
 
@@ -2196,7 +2209,7 @@ begin
   select contract_week.status::text into v_week_status
   from public.contract_weeks contract_week
   where contract_week.timesheet_id='b7000000-0000-4000-8000-000000000312';
-  select pg_catalog.count(*) into v_jobs_before from public.banking_pay_workbench_jobs;
+  select pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass) into v_jobs_before;
   select pg_catalog.count(*) into v_audit_before from public.audit_events
    where object_id_text='b7000000-0000-4000-8000-000000000312';
 
@@ -2249,7 +2262,7 @@ begin
         and authorisation_row.authorisation_generation=1),
     'UNA-017: the withdrawal marks must be rolled back');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.banking_pay_workbench_jobs)=v_jobs_before,
+    pg_temp.ws_verify_writes('public.banking_pay_workbench_jobs'::regclass)=v_jobs_before,
     'UNA-017: no dirty job may survive the rollback');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.audit_events

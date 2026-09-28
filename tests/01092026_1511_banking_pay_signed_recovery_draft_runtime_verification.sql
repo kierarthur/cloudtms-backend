@@ -4,6 +4,11 @@
 begin;
 set local statement_timeout='45s';
 set local lock_timeout='5s';
+-- This small rollback fixture tests financial semantics. Native-code compilation
+-- of the inlined entitlement lookup can consume the whole 45-second budget
+-- before these synthetic rows are evaluated. Keep the timeout and assertions;
+-- disable only optional compilation for this transaction, not application traffic.
+set local jit=off;
 set local cloudtms.rollback_fixture_scope='BANKING_PAY_SIGNED_RECOVERY_DRAFT_V1';
 \if :{?cloudtms_release_fixture_context}
 select pg_catalog.set_config(

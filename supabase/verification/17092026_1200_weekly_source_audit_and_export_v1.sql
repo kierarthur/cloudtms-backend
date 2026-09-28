@@ -49,6 +49,14 @@
 \pset pager off
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_manager_recipient_routes'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_message_dispatch_targets'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_message_intents'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_message_renders'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -101,7 +109,9 @@ create function pg_temp.drain_workbench_jobs() returns void
 language sql as $function$
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 $function$;
 
 create function pg_temp.seed_timesheet(
@@ -2536,10 +2546,10 @@ begin
   -- With no Weekly Source group, client policy or cycle in this fixture, no
   -- manager route, generation, intent, render or dispatch target exists at all.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_manager_recipient_routes)=0
-    and (select pg_catalog.count(*) from public.weekly_message_intents)=0
-    and (select pg_catalog.count(*) from public.weekly_message_renders)=0
-    and (select pg_catalog.count(*) from public.weekly_message_dispatch_targets)=0,
+    pg_temp.ws_verify_writes('public.weekly_manager_recipient_routes'::regclass)=0
+    and pg_temp.ws_verify_writes('public.weekly_message_intents'::regclass)=0
+    and pg_temp.ws_verify_writes('public.weekly_message_renders'::regclass)=0
+    and pg_temp.ws_verify_writes('public.weekly_message_dispatch_targets'::regclass)=0,
     'nothing in the Gate 11 package creates a manager route, render or dispatch target');
 
   -- Office Weekly source notices live in their own store.

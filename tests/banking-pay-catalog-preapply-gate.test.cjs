@@ -62,6 +62,27 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
   }
 });
 
+test('catalog rehearsal accepts the Windows-safe JSON path transport without changing the generated proof', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'banking-pay-catalog-preapply-json-'));
+  const directOutput = path.join(tempDir, 'direct.sql');
+  const jsonOutput = path.join(tempDir, 'json.sql');
+  const pendingFile = path.join(tempDir, 'pending.json');
+  const pending = [
+    'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql',
+    'supabase/repeatable/01092026_1459_banking_pay_signed_recovery_draft_v1.sql',
+  ];
+  try {
+    fs.writeFileSync(pendingFile, JSON.stringify(pending), 'utf8');
+    const direct = spawnSync(process.execPath, [generator, directOutput, ...pending], { cwd: root, encoding: 'utf8' });
+    const transported = spawnSync(process.execPath, [generator, jsonOutput, '--pending-json', pendingFile], { cwd: root, encoding: 'utf8' });
+    assert.equal(direct.status, 0, direct.stderr);
+    assert.equal(transported.status, 0, transported.stderr);
+    assert.equal(fs.readFileSync(jsonOutput, 'utf8'), fs.readFileSync(directOutput, 'utf8'));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('exact outer transaction parser preserves inner bytes and kills boundary mutations', async () => {
   const { prepareCatalogOwnedSourceForRehearsal } = await import(pathToFileURL(envelopeParser).href);
   const inner = [
@@ -237,11 +258,20 @@ test('release engine runs the rollback-only catalog rehearsal before changed rep
   const engine = fs.readFileSync(releaseEnginePath, 'utf8');
   const collectIndex = engine.indexOf('const pendingRepeatables = current.repeatables.filter');
   const generatorIndex = engine.indexOf('runBankingPayCatalogPreapply(pendingRepeatables.map');
-  const applyIndex = engine.indexOf('for (const item of pendingRepeatables)');
+  // Changed repeatables are installed in reader-release phases: ordinary authority first, then the
+  // atomic activation of the exact source readers. Both phases must follow the rehearsal.
+  const phaseIndex = engine.indexOf('readerReleasePhases(pendingRepeatables, current.repeatables)');
+  const applyIndex = engine.indexOf('for (const item of phases.ordinary)');
+  const readerActivationIndex = engine.indexOf('readerActivationSql(phases.readers');
 
   assert.ok(collectIndex >= 0, 'release engine must collect changed repeatables');
   assert.ok(generatorIndex > collectIndex, 'release engine must run the catalog rehearsal after collection');
+  assert.ok(phaseIndex > generatorIndex, 'catalog rehearsal must pass before changed repeatables are phased');
   assert.ok(applyIndex > generatorIndex, 'catalog rehearsal must pass before applying changed repeatables');
+  assert.ok(readerActivationIndex > applyIndex, 'reader activation must follow the ordinary changed repeatables');
+  assert.doesNotMatch(engine, /for \(const item of pendingRepeatables\)/,
+    'no changed repeatable may bypass the reader-release phases');
   assert.match(engine, /generate_banking_pay_catalog_preapply_check\.mjs/);
+  assert.match(engine, /--pending-json/);
   assert.match(engine, /psql\(\{ file: output \}\)/);
 });

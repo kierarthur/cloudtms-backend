@@ -831,7 +831,9 @@ $verify_fingerprint$;
 -- ======================================================================= --
 do $verify_certified_zero$
 declare
-  v_head uuid:=(select id from public.weekly_source_entitlement_heads where state='COMMITTED_CURRENT');
+  v_head uuid:=(select id from public.weekly_source_entitlement_heads
+    where state='COMMITTED_CURRENT'
+      and root_timesheet_id='17092026-0800-4000-8000-000000000005');
   v_zero uuid:='17092026-0800-4000-8000-000000000202';
   v_bundle uuid:='17092026-0800-4000-8000-000000000302';
   v_fp jsonb;
@@ -1319,7 +1321,8 @@ $verify_fail_closed_setup$;
 do $verify_fail_closed$
 declare
   v_zero uuid:=(select id from public.weekly_source_entitlement_heads
-                where state='COMMITTED_CURRENT' limit 1);
+                where state='COMMITTED_CURRENT'
+                  and root_timesheet_id='17092026-0800-4000-8000-000000000005');
   v_ts uuid:=(select v from pg_temp.world where k='timesheet');
   v_booking text:=(select v from pg_temp.worldt where k='booking');
   v_second uuid:='17092026-0800-4000-8000-000000000203';

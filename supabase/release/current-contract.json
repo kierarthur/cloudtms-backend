@@ -430,6 +430,54 @@
   ],
   "policies": [
     {
+      "name": "bpay_clock_families_v1_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_clock_families_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_clock_rows_v1_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_clock_rows_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_protected_reference_events_v1_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_protected_reference_events_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_protected_reference_heads_v1_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_protected_reference_heads_v1",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -5147,7 +5195,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6cdf0456653c293bc785aef28d552c9c3e66f8d3f7126561b948830887f4124b"
+      "definition_sha256": "3e37921f0064501ac5bae81c497169e0e6d74bc4334e1d1b96147b128b11e098"
     },
     {
       "acl": [
@@ -5387,6 +5435,44 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_source_family_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "4de58064ef8ba3b19028f856b496201c589e614bf8256a1e110ecd7c17b341ec"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_expense_source_root_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d121831e2bf7c02b579dbac1d986e7c3adb8083f1542a30a213c5f5a565ee4f9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, pg_temp"
       ],
       "schema": "private",
@@ -5413,7 +5499,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "eed4c9ae5a675560e7b2e121171df9df15a5f708f21b5181aebad5c65f9878f5"
+      "definition_sha256": "01c346102ece28c6d511802dce8baf240d037ccae48fc59b4f3310fc8ba9e1f4"
     },
     {
       "acl": [
@@ -6634,7 +6720,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "9e0916b5348a5f9047fa1904b7b1ad8ae20b6319f7c25e45676f8c4bcf9094c7"
+      "definition_sha256": "5fc16ab6420a6c50c3a66433cec942b6075a75d96ca2b8a806d6fd4e589633b9"
     },
     {
       "acl": [
@@ -8797,7 +8883,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ccc98622b4a8240b0423044e274d8952d6c24ed415524be278f64cb4b50a5cbb"
+      "definition_sha256": "ae8f97ada2c273925b265febeb51cba5198be7aff0c004851073e15e0b1beedd"
     },
     {
       "acl": [
@@ -9106,7 +9192,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "aaadef1026cfa18b22170113a4973647f6568f3276f0a6373a1bf93d42df60f3"
+      "definition_sha256": "110d56f858ade39067e7713008f9fc0d90265ddb24e03ef6aeabc9c09a390802"
     },
     {
       "acl": [
@@ -9480,6 +9566,769 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_authorisation_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "36fa84c9350540765364887ecfbba1e2386cb96473c6fe32e29b5e7db6aa7f50"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_clock_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4aa49b2d45ba0b730576ce618d06c7e98d3fadd994bc31b8ef67db59a9d69927"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_clock_override_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9232eb51ec745edf5f3e2406faf5dbe1933bdf9e2feb20587ef3ff2d75f22f50"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_clock_rebuild_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e76b7ee98e8600e9a7f31587e17ef03503f8f0b428b88e9f2e77facc632bac62"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_clock_retire_family_v1(p_family uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "798e323a1e3191f058f151c4e4f012875c78fd6e23c1181c976b5fed951f0514"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_clock_retirement_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7ef0f37e7c37ebc10c7367527dd257a0e5cadf49560829e3c65f49c60f1814d3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_entitlement_financial_scope_v1(p_timesheet_ids uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "46ffe406932fe7897049d26807c4800aae77ccebd674534b44fa8a477afd1f93"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_expense_classification_lineage_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9d8685f21df9a29256f416afb0c89ab0900943896b5832541920b0fad48e3c8c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_expense_classification_ts_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "df274307824c4011510e2731e241e34e57639b1435144651618887c7fc699f86"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_expense_classification_week_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2ba01013237a434f1e6c44b7063206ed020cd4659ab60c9360e514879b4bbd01"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_expense_identity_gate_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4a320a6159ae211f6f1e2a13357c8241149e54e7b8317f861cb061386de9591b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_finance_component_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d32d43c95cf72d4735d5b71cdf6b03ff8b4c33c9d05ff0b34ffb1e8117386c26"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_has_uncleared_advance_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "2a75e25b77a9643b474ecfc12ebfdf877094f1fec00c4f749d674ec7183b5ca0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_item_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "91dc8e13624f7a68e3d302ca84a539d7b4a17dfe77dcd8cc25b38e57ed6ac913"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_lineage_work_binding_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c2921d623dbaa97e579c51eb9634e2b0ec0f9bceb1e6f6ba5e15c7d790842a9a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_protected_family_for_current_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b34163f6fcdf031f056ee642dc7a3bd98271d1bb871dae7e8cc74fad7ecebcde"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_authorisation_signature_v1(p_agency uuid, p_root uuid, p_booking text, p_version integer, p_generation integer, p_lifecycle text, p_hashes text[], p_codec smallint, p_ref jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "9acc50d91010efef88eeb886b423a5eee3bcfad52826bb4377b45180468201ce"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_capture_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "a4c0adaa065773dd83e7c1b831052f8ec40540ef19c8ac8f17232a8e66380c26"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_for_root_v1(p_root uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "cd0fbab1b4f33ae55de175313eb3ee16491272d902093bcf076e3babf8f27182"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_genesis_v1(p_family uuid)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "99914634a949b4206faeecf95bdab1f802fb6b03db72c6e3f94b163a6face777"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_page_v1(p_family uuid, p_cut bigint, p_after bigint, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e7df99384ae167a8053af464b9ab0e803034e6dc04c1e78f980c9db2cb434179"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_try_family_gate_v1(p_family uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7e5fac6701ef380fbba581425e7861a5c588cd675fc3aa8ca539721f7fdf4223"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_v1(p_family uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bb7f3d369c5a693411a5029df1258441e1aaa4f7c4c2a6da98742ac3ed63f3fa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [],
+      "schema": "private",
+      "identity": "bpay_protected_reference_valid_v1(p_ref jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a0185c3ecd33747bbee4cb05daf98d0871fa7925b55d41813f8e26c087a3fc1b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_protected_root_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "979e57cde52bcd7714db7c6817544d0ed16518886186d9bc45353b7bc3ef00ce"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_settled_financial_scope_v1(p_timesheet_ids uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "c31317759ca6b27a9a4f9133a063c4f89ab11b979e8c969f2dce962048f9bd47"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_auth_family_gate_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "0428498a4897b6185b2e3ffa63079da91a412b796f333d36916684ae645616a2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_authorise_identity_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "bc404424d086a6c6cce8caa3d7bd1fdaeee529d80292adbb09b268f195b185bf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_authorise_lock_v1(p_candidate uuid, p_id uuid, p_job uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "dbd6ba2497f1f47906635aee39ab01f0d721da561b36c8ac3abd8723edc5d43d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_family_current_gate_v1(p_booking text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ac0bde9da010fd5769532de2acc65ca7caf1a748ee796c18859c2a9fbd1f17ca"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_family_try_lock_v1(p_booking text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8ab8387a911b5b5489e85ea67342297b4e4e78c26e50cd3f227d3818c627ef13"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_lineage_family_gate_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "aa55239e6529a63b42d6ebf897b7b7505545fd30d46777775cff98bf5b590265"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_protected_family_gate_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e1af66b04f16ea1ef3f1791a36ddb8bdc7359337c7d46c250005b7d18ed6152a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_row_gate_v1(p_id uuid, p_exclusive boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1acf23837bed2a2ebaba57b0a8c86e0b7bfee46838765ae1254d3884179d12e4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_row_wait_gate_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2a912f42798b81d07d2302f2deb626e5d003788a207893d0040ec4681f0cfddd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_source_timesheet_family_gate_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7fd090e99c1c8424bae299f8989463b0da293fabfc42aae8c8dc1dc83e0b6348"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_timesheet_pay_state_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8cd14bb8ddf0bd2ed6985b30878ff56175fa789f9b2881a2695d1339f436fc23"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_timesheet_payment_overrides_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "625b003e9b6949026220fceaf8fd5dbfad8f1fc820d5377c305e7db4f84065d0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_timesheet_work_key_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "745644695c0256ea292746ce920fe7859df2a0ed7767168e9c5f2f30e1e5a342"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_timesheet_work_revision_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bb6a39d24474bf4a7007ae73cf6044f4c7aad7797c0f1e1f439665196df917c7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "bpay_ts_pay_adjustments_work_reference_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1d6ddd9b6f5fef1cef008283930f70778a44ec6baededd158aab3f54b882310a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         },
         {
           "grantee": "service_role",
@@ -9516,6 +10365,44 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "06fd7386091293cb24797f5ddffc0f236d85c953058e1098e9b945c0e57b7b72"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "pay_batch_source_head_drift_v1(p_pay_batch_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "4bb4d8d7a06d0a9b8a321f2bcda78afc09ed048404670911ec21bbf7e64cc401"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "pay_batch_v8_draft_preparation_unfinished_v1(p_pay_batch_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "1aaec665eb6a1d7d80428df7be1b71b83933b96e33e04193cb3119ecaa14c759"
     },
     {
       "acl": [
@@ -9613,7 +10500,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "983d7acd4842aee864174c1c96cdb548d158d477aaac59049ed9a0bcdc5e15fa"
+      "definition_sha256": "e52dc227b42a6c1825be6c2766de795bc5b1640e5ff118cbd5f5a70755f27fef"
     },
     {
       "acl": [
@@ -9670,7 +10557,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "d1e1c28e8343774507185e5d353b073499bedccdeac1fd3baa33ee81f31d3140"
+      "definition_sha256": "51fa895d52db5cf2caaa7562836f241072a7f48b55d34061417fc62c9e8adc24"
     },
     {
       "acl": [
@@ -9765,7 +10652,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e78bfd3f81d472b6b9909a75217d4c1acb77c76d05d25b7c6e469586dbd154a3"
+      "definition_sha256": "34ede32c264615218c12ec9ce597d8bf4c6a601e30f55f95627350b91a465469"
     },
     {
       "acl": [
@@ -10404,6 +11291,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=\"\""
       ],
       "schema": "private",
@@ -10411,7 +11299,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "d05f889bd8aaa67ee9326d10f293d8b69c2654325b436797d0a978c62437bde6"
+      "definition_sha256": "f0ae424f2f0fbddb793aa750a8baa6a0766f49b64f879a0976c9831c0e464806"
     },
     {
       "acl": [
@@ -11248,7 +12136,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "c73ae64268ed19692af8f4a1e894549540fafdeef3ecbeab0919909bfade001c"
+      "definition_sha256": "f6746517207c57e4c2d005dbe09add2dcd3414326e75fbb58b02cec2f3fd3bd7"
     },
     {
       "acl": [
@@ -11583,6 +12471,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=\"\""
       ],
       "schema": "private",
@@ -11590,7 +12479,27 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a704f4ed3d34645ec262278aa20a85dc4fcafe5bf0cb64939974974f6a2c2c7f"
+      "definition_sha256": "16216be15e2a0f7792985a5169f3429bce315f69d606d2a07a99a5269863e94e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "jit=off",
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "pay_workbench_recovery_type_capped_allocate_v1(p_candidate_id uuid, p_pay_date date, p_rows jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "0ff43b27b4101e2557426c30c5767c8ccc4f16ed35a927049eedc22e2d2af322"
     },
     {
       "acl": [
@@ -11818,7 +12727,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "1e30ab375c87dd7953bc973e734d878cfaeb9bf13e1232b40c9a034c46092265"
+      "definition_sha256": "e692d0c839f3a01944cc25bf329ce676a468303e2ab914b503b9b8307f1e00ef"
     },
     {
       "acl": [
@@ -11932,7 +12841,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "82a42d5528e293f6325d1b601901a55b01a3f45b1db37e5a11079f47c90fdd4e"
+      "definition_sha256": "33d0702b601c6d47cc2bef1e9aa622ee1af6bbc7421d190de56da87f3a150b2c"
     },
     {
       "acl": [
@@ -12198,7 +13107,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ca059ceb8f8100ad731ef5ef6458f5a7834b32c7f3c44795060ebd5a5b4ddd6e"
+      "definition_sha256": "e1fa84bba9712f8016996c8d7975351f981be9aa85fb7047dcbf4dddb8046936"
     },
     {
       "acl": [
@@ -12237,6 +13146,46 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "3e6d55c605be9bd2fc5b6cd34a908d2911645b529f3713668e93f39102503efa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "jit=off",
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "s3p_recovery_age_key_v1(p_case_type text, p_created_at timestamp with time zone, p_payout_completed_at timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "39697d8f730f9ab78e57d20fed3f5a311d50352704664e965a610d543bd9dad9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "jit=off",
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "s3p_recovery_order_key_v1(p_finance_case_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "eef0ec31ce9b14f20290bde621f01b5d74b681441744107ee9dd010ad0b0f958"
     },
     {
       "acl": [
@@ -12959,6 +13908,25 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "weekly_source_candidate_contract_week_view_merge_v1(p_contract_week_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f96124539b72d2133269c821ed0fa97fe002c90d9878b2c2993b41909f6472f9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "weekly_source_candidate_current_rows_v1(p_projection_publication_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_week_ending date)",
       "parallel": "u",
       "volatility": "s",
@@ -13621,6 +14589,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "weekly_source_entitlement_head_ledger_mark_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "d83476b22a0e2d6589267664c62a2911bb7b62b706f054658274b626cfcb4e01"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -13761,7 +14748,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3dcfcdcb300204c12a99d0f2e9c8b39eb92a45b99161323a72a8433275968975"
+      "definition_sha256": "6e4cd70eac0ed00b46eaadee4f10658d32ff922781e77dd75181ac53ec01b185"
     },
     {
       "acl": [
@@ -14217,7 +15204,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d394db1295bc7fdbab118d03632cd937794c240711869ffc424394502f214714"
+      "definition_sha256": "94680b1246d8fcca80e6bf1f6149d802bd363e33fb25f6ff36635c0bad4ca8ed"
     },
     {
       "acl": [
@@ -14236,7 +15223,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "f5f4e1ef634d6e6c79e4c2c7141e502b53d790168e708fff7a101370f54acd4f"
+      "definition_sha256": "db895a69cb194a8c673c114c05e01d8d7ed374cf07123f3882b36560c2acb586"
     },
     {
       "acl": [
@@ -14312,7 +15299,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ab6536d8940c4064491bb23112af59a921fa44ec26f939927c8db1ef83a136e4"
+      "definition_sha256": "4a22a5a54be6e7db4aa4807a2ca238414a99af9a7ac5f84acacd4e2008857262"
     },
     {
       "acl": [
@@ -15615,14 +16602,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public, private, pg_catalog, pg_temp"
+        "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
       "identity": "weekly_source_ordinary_authorisation_guard_v1(p_timesheet_id uuid, p_booking_id text)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e3419b6d33349f25e7fd6dc50322b79e4340bb8ba7d3dea8ecee2ef07eca1447"
+      "definition_sha256": "85a91e041a615f6968a89f684739fd0618afb56ffdbe648eb4172b519835a1a8"
     },
     {
       "acl": [
@@ -17527,7 +18514,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "40a0e4017d1d1671d661945d1790b958460cfb16633b2a2a0833cfe43693df42"
+      "definition_sha256": "22c97b6889bc88a126aac561b504d96124ee5732e108f8789597cbe3b8d9d3d4"
     },
     {
       "acl": [
@@ -17546,7 +18533,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "72328357982372c533d2e714070ef79757db528bce89bada1296338f0bb4f66d"
+      "definition_sha256": "6fad54f01e1557c8547f2ce68f3523e183f9ac77915c57050216adae3c2c202b"
     },
     {
       "acl": [
@@ -19203,6 +20190,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -19210,7 +20198,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "83fbc69805a7a4066385dcea1fd3cfa7cc015bf1d885ca82d353eb9cada8f43c"
+      "definition_sha256": "a023675df9dd38f66b63461a5a8c4264dd19eae0a46de0ae8954a63556982b22"
     },
     {
       "acl": [
@@ -19314,6 +20302,25 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "identity": "_pay_batch_draft_stale_hint_on_view_v1(p_pay_batch_id uuid, p_page_timesheet_count integer, p_budget_ms integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d36cb045b8ef08f9f34b49b412bfd5969a430c9f33f9d12e7a7093649ec43632"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         },
         {
           "grantee": "service_role",
@@ -19347,6 +20354,8 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
+        "plan_cache_mode=force_custom_plan",
         "search_path=public"
       ],
       "schema": "public",
@@ -19354,7 +20363,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a5fd596d16276591e6c13ebeb314a03f154d63849b4d2442d478ae60f269d889"
+      "definition_sha256": "95eb5645a4e8aac1f92938abdcc64d303d63dee19cd089a01220a7b12c4cfbbc"
     },
     {
       "acl": [
@@ -19642,6 +20651,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -19649,7 +20659,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b99a02960318906bf93ffceba80d188b8229ea924a9b715f669f8088f320d973"
+      "definition_sha256": "23c77f2a4dae114a851aebf1c8f5172a67a922f3282fffffce1e345f4b234084"
     },
     {
       "acl": [
@@ -19983,6 +20993,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -19990,7 +21001,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5b8ac8475cfb5a13afb45add059c2fc4c48b43e5cad8bf8bf19f70d390e65bd2"
+      "definition_sha256": "e5b8dac3abcd5f4472dda34322ae1a0a1c7ef82c0161190dc609671c6103418e"
     },
     {
       "acl": [
@@ -20329,6 +21340,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -20336,7 +21348,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e03274ccab6dcc88f8b76772d8d90147b0f1648fe0f14b9b3c2d56a974154580"
+      "definition_sha256": "e5dc4c0bb4c166b587766fcf8a01d0b1cc2c9857a52393702ba988f25a85f7bf"
     },
     {
       "acl": [
@@ -20529,7 +21541,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5472c53ac0b342759041c90f41b7f73638262a998fab48434ee4cbcd3663848f"
+      "definition_sha256": "084f49a607138fc57a6bacc655fce6bcf58a59757816d4fc5a4ca8bb65cdcc95"
     },
     {
       "acl": [
@@ -22724,7 +23736,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c925d1e261c8d8a679966a213b33b935962decde7465052c2b0e6ebc909c9910"
+      "definition_sha256": "2482f8d4b79ad745274bf85eb6c0045e42b1a4b1c5ae806969901e83e4b7b04e"
     },
     {
       "acl": [
@@ -29550,7 +30562,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a3f3d9858e2de5963d8df34535cf9576f2e363daef8286cbdc9b086fe18623d0"
+      "definition_sha256": "bfdf32c91449e598f0dfc13727982e62b04be2d536c9fc507c3146004952f59e"
     },
     {
       "acl": [
@@ -29992,7 +31004,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "85374325427698721976d8041b20f6a4f1c1fecf1a47f4d4916d5c5a2c5ffe38"
+      "definition_sha256": "d6ac3e3c44583fa5bac1dedd7f66659cb40ebcdb69b1f85a48cd2a85ae01a27b"
     },
     {
       "acl": [
@@ -30064,7 +31076,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7611632245a2b068f6aee10d5aa08eafd068c264139f444004cff5ea38441482"
+      "definition_sha256": "86381d0c50f94ed41065907c59fbe6abc5ce9719e95e1ef1c1ea45e471c4d0e5"
     },
     {
       "acl": [
@@ -30137,7 +31149,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "621520be612abdb8fc1e6e59d9dcc8a80e89645e649792defd9b4e35d52524f6"
+      "definition_sha256": "39d5f9c26ce71c55810e2117361c034b2585c82284d8b4b6148c24ca95ec85fb"
     },
     {
       "acl": [
@@ -30161,7 +31173,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "1db5a00b34e0ce1ff6428faf39373db58b97fcabd57dd19c7ebdb5e0755ec114"
+      "definition_sha256": "6df84ac9d8703acf83eed10e1ca37080e2c15fb59d7d08804717dd0e23141eda"
     },
     {
       "acl": [
@@ -30452,7 +31464,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "480d38642378257f5bdafaa6e6969d83fe2f500bdc0735422eb01c0b279bc878"
+      "definition_sha256": "484916767564f1398281e7c7276e4bb52c12f460575c0203c0ecd1bc0f537a4c"
     },
     {
       "acl": [
@@ -30500,7 +31512,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "47ac07cda55f06c76286535af9d4d87a76d3983af5993e432389ed0c4b89dc8e"
+      "definition_sha256": "4105eb6118ef3c065a639b4d7936634cd331d4abde2ebf2a5ba79aee807b18f0"
     },
     {
       "acl": [
@@ -30550,7 +31562,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4223fd75cc4d95d796746264382b078ae67944ebf173b658cdeeeb12da9da5fb"
+      "definition_sha256": "74bbbc10c62a1b42361451b5a2132020b311c1c7637d01213b6d1b867dfe89dc"
     },
     {
       "acl": [
@@ -30862,7 +31874,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7f2ca3211f207b2ee3e49712bc4860492df0a62ff5bafe90413589683ec9bce8"
+      "definition_sha256": "c780fd12ef7ee71c6c810a77ee8a974bd9e4d63b91c9f438e61473c99a90b90e"
     },
     {
       "acl": [
@@ -31102,7 +32114,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1001351740de7c2071bac3c958d1db272c2c04fcf865bb8c65dafef81133a542"
+      "definition_sha256": "832736785a0db0a3f5fe9c4a4430bcd7e9bdd34a05a37c81377f1f4358feb625"
     },
     {
       "acl": [
@@ -32381,7 +33393,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "53c213b94143df5391608dba2e6719aa0257301495d16fcec50c8b79b1627408"
+      "definition_sha256": "034b5c9924e9f6cd49674b2a257ad20b22e476ea5580627b5b5912017ed8f11c"
     },
     {
       "acl": [
@@ -32446,6 +33458,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -32453,7 +33466,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9547482a07ba519e2d477348ba90612f221361a372743d3520bb2a554178c016"
+      "definition_sha256": "c8be50d05e8298a52c9e15dcd06aa02d08025c256f3e0e74edb2cc8cdb428c2c"
     },
     {
       "acl": [
@@ -32549,7 +33562,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "419da6ee19a588eb2fec591b888a923443678717270cf7a67702a72b3d08eaf3"
+      "definition_sha256": "818999c1f87f5707209bd38c8b5d4f4bfc5f8c99dc494338efd111ebfeebd75e"
     },
     {
       "acl": [
@@ -32765,7 +33778,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7388a70ab134e4f01c2143f4a897c744fc0e10ca3a1853a24a410a326a34ba7b"
+      "definition_sha256": "8adfd18871b7528aaf5606b3d14b5854a6174a4abe9b48617e97bd5ffabbbb08"
     },
     {
       "acl": [
@@ -33223,7 +34236,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d6c0ec4a37c25066823e0d9d1fc7f909239093c62366262097e1773c2e866aa4"
+      "definition_sha256": "9abb21ae3cabd8e94d26d07141ead6600449ea537b8628c76f5d8bbfe7621c35"
     },
     {
       "acl": [
@@ -33288,6 +34301,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "plan_cache_mode=force_custom_plan",
         "search_path=public, pg_temp"
       ],
       "schema": "public",
@@ -33295,7 +34309,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ffcee44c5e17076fbb2764dea5c7b23dd50236a81e402bf0d16d7d3629821ccb"
+      "definition_sha256": "eebad381e621378d5553d7ab34f6eae1ad143214df0fe0ac28dee718543c1953"
     },
     {
       "acl": [
@@ -33631,7 +34645,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2ab27176111c5940b66a0027fefc512c055627b1ea8f00f8c2134c359350f21f"
+      "definition_sha256": "a338eab0ef36aa5a9f9cc13405e254102cfdf3419bebedf5cdd819a375f783e7"
     },
     {
       "acl": [
@@ -33648,6 +34662,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "cloudtms.banking_pay_inherited_scope_generation=",
         "search_path=public"
       ],
       "schema": "public",
@@ -33655,7 +34670,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "560dc1a0e2a5044302671a572a658cdbb8d2077c5fa4e8e5fbd1cfcec71ae602"
+      "definition_sha256": "31d97fd202023f73acc0927e7d0574da9f0f25e89963b59a5556d30287990fb0"
     },
     {
       "acl": [
@@ -33847,7 +34862,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9a945900e1109f4f8ca88e185a465a9e6eb408648e11c0a7921f9b67b25f656d"
+      "definition_sha256": "f355297e2c3e0951731750b3e1a627e87b45e6446dbbd5a31e26dd9188bca821"
     },
     {
       "acl": [
@@ -33864,6 +34879,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=\"\""
       ],
       "schema": "public",
@@ -33871,7 +34887,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3a73dd08bdc70a270ced12931a1aaa1b87358b10bc8b5ecb9ea8e8cc340f12a3"
+      "definition_sha256": "15cb757256c7296e906bbb437eb165dcf57351a58cc450e38e5ec2b3285695c3"
     },
     {
       "acl": [
@@ -34183,7 +35199,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "62e25d7548b7c2488b76aa2d189bc07fc986364de5837f775bed3a3a364243e7"
+      "definition_sha256": "c01fb95d6d26d1edc413fbceec53b21331bf919adb9142f7aa11e22caee49abf"
     },
     {
       "acl": [
@@ -34567,7 +35583,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4d8780387cc5ddb4648570eb8afdddc36057a8489e292994d2991fff5c5eb486"
+      "definition_sha256": "580bfc0e717784b4aefc010d438da8b6ebffeb9d07591280a3c8af472839d3df"
     },
     {
       "acl": [
@@ -34728,6 +35744,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -34735,7 +35752,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1f95c906b67f841d9b711dd8f8d126534c048aa2e6441c3ccd1a52df7f0acbda"
+      "definition_sha256": "3877157212733157743a6fbd8acccb34ea33dbc8b27e0cd81fbb664dea04b0d4"
     },
     {
       "acl": [
@@ -34752,6 +35769,7 @@
       ],
       "owner": "postgres",
       "config": [
+        "jit=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -34759,7 +35777,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "46b2d03887762437bb279ba7f0f401c43a8a9777966c71e257bded34a6ab524b"
+      "definition_sha256": "426c40af4896babcc8121a90cc0fe593e11cb7bd4b964c2a86a13437f8f45267"
     },
     {
       "acl": [
@@ -34807,7 +35825,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4ce27f9db0395d2feb2b714d239dd5064521e0afc74beb358e0343a17aab0c71"
+      "definition_sha256": "8fc5eba42c9432d98ba125ff3ebe7cb3cc9a9d540c8be6561b62cb7c529821b0"
     },
     {
       "acl": [
@@ -34855,7 +35873,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ce4dbc287608d71e9a38aad3b34c2f9521b08306e26925ef1c9b3ab8cdff6419"
+      "definition_sha256": "88f32108636dc34779b352c39d88ffb5cbb20f004a2c78e0b9164b332afb32cf"
     },
     {
       "acl": [
@@ -34975,7 +35993,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c0c1f2ff364dc83ae0ede6c4a5cf786de69fa04956843d4190a49ddc903f68aa"
+      "definition_sha256": "6a3bc21a462a6178f0032ebc0b72347c6b34332b2dde48f94e3fc2dee5117f65"
     },
     {
       "acl": [
@@ -36027,7 +37045,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1dfba0424215530d26c36f18f367f6c5c0a07fe77d049f9a4813da8d7f3742dc"
+      "definition_sha256": "b95f733cd35d49e93ecf876a2fabdf64db6aaf006f10f7b5f3fabe01001a2fba"
     },
     {
       "acl": [
@@ -36410,7 +37428,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f49899e3f5ae7920a71019707199e4c26c6d4f21f2332b28961ce60c7f76522e"
+      "definition_sha256": "14e597aa3a0d7efdcc8097d414fa3517703140704d30f8f4717a3599cb26af89"
     },
     {
       "acl": [
@@ -37015,7 +38033,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "90ad7fdd6a5acb8e952e9c8948538b593377c17345cfc1e05cddac390addfb98"
+      "definition_sha256": "dcc6bd08baa8292234c027752a5c5027795e3c65683ed0edd2e6c57298a145d9"
     },
     {
       "acl": [
@@ -38156,6 +39174,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "cfe62c14d582bd9c0abe80b483929075d9d9af1128960c252563a51ad2e2de52"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "timesheet_settings_authority_frozen_get_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e7cbffe9b25487a1486830321f54575a41a532955775923747e48162d204d9f6"
     },
     {
       "acl": [
@@ -40979,7 +42021,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "47ee1d9a8740d89b8564fdf557fc9e2b3f597cdc00bde81a973afd55e646c02f"
+      "definition_sha256": "949901a4bfa384f65704bafe82760a5f7b67b0259d5de58d113b459d80882795"
     },
     {
       "acl": [
@@ -41147,7 +42189,31 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "33a0581a446f1719e2e4456fc46d343c03bd56d4098b7c88c70b32bf11659317"
+      "definition_sha256": "ad8f667f11e97f546b719528ef6b841b949c4f7f59740badcba30bb2f57bc46f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_invoice_evidence_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "9366e2eefa75d2915b6b00aa5ad0066f8e4f2696ce2ec64620e89eb19a852d0e"
     },
     {
       "acl": [
@@ -41315,7 +42381,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5b633e654c1b736b05dad2ffa8f8514a9a6d741e476a00bf59dc6de168e262ef"
+      "definition_sha256": "0cde4bb02d2ab8ce8fd9571c6135c13ab05838d3511a18a0965c2ca2654b8041"
     },
     {
       "acl": [
@@ -41387,7 +42453,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "809e819a9be3ec9113beb8e855f81af1c28831f8b1d454fa38ac17a041959925"
+      "definition_sha256": "a51ed2eba8c8dd869ea5a00c026488e06acf5aac59ed0413c69ab8dfaf18eeb7"
     },
     {
       "acl": [
@@ -41507,7 +42573,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "2f2b443371ff33618a522b44a20c705058cac76dcffcc1d7f6782d61b29d853e"
+      "definition_sha256": "22e1f8558e1c8c3ae521d0c93aa7aee13849decef592ff494d0acc5cd1ac2fa4"
     },
     {
       "acl": [
@@ -41531,7 +42597,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "bc804d9c8b600f72d0439978d1a1234a8ee69ff6e0a682a966f80001608c9e4b"
+      "definition_sha256": "a963d028ca82bde76de4d4b663c00f17060d9bf0bb4f4a33a050d4d19aac7b24"
     },
     {
       "acl": [
@@ -41604,6 +42670,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "8313a12e2fa54263e05a3bca52cd090044d3cddf745dbe8294c763d4e5c7fc71"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, extensions, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_nhsp_report_scope_resolve_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "040fe38e1b59243da499d76c494410aa62cd98eb380ad1b171dc90686cb6f0cd"
     },
     {
       "acl": [
@@ -41723,7 +42813,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5f68e2e4f7030d784b1c9b7d51d1412a18ae34429ae0c72233e30ceb0ca0a02d"
+      "definition_sha256": "31fe89d25cb202876effdb71059783ce2d3c5aa9b8ad1a59783b419cac882521"
     },
     {
       "acl": [
@@ -42251,7 +43341,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "65720f72453f856f1c2f6a56f4ff302a3397a5b84112787d19a7bc53911948ca"
+      "definition_sha256": "79faac0aa05d51ffe6459ea41be7ceb932791343d49da17e8ee0017858da423a"
     },
     {
       "acl": [
@@ -42412,6 +43502,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER ws_operation_effect_capture_v1 AFTER INSERT OR DELETE OR UPDATE ON private.banking_pay_workbench_timesheet_scope_state FOR EACH ROW EXECUTE FUNCTION private.weekly_source_observe_effect_v1()"
+    },
+    {
+      "name": "bpay_clock_retire_v1",
+      "table": "bpay_clock_rows_v1",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_retire_v1 AFTER DELETE OR UPDATE OF family_id ON private.bpay_clock_rows_v1 FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_retirement_changed_v1()"
     },
     {
       "name": "candidate_daily_authority_transitions_immutable",
@@ -42694,6 +43791,13 @@
       "definition": "CREATE TRIGGER candidate_timesheet_summary_approval_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_timesheet_summary_approval_revision_trg_v1()"
     },
     {
+      "name": "candidate_expense_source_root_guard_v1",
+      "table": "candidate_expense_components",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_expense_source_root_guard_v1 BEFORE INSERT OR UPDATE OF owning_timesheet_id, lifecycle_state ON candidate_expense_components FOR EACH ROW EXECUTE FUNCTION private._candidate_expense_source_root_guard_v1()"
+    },
+    {
       "name": "trg_candidate_job_titles_set_updated_at",
       "table": "candidate_job_titles",
       "schema": "public",
@@ -42951,6 +44055,20 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_cc_clients_tombstones AFTER INSERT OR DELETE OR UPDATE ON clients_tombstones FOR EACH ROW EXECUTE FUNCTION _trg_change_bump('clients')"
+    },
+    {
+      "name": "bpay_expense_classification_week_after_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_week_after_v1 AFTER INSERT OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_week_before_v1",
+      "table": "contract_weeks",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_week_before_v1 BEFORE INSERT OR DELETE OR UPDATE OF timesheet_id, contract_id, week_ending_date, additional_seq, is_adjustment ON contract_weeks FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_week_v1()"
     },
     {
       "name": "contract_week_settings_authority_before_v1",
@@ -43660,6 +44778,13 @@
       "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_update_dirty_v1 AFTER UPDATE ON pay_batch_item_breakdowns REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
+      "name": "bpay_item_work_reference_v1",
+      "table": "pay_batch_items",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_item_work_reference_v1 BEFORE INSERT OR UPDATE OF timesheet_id, frozen_source_basis_json, bpay_direct_source_timesheet_id_v1, bpay_direct_work_key_v1, bpay_direct_work_revision_v1 ON pay_batch_items FOR EACH ROW EXECUTE FUNCTION private.bpay_item_work_reference_v1()"
+    },
+    {
       "name": "trg_bpay_wb_batch_items_delete_dirty_v1",
       "table": "pay_batch_items",
       "schema": "public",
@@ -43784,6 +44909,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_batches_au AFTER UPDATE ON pay_batches REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "bpay_finance_component_work_reference_v1",
+      "table": "pay_finance_case_components",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_finance_component_work_reference_v1 BEFORE INSERT OR UPDATE OF linked_timesheet_id, bpay_work_key_v1, bpay_work_revision_v1 ON pay_finance_case_components FOR EACH ROW EXECUTE FUNCTION private.bpay_finance_component_work_reference_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_components_delete",
@@ -44115,6 +45247,13 @@
       "definition": "CREATE TRIGGER trg_timesheet_evidence_document_invalidate_u AFTER UPDATE ON timesheet_evidence REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION trg_timesheet_document_invalidate()"
     },
     {
+      "name": "bpay_work_reference_v1",
+      "table": "timesheet_pay_state",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_work_reference_v1 BEFORE INSERT OR UPDATE OF timesheet_id, bpay_work_key_v1, bpay_work_revision_v1 ON timesheet_pay_state FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_pay_state_work_reference_v1()"
+    },
+    {
       "name": "trg_pay_workbench_mark_candidate_dirty__timesheet_pay_state",
       "table": "timesheet_pay_state",
       "schema": "public",
@@ -44192,6 +45331,27 @@
       "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_history_au AFTER UPDATE ON timesheet_pay_state_history REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
     },
     {
+      "name": "bpay_clock_retire_v1",
+      "table": "timesheet_payment_overrides",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_retire_v1 AFTER DELETE OR UPDATE OF bpay_clock_family_id_v1 ON timesheet_payment_overrides FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_retirement_changed_v1()"
+    },
+    {
+      "name": "bpay_work_reference_v1",
+      "table": "timesheet_payment_overrides",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_work_reference_v1 BEFORE INSERT OR UPDATE OF timesheet_id, bpay_work_key_v1, bpay_work_revision_v1 ON timesheet_payment_overrides FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_payment_overrides_work_reference_v1()"
+    },
+    {
+      "name": "bpay_z_clock_override_v1",
+      "table": "timesheet_payment_overrides",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_z_clock_override_v1 BEFORE INSERT OR UPDATE OF timesheet_id, bpay_work_key_v1, bpay_work_revision_v1, bpay_clock_family_id_v1 ON timesheet_payment_overrides FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_override_changed_v1()"
+    },
+    {
       "name": "trg_pay_workbench_mark_candidate_dirty__timesheet_payment_overr",
       "table": "timesheet_payment_overrides",
       "schema": "public",
@@ -44234,11 +45394,53 @@
       "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_override_au AFTER UPDATE ON timesheet_payment_overrides REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
     },
     {
+      "name": "bpay_clock_cache_v1",
+      "table": "timesheet_summary_pay_state_cache",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_cache_v1 AFTER INSERT OR DELETE OR UPDATE OF timesheet_id, advance_authorisation_consumed_at_utc ON timesheet_summary_pay_state_cache FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1()"
+    },
+    {
       "name": "trg_tsfin_timesheet_validations_wakeup",
       "table": "timesheet_validations",
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_tsfin_timesheet_validations_wakeup AFTER INSERT OR UPDATE ON timesheet_validations FOR EACH ROW EXECUTE FUNCTION trg_tsfin_timesheet_validations_wakeup()"
+    },
+    {
+      "name": "bpay_clock_timesheet_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_timesheet_v1 AFTER INSERT OR UPDATE OF booking_id, authorised_at_server, revoked_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_ts_after_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_after_v1 AFTER INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_ts_before_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()"
+    },
+    {
+      "name": "bpay_source_timesheet_family_gate_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_timesheet_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF booking_id, is_current, version ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_source_timesheet_family_gate_v1()"
+    },
+    {
+      "name": "bpay_timesheet_work_revision_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_timesheet_work_revision_v1 BEFORE INSERT OR UPDATE OF booking_id, bpay_work_revision_v1 ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_revision_v1()"
     },
     {
       "name": "candidate_expense_timesheet_component_sync",
@@ -44367,6 +45569,20 @@
       "definition": "CREATE TRIGGER weekly_source_managed_root_authorisation_guard_bu BEFORE UPDATE ON timesheets FOR EACH ROW WHEN (old.authorised_at_server IS DISTINCT FROM new.authorised_at_server) EXECUTE FUNCTION private.weekly_source_ordinary_authorisation_guard_tg_v1()"
     },
     {
+      "name": "zz_bpay_timesheet_work_key_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "A",
+      "definition": "CREATE TRIGGER zz_bpay_timesheet_work_key_v1 BEFORE INSERT OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_timesheet_work_key_v1()"
+    },
+    {
+      "name": "bpay_clock_financial_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_clock_financial_v1 AFTER INSERT OR DELETE OR UPDATE OF timesheet_id, authorised_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_clock_changed_v1()"
+    },
+    {
       "name": "candidate_expense_financial_component_sync",
       "table": "timesheets_financials",
       "schema": "public",
@@ -44484,6 +45700,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER tms_users_touch BEFORE UPDATE ON tms_users FOR EACH ROW EXECUTE FUNCTION tms_touch_updated_at()"
+    },
+    {
+      "name": "bpay_work_reference_v1",
+      "table": "ts_pay_adjustments",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_work_reference_v1 BEFORE INSERT OR UPDATE OF timesheet_id, bpay_work_key_v1, bpay_work_revision_v1 ON ts_pay_adjustments FOR EACH ROW EXECUTE FUNCTION private.bpay_ts_pay_adjustments_work_reference_v1()"
     },
     {
       "name": "trg_pay_workbench_mark_candidate_dirty__ts_pay_adjustments",
@@ -44703,11 +45926,32 @@
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_exceptional_pay_target_events FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
     },
     {
+      "name": "bpay_protected_root_reference_v1",
+      "table": "weekly_exceptional_pay_target_families",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_protected_root_reference_v1 BEFORE INSERT OR UPDATE OF root_timesheet_id, bpay_root_work_revision_v1 ON weekly_exceptional_pay_target_families FOR EACH ROW EXECUTE FUNCTION private.bpay_protected_root_reference_v1()"
+    },
+    {
+      "name": "bpay_source_protected_family_gate_v1",
+      "table": "weekly_exceptional_pay_target_families",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_protected_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE OF root_family_booking_id, root_timesheet_id ON weekly_exceptional_pay_target_families FOR EACH ROW EXECUTE FUNCTION private.bpay_source_protected_family_gate_v1()"
+    },
+    {
       "name": "weekly_exceptional_pay_target_families_root_identity",
       "table": "weekly_exceptional_pay_target_families",
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_exceptional_pay_target_families_root_identity BEFORE INSERT OR UPDATE ON weekly_exceptional_pay_target_families FOR EACH ROW EXECUTE FUNCTION private.weekly_source_target_family_root_identity_v1()"
+    },
+    {
+      "name": "bpay_evidence_reference_v1",
+      "table": "weekly_exceptional_payment_approvals",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_evidence_reference_v1 AFTER INSERT OR DELETE OR UPDATE ON weekly_exceptional_payment_approvals FOR EACH ROW EXECUTE FUNCTION private.bpay_protected_reference_capture_v1()"
     },
     {
       "name": "weekly_source_immutable_fact_guard",
@@ -44997,6 +46241,13 @@
       "definition": "CREATE CONSTRAINT TRIGGER weekly_source_entitlement_head_inventory_assert AFTER INSERT OR UPDATE ON weekly_source_entitlement_heads DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.weekly_source_entitlement_head_inventory_assert_v1()"
     },
     {
+      "name": "weekly_source_entitlement_head_ledger_mark",
+      "table": "weekly_source_entitlement_heads",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER weekly_source_entitlement_head_ledger_mark AFTER INSERT OR UPDATE OF state ON weekly_source_entitlement_heads FOR EACH ROW EXECUTE FUNCTION private.weekly_source_entitlement_head_ledger_mark_v1()"
+    },
+    {
       "name": "weekly_source_entitlement_head_receipt_assert",
       "table": "weekly_source_entitlement_heads",
       "schema": "public",
@@ -45214,6 +46465,20 @@
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_physical_rows FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
     },
     {
+      "name": "bpay_authorisation_work_reference_v1",
+      "table": "weekly_source_root_authorisations",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_authorisation_work_reference_v1 BEFORE INSERT ON weekly_source_root_authorisations FOR EACH ROW EXECUTE FUNCTION private.bpay_authorisation_work_reference_v1()"
+    },
+    {
+      "name": "bpay_source_auth_family_gate_v1",
+      "table": "weekly_source_root_authorisations",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_auth_family_gate_v1 BEFORE INSERT OR DELETE OR UPDATE ON weekly_source_root_authorisations FOR EACH ROW EXECUTE FUNCTION private.bpay_source_auth_family_gate_v1()"
+    },
+    {
       "name": "weekly_source_audit_first_authorisation",
       "table": "weekly_source_root_authorisations",
       "schema": "public",
@@ -45303,6 +46568,34 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_source_row_resolutions FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_lineage_after_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_lineage_after_v1 AFTER INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()"
+    },
+    {
+      "name": "bpay_expense_classification_lineage_before_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_expense_classification_lineage_before_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_lineage_v1()"
+    },
+    {
+      "name": "bpay_lineage_work_binding_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_lineage_work_binding_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_lineage_work_binding_v1()"
+    },
+    {
+      "name": "bpay_source_lineage_family_gate_v1",
+      "table": "weekly_source_row_timesheet_lineages",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_source_lineage_family_gate_v1 BEFORE INSERT ON weekly_source_row_timesheet_lineages FOR EACH ROW EXECUTE FUNCTION private.bpay_source_lineage_family_gate_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -58919,6 +60212,502 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE CASCADE"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_clock_families_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "booking_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_clock_families_v1_booking_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_clock_families_v1_booking_id_key ON private.bpay_clock_families_v1 USING btree (booking_id)"
+        },
+        {
+          "name": "bpay_clock_families_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_clock_families_v1_pkey ON private.bpay_clock_families_v1 USING btree (id)"
+        },
+        {
+          "name": "bpay_clock_family_trim_v1",
+          "definition": "CREATE INDEX bpay_clock_family_trim_v1 ON private.bpay_clock_families_v1 USING btree (btrim(booking_id))"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_clock_families_v1_booking_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (booking_id)"
+        },
+        {
+          "name": "bpay_clock_families_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_clock_rows_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "authorisation_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "family_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_clock_rows_v1_family_id_authorisation_at_idx",
+          "definition": "CREATE INDEX bpay_clock_rows_v1_family_id_authorisation_at_idx ON private.bpay_clock_rows_v1 USING btree (family_id, authorisation_at DESC NULLS LAST)"
+        },
+        {
+          "name": "bpay_clock_rows_v1_family_id_consumed_at_idx",
+          "definition": "CREATE INDEX bpay_clock_rows_v1_family_id_consumed_at_idx ON private.bpay_clock_rows_v1 USING btree (family_id, consumed_at DESC NULLS LAST)"
+        },
+        {
+          "name": "bpay_clock_rows_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_clock_rows_v1_pkey ON private.bpay_clock_rows_v1 USING btree (timesheet_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_clock_rows_v1_family_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (family_id) REFERENCES private.bpay_clock_families_v1(id)"
+        },
+        {
+          "name": "bpay_clock_rows_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (timesheet_id)"
+        },
+        {
+          "name": "bpay_clock_rows_v1_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE CASCADE"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_protected_reference_events_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "family_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "previous_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_protected_reference_events_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_protected_reference_events_v1_pkey ON private.bpay_protected_reference_events_v1 USING btree (family_id, ordinal)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_protected_reference_events_v1_approval_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(approval_hash) = 32)"
+        },
+        {
+          "name": "bpay_protected_reference_events_v1_digest_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(previous_digest) = 32 AND octet_length(digest) = 32)"
+        },
+        {
+          "name": "bpay_protected_reference_events_v1_family_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (family_id) REFERENCES private.bpay_protected_reference_heads_v1(family_id)"
+        },
+        {
+          "name": "bpay_protected_reference_events_v1_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (ordinal > 0)"
+        },
+        {
+          "name": "bpay_protected_reference_events_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (family_id, ordinal)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_protected_reference_heads_v1",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "family_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_protected_reference_heads_v1_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_protected_reference_heads_v1_pkey ON private.bpay_protected_reference_heads_v1 USING btree (family_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_protected_reference_heads_v1_digest_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(digest) = 32)"
+        },
+        {
+          "name": "bpay_protected_reference_heads_v1_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (ordinal >= 0)"
+        },
+        {
+          "name": "bpay_protected_reference_heads_v1_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (family_id)"
         }
       ],
       "view_definition_sha256": null
@@ -74952,6 +76741,18 @@
           "definition": "CREATE INDEX idx_bpay_wb_jobs_candidate_dirty_active_cohort_v1 ON public.banking_pay_workbench_jobs USING btree (candidate_id, id) WHERE ((job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'::text) AND (status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])) AND (candidate_id IS NOT NULL))"
         },
         {
+          "name": "idx_bpay_wb_jobs_generated_live_v1",
+          "definition": "CREATE INDEX idx_bpay_wb_jobs_generated_live_v1 ON public.banking_pay_workbench_jobs USING btree (scope_change_generation) WHERE ((scope_change_generation IS NOT NULL) AND (job_type = ANY (ARRAY['WORKBENCH_CANDIDATE_DIRTY_APPLY'::text, 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'::text, 'CONTRACT_CLIENT_DIRTY_FANOUT'::text])) AND (status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text, 'FAILED'::text, 'DEAD'::text])))"
+        },
+        {
+          "name": "idx_bpay_wb_jobs_generated_padded_key_v1",
+          "definition": "CREATE INDEX idx_bpay_wb_jobs_generated_padded_key_v1 ON public.banking_pay_workbench_jobs USING btree (md5(btrim(dedupe_key))) WHERE ((scope_change_generation IS NOT NULL) AND (job_type = ANY (ARRAY['WORKBENCH_CANDIDATE_DIRTY_APPLY'::text, 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'::text, 'CONTRACT_CLIENT_DIRTY_FANOUT'::text])) AND (dedupe_key <> btrim(dedupe_key)))"
+        },
+        {
+          "name": "idx_bpay_wb_jobs_generated_unscoped_done_v1",
+          "definition": "CREATE INDEX idx_bpay_wb_jobs_generated_unscoped_done_v1 ON public.banking_pay_workbench_jobs USING btree (scope_change_generation) WHERE ((scope_change_generation IS NOT NULL) AND (job_type = ANY (ARRAY['WORKBENCH_CANDIDATE_DIRTY_APPLY'::text, 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'::text, 'CONTRACT_CLIENT_DIRTY_FANOUT'::text])) AND (status = 'SUCCEEDED'::text) AND ((candidate_id IS NULL) OR (job_type = 'CONTRACT_CLIENT_DIRTY_FANOUT'::text)))"
+        },
+        {
           "name": "idx_bpay_wb_jobs_legacy_candidate_dirty_active_cohort_v1",
           "definition": "CREATE INDEX idx_bpay_wb_jobs_legacy_candidate_dirty_active_cohort_v1 ON public.banking_pay_workbench_jobs USING btree (lower(btrim(COALESCE((payload_json ->> 'candidate_id'::text), ''::text))), id) WHERE ((job_type = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'::text) AND (status = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text])) AND (candidate_id IS NULL))"
         },
@@ -81769,6 +83570,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_source_active_claim_owner_v1",
+          "definition": "CREATE INDEX bpay_source_active_claim_owner_v1 ON public.candidate_expense_components USING btree (owning_timesheet_id) WHERE (lifecycle_state <> ALL (ARRAY['MANAGER_REFUSED'::text, 'OFFICE_REJECTED'::text, 'WITHDRAWN'::text, 'CANCELLED'::text, 'SUPERSEDED'::text]))"
+        },
         {
           "name": "candidate_expense_components_approval_idx",
           "definition": "CREATE INDEX candidate_expense_components_approval_idx ON public.candidate_expense_components USING btree (approval_request_id) WHERE (approval_request_id IS NOT NULL)"
@@ -106148,6 +107953,30 @@
           "generated": ""
         },
         {
+          "name": "bpay_direct_source_timesheet_id_v1",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_direct_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_direct_work_revision_v1",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "created_at",
           "type": "timestamp with time zone",
           "default": "now()",
@@ -106430,6 +108259,18 @@
       ],
       "indexes": [
         {
+          "name": "bpay_item_component_fallback_v1",
+          "definition": "CREATE INDEX bpay_item_component_fallback_v1 ON public.pay_batch_items USING btree (finance_component_id, id) WHERE ((bpay_direct_source_timesheet_id_v1 IS NULL) AND (finance_component_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_item_direct_work_v1",
+          "definition": "CREATE INDEX bpay_item_direct_work_v1 ON public.pay_batch_items USING btree (bpay_direct_work_key_v1) WHERE (bpay_direct_work_key_v1 IS NOT NULL)"
+        },
+        {
+          "name": "bpay_item_work_reference_fk_v1",
+          "definition": "CREATE INDEX bpay_item_work_reference_fk_v1 ON public.pay_batch_items USING btree (bpay_direct_source_timesheet_id_v1, bpay_direct_work_revision_v1) WHERE (bpay_direct_source_timesheet_id_v1 IS NOT NULL)"
+        },
+        {
           "name": "idx_bpay_wb_finance_item_authority_page",
           "definition": "CREATE INDEX idx_bpay_wb_finance_item_authority_page ON public.pay_batch_items USING btree (pay_batch_candidate_id, id) WHERE ((item_type = ANY (ARRAY['OVERPAYMENT_RECOVERY'::text, 'UNDERPAYMENT_PAYMENT'::text])) AND (COALESCE(is_voided, false) IS FALSE))"
         },
@@ -106509,6 +108350,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_item_work_reference_presence_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((bpay_direct_work_revision_v1 IS NULL OR bpay_direct_source_timesheet_id_v1 IS NOT NULL) AND (bpay_direct_work_key_v1 IS NULL OR bpay_direct_work_revision_v1 IS NOT NULL))"
+        },
+        {
+          "name": "bpay_item_work_reference_v1",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (bpay_direct_source_timesheet_id_v1, bpay_direct_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1) ON DELETE SET NULL (bpay_direct_work_revision_v1)"
+        },
         {
           "name": "pay_batch_items_candidate_fkey",
           "type": "f",
@@ -107940,6 +109797,22 @@
           "generated": ""
         },
         {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -108134,6 +110007,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_finance_component_work_v1",
+          "definition": "CREATE INDEX bpay_finance_component_work_v1 ON public.pay_finance_case_components USING btree (bpay_work_key_v1) WHERE (bpay_work_key_v1 IS NOT NULL)"
+        },
+        {
           "name": "bpay_finance_components_candidate_open_timesheet_idx",
           "definition": "CREATE INDEX bpay_finance_components_candidate_open_timesheet_idx ON public.pay_finance_case_components USING btree (candidate_id, linked_timesheet_id, finance_case_id, id) WHERE ((linked_timesheet_id IS NOT NULL) AND (closed_at_utc IS NULL))"
         },
@@ -108173,6 +110050,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_finance_component_work_presence_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((linked_timesheet_id IS NULL) = (bpay_work_revision_v1 IS NULL))"
+        },
+        {
+          "name": "bpay_finance_component_work_reference_v1",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (linked_timesheet_id, bpay_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1) MATCH FULL"
+        },
         {
           "name": "pay_finance_case_components_candidate_id_fkey",
           "type": "f",
@@ -118272,6 +120165,22 @@
       "schema": "public",
       "columns": [
         {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "last_settled_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -118346,6 +120255,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_timesheet_pay_state_work_idx",
+          "definition": "CREATE INDEX bpay_timesheet_pay_state_work_idx ON public.timesheet_pay_state USING btree (bpay_work_key_v1)"
+        },
+        {
           "name": "idx_timesheet_pay_state_last_batch",
           "definition": "CREATE INDEX idx_timesheet_pay_state_last_batch ON public.timesheet_pay_state USING btree (last_settled_pay_batch_id)"
         },
@@ -118357,6 +120270,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_timesheet_pay_state_work_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id, bpay_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
         {
           "name": "timesheet_pay_state_last_batch_fkey",
           "type": "f",
@@ -118668,6 +120589,30 @@
       "schema": "public",
       "columns": [
         {
+          "name": "bpay_clock_family_id_v1",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -118766,8 +120711,24 @@
       ],
       "indexes": [
         {
+          "name": "bpay_clock_override_family_v1",
+          "definition": "CREATE INDEX bpay_clock_override_family_v1 ON public.timesheet_payment_overrides USING btree (bpay_clock_family_id_v1)"
+        },
+        {
+          "name": "bpay_clock_override_latest_v1",
+          "definition": "CREATE INDEX bpay_clock_override_latest_v1 ON public.timesheet_payment_overrides USING btree (bpay_clock_family_id_v1, created_at_utc DESC, id DESC) WHERE ((cleared_at_utc IS NULL) AND (upper(btrim(COALESCE(override_type, ''::text))) = 'ADVANCE_THIS_PAYMENT'::text))"
+        },
+        {
           "name": "bpay_timesheet_overrides_candidate_active_idx",
           "definition": "CREATE INDEX bpay_timesheet_overrides_candidate_active_idx ON public.timesheet_payment_overrides USING btree (candidate_id, timesheet_id, id) WHERE ((timesheet_id IS NOT NULL) AND (cleared_at_utc IS NULL) AND (consumed_at_utc IS NULL) AND (consumed_by_pay_batch_id IS NULL))"
+        },
+        {
+          "name": "bpay_timesheet_payment_overrides_work_fk_v1",
+          "definition": "CREATE INDEX bpay_timesheet_payment_overrides_work_fk_v1 ON public.timesheet_payment_overrides USING btree (timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "bpay_timesheet_payment_overrides_work_idx",
+          "definition": "CREATE INDEX bpay_timesheet_payment_overrides_work_idx ON public.timesheet_payment_overrides USING btree (bpay_work_key_v1) WHERE ((cleared_at_utc IS NULL) AND (upper(btrim(COALESCE(override_type, ''::text))) = 'ADVANCE_THIS_PAYMENT'::text))"
         },
         {
           "name": "idx_timesheet_payment_overrides_candidate_active",
@@ -118785,6 +120746,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_timesheet_payment_overrides_work_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id, bpay_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "timesheet_payment_overrides_bpay_clock_family_id_v1_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (bpay_clock_family_id_v1) REFERENCES private.bpay_clock_families_v1(id)"
+        },
         {
           "name": "timesheet_payment_overrides_candidate_id_fkey",
           "type": "f",
@@ -119844,6 +121821,22 @@
           "generated": ""
         },
         {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "break_end_iso",
           "type": "timestamp with time zone",
           "default": null,
@@ -120446,6 +122439,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_timesheet_work_identity_v1",
+          "definition": "CREATE UNIQUE INDEX bpay_timesheet_work_identity_v1 ON public.timesheets USING btree (timesheet_id, bpay_work_revision_v1)"
+        },
+        {
           "name": "idx_timesheets_active_document_operation",
           "definition": "CREATE INDEX idx_timesheets_active_document_operation ON public.timesheets USING btree (active_document_operation_id) WHERE (active_document_operation_id IS NOT NULL)"
         },
@@ -120589,6 +122586,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_timesheet_work_identity_v1",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "bpay_timesheet_work_key_expression_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT bpay_work_key_v1 IS DISTINCT FROM\nCASE\n    WHEN booking_id IS NOT NULL AND btrim(booking_id) <> ''::text THEN booking_id\n    ELSE NULL::text\nEND)"
+        },
         {
           "name": "chk_timesheets_minutes_positive",
           "type": "c",
@@ -121611,6 +123624,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_clock_financial_event_v1",
+          "definition": "CREATE INDEX bpay_clock_financial_event_v1 ON public.timesheets_financials USING btree (timesheet_id, authorised_at_utc DESC NULLS LAST)"
+        },
         {
           "name": "idx_tsfin_assignment",
           "definition": "CREATE INDEX idx_tsfin_assignment ON public.timesheets_financials USING btree (candidate_assignment)"
@@ -122974,6 +124991,22 @@
           "generated": ""
         },
         {
+          "name": "bpay_work_key_v1",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -123092,6 +125125,10 @@
           "definition": "CREATE INDEX bpay_ts_adjustments_candidate_unpaid_idx ON public.ts_pay_adjustments USING btree (candidate_id, timesheet_id, id) WHERE ((timesheet_id IS NOT NULL) AND (paid_at_utc IS NULL))"
         },
         {
+          "name": "bpay_ts_pay_adjustments_work_idx",
+          "definition": "CREATE INDEX bpay_ts_pay_adjustments_work_idx ON public.ts_pay_adjustments USING btree (bpay_work_key_v1)"
+        },
+        {
           "name": "ts_pay_adjustments_candidate_week_idx",
           "definition": "CREATE INDEX ts_pay_adjustments_candidate_week_idx ON public.ts_pay_adjustments USING btree (candidate_id, week_ending_date)"
         },
@@ -123119,6 +125156,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_ts_pay_adjustments_work_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id, bpay_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
         {
           "name": "ts_pay_adjustments_candidate_id_fkey",
           "type": "f",
@@ -129670,6 +131715,14 @@
           "generated": ""
         },
         {
+          "name": "bpay_root_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "c1_publication_state",
           "type": "text",
           "default": "'NONE'::text",
@@ -129855,6 +131908,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_protected_root_work_v1",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (root_timesheet_id, bpay_root_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
         {
           "name": "weekly_exceptional_pay_targe_current_complete_target_vect_check",
           "type": "c",
@@ -149634,6 +151695,30 @@
           "generated": ""
         },
         {
+          "name": "bpay_evidence_codec_v1",
+          "type": "smallint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bpay_evidence_reference_v1",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "bpay_root_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "created_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
@@ -149724,6 +151809,14 @@
       ],
       "indexes": [
         {
+          "name": "bpay_auth_live_trim_v1",
+          "definition": "CREATE INDEX bpay_auth_live_trim_v1 ON public.weekly_source_root_authorisations USING btree (btrim(family_booking_id)) WHERE (withdrawn_at_utc IS NULL)"
+        },
+        {
+          "name": "bpay_authorisation_live_family_v1",
+          "definition": "CREATE UNIQUE INDEX bpay_authorisation_live_family_v1 ON public.weekly_source_root_authorisations USING btree (family_booking_id) WHERE (withdrawn_at_utc IS NULL)"
+        },
+        {
           "name": "weekly_source_root_authorisat_root_timesheet_id_authorisati_key",
           "definition": "CREATE UNIQUE INDEX weekly_source_root_authorisat_root_timesheet_id_authorisati_key ON public.weekly_source_root_authorisations USING btree (root_timesheet_id, authorisation_generation)"
         },
@@ -149747,6 +151840,22 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_authorisation_work_reference_v1",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (root_timesheet_id, bpay_root_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
+        {
+          "name": "bpay_evidence_shape_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (bpay_evidence_codec_v1 = 1 AND bpay_evidence_reference_v1 IS NULL OR bpay_evidence_codec_v1 = 2 AND bpay_evidence_reference_v1 IS NOT NULL AND protected_decision_hashes IS NULL)"
+        },
         {
           "name": "weekly_source_root_authorisat_root_timesheet_id_authorisati_key",
           "type": "u",
@@ -151776,6 +153885,14 @@
       "schema": "public",
       "columns": [
         {
+          "name": "bpay_lineage_work_revision_v1",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -151890,6 +154007,14 @@
       ],
       "indexes": [
         {
+          "name": "bpay_lineage_physical_v1",
+          "definition": "CREATE INDEX bpay_lineage_physical_v1 ON public.weekly_source_row_timesheet_lineages USING btree (timesheet_id)"
+        },
+        {
+          "name": "bpay_lineage_trim_family_v1",
+          "definition": "CREATE INDEX bpay_lineage_trim_family_v1 ON public.weekly_source_row_timesheet_lineages USING btree (btrim(family_booking_id))"
+        },
+        {
           "name": "weekly_source_row_timesheet_lineages_event_idx",
           "definition": "CREATE INDEX weekly_source_row_timesheet_lineages_event_idx ON public.weekly_source_row_timesheet_lineages USING btree (work_event_id, contract_id, week_ending_date, id)"
         },
@@ -151913,6 +154038,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_lineage_work_revision_fk_v1",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id, bpay_lineage_work_revision_v1) REFERENCES timesheets(timesheet_id, bpay_work_revision_v1)"
+        },
         {
           "name": "weekly_source_row_timesheet_lineages_candidate_id_fkey",
           "type": "f",
@@ -164854,7 +166987,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "7495e30eac31c6bcc7701094a4130a683e8f6b661e1d1d448358e02f28bb57d1"
+      "view_definition_sha256": "440ca1b1e6ca93d036bf4e78096bb0f1f0a2c0e312ea7fbe394bbdf7fd733d1e"
     },
     {
       "acl": [
@@ -165064,7 +167197,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "d91dbf1069b6cb26949b5dd081728537d0cabfa34c77c1aa7fe771ead130ee3e"
+      "view_definition_sha256": "da446690aac20c966c4c59c6c01187f04e1a78389b13e078a2b3593301c8a7a2"
     },
     {
       "acl": [

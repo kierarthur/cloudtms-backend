@@ -3,6 +3,7 @@ import {
   isManagedRootGuardRefusal,
   recordGuardRefusalAfterRollback,
 } from './guard-refusal-record.mjs';
+import { bpayBusyEnvelope } from '../bpay-busy.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_COMMAND_BYTES = 262_144;
@@ -934,6 +935,8 @@ async function runModeAAuthorisationFollowUp(dependencies, env, actorUserId, app
 }
 
 function routeErrorResponse(error) {
+  const busy = bpayBusyEnvelope(error);
+  if (busy) return jsonResponse(busy.status, busy.body);
   if (error instanceof WeeklySourceRouteError) {
     return jsonResponse(error.status, {
       ok: false,

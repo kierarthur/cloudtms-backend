@@ -1,6 +1,21 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.contract_weeks'::regclass);
+select pg_temp.ws_verify_watch('public.pay_batch_items'::regclass);
+select pg_temp.ws_verify_watch('public.timesheets'::regclass);
+select pg_temp.ws_verify_watch('public.timesheets_financials'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_exceptional_pay_target_families'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_billing_movements'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_row_economic_snapshots'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_row_resolutions'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_row_timesheet_lineages'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_timesheet_authority_resolutions'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_work_event_source_links'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_work_events'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 insert into public.settings_defaults(
@@ -188,10 +203,10 @@ begin
       where candidate_id='70000000-0000-4000-8000-000000000003')<>3 then
     raise exception 'PROJECTION_WORK_EVENT_NOT_CREATED';
   end if;
-  if (select count(*) from public.weekly_work_event_source_links)<>3 then
+  if pg_temp.ws_verify_count('public.weekly_work_event_source_links'::regclass)<>3 then
     raise exception 'PROJECTION_SOURCE_LINK_NOT_CREATED';
   end if;
-  if (select count(*) from public.weekly_source_row_economic_snapshots)<>2
+  if pg_temp.ws_verify_count('public.weekly_source_row_economic_snapshots'::regclass)<>2
      or exists(
        select 1
        from public.weekly_source_row_economic_snapshots snapshot
@@ -199,9 +214,9 @@ begin
      ) then
     raise exception 'PROJECTION_ECONOMIC_SNAPSHOT_CARDINALITY_INVALID';
   end if;
-  if exists(select 1 from public.timesheets)
-     or exists(select 1 from public.weekly_source_billing_movements)
-     or exists(select 1 from public.weekly_exceptional_pay_target_families) then
+  if (pg_temp.ws_verify_writes('public.timesheets'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_source_billing_movements'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.weekly_exceptional_pay_target_families'::regclass)>0) then
     raise exception 'PROJECTION_CROSSED_FINANCIAL_BOUNDARY';
   end if;
 end;
@@ -284,42 +299,46 @@ select public.weekly_source_timesheet_lineage_ensure_atomic_v1(
 
 do $lineage_verify$
 begin
-  if (select count(*) from public.weekly_source_row_timesheet_lineages)<>2 then
+  if pg_temp.ws_verify_count('public.weekly_source_row_timesheet_lineages'::regclass)<>2 then
     raise exception 'PROJECTION_TIMESHEET_LINEAGE_CARDINALITY_INVALID';
   end if;
-  if (select count(*) from public.contract_weeks)<>1
-     or (select count(*) from public.timesheets)<>1 then
+  if pg_temp.ws_verify_count('public.contract_weeks'::regclass)<>1
+     or pg_temp.ws_verify_count('public.timesheets'::regclass)<>1 then
     raise exception 'PROJECTION_BASE_TIMESHEET_NOT_REUSED';
   end if;
   if exists(
     select 1 from public.contract_weeks
-    where status<>'INVOICED'::public.contract_week_status_enum
+    where contract_id='70000000-0000-4000-8000-000000000004'
+      and status<>'INVOICED'::public.contract_week_status_enum
   ) then
     raise exception 'PROJECTION_LINEAGE_REOPENED_INVOICED_WEEK';
   end if;
   if exists(
     select 1 from public.timesheets
-    where actual_schedule_json is distinct from
+    where contract_id='70000000-0000-4000-8000-000000000004'
+      and (actual_schedule_json is distinct from
           '[{"date":"2026-09-07","start":"09:00","end":"17:00","break_minutes":30}]'::jsonb
        or status<>'STORED'::public.timesheet_status_enum
        or authorised_at_server is not null
        or r2_nurse_key is distinct from 'test-only/nurse-signature.png'
        or img_sha256_nurse is distinct from repeat('a',64)
-       or r2_auth_key is not null
+       or r2_auth_key is not null)
   ) then
     raise exception 'PROJECTION_LINEAGE_MUTATED_EVIDENCE_OR_AUTHORITY';
   end if;
   if (select count(*) from public.audit_events
-      where action='WEEKLY_SOURCE_BASE_TIMESHEET_CREATED')<>1 then
+      where actor_user_id='70000000-0000-4000-8000-000000000001'
+        and action='WEEKLY_SOURCE_BASE_TIMESHEET_CREATED')<>1 then
     raise exception 'PROJECTION_LINEAGE_AUDIT_CARDINALITY_INVALID';
   end if;
   if (select count(*) from public.audit_events
-      where action='WEEKLY_SOURCE_TIMESHEET_LINEAGE_CREATED')<>2 then
+      where actor_user_id='70000000-0000-4000-8000-000000000001'
+        and action='WEEKLY_SOURCE_TIMESHEET_LINEAGE_CREATED')<>2 then
     raise exception 'PROJECTION_SOURCE_LINEAGE_AUDIT_CARDINALITY_INVALID';
   end if;
-  if exists(select 1 from public.weekly_source_billing_movements)
-     or exists(select 1 from public.timesheets_financials)
-     or exists(select 1 from public.pay_batch_items) then
+  if (pg_temp.ws_verify_writes('public.weekly_source_billing_movements'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.timesheets_financials'::regclass)>0)
+     or (pg_temp.ws_verify_writes('public.pay_batch_items'::regclass)>0) then
     raise exception 'PROJECTION_LINEAGE_CROSSED_FINANCIAL_BOUNDARY';
   end if;
 end;
@@ -327,10 +346,10 @@ $lineage_verify$;
 
 select jsonb_build_object(
   'ok',true,'verification','weekly_source_projection_build_v1',
-  'resolution_count',(select count(*) from public.weekly_source_row_resolutions),
-  'work_event_count',(select count(*) from public.weekly_work_events),
-  'timesheet_lineage_count',(select count(*) from public.weekly_source_row_timesheet_lineages),
-  'ordinary_timesheet_count',(select count(*) from public.timesheets),
+  'resolution_count',pg_temp.ws_verify_count('public.weekly_source_row_resolutions'::regclass),
+  'work_event_count',pg_temp.ws_verify_count('public.weekly_work_events'::regclass),
+  'timesheet_lineage_count',pg_temp.ws_verify_count('public.weekly_source_row_timesheet_lineages'::regclass),
+  'ordinary_timesheet_count',pg_temp.ws_verify_count('public.timesheets'::regclass),
   'financial_writes',(
     select count(*) from public.weekly_source_billing_movements
   )
@@ -503,7 +522,7 @@ begin
   ) then
     raise exception 'REFUSED_SELECTION_METHOD_LEFT_A_RESOLUTION';
   end if;
-  if exists(select 1 from public.weekly_timesheet_authority_resolutions) then
+  if (pg_temp.ws_verify_writes('public.weekly_timesheet_authority_resolutions'::regclass)>0) then
     raise exception 'REFUSED_SELECTION_METHOD_LEFT_A_MODE_A_RESOLUTION';
   end if;
   -- The Office decision between two qualifying Contracts is accepted.
@@ -517,10 +536,11 @@ declare
 begin
   -- G8-1/G8-2: production code, not a verification fixture, now writes the
   -- Mode A authority resolution.
-  if (select count(*) from public.weekly_timesheet_authority_resolutions)<>1 then
+  if pg_temp.ws_verify_count('public.weekly_timesheet_authority_resolutions'::regclass)<>1 then
     raise exception 'MODE_A_AUTHORITY_RESOLUTION_NOT_WRITTEN_EXACTLY_ONCE';
   end if;
-  select * into strict v_resolution from public.weekly_timesheet_authority_resolutions;
+  select * into strict v_resolution from public.weekly_timesheet_authority_resolutions
+  where source_cycle_id='71000000-0000-4000-8000-00000000000a';
   if v_resolution.source_cycle_id is distinct from '71000000-0000-4000-8000-00000000000a'
      or v_resolution.client_id is distinct from '71000000-0000-4000-8000-000000000002'
      or v_resolution.contract_id is distinct from '71000000-0000-4000-8000-000000000005'
@@ -831,14 +851,14 @@ do $nhsp_identity_guard_proof$
 declare
   v_events_before bigint;
 begin
-  select pg_catalog.count(*) into v_events_before from public.weekly_work_events;
+  select pg_temp.ws_verify_writes('public.weekly_work_events'::regclass) into v_events_before;
   begin
     perform pg_temp.nhsp_identity_apply('PROFILE_EXTERNAL_KEY');
     raise exception 'NHSP_REFERENCE_KEYED_IDENTITY_WAS_ACCEPTED';
   exception when sqlstate '22023' then
     if sqlerrm is distinct from 'WEEKLY_SOURCE_SCHEDULE_TUPLE_EVENT_KEY_REQUIRED' then raise; end if;
   end;
-  if (select pg_catalog.count(*) from public.weekly_work_events)<>v_events_before then
+  if pg_temp.ws_verify_writes('public.weekly_work_events'::regclass)<>v_events_before then
     raise exception 'A_REFUSED_NHSP_IDENTITY_CREATED_A_WORK_EVENT';
   end if;
   if exists(

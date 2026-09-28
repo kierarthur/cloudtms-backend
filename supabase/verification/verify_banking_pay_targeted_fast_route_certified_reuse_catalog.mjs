@@ -138,7 +138,7 @@ const helperActual = helperManifest ? actualByKey.get(keyOf(helperManifest)) : u
 const canonicalLinesManifest = expected.find((item) =>
   item.schema === 'public' && item.name === 'pay_preview_candidate_build_canonical_lines');
 if (!canonicalLinesManifest
-    || canonicalLinesManifest.definition_sha256 !== '3aa94ba810ad14a48926ebef2787909f6870df83724abb8a3aad3eb58ec0e25b'
+    || canonicalLinesManifest.definition_sha256 !== '034b5c9924e9f6cd49674b2a257ad20b22e476ea5580627b5b5912017ed8f11c'
     || canonicalLinesManifest.preapply_definition_sha256 !== '0b51f2d023da22e1cb8ce838f24954c95d25db51906183a025ac1a84e68a6715') {
   problems.push('canonical-line raw installed and provider-portable pre-apply hashes are not separately exact');
 }

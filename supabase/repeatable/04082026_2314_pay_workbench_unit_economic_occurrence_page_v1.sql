@@ -1,43 +1,34 @@
--- Banking Pay bounded-scope V1.2.9: bounded physical economic occurrences
--- for one sealed dependency-unit projection. No page-local rotation expansion,
--- grouped fallback multiplicity or unscoped reservation aggregation.
+-- Stage 2 bounded Source seam: protected transactional inventory counters
+-- and indexed numeric ordinal paging. Source monetary semantics retained.
 
-CREATE OR REPLACE FUNCTION private.pay_workbench_unit_economic_occurrence_page_v1(
-  p_build_id uuid,
-  p_dependency_unit_key text,
-  p_fact_family text,
-  p_projected_timesheet_id uuid,
-  p_last_source_key text DEFAULT NULL::text,
-  p_limit integer DEFAULT 25
-)
-RETURNS TABLE(
-  source_key text,
-  natural_key text,
-  timesheet_id uuid,
-  subject_timesheet_ids uuid[],
-  source_relation text,
-  source_id uuid,
-  economic_key_type text,
-  economic_key_value text,
-  amount_ex_vat numeric,
-  amount_inc_vat numeric,
-  truth_ex_vat numeric,
-  truth_inc_vat numeric,
-  baseline_ex_vat numeric,
-  baseline_inc_vat numeric,
-  source_payload_json jsonb,
-  financial_digest text,
-  resolution_failure text
-)
-LANGUAGE plpgsql
-STABLE
-PARALLEL UNSAFE
-SECURITY DEFINER
-SET search_path = ''
+CREATE OR REPLACE FUNCTION private.pay_workbench_unit_economic_occurrence_page_v1(p_build_id uuid, p_dependency_unit_key text, p_fact_family text, p_projected_timesheet_id uuid, p_last_source_key text DEFAULT NULL::text, p_limit integer DEFAULT 25)
+ RETURNS TABLE(source_key text, natural_key text, timesheet_id uuid, subject_timesheet_ids uuid[], source_relation text, source_id uuid, economic_key_type text, economic_key_value text, amount_ex_vat numeric, amount_inc_vat numeric, truth_ex_vat numeric, truth_inc_vat numeric, baseline_ex_vat numeric, baseline_inc_vat numeric, source_payload_json jsonb, financial_digest text, resolution_failure text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
 AS $function$
 DECLARE
   v_limit integer:=LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1;
   v_family text:=UPPER(NULLIF(BTRIM(COALESCE(p_fact_family,'')),''));
+  v_head_count integer;
+  v_head_id uuid;
+  v_head_authority_kind text;
+  v_head_revision bigint;
+  v_head_component_count integer;
+  v_head_certified_zero boolean;
+  v_head_family_booking_id text;
+  v_head_timesheet_version integer;
+  v_head_entitlement_digest text;
+  v_head_inventory_digest text;
+  v_head_receipt_digest text;
+  v_head_source_generation_digest text;
+  v_head_scope_change_tx_token uuid;
+  v_head_identity jsonb;
+  v_actual_component_count integer;
+  v_emittable_component_count integer;
+  v_invalid_component_count bigint;
+  v_head_cursor_ordinal integer:=0;
+  v_head_prefix text;
 BEGIN
   IF p_build_id IS NULL OR NULLIF(BTRIM(COALESCE(p_dependency_unit_key,'')),'') IS NULL
      OR p_projected_timesheet_id IS NULL
@@ -58,6 +49,136 @@ BEGIN
   END IF;
 
   IF v_family='LIVE_ENTITLEMENT_INPUT' THEN
+    SELECT pg_catalog.count(*)::integer,
+      pg_catalog.min(head_row.id::text)::uuid
+    INTO v_head_count,v_head_id
+    FROM public.weekly_source_entitlement_heads head_row
+    WHERE head_row.root_timesheet_id=p_projected_timesheet_id
+      AND head_row.state='COMMITTED_CURRENT';
+
+    IF COALESCE(v_head_count,0)>1 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_AMBIGUOUS' USING ERRCODE='23514',
+        DETAIL=pg_catalog.jsonb_build_object(
+          'code','PAY_WORKBENCH_ENTITLEMENT_HEAD_AMBIGUOUS',
+          'root_timesheet_id',p_projected_timesheet_id,
+          'committed_current_head_count',v_head_count)::text;
+    END IF;
+
+    IF COALESCE(v_head_count,0)=0 THEN
+      IF EXISTS(
+        SELECT 1 FROM public.weekly_source_entitlement_heads head_row
+        WHERE head_row.root_timesheet_id=p_projected_timesheet_id
+          AND head_row.state='STAGED'
+      ) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_STAGED' USING ERRCODE='23514',
+          DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_ENTITLEMENT_HEAD_STAGED',
+            'root_timesheet_id',p_projected_timesheet_id)::text;
+      END IF;
+    ELSE
+      SELECT head_row.authority_kind,head_row.head_revision,head_row.component_count,
+        head_row.certified_zero,head_row.root_family_booking_id,
+        head_row.root_timesheet_version,
+        encode(head_row.entitlement_digest,'hex'),
+        encode(head_row.inventory_digest,'hex'),
+        encode(head_row.publication_receipt_digest,'hex'),
+        encode(head_row.source_generation_digest,'hex'),
+        head_row.scope_change_tx_token
+      INTO v_head_authority_kind,v_head_revision,v_head_component_count,
+        v_head_certified_zero,v_head_family_booking_id,v_head_timesheet_version,
+        v_head_entitlement_digest,v_head_inventory_digest,v_head_receipt_digest,
+        v_head_source_generation_digest,v_head_scope_change_tx_token
+      FROM public.weekly_source_entitlement_heads head_row
+      WHERE head_row.id=v_head_id;
+
+      IF v_head_authority_kind IS NULL
+         OR v_head_authority_kind NOT IN ('PROTECTED','LOCKED_FINAL_SOURCE')
+         OR COALESCE(v_head_revision,0)<1
+         OR v_head_receipt_digest IS NULL
+         OR v_head_scope_change_tx_token IS NULL
+         OR v_head_certified_zero IS DISTINCT FROM (COALESCE(v_head_component_count,-1)=0) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_MALFORMED' USING ERRCODE='23514',
+          DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_ENTITLEMENT_HEAD_MALFORMED',
+            'root_timesheet_id',p_projected_timesheet_id,'head_id',v_head_id,
+            'authority_kind',v_head_authority_kind,'head_revision',v_head_revision,
+            'component_count',v_head_component_count,
+            'certified_zero',v_head_certified_zero,
+            'has_receipt_digest',(v_head_receipt_digest IS NOT NULL),
+            'has_scope_change_tx_token',(v_head_scope_change_tx_token IS NOT NULL))::text;
+      END IF;
+
+      IF v_head_entitlement_digest IS NULL
+         OR v_head_inventory_digest IS NULL
+         OR v_head_source_generation_digest IS NULL THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_EVIDENCE_INCOMPLETE' USING ERRCODE='23514',
+          DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_ENTITLEMENT_HEAD_EVIDENCE_INCOMPLETE',
+            'root_timesheet_id',p_projected_timesheet_id,'head_id',v_head_id,
+            'certified_zero',v_head_certified_zero,
+            'has_entitlement_digest',(v_head_entitlement_digest IS NOT NULL),
+            'has_inventory_digest',(v_head_inventory_digest IS NOT NULL),
+            'has_source_generation_digest',(v_head_source_generation_digest IS NOT NULL))::text;
+      END IF;
+
+      IF NOT EXISTS(
+        SELECT 1 FROM public.timesheets timesheet_row
+        WHERE timesheet_row.timesheet_id=p_projected_timesheet_id
+          AND timesheet_row.booking_id IS NOT DISTINCT FROM v_head_family_booking_id
+          AND timesheet_row.version IS NOT DISTINCT FROM v_head_timesheet_version
+      ) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_STALE' USING ERRCODE='23514',
+          DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_ENTITLEMENT_HEAD_STALE',
+            'root_timesheet_id',p_projected_timesheet_id,'head_id',v_head_id,
+            'head_family_booking_id',v_head_family_booking_id,
+            'head_timesheet_version',v_head_timesheet_version)::text;
+      END IF;
+
+      SELECT i.component_count,i.emittable_count,i.invalid_count
+       INTO v_actual_component_count,v_emittable_component_count,v_invalid_component_count
+       FROM private.weekly_source_workbench_inventory_v1 i
+       WHERE i.head_id=v_head_id AND i.complete;
+      IF NOT FOUND OR v_actual_component_count IS DISTINCT FROM v_head_component_count THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_INCOMPLETE' USING ERRCODE='23514';
+      END IF;
+      IF v_invalid_component_count<>0 THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_COMPONENT_UNSUPPORTED' USING ERRCODE='23514';
+      END IF;
+      IF v_head_certified_zero IS NOT TRUE AND v_emittable_component_count=0 THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ENTITLEMENT_HEAD_EXPECTED_NONZERO_NO_FACT'
+         USING ERRCODE='23514';
+      END IF;
+
+      v_head_identity:=pg_catalog.jsonb_build_object(
+        'head_id',v_head_id,
+        'authority_kind',v_head_authority_kind,
+        'head_revision',v_head_revision,
+        'component_count',v_head_component_count,
+        'certified_zero',v_head_certified_zero,
+        'root_family_booking_id',v_head_family_booking_id,
+        'root_timesheet_version',v_head_timesheet_version,
+        'entitlement_digest',v_head_entitlement_digest,
+        'inventory_digest',v_head_inventory_digest,
+        'receipt_digest',v_head_receipt_digest,
+        'source_generation_digest',v_head_source_generation_digest);
+    END IF;
+
+    v_head_prefix:='10:'||p_projected_timesheet_id::text||':HEADCOMP:';
+    IF p_last_source_key IS NOT NULL AND p_last_source_key>=v_head_prefix THEN
+      IF left(p_last_source_key,length(v_head_prefix))=v_head_prefix THEN
+        IF substring(p_last_source_key FROM length(v_head_prefix)+1) !~ '^[0-9]{12}$' THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_INVALID' USING ERRCODE='22023';
+        END IF;
+        IF substring(p_last_source_key FROM length(v_head_prefix)+1)::numeric>2147483647 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_INVALID' USING ERRCODE='22023';
+        END IF;
+        v_head_cursor_ordinal:=substring(p_last_source_key FROM length(v_head_prefix)+1)::integer;
+      ELSE
+        v_head_cursor_ordinal:=2147483647;
+      END IF;
+    END IF;
+
     RETURN QUERY
     WITH build_authority AS MATERIALIZED (
       SELECT build.*
@@ -365,21 +486,147 @@ BEGIN
         AND (p_last_source_key IS NULL OR
           '10:'||p_projected_timesheet_id::text||':ADJUSTMENT:'||adjustment.id::text>p_last_source_key)
       ORDER BY adjustment.id LIMIT v_limit
+    ), head_fixed_expense AS MATERIALIZED (
+      -- A20 (Worker W, 25 Sep 2026): Source/Magnit fixed expenses (SOURCE_FIXED_EXPENSE) are paid through
+      -- the EXISTING Weekly Source mapping, not a new key ladder. The ordinary projection owner
+      -- (weekly_source_ordinary_projection_snapshot_assert_v1) writes the SUM of the current Source expense
+      -- authorities into the Timesheet financial row's expenses_pay_ex_vat / expenses_charge_ex_vat, and both
+      -- this page (expense_rows) and Pay (_pay_timesheet_components) key that column as EXPENSE_CODE 'EXPENSES'.
+      -- The head path therefore emits ONE EXPENSE_CODE 'EXPENSES' row per head carrying that same sum, anchored
+      -- at the first emitted SOURCE_FIXED_EXPENSE ordinal. A zero sum emits nothing, exactly like expense_rows.
+      SELECT min(component.component_ordinal) AS anchor_ordinal,
+        ROUND(sum(CASE WHEN component.exclude_from_pay THEN 0::numeric
+          ELSE component.pay_ex_vat END),2) AS pay_ex_vat,
+        ROUND(sum(COALESCE(component.charge_ex_vat,0::numeric)),2) AS charge_ex_vat,
+        count(*)::integer AS member_count
+      FROM public.weekly_source_entitlement_head_components component
+      WHERE v_head_id IS NOT NULL
+        AND component.head_id=v_head_id
+        AND component.component_kind='SOURCE_FIXED_EXPENSE'
+        AND ROUND(CASE WHEN component.exclude_from_pay THEN 0::numeric
+          ELSE COALESCE(component.pay_ex_vat,0) END,2)<>0
+      HAVING count(*)>0
+        AND ROUND(sum(CASE WHEN component.exclude_from_pay THEN 0::numeric
+          ELSE component.pay_ex_vat END),2)<>0
+    ), head_component_rows AS (
+      SELECT '10:'||p_projected_timesheet_id::text||':HEADCOMP:'||
+          LPAD(component.component_ordinal::text,12,'0') AS source_key,
+        'weekly_source_entitlement_head_components'::text AS source_relation,
+        component.id AS source_id,
+        CASE component.component_kind
+          WHEN 'WORKED_TIME' THEN
+            CASE WHEN component.work_date IS NOT NULL THEN 'TS_DAY' ELSE 'TS_TOTAL' END
+          WHEN 'ADDITIONAL_UNIT' THEN 'ADDITIONAL_CODE'
+          WHEN 'EXPENSE' THEN 'EXPENSE_CODE'
+          WHEN 'SOURCE_FIXED_EXPENSE' THEN 'EXPENSE_CODE'
+        END AS raw_key_type,
+        CASE component.component_kind
+          WHEN 'WORKED_TIME' THEN
+            CASE WHEN component.work_date IS NOT NULL
+              THEN to_char(component.work_date,'YYYY-MM-DD') ELSE 'TOTAL' END
+          WHEN 'ADDITIONAL_UNIT' THEN UPPER(BTRIM(component.additional_code_raw))
+          WHEN 'EXPENSE' THEN UPPER(BTRIM(component.expense_code))
+          WHEN 'SOURCE_FIXED_EXPENSE' THEN 'EXPENSES'
+        END AS raw_key_value,
+        ROUND(CASE WHEN component.component_kind='SOURCE_FIXED_EXPENSE'
+            THEN (SELECT fixed.pay_ex_vat FROM head_fixed_expense fixed)
+          WHEN component.exclude_from_pay THEN 0::numeric
+          ELSE component.pay_ex_vat END,2) AS amount_ex_vat,
+        CASE component.component_kind
+          WHEN 'WORKED_TIME' THEN
+            jsonb_build_object('role','LIVE_COMPONENT','source_kind','SEGMENT',
+              'projected_timesheet_id',p_projected_timesheet_id,
+              'segment',jsonb_build_object(
+                'segment_id',component.segment_id,
+                'segment_key',component.segment_key,
+                'segment_stable_key',component.segment_stable_key,
+                'hours_day',ROUND(COALESCE(component.hours_day,0),6),
+                'hours_night',ROUND(COALESCE(component.hours_night,0),6),
+                'hours_sat',ROUND(COALESCE(component.hours_sat,0),6),
+                'hours_sun',ROUND(COALESCE(component.hours_sun,0),6),
+                'hours_bh',ROUND(COALESCE(component.hours_bh,0),6),
+                'pay_amount',ROUND(component.pay_ex_vat,2),
+                'charge_amount',CASE WHEN component.charge_ex_vat IS NULL THEN NULL
+                  ELSE ROUND(component.charge_ex_vat,2) END,
+                'exclude_from_pay',component.exclude_from_pay,
+                'date',CASE WHEN component.work_date IS NOT NULL
+                  THEN to_char(component.work_date,'YYYY-MM-DD') END,
+                'ref_num',component.reference_number),
+              'source_ordinal',component.component_ordinal)
+          WHEN 'ADDITIONAL_UNIT' THEN
+            jsonb_build_object('role','LIVE_COMPONENT','source_kind','ADDITIONAL',
+              'projected_timesheet_id',p_projected_timesheet_id,
+              'raw_additional_code',component.additional_code_raw,
+              'additional_code',UPPER(BTRIM(component.additional_code_raw)),
+              'source_value',jsonb_build_object(
+                'unit_count',component.unit_count,
+                'pay_rate',component.unit_pay_rate,
+                'charge_rate',component.unit_charge_rate,
+                'pay_ex_vat',ROUND(component.pay_ex_vat,2),
+                'charge_ex_vat',CASE WHEN component.charge_ex_vat IS NULL THEN NULL
+                  ELSE ROUND(component.charge_ex_vat,2) END),
+              'source_ordinal',component.component_ordinal)
+          WHEN 'EXPENSE' THEN
+            jsonb_build_object('role','LIVE_COMPONENT','source_kind','EXPENSE',
+              'projected_timesheet_id',p_projected_timesheet_id,
+              'expense_code',UPPER(BTRIM(component.expense_code)),
+              'source_charge_ex_vat',CASE WHEN component.charge_ex_vat IS NULL THEN NULL
+                ELSE ROUND(component.charge_ex_vat,2) END,
+              'source_ordinal',component.component_ordinal)
+          WHEN 'SOURCE_FIXED_EXPENSE' THEN
+            (SELECT jsonb_build_object('role','LIVE_COMPONENT','source_kind','EXPENSE',
+              'projected_timesheet_id',p_projected_timesheet_id,
+              'expense_code','EXPENSES',
+              'source_charge_ex_vat',fixed.charge_ex_vat,
+              'source_ordinal',component.component_ordinal,
+              'source_fixed_expense',jsonb_build_object(
+                'mapping','WEEKLY_SOURCE_FIXED_EXPENSE_TO_TSFIN_EXPENSES_V1',
+                'member_count',fixed.member_count,
+                'pay_ex_vat',fixed.pay_ex_vat,
+                'charge_ex_vat',fixed.charge_ex_vat))
+             FROM head_fixed_expense fixed)
+        END||jsonb_build_object(
+          'entitlement_head',v_head_identity,
+          'head_component',jsonb_build_object(
+            'head_component_id',component.id,
+            'component_ordinal',component.component_ordinal,
+            'component_id',component.component_id,
+            'component_kind',component.component_kind,
+            'component_member_identity',component.component_member_identity,
+            'head_economic_key_type',component.economic_key_type,
+            'head_economic_key_value',component.economic_key_value,
+            'origin',component.origin,
+            'exclude_from_pay',component.exclude_from_pay,
+            'movement_id',component.movement_id,
+            'movement_group_id',component.movement_group_id,
+            'component_sha256',encode(component.component_sha256,'hex'))) AS payload,
+        NULL::text AS raw_failure
+      FROM public.weekly_source_entitlement_head_components component
+      WHERE v_head_id IS NOT NULL
+        AND component.head_id=v_head_id
+        AND component.component_ordinal>v_head_cursor_ordinal
+        AND (component.component_kind<>'SOURCE_FIXED_EXPENSE'
+          OR component.component_ordinal=(SELECT fixed.anchor_ordinal FROM head_fixed_expense fixed))
+        AND (component.component_kind='WORKED_TIME'
+             OR ROUND(CASE WHEN component.exclude_from_pay THEN 0::numeric
+                  ELSE COALESCE(component.pay_ex_vat,0) END,2)<>0)
+        AND (p_last_source_key IS NULL OR
+          '10:'||p_projected_timesheet_id::text||':HEADCOMP:'||
+            LPAD(component.component_ordinal::text,12,'0')>p_last_source_key)
+      ORDER BY component.component_ordinal LIMIT v_limit
     ), raw_rows AS (
-      SELECT * FROM segment_rows
+      SELECT * FROM segment_rows WHERE v_head_id IS NULL
       UNION ALL SELECT additional.* FROM additional_rows additional
-        WHERE additional.amount_ex_vat<>0 OR additional.raw_failure IS NOT NULL
-      UNION ALL SELECT * FROM additional_container_failure
-      UNION ALL SELECT * FROM expense_rows
+        WHERE v_head_id IS NULL
+          AND (additional.amount_ex_vat<>0 OR additional.raw_failure IS NOT NULL)
+      UNION ALL SELECT * FROM additional_container_failure WHERE v_head_id IS NULL
+      UNION ALL SELECT * FROM expense_rows WHERE v_head_id IS NULL
+      UNION ALL SELECT * FROM head_component_rows
       UNION ALL SELECT * FROM adjustment_rows
     ), paged_raw_rows AS MATERIALIZED (
       SELECT raw.* FROM raw_rows raw
       WHERE p_last_source_key IS NULL OR raw.source_key>p_last_source_key
       ORDER BY raw.source_key
-      -- One extra parent beyond the row look-ahead is required because the
-      -- resume cursor can point inside the final component of the prior item.
-      -- Without it, a 25-row page can falsely report source exhaustion at an
-      -- item boundary (for example, exactly 50 or 51 physical occurrences).
       LIMIT v_limit+1
     ), resolved AS (
       SELECT raw.*,
@@ -614,9 +861,6 @@ BEGIN
           'source_rate',keyed.source_rate,'source_charge_rate',keyed.source_charge_rate,
           'source_pay_ex_vat',keyed.source_pay_ex_vat,
           'source_charge_ex_vat',keyed.source_charge_ex_vat,
-          -- Baseline and reservation are separate sealed finance authority.
-          -- They are attributed to this physical source only after all build
-          -- fact families have been persisted; do not invent a live zero here.
           'baseline_source_pay_ex_vat',NULL::numeric,
           'reserved_source_pay_ex_vat',NULL::numeric,
           'outstanding_source_pay_ex_vat',NULL::numeric,
@@ -883,8 +1127,6 @@ BEGIN
       WHERE p_last_source_key IS NULL OR
         '20:'||p_projected_timesheet_id::text||':'||item.id::text||':99999999'>p_last_source_key
       ORDER BY item.id
-      -- Keep the current parent plus one parent beyond the page look-ahead so
-      -- that an exact 25-row component boundary cannot look terminal.
       LIMIT v_limit+1
     ), standard_components AS (
       SELECT item.id AS pay_batch_item_id,item.timesheet_id AS source_timesheet_id,
@@ -1098,8 +1340,6 @@ BEGIN
       AND (p_last_source_key IS NULL OR
         '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':~'>p_last_source_key)
     ORDER BY state.timesheet_id
-    -- Include the current parent plus enough following parents to provide the
-    -- complete 25-row page and one row of look-ahead after cursor filtering.
     LIMIT v_limit+1
   ), validation_failure AS (
     SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,

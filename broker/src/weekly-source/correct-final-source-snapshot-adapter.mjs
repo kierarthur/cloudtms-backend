@@ -89,11 +89,10 @@ function numericOrNull(value, label) {
 
 function round2(value) {
   const amount = numeric(value, 'Calculated amount');
-  const scaled = amount * 100;
-  const rounded = scaled < 0
-    ? -Math.round(Math.abs(scaled) + Number.EPSILON)
-    : Math.round(scaled + Number.EPSILON);
-  return rounded / 100;
+  // Exact 2dp, half away from zero, matching PostgreSQL numeric round(x, 2) (F-H1-01).
+  if (amount === 0) return 0;
+  const cents = Math.round(Number((Math.abs(amount) * 100).toPrecision(15)));
+  return (Math.sign(amount) * cents) / 100;
 }
 
 function sameNumber(left, right) {

@@ -17,6 +17,16 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('private.weekly_source_entitlement_publication_receipts'::regclass);
+select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
+select pg_temp.ws_verify_watch('public.audit_events'::regclass);
+select pg_temp.ws_verify_watch('public.pay_bank_transfers'::regclass);
+select pg_temp.ws_verify_watch('public.timesheet_pay_state_history'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_entitlement_heads'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_pending_entitlement_bundles'::regclass);
+
 set local request.jwt.claim.role='service_role';
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
@@ -997,7 +1007,7 @@ begin
     and v_result->>'code'='WEEKLY_SOURCE_PENDING_BUNDLE_CENSUS_NOT_FROZEN',
     'a CENSUS_ERROR census must not be saved as pending: '||v_result::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_pending_entitlement_bundles)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_pending_entitlement_bundles'::regclass)=0,
     'neither refusal wrote a row');
 
   -- The real save, with the real census over the real frozen root.
@@ -1039,7 +1049,7 @@ begin
   -- 24 section 4.4: the previous effective entitlement remains current and no
   -- head is written.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0,
     '24 section 4.4: a frozen decision publishes no head');
 
   -- The one bounded, informational stale warning.
@@ -1071,7 +1081,7 @@ begin
     'a second save of the same request returns the same bundle and creates nothing: '
       ||v_again::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_pending_entitlement_bundles)=1,
+    pg_temp.ws_verify_count('public.weekly_source_pending_entitlement_bundles'::regclass)=1,
     'still exactly one pending bundle');
 
   -- A DIFFERENT request under the same decision bundle revision is refused and
@@ -1097,7 +1107,7 @@ begin
     'a different request under the same revision is refused, never an overwrite: '
       ||v_again::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_pending_entitlement_bundles)=1
+    pg_temp.ws_verify_count('public.weekly_source_pending_entitlement_bundles'::regclass)=1
     and (select request_digest=v_row.request_digest
            from public.weekly_source_pending_entitlement_bundles where id=v_row.id),
     'the saved decision is untouched by the refused request');
@@ -1264,7 +1274,7 @@ begin
        from public.weekly_source_pending_entitlement_bundles where id=v_pending),
     'R42: BLOCKED consumes no technical-failure budget and leaves the bundle reclaimable');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0,
     'R42: a BLOCKED gate writes nothing');
 
   -- TEST SCAFFOLDING: retire the queued Candidate jobs so the gate can grant.
@@ -1272,7 +1282,9 @@ begin
   -- release owner never touches a Workbench job.
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
 
   -- R3 and R5: the root is still frozen by a live Draft item.  FROZEN advances
   -- next_check_at_utc, keeps the old head current and NEVER touches the
@@ -1340,9 +1352,8 @@ begin
 
   -- R5: nothing was released by elapsed time, by attempt count or by inference.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0
+    and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=0,
     'R5: four ticks against a frozen root published no head and wrote no receipt');
 end
 $verify_release_apply_frozen$;
@@ -1393,10 +1404,12 @@ begin
     (v_saved->>'ok')::boolean and (v_saved->>'created')::boolean,
     'R6: the mixed bundle is saved as one PENDING bundle: '||v_saved::text);
 
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   update public.weekly_source_pending_entitlement_bundles
      set next_check_at_utc=pg_catalog.clock_timestamp()-interval '1 second'
    where id=(v_saved->>'pending_bundle_id')::uuid;
@@ -1412,7 +1425,7 @@ begin
     'R6: a mixed bundle stays PENDING and neither root publishes: '
       ||(v_apply-'census')::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'R6: neither root published a head');
   perform pg_temp.assert_true(
     (select state='PENDING' and technical_failure_count=0
@@ -1661,7 +1674,7 @@ begin
     v_row.lease_token is null and v_row.lease_owner is null,
     'R14: a bundle in MANUAL_REVIEW carries no lease');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0,
     'R14: the old head remains current and nothing was published');
 
   -- A bundle in MANUAL_REVIEW is not claimed again by any tick.
@@ -1745,7 +1758,7 @@ begin
     'R24: an ambiguous family is MANUAL_REVIEW, and nothing is written: '
       ||(v_result-'detail')::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0,
     'R24: nothing was published');
   -- Office reviews it and asks for another attempt; the family is still broken
   -- when the next tick runs, which is the R22 case below.
@@ -1788,9 +1801,8 @@ begin
     and v_row.manual_review_reason::jsonb->>'code'='WEEKLY_SOURCE_ROOT_ROTATED_AFTER_AUTHORISATION',
     'R22: the Office-visible reason names the rotation');
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=0
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=0,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=0
+    and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=0,
     'R22: nothing was published and nothing was rebuilt');
   perform pg_temp.assert_true(
     (select version=1 and is_current is false
@@ -1845,7 +1857,7 @@ begin
     raise notice 'SKIPPED: interface I-1 is not installed; ruling A6 was not exercised';
     return;
   end if;
-  select pg_catalog.count(*) into v_heads from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads;
   select * into v_row from public.weekly_source_pending_entitlement_bundles
    where decision_bundle_id='d0000000-0000-4000-8000-0000000000b1';
   v_pending:=v_row.id;
@@ -1865,7 +1877,9 @@ begin
     pg_catalog.statement_timestamp(),pg_catalog.statement_timestamp());
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   update public.weekly_source_pending_entitlement_bundles
      set state='PENDING',manual_review_reason=null,
          lease_owner=null,lease_token=null,lease_worker_run_id=null,lease_expires_at_utc=null,
@@ -1884,7 +1898,7 @@ begin
     and v_result->>'outcome'='MANUAL_REVIEW'
     and v_row.state='MANUAL_REVIEW'
     and (v_row.manual_review_reason::jsonb)->>'code'='BOOKING_REFERENCE_CANONICAL_COLLISION'
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads,
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads,
     'A6: the trim/whitespace-equivalent canonical booking-reference split reaches the '
       ||'Office as BOOKING_REFERENCE_CANONICAL_COLLISION, and nothing is published: '
       ||coalesce(v_row.manual_review_reason,'<null>'));
@@ -1893,7 +1907,9 @@ begin
   -- Limb 2: the OTHER non-canonical shape must keep its own precise reason.
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   update public.timesheets set is_current=false
    where timesheet_id='d0000000-0000-4000-8000-000000000006';
   update public.weekly_source_pending_entitlement_bundles
@@ -1918,7 +1934,7 @@ begin
         <>'BOOKING_REFERENCE_CANONICAL_COLLISION'
     and pg_catalog.strpos(coalesce((v_row.manual_review_reason::jsonb)->>'message',''),
                           'CANONICAL_AMBIGUOUS')>0
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads,
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads,
     'A6: a zero-or-many canonical-row family keeps its own precise reason and is NOT '
       ||'collapsed into the collision code: '||coalesce(v_row.manual_review_reason,'<null>'));
   update public.timesheets set is_current=true
@@ -2026,9 +2042,10 @@ begin
   -- Exactly one head, committed current, one invalidation token, one receipt.
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_entitlement_heads
-      where state='COMMITTED_CURRENT')=1
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=1,
+      where state='COMMITTED_CURRENT'
+        and id in (select (key->>0)::uuid from pg_temp.ws_verify_keys
+                   where rel='public.weekly_source_entitlement_heads'::regclass))=1
+    and pg_temp.ws_verify_count('private.weekly_source_entitlement_publication_receipts'::regclass)=1,
     'exactly one committed head and exactly one receipt');
 
   -- R33: the response is lost, the lease expires, the same request is applied
@@ -2050,9 +2067,8 @@ begin
     'R33: the receipt is returned by the replay check BEFORE the expired-lease rejection: '
       ||(v_again-'receipt')::text);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=1
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=1,
+    pg_temp.ws_verify_count('public.weekly_source_entitlement_heads'::regclass)=1
+    and pg_temp.ws_verify_count('private.weekly_source_entitlement_publication_receipts'::regclass)=1,
     'R33: nothing was republished');
 
   -- The bundle's money identity is FROZEN, including the stored request.  With
@@ -2355,7 +2371,9 @@ begin
   -- coalesce into one of them and the contract would report NO_COMPLETE_SCOPE_JOB.
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   v_result:=public.weekly_source_first_authorisation_withdraw_v1(
     v_root,v_root,v_signature,v_actor);
   perform pg_temp.assert_true(
@@ -2404,7 +2422,9 @@ begin
                  ->>'current_row_signature';
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
   v_result:=public.weekly_source_first_authorisation_withdraw_v1(
     v_root,v_root,v_signature,v_actor);
   perform pg_temp.assert_true(
@@ -2467,8 +2487,8 @@ begin
     (select item_row.is_voided and item_row.amount_inc_vat=100.00
        from public.pay_batch_items item_row
       where item_row.id='d0000000-0000-4000-8000-00000000ba03')
-    and (select pg_catalog.count(*) from public.timesheet_pay_state_history)=0
-    and (select pg_catalog.count(*) from public.pay_bank_transfers)=0
+    and pg_temp.ws_verify_writes('public.timesheet_pay_state_history'::regclass)=0
+    and pg_temp.ws_verify_writes('public.pay_bank_transfers'::regclass)=0
     and (select financial_row.paid_at_utc is null
            from public.timesheets_financials financial_row
           where financial_row.timesheet_id=v_root),
@@ -2687,8 +2707,10 @@ begin
 
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
-  select pg_catalog.count(*) into v_heads_before from public.weekly_source_entitlement_heads;
+   where status in ('QUEUED','RUNNING')
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.banking_pay_workbench_jobs'::regclass);
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
 
   v_result:=private.weekly_source_entitlement_publish_immediate_v1(v_request);
   perform pg_temp.assert_true(
@@ -2701,7 +2723,7 @@ begin
     'D10: the coordinator''s save-side check accepted WP-08b''s row: '
       ||coalesce((v_result->'pending')::text,'<null>'));
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before,
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before,
     'D10: no head was written on the save path');
 
   select * into v_row from public.weekly_source_pending_entitlement_bundles
@@ -2784,10 +2806,8 @@ begin
       'd0000000-0000-4000-8000-000000000001');
   end if;
 
-  select pg_catalog.count(*) into v_heads_before
-    from public.weekly_source_entitlement_heads;
-  select pg_catalog.count(*) into v_receipts_before
-    from private.weekly_source_entitlement_publication_receipts;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads_before;
+  select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts_before;
 
   -- B4.3 needs the counter to be NON-ZERO before the frozen run, otherwise
   -- "it neither incremented nor cleared it" is unmeasurable in one direction.
@@ -2830,7 +2850,7 @@ begin
   v_counter_before:=v_row.technical_failure_count;
 
   -- ---- run A: the behaviour B4.2 reverses ---------------------------------
-  select pg_catalog.count(*) into v_audit_start from public.audit_events;
+  select pg_temp.ws_verify_count('public.audit_events'::regclass) into v_audit_start;
   for v_tick in 1..v_ticks loop
     update public.weekly_source_pending_entitlement_bundles
        set next_check_at_utc=pg_catalog.clock_timestamp()-interval '1 second',
@@ -2848,7 +2868,7 @@ begin
       v_result->>'outcome'='FROZEN' and (v_result->>'released')::boolean is false,
       'B4.2 run A tick '||v_tick::text||': still frozen, still nothing released');
   end loop;
-  select pg_catalog.count(*) into v_audit_a from public.audit_events;
+  select pg_temp.ws_verify_count('public.audit_events'::regclass) into v_audit_a;
   v_rows_a:=v_audit_a-v_audit_start;
 
   -- ---- run B: the shipped behaviour ---------------------------------------
@@ -2864,7 +2884,7 @@ begin
       'B4.2 run B tick '||v_tick::text||': the unchanged freeze is watched, not claimed: '
         ||v_claim::text);
   end loop;
-  select pg_catalog.count(*) into v_audit_b from public.audit_events;
+  select pg_temp.ws_verify_count('public.audit_events'::regclass) into v_audit_b;
   v_rows_b:=v_audit_b-v_audit_a;
 
   raise notice 'B4.2 MEASURED over % ticks each: run A (pre-ruling path) wrote % audit rows; run B (shipped watch) wrote % audit rows',
@@ -2905,9 +2925,8 @@ begin
   -- And nothing was released by elapsed time, by observation count or by
   -- inference across either run.
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads_before
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=v_receipts_before
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads_before
+    and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=v_receipts_before
     and (select state='PENDING'
            from public.weekly_source_pending_entitlement_bundles where id=v_pending),
     'B4.2/B4.3: '||(2*v_ticks)::text||' ticks against a frozen root published no head '
@@ -3271,9 +3290,8 @@ begin
          pending_revision=pending_revision+1
    where id=v_pending;
   select * into v_before from public.weekly_source_pending_entitlement_bundles where id=v_pending;
-  select pg_catalog.count(*) into v_heads from public.weekly_source_entitlement_heads;
-  select pg_catalog.count(*) into v_receipts
-    from private.weekly_source_entitlement_publication_receipts;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads;
+  select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts;
 
   -- Limb 1: the census verdict is FROZEN.  The classifier must refuse to
   -- classify it at all.
@@ -3321,9 +3339,8 @@ begin
     and v_row.technical_failure_count=v_before.technical_failure_count
     and v_row.pending_revision=v_before.pending_revision
     and v_row.manual_review_reason is not distinct from v_before.manual_review_reason
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads
-    and (select pg_catalog.count(*)
-           from private.weekly_source_entitlement_publication_receipts)=v_receipts,
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads
+    and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=v_receipts,
     'A5: a refused frozen state published no head, wrote no receipt, caused no manual '
       ||'review and neither incremented nor reset the counter');
 
@@ -3566,21 +3583,22 @@ begin
   -- after its lease is long gone: it returns the SAME receipt and publishes
   -- nothing new.
   select * into v_row from public.weekly_source_pending_entitlement_bundles
-   where state='RELEASED' order by released_at_utc limit 1;
+   where state='RELEASED'
+     and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+       where rel='public.weekly_source_pending_entitlement_bundles'::regclass)
+   order by released_at_utc limit 1;
   if found then
     v_pending:=v_row.id;
-    select pg_catalog.count(*) into v_heads from public.weekly_source_entitlement_heads;
-    select pg_catalog.count(*) into v_receipts
-      from private.weekly_source_entitlement_publication_receipts;
+    select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads;
+    select pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass) into v_receipts;
     v_result:=private.weekly_source_pending_entitlement_release_apply_v1(
       v_pending,v_row.pending_revision,v_row.request_digest,
       'weekly-source-release-worker',pg_catalog.gen_random_uuid(),
       pg_catalog.gen_random_uuid());
     perform pg_temp.assert_true(
       (v_result->>'replayed')::boolean and (v_result->>'released')::boolean
-      and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads
-      and (select pg_catalog.count(*)
-             from private.weekly_source_entitlement_publication_receipts)=v_receipts,
+      and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads
+      and pg_temp.ws_verify_writes('private.weekly_source_entitlement_publication_receipts'::regclass)=v_receipts,
       'GUARANTEE 1: a replay of a released bundle returns the committed receipt and '
         ||'publishes nothing a second time: '||(v_result-'receipt')::text);
     -- And a RELEASED bundle is never claimed again, by the watch or the claim.
@@ -3623,11 +3641,11 @@ begin
   -- nothing and moves no state.
   select * into v_row from public.weekly_source_pending_entitlement_bundles
    where decision_bundle_id='d0000000-0000-4000-8000-0000000000b7';
-  select pg_catalog.count(*) into v_heads from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads;
   v_result:=private.weekly_source_pending_release_watch_page_v1(
     'weekly-source-release-worker','d0000000-0000-4000-8000-00000000cc09',25);
   perform pg_temp.assert_true(
-    (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads
+    pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads
     and (select state from public.weekly_source_pending_entitlement_bundles where id=v_row.id)
         =v_row.state,
     'GUARANTEE 2: the frozen watch released nothing and promoted no state: '||v_result::text);
@@ -3660,7 +3678,7 @@ begin
      set next_check_at_utc=pg_catalog.clock_timestamp()-interval '1 second',
          last_census_json=coalesce(last_census_json,'{}'::jsonb)-'watch'
    where id=v_pending;
-  select pg_catalog.count(*) into v_heads from public.weekly_source_entitlement_heads;
+  select pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass) into v_heads;
   perform private.weekly_source_pending_entitlement_release_claim_page_v1(
     'weekly-source-release-worker','d0000000-0000-4000-8000-00000000cc09',60,25);
   select * into v_row from public.weekly_source_pending_entitlement_bundles where id=v_pending;
@@ -3670,7 +3688,7 @@ begin
   perform pg_temp.assert_true(
     (v_result->>'released')::boolean is false
     and v_result->>'outcome'='SUPERSEDED'
-    and (select pg_catalog.count(*) from public.weekly_source_entitlement_heads)=v_heads,
+    and pg_temp.ws_verify_writes('public.weekly_source_entitlement_heads'::regclass)=v_heads,
     'GUARANTEE 3: a bundle whose accepted Office decision no longer stands is never '
       ||'released: '||(v_result-'detail')::text);
   -- The watch honours the same rule: it escalates rather than keep waiting on a

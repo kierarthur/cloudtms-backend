@@ -209,6 +209,12 @@ import {
   signTsq1 as signTsq1Shared
 } from './timesheet-qr-payload.js';
 import { canonicalWeeklyShiftFinancialSegment } from './weekly-source/weekly-rate-owner.js';
+import {
+  bpayBusyCode,
+  bpayBusyErrorFromResponseText,
+  bpayBusyResponse,
+  bpayBusyRpcMessage
+} from './bpay-busy.js';
 
 // Provider compatibility boundary: current CloudTMS business code keeps its
 // established /rest/v1 table and RPC URLs. Only direct requests to a Miget
@@ -166246,7 +166252,12 @@ async function sbRpc(env, fn, args, opts) {
     }
 
     if (!res.ok) {
-      const err = new Error(`RPC ${fnText} failed ${res.status}: ${txt}`);
+      // Stage 2 H3: a Banking Pay busy refusal gets a fixed message with no
+      // response body; status, body and json are unchanged for every caller.
+      const busyCode = bpayBusyCode({ status: res.status, json });
+      const err = new Error(busyCode
+        ? bpayBusyRpcMessage(fnText, res.status, busyCode)
+        : `RPC ${fnText} failed ${res.status}: ${txt}`);
       err.status = res.status;
       err.body = txt;
       err.json = json;
@@ -166254,6 +166265,7 @@ async function sbRpc(env, fn, args, opts) {
       err.routeClass = effectiveRouteClass || null;
       err.purpose = purposeRaw || null;
       err.authRefreshRetried = authRefreshRetried;
+      if (busyCode) err.code = busyCode;
       throw err;
     }
 
@@ -172114,7 +172126,18 @@ function candidateScheduleLocalTimeAliases(segment, fallback = null) {
   };
 }
 
+// Exact 2dp money rounding, half away from zero, matching PostgreSQL numeric round(x, 2)
+// applied to the decimal value of short-decimal money arithmetic (F-H1-01: 112.50 x 1.138 =
+// 128.025 must round to 128.03 as the Source database owner does, not 128.02 from binary floats).
+function roundMoney2HalfAwayExact(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x) || x === 0) return 0;
+  const cents = Math.round(Number((Math.abs(x) * 100).toPrecision(15)));
+  return (Math.sign(x) * cents) / 100;
+}
+
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
+  const round2 = roundMoney2HalfAwayExact;
   const pc = payChargeFromContract(contract);
   const pay = pc?.pay || null;
   const chg = pc?.charge || null;
@@ -173155,7 +173178,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 }
 
 async function rebuildFromExistingSegmentsEvidence(env, ts, cw, contract, curFin, options = {}) {
-  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+  const round2 = roundMoney2HalfAwayExact;
   const asNumberLocal = (v) => (v == null ? 0 : Number(v) || 0);
   const trimStr = (v) => (v == null ? '' : String(v).trim());
 
@@ -189112,6 +189135,15 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const passSummaries = [];
   const sourceBuildParallelBurstSummaries = [];
   let sourceBuildDuePreflightCount = 0;
+  // B3: a burst whose every lane claimed, processed and enqueued its own
+  // immediately-due continuation leaves the due source-build count unchanged,
+  // so the next burst may reuse that count instead of repeating the REST
+  // preflight.  Bounded so new due work from other Candidates is still counted
+  // at least every (reuse bound + 1) bursts.
+  const sourceBuildDuePreflightReuseMax = 3;
+  let sourceBuildDuePreflightReuseCount = 0;
+  let sourceBuildDuePreflightReuseStreak = 0;
+  let sourceBuildReusableDueQueuedCount = null;
   let sourceBuildRecoveryProbeCount = 0;
   let sourceBuildLaneSkippedNoDueWorkCount = 0;
   let sourceBuildLaneSkippedNormalWorkCount = 0;
@@ -189806,7 +189838,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     continuationsCreated += passContinuationsCreated;
     rowUnitsProcessed += passWorkUnits;
     madeProgress = madeProgress || passMadeProgress;
-    if (normalLaneEnabled && (passProcessed > 0 || passContinuationsCreated > 0)) downstreamWorkMayBeDue = true;
+    // B2: a processed source stage that enqueued its own continuation is a
+    // mid-chain page; only the chain-ending stage (no continuation, including a
+    // durable failure) can publish work for the normal lane, so only that stage
+    // schedules the follow-up normal drain pass.
+    if (normalLaneEnabled && passProcessed > 0 && passContinuationsCreated === 0) downstreamWorkMayBeDue = true;
     if (lockContention) {
       lockContentionDetected = true;
       lockContentionCount += 1;
@@ -190050,8 +190086,24 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         stoppedBy = budget.reason;
         break;
       }
-      const sourceDuePreflight = await fetchDueQueuedJobCount(sourceBuildDueJobTypes, 'SOURCE_BUILD_PARALLEL');
-      sourceBuildDuePreflightCount += 1;
+      let sourceDuePreflight;
+      if (sourceBuildReusableDueQueuedCount !== null
+          && sourceBuildReusableDueQueuedCount > 0
+          && sourceBuildDuePreflightReuseStreak < sourceBuildDuePreflightReuseMax) {
+        sourceDuePreflight = {
+          ok: true,
+          route: 'SOURCE_BUILD_PARALLEL',
+          due_queued_count: sourceBuildReusableDueQueuedCount,
+          reused_from_previous_burst: true
+        };
+        sourceBuildDuePreflightReuseCount += 1;
+        sourceBuildDuePreflightReuseStreak += 1;
+      } else {
+        sourceDuePreflight = await fetchDueQueuedJobCount(sourceBuildDueJobTypes, 'SOURCE_BUILD_PARALLEL');
+        sourceBuildDuePreflightCount += 1;
+        sourceBuildDuePreflightReuseStreak = 0;
+      }
+      sourceBuildReusableDueQueuedCount = null;
       const dueQueuedCount = Math.max(0, Number(sourceDuePreflight.due_queued_count) || 0);
       const recoveryProbeOnly = sourceDuePreflight.ok === true && dueQueuedCount <= 0;
       if (recoveryProbeOnly && sourceBuildRecoveryProbeCount > 0) {
@@ -190100,9 +190152,17 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       // A zero queued-row preflight cannot prove that no expired RUNNING attempt
       // needs recovery. RPC 1 owns that recovery, so one recovery-capable lane is
       // mandatory; the preflight count sizes only additional queued-work lanes.
+      // B1: queued-work lanes are sized by the due source-build work the
+      // preflight counted.  At most one queued source-build job per Candidate
+      // is claimable at a time, so a lane beyond the due count can only return
+      // an empty claim.  An unknown count (failed preflight) keeps the
+      // configured parallelism.
+      const dueLaneCap = sourceDuePreflight.ok === true && dueQueuedCount > 0
+        ? dueQueuedCount
+        : sourceBuildParallelism;
       const laneCount = recoveryProbeOnly
         ? 1
-        : Math.max(1, Math.min(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit));
+        : Math.max(1, Math.min(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit, dueLaneCap));
       const burstNumber = sourceBuildParallelBurstCount + 1;
 
       logRpcBudgetDecision({
@@ -190155,6 +190215,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       let burstAssertionPassed = true;
       const burstErrors = [];
       let burstRpcCalls = 0;
+      let burstContinuingLanes = 0;
 
       for (const settledLane of settled) {
         const rejectedDiagnostic = settledLane.status === 'rejected'
@@ -190235,6 +190296,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         burstMoreDue = burstMoreDue || recorded.more_due;
         burstMadeProgress = burstMadeProgress || recorded.made_progress;
         burstLockContention = burstLockContention || recorded.lock_contention;
+        if (recorded.claimed === 1 && recorded.processed === 1 && recorded.failed === 0
+            && recorded.continuations_created === 1) {
+          burstContinuingLanes += 1;
+        }
         if (recorded.failed > 0) {
           burstErrors.push({
             code: recorded.result_code || 'SOURCE_BUILD_STAGE_FAILED',
@@ -190245,6 +190310,13 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
 
       burstMoreDue = burstMoreDue
         || dueQueuedCount > burstClaimed;
+      if (!recoveryProbeOnly
+          && sourceDuePreflight.ok === true
+          && dueQueuedCount > 0
+          && burstErrors.length === 0
+          && burstContinuingLanes === laneCount) {
+        sourceBuildReusableDueQueuedCount = dueQueuedCount;
+      }
 
       const burstSummary = {
         burst_number: burstNumber,
@@ -190596,6 +190668,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_attempt_post_claim_budget_skip_count: sourceBuildAttemptPostClaimBudgetSkipCount,
     source_build_attempt_contract_failure_count: sourceBuildAttemptContractFailureCount,
     source_build_due_preflight_count: sourceBuildDuePreflightCount,
+    source_build_due_preflight_reuse_count: sourceBuildDuePreflightReuseCount,
     source_build_recovery_probe_count: sourceBuildRecoveryProbeCount,
     source_build_lane_skipped_no_due_work_count: sourceBuildLaneSkippedNoDueWorkCount,
     source_build_lane_skipped_normal_work_count: sourceBuildLaneSkippedNormalWorkCount,
@@ -194976,6 +195049,9 @@ async function handleTimesheetQrRestore(env, req, timesheetId) {
         new Response(JSON.stringify(moved), { status: 409, headers: { 'Content-Type': 'application/json' } })
       );
     }
+    const busyResponse = bpayBusyResponse(
+      bpayBusyErrorFromResponseText('timesheet_qr_restore_version', rpcRes.status, t), JSON_HEADERS);
+    if (busyResponse) return withCORS(env, req, busyResponse);
     return withCORS(env, req, badRequest(`Restore failed: ${t}`));
   }
 
@@ -195240,6 +195316,9 @@ async function handleTimesheetQrRefuseAndReset(env, req, timesheetId) {
         new Response(JSON.stringify(moved), { status: 409, headers: { 'Content-Type': 'application/json' } })
       );
     }
+    const busyResponse = bpayBusyResponse(
+      bpayBusyErrorFromResponseText('timesheet_qr_refuse_and_reset', rpcRes.status, t), JSON_HEADERS);
+    if (busyResponse) return withCORS(env, req, busyResponse);
     return withCORS(env, req, badRequest(`Refuse failed: ${t}`));
   }
 
@@ -195589,6 +195668,8 @@ async function handleContractWeekDeletePlanned(env, req, contractWeekId) {
       throw new Error('CONTRACT_WEEK_DELETE_PLANNED_GUARDED_INVALID');
     }
   } catch (error) {
+    const busyResponse = bpayBusyResponse(error, JSON_HEADERS);
+    if (busyResponse) return withCORS(env, req, busyResponse);
     const message = String(error?.message || error || 'Planned delete failed');
     const contextChanged = /CONTRACT_WEEK_DELETE_CONTEXT_CHANGED|CANDIDATE_SUBMISSION_REJECTION_REQUIRED/.test(message);
     return withCORS(env, req, new Response(JSON.stringify({
@@ -202177,6 +202258,9 @@ if (req.method === 'POST' && p === '/api/users') {
     } catch (e) {
       // Log full error to Worker logs
       console.error("Unhandled error:", e);
+
+      const busyResponse = bpayBusyResponse(e, JSON_HEADERS);
+      if (busyResponse) return withCORS(env, req, busyResponse);
 
       // Expose a useful message to the browser *with* CORS headers,
       // so you see a JSON 500 instead of a misleading CORS failure.

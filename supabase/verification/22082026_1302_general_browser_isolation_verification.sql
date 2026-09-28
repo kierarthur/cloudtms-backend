@@ -406,8 +406,8 @@ begin
   -- The installed definition is SECURITY DEFINER with fixed
   -- search_path=pg_catalog,pg_temp and grants only owner and service_role.
   -- This updates the inventory seal; it does not change any grants.
-  if v_count<>792 or v_service_missing<>75 or v_browser_executable<>0
-     or v_hash<>'50de1833423a306fcc4a0502d30ae59f' then
+  if v_count<>793 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'af4aefdaef23634e2ccf876ab91ea3e5' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

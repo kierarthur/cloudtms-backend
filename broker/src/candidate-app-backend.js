@@ -24,6 +24,7 @@ import {
   isManagedRootGuardRefusal,
   recordGuardRefusalAfterRollback
 } from './weekly-source/guard-refusal-record.mjs';
+import { bpayBusyEnvelope } from './bpay-busy.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -833,6 +834,10 @@ function officeErrorCode(error) {
 }
 
 function errorResponse(error, correlationId, office = false, safeDiagnosticDetails = null) {
+  // Stage 2 H3: a Banking Pay busy refusal is a clean, retryable 409. It
+  // carries no transport diagnostic, so no database text reaches the client.
+  const busy = bpayBusyEnvelope(error);
+  if (busy) return jsonResponse(busy.status, { ...busy.body, retryable: true, request_id: correlationId });
   const code = office ? officeErrorCode(error) : knownErrorCode(error);
   let status = error instanceof CandidateHttpError ? error.status : 400;
   if (AUTH_ERROR_CODES.has(code)) status = 401;

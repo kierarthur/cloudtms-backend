@@ -1115,20 +1115,27 @@ insert into wp18_dynamic_sql_acknowledged
   ('private','_invoice_generation_advance_core_v8','p_claims jsonb, p_now_utc timestamp with time zone','bb727a6d5f24e5ec137186e30f547743ffdcf05feb131287c918da2ab90896da'),
   ('private','pay_workbench_correction_held_dirty_job_resolve_v1','p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_route_results_json jsonb, p_options_json jsonb','ba11e89120decf5cfabca5ec2cfdfdc2a416cb9fb2c426548e25d6e4adbd6337'),
   ('private','pay_workbench_financial_scope_dirty_transition_v1','','1add84673ed8baed0023f39af4b7d6cd3346a16d6f5ff7a2aae3066d53e0e6eb'),
-  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','617c4f658a4e9d99ded9dbca54cc4f90b5ad3ce8621bf2fcdb8de4b7672bc464'),
+  ('private','pay_sync_overpayments_from_workbench_workspace_v1','p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]','e52dc227b42a6c1825be6c2766de795bc5b1640e5ff118cbd5f5a70755f27fef'),
+  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','94f92d42c1665cce018e4afecc7d5dc353daeebf9d45b36a2a93edcc46fbecdb'),
   ('public','codex_debug_exec_sql','p_sql text, p_statement_timeout_ms integer, p_lock_timeout_ms integer','8366f2d4db00a039928e39fd53876b6dea6f471e51c7b21c160d7e0ed4e44a70'),
   ('public','codex_debug_explain_sql','p_sql text, p_analyze boolean, p_statement_timeout_ms integer, p_lock_timeout_ms integer','561524dc2ea5ce6138561b85162dc479777dc0a6f7802f70551535fbe4c284e6'),
   ('public','codex_debug_pg_stat_statements_snapshot','p_terms text[], p_limit integer','db679b5746ebe9ebddcc3333c21795705944f7a545e903d20c6b9184da58f500'),
   ('public','codex_debug_query_sql','p_sql text, p_limit integer, p_statement_timeout_ms integer, p_lock_timeout_ms integer','fb5a37cf5a1b94f05c5e4e7051100502da9138022dd1afd0232fccc8f90e84d4'),
   ('public','codex_debug_select_sql','p_sql text, p_limit integer','b736ba46a7acc3f1419e8f66695672c0321d4c8173941041856f384c96592a11'),
-  ('public','id_consolidation_run_draft_commit','p_id_ref text, p_bank_upload_code text, p_actor_user_id uuid','e930d13cc8fe35cebe82e9e851e83f770bc55176f1cd49b368ab0c319ea308e3'),
+  -- Retain 7020c683's ledger-revision/stale-Draft correction. This exact hash
+  -- matches both the retained TEST contract and the clean local NEW definition.
+  -- This remains a dynamic-SQL acknowledgement, NOT an absence/safety proof.
+  ('public','id_consolidation_run_draft_commit','p_id_ref text, p_bank_upload_code text, p_actor_user_id uuid','d4280107db960db290d515b52dae737b8ec6739561e60579f28acb170d246bb2'),
   ('public','invoice_issue_one','p_invoice_id uuid, p_actor_user_id uuid','c49c6056de2d20dbf45e5be231a10ad2e5fd91fefc37b5c431e94e355a9b817c'),
   ('public','pay_remittance_maybe_queue_for_trigger','p_pay_batch_id uuid, p_trigger text, p_scope text, p_actor_user_id uuid, p_only_confirmed boolean, p_root_operation_id uuid, p_operation_mode boolean','1745985bd2a722750514f77a5ce5f4ae5744b23dc2c4f0c37f3a8e53faad54db'),
-  ('public','pay_timesheet_summary_pay_state_refresh_trigger','','ffcee44c5e17076fbb2764dea5c7b23dd50236a81e402bf0d16d7d3629821ccb'),
+  -- Banking Pay Stage 2 A35 adds only SET plan_cache_mode=force_custom_plan; the
+  -- body (prosrc) is unchanged. Exact final installed definition on NEW, baseline
+  -- UPGRADE and seeded UPGRADE. Still an acknowledgement, NOT a safety proof.
+  ('public','pay_timesheet_summary_pay_state_refresh_trigger','','eebad381e621378d5553d7ab34f6eae1ad143214df0fe0ac28dee718543c1953'),
   ('public','pay_workbench_candidate_dirty_apply_job_process','p_job_id uuid, p_limit integer','1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e'),
   ('public','pay_workbench_claim_due_jobs','p_limit integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid, p_allowed_job_types text[]','8849ce5f2ba63b8fb68fbb82496993cc3a338e994cddcf9f012340db250648c5'),
   ('public','pay_workbench_enqueue_candidate_refresh','p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb','afff514075f85f88642783e6b72db24b64e922b4112274473f67e33c92694d79'),
-  ('public','pay_workbench_mark_candidate_dirty','','62e25d7548b7c2488b76aa2d189bc07fc986364de5837f775bed3a3a364243e7'),
+  ('public','pay_workbench_mark_candidate_dirty','','c01fb95d6d26d1edc413fbceec53b21331bf919adb9142f7aa11e22caee49abf'),
   ('public','pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1','p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb','5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18'),
   ('public','pay_workbench_preview_rows_materialise_chunk','p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer','a956d26311d7eb018b6c55de20049ecca5edb85e1a48e16dd386b10b8d400add');
 do $dynamic_sql$
@@ -1390,6 +1397,7 @@ begin
     'pay_bank_transfers|trg_bpay_wb_transfers_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_bank_transfers|trg_pay_bank_transfers_normalise_status_biu|public._pay_bank_transfers_normalise_status_biu',
     'pay_bank_transfers|trg_ts_summary_pay_cache_transfers_au|public.pay_timesheet_summary_pay_state_refresh_trigger',
+    'pay_batch_items|bpay_item_work_reference_v1|private.bpay_item_work_reference_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_insert_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_update_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
@@ -1484,6 +1492,12 @@ begin
     'pay_bank_transfers.pay_bank_transfers_batch_fkey del=c upd=a',
     'pay_bank_transfers.pay_bank_transfers_candidate_fkey del=n upd=a',
     'pay_bank_transfers.pay_bank_transfers_umbrella_fkey del=n upd=a',
+    -- [Worker CA re-census ORPHAN-V5, 28 Sep 2026] Stage 2 work-reference FK. ON DELETE SET NULL
+    -- (bpay_direct_work_revision_v1) only: a deleted Timesheet clears the Stage 2 reference revision (the item trigger
+    -- then clears the reference key). It writes none of the eight census columns and no amount, status or frozen
+    -- column; the recorded reference UUID is kept. Without it a Timesheet referenced only by a frozen UUID could no
+    -- longer be deleted, which today it can.
+    'pay_batch_items.bpay_item_work_reference_v1 del=n upd=a',
     'pay_batch_items.pay_batch_items_candidate_fkey del=c upd=a',
     'pay_batch_items.pay_batch_items_finance_component_id_fkey del=n upd=a',
     'pay_batch_items.pay_batch_items_timesheet_id_fkey del=n upd=a',

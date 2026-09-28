@@ -18,6 +18,7 @@ DECLARE
   v_expected_direct_callers text[] := ARRAY[
     'private.pay_workbench_candidate_dirty_cohort_stage_v1(p_job_id uuid, p_candidate_id uuid, p_now_utc timestamp with time zone)',
     'private.pay_workbench_financial_scope_dirty_transition_v1()',
+    'private.weekly_source_entitlement_head_ledger_mark_v1()',
     'private.weekly_source_entitlement_publish_core_v1(p_request jsonb, p_publication_mode text, p_lock_result jsonb, p_pending_bundle_id uuid, p_worker_id text, p_worker_run_id uuid, p_census jsonb, p_proof jsonb)',
     'public.candidate_pay_method_change_refresh_scope_v1(p_candidate_id uuid, p_source_method text, p_target_method text)',
     'public.pay_timesheet_summary_pay_state_refresh_trigger()',
@@ -166,6 +167,14 @@ BEGIN
             WHEN caller_namespace.nspname = 'private'
              AND caller_proc.proname =
                    'pay_workbench_candidate_dirty_cohort_stage_v1'
+              THEN caller_proc.prosecdef IS DISTINCT FROM FALSE
+            -- Banking Pay Stage 2 A17: the head-ledger trigger function runs as
+            -- the writer of public.weekly_source_entitlement_heads, which only
+            -- the owner can write, so it is an owner-context SECURITY INVOKER
+            -- caller like the cohort stage above.
+            WHEN caller_namespace.nspname = 'private'
+             AND caller_proc.proname =
+                   'weekly_source_entitlement_head_ledger_mark_v1'
               THEN caller_proc.prosecdef IS DISTINCT FROM FALSE
             ELSE caller_proc.prosecdef IS DISTINCT FROM TRUE
           END
