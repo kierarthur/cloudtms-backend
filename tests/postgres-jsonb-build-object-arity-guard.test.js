@@ -31,15 +31,17 @@ const EXPECTED_CEILING_OCCURRENCES = Object.freeze([
   'supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql:597',
   'supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql:3051',
   'supabase/repeatable/13062026_1544_process_authorise_unprocess_unauthorise.sql:3046',
+  'supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql:11990',
   'supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql:1550',
 ].sort());
 
 const FINAL_CEILING_OWNERS = Object.freeze([
   Object.freeze({
     owner: 'private.pay_workbench_settled_certificate_constituent_seed_v8',
-    path:
-      'supabase/repeatable/02092026_2301_banking_pay_workbench_settled_certificate_build_v8.sql',
-    line: 597,
+    // Banking Pay Stage 2 (26092026_0203) is now the final owner of this routine; the call
+    // is byte-identical (same callSha256) and still has zero argument headroom.
+    path: 'supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql',
+    line: 11990,
     callSha256: 'ebc188732afa6694ab65c53b58853f2f3adb26e50bedc08af0ca00a0e273df8c',
     warning: 'Workbench settled-certificate seed (Draft-readiness path) has zero argument headroom',
   }),

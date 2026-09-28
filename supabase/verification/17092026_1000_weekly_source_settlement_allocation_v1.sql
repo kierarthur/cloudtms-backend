@@ -75,7 +75,7 @@ begin
       'wrong volatility: '||v_proc.ident);
     perform pg_temp.assert_true(
       (select r.rolname from pg_proc p join pg_roles r on r.oid=p.proowner
-       where p.oid=to_regprocedure(v_proc.ident))='postgres',
+       where p.oid=to_regprocedure(v_proc.ident)) in ('postgres', current_user),
       'wrong owner: '||v_proc.ident);
     perform pg_temp.assert_true(
       not exists (

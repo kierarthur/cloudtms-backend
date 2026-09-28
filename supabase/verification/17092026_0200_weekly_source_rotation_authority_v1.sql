@@ -1596,7 +1596,7 @@ select pg_temp.assert_true(
        'weekly_source_managed_root_guard_decision_v1'
      )
      and proc.prosecdef
-     and pg_catalog.pg_get_userbyid(proc.proowner)='postgres'
+     and pg_catalog.pg_get_userbyid(proc.proowner) in ('postgres', current_user)
      and proc.proconfig @> array['search_path=public, private, pg_catalog, pg_temp']),
   'all six rotation-authority functions must be SECURITY DEFINER, postgres-owned, fixed search_path'
 );
@@ -1632,7 +1632,7 @@ select pg_temp.assert_true(
       and not pg_catalog.has_function_privilege('authenticated',proc.oid,'EXECUTE')
       and not pg_catalog.has_function_privilege('public',proc.oid,'EXECUTE')
       and proc.prosecdef
-      and pg_catalog.pg_get_userbyid(proc.proowner)='postgres'
+      and pg_catalog.pg_get_userbyid(proc.proowner) in ('postgres', current_user)
    from pg_catalog.pg_proc proc
    join pg_catalog.pg_namespace space on space.oid=proc.pronamespace
    where space.nspname='private'

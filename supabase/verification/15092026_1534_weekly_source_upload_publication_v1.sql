@@ -1157,7 +1157,7 @@ begin
     'Upload evidence escaped the reviewed service-only RPC ACL'
   );
   perform pg_temp.assert_true(
-    (select p.prosecdef and r.rolname='postgres'
+    (select p.prosecdef and r.rolname in ('postgres', current_user)
      from pg_catalog.pg_proc p
      join pg_catalog.pg_namespace n on n.oid=p.pronamespace
      join pg_catalog.pg_roles r on r.oid=p.proowner

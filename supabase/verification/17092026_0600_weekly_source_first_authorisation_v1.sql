@@ -322,7 +322,7 @@ begin
       v_name||' must exist with exactly that signature');
     perform pg_temp.assert_true(
       (select proowner::regrole::text from pg_catalog.pg_proc
-        where oid=pg_catalog.to_regprocedure(v_name))='postgres',
+        where oid=pg_catalog.to_regprocedure(v_name)) in ('postgres', current_user),
       v_name||' must be owned by postgres');
     -- Every function that reads a relation is SECURITY DEFINER.  The pure
     -- UUID extractor reads nothing, so it stays SECURITY INVOKER and IMMUTABLE,

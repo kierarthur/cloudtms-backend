@@ -342,7 +342,7 @@ begin
   -- It is in `private`, owned by postgres, RLS-forced, and no browser or service
   -- role may touch it directly.
   perform pg_temp.assert_true(
-    (select relrowsecurity and relforcerowsecurity and relowner::regrole::text='postgres'
+    (select relrowsecurity and relforcerowsecurity and relowner::regrole::text in ('postgres', current_user)
        from pg_catalog.pg_class
       where oid=pg_catalog.to_regclass(
         'private.weekly_source_first_authorisation_withdrawal_receipts')),

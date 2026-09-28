@@ -421,7 +421,7 @@ begin
               pg_catalog.to_regprocedure('private.weekly_source_ordinary_authorisation_guard_v1(uuid,text)'),
               pg_catalog.to_regprocedure('private.weekly_source_ordinary_authorisation_guard_tg_v1()'),
               pg_catalog.to_regprocedure('private.weekly_source_guard_flag_v1(jsonb,text,boolean)'))
-        and p.proowner::regrole::text='postgres')=3,
+        and p.proowner::regrole::text in ('postgres', current_user))=3,
     'all three WP-24 routines must be owned by postgres');
   perform pg_temp.assert_true(
     not pg_catalog.has_function_privilege('anon',

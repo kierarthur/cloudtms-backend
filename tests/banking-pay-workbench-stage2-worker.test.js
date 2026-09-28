@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { bpayBusyCode, bpayBusyRpcMessage } from '../broker/src/bpay-busy.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,7 +73,10 @@ function loadActualSbRpcLaneAttempt(fetchImpl) {
     clearTimeout,
     encodeURIComponent,
     fetch: fetchImpl,
-    sbHeaders: () => ({})
+    sbHeaders: () => ({}),
+    // Stage 2 H3: sbRpc now classifies Banking Pay busy refusals through these module imports.
+    bpayBusyCode,
+    bpayBusyRpcMessage
   };
   vm.runInNewContext(
     `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('sbRpc')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
@@ -761,7 +765,7 @@ test('source-build parallelism defaults fail closed to one while explicit zero a
   assert.match(cron, /sourceBuildParallelism: 0/);
   assert.match(cron, /source_build_parallelism: 0/);
   assert.match(drain, /sourceBuildParallelism > 0/);
-  assert.match(drain, /Math\.min\(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit\)/);
+  assert.match(drain, /Math\.min\(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit, dueLaneCap\)/);
   assert.doesNotMatch(worker, /source_build_parallelism:\s*[24],/);
   assert.doesNotMatch(worker, /budgetProfile === 'NUDGE' \? 4 : 2/);
 });
