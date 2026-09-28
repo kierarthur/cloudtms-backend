@@ -34662,7 +34662,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "cloudtms.banking_pay_inherited_scope_generation=",
         "search_path=public"
       ],
       "schema": "public",
@@ -34670,7 +34669,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "31d97fd202023f73acc0927e7d0574da9f0f25e89963b59a5556d30287990fb0"
+      "definition_sha256": "ed6a339babab738f9781a2cbf7d0665b05ae924fd4bd9bb90399f56240e58b07"
     },
     {
       "acl": [

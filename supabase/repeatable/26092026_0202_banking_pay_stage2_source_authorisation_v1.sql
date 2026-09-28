@@ -1723,9 +1723,18 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_contract_client_dirty_fanout_chu
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
- SET "cloudtms.banking_pay_inherited_scope_generation" TO ''
 AS $function$
 DECLARE
+  -- v5.2: the former function-level configuration clause that emptied the custom setting
+  -- cloudtms.banking_pay_inherited_scope_generation is replaced by an explicit save / reset /
+  -- restore of the same transaction-local setting, because a non-superuser release owner cannot
+  -- CREATE a function whose configuration names an unregistered custom parameter (PostgreSQL 15+,
+  -- "permission denied to set parameter"). Behaviour is unchanged: the body starts
+  -- with the setting empty, and every normal return restores the caller's value so the
+  -- inherited scope generation never leaks past this call; an error unwinds the setting
+  -- through the enclosing (sub)transaction abort exactly as it did with the SET clause.
+  v_saved_inherited_scope_generation text :=
+    pg_catalog.current_setting('cloudtms.banking_pay_inherited_scope_generation', true);
   v_now timestamptz := now();
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100);
   v_job_row public.banking_pay_workbench_jobs%ROWTYPE;
@@ -1769,6 +1778,7 @@ DECLARE
   v_scope_change_tx_token uuid := NULL::uuid;
   v_scope_invalidation_result jsonb := '{}'::jsonb;
 BEGIN
+  PERFORM pg_catalog.set_config('cloudtms.banking_pay_inherited_scope_generation', '', true);
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
   IF p_job_id IS NULL THEN
@@ -2112,6 +2122,7 @@ BEGIN
   END IF;
 
   IF COALESCE(v_candidate_count, 0) = 0 THEN
+    PERFORM pg_catalog.set_config('cloudtms.banking_pay_inherited_scope_generation', COALESCE(v_saved_inherited_scope_generation, ''), true);
     RETURN jsonb_build_object(
       'ok', true,
       'job_id', v_job_row.id::text,
@@ -2238,6 +2249,7 @@ BEGIN
           updated_at_utc = v_now
       WHERE delayed_job.id = v_job_row.id;
 
+      PERFORM pg_catalog.set_config('cloudtms.banking_pay_inherited_scope_generation', COALESCE(v_saved_inherited_scope_generation, ''), true);
       RETURN jsonb_build_object(
         'ok', true,
         'job_id', v_job_row.id::text,
@@ -2612,6 +2624,7 @@ BEGIN
   INTO v_jobs_queued_or_reused
   FROM upserted_jobs;
 
+  PERFORM pg_catalog.set_config('cloudtms.banking_pay_inherited_scope_generation', COALESCE(v_saved_inherited_scope_generation, ''), true);
   RETURN jsonb_build_object(
       'ok', true,
       'job_id', v_job_row.id::text,
