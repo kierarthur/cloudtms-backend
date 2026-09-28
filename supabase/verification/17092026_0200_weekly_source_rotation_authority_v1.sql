@@ -1687,19 +1687,49 @@ do $f8_invoker$
 declare
   v_decision jsonb;
   v_refused boolean:=false;
+  v_guard regprocedure:='private.weekly_source_managed_root_guard_v1(uuid)'::regprocedure;
+  v_shim regprocedure:='private.weekly_source_managed_root_guard_decision_v1(uuid)'::regprocedure;
 begin
-  set local role service_role;
-  -- The guard itself must stay out of reach.
-  begin
-    perform private.weekly_source_managed_root_guard_v1(
+  if pg_catalog.pg_has_role(current_user,'service_role','SET') then
+    set local role service_role;
+    -- The guard itself must stay out of reach.
+    begin
+      perform private.weekly_source_managed_root_guard_v1(
+        'a3000000-0000-4000-8000-000000000102');
+    exception when insufficient_privilege then
+      v_refused:=true;
+    end;
+    -- The shim must work for exactly the role E7 runs as.
+    v_decision:=private.weekly_source_managed_root_guard_decision_v1(
       'a3000000-0000-4000-8000-000000000102');
-  exception when insufficient_privilege then
-    v_refused:=true;
-  end;
-  -- The shim must work for exactly the role E7 runs as.
-  v_decision:=private.weekly_source_managed_root_guard_decision_v1(
-    'a3000000-0000-4000-8000-000000000102');
-  reset role;
+    reset role;
+  else
+    -- v5.4: the managed Miget release owner is a member of service_role
+    -- without the SET option, so it cannot switch to it. Prove the same two
+    -- facts from the catalogue instead. service_role holding no EXECUTE on the
+    -- guard is exactly what makes the runtime call above raise
+    -- insufficient_privilege. The shim is reachable by service_role (schema
+    -- USAGE plus EXECUTE) and is SECURITY DEFINER with a pinned search_path,
+    -- so its body runs as its owner whoever calls it; neither it nor the guard
+    -- reads current_user or a session setting (see the guard's C5 comment).
+    -- Calling it here as the release owner therefore returns what the
+    -- service_role call returns.
+    v_refused:=not pg_catalog.has_function_privilege('service_role',v_guard,'EXECUTE');
+    if not pg_catalog.has_schema_privilege('service_role','private','USAGE')
+       or not pg_catalog.has_function_privilege('service_role',v_shim,'EXECUTE') then
+      raise exception 'ASSERTION_FAILED: service_role could not execute the decision shim: no USAGE on private or no EXECUTE on the shim';
+    end if;
+    if not exists (
+      select 1 from pg_catalog.pg_proc proc
+      where proc.oid=v_shim
+        and proc.prosecdef
+        and exists (select 1 from pg_catalog.unnest(proc.proconfig) setting
+                    where setting like 'search\_path=%')) then
+      raise exception 'ASSERTION_FAILED: the decision shim is not SECURITY DEFINER with a pinned search_path, so the owner call cannot stand in for service_role';
+    end if;
+    v_decision:=private.weekly_source_managed_root_guard_decision_v1(
+      'a3000000-0000-4000-8000-000000000102');
+  end if;
   if not v_refused then
     raise exception 'ASSERTION_FAILED: service_role could execute the guard directly';
   end if;
