@@ -12,6 +12,21 @@ const context = Object.freeze({
   context_token: 'a'.repeat(64)
 });
 
+test('source candidate self-entry exposes only its configured evidence break mode', () => {
+  const sql = readFileSync(new URL(
+    '../supabase/repeatable/28092026_1110_candidate_source_self_entry_break_context_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /candidate_source_self_entry_allowed/);
+  assert.match(sql, /route_family',''\)='IMPORT_AUTHORITATIVE'/);
+  assert.match(sql, /not coalesce\(\(p_capabilities->>'protected'\)::boolean,false\)/);
+  assert.match(sql, /not coalesce\(\(p_capabilities->>'candidate_mutation_locked'\)::boolean,false\)/);
+  assert.match(sql, /where cs\.id=\(v_resolution->>'client_settings_id'\)::uuid/);
+  assert.match(sql, /v_entry_mode not in \('START_END_TIMES','DURATION_MINUTES'\)/);
+  assert.match(sql, /when v_source_self_entry then 'CANDIDATE_SOURCE_SELF_ENTRY'/);
+  assert.match(sql, /revoke all on function private\._candidate_break_entry_context_core_v1\(uuid,uuid,date,jsonb\)\s+from public,anon,authenticated,service_role/);
+});
+
 test('editable printed-document Timesheets retain adaptive break entry', () => {
   const sql = readFileSync(new URL(
     '../supabase/repeatable/02092026_0325_candidate_paper_break_entry_v1.sql',
