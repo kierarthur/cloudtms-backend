@@ -15,10 +15,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 test('component database file set is exact, present and excludes HANDOVER 2 owners', async () => {
   const result = await verifyWeeklySourceComponentFileSet(repoRoot);
   assert.equal(result.migrationCount, 9);
-  assert.equal(result.repeatableCount, 77);
+  assert.equal(result.repeatableCount, 79);
   assert(result.files.some((file) => file.relative === 'supabase/repeatable/02022026_payroll_ID_new_tables_and_triggers.sql'));
-  assert.equal(result.files.length, 86);
-  assert.equal(new Set(result.files.map((file) => file.relative)).size, 86);
+  assert.equal(result.files.length, 88);
+  assert.equal(new Set(result.files.map((file) => file.relative)).size, 88);
   assert(result.files.every((file) => /^[a-f0-9]{64}$/.test(file.sha256)));
   for (const excluded of HANDOVER2_OWNED_REPEATABLE_EXCLUSIONS) {
     assert(!result.files.some((file) => file.relative === excluded), `${excluded} is separately owned`);

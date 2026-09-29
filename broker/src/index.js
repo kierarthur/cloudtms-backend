@@ -81295,7 +81295,6 @@ async function handleTimesheetsEligibilityWeekly(env, req) {
 }
 
 // GET /api/timesheets/:id/evidence
-// GET /api/timesheets/:id/evidence
 
 
 function hasAnySegmentInvoiceLock(input) {
@@ -82272,6 +82271,66 @@ async function handleBulkAuthoriseEvidenceMutation(env, req, tsId) {
   }
 }
 
+async function weeklySourceCandidatePackEvidence(env, timesheetId, actorUserId) {
+  const id = String(timesheetId || '').trim();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(id) || !uuid.test(String(actorUserId || ''))) {
+    throw new Error('CANDIDATE_HOURS_EVIDENCE_REQUEST_INVALID');
+  }
+  const response = unwrapRpcJsonb(await sbRpc(env, 'weekly_source_candidate_hours_evidence_v1', {
+    p_request: { actor_user_id: actorUserId, timesheet_id: id }
+  }), 'weekly_source_candidate_hours_evidence_v1');
+  if (response?.available === false) return null;
+  if (response?.available !== true || String(response.timesheet_id) !== id
+    || !uuid.test(String(response.event_id || ''))
+    || !/^[0-9a-f]{64}$/i.test(String(response.sha256 || ''))
+    || !Number.isSafeInteger(Number(response.size_bytes))
+    || Number(response.size_bytes) < 1 || Number(response.size_bytes) > 15 * 1024 * 1024
+    || !String(response.r2_key || '').trim()) {
+    throw new Error('CANDIDATE_HOURS_EVIDENCE_LINEAGE_INCOMPLETE');
+  }
+  return { ...response, r2_key: String(response.r2_key).replace(/^\/+/, '') };
+}
+
+async function handleTimesheetCandidateHoursEvidence(env, req, timesheetId, eventId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  try {
+    const resolved = await resolveTimesheetToCurrent(env, timesheetId);
+    if (!resolved || String(resolved.current_timesheet_id) !== String(timesheetId)) {
+      return withCORS(env, req, notFound('Timesheet not found'));
+    }
+    const pack = await weeklySourceCandidatePackEvidence(env, timesheetId, user.id);
+    if (!pack || pack.event_id !== String(eventId)) {
+      return withCORS(env, req, notFound('Signed candidate hours not found'));
+    }
+    const bucket = env.R2_BUCKET || env.R2;
+    if (!bucket?.get) throw new Error('CANDIDATE_HOURS_STORAGE_UNAVAILABLE');
+    const object = await bucket.get(pack.r2_key);
+    if (!object || object.size !== pack.size_bytes) {
+      return withCORS(env, req, notFound('Signed candidate hours file not found'));
+    }
+    const bytes = await object.arrayBuffer();
+    if (bytes.byteLength !== pack.size_bytes ||
+      String.fromCharCode(...new Uint8Array(bytes.slice(0, 5))) !== '%PDF-') {
+      throw new Error('CANDIDATE_HOURS_PDF_INVALID');
+    }
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+      .map(value => value.toString(16).padStart(2, '0')).join('');
+    if (digest !== pack.sha256) throw new Error('CANDIDATE_HOURS_HASH_MISMATCH');
+    const filename = pack.filename.replace(/[/\\\r\n"]/g, '_');
+    return withCORS(env, req, new Response(bytes, { status: 200, headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="' + filename + '"',
+      'Content-Length': String(bytes.byteLength),
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store'
+    } }));
+  } catch {
+    return withCORS(env, req, serverError('Signed candidate hours are not available right now'));
+  }
+}
+
 async function handleTimesheetEvidenceList(env, req, tsId) {
   const enc = encodeURIComponent;
 
@@ -82358,6 +82417,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         `&select=` +
           [
             'timesheet_id',
+            'contract_id',
             'booking_id',
             'version',
             'sheet_scope',
@@ -82403,6 +82463,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
 
             // electronic signatures (no new storage)
             'r2_nurse_key',
+            'img_sha256_nurse',
             'r2_auth_key',
             'auth_name',
             'auth_job_title',
@@ -83249,6 +83310,36 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         }
       } catch {
         // non-fatal
+      }
+    }
+
+    if (importAuthoritative && ts?.r2_nurse_key && ts?.img_sha256_nurse) {
+      try {
+        const pack = await weeklySourceCandidatePackEvidence(env, currentTsId, user.id);
+        if (pack) systemEvidence.push({
+          id: 'SYS:CANDIDATE_HOURS:' + pack.event_id,
+          timesheet_id: currentTsId,
+          kind: 'CANDIDATE_HOURS',
+          filename: pack.filename,
+          display_name: 'Signed candidate hours submission',
+          storage_key: null,
+          created_at: pack.created_at_utc,
+          uploaded_at_utc: pack.created_at_utc,
+          system: true,
+          is_view_only: true,
+          can_delete: false,
+          can_reclassify: false,
+          can_return_to_queue: false,
+          source_badge: 'Candidate',
+          uploaded_by_display: 'Candidate',
+          preview_mode: 'CANDIDATE_HOURS_SUBMISSION',
+          candidate_hours_event_id: pack.event_id,
+          page_count: pack.page_count
+        });
+      } catch (error) {
+        console.warn('[handleTimesheetEvidenceList] candidate pack lineage unavailable', {
+          timesheet_id: currentTsId, error: String(error?.message || error)
+        });
       }
     }
 
@@ -87170,6 +87261,7 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
   const pending = [];
   const chunks = [];
+  const importRoots = [];
 
   for (let index = 0; index < output.length; index += 1) {
     const row = output[index];
@@ -87183,6 +87275,14 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
       row.candidate_office_projection_not_applicable = true;
       row.candidate_office_projection = null;
       row.candidate_office_projection_error = null;
+      const route = String(row.route_type || '').trim().toUpperCase();
+      const isAdditional = row.is_adjustment === true || Number(row.additional_seq || 0) > 0;
+      const noTimesheetRequired = row.client_no_timesheet_required === true;
+      if (!isAdditional && (route === 'WEEKLY_NHSP'
+          || (route === 'WEEKLY_HEALTHROSTER' && noTimesheetRequired))) {
+        row.office_submission_mode_label = 'Import';
+        importRoots.push(row);
+      }
       continue;
     }
     const contractWeekId = String(row?.contract_week_id || '').trim();
@@ -87196,6 +87296,41 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
       ).trim() || null
     };
     pending.push({ index, identity });
+  }
+
+  // Source-authoritative candidate hours are a separate evidence fact, not
+  // Candidate Office approval and not the financial Timesheet total.
+  for (let offset = 0; offset < importRoots.length; offset += 50) {
+    const slice = importRoots.slice(offset, offset + 50);
+    const ids = slice.map(row => String(row.timesheet_id || '')).filter(Boolean);
+    if (!ids.length) continue;
+    try {
+      const { rows: signedRows } = await sbFetch(env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+        `?timesheet_id=in.(${ids.map(encodeURIComponent).join(',')})` +
+        `&is_current=eq.true&select=timesheet_id,r2_nurse_key,img_sha256_nurse&limit=50`
+      );
+      const signedIds = new Set((signedRows || [])
+        .filter(row => !!row.r2_nurse_key && !!row.img_sha256_nurse)
+        .map(row => String(row.timesheet_id)));
+      for (const row of slice) {
+        row.candidate_hours_received = signedIds.has(String(row.timesheet_id));
+        const status = String(row.processing_status || '').trim().toUpperCase();
+        const preSourceCandidateOnly = row.candidate_hours_received
+          && Number(row.total_hours || 0) === 0
+          && (!status || status === 'UNPROCESSED' || status === 'UNASSIGNED');
+        row.office_pre_source_candidate_hours = preSourceCandidateOnly;
+        if (preSourceCandidateOnly) {
+          row.processing_status_display = 'Unprocessed';
+          row.summary_stage = 'UNPROCESSED';
+          row.tools_stage = 'UNPROCESSED';
+          row.weekly_source_pay_delayed = false;
+        }
+      }
+    } catch {
+      // Fail closed: an unavailable signature read must not claim submission.
+      for (const row of slice) row.candidate_hours_received = false;
+    }
   }
 
   if (!pending.length) {
@@ -87307,6 +87442,9 @@ function candidateTimesheetSummaryCompactPatch(row) {
     sheet_scope: row?.sheet_scope ?? null,
     submission_mode: row?.submission_mode ?? null,
     submission_mode_snapshot: row?.submission_mode_snapshot ?? null,
+    office_submission_mode_label: row?.office_submission_mode_label ?? null,
+    candidate_hours_received: row?.candidate_hours_received === true,
+    office_pre_source_candidate_hours: row?.office_pre_source_candidate_hours === true,
     processing_status: row?.processing_status ?? null,
     processing_status_display: row?.processing_status_display ?? null,
     total_hours: row?.total_hours ?? null,
@@ -201355,6 +201493,15 @@ async function handleTimesheetBulkAuthoriseWatch(env, req, timesheetId = null) {
   const m = matchPath(p, '/api/timesheets/:id/bulk-authorise-evidence');
   if (m && req.method === 'POST') {
     return handleBulkAuthoriseEvidenceMutation(env, req, m.id);
+  }
+}
+
+// A timesheet-scoped, hash-checked candidate-hours PDF. No browser-supplied
+// R2 key is accepted, and the generic file-presign route is not used.
+{
+  const m = matchPath(p, '/api/timesheets/:id/candidate-hours-evidence/:event_id');
+  if (m && req.method === 'GET') {
+    return handleTimesheetCandidateHoursEvidence(env, req, m.id, m.event_id);
   }
 }
 
