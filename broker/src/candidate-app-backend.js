@@ -3454,6 +3454,34 @@ function explicitNoBreak(value) {
 }
 
 function segmentBreak(segment) {
+  // Weekly Source preserves the signed break as a nested break_entry. The
+  // ordinary Timesheet renderer also receives legacy flat break fields.
+  // Read the signed source shape first so its informational PDF cannot show
+  // gross shift hours as paid hours or omit the break window.
+  const entry = isObject(segment?.break_entry) ? segment.break_entry : null;
+  if (entry) {
+    const kind = upper(entry.kind);
+    if (kind === 'NO_BREAK') {
+      return { break_start_local: '', break_end_local: '', break_minutes: 0, break_display_mode: 'NONE' };
+    }
+    if (kind === 'START_END_TIMES') {
+      const start = hhmm(entry.break_start);
+      const end = hhmm(entry.break_end);
+      const minutes = intervalMinutes(start, end);
+      if (!start || !end || minutes < 1 || Number(entry.calculated_break_minutes) !== minutes) {
+        throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+      }
+      return { break_start_local: start, break_end_local: end, break_minutes: minutes, break_display_mode: 'EXPLICIT_INTERVAL' };
+    }
+    if (kind === 'DURATION_MINUTES') {
+      const minutes = Number(entry.break_minutes);
+      if (!Number.isSafeInteger(minutes) || minutes < 1) {
+        throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+      }
+      return { break_start_local: '', break_end_local: '', break_minutes: minutes, break_display_mode: 'MINUTES_ONLY' };
+    }
+    throw new CandidateHttpError(409, 'CANDIDATE_RENDER_BREAK_INVALID');
+  }
   const windows = Array.isArray(segment?.breaks) ? segment.breaks : [];
   const primaryStart = text(segment?.break_start || segment?.breakStart || segment?.break_start_time);
   const primaryEnd = text(segment?.break_end || segment?.breakEnd || segment?.break_end_time);
@@ -12422,6 +12450,7 @@ export const candidateAppBackendInternals = Object.freeze({
   verifyPassword,
   forbiddenFinancialKeys,
   segmentBreak,
+  scheduleLine,
   explicitNoBreak,
   normaliseAdaptiveBreakEntry,
   normaliseCandidateBreakSubmission,

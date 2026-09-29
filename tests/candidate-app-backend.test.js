@@ -85,6 +85,7 @@ const {
   safePaperReturnPages,
   safeQrPackResponse,
   segmentBreak,
+  scheduleLine,
   uploadTicket,
   validateComponentBytes,
   verifyUploadTicket,
@@ -1892,6 +1893,36 @@ test('explicit no-break input is represented as zero minutes with no interval', 
     break_minutes: 0,
     break_display_mode: 'NONE'
   });
+});
+
+test('signed Weekly Source break is shown and deducted in the completed Timesheet model', () => {
+  const line = scheduleLine({
+    date: '2026-09-28', start: '09:00', end: '17:00',
+    break_entry: {
+      kind: 'START_END_TIMES', break_start: '13:00', break_end: '14:00',
+      calculated_break_minutes: 60
+    }
+  }, 0);
+  assert.equal(line.break_start_local, '13:00');
+  assert.equal(line.break_end_local, '14:00');
+  assert.equal(line.break_display_mode, 'EXPLICIT_INTERVAL');
+  assert.equal(line.paid_minutes, 420);
+  const lengthOnly = scheduleLine({
+    date: '2026-09-28', start: '09:00', end: '17:00',
+    break_entry: { kind: 'DURATION_MINUTES', break_minutes: 30 }
+  }, 0);
+  assert.equal(lengthOnly.break_minutes, 30);
+  assert.equal(lengthOnly.break_display_mode, 'MINUTES_ONLY');
+  assert.equal(lengthOnly.paid_minutes, 450);
+  const noBreak = scheduleLine({
+    date: '2026-09-28', start: '09:00', end: '17:00',
+    break_entry: { kind: 'NO_BREAK' }
+  }, 0);
+  assert.equal(noBreak.break_minutes, 0);
+  assert.equal(noBreak.paid_minutes, 480);
+  assert.throws(() => segmentBreak({ break_entry: {
+    kind: 'START_END_TIMES', break_start: '13:00', break_end: '14:00', calculated_break_minutes: 30
+  } }), /CANDIDATE_RENDER_BREAK_INVALID/);
 });
 
 test('blank or null break values are not silently converted into a no-break declaration', () => {
