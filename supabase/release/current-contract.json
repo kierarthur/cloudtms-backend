@@ -9192,7 +9192,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "110d56f858ade39067e7713008f9fc0d90265ddb24e03ef6aeabc9c09a390802"
+      "definition_sha256": "5dfabdf8354b44a3bd0a0c394e0679368709586d574e3f2f8d51de3ef58541b6"
     },
     {
       "acl": [
@@ -10322,6 +10322,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "1d6ddd9b6f5fef1cef008283930f70778a44ec6baededd158aab3f54b882310a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "candidate_hours_received_audit_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "adde7f8241f87f38eb332d9afb5d7595f52e81faa72f358fbc8a970a67405940"
     },
     {
       "acl": [
@@ -16476,7 +16495,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "6507aa976ca4d32990acedcf5849ef65bc42dabeb221a1fe332d57f3d42bfcf8"
+      "definition_sha256": "bdebe7f429fa27c25f49596da036a932c835238a4bd2d08e781b5569f98760ab"
     },
     {
       "acl": [
@@ -41317,6 +41336,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_candidate_hours_evidence_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "c2a71c140a3699cc314442c1af6aaa2c1286eb3c550b8ee06286801d83da14c9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
@@ -42812,7 +42855,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "31fe89d25cb202876effdb71059783ce2d3c5aa9b8ad1a59783b419cac882521"
+      "definition_sha256": "ecda7035ff84d81b3d97904de02a93be7e4995db436636d0b23ace8dbecaf83c"
     },
     {
       "acl": [
@@ -43837,6 +43880,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()"
+    },
+    {
+      "name": "trg_candidate_hours_received_audit_v1",
+      "table": "candidate_submission_workflows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_candidate_hours_received_audit_v1 AFTER UPDATE OF generation, state, worker_submitted_at_utc, candidate_signed_at_utc ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private.candidate_hours_received_audit_v1()"
     },
     {
       "name": "trg_timesheet_submission_workflow_overlap_biu",

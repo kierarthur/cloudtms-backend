@@ -2338,8 +2338,8 @@ as $function$
           'row_key','submitted-all-'||entry.ordinality::text,
           'day_date',case when (entry.value->>'date') ~ '^\d{4}-\d{2}-\d{2}$'
             then pg_catalog.to_char((entry.value->>'date')::date,'Dy FMDD Mon YYYY') else null end,
-          'hours',coalesce(entry.value->>'start',pg_catalog.chr(8212))||'-'||coalesce(entry.value->>'end',pg_catalog.chr(8212)),
-          'break_text',coalesce(entry.value->>'break_minutes','0')||' min',
+          'hours',coalesce(entry.value->>'start',entry.value->>'start_time',pg_catalog.chr(8212))||'-'||coalesce(entry.value->>'end',entry.value->>'end_time',pg_catalog.chr(8212)),
+          'break_text',coalesce(entry.value#>>'{break_entry,calculated_break_minutes}',entry.value#>>'{break_entry,break_minutes}',entry.value->>'break_minutes','0')||' min',
           'state','SUBMITTED')
           order by entry.value->>'date',entry.ordinality)
         from pg_catalog.jsonb_array_elements(p_actual_schedule)
@@ -3779,7 +3779,10 @@ begin
   if found then
     select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
     perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
-  elsif v_policy->>'authority_mode'='SOURCE_AUTHORITY' then
+  elsif v_policy->>'authority_mode'='SOURCE_AUTHORITY'
+      and v_timesheet.authorised_at_server is not null then
+    -- A formerly authorised source week with no current publication is
+    -- inconsistent and retains the previous fail-closed behaviour.
     raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
   end if;
 
@@ -3849,7 +3852,7 @@ begin
       'row_key','submitted-'||entry.ordinality,
       'day_date',to_char((entry.value->>'date')::date,'Dy FMDD Mon YYYY'),
       'hours',coalesce(entry.value->>'start',pg_catalog.chr(8212))||'-'||coalesce(entry.value->>'end',pg_catalog.chr(8212)),
-      'break_text',coalesce(entry.value->>'break_minutes','0')||' min',
+      'break_text',coalesce(entry.value#>>'{break_entry,calculated_break_minutes}',entry.value#>>'{break_entry,break_minutes}',entry.value->>'break_minutes','0')||' min',
       'state',case when exists(
         select 1 from public.weekly_discrepancy_incidents incident
         join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
@@ -4025,7 +4028,7 @@ begin
       -- and raised 42883 for every Timesheet-authority week that had a
       -- submitted schedule, which is exactly matrix rows UI-014 and UI-015.
       'hours',(entry.value->>'start')||'-'||(entry.value->>'end'),
-      'break_text',coalesce(entry.value->>'break_minutes','0')||' min',
+      'break_text',coalesce(entry.value#>>'{break_entry,calculated_break_minutes}',entry.value#>>'{break_entry,break_minutes}',entry.value->>'break_minutes','0')||' min',
       'state','READY','status_text','Ready'
     ) order by (entry.value->>'date')::date,entry.ordinality),'[]'::jsonb)
     into v_approved_rows
@@ -4079,11 +4082,14 @@ begin
       if not v_authorise_allowed then v_blocked_reason:='The required client reference is not ready yet.'; end if;
     end if;
   else
-    v_comparison_state:=case when not v_submitted_available then 'NO_TIMESHEET'
+    v_comparison_state:=case when v_publication.id is null then 'SOURCE_PENDING'
+      when not v_submitted_available then 'NO_TIMESHEET'
       when v_open_issue_count>0 then 'MISMATCH' else 'MATCH' end;
-    v_authorise_allowed:=v_unprotected_issue_count=0;
+    v_authorise_allowed:=v_publication.id is not null and v_unprotected_issue_count=0;
     if not v_authorise_allowed then
-      v_blocked_reason:='Resolve the hours needing attention before authorising.';
+      v_blocked_reason:=case when v_publication.id is null
+        then 'Waiting for final source hours before authorising.'
+        else 'Resolve the hours needing attention before authorising.' end;
     end if;
   end if;
 
@@ -4144,7 +4150,8 @@ begin
       then private.weekly_source_office_schedule_absent_v1('NO_CURRENT_SOURCE_PUBLICATION')
       else private.weekly_source_office_schedule_from_rows_v1(
         v_source_rows,'WEEKLY_SOURCE_LATEST_SOURCE') end,
-    'hours_to_authorise',case when v_first_authorisation
+    'hours_to_authorise',case when v_first_authorisation and
+      (v_authority<>'CLIENT_SYSTEM' or v_publication.id is not null)
       then private.weekly_source_office_schedule_from_rows_v1(
         v_approved_rows,'WEEKLY_SOURCE_PROPOSED_FIRST_ENTITLEMENT')
       else private.weekly_source_office_schedule_absent_v1(

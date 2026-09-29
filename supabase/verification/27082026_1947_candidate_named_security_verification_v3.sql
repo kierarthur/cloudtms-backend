@@ -159,8 +159,11 @@ begin
   -- 26 September: candidate-initiated signed CHECK_ONLY hours adds exactly one
   -- service-only public SECURITY DEFINER entry; browser access remains zero.
   -- Measured on the complete PostgreSQL 17 NEW catalogue: 165 / 9 / 0.
-  if v_count<>165 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'5fe9d64913a1eb75837ea0b98a16e752' then
+  -- 29 September: the actor-scoped, service-only signed candidate-hours PDF
+  -- reader adds exactly one public SECURITY DEFINER routine. The clean PG17
+  -- catalogue measured 166 / 9 / 0; browser execution remains zero.
+  if v_count<>166 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'0c6caf136fd2647a46960b64944ab000' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

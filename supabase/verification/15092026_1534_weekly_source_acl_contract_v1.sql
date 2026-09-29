@@ -301,6 +301,7 @@ declare
     'public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamptz)',
     'public.weekly_source_candidate_check_materialise_atomic_v1(jsonb,timestamptz)',
     'public.weekly_source_candidate_hours_push_v1(jsonb)',
+    'public.weekly_source_candidate_hours_evidence_v1(jsonb)',
     'public.weekly_source_candidate_query_get_v1(jsonb)',
     'public.weekly_source_candidate_reminder_atomic_v1(jsonb)',
     'public.weekly_source_candidate_response_submit_atomic_v1(jsonb)',
