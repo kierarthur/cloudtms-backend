@@ -17,6 +17,10 @@ const timesheetId = '10000000-0000-4000-8000-000000000001';
 const eventId = '30000000-0000-4000-8000-000000000001';
 const bytes = new TextEncoder().encode('%PDF-1.7\nCandidate signed hours');
 const sha = createHash('sha256').update(bytes).digest('hex');
+const sourceRootStart = worker.indexOf('function isSourceImportSummaryRoot(');
+const summaryAttachStart = worker.indexOf('\nasync function attachCandidateOfficeSummaryProjections(', sourceRootStart);
+const summaryEnd = worker.indexOf('\nasync function readCandidateTimesheetSummaryCursor(', summaryAttachStart);
+assert.ok(sourceRootStart > 0 && summaryAttachStart > sourceRootStart && summaryEnd > summaryAttachStart);
 
 const validPack = () => ({ available: true, event_id: eventId,
   timesheet_id: timesheetId, r2_key: 'candidate/signed.pdf', sha256: sha,
@@ -77,4 +81,34 @@ test('accepted candidate submission writes a real, idempotent generation audit e
   assert.match(audit, /insert into public\.audit_events\(/);
   assert.match(audit, /'CANDIDATE_HOURS_RECEIVED'/);
   assert.match(audit, /after update of generation,state,worker_submitted_at_utc,candidate_signed_at_utc/);
+});
+
+test('Import labels apply before a Timesheet exists and regardless of stored manual/electronic mode', async () => {
+  const makeSummary = new Function('attachExpenseReservationSummaries', 'sbRpcRecordingGuardRefusal',
+    'candidateOfficeApplicability', 'sbFetch', 'unwrapRpcJsonb',
+    'TIMESHEET_SUMMARY_CANDIDATE_BATCH_SIZE', 'candidateSummaryProjectionError',
+    'reconcileCandidateOwnedProcessingStatus', 'candidateOfficeSummaryStatusLabel',
+    `${worker.slice(sourceRootStart, summaryEnd)}\nreturn {isSourceImportSummaryRoot,attachCandidateOfficeSummaryProjections};`)(
+    async () => {}, async () => ({}), () => true,
+    async () => ({ rows: [{ timesheet_id: timesheetId, r2_nurse_key: 'signed.pdf', img_sha256_nurse: sha }] }),
+    value => value, 50, () => ({ code: 'TEST' }), () => {}, () => ''
+  );
+  assert.equal(makeSummary.isSourceImportSummaryRoot({ route_type: 'WEEKLY_NHSP', submission_mode: 'ELECTRONIC' }), true);
+  assert.equal(makeSummary.isSourceImportSummaryRoot({ route_type: 'WEEKLY_HEALTHROSTER', client_no_timesheet_required: true }), true);
+  assert.equal(makeSummary.isSourceImportSummaryRoot({ route_type: 'WEEKLY_HEALTHROSTER', client_no_timesheet_required: false }), false);
+  assert.equal(makeSummary.isSourceImportSummaryRoot({ route_type: 'WEEKLY_NHSP_ADJUSTMENT' }), false);
+  const rows = await makeSummary.attachCandidateOfficeSummaryProjections(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.invalid' }, eventId,
+    [
+      { contract_week_id: eventId, timesheet_id: null, route_type: 'WEEKLY_NHSP', submission_mode: 'ELECTRONIC' },
+      { timesheet_id: timesheetId, route_type: 'WEEKLY_NHSP', submission_mode: 'MANUAL',
+        processing_status: 'PROCESSING_DELAYED', total_hours: 0 }
+    ],
+    async () => ({ results: [] })
+  );
+  assert.equal(rows[0].office_submission_mode_label, 'Import');
+  assert.equal(rows[1].office_submission_mode_label, 'Import');
+  assert.equal(rows[1].candidate_hours_received, true);
+  assert.equal(rows[1].office_pre_source_candidate_hours, true);
+  assert.equal(rows[1].processing_status_display, 'Unprocessed');
 });

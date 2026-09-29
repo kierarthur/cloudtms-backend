@@ -87255,6 +87255,13 @@ function candidateOfficeSummaryStatusLabel(projection) {
   return '';
 }
 
+function isSourceImportSummaryRoot(row) {
+  const route = String(row?.route_type || '').trim().toUpperCase();
+  const additional = row?.is_adjustment === true || Number(row?.additional_seq || 0) > 0;
+  return !additional && (route === 'WEEKLY_NHSP'
+    || (route === 'WEEKLY_HEALTHROSTER' && row?.client_no_timesheet_required === true));
+}
+
 async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpcRecordingGuardRefusal) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
   await attachExpenseReservationSummaries(env, actorUserId, output, rpc, unwrapRpcJsonb);
@@ -87266,6 +87273,13 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
   for (let index = 0; index < output.length; index += 1) {
     const row = output[index];
     const timesheetId = String(row?.timesheet_id || '').trim();
+    // The import label belongs to the source-authoritative root even before
+    // a Timesheet exists. Stored electronic/manual mode describes the paper
+    // carrier, not who supplies the payable hours.
+    if (isSourceImportSummaryRoot(row)) {
+      row.office_submission_mode_label = 'Import';
+      if (timesheetId) importRoots.push(row);
+    }
     if (!timesheetId) continue;
     if (candidateOfficeApplicability(row) === false) {
       // Summary already owns the exact route classification needed to prove
@@ -87275,14 +87289,6 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
       row.candidate_office_projection_not_applicable = true;
       row.candidate_office_projection = null;
       row.candidate_office_projection_error = null;
-      const route = String(row.route_type || '').trim().toUpperCase();
-      const isAdditional = row.is_adjustment === true || Number(row.additional_seq || 0) > 0;
-      const noTimesheetRequired = row.client_no_timesheet_required === true;
-      if (!isAdditional && (route === 'WEEKLY_NHSP'
-          || (route === 'WEEKLY_HEALTHROSTER' && noTimesheetRequired))) {
-        row.office_submission_mode_label = 'Import';
-        importRoots.push(row);
-      }
       continue;
     }
     const contractWeekId = String(row?.contract_week_id || '').trim();
@@ -87315,10 +87321,10 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
         .map(row => String(row.timesheet_id)));
       for (const row of slice) {
         row.candidate_hours_received = signedIds.has(String(row.timesheet_id));
-        const status = String(row.processing_status || '').trim().toUpperCase();
+        const status = String(row.processing_status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
         const preSourceCandidateOnly = row.candidate_hours_received
           && Number(row.total_hours || 0) === 0
-          && (!status || status === 'UNPROCESSED' || status === 'UNASSIGNED');
+          && (!status || ['UNPROCESSED', 'UNASSIGNED', 'PROCESSING_DELAYED'].includes(status));
         row.office_pre_source_candidate_hours = preSourceCandidateOnly;
         if (preSourceCandidateOnly) {
           row.processing_status_display = 'Unprocessed';
