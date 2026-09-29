@@ -50,11 +50,14 @@ begin
     (v_active_outbox,'TEST',v_candidate,date '2026-09-03',3,'LONG_DAY_OR_NIGHT',v_command,'CLAIMED',0,
       'availability-runtime-active','active-runtime-token-0003',now()+interval '10 minutes','01K2ABCDEF0123456789ABCDE1');
 
+  -- The claim is global: hosted TEST can hold real claimable rows, so use the
+  -- maximum batch and judge only this fixture's outbox rows in the result.
   v_claim:=public.candidate_daily_projection_claim_v1(
     v_system,'00000000-0000-4000-8000-00000000f907','projection-lease-runtime-claim-0001',
-    'MASTER_AVAILABILITY_SHEET','availability-runtime-recovery',20,600,
+    'MASTER_AVAILABILITY_SHEET','availability-runtime-recovery',100,600,
     '01K2ABCDEF0123456789ABCDE2');
-  if jsonb_array_length(v_claim->'items')<>0 then
+  if exists(select 1 from jsonb_array_elements(v_claim->'items') claimed(item)
+      where (claimed.item->>'outbox_id')::uuid in (v_retry_outbox,v_terminal_outbox,v_active_outbox)) then
     raise exception 'PROJECTION_LEASE_RUNTIME: recovered rows ignored backoff';
   end if;
   if not exists(select 1 from public.candidate_daily_sheet_projection_outbox
@@ -79,11 +82,12 @@ begin
   where outbox_id=v_retry_outbox;
   v_claim:=public.candidate_daily_projection_claim_v1(
     v_system,'00000000-0000-4000-8000-00000000f908','projection-lease-runtime-claim-0002',
-    'MASTER_AVAILABILITY_SHEET','availability-runtime-retry',20,600,
+    'MASTER_AVAILABILITY_SHEET','availability-runtime-retry',100,600,
     '01K2ABCDEF0123456789ABCDE3');
-  v_item:=v_claim#>'{items,0}';
+  select claimed.item into v_item from jsonb_array_elements(v_claim->'items') claimed(item)
+  where (claimed.item->>'outbox_id')::uuid=v_retry_outbox;
   v_new_token:=v_item->>'lease_token';
-  if (v_item->>'outbox_id')::uuid<>v_retry_outbox or length(v_new_token)<16
+  if v_item is null or length(v_new_token)<16
      or (v_item->>'lease_expires_at')::timestamptz<now()+interval '9 minutes 50 seconds' then
     raise exception 'PROJECTION_LEASE_RUNTIME: recovered retry did not receive a fresh full lease';
   end if;

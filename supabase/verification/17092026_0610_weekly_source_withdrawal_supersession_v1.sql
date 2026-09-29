@@ -43,6 +43,11 @@
 begin;
 set local request.jwt.claim.role='service_role';
 
+-- In-flight Workbench jobs that existed before this fixture: hosted TEST holds real rows.
+create temp table wp07c_preexisting_live_jobs on commit drop as
+select job.id from public.banking_pay_workbench_jobs job
+ where job.status in ('QUEUED','RUNNING');
+
 create function pg_temp.assert_true(p_condition boolean,p_message text)
 returns void language plpgsql as $function$
 begin
@@ -76,7 +81,9 @@ create function pg_temp.drain_workbench_jobs() returns void
 language sql as $function$
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     -- scoped to fixture rows: hosted TEST holds real rows
+     and pg_catalog.strpos(dedupe_key,'c7000000-0000-4000-8000-')>0;
 $function$;
 
 create function pg_temp.current_signature(p_timesheet_id uuid) returns text
@@ -483,7 +490,8 @@ begin
         and job_row.scope_change_tx_token=(v_result->>'scope_change_tx_token')::uuid)>=1
     and (select pg_catalog.count(distinct job_row.scope_change_tx_token)
            from public.banking_pay_workbench_jobs job_row
-          where job_row.status in ('QUEUED','RUNNING'))=1,
+          where job_row.status in ('QUEUED','RUNNING')
+            and job_row.id not in (select id from wp07c_preexisting_live_jobs))=1,
     'A3 step 4: the aligned invalidation must carry ONE token and no other');
 
   -- Committed TOGETHER: the write fingerprint moved in exactly the ways the

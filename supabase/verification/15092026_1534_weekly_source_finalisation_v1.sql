@@ -879,6 +879,8 @@ select pg_temp.assert_true(
     join public.weekly_source_row_timesheet_lineages lineage
       on lineage.timesheet_id=root.timesheet_id
     where root.line_type<>'HOURS'::public.timesheet_line_type_enum
+      -- scoped to fixture rows: hosted TEST holds real rows
+      and lineage.candidate_id='a0000000-0000-4000-8000-000000000003'
   ),
   'source-fixed expenses must never create or reuse an ordinary expense Timesheet'
 );
@@ -1077,6 +1079,8 @@ begin
     from public.weekly_source_row_economic_snapshots template
     join public.weekly_source_row_resolutions target_resolution
       on target_resolution.id=v_resolution_id
+    -- template scoped to the fixture's own worked row: hosted TEST holds real rows
+    where template.upload_row_id='a1000000-0000-4000-8000-000000000004'
     limit 1;
     perform public.weekly_source_timesheet_lineage_ensure_atomic_v1(
       v_resolution_id,'a0000000-0000-4000-8000-000000000001'

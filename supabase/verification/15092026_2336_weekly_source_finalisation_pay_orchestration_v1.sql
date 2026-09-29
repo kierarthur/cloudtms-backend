@@ -27,6 +27,13 @@ join public.weekly_source_billing_movements movement
 where revision.state='CURRENT'
   and revision.reason='INITIAL_FINALISATION'
   and movement.invoice_timesheet_id is not null
+  -- scoped to fixture source groups: hosted TEST holds real final revisions
+  and revision.source_cycle_id in (
+    select cycle.id from public.weekly_source_cycles cycle
+    where cycle.source_group_id in (
+      'a0000000-0000-4000-8000-000000000005','b0000000-0000-4000-8000-000000000005'
+    )
+  )
   and not exists(
     select 1
     from public.weekly_source_ordinary_pay_projection_receipts receipt

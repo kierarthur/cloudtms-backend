@@ -204,7 +204,9 @@ select pg_temp.assert_true(
   (select count(*)>0
    from public.banking_pay_workbench_jobs job
    where pg_catalog.upper(pg_catalog.btrim(coalesce(job.status,'')))in('QUEUED','RUNNING')
-     and job.job_type='CONTRACT_CLIENT_DIRTY_FANOUT'),
+     and job.job_type='CONTRACT_CLIENT_DIRTY_FANOUT'
+     -- scoped to fixture rows: hosted TEST holds real rows
+     and pg_catalog.strpos(job.dedupe_key,'a3000000-0000-4000-8000-')>0),
   'the installed Workbench trigger must have queued a Candidate job for the fixture'
 );
 
@@ -236,7 +238,9 @@ select pg_temp.assert_true(
 -- jobs the fixture inserts produced so the remaining proofs see a clear
 -- Candidate. No Banking Pay owner is called and no Banking Pay logic changes.
 delete from public.banking_pay_workbench_jobs
-where pg_catalog.upper(pg_catalog.btrim(coalesce(status,'')))in('QUEUED','RUNNING');
+where pg_catalog.upper(pg_catalog.btrim(coalesce(status,'')))in('QUEUED','RUNNING')
+  -- scoped to fixture rows: hosted TEST holds real rows
+  and pg_catalog.strpos(dedupe_key,'a3000000-0000-4000-8000-')>0;
 
 select pg_temp.assert_true(
   (private.weekly_source_candidate_serial_gate_v1(

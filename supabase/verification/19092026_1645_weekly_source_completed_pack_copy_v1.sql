@@ -11,6 +11,22 @@ begin
 end;
 $assert$;
 
+-- Hosted TEST holds real completed packs, so the owner's due list is read at its
+-- full page and only this fixture's workflows are kept.  The fixture workflow ids
+-- (00000000-e509-...) sort ahead of real ids in the owner's workflow_id order.
+create or replace function pg_temp.fixture_due_v1()
+returns jsonb language sql as $due$
+  select pg_catalog.jsonb_build_object('ok',true,
+    'count',pg_catalog.jsonb_array_length(fixture.items),'items',fixture.items)
+  from (
+    select coalesce(pg_catalog.jsonb_agg(item.value order by item.value->>'workflow_id'),
+      '[]'::jsonb) as items
+    from pg_catalog.jsonb_array_elements(
+      public.weekly_source_completed_pack_copy_due_list_v1('{"limit":100}')->'items') item
+    where item.value->>'workflow_id' like '00000000-e509-4000-8000-%'
+  ) fixture;
+$due$;
+
 select pg_temp.assert_true(
   pg_catalog.to_regprocedure(
     'public.weekly_source_completed_pack_copy_due_list_v1(jsonb)'
@@ -154,13 +170,13 @@ insert into public.candidate_submission_workflows(
   idempotency_key,worker_submitted_at_utc,immutable_submission_json,
   immutable_submission_sha256,candidate_signed_at_utc
 ) values
-  ('e5090000-0000-4000-8000-000000000001','TEST','e5080000-0000-4000-8000-000000000001',
+  ('00000000-e509-4000-8000-000000000001','TEST','e5080000-0000-4000-8000-000000000001',
    'e5030000-0000-4000-8000-000000000001','CONTRACT_HOURS','WEEKLY','ELECTRONIC',
    'WORKER_SUBMITTED',1,'e5040000-0000-4000-8000-000000000001',
    'e5070000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000001',
    'e5060000-0000-4000-8000-000000000001','2026-09-13','pack-source-1',
    '2026-09-10 10:00+00','{}',decode(repeat('11',32),'hex'),'2026-09-10 10:00+00'),
-  ('e5090000-0000-4000-8000-000000000002','TEST','e5080000-0000-4000-8000-000000000002',
+  ('00000000-e509-4000-8000-000000000002','TEST','e5080000-0000-4000-8000-000000000002',
    'e5030000-0000-4000-8000-000000000002','CONTRACT_COMBINED','WEEKLY','PHONE',
    'FINALISED',2,'e5040000-0000-4000-8000-000000000002',
    'e5070000-0000-4000-8000-000000000002','e5060000-0000-4000-8000-000000000002',
@@ -205,7 +221,7 @@ insert into public.candidate_submission_workflows(
   worker_submitted_at_utc,immutable_submission_json,immutable_submission_sha256,
   candidate_signed_at_utc
 ) values (
-  'e5090000-0000-4000-8000-000000000003','TEST','e5080000-0000-4000-8000-000000000001',
+  '00000000-e509-4000-8000-000000000003','TEST','e5080000-0000-4000-8000-000000000001',
   'e5030000-0000-4000-8000-000000000001','CONTRACT_HOURS','WEEKLY','ELECTRONIC',
   'WORKER_SUBMITTED',1,'e5040000-0000-4000-8000-000000000003',
   'e5070000-0000-4000-8000-000000000003',
@@ -215,7 +231,7 @@ insert into public.candidate_submission_workflows(
 );
 select pg_temp.assert_true(
   private._weekly_source_completed_pack_copy_eligibility_v1(
-    'e5090000-0000-4000-8000-000000000003'
+    '00000000-e509-4000-8000-000000000003'
   ) is null,
   'ordinary weekly workflow entered the source-only completed-pack copy route'
 );
@@ -225,15 +241,15 @@ insert into public.candidate_submission_components(
   document_role,state,storage_key,media_type,byte_size,source_content_sha256,
   immutable_at_utc,review_ordinal,required,review_render_state,final_signed_render_state
 ) values
-  ('e5100000-0000-4000-8000-000000000001','e5090000-0000-4000-8000-000000000001',1,1,
+  ('e5100000-0000-4000-8000-000000000001','00000000-e509-4000-8000-000000000001',1,1,
    'e5060000-0000-4000-8000-000000000001','CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE',
    'IMMUTABLE','signatures/source.png','image/png',100,decode(repeat('12',32),'hex'),
    '2026-09-10 10:00+00',null,false,'NOT_REQUIRED','NOT_REQUIRED'),
-  ('e5100000-0000-4000-8000-000000000002','e5090000-0000-4000-8000-000000000002',1,1,
+  ('e5100000-0000-4000-8000-000000000002','00000000-e509-4000-8000-000000000002',1,1,
    'e5060000-0000-4000-8000-000000000002','CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE',
    'IMMUTABLE','signatures/evidence-candidate.png','image/png',100,decode(repeat('22',32),'hex'),
    '2026-09-10 10:00+00',null,false,'NOT_REQUIRED','NOT_REQUIRED'),
-  ('e5100000-0000-4000-8000-000000000003','e5090000-0000-4000-8000-000000000002',1,2,
+  ('e5100000-0000-4000-8000-000000000003','00000000-e509-4000-8000-000000000002',1,2,
    'e5060000-0000-4000-8000-000000000002','HOURS_TIMESHEET',
    'ELECTRONIC_TIMESHEET_MANAGER_REVIEW','IMMUTABLE',null,null,null,null,
    '2026-09-10 10:00+00',1,true,'PENDING','PENDING');
@@ -260,7 +276,7 @@ insert into public.candidate_submission_components(
   source_content_sha256,immutable_at_utc,review_ordinal,required,
   review_render_state,final_signed_render_state
 ) values (
-  'e5100000-0000-4000-8000-000000000005','e5090000-0000-4000-8000-000000000002',1,4,
+  'e5100000-0000-4000-8000-000000000005','00000000-e509-4000-8000-000000000002',1,4,
   'e5060000-0000-4000-8000-000000000002','EXPENSE_EVIDENCE','TRAVEL',
   'SOURCE_EVIDENCE','IMMUTABLE','evidence/travel-receipt.pdf','application/pdf',600,
   decode(repeat('28',32),'hex'),'2026-09-10 10:00+00',2,true,'PENDING','PENDING'
@@ -288,7 +304,7 @@ insert into public.candidate_approval_requests(
   approved_at_utc,idempotency_key,review_manifest_sha256,required_component_ids,
   required_component_manifest_json
 ) values (
-  'e5110000-0000-4000-8000-000000000001','e5090000-0000-4000-8000-000000000002',1,
+  'e5110000-0000-4000-8000-000000000001','00000000-e509-4000-8000-000000000002',1,
   'PHONE','APPROVED','Morgan Manager','Manager','2026-09-10 10:02+00','pack-approval-1',
   decode(repeat('26',32),'hex'),array['e5100000-0000-4000-8000-000000000003'::uuid],
   '[{"component_id":"e5100000-0000-4000-8000-000000000003"}]'
@@ -309,7 +325,7 @@ insert into public.candidate_submission_components(
   immutable_at_utc,required,review_render_state,final_signed_render_state,
   manager_signature_capture_method
 ) values (
-  'e5100000-0000-4000-8000-000000000004','e5090000-0000-4000-8000-000000000002',1,3,
+  'e5100000-0000-4000-8000-000000000004','00000000-e509-4000-8000-000000000002',1,3,
   'MANAGER_SIGNATURE','MANAGER_SIGNATURE','IMMUTABLE','e5110000-0000-4000-8000-000000000001',
   'signatures/evidence-manager.png','image/png',100,decode(repeat('27',32),'hex'),
   '2026-09-10 10:02+00',false,'NOT_REQUIRED','NOT_REQUIRED','DRAW'
@@ -319,18 +335,18 @@ set signature_component_id='e5100000-0000-4000-8000-000000000004'
 where id='e5110000-0000-4000-8000-000000000001';
 update public.candidate_submission_workflows
 set candidate_signature_component_id=case id
-      when 'e5090000-0000-4000-8000-000000000001' then 'e5100000-0000-4000-8000-000000000001'::uuid
+      when '00000000-e509-4000-8000-000000000001' then 'e5100000-0000-4000-8000-000000000001'::uuid
       else 'e5100000-0000-4000-8000-000000000002'::uuid end,
     candidate_signature_sha256=case id
-      when 'e5090000-0000-4000-8000-000000000001' then decode(repeat('12',32),'hex')
+      when '00000000-e509-4000-8000-000000000001' then decode(repeat('12',32),'hex')
       else decode(repeat('22',32),'hex') end
-where id in ('e5090000-0000-4000-8000-000000000001','e5090000-0000-4000-8000-000000000002');
+where id in ('00000000-e509-4000-8000-000000000001','00000000-e509-4000-8000-000000000002');
 update public.candidate_submission_workflows
 set manager_name='Morgan Manager',manager_position='Manager',
     manager_signature_component_id='e5100000-0000-4000-8000-000000000004',
     manager_signature_sha256=decode(repeat('27',32),'hex'),
     manager_approved_at_utc='2026-09-10 10:02+00',finalised_at_utc='2026-09-10 10:03+00'
-where id='e5090000-0000-4000-8000-000000000002';
+where id='00000000-e509-4000-8000-000000000002';
 
 -- Effective setting hierarchy and readiness negatives. These are isolated
 -- policy/readiness changes inside this rollback-only verification.
@@ -392,8 +408,8 @@ begin
   update public.candidate_submission_workflows
   set candidate_signed_at_utc=null,candidate_signature_component_id=null,
       candidate_signature_sha256=null
-  where id='e5090000-0000-4000-8000-000000000001';
-  v_due:=public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}');
+  where id='00000000-e509-4000-8000-000000000001';
+  v_due:=pg_temp.fixture_due_v1();
   if (v_due->>'count')::integer<>1
      or v_due->'items'->0->>'document_mode'<>'INVOICE_EVIDENCE_REQUIRED' then
     raise exception 'VERIFY_FAILED: incomplete Candidate signature was eligible';
@@ -402,13 +418,13 @@ begin
   set candidate_signed_at_utc='2026-09-10 10:00+00',
       candidate_signature_component_id='e5100000-0000-4000-8000-000000000001',
       candidate_signature_sha256=decode(repeat('12',32),'hex')
-  where id='e5090000-0000-4000-8000-000000000001';
+  where id='00000000-e509-4000-8000-000000000001';
 
   update public.candidate_submission_workflows
   set manager_name=null,manager_position=null,manager_approved_at_utc=null,
       manager_signature_component_id=null,manager_signature_sha256=null
-  where id='e5090000-0000-4000-8000-000000000002';
-  v_due:=public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}');
+  where id='00000000-e509-4000-8000-000000000002';
+  v_due:=pg_temp.fixture_due_v1();
   if (v_due->>'count')::integer<>1
      or v_due->'items'->0->>'document_mode'<>'CHECK_ONLY' then
     raise exception 'VERIFY_FAILED: incomplete manager approval was eligible';
@@ -418,12 +434,12 @@ begin
       manager_approved_at_utc='2026-09-10 10:02+00',
       manager_signature_component_id='e5100000-0000-4000-8000-000000000004',
       manager_signature_sha256=decode(repeat('27',32),'hex')
-  where id='e5090000-0000-4000-8000-000000000002';
+  where id='00000000-e509-4000-8000-000000000002';
 
   update public.weekly_source_client_policies
   set document_mode='IMPORT_ONLY'
   where client_id='e5020000-0000-4000-8000-000000000001';
-  v_due:=public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}');
+  v_due:=pg_temp.fixture_due_v1();
   if (v_due->>'count')::integer<>1
      or v_due->'items'->0->>'document_mode'<>'INVOICE_EVIDENCE_REQUIRED' then
     raise exception 'VERIFY_FAILED: IMPORT_ONLY produced a completed-pack copy';
@@ -450,7 +466,7 @@ declare
   v_result jsonb;
   v_count integer;
 begin
-  v_due:=public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}');
+  v_due:=pg_temp.fixture_due_v1();
   if (v_due->>'count')::integer<>2 then
     raise exception 'VERIFY_FAILED: both completed document modes were not due: %',v_due;
   end if;
@@ -487,14 +503,21 @@ begin
     end if;
   end loop;
 
-  select count(*) into v_count from public.weekly_completed_pack_copy_events;
+  -- scoped to fixture rows: hosted TEST holds real rows
+  select count(*) into v_count from public.weekly_completed_pack_copy_events
+  where timesheet_id in ('e5060000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000002',
+    'e5060000-0000-4000-8000-000000000003','e5060000-0000-4000-8000-000000000004');
   if v_count<>2 then raise exception 'VERIFY_FAILED: completion event count is not two'; end if;
   select count(*) into v_count from public.mail_outbox
-  where payment_scope_json->>'completed_pack_copy_authority'='WEEKLY_COMPLETED_PACK_COPY_V1';
+  where payment_scope_json->>'completed_pack_copy_authority'='WEEKLY_COMPLETED_PACK_COPY_V1'
+    and context_id in ('e5060000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000002',
+      'e5060000-0000-4000-8000-000000000003','e5060000-0000-4000-8000-000000000004');
   if v_count<>2 then raise exception 'VERIFY_FAILED: completed pack outbox count is not two'; end if;
   if exists(
     select 1 from public.mail_outbox
     where payment_scope_json->>'completed_pack_copy_authority'='WEEKLY_COMPLETED_PACK_COPY_V1'
+      and context_id in ('e5060000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000002',
+        'e5060000-0000-4000-8000-000000000003','e5060000-0000-4000-8000-000000000004')
       and (body_html ~* 'href=|https?://' or body_text ~* 'https?://')
   ) then raise exception 'VERIFY_FAILED: informational email contains a link'; end if;
 
@@ -521,23 +544,42 @@ $prove$;
 do $claim_guard$
 declare
   v_outbox_id uuid;
+  v_sentinel_id uuid;
   v_claimed integer;
+  v_sentinel integer;
 begin
   select outbox.id into strict v_outbox_id
   from public.mail_outbox outbox
   where outbox.payment_scope_json->>'completed_pack_copy_authority'
     ='WEEKLY_COMPLETED_PACK_COPY_V1'
     and outbox.context_id='e5060000-0000-4000-8000-000000000001';
+  -- Hosted TEST mail_outbox holds real QUEUED rows.  The probe copy is ordered
+  -- first and a plain claimable fixture message (the sentinel) second, ahead of
+  -- every real row, and each claim takes ONE row: a claim can lease only a
+  -- fixture row, and a refused probe must leave exactly the sentinel claimed.
+  insert into public.mail_outbox(id,type,"to",subject,body_text,next_attempt_at_utc)
+  values ('e5120000-0000-4000-8000-000000000001','TIMESHEET_GENERAL',
+    'claim-sentinel@example.invalid','Completed-pack claim sentinel','sentinel',
+    '0001-01-01 00:00:00+00')
+  returning id into v_sentinel_id;
+  update public.mail_outbox set next_attempt_at_utc='-infinity' where id=v_outbox_id;
 
   update public.mail_outbox
   set attachments=jsonb_set(attachments,'{0,sha256}',to_jsonb(repeat('f',64)))
   where id=v_outbox_id;
-  select count(*) into v_claimed
-  from public.email_outbox_claim_ready_batch(10,'weekly-copy-forged-proof',5) claimed
-  where claimed.id=v_outbox_id;
+  select count(*) filter (where claimed.id=v_outbox_id),
+         count(*) filter (where claimed.id=v_sentinel_id)
+  into v_claimed,v_sentinel
+  from public.email_outbox_claim_ready_batch(1,'weekly-copy-forged-proof',5) claimed;
   if v_claimed<>0 then
     raise exception 'VERIFY_FAILED: forged completed-copy attachment was claimable';
   end if;
+  if v_sentinel<>1 then
+    raise exception 'VERIFY_FAILED: forged-copy claim did not take the fixture sentinel';
+  end if;
+  update public.mail_outbox
+  set attempt_lease_token=null,attempt_leased_at_utc=null,attempt_lease_expires_at_utc=null
+  where id=v_sentinel_id;
 
   update public.mail_outbox
   set attachments=jsonb_set(
@@ -547,18 +589,25 @@ begin
         payment_scope_json,'{candidate_mail_authority}',to_jsonb('CANDIDATE_PAPER_V1'::text)
       )
   where id=v_outbox_id;
-  select count(*) into v_claimed
-  from public.email_outbox_claim_ready_batch(10,'weekly-copy-paper-marker-proof',5) claimed
-  where claimed.id=v_outbox_id;
+  select count(*) filter (where claimed.id=v_outbox_id),
+         count(*) filter (where claimed.id=v_sentinel_id)
+  into v_claimed,v_sentinel
+  from public.email_outbox_claim_ready_batch(1,'weekly-copy-paper-marker-proof',5) claimed;
   if v_claimed<>0 then
     raise exception 'VERIFY_FAILED: completed-copy email with PAPER marker was claimable';
   end if;
+  if v_sentinel<>1 then
+    raise exception 'VERIFY_FAILED: paper-marker claim did not take the fixture sentinel';
+  end if;
+  update public.mail_outbox
+  set attempt_lease_token=null,attempt_leased_at_utc=null,attempt_lease_expires_at_utc=null
+  where id=v_sentinel_id;
 
   update public.mail_outbox
   set payment_scope_json=payment_scope_json-'candidate_mail_authority'
   where id=v_outbox_id;
   select count(*) into v_claimed
-  from public.email_outbox_claim_ready_batch(10,'weekly-copy-valid-proof',5) claimed
+  from public.email_outbox_claim_ready_batch(1,'weekly-copy-valid-proof',5) claimed
   where claimed.id=v_outbox_id;
   if v_claimed<>1 then
     raise exception 'VERIFY_FAILED: valid completed-copy message was not claimable';
@@ -608,7 +657,7 @@ insert into public.candidate_submission_components(
   document_role,state,storage_key,media_type,byte_size,source_content_sha256,
   immutable_at_utc,required,review_render_state,final_signed_render_state
 ) values (
-  'e5100000-0000-4000-8000-000000000006','e5090000-0000-4000-8000-000000000001',2,1,
+  'e5100000-0000-4000-8000-000000000006','00000000-e509-4000-8000-000000000001',2,1,
   'e5060000-0000-4000-8000-000000000001','CANDIDATE_SIGNATURE','CANDIDATE_SIGNATURE',
   'IMMUTABLE','signatures/source-v2.png','image/png',100,decode(repeat('41',32),'hex'),
   '2026-09-11 10:00+00',false,'NOT_REQUIRED','NOT_REQUIRED'
@@ -617,16 +666,16 @@ update public.candidate_submission_workflows
 set generation=2,candidate_signature_component_id='e5100000-0000-4000-8000-000000000006',
     candidate_signature_sha256=decode(repeat('41',32),'hex'),
     candidate_signed_at_utc='2026-09-11 10:00+00',updated_at_utc='2026-09-11 10:00+00'
-where id='e5090000-0000-4000-8000-000000000001';
+where id='00000000-e509-4000-8000-000000000001';
 select pg_temp.assert_true(
-  (public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}')->>'count')::integer=1,
+  (pg_temp.fixture_due_v1()->>'count')::integer=1,
   'a genuinely re-signed completion generation was not due exactly once'
 );
 update public.candidate_submission_workflows
 set generation=1,candidate_signature_component_id='e5100000-0000-4000-8000-000000000001',
     candidate_signature_sha256=decode(repeat('12',32),'hex'),
     candidate_signed_at_utc='2026-09-10 10:00+00',updated_at_utc='2026-09-10 10:00+00'
-where id='e5090000-0000-4000-8000-000000000001';
+where id='00000000-e509-4000-8000-000000000001';
 update public.weekly_source_client_policies
 set completed_pack_recipient='copy-source@example.invalid'
 where client_id='e5020000-0000-4000-8000-000000000001';
@@ -646,15 +695,31 @@ insert into public.timesheets(
   sheet_scope,line_type,actual_schedule_json,2
 from public.timesheets where timesheet_id='e5060000-0000-4000-8000-000000000001';
 select pg_temp.assert_true(
-  (public.weekly_source_completed_pack_copy_due_list_v1('{"limit":20}')->>'count')::integer=0,
+  (pg_temp.fixture_due_v1()->>'count')::integer=0,
   'Timesheet family rotation created a duplicate informational copy'
 );
 
+-- scoped to fixture rows: hosted TEST mail_outbox holds real rows
 update public.mail_outbox set status='SENT',sent_at=clock_timestamp()
-where payment_scope_json->>'completed_pack_copy_authority'='WEEKLY_COMPLETED_PACK_COPY_V1';
-select public.weekly_source_completed_pack_copy_status_sync_v1('{"limit":20}');
+where payment_scope_json->>'completed_pack_copy_authority'='WEEKLY_COMPLETED_PACK_COPY_V1'
+  and context_id in ('e5060000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000002',
+    'e5060000-0000-4000-8000-000000000003','e5060000-0000-4000-8000-000000000004');
+-- The sync owner is a global oldest-first sweep with no scope argument; real
+-- unsynchronised events may precede the fixture's, so it is run to exhaustion.
+do $status_sync$
+declare v_round integer:=0;
+begin
+  loop
+    v_round:=v_round+1;
+    exit when (public.weekly_source_completed_pack_copy_status_sync_v1('{"limit":500}')
+      ->>'updated_count')::integer=0 or v_round>=100;
+  end loop;
+end;
+$status_sync$;
 select pg_temp.assert_true(
-  not exists(select 1 from public.weekly_completed_pack_copy_events where state<>'SENT'),
+  not exists(select 1 from public.weekly_completed_pack_copy_events where state<>'SENT'
+    and timesheet_id in ('e5060000-0000-4000-8000-000000000001','e5060000-0000-4000-8000-000000000002',
+      'e5060000-0000-4000-8000-000000000003','e5060000-0000-4000-8000-000000000004')),
   'sent outbox state did not synchronise to completion events'
 );
 

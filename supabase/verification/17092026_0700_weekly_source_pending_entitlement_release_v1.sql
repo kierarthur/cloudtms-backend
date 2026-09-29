@@ -26,6 +26,12 @@ select pg_temp.ws_verify_watch('public.pay_bank_transfers'::regclass);
 select pg_temp.ws_verify_watch('public.timesheet_pay_state_history'::regclass);
 select pg_temp.ws_verify_watch('public.weekly_source_entitlement_heads'::regclass);
 select pg_temp.ws_verify_watch('public.weekly_source_pending_entitlement_bundles'::regclass);
+-- Hosted TEST holds real pending bundles; the claim page and frozen watch are global
+-- (page clamped to 25), so hide every non-fixture bundle from them.  Rolled back.
+create policy cl_verify_fixture_bundles_only on public.weekly_source_pending_entitlement_bundles
+  as restrictive for all to public
+  using (candidate_id in ('d0000000-0000-4000-8000-000000000003'::uuid,
+                          'd0000000-0000-4000-8000-000000000023'::uuid));
 
 set local request.jwt.claim.role='service_role';
 
@@ -1153,7 +1159,8 @@ begin
   -- R27: caller-supplied page 500 and lease 3600 are clamped INSIDE the
   -- function to 25 and 120; page 0 and lease 1 are clamped up to 1 and 30.
   update public.weekly_source_pending_entitlement_bundles
-     set next_check_at_utc=pg_catalog.clock_timestamp()-interval '1 second';
+     set next_check_at_utc=pg_catalog.clock_timestamp()-interval '1 second'
+   where id=v_pending;
   v_claim:=private.weekly_source_pending_entitlement_release_claim_page_v1(
     'weekly-source-release-worker','d0000000-0000-4000-8000-00000000cc01',3600,500);
   perform pg_temp.assert_true(
@@ -1257,7 +1264,8 @@ begin
   -- write - skip this bundle for this tick and retry next tick.
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.banking_pay_workbench_jobs
-      where status in ('QUEUED','RUNNING'))>=1,
+      where status in ('QUEUED','RUNNING')
+        and candidate_id='d0000000-0000-4000-8000-000000000003')>=1,
     'the installed dirty trigger queued a Workbench job, so the gate can be exercised');
   select * into v_row from public.weekly_source_pending_entitlement_bundles where id=v_pending;
   v_result:=private.weekly_source_pending_entitlement_release_apply_v1(

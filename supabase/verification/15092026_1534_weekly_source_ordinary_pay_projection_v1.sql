@@ -673,7 +673,13 @@ select pg_temp.assert_true(
 );
 select pg_temp.assert_true(
   (select pg_catalog.count(*)=2
-   from public.weekly_source_expense_pay_materialisations),
+   from public.weekly_source_expense_pay_materialisations materialisation
+   -- scoped to the fixture root: hosted TEST holds real rows
+   where materialisation.root_timesheet_id=(
+     select receipt.root_timesheet_id
+     from public.weekly_source_ordinary_pay_projection_receipts receipt
+     where receipt.idempotency_key='projection-a3'
+   )),
   'AMEND must retain immutable prior pay provenance and bind the new authority'
 );
 
@@ -703,6 +709,12 @@ select pg_temp.assert_true(
     join public.weekly_expense_authority_generations authority
       on authority.id=materialisation.expense_authority_generation_id
     where authority.state='CURRENT'
+      -- scoped to the fixture root: hosted TEST holds real rows
+      and materialisation.root_timesheet_id=(
+        select receipt.root_timesheet_id
+        from public.weekly_source_ordinary_pay_projection_receipts receipt
+        where receipt.idempotency_key='projection-a4'
+      )
   ),
   'CANCEL must leave no pay materialisation for the current zero authority'
 );
@@ -1163,9 +1175,12 @@ select pg_temp.assert_true(
    where bundle_row.state='PROPOSED'
      and bundle_row.bundle_kind='SINGLE_ROOT'
      and pg_catalog.cardinality(bundle_row.proposed_head_ids)=1)
-  and (select pg_catalog.count(*)=0 from public.weekly_source_entitlement_heads)
+  -- scoped to the fixture Candidate: hosted TEST holds real rows
+  and (select pg_catalog.count(*)=0 from public.weekly_source_entitlement_heads head_row
+       where head_row.candidate_id='a0000000-0000-4000-8000-000000000003')
   and (select pg_catalog.count(*)=0
-       from private.weekly_source_entitlement_publication_receipts),
+       from private.weekly_source_entitlement_publication_receipts publication_receipt
+       where publication_receipt.candidate_id='a0000000-0000-4000-8000-000000000003'),
   'a proposal creates one PROPOSED bundle revision and no head, and publishes nothing'
 );
 select pg_temp.assert_true(

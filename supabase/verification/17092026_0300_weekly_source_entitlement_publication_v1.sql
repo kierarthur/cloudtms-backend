@@ -1357,9 +1357,11 @@ begin
   -- every immutable receipt field, so the conflict is produced here by
   -- tampering with the stored receipt rather than the request - proving that
   -- the field-by-field comparison, and not the digest alone, is what decides.
+  -- scoped to fixture rows: hosted TEST holds real rows
   set local session_replication_role='replica';
   update private.weekly_source_entitlement_publication_receipts
-     set member_root_versions=array[99]::integer[];
+     set member_root_versions=array[99]::integer[]
+   where decision_bundle_id='c0000000-0000-4000-8000-0000000000b1';
   set local session_replication_role='origin';
 
   v_replay:=pg_temp.publish(v_request,pg_temp.lock_result_a());
@@ -1379,7 +1381,8 @@ begin
 
   set local session_replication_role='replica';
   update private.weekly_source_entitlement_publication_receipts
-     set member_root_versions=array[1]::integer[];
+     set member_root_versions=array[1]::integer[]
+   where decision_bundle_id='c0000000-0000-4000-8000-0000000000b1';
   set local session_replication_role='origin';
 end
 $verify_publication_replay$;
@@ -2711,6 +2714,7 @@ declare
 begin
   select receipt_row.request_digest into v_digest
     from private.weekly_source_entitlement_publication_receipts as receipt_row
+   where receipt_row.candidate_id='c0000000-0000-4000-8000-000000000003'
    order by receipt_row.created_at_utc limit 1;
   perform pg_temp.expect_failure(
     pg_catalog.format($sql$
@@ -3433,6 +3437,7 @@ begin
   select pending_row.id into v_pending_id
     from public.weekly_source_pending_entitlement_bundles as pending_row
    where pending_row.state in ('PENDING','RELEASING')
+     and pending_row.candidate_id='c0000000-0000-4000-8000-000000000003'
    order by pending_row.created_at_utc desc
    limit 1;
   if v_pending_id is null then

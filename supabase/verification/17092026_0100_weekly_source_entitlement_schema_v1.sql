@@ -2309,15 +2309,18 @@ begin
     (14,'FULL_NEGATIVE',-1::bigint,-15000::bigint,-15001::bigint,-15000::bigint)
   ) as probe(generation,row_sign_kind,commission,total_cost,shift_charge,calculated);
 
+  -- scoped to fixture rows: hosted TEST holds real rows
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_charge_checks
       where comparison_result='SOURCE_ROUNDING_EQUIVALENT'
-        and source_charge_difference_pence=-1)=2,
+        and source_charge_difference_pence=-1
+        and upload_row_id=v_upload_row)=2,
     'the symmetric rule must admit a source one penny BELOW the calculation, in both signs');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.weekly_source_charge_checks
       where comparison_result='SOURCE_ROUNDING_EQUIVALENT'
-        and source_charge_difference_pence=1)=2,
+        and source_charge_difference_pence=1
+        and upload_row_id=v_upload_row)=2,
     'the symmetric rule must admit a source one penny ABOVE the calculation, in both signs');
 
   perform pg_temp.expect_failure($sql$

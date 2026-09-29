@@ -378,6 +378,8 @@ begin
   if exists(
     select 1 from public.hr_imports import_row
     where import_row.parser_version='WEEKLY_SOURCE_MODE_A_BRIDGE_V1'
+      -- scoped to fixture rows: hosted TEST holds real rows
+      and import_row.client_id in ((v_clean->>'client_id')::uuid,(v_held->>'client_id')::uuid,(v_unsigned->>'client_id')::uuid)
       and (import_row.import_scope is distinct from 'HR_WEEKLY'
         or import_row.source_system<>'HEALTHROSTER'::public.hr_source_enum)
   ) then
@@ -387,6 +389,7 @@ begin
     select 1 from public.import_review_decisions decision
     join public.hr_imports import_row on import_row.id=decision.import_id
     where import_row.parser_version='WEEKLY_SOURCE_MODE_A_BRIDGE_V1'
+      and import_row.client_id in ((v_clean->>'client_id')::uuid,(v_held->>'client_id')::uuid,(v_unsigned->>'client_id')::uuid)
       and decision.summary_json->>'source_route' like '%DAILY%'
   ) then
     raise exception 'MODE_A_BRIDGE_PRODUCED_A_DAILY_ACTION';
@@ -396,6 +399,7 @@ begin
   if exists(
     select 1 from public.weekly_timesheet_authority_resolutions authority
     where authority.require_reference_to_pay is not false
+      and authority.client_id in ((v_clean->>'client_id')::uuid,(v_held->>'client_id')::uuid,(v_unsigned->>'client_id')::uuid)
   ) then
     raise exception 'MODE_A_REFERENCE_REQUIRED_BEFORE_PAY_DID_NOT_DEFAULT_FALSE';
   end if;

@@ -191,6 +191,10 @@ begin
   join public.timesheets_financials financial
     on financial.timesheet_id=lineage.timesheet_id and financial.is_current
    and financial.client_id is not null
+  -- scoped to fixture rows: hosted TEST holds real lineage-bound Timesheets
+  join public.weekly_source_cycles fixture_cycle on fixture_cycle.id=lineage.source_cycle_id
+  join public.weekly_source_groups fixture_group on fixture_group.id=fixture_cycle.source_group_id
+   and fixture_group.agency_id='a0000000-0000-4000-8000-000000000006'
   where pg_catalog.btrim(coalesce(timesheet_row.booking_id,''))<>''
   order by lineage.timesheet_id
   limit 1;
@@ -280,8 +284,7 @@ begin
     root_timesheet_id,root_family_booking_id,ownership_state,
     first_signed_evidence_fingerprint,current_lifecycle_state,creation_idempotency_key
   )
-  select (select source_group.agency_id from public.weekly_source_groups source_group
-          order by source_group.id limit 1),
+  select 'a0000000-0000-4000-8000-000000000006'::uuid, -- the fixture agency, never a real group's
          contract_row.candidate_id,timesheet_row.contract_id,
          timesheet_row.week_ending_date-6,timesheet_row.week_ending_date,
          v_old,pg_catalog.btrim(timesheet_row.booking_id),'TARGET_MANAGED',

@@ -15,6 +15,61 @@ begin
 end;
 $verify$;
 
+-- Hosted TEST holds real Weekly Source delivery rows.  A command or target
+-- claim with a small limit could lease a real row instead of the fixture's
+-- own, so these transaction-local helpers keep claiming (every lease is rolled
+-- back with the verifier) until the fixture's item is leased, and return a
+-- claim-shaped result containing only the fixture's command or targets.
+create or replace function pg_temp.claim_fixture_command_v1(
+  p_worker text,p_command_id uuid,p_lease_seconds integer default 60
+) returns jsonb language plpgsql as $claim$
+declare
+  v_claim jsonb;
+  v_item jsonb;
+  v_round integer:=0;
+begin
+  loop
+    v_round:=v_round+1;
+    v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
+      'worker_id',p_worker,'limit',100,'lease_seconds',p_lease_seconds
+    ));
+    select value into v_item from pg_catalog.jsonb_array_elements(v_claim->'commands')
+    where value->>'dispatch_command_id'=p_command_id::text;
+    exit when v_item is not null or (v_claim->>'claimed_count')::integer=0 or v_round>=100;
+  end loop;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'worker_id',p_worker,'lease_token',v_item->'lease_token',
+    'claimed_count',case when v_item is null then 0 else 1 end,
+    'commands',case when v_item is null then '[]'::jsonb else pg_catalog.jsonb_build_array(v_item) end
+  );
+end;
+$claim$;
+
+create or replace function pg_temp.claim_fixture_targets_v1(p_worker text,p_command_id uuid)
+returns jsonb language plpgsql as $claim$
+declare
+  v_claim jsonb;
+  v_targets jsonb:='[]'::jsonb;
+  v_round integer:=0;
+begin
+  loop
+    v_round:=v_round+1;
+    v_claim:=public.weekly_source_message_dispatch_target_claim_v1(pg_catalog.jsonb_build_object(
+      'worker_id',p_worker,'limit',200,'lease_seconds',60
+    ));
+    v_targets:=v_targets||coalesce((
+      select pg_catalog.jsonb_agg(value) from pg_catalog.jsonb_array_elements(v_claim->'targets')
+      where value->>'dispatch_command_id'=p_command_id::text
+    ),'[]'::jsonb);
+    exit when (v_claim->>'claimed_count')::integer=0 or v_round>=100;
+  end loop;
+  return pg_catalog.jsonb_build_object(
+    'ok',true,'worker_id',p_worker,
+    'claimed_count',pg_catalog.jsonb_array_length(v_targets),'targets',v_targets
+  );
+end;
+$claim$;
+
 -- Every accepted Candidate outreach now owns a durable in-app notification.
 -- Give each transaction-local Candidate fixture exactly one active app account
 -- and membership so this verifier exercises that fail-closed invariant rather
@@ -127,9 +182,7 @@ begin
       )
     );
   end if;
-  v_claim:=public.weekly_source_message_dispatch_target_claim_v1(
-    pg_catalog.jsonb_build_object('worker_id',v_worker,'limit',100,'lease_seconds',60)
-  );
+  v_claim:=pg_temp.claim_fixture_targets_v1(v_worker,v_command_id);
   select value into strict v_claimed
   from pg_catalog.jsonb_array_elements(v_claim->'targets')
   where value->>'dispatch_command_id'=v_command_id::text;
@@ -426,7 +479,9 @@ begin
     ))
   ));
   perform pg_temp.assert_true((v_result->>'unchanged_incidents')::integer=1,'unchanged re-import changed the incident');
-  perform pg_temp.assert_true((select count(*) from public.weekly_candidate_outreach_generations)=1,
+  -- Scoped to the fixture cycle: hosted TEST holds real outreach generations.
+  perform pg_temp.assert_true((select count(*) from public.weekly_candidate_outreach_generations
+    where source_cycle_id='e6000000-0000-4000-8000-000000000001')=1,
     'unchanged re-import resent candidate outreach');
 
   -- A genuinely new issue resets the active cohort and includes every open issue.
@@ -460,7 +515,7 @@ begin
   select id into strict v_incident_2 from public.weekly_discrepancy_incidents
   where work_event_id='e9000000-0000-4000-8000-000000000002' and state='OPEN';
   select id into strict v_generation_2 from public.weekly_candidate_outreach_generations
-  where state='ACTIVE';
+  where state='ACTIVE' and source_cycle_id='e6000000-0000-4000-8000-000000000001';
   perform pg_temp.assert_true(v_generation_2<>v_generation_1,'new issue did not reset the generation');
   perform pg_temp.assert_true((select count(*) from public.weekly_candidate_outreach_memberships
     where candidate_generation_id=v_generation_2 and state='ACTIONABLE')=2,
@@ -507,19 +562,25 @@ begin
 
   -- At the configured manager partial time, only the answered shift becomes one digest.
   perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
-    'now_utc',v_started+interval '3 hours','limit',100
+    'now_utc',v_started+interval '3 hours','limit',1000
   ));
   select id into strict v_manager_intent from public.weekly_message_intents
-  where audience_kind='MANAGER' and tranche_kind='MANAGER_T6_RESPONDED' and state='DUE';
+  where audience_kind='MANAGER' and tranche_kind='MANAGER_T6_RESPONDED' and state='DUE'
+    and source_cycle_id='e6000000-0000-4000-8000-000000000001';
   perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
-    'now_utc',v_started+interval '11 hours','limit',100
+    'now_utc',v_started+interval '11 hours','limit',1000
   ));
   perform pg_temp.assert_true(not exists(
     select 1 from public.weekly_message_intents
     where audience_kind='MANAGER' and tranche_kind='MANAGER_T12_REMAINDER'
+      and source_cycle_id='e6000000-0000-4000-8000-000000000001'
   ) and exists(
     select 1 from public.weekly_manager_cohort_due_events
     where event_kind='T12_REMAINDER' and state='PENDING'
+      and candidate_cohort_id in (
+        select id from public.weekly_candidate_cohorts
+        where source_cycle_id='e6000000-0000-4000-8000-000000000001'
+      )
   ),'later manager tranche duplicated rows while an earlier digest was pending');
   v_render_input:=public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
     'message_intent_id',v_manager_intent,
@@ -551,9 +612,7 @@ begin
     'data_plane_identity','agency-test','route_version','v1','credential_version','v1'
     ,'manager_route_preparation_id',v_route_preparation->>'manager_route_preparation_id'
   ));
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','query-verifier','limit',1,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1('query-verifier',(v_stage->>'dispatch_command_id')::uuid);
   perform pg_temp.assert_true((v_claim->>'claimed_count')::integer=1,'manager dispatch not claimed');
   v_start:=pg_temp.start_one_delivery_target_v1(pg_catalog.jsonb_build_object(
     'dispatch_command_id',v_claim->'commands'->0->>'dispatch_command_id',
@@ -603,10 +662,11 @@ begin
   -- At the configured candidate deadline, the still-unanswered Timesheet row
   -- becomes the one manager remainder; the earlier answered row is not repeated.
   perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
-    'now_utc',v_started+interval '11 hours','limit',100
+    'now_utc',v_started+interval '11 hours','limit',1000
   ));
   select id into strict v_manager_intent from public.weekly_message_intents
-  where audience_kind='MANAGER' and tranche_kind='MANAGER_T12_REMAINDER' and state='DUE';
+  where audience_kind='MANAGER' and tranche_kind='MANAGER_T12_REMAINDER' and state='DUE'
+    and source_cycle_id='e6000000-0000-4000-8000-000000000001';
   v_render_input:=public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
     'message_intent_id',v_manager_intent,
     'projection_publication_id','e8000000-0000-4000-8000-000000000002'
@@ -680,7 +740,7 @@ begin
     'missing Timesheet incorrectly enabled manager send');
   perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
     'now_utc',(select started_at_utc+interval '11 hours' from public.weekly_candidate_outreach_generations
-               where id=v_submission_generation),'limit',100
+               where id=v_submission_generation),'limit',1000
   ));
   perform pg_temp.assert_true(exists(select 1 from public.weekly_timesheet_submission_requests
     where id=(v_submission->>'submission_request_id')::uuid and state='OVERDUE'),
@@ -820,9 +880,7 @@ begin
     'data_plane_identity','agency-test','route_version','v1','credential_version','v1'
     ,'manager_route_preparation_id',v_route_preparation->>'manager_route_preparation_id'
   ));
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','query-verifier-2','limit',1,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1('query-verifier-2',(v_stage->>'dispatch_command_id')::uuid);
   perform pg_temp.assert_true(v_claim->'commands'->0->>'dispatch_command_id'=v_stage->>'dispatch_command_id',
     'two-candidate manager digest dispatch was not claimed');
   v_start:=pg_temp.start_one_delivery_target_v1(pg_catalog.jsonb_build_object(
@@ -939,17 +997,26 @@ begin
       from public.weekly_manager_review_items item
       where item.id=(v_review_item->>'review_item_id')::uuid)='UNANSWERED',
     'the refused zero-length correction still answered the review item');
+  -- Scoped to the fixture cycle's incidents: hosted TEST holds real rows.
   perform pg_temp.assert_true(not exists(
     select 1 from public.weekly_manager_review_items item
-    where item.intended_end_at_local
+    where (item.intended_end_at_local
             =item.intended_start_at_local+pg_catalog.make_interval(days=>1)
-       or item.intended_end_at_local=item.intended_start_at_local
+       or item.intended_end_at_local=item.intended_start_at_local)
+      and item.incident_id in (
+        select id from public.weekly_discrepancy_incidents
+        where source_cycle_id='e6000000-0000-4000-8000-000000000001'
+      )
   ),'a manager review item recorded a zero-length or 24-hour intended shift');
   perform pg_temp.assert_true(not exists(
     select 1 from public.office_action_notifications
     where event_kind='WEEKLY_MANAGER_SOURCE_CORRECTED'
       and payload_json->>'manager_intended_start'
             =payload_json->>'manager_intended_end'
+      and issue_id in (
+        select id from public.weekly_discrepancy_incidents
+        where source_cycle_id='e6000000-0000-4000-8000-000000000001'
+      )
   ),'an Office notice carried a zero-length manager correction');
   -- The genuine overnight correction answered above is the sentinel that must
   -- NOT change: 20:00 to 08:00 still belongs to the following calendar day, and
@@ -1007,7 +1074,8 @@ begin
   from public.weekly_candidate_outreach_generations
   where candidate_id='e3000000-0000-4000-8000-000000000001';
   select current_generation_id into strict v_manager_generation_before
-  from public.weekly_manager_recipient_routes where current_generation_id is not null;
+  from public.weekly_manager_recipient_routes where current_generation_id is not null
+    and source_cycle_id='e6000000-0000-4000-8000-000000000001';
   v_v3_sync_request:=pg_catalog.jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_cycle_id','e6000000-0000-4000-8000-000000000001',
@@ -1043,7 +1111,8 @@ begin
   from public.weekly_candidate_outreach_generations
   where candidate_id='e3000000-0000-4000-8000-000000000001';
   select current_generation_id into strict v_manager_generation_after
-  from public.weekly_manager_recipient_routes where current_generation_id is not null;
+  from public.weekly_manager_recipient_routes where current_generation_id is not null
+    and source_cycle_id='e6000000-0000-4000-8000-000000000001';
   perform pg_temp.assert_true(v_candidate_generation_count_after=v_candidate_generation_count_before
     and not exists(
       select 1 from public.weekly_candidate_outreach_generations
@@ -1133,6 +1202,7 @@ begin
   ) and v_manager_generation_after=(
     select current_generation_id from public.weekly_manager_recipient_routes
     where current_generation_id is not null
+      and source_cycle_id='e6000000-0000-4000-8000-000000000001'
   ),'unchanged re-import resent an outreach generation');
 end;
 $test$;
@@ -1220,9 +1290,7 @@ begin
 
   -- Snapshot two devices under one immutable command.  Acceptance by the
   -- first device must not close or skip the second device.
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','multi-device-command','limit',1,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1('multi-device-command',v_command_id);
   perform pg_temp.assert_true(v_claim->'commands'->0->>'dispatch_command_id'=v_command_id::text,
     'new dispatch command was not leased');
   v_register:=public.weekly_source_message_targets_register_atomic_v1(
@@ -1258,9 +1326,7 @@ begin
   );
   perform pg_temp.assert_true((v_register->>'target_count')::integer=2,
     'multi-device snapshot did not create two independent targets');
-  v_claim:=public.weekly_source_message_dispatch_target_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','multi-device-targets','limit',10,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_targets_v1('multi-device-targets',v_command_id);
   select value into strict v_target_one from pg_catalog.jsonb_array_elements(v_claim->'targets')
   where value->>'external_target_id'='f2000000-0000-4000-8000-000000000001';
   select value into strict v_target_two from pg_catalog.jsonb_array_elements(v_claim->'targets')
@@ -1323,9 +1389,7 @@ begin
   update public.weekly_message_dispatch_targets
   set next_attempt_at_utc=pg_catalog.transaction_timestamp()-interval '1 second'
   where id=v_target_two_id;
-  v_claim:=public.weekly_source_message_dispatch_target_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','multi-device-retry','limit',10,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_targets_v1('multi-device-retry',v_command_id);
   select value into strict v_target_two from pg_catalog.jsonb_array_elements(v_claim->'targets')
   where value->>'dispatch_target_id'=v_target_two_id::text;
   v_start:=public.weekly_source_message_dispatch_target_start_atomic_v1(
@@ -1386,9 +1450,7 @@ begin
     'renderer_version','1.3.0','plain_body','Please submit your Timesheet.'
   ));
   v_retry_command:=(v_stage->>'dispatch_command_id')::uuid;
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','ambiguous-verifier','limit',1,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1('ambiguous-verifier',v_retry_command);
   v_start:=pg_temp.start_one_delivery_target_v1(
     pg_catalog.jsonb_build_object(
       'dispatch_command_id',v_retry_command,
@@ -1438,9 +1500,7 @@ begin
     'renderer_version','1.3.0','plain_body','Please submit your Timesheet.'
   ));
   v_retry_command:=(v_stage->>'dispatch_command_id')::uuid;
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','invalid-target-verifier','limit',1,'lease_seconds',60
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1('invalid-target-verifier',v_retry_command);
   v_start:=pg_temp.start_one_delivery_target_v1(pg_catalog.jsonb_build_object(
     'dispatch_command_id',v_retry_command,
     'lease_token',v_claim->'commands'->0->>'lease_token',
@@ -1871,7 +1931,7 @@ begin
     'later-cycle changed facts did not append to and restart the durable incident'
   );
   perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
-    'now_utc',pg_catalog.transaction_timestamp()+interval '1 minute','limit',100
+    'now_utc',pg_catalog.transaction_timestamp()+interval '1 minute','limit',1000
   ));
   select public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
     'message_intent_id',intent.id,
@@ -1916,9 +1976,9 @@ begin
       ,'manager_route_preparation_id',v_route_preparation->>'manager_route_preparation_id'
     )
   );
-  v_claim:=public.weekly_source_message_dispatch_claim_v1(pg_catalog.jsonb_build_object(
-    'worker_id','cross-cycle-verifier','limit',100,'lease_seconds',30
-  ));
+  v_claim:=pg_temp.claim_fixture_command_v1(
+    'cross-cycle-verifier',(v_stage->>'dispatch_command_id')::uuid,30
+  );
   select value into strict v_claimed
   from pg_catalog.jsonb_array_elements(v_claim->'commands')
   where value->>'dispatch_command_id'=v_stage->>'dispatch_command_id';
@@ -2381,9 +2441,12 @@ select pg_temp.assert_true(
   not pg_catalog.has_function_privilege('service_role','private.weekly_source_query_notice_fanout_v1(uuid,uuid,text,jsonb)','EXECUTE'),
   'private helper is directly API-callable'
 );
+-- Scoped to the renders this verifier created (created_at_utc defaults to the
+-- transaction timestamp): hosted TEST holds real rendered messages.
 select pg_temp.assert_true(not exists(
   select 1 from public.weekly_message_renders
-  where (coalesce(subject_text,'')||' '||coalesce(html_body,'')||' '||plain_body)
+  where created_at_utc=pg_catalog.transaction_timestamp()
+    and (coalesce(subject_text,'')||' '||coalesce(html_body,'')||' '||plain_body)
     ~* '(^|[^[:alnum:]_])(pay|charge|rate|vat|invoice|banking|import|source|fingerprint|generation|incident|projection)([^[:alnum:]_]|$)'
 ),'candidate or manager content contains financial or technical terminology');
 select pg_temp.assert_true(

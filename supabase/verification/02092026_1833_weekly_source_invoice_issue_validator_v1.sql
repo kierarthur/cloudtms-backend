@@ -22,6 +22,15 @@
 \set weekly_source_verification_correction_presentation 'FULL_REVERSAL_REPLACEMENT'
 \set weekly_source_verification_expense_vat_enabled false
 begin;
+-- scoped to fixture rows: hosted TEST holds real manifests, invoices and bindings
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.invoices'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_client_manifests'::regclass);
+create function pg_temp.ws_fixture_key(p_rel regclass,p_id uuid)
+returns boolean language sql stable as $fixture_key$
+  select exists(select 1 from pg_temp.ws_verify_keys
+                where rel=p_rel and key=pg_catalog.jsonb_build_array(p_id));
+$fixture_key$;
 \ir 15092026_1534_weekly_source_ordinary_pay_projection_v1.sql
 
 create function pg_temp.iss_admit_all()
@@ -30,7 +39,9 @@ declare v_manifest public.weekly_source_client_manifests%rowtype;
 begin
   for v_manifest in
     select * from public.weekly_source_client_manifests
-    where invoice_state='READY' order by created_at_utc,id
+    where invoice_state='READY'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,id)
+    order by created_at_utc,id
   loop
     perform public.weekly_source_invoice_admit_atomic_v1(
       pg_catalog.jsonb_build_object(
@@ -149,7 +160,8 @@ begin
     and pg_catalog.strpos(v_definition,'timesheets_financials')=0,
     'ISS-013','the source issue validator reads Candidate pay or authorisation state');
   perform pg_temp.iss_assert(
-    exists(select 1 from public.weekly_exceptional_pay_target_families),
+    exists(select 1 from public.weekly_exceptional_pay_target_families
+           where agency_id='a0000000-0000-4000-8000-000000000006'),
     'ISS-013','the fixture no longer carries a protected pay family');
 
   v_status:=pg_temp.iss_direct_issue(v_invoice);
@@ -245,7 +257,9 @@ begin
   select presentation.* into strict v_penny
   from public.weekly_source_invoice_presentation_lines presentation
   where presentation.origin_kind='NHSP_PHYSICAL_ROW'
-    and presentation.price_check_result='SOURCE_ROUNDING_EQUIVALENT';
+    and presentation.price_check_result='SOURCE_ROUNDING_EQUIVALENT'
+    and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,
+                               presentation.client_manifest_id);
   perform pg_temp.iss_assert(
     pg_catalog.abs(v_penny.source_validation_charge_pence
                    -v_penny.calculated_comparison_charge_pence)=1,
@@ -533,6 +547,7 @@ begin
   join public.weekly_source_billing_movements movement
     on movement.id=presentation.billing_movement_id
   where line.timesheet_id is not null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,line.invoice_id)
   group by line.invoice_id,line.timesheet_id
   having pg_catalog.bool_and(
            movement.source_line_kind='NHSP_PHYSICAL_FULL_NEGATIVE')
@@ -634,6 +649,7 @@ begin
   join public.weekly_source_billing_movements movement
     on movement.id=presentation.billing_movement_id
   where line.timesheet_id is not null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,line.invoice_id)
   group by line.invoice_id,line.timesheet_id
   having pg_catalog.bool_and(movement.source_line_kind='SOURCE_ORDINARY')
      and not exists(select 1 from public.timesheets_financials financial
@@ -746,6 +762,7 @@ begin
   select line.invoice_id into v_present_invoice
   from public.invoice_lines line
   where line.timesheet_id is not null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,line.invoice_id)
     and exists(select 1 from public.timesheets_financials financial
                where financial.timesheet_id=line.timesheet_id and financial.is_current)
   order by line.invoice_id limit 1;
@@ -1008,6 +1025,7 @@ begin
   join public.invoices invoice on invoice.id=line.invoice_id
   where line.timesheet_id is not null
     and invoice.status='DRAFT' and invoice.on_hold_reason is null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,line.invoice_id)
     and exists(select 1 from public.timesheets_financials financial
                where financial.timesheet_id=line.timesheet_id
                  and financial.is_current)
@@ -1169,7 +1187,8 @@ begin
   select s.invoice_id into v_inv
   from (select distinct binding.invoice_id
         from public.weekly_source_invoice_line_bindings binding
-        where binding.state='CURRENT') s
+        where binding.state='CURRENT'
+          and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)) s
   join public.invoices invoice on invoice.id=s.invoice_id
   where invoice.status='DRAFT' and invoice.on_hold_reason is null
     and coalesce((private.weekly_source_invoice_issue_validate_v1(s.invoice_id)
@@ -1219,7 +1238,8 @@ begin
   select s.invoice_id into v_inv
   from (select distinct binding.invoice_id
         from public.weekly_source_invoice_line_bindings binding
-        where binding.state='CURRENT') s
+        where binding.state='CURRENT'
+          and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)) s
   join public.invoices invoice on invoice.id=s.invoice_id
   where invoice.status='DRAFT' and invoice.on_hold_reason is null
     and private.weekly_source_invoice_tsfin_state_v1(s.invoice_id)->>'state'
@@ -1466,7 +1486,8 @@ begin
     into v_exempt_inv,v_exempt_ts
   from (select distinct binding.invoice_id
         from public.weekly_source_invoice_line_bindings binding
-        where binding.state='CURRENT') s
+        where binding.state='CURRENT'
+          and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)) s
   join public.invoices invoice on invoice.id=s.invoice_id
   where invoice.status='DRAFT' and invoice.on_hold_reason is null
     and private.weekly_source_invoice_tsfin_state_v1(s.invoice_id)->>'state'
@@ -1479,7 +1500,8 @@ begin
     into v_present_inv,v_present_ts
   from (select distinct binding.invoice_id
         from public.weekly_source_invoice_line_bindings binding
-        where binding.state='CURRENT') s
+        where binding.state='CURRENT'
+          and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)) s
   join public.invoices invoice on invoice.id=s.invoice_id
   where invoice.status='DRAFT' and invoice.on_hold_reason is null
     and private.weekly_source_invoice_tsfin_state_v1(s.invoice_id)->>'state'
@@ -2037,6 +2059,15 @@ rollback;
 \set weekly_source_verification_correction_presentation 'NET_DIFFERENCE_PRESENTATION'
 \set weekly_source_verification_expense_vat_enabled true
 begin;
+-- scoped to fixture rows: hosted TEST holds real manifests, invoices and bindings
+\ir support/22092026_1850_source_fixture_capture.sql
+select pg_temp.ws_verify_watch('public.invoices'::regclass);
+select pg_temp.ws_verify_watch('public.weekly_source_client_manifests'::regclass);
+create function pg_temp.ws_fixture_key(p_rel regclass,p_id uuid)
+returns boolean language sql stable as $fixture_key$
+  select exists(select 1 from pg_temp.ws_verify_keys
+                where rel=p_rel and key=pg_catalog.jsonb_build_array(p_id));
+$fixture_key$;
 \ir 15092026_1534_weekly_source_ordinary_pay_projection_v1.sql
 
 create function pg_temp.iss_admit_all()
@@ -2045,7 +2076,9 @@ declare v_manifest public.weekly_source_client_manifests%rowtype;
 begin
   for v_manifest in
     select * from public.weekly_source_client_manifests
-    where invoice_state='READY' order by created_at_utc,id
+    where invoice_state='READY'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,id)
+    order by created_at_utc,id
   loop
     perform public.weekly_source_invoice_admit_atomic_v1(
       pg_catalog.jsonb_build_object(
@@ -2109,6 +2142,7 @@ begin
     on presentation.id=binding.presentation_line_id
   where binding.state='CURRENT' and presentation.correction_role='NET_DIFFERENCE'
     and presentation.origin_kind<>'SOURCE_FIXED_EXPENSE'
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
   order by binding.invoice_id limit 1;
   if coalesce((private.weekly_source_invoice_issue_validate_v1(v_invoice)->>'ok')::boolean,false)
        is not true then

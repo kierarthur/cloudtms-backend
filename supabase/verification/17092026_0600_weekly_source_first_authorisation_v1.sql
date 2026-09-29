@@ -1922,7 +1922,10 @@ begin
   perform pg_temp.assert_true(
     (select pg_catalog.count(distinct job_row.scope_change_tx_token)
        from public.banking_pay_workbench_jobs job_row
-      where job_row.status in ('QUEUED','RUNNING'))<=1,
+      where job_row.status in ('QUEUED','RUNNING')
+        -- scoped to fixture rows: hosted TEST holds real rows
+        and job_row.id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
+          where rel='public.banking_pay_workbench_jobs'::regclass))<=1,
     'A3 step 4: every job queued by this transaction carries ONE token');
 
   -- Step 5 executed: one receipt, and it carries the same token as the result

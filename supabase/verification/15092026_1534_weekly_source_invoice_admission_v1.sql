@@ -12,6 +12,13 @@
 begin;
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.invoices'::regclass);
+-- scoped to fixture rows: hosted TEST holds real manifests, invoices and bindings
+select pg_temp.ws_verify_watch('public.weekly_source_client_manifests'::regclass);
+create function pg_temp.ws_fixture_key(p_rel regclass,p_id uuid)
+returns boolean language sql stable as $fixture_key$
+  select exists(select 1 from pg_temp.ws_verify_keys
+                where rel=p_rel and key=pg_catalog.jsonb_build_array(p_id));
+$fixture_key$;
 \ir 15092026_1534_weekly_source_ordinary_pay_projection_v1.sql
 
 create function pg_temp.admit_all_manifests()
@@ -24,6 +31,7 @@ begin
   for v_manifest in
     select * from public.weekly_source_client_manifests
     where invoice_state='READY'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,id)
     order by created_at_utc,id
   loop
     v_result:=public.weekly_source_invoice_admit_atomic_v1(
@@ -173,8 +181,9 @@ select pg_temp.assert_true(
       on first_manifest.id=first_member.client_manifest_id
     join public.weekly_source_client_manifests other_manifest
       on other_manifest.id=other_member.client_manifest_id
-    where first_manifest.source_cycle_id<>other_manifest.source_cycle_id
-       or first_manifest.client_id<>other_manifest.client_id
+    where (first_manifest.source_cycle_id<>other_manifest.source_cycle_id
+       or first_manifest.client_id<>other_manifest.client_id)
+      and pg_temp.ws_fixture_key('public.invoices'::regclass,invoice.id)
   ),
   'automatic admission must never consolidate different Clients or finalised cycles'
 );
@@ -183,6 +192,7 @@ select pg_temp.assert_true(
     select 1
     from public.weekly_source_client_manifests manifest
     where manifest.movement_count=0
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,manifest.id)
       and exists(
         select 1
         from public.weekly_source_invoice_line_bindings binding
@@ -239,6 +249,8 @@ select pg_temp.assert_true(
       join public.weekly_source_billing_movements movement
         on movement.id=member.billing_movement_id
       where movement.expense_authority_generation_id=generation.id
+        and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,
+                                   member.client_manifest_id)
     )
       and (select pg_catalog.count(*)
            from public.weekly_source_expense_materialisations materialisation
@@ -250,6 +262,8 @@ select pg_temp.assert_true(
   not exists(
     select 1 from public.weekly_source_invoice_presentation_lines presentation
     where presentation.line_kind='SOURCE_FIXED_EXPENSE'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,
+                                 presentation.client_manifest_id)
       and (presentation.total_pay_ex_vat<>presentation.total_charge_ex_vat
         or presentation.vat_rate_pct<>0 or presentation.vat_amount<>0
         or presentation.amount_authority<>'VALIDATED_SOURCE_PENCE'
@@ -259,6 +273,8 @@ select pg_temp.assert_true(
   and exists(
     select 1 from public.weekly_source_invoice_presentation_lines presentation
     where presentation.line_kind='SOURCE_FIXED_EXPENSE'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,
+                                 presentation.client_manifest_id)
       and presentation.total_charge_ex_vat=-1.25
   ),
   'source-fixed expenses must preserve source-pence authority, equal pay/charge, VAT off and zero-source reversal'
@@ -867,6 +883,7 @@ begin
   select binding.invoice_id into v_invoice
   from public.weekly_source_invoice_line_bindings binding
   where binding.state='CURRENT'
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
   order by binding.invoice_id
   limit 1;
   perform pg_catalog.set_config('request.jwt.claim.role','service_role',true);
@@ -907,6 +924,21 @@ rollback;
 begin;
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.invoices'::regclass);
+-- scoped to fixture rows: hosted TEST holds real manifests, invoices, Timesheets
+-- and invoice-discounting ledger rows
+select pg_temp.ws_verify_watch('public.weekly_source_client_manifests'::regclass);
+select pg_temp.ws_verify_watch('public.timesheets'::regclass);
+create function pg_temp.ws_fixture_key(p_rel regclass,p_id uuid)
+returns boolean language sql stable as $fixture_key$
+  select exists(select 1 from pg_temp.ws_verify_keys
+                where rel=p_rel and key=pg_catalog.jsonb_build_array(p_id));
+$fixture_key$;
+create function pg_temp.ws_fixture_preview_lines(p_preview jsonb)
+returns integer language sql stable as $fixture_preview$
+  select pg_catalog.count(*)::integer
+  from pg_catalog.jsonb_array_elements(coalesce(p_preview->'lines','[]'::jsonb)) line
+  where pg_temp.ws_fixture_key('public.invoices'::regclass,(line->>'invoice_id')::uuid);
+$fixture_preview$;
 -- The production FINAL_ISSUE renderer correctly refuses a self-bill without
 -- its legally required wording.  Establish that ordinary prerequisite before
 -- building the NET fixture so this proof exercises an actually issuable
@@ -929,7 +961,9 @@ declare
 begin
   for v_manifest in
     select * from public.weekly_source_client_manifests
-    where invoice_state='READY' order by created_at_utc,id
+    where invoice_state='READY'
+      and pg_temp.ws_fixture_key('public.weekly_source_client_manifests'::regclass,id)
+    order by created_at_utc,id
   loop
     v_result:=public.weekly_source_invoice_admit_atomic_v1(
       pg_catalog.jsonb_build_object(
@@ -1126,6 +1160,7 @@ select pg_temp.assert_true(
     join public.weekly_source_billing_movements movement
       on movement.id=binding.billing_movement_id
     where binding.state='CURRENT'
+      and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
     group by binding.invoice_line_id
     having pg_catalog.count(*)=2 and (
       pg_catalog.count(distinct movement.correction_unit_id)<>1
@@ -1165,7 +1200,8 @@ select pg_temp.assert_true(
 select pg_temp.assert_true(
   not exists(
     select 1 from public.invoices invoice
-    where exists(
+    where pg_temp.ws_fixture_key('public.invoices'::regclass,invoice.id)
+      and exists(
       select 1 from public.weekly_source_invoice_line_bindings binding
       where binding.invoice_id=invoice.id and binding.state='CURRENT'
     ) and (private.weekly_source_invoice_allocation_assert_v1(invoice.id)->>'ok')::boolean is not true
@@ -1218,6 +1254,7 @@ begin
    and financial.is_current
    and financial.client_id is not null
   where pg_catalog.btrim(coalesce(timesheet_row.booking_id,''))<>''
+    and pg_temp.ws_fixture_key('public.timesheets'::regclass,lineage.timesheet_id)
   order by lineage.timesheet_id
   limit 1;
   perform pg_temp.assert_true(
@@ -1303,7 +1340,8 @@ select pg_temp.assert_true(
   not exists(
     select 1
     from public.timesheets timesheet_row
-    where not exists(
+    where pg_temp.ws_fixture_key('public.timesheets'::regclass,timesheet_row.timesheet_id)
+    and not exists(
       select 1 from public.timesheets sibling
       where pg_catalog.btrim(sibling.booking_id)=pg_catalog.btrim(timesheet_row.booking_id)
         and sibling.booking_id<>timesheet_row.booking_id
@@ -1344,6 +1382,7 @@ begin
   join public.invoices invoice on invoice.id=binding.invoice_id
   where binding.state='CURRENT' and invoice.status='DRAFT'
     and invoice.issued_at_utc is null and invoice.paid_at_utc is null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
   order by binding.invoice_id limit 1;
   perform pg_temp.assert_true(v_invoice is not null,
     'the real asynchronous issue proof found no source invoice');
@@ -1475,6 +1514,7 @@ begin
     select distinct binding.invoice_id
     from public.weekly_source_invoice_line_bindings binding
     where binding.state='CURRENT'
+      and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
   ) source_invoice;
 
   select
@@ -1489,6 +1529,7 @@ begin
     from public.weekly_source_invoice_line_bindings binding
     join public.invoice_lines line on line.id=binding.invoice_line_id
     where binding.state='CURRENT'
+      and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
     group by binding.invoice_id
   ) shape;
   perform pg_temp.assert_true(v_positive>0,
@@ -1505,6 +1546,7 @@ begin
       join public.invoices invoice on invoice.id=binding.invoice_id
       join public.id_invoice_ledger ledger on ledger.invoice_id=invoice.id
       where binding.state='CURRENT'
+        and pg_temp.ws_fixture_key('public.invoices'::regclass,invoice.id)
       group by invoice.id,invoice.subtotal_ex_vat,invoice.vat_amount,
                invoice.total_inc_vat,ledger.current_ex_vat,ledger.current_vat,
                ledger.current_inc_vat
@@ -1517,7 +1559,7 @@ begin
 
   v_preview:=public.id_consolidation_preview();
   v_before_count:=coalesce((v_preview->>'line_count')::integer,0);
-  perform pg_temp.assert_true(v_before_count>0,
+  perform pg_temp.assert_true(pg_temp.ws_fixture_preview_lines(v_preview)>0,
     'signed source invoices produced no invoice-discounting preview');
   perform pg_temp.assert_true(
     not exists(
@@ -1525,6 +1567,7 @@ begin
       from public.weekly_source_invoice_line_bindings binding
       join public.id_invoice_ledger ledger on ledger.invoice_id=binding.invoice_id
       where binding.state='CURRENT'
+        and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
         and (ledger.current_ex_vat<>ledger.last_reported_ex_vat
           or ledger.current_vat<>ledger.last_reported_vat
           or ledger.current_inc_vat<>ledger.last_reported_inc_vat)
@@ -1593,6 +1636,7 @@ begin
       select 1 from public.weekly_source_invoice_line_bindings binding
       join public.id_invoice_ledger ledger on ledger.invoice_id=binding.invoice_id
       where binding.state='CURRENT'
+        and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
         and (ledger.current_ex_vat<>ledger.last_reported_ex_vat
           or ledger.current_vat<>ledger.last_reported_vat
           or ledger.current_inc_vat<>ledger.last_reported_inc_vat)
@@ -1702,7 +1746,7 @@ begin
              and run.bank_upload_code is null),
     'stale commit advanced the Draft header');
   perform public.id_consolidation_run_draft_cancel(v_ref,v_actor);
-  perform pg_temp.assert_true((public.id_consolidation_preview()->>'line_count')::integer=0,
+  perform pg_temp.assert_true(pg_temp.ws_fixture_preview_lines(public.id_consolidation_preview())=0,
     'stale Draft refusal/restoration did not return the ledger to its committed baseline');
 
   -- Issue, unissue, reissue and unissue a source invoice after its ledger
@@ -1715,6 +1759,7 @@ begin
     and invoice.status='DRAFT'
     and invoice.issued_at_utc is null
     and invoice.paid_at_utc is null
+    and pg_temp.ws_fixture_key('public.invoices'::regclass,binding.invoice_id)
   order by binding.invoice_id
   limit 1;
   perform pg_temp.assert_true(v_reissue_invoice is not null,
@@ -1730,7 +1775,7 @@ begin
     'invoice-discounting proof could not reissue its source invoice');
   perform public.invoice_unissue_one(v_reissue_invoice,v_actor,true);
   perform pg_temp.assert_true(
-    (public.id_consolidation_preview()->>'line_count')::integer=0,
+    pg_temp.ws_fixture_preview_lines(public.id_consolidation_preview())=0,
     'issue/unissue/reissue invented a duplicate invoice-discounting delta'
   );
 
@@ -1800,11 +1845,11 @@ begin
   );
   v_draft:=public.id_consolidation_run_draft_start(v_actor,'Weekly Source move cancellation proof');
   perform public.id_consolidation_run_draft_cancel(v_draft->>'id_ref',v_actor);
-  perform pg_temp.assert_true((public.id_consolidation_preview()->>'line_count')::integer>0,
+  perform pg_temp.assert_true(pg_temp.ws_fixture_preview_lines(public.id_consolidation_preview())>0,
     'cancelling a moved-line Draft lost the pending source deltas');
   v_draft:=public.id_consolidation_run_draft_start(v_actor,'Weekly Source move commit proof');
   perform public.id_consolidation_run_draft_commit(v_draft->>'id_ref','WS-ID-PROOF-2',v_actor);
-  perform pg_temp.assert_true((public.id_consolidation_preview()->>'line_count')::integer=0,
+  perform pg_temp.assert_true(pg_temp.ws_fixture_preview_lines(public.id_consolidation_preview())=0,
     'committed moved-line invoice-discounting position did not converge');
 
   -- Inject a failure in the canonical invoice-total owner while attempting to

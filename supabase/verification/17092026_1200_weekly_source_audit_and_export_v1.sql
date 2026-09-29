@@ -1330,7 +1330,12 @@ begin
     'WP-14b F3: the Office reopen appears in the Timesheet chronology exactly once');
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.audit_events
-      where action='WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLE_REOPENED')=1,
+      where action='WEEKLY_SOURCE_PENDING_ENTITLEMENT_BUNDLE_REOPENED'
+        -- scoped to fixture rows (fixture ids and fixture pending bundles): hosted TEST holds real rows
+        and (object_id_text like 'c4000000-0000-4000-8000-%'
+          or object_id_text in (select bundle.id::text
+            from public.weekly_source_pending_entitlement_bundles bundle
+            where bundle.candidate_id::text like 'c4000000-0000-4000-8000-%')))=1,
     'WP-14b F3: and it is still ONE audit row - the reader unions, it never writes');
   perform pg_temp.assert_eq(
     (select event.value->>'audited_object_type'
@@ -1699,7 +1704,12 @@ begin
     'an ordinary week pushes nothing: '||v_result::text);
   perform pg_temp.assert_true(
     (select pg_catalog.count(*) from public.candidate_notifications
-      where event_type='TIMESHEET_HOURS_UPDATED')=0,
+      where event_type='TIMESHEET_HOURS_UPDATED'
+        -- scoped to fixture rows: hosted TEST holds real rows
+        and (timesheet_id::text like 'c4000000-0000-4000-8000-%'
+          or timesheet_id::text like 'e1000000-0000-4000-8000-%'
+          or candidate_id::text like 'c4000000-0000-4000-8000-%'
+          or candidate_id::text like 'e1000000-0000-4000-8000-%'))=0,
     'and writes no notification');
 
   -- The complete serialised payload the boundary would receive, scanned as one

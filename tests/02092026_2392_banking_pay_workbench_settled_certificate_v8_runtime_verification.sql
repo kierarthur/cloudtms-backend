@@ -125,6 +125,9 @@ DECLARE
   v_certificate_reference jsonb;
   v_caught boolean;
   v_scope_generation bigint;
+  -- The due sweep is global and oldest-first: date the fixture sessions before
+  -- any real hosted Workbench session so a real due session is never claimed.
+  v_due_epoch timestamptz := TIMESTAMPTZ '2000-01-01 00:00:00+00';
 BEGIN
   -- This verifier also runs during managed UPGRADE, where unrelated historic
   -- Workbench failures and a non-zero global generation legitimately exist.
@@ -154,13 +157,13 @@ BEGIN
     line_units_total,line_units_ready,line_units_pending,line_units_failed,
     preview_row_count,selected_row_count,progress_state,progress_counter_version,
     scope_candidate_ids,scope_change_generation_target,scope_change_generation_applied,
-    scope_change_generation_shadow_checked
+    scope_change_generation_shadow_checked,updated_at_utc
   ) VALUES (
     v_session_id,v_actor_id,DATE '2099-04-03',DATE '2099-03-29',
     pg_catalog.jsonb_build_object('candidate_id',v_candidate_id::text),v_prefix,
     v_snapshot_id,'OPEN',1,pg_catalog.jsonb_build_array(v_preview_row_id::text),
     true,true,1,1,1,0,0,1,1,0,0,1,1,'READY',1,ARRAY[v_candidate_id],
-    v_scope_generation,v_scope_generation,v_scope_generation
+    v_scope_generation,v_scope_generation,v_scope_generation,v_due_epoch
   );
   INSERT INTO private.banking_pay_workbench_economic_builds(
     id,candidate_id,session_id,session_version,source_snapshot_run_id,source_build_run_id,
@@ -393,7 +396,7 @@ BEGIN
 
   -- A sealed oldest session cannot hide a newer unstarted one.
   PERFORM pg_temp.h1_v8_clone_due_session(
-    v_session_id,v_due_session_b,v_due_preview_b,v_due_state_b,clock_timestamp()+interval '1 second'
+    v_session_id,v_due_session_b,v_due_preview_b,v_due_state_b,v_due_epoch+interval '1 second'
   );
   v_result:=public.pay_workbench_settled_certificate_due_claim_v8(1);
   IF v_result#>>'{claims,0,session_id}'<>v_due_session_b::text
@@ -416,7 +419,7 @@ BEGIN
 
   -- BUILDING work has priority over a later unstarted session.
   PERFORM pg_temp.h1_v8_clone_due_session(
-    v_session_id,v_due_session_c,v_due_preview_c,v_due_state_c,clock_timestamp()+interval '2 seconds'
+    v_session_id,v_due_session_c,v_due_preview_c,v_due_state_c,v_due_epoch+interval '2 seconds'
   );
   UPDATE private.banking_pay_workbench_settled_certificates_v8
   SET lease_expires_at_utc=clock_timestamp()-interval '1 second'
@@ -452,7 +455,7 @@ BEGIN
       lease_owner=NULL,lease_expires_at_utc=NULL
   WHERE certificate_uuid=v_due_certificate_b;
   PERFORM pg_temp.h1_v8_clone_due_session(
-    v_session_id,v_due_session_d,v_due_preview_d,v_due_state_d,clock_timestamp()+interval '3 seconds'
+    v_session_id,v_due_session_d,v_due_preview_d,v_due_state_d,v_due_epoch+interval '3 seconds'
   );
   v_result:=public.pay_workbench_settled_certificate_due_claim_v8(1);
   IF v_result#>>'{claims,0,session_id}'<>v_due_session_d::text THEN

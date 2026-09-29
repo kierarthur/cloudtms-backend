@@ -72,7 +72,9 @@ $function$;
 create function pg_temp.drain_jobs() returns void language sql as $function$
   update public.banking_pay_workbench_jobs
      set status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp()
-   where status in ('QUEUED','RUNNING');
+   where status in ('QUEUED','RUNNING')
+     -- scoped to fixture rows: hosted TEST holds real rows
+     and pg_catalog.strpos(dedupe_key,'c2400000-0000-4000-8000-')>0;
 $function$;
 
 create function pg_temp.current_signature(p_timesheet_id uuid) returns text
