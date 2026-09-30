@@ -17,7 +17,7 @@ on:
         description: PLAN is read-only; APPLY is full verification; AUTO selects the safe TEST route
         required: true
         type: choice
-        options: [PLAN, APPLY, AUTO]
+        options: [PLAN, APPLY, AUTO_PLAN, AUTO]
       customer_key:
         description: Optional non-secret tenant key for a dedicated customer database
         required: false
@@ -132,7 +132,7 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
-          if [[ "${{ inputs.phase }}" == "AUTO" ]]; then
+          if [[ "${{ inputs.phase }}" == "AUTO" || "${{ inputs.phase }}" == "AUTO_PLAN" ]]; then
             [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" && "$GITHUB_REF" == "refs/heads/test" ]] || { echo "AUTO is restricted to canonical managed TEST UPGRADE"; exit 1; }
           fi
           if [[ "${{ inputs.mode }}" == "NEW" || "${{ inputs.mode }}" == "UPGRADE" ]]; then
@@ -166,8 +166,11 @@ jobs:
       - name: Automatically select and execute the protected TEST database route
         if: inputs.phase == 'AUTO'
         run: node scripts/cloudtms-auto-test-release.mjs apply
+      - name: Preview automatic TEST database decision without installing
+        if: inputs.phase == 'AUTO_PLAN'
+        run: node scripts/cloudtms-auto-test-release.mjs plan
       - name: Preserve bounded automatic release evidence
-        if: always() && inputs.phase == 'AUTO'
+        if: always() && (inputs.phase == 'AUTO' || inputs.phase == 'AUTO_PLAN')
         uses: actions/upload-artifact@v4
         with:
           name: automatic-test-release-${{ needs.source-gate.outputs.commit }}

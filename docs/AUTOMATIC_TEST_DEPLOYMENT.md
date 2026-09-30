@@ -9,6 +9,7 @@
 - `npm run release:test -- --connections-proof=<absolute JSON path> [--office-path=<reviewed clean Office worktree>]`: desktop coordinator. Uses existing GitHub SSH and `gh` authentication; does not obtain or rotate tokens. Requires reviewed source already committed and pushed to backend `test`. Never commits, merges, resets, cleans or force-pushes somebody's work.
 - Protected `database-release.yml`, environment TEST, mode UPGRADE, phase AUTO: automatically chooses the database route using fresh installed identity, ledger, latest release status and actual contract. PLAN/APPLY remain available for explicit controlled operations; AUTO is the normal managed TEST entry.
 - `npm run release:test:plan`: read-only machine-local planning with approved process-local TEST database configuration. Never print credentials. Prefer protected workflow planning where local credentials are unavailable.
+- Protected phase `AUTO_PLAN` previews the same automatic decision and uploads its receipt without installing SQL or publishing applications. It still requires the exact managed TEST target and passes the repository source gates.
 
 ## Before every release
 
