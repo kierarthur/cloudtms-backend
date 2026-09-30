@@ -1,12 +1,17 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "canonical_contract_hash": "075775239b4fa915065f2e1a8221d9c7ab057eec83984c05325aa7f8c950854a",
-  "contract_sha256": "41ad00c57f16477d516d8ff16e2842d56640e4e657466889a4b1675984932909",
+  "current_change": "Replays the existing 24 September Candidate provisional expense-carrier authority on managed TEST UPGRADE. The hosted incremental release retained an older candidate timesheet-list definition that exposed an empty reservation. Replaying the unchanged definitions on disposable PostgreSQL 17 left the sealed contract byte-identical.",
+  "canonical_contract_hash": "95762a780c95f78bb79ae10eb56b872b3d355bfebc030d70748dea0cd35cac33",
+  "contract_sha256": "6700098dff3939ce8051be8942ccabcaf419cc96da18dbdb0625dd830563c712",
   "files": [
     {
       "path": "supabase/repeatable/26092026_0207_banking_pay_stage2_recovery_order_floor_v1.sql",
       "sha256": "267200a251b973fc7be5f5f047c3a29c15cad5ec303d671290e681e8d005094f"
+    },
+    {
+      "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
+      "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
     }
   ]
 }

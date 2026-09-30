@@ -1,5 +1,8 @@
 -- Repeatable CloudTMS function/view authority: candidate_provisional_expense_carrier_lifecycle
 -- Use CREATE OR REPLACE and preserve owner, security, search_path, and ACL contracts.
+-- Replay this existing authority on TEST UPGRADE: older installed candidate
+-- timesheet-list definitions still expose empty provisional expense carriers.
+-- The clean NEW definition below already hides them; no business rule changes.
 
 \set ON_ERROR_STOP on
 
