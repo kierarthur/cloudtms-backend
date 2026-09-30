@@ -160,6 +160,15 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.doesNotMatch(sourceGate, /npm run security:verify/);
 });
 
+test('TEST release sessions use the proved bounded non-JIT profile without relaxing checks', () => {
+  const workflow = read('.github/workflows/database-release.yml');
+  assert.match(workflow, /PGOPTIONS: \$\{\{ inputs\.environment == 'TEST' && '-c pg_show_plans\.is_enabled=off -c jit=off' \|\| '' \}\}/);
+  assert.match(workflow, /show jit/);
+  assert.match(workflow, /\[\[ "\$jit_setting" == "off" \]\]/);
+  assert.doesNotMatch(workflow, /-c statement_timeout|ALTER SYSTEM|ALTER DATABASE/i);
+  assert.match(workflow, /npm run db:apply -- --environment=\$\{\{ inputs\.environment \}\} --mode=\$\{\{ inputs\.mode \}\}/);
+});
+
 test('contract-bearing SQL is coupled to a fast local PostgreSQL 17 contract seal', () => {
   const packageJson = readJson('package.json');
   const localSeal = read('scripts/seal-local-database-contract.mjs');
