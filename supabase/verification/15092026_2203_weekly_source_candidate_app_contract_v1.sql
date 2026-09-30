@@ -405,6 +405,7 @@ declare
   v_replay jsonb;
   v_final_body jsonb;
   v_final jsonb;
+  v_untouched_comparison_id uuid;
   v_material_request jsonb;
   v_material_replay jsonb;
   v_workflow_create jsonb;
@@ -1680,7 +1681,9 @@ begin
   -- weeks exist. The import recheck must work without an ACTIVE submission
   -- request, preserve already-open incidents and remain replay-safe.
   update public.weekly_source_uploads
-  set source_format_profile_id='31111111-1111-4111-8111-111111111111'
+  set source_format_profile_id='31111111-1111-4111-8111-111111111111',
+      confirmed_coverage_start_local_date='2026-08-10',
+      confirmed_coverage_end_local_date='2026-08-25'
   where id='fa700000-0000-4000-8000-000000000001';
   v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
     'fa100000-0000-4000-8000-000000000001',
@@ -1695,6 +1698,77 @@ begin
   perform pg_temp.assert_true((v_final->>'new_incidents')::integer=0
     and (v_final->>'changed_comparisons')::integer=0,
     'unchanged Previously Released recheck created another incident or revision');
+  -- A final backing report may contain the same physical shift but carry a
+  -- different work-event ID. It is not a second provisional candidate-check
+  -- identity when the next released-shifts file omits that old date.
+  insert into public.weekly_source_uploads(
+    id,source_cycle_id,original_filename,content_sha256,byte_count,
+    source_format_profile_id,parser_version,normaliser_version,
+    header_coordinate_map_hash,declared_scope_fingerprint,coverage_proof_kind,
+    physical_row_count,accepted_count,row_manifest_hash,state,uploaded_by_user_id
+  ) select
+    'fa700000-0000-4000-8000-000000000003',
+    'fa600000-0000-4000-8000-000000000001','same-shift-final-backing.xlsx',
+    decode(repeat('c7',32),'hex'),100,profile.id,'verify','verify',
+    decode(repeat('c8',32),'hex'),decode(repeat('c9',32),'hex'),
+    'NHSP_TRUST_REPORT_SCOPE',1,1,decode(repeat('ca',32),'hex'),
+    'SUPERSEDED','fa100000-0000-4000-8000-000000000001'
+  from public.weekly_source_format_profiles profile
+  where profile.profile_code='NHSP_FINAL_BACKING_V1';
+  perform pg_temp.assert_true(exists(
+    select 1 from public.weekly_source_uploads
+    where id='fa700000-0000-4000-8000-000000000003'
+  ),'final-backing profile fixture is unavailable');
+  insert into public.weekly_source_upload_rows(
+    id,upload_id,source_row_ordinal,external_source_key,
+    source_candidate_identity,source_client_identity,work_date,
+    start_at_local,end_at_local,break_minutes,actual_net_minutes,
+    row_finalisation_state,normalised_row_hash
+  ) values (
+    'fc000000-0000-4000-8000-000000000004',
+    'fa700000-0000-4000-8000-000000000003',1,'late-source-exact',
+    'CCR-90001','Candidate App Test Trust','2026-08-10',
+    '2026-08-10 09:00','2026-08-10 17:00',30,450,'SOURCE_WORKED',
+    decode(repeat('cb',32),'hex')
+  );
+  insert into public.weekly_work_events(
+    id,candidate_id,client_id,work_date,identity_kind,profile_external_key,
+    durable_identity_hash,first_source_group_id,source_format_profile_id
+  ) select
+    'fc100000-0000-4000-8000-000000000004',
+    'fa300000-0000-4000-8000-000000000001',
+    'fa200000-0000-4000-8000-000000000001','2026-08-10',
+    'PROFILE_EXTERNAL_KEY','late-source-exact',decode(repeat('cc',32),'hex'),
+    'fa500000-0000-4000-8000-000000000001',profile.id
+  from public.weekly_source_format_profiles profile
+  where profile.profile_code='NHSP_FINAL_BACKING_V1';
+  insert into public.weekly_source_row_resolutions(
+    id,upload_row_id,generation,candidate_id,client_id,contract_id,work_event_id,
+    paid_minutes,rate_classifications_json,mapping_state,contract_selection_method,
+    work_event_match_kind,work_event_match_fingerprint,
+    qualification_profile_fingerprint,qualifying_contract_count,
+    qualifying_contract_set_hash,source_row_fingerprint,
+    contract_and_rate_fingerprint,effective_policy_fingerprint
+  ) values (
+    'fc200000-0000-4000-8000-000000000004',
+    'fc000000-0000-4000-8000-000000000004',1,
+    'fa300000-0000-4000-8000-000000000001',
+    'fa200000-0000-4000-8000-000000000001',
+    'fa400000-0000-4000-8000-000000000001',
+    'fc100000-0000-4000-8000-000000000004',450,'{}','RESOLVED','AUTO_UNIQUE',
+    'NEW_PROFILE_KEY',decode(repeat('cd',32),'hex'),decode(repeat('ce',32),'hex'),
+    1,decode(repeat('cf',32),'hex'),decode(repeat('cb',32),'hex'),
+    decode(repeat('d0',32),'hex'),decode(repeat('d1',32),'hex')
+  );
+  insert into public.weekly_work_event_source_links(
+    id,work_event_id,upload_row_id,row_resolution_id,link_kind,link_hash
+  ) values (
+    'fc300000-0000-4000-8000-000000000004',
+    'fc100000-0000-4000-8000-000000000004',
+    'fc000000-0000-4000-8000-000000000004',
+    'fc200000-0000-4000-8000-000000000004','POSITIVE_SOURCE',
+    decode(repeat('d2',32),'hex')
+  );
   -- A replacement publication can omit earlier shifts. The old upload is
   -- retained solely for durable work-event identity, not as current hours.
   update public.weekly_source_projection_publications set state='STALE'
@@ -1705,13 +1779,14 @@ begin
     id,source_cycle_id,original_filename,content_sha256,byte_count,
     source_format_profile_id,parser_version,normaliser_version,
     header_coordinate_map_hash,declared_scope_fingerprint,coverage_proof_kind,
+    confirmed_coverage_start_local_date,confirmed_coverage_end_local_date,
     physical_row_count,row_manifest_hash,state,uploaded_by_user_id
   ) values (
     'fa700000-0000-4000-8000-000000000002',
     'fa600000-0000-4000-8000-000000000001','replacement-omits-old-shifts.xlsx',
     decode(repeat('c1',32),'hex'),100,'31111111-1111-4111-8111-111111111111',
     'verify','verify',decode(repeat('c2',32),'hex'),decode(repeat('c3',32),'hex'),
-    'FORMAT_MANIFEST',0,decode(repeat('c4',32),'hex'),
+    'FORMAT_MANIFEST','2026-08-10','2026-08-25',0,decode(repeat('c4',32),'hex'),
     'CURRENT','fa100000-0000-4000-8000-000000000001'
   );
   insert into public.weekly_source_projection_publications(
@@ -1750,6 +1825,134 @@ begin
   perform pg_temp.assert_true((v_final->>'new_incidents')::integer=0
     and (v_final->>'changed_comparisons')::integer=0,
     'rechecking the same omission restarted an incident');
+  -- A later one-day export has no authority over the earlier August dates.
+  -- It must neither revisit those signed weeks nor hide their open questions.
+  update public.weekly_source_projection_publications set state='STALE'
+  where id='fa800000-0000-4000-8000-000000000002';
+  update public.weekly_source_uploads set state='SUPERSEDED'
+  where id='fa700000-0000-4000-8000-000000000002';
+  insert into public.weekly_source_uploads(
+    id,source_cycle_id,original_filename,content_sha256,byte_count,
+    source_format_profile_id,parser_version,normaliser_version,
+    header_coordinate_map_hash,declared_scope_fingerprint,coverage_proof_kind,
+    confirmed_coverage_start_local_date,confirmed_coverage_end_local_date,
+    physical_row_count,row_manifest_hash,state,uploaded_by_user_id
+  ) values (
+    'fa700000-0000-4000-8000-000000000005',
+    'fa600000-0000-4000-8000-000000000001','one-day-september.xlsx',
+    decode(repeat('d3',32),'hex'),100,'31111111-1111-4111-8111-111111111111',
+    'verify','verify',decode(repeat('d4',32),'hex'),decode(repeat('d5',32),'hex'),
+    'FORMAT_MANIFEST','2026-09-21','2026-09-21',0,decode(repeat('d6',32),'hex'),
+    'CURRENT','fa100000-0000-4000-8000-000000000001'
+  );
+  insert into public.weekly_source_projection_publications(
+    id,source_cycle_id,authority_scope_kind,upload_id,authority_scope_version,
+    comparison_manifest_hash,issue_set_hash,state,published_at_utc
+  ) values (
+    'fa800000-0000-4000-8000-000000000005',
+    'fa600000-0000-4000-8000-000000000001','CYCLE',
+    'fa700000-0000-4000-8000-000000000005',3,
+    decode(repeat('d7',32),'hex'),decode(repeat('d8',32),'hex'),'CURRENT',
+    pg_catalog.transaction_timestamp()
+  );
+  update public.weekly_source_cycles
+  set version=3,current_complete_upload_id='fa700000-0000-4000-8000-000000000005',
+    current_projection_publication_id='fa800000-0000-4000-8000-000000000005'
+  where id='fa600000-0000-4000-8000-000000000001';
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000005'
+  );
+  perform pg_temp.assert_true((v_final->>'signed_weeks_checked')::integer=0
+    and (v_final->>'new_incidents')::integer=0
+    and (v_final->>'changed_comparisons')::integer=0
+    and (v_final->>'resolved_incidents')::integer=0,
+    'one-day September export rechecked a signed August week outside its range');
+  perform pg_temp.assert_true(exists(
+    select 1 from private.weekly_source_office_query_groups_v1(
+      'fa600000-0000-4000-8000-000000000001',
+      'fa800000-0000-4000-8000-000000000005','{}'::jsonb
+    ) query_group
+    join public.weekly_discrepancy_incidents incident
+      on incident.id=any(query_group.incident_ids)
+    where incident.work_event_id='fc100000-0000-4000-8000-000000000001'
+      and incident.state='OPEN'
+  ),'earlier open August query disappeared after a one-day September export');
+  select incident.current_comparison_revision_id into strict v_untouched_comparison_id
+  from public.weekly_discrepancy_incidents incident
+  where incident.work_event_id='fc100000-0000-4000-8000-000000000003'
+    and incident.state='OPEN';
+  -- The range can cover only one day inside an otherwise signed full week.
+  -- Its other signed day and existing open question remain untouched.
+  update public.weekly_source_projection_publications set state='STALE'
+  where id='fa800000-0000-4000-8000-000000000005';
+  update public.weekly_source_uploads set state='SUPERSEDED'
+  where id='fa700000-0000-4000-8000-000000000005';
+  insert into public.weekly_source_uploads(
+    id,source_cycle_id,original_filename,content_sha256,byte_count,
+    source_format_profile_id,parser_version,normaliser_version,
+    header_coordinate_map_hash,declared_scope_fingerprint,coverage_proof_kind,
+    confirmed_coverage_start_local_date,confirmed_coverage_end_local_date,
+    physical_row_count,row_manifest_hash,state,uploaded_by_user_id
+  ) values (
+    'fa700000-0000-4000-8000-000000000006',
+    'fa600000-0000-4000-8000-000000000001','one-day-inside-signed-week.xlsx',
+    decode(repeat('d9',32),'hex'),100,'31111111-1111-4111-8111-111111111111',
+    'verify','verify',decode(repeat('da',32),'hex'),decode(repeat('db',32),'hex'),
+    'FORMAT_MANIFEST','2026-08-25','2026-08-25',0,decode(repeat('dc',32),'hex'),
+    'CURRENT','fa100000-0000-4000-8000-000000000001'
+  );
+  insert into public.weekly_source_projection_publications(
+    id,source_cycle_id,authority_scope_kind,upload_id,authority_scope_version,
+    comparison_manifest_hash,issue_set_hash,state,published_at_utc
+  ) values (
+    'fa800000-0000-4000-8000-000000000006',
+    'fa600000-0000-4000-8000-000000000001','CYCLE',
+    'fa700000-0000-4000-8000-000000000006',4,
+    decode(repeat('dd',32),'hex'),decode(repeat('de',32),'hex'),'CURRENT',
+    pg_catalog.transaction_timestamp()
+  );
+  update public.weekly_source_cycles
+  set version=4,current_complete_upload_id='fa700000-0000-4000-8000-000000000006',
+    current_projection_publication_id='fa800000-0000-4000-8000-000000000006'
+  where id='fa600000-0000-4000-8000-000000000001';
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000006'
+  );
+  perform pg_temp.assert_true((v_final->>'signed_weeks_checked')::integer=1
+    and (v_final->>'new_incidents')::integer=0
+    and (v_final->>'changed_comparisons')::integer=0
+    and (v_final->>'resolved_incidents')::integer=0,
+    'one-day export inside a signed week rechecked another date or missed the covered date');
+  perform pg_temp.assert_true(exists(
+    select 1 from public.weekly_discrepancy_incidents incident
+    where incident.work_event_id='fc100000-0000-4000-8000-000000000003'
+      and incident.current_comparison_revision_id=v_untouched_comparison_id
+      and incident.state='OPEN'
+  ),'one-day export changed the earlier question on another signed day');
+  perform pg_temp.assert_true(exists(
+    select 1 from private.weekly_source_office_query_groups_v1(
+      'fa600000-0000-4000-8000-000000000001',
+      'fa800000-0000-4000-8000-000000000006','{}'::jsonb
+    ) query_group
+    join public.weekly_discrepancy_incidents incident
+      on incident.id=any(query_group.incident_ids)
+    where incident.work_event_id='fc100000-0000-4000-8000-000000000003'
+      and incident.state='OPEN'
+  ),'older open query vanished after a same-week one-day export');
+  perform pg_temp.assert_true(exists(
+    select 1 from private.weekly_source_office_query_groups_v1(
+      'fa600000-0000-4000-8000-000000000001',
+      'fa800000-0000-4000-8000-000000000006','{}'::jsonb
+    ) query_group
+    join public.weekly_discrepancy_incidents incident
+      on incident.id=any(query_group.incident_ids)
+    join public.weekly_work_events work_event
+      on work_event.id=incident.work_event_id
+    where work_event.work_date='2026-08-25'
+      and incident.state='OPEN'
+  ),'unchanged same-date open query vanished after a one-day export');
   perform pg_temp.assert_true(not exists(
     select 1 from public.timesheets_financials financial
     join public.contract_weeks week_row on week_row.timesheet_id=financial.timesheet_id

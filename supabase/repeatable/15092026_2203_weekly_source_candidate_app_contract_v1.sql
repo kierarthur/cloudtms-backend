@@ -1240,6 +1240,7 @@ declare
   v_group public.weekly_source_groups%rowtype;
   v_publication public.weekly_source_projection_publications%rowtype;
   v_upload public.weekly_source_uploads%rowtype;
+  v_profile_code text;
   v_submission public.weekly_timesheet_submission_requests%rowtype;
   v_membership public.weekly_timesheet_submission_request_memberships%rowtype;
   v_timesheet public.timesheets%rowtype;
@@ -1328,6 +1329,14 @@ begin
     and source_cycle_id=v_cycle.id and state='CURRENT';
   select * into strict v_upload from public.weekly_source_uploads
   where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  select profile.profile_code into strict v_profile_code
+  from public.weekly_source_format_profiles profile
+  where profile.id=v_upload.source_format_profile_id;
+  if v_profile_code='NHSP_PREFINAL_RELEASED_V1'
+     and (v_upload.confirmed_coverage_start_local_date is null
+       or v_upload.confirmed_coverage_end_local_date is null) then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000';
+  end if;
   if p_candidate_generation_id is not null then
     select * into strict v_submission
     from public.weekly_timesheet_submission_requests
@@ -1387,7 +1396,11 @@ begin
       private.weekly_source_candidate_app_schedule_v1(
         v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day
       )
-    )
+    ) candidate_row
+    where v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+      or (candidate_row.value->>'date')::date between
+        v_upload.confirmed_coverage_start_local_date
+        and v_upload.confirmed_coverage_end_local_date
     order by value->>'date',value->>'start',value->>'end',
       coalesce(value->>'row_key','') collate "C"
   loop
@@ -1533,6 +1546,9 @@ begin
             on work_event.id=link.work_event_id
           where historical_upload.source_cycle_id=v_cycle.id
             and historical_upload.id<>v_upload.id
+            -- A provisional check must not choose a final backing-report
+            -- event as the identity of a missing provisional shift.
+            and historical_upload.source_format_profile_id=v_upload.source_format_profile_id
             and source_row.work_date=(v_candidate_row->>'date')::date
             and source_row.start_at_local is not null
             and source_row.end_at_local is not null
@@ -1836,6 +1852,9 @@ begin
       and incident.client_id=v_membership.client_id
       and comparison.contract_id=v_membership.contract_id
       and work_event.work_date between v_membership.week_ending-6 and v_membership.week_ending
+      and (v_profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+        or work_event.work_date between v_upload.confirmed_coverage_start_local_date
+          and v_upload.confirmed_coverage_end_local_date)
       and incident.state='OPEN'
       and not (incident.work_event_id=any(v_seen_work_events))
     order by incident.id for update of incident
@@ -1904,6 +1923,8 @@ declare
   v_publication public.weekly_source_projection_publications%rowtype;
   v_cycle public.weekly_source_cycles%rowtype;
   v_profile_code text;
+  v_profile_id uuid;
+  v_upload public.weekly_source_uploads%rowtype;
   v_signed record;
   v_result jsonb;
   v_checked integer:=0;
@@ -1919,7 +1940,7 @@ begin
   where id=p_projection_publication_id and state='CURRENT';
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_publication.source_cycle_id;
-  select profile.profile_code into strict v_profile_code
+  select profile.profile_code,profile.id into strict v_profile_code,v_profile_id
   from public.weekly_source_uploads upload
   join public.weekly_source_format_profiles profile
     on profile.id=upload.source_format_profile_id
@@ -1929,14 +1950,20 @@ begin
      or v_cycle.current_projection_publication_id is distinct from v_publication.id then
     raise exception 'WEEKLY_SOURCE_PREFINAL_RECHECK_SCOPE_INVALID' using errcode='55000';
   end if;
+  select * into strict v_upload from public.weekly_source_uploads
+  where id=v_publication.upload_id and source_cycle_id=v_cycle.id;
+  if v_upload.confirmed_coverage_start_local_date is null
+     or v_upload.confirmed_coverage_end_local_date is null then
+    raise exception 'WEEKLY_SOURCE_PREFINAL_COVERAGE_INVALID' using errcode='55000';
+  end if;
   perform private.weekly_source_office_authority_v1(
     p_actor_user_id,'RECHECK_SOURCE',v_cycle.source_group_id,null,
     v_cycle.finalisation_week_ending
   );
 
-  -- Only complete signed weeks in the exact candidate/client/contract scope of
-  -- a resolved row in this cycle are compared. Superseded rows identify weeks
-  -- whose shift disappeared from the replacement file; they are not authority.
+  -- Recheck signed weeks only for days in this upload's confirmed export
+  -- period. A week may straddle that period; compare_sync applies the same
+  -- day boundary to candidate rows and incident resolution.
   for v_signed in
     select distinct sheet.timesheet_id,contract.candidate_id,contract.client_id,
       contract.id as contract_id
@@ -1947,7 +1974,9 @@ begin
       and sheet.archived_at_utc is null and sheet.sheet_scope='WEEKLY'
       and sheet.line_type='HOURS' and sheet.authorised_at_server is null
       and sheet.r2_nurse_key is not null and sheet.img_sha256_nurse is not null
-      and exists (
+      and sheet.week_ending_date>=v_upload.confirmed_coverage_start_local_date
+      and sheet.week_ending_date-6<=v_upload.confirmed_coverage_end_local_date
+      and (exists (
         select 1
         from public.weekly_source_uploads historical_upload
         join public.weekly_source_upload_rows source_row
@@ -1956,12 +1985,29 @@ begin
           on resolution.upload_row_id=source_row.id
          and resolution.mapping_state='RESOLVED'
         where historical_upload.source_cycle_id=v_cycle.id
+          and historical_upload.source_format_profile_id=v_profile_id
           and source_row.work_date between sheet.week_ending_date-6
             and sheet.week_ending_date
+          and source_row.work_date between
+            v_upload.confirmed_coverage_start_local_date
+            and v_upload.confirmed_coverage_end_local_date
           and resolution.candidate_id=contract.candidate_id
           and resolution.client_id=contract.client_id
           and resolution.contract_id=contract.id
-      )
+      ) or exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(
+          private.weekly_source_candidate_app_schedule_v1(
+            sheet.actual_schedule_json,sheet.additional_units_per_day
+          )
+        ) candidate_shift
+        where (candidate_shift.value->>'date')::date between
+          v_upload.confirmed_coverage_start_local_date
+          and v_upload.confirmed_coverage_end_local_date
+          and private._weekly_source_effective_policy_v1(
+            contract.client_id,contract.id,(candidate_shift.value->>'date')::date
+          )->>'source_group_id'=v_cycle.source_group_id::text
+      ))
     order by sheet.timesheet_id
   loop
     v_result:=private.weekly_source_candidate_submission_compare_sync_v1(

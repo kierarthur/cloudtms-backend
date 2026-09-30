@@ -207,13 +207,19 @@ as $function$
   with cycle_context as (
     select cycle.id,cycle.source_group_id,cycle.finalisation_week_ending,
       source_group.environment,source_group.agency_id,source_group.source_family,
-      publication.upload_id
+      publication.upload_id,
+      current_upload.source_format_profile_id,
+      current_profile.profile_code
     from public.weekly_source_cycles cycle
     join public.weekly_source_groups source_group on source_group.id=cycle.source_group_id
     join public.weekly_source_projection_publications publication
       on publication.id=p_projection_publication_id
      and publication.source_cycle_id=cycle.id
      and publication.state='CURRENT'
+    join public.weekly_source_uploads current_upload
+      on current_upload.id=publication.upload_id
+    join public.weekly_source_format_profiles current_profile
+      on current_profile.id=current_upload.source_format_profile_id
     where cycle.id=p_source_cycle_id
   ), incident_facts as (
     select incident.id incident_id,incident.candidate_id,incident.client_id,
@@ -230,7 +236,8 @@ as $function$
       on incident.source_cycle_id=cycle_context.id and incident.state='OPEN'
     join public.weekly_issue_comparison_revisions comparison
       on comparison.id=incident.current_comparison_revision_id
-     and comparison.projection_publication_id=p_projection_publication_id
+    join public.weekly_source_uploads comparison_upload
+      on comparison_upload.id=comparison.comparison_upload_id
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     left join public.contracts contract on contract.id=comparison.contract_id
     cross join lateral (
@@ -239,7 +246,15 @@ as $function$
         comparison.contract_id,work_event.work_date
       ) value
     ) route_context
+    -- A provisional comparison can remain byte-for-byte unchanged when a new
+    -- file covers its date. Its immutable revision still names the prior
+    -- publication; visibility is based on the OPEN incident, not a rewrite of
+    -- that revision or a second notification clock.
     where comparison.issue_family<>'CANDIDATE_TIMESHEET_MISSING'
+      and (comparison.projection_publication_id=p_projection_publication_id
+        or (cycle_context.profile_code='NHSP_PREFINAL_RELEASED_V1'
+          and comparison_upload.source_cycle_id=cycle_context.id
+          and comparison_upload.source_format_profile_id=cycle_context.source_format_profile_id))
   ), missing_rows as (
     select cycle_context.id source_cycle_id,
       resolution.candidate_id,resolution.client_id,resolution.contract_id,
@@ -4581,7 +4596,6 @@ begin
           from public.weekly_discrepancy_incidents incident
           join public.weekly_issue_comparison_revisions comparison
             on comparison.id=incident.current_comparison_revision_id
-           and comparison.projection_publication_id=v_publication_id
           where incident.source_cycle_id=v_cycle_id
             and incident.candidate_id=v_candidate.candidate_id
             and incident.client_id=v_client.client_id and incident.state='OPEN'
