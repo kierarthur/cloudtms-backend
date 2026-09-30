@@ -2,6 +2,8 @@
 
 ## Purpose
 
+Before any managed TEST install or deployment, read `docs/AUTOMATIC_TEST_DEPLOYMENT.md` and `docs/DATABASE_RELEASE_BIBLE.md`. Use the automatic TEST coordinator and its fresh account-appropriate build-connection preflight; do not ask the user to choose a release mechanism. Permanent TEST changes must first be committed/pushed to GitHub. Do not confuse installed-but-unverified definitions with a successful release. No LIVE authority is added. Verify the dedicated normal-backend release-branch trigger before relying on source pushes being non-deploying.
+
 These instructions apply to Codex work on CloudTMS. They are mandatory unless the user explicitly overrides a specific instruction in the current task.
 
 CloudTMS currently uses a frontend-primary Codex environment:
