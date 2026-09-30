@@ -1280,7 +1280,6 @@ begin
             and generation.state='ACTIVE'
             and generation.deadline_at_utc>=p_now_utc
             and membership.state='ACTIONABLE'
-            and membership.comparison_revision_id=incident.current_comparison_revision_id
             and comparison.candidate_timesheet_id=v_week.timesheet_id
             and comparison.contract_id=v_contract.id
         ) into v_weekly_source_candidate_request_allowed;

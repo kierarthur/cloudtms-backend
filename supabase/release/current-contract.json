@@ -13779,7 +13779,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "3701d7d8e2293f047e8c222faf91576c477f04e519332461ce4018596de09771"
+      "definition_sha256": "ea4be38a6d0c3309dc56b053c39b0603731b81f2c724d7edcc521b0f8396195c"
     },
     {
       "acl": [
@@ -14174,6 +14174,25 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "weekly_source_candidate_prefinal_publish_recheck_v1(p_actor_user_id uuid, p_projection_publication_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a656af0d1a4a492cbcb89cc2941b970c1c5f5cc04fe267200badb0a1259fdd96"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "weekly_source_candidate_serial_gate_v1(p_candidate_id uuid, p_job_type text, p_job_id uuid, p_reason text)",
       "parallel": "u",
       "volatility": "v",
@@ -14197,7 +14216,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3746fcf325c0ee607be4df4f9c35778d5f750e3bb0e5693c756bcc880752a218"
+      "definition_sha256": "cd766722c1e4c2a1e160d0435bc57211b047eb40a12ab0f6fd71e41a7c26fbff"
     },
     {
       "acl": [
@@ -14235,7 +14254,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "188bfe1cfa30022553776cb4349db71b05cbf6934fe17fff5a2a03e69f3b72ba"
+      "definition_sha256": "7fc9e98da9f95ee4de9a448ca5023380268e1e8d51c15fc78cb14840a0396482"
     },
     {
       "acl": [
@@ -18286,7 +18305,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5a3872f242e5e3db3f05bb888436ecfb159e7dfc40a914706dc35c7fd2ac8e62"
+      "definition_sha256": "54406f468da03945e5020018afe2ce66ebd08417baed6022ce3daa8c927d1b0f"
     },
     {
       "acl": [
@@ -25864,7 +25883,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "94f92d42c1665cce018e4afecc7d5dc353daeebf9d45b36a2a93edcc46fbecdb"
+      "definition_sha256": "37a3ad3358c8780c0cd8c8a3bd04aed3baeb70c6f1092b26692e8314ad81cb19"
     },
     {
       "acl": [
@@ -43047,7 +43066,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2cceedda77f38edc831421efe69b8e451d1e222bc04c38de5de29bdd3de28ffd"
+      "definition_sha256": "64f5c5d4a8f8612d66507e767e0de801ac7c21ccf27579c03da59bb7bf84a081"
     },
     {
       "acl": [
@@ -43191,7 +43210,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9ca863123ef44ef60dd4a3692fdbfdd89ea685e571e9be6a0ba53e018930ce6a"
+      "definition_sha256": "f0aa8b4508de60009808fa8594e306647d2111e90fb89983326901efc666da8d"
     },
     {
       "acl": [
@@ -43455,7 +43474,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "555bcba417b984996eb7b60b7e82c347de0f93a90bff60eb59cb67ed95be833a"
+      "definition_sha256": "7317bd01b749701ad9a00d902095480ca0719deeaa0e74337828abba9be07623"
     },
     {
       "acl": [

@@ -170,7 +170,6 @@ begin
     and generation.request_kind='CHECK_HOURS'
     and generation.state not in ('SUPERSEDED','CANCELLED')
     and membership.state<>'SUPERSEDED'
-    and membership.comparison_revision_id=incident.current_comparison_revision_id
     and comparison.candidate_timesheet_id=v_timesheet_id
   group by generation.id
   order by generation.id

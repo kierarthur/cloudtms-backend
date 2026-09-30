@@ -2058,7 +2058,11 @@ begin
          or v_prior_upload.state<>'CURRENT' then
         raise exception 'WEEKLY_SOURCE_CURRENT_POINTER_CORRUPT' using errcode='55000';
       end if;
-      if (v_upload.confirmed_coverage_start_local_date>
+      -- The longitudinal coverage/omission acknowledgement does not apply to
+      -- NHSP previously released shifts. This is provisional checking evidence;
+      -- omitted rows never cancel NHSP work or create a financial movement.
+      if v_profile.profile_code<>'NHSP_PREFINAL_RELEASED_V1'
+         and (v_upload.confirmed_coverage_start_local_date>
             v_prior_upload.confirmed_coverage_start_local_date
           or v_upload.confirmed_coverage_end_local_date<
             v_prior_upload.confirmed_coverage_end_local_date)
@@ -3067,6 +3071,18 @@ begin
   end if;
   if not found then
     raise exception 'WEEKLY_SOURCE_PUBLICATION_CAS_LOST' using errcode='40001';
+  end if;
+  if v_publication.correction_session_id is null and exists (
+    select 1 from public.weekly_source_format_profiles profile
+    where profile.id=v_upload.source_format_profile_id
+      and profile.profile_code='NHSP_PREFINAL_RELEASED_V1'
+  ) then
+    -- Recheck already-signed candidate evidence in the same publication
+    -- transaction. This writes comparison/query evidence only: no source
+    -- financial movement, Timesheet hours, or first outreach is created here.
+    perform private.weekly_source_candidate_prefinal_publish_recheck_v1(
+      v_actor,v_publication.id
+    );
   end if;
   v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_SOURCE_PUBLICATION_FINGERPRINT_V1',

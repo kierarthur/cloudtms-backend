@@ -1116,7 +1116,10 @@ insert into wp18_dynamic_sql_acknowledged
   ('private','pay_workbench_correction_held_dirty_job_resolve_v1','p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_route_results_json jsonb, p_options_json jsonb','ba11e89120decf5cfabca5ec2cfdfdc2a416cb9fb2c426548e25d6e4adbd6337'),
   ('private','pay_workbench_financial_scope_dirty_transition_v1','','1add84673ed8baed0023f39af4b7d6cd3346a16d6f5ff7a2aae3066d53e0e6eb'),
   ('private','pay_sync_overpayments_from_workbench_workspace_v1','p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]','e52dc227b42a6c1825be6c2766de795bc5b1640e5ff118cbd5f5a70755f27fef'),
-  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','94f92d42c1665cce018e4afecc7d5dc353daeebf9d45b36a2a93edcc46fbecdb'),
+  -- The changed candidate-question eligibility predicate follows the current
+  -- comparison on an already-open request. Dynamic SQL and write paths are
+  -- unchanged; this remains an acknowledgement, not a safety proof.
+  ('public','candidate_workflow_transition_atomic_v1','p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone','37a3ad3358c8780c0cd8c8a3bd04aed3baeb70c6f1092b26692e8314ad81cb19'),
   ('public','codex_debug_exec_sql','p_sql text, p_statement_timeout_ms integer, p_lock_timeout_ms integer','8366f2d4db00a039928e39fd53876b6dea6f471e51c7b21c160d7e0ed4e44a70'),
   ('public','codex_debug_explain_sql','p_sql text, p_analyze boolean, p_statement_timeout_ms integer, p_lock_timeout_ms integer','561524dc2ea5ce6138561b85162dc479777dc0a6f7802f70551535fbe4c284e6'),
   ('public','codex_debug_pg_stat_statements_snapshot','p_terms text[], p_limit integer','db679b5746ebe9ebddcc3333c21795705944f7a545e903d20c6b9184da58f500'),

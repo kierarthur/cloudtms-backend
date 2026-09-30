@@ -4706,51 +4706,10 @@ begin
     );
     if not v_is_new and v_comparison.id is not null
        and v_comparison.material_comparison_fingerprint<>v_fingerprint then
-      v_episode:=v_incident.episode_number+1;
-      v_fingerprint:=private.weekly_source_query_comparison_fingerprint_v1(
-        v_incident.id,v_episode,v_event.id,v_issue
-      );
-      update public.weekly_discrepancy_incidents
-      set episode_number=v_episode,reconciliation_state='UNRESOLVED',
-          candidate_action_state=case
-            when coalesce((v_policy->>'candidate_queries_enabled')::boolean,false)
-              then 'NOT_ASKED'
-            else 'NOT_REQUIRED'
-          end,
-          manager_potential_state=case
-            when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
-                 and nullif(v_policy->>'manager_query_recipient','') is not null
-              then 'AVAILABLE'
-            else 'NOT_AVAILABLE'
-          end,
-          manager_action_state=case
-            when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
-                 and nullif(v_policy->>'manager_query_recipient','') is not null
-              then 'NOT_SENT'
-            else 'NOT_REQUIRED'
-          end,
-          waiting_source_state='NOT_WAITING',resolved_at_utc=null,resolution_kind=null
-      where id=v_incident.id;
-      update public.office_action_notifications
-      set operational_state='RESOLVED',resolved_at_utc=pg_catalog.transaction_timestamp()
-      where issue_id=v_incident.id and operational_state='OPEN';
-      v_incident.episode_number:=v_episode;
-      v_incident.candidate_action_state:=case
-        when coalesce((v_policy->>'candidate_queries_enabled')::boolean,false)
-          then 'NOT_ASKED'
-        else 'NOT_REQUIRED'
-      end;
-      v_incident.manager_action_state:=case
-        when coalesce((v_policy->>'manager_queries_enabled')::boolean,false)
-             and nullif(v_policy->>'manager_query_recipient','') is not null
-          then 'NOT_SENT'
-        else 'NOT_REQUIRED'
-      end;
+      -- A changed source tuple is a new comparison revision of the same open
+      -- episode. Only a resolved work event that reappears starts a new episode.
+      -- Preserve route activation, due times and accepted manager memberships.
       v_changed_count:=v_changed_count+1;
-      v_new_cohort_keys:=pg_catalog.array_append(
-        v_new_cohort_keys,
-        v_incident.source_cycle_id::text||':'||v_event.candidate_id::text||':'||v_event.client_id::text
-      );
     end if;
     if nullif(v_issue->>'expected_material_comparison_fingerprint','') is not null then
       v_expected:=private.weekly_source_query_hex32_v1(

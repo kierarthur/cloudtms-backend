@@ -308,6 +308,15 @@ begin
       'source_group_name',v_group.display_name,'source_family',v_group.source_family,
       'source_cycle_id',v_cycle.id,'finalisation_week_ending',v_cycle.finalisation_week_ending,
       'cutoff_at_utc',v_cycle.cutoff_at_utc,'cycle_state',v_cycle.state,
+      'previous_coverage',(
+        select pg_catalog.jsonb_build_object(
+          'start_local_date',prior.confirmed_coverage_start_local_date,
+          'end_local_date',prior.confirmed_coverage_end_local_date
+        )
+        from public.weekly_source_uploads prior
+        where prior.id=v_cycle.current_complete_upload_id
+          and prior.state='CURRENT'
+      ),
       'report_scope_id',v_report_scope_id,'client_id',v_client_id,
       'client_name',v_client_name,'nhsp_report_heading_name',v_group.nhsp_report_heading_name,
       'client_selection_required',v_group.source_family='ROSTER' and v_client_id is null,

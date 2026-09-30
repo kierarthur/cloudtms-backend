@@ -1122,13 +1122,13 @@ begin
       where source_cycle_id='e6000000-0000-4000-8000-000000000001'
         and candidate_id='e3000000-0000-4000-8000-000000000001'
         and audience_route='CANDIDATE' and route_mode='MANAGER_DIRECT'
-    ) and v_manager_generation_after<>v_manager_generation_before,
-    'changed issue did not preserve manager-direct while resetting manager outreach');
+    ) and v_manager_generation_after=v_manager_generation_before,
+    'changed open issue reset the manager-direct outreach generation');
   perform pg_temp.assert_true((select episode_number from public.weekly_discrepancy_incidents
-    where id=v_incident_2)=2,'changed issue did not increment its episode');
+    where id=v_incident_2)=1,'changed open issue started a new episode');
   perform pg_temp.assert_true((select count(*) from public.weekly_manager_recipient_memberships
     where recipient_generation_id=v_manager_generation_after)=2,
-    'new manager generation did not include every unresolved issue');
+    'the existing manager generation lost its incident membership');
   -- 04A section 8: "A later cohort merely becoming due is not a revocation
   -- event for an earlier accepted batch", and section 1: a later generation
   -- "cannot broaden, alter, supersede or revoke an already accepted earlier
@@ -1160,7 +1160,7 @@ begin
   -- 04A section 6.1 "never resends a row already in an accepted batch" and
   -- section 6.5 "No row is sent twice": the row still unanswered in that
   -- accepted batch must not reappear in the new generation's sendable set,
-  -- while the row whose episode genuinely changed may.
+  -- and a changed comparison of that same open episode remains owned too.
   perform pg_temp.assert_true(
     private.weekly_source_query_manager_row_owned_v1(
       (select recipient_route_id from public.weekly_manager_recipient_generations
@@ -1168,13 +1168,13 @@ begin
       v_incident_1,
       (select episode_number from public.weekly_discrepancy_incidents where id=v_incident_1)
     )
-    and not private.weekly_source_query_manager_row_owned_v1(
+    and private.weekly_source_query_manager_row_owned_v1(
       (select recipient_route_id from public.weekly_manager_recipient_generations
        where id=v_manager_generation_after),
       v_incident_2,
       (select episode_number from public.weekly_discrepancy_incidents where id=v_incident_2)
     ),
-    'accepted-batch ownership did not survive the generation rotation, or blocked a new episode');
+    'changed open comparison lost accepted-batch ownership');
   v_result:=public.weekly_source_manager_review_respond_atomic_v1(v_second_manager_response);
   perform pg_temp.assert_true((v_result->>'replay')::boolean,
     'exact manager replay did not survive a superseded generation and newer facts');
@@ -1716,11 +1716,13 @@ begin
       'client_id','e2000000-0000-4000-8000-000000000001',
       'incident_ids',pg_catalog.jsonb_build_array(v_incident_2)
     ));
-  exception when sqlstate '55000' then
-    v_candidate_disabled:=sqlerrm='WEEKLY_SOURCE_CANDIDATE_QUERIES_DISABLED';
+  exception when sqlstate '40001' then
+    -- This incident already belongs to a manager-direct route. Its changed
+    -- source hours must not make it newly selectable for candidate outreach.
+    v_candidate_disabled:=sqlerrm='WEEKLY_SOURCE_ASK_CANDIDATE_SELECTION_STALE';
   end;
   perform pg_temp.assert_true(v_candidate_disabled,
-    'candidate contact toggle did not disable only the candidate route');
+    'changed open incident became a new candidate-outreach selection');
 
   update public.weekly_source_client_policies
   set candidate_queries_enabled=true,manager_queries_enabled=false
@@ -1927,62 +1929,11 @@ begin
          join public.weekly_issue_comparison_revisions comparison
            on comparison.id=incident.current_comparison_revision_id
          where incident.id=v_incident_id)='e8000000-0000-4000-8000-000000000004'
-    and v_generation_after<>v_generation_before,
-    'later-cycle changed facts did not append to and restart the durable incident'
+    and v_generation_after=v_generation_before
+    and (select episode_number from public.weekly_discrepancy_incidents
+         where id=v_incident_id)=1,
+    'later-cycle changed facts reset the unresolved incident or its outreach'
   );
-  perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
-    'now_utc',pg_catalog.transaction_timestamp()+interval '1 minute','limit',1000
-  ));
-  select public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
-    'message_intent_id',intent.id,
-    'projection_publication_id','e8000000-0000-4000-8000-000000000004'
-  )) into strict v_render_input
-  from public.weekly_message_intents intent
-  where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
-  order by intent.created_at_utc desc,intent.id desc limit 1;
-  perform pg_temp.assert_true((v_render_input->>'shift_count')::integer>=1,
-    'later current publication could not render the restarted original-cycle route');
-  v_route_preparation:=public.weekly_source_manager_route_prepare_atomic_v1(
-    pg_catalog.jsonb_build_object(
-      'message_intent_id',(
-        select intent.id from public.weekly_message_intents intent
-        where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
-        order by intent.created_at_utc desc,intent.id desc limit 1
-      ),
-      'projection_publication_id','e8000000-0000-4000-8000-000000000004'
-    )
-  );
-  v_stage:=public.weekly_source_message_render_stage_atomic_v1(
-    pg_catalog.jsonb_build_object(
-      'message_intent_id',(
-        select intent.id from public.weekly_message_intents intent
-        where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
-        order by intent.created_at_utc desc,intent.id desc limit 1
-      ),
-      'projection_publication_id','e8000000-0000-4000-8000-000000000004',
-      'membership_hash',v_render_input->>'membership_hash',
-      'policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
-      'subject_text',pg_catalog.format(
-        'Timesheet queries requiring your review - %s %s',
-        v_render_input->>'shift_count',
-        case when (v_render_input->>'shift_count')::integer=1 then 'shift' else 'shifts' end
-      ),
-      'html_body','<p>Please review the listed hours.</p>',
-      'plain_body','Please review the listed hours.',
-      'credential_hash',repeat('97',32),
-      'control_plane_ticket_id','ec100000-0000-4000-8000-000000000001',
-      'agency_receipt_id','ed100000-0000-4000-8000-000000000001',
-      'data_plane_identity','query-cross-cycle','route_version','1','credential_version','1'
-      ,'manager_route_preparation_id',v_route_preparation->>'manager_route_preparation_id'
-    )
-  );
-  v_claim:=pg_temp.claim_fixture_command_v1(
-    'cross-cycle-verifier',(v_stage->>'dispatch_command_id')::uuid,30
-  );
-  select value into strict v_claimed
-  from pg_catalog.jsonb_array_elements(v_claim->'commands')
-  where value->>'dispatch_command_id'=v_stage->>'dispatch_command_id';
-
   v_result:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_cycle_id','e6000000-0000-4000-8000-000000000002',
@@ -2010,6 +1961,87 @@ begin
       where id=v_incident_id and state='RESOLVED' and resolution_kind='SOURCE_MATCHED'
         and source_cycle_id='e6000000-0000-4000-8000-000000000001'
     ),'later complete HealthRoster coverage did not resolve the durable incident');
+  -- A genuinely resolved event reappearing is a NEW episode. Only this
+  -- transition may restart the previously activated route and make a fresh
+  -- manager render; a later resolution must retire that unsent render.
+  v_result:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_cycle_id','e6000000-0000-4000-8000-000000000001',
+    'projection_publication_id','e8000000-0000-4000-8000-000000000003',
+    'issues',pg_catalog.jsonb_build_array(v_issue)
+  ));
+  select current_generation_id into strict v_generation_after
+  from public.weekly_manager_recipient_routes
+  where source_cycle_id='e6000000-0000-4000-8000-000000000001'
+    and current_generation_id is not null;
+  perform pg_temp.assert_true(
+    (v_result->>'new_incidents')::integer=1
+    and v_generation_after<>v_generation_before
+    and exists (
+      select 1 from public.weekly_discrepancy_incidents
+      where work_event_id='e9000000-0000-4000-8000-000000000002'
+        and state='OPEN' and episode_number=2
+    ),'resolved event reappearance failed to start a new episode');
+  perform public.weekly_source_query_scheduler_tick_v1(pg_catalog.jsonb_build_object(
+    'now_utc',pg_catalog.transaction_timestamp()+interval '1 minute','limit',1000
+  ));
+  select public.weekly_source_message_render_input_v1(pg_catalog.jsonb_build_object(
+    'message_intent_id',intent.id,
+    'projection_publication_id','e8000000-0000-4000-8000-000000000003'
+  )) into strict v_render_input
+  from public.weekly_message_intents intent
+  where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
+  order by intent.created_at_utc desc,intent.id desc limit 1;
+  perform pg_temp.assert_true((v_render_input->>'shift_count')::integer>=1,
+    'reappeared event could not render the new manager review');
+  v_route_preparation:=public.weekly_source_manager_route_prepare_atomic_v1(
+    pg_catalog.jsonb_build_object(
+      'message_intent_id',(
+        select intent.id from public.weekly_message_intents intent
+        where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
+        order by intent.created_at_utc desc,intent.id desc limit 1
+      ),
+      'projection_publication_id','e8000000-0000-4000-8000-000000000003'
+    )
+  );
+  v_stage:=public.weekly_source_message_render_stage_atomic_v1(
+    pg_catalog.jsonb_build_object(
+      'message_intent_id',(
+        select intent.id from public.weekly_message_intents intent
+        where intent.recipient_generation_id=v_generation_after and intent.state='DUE'
+        order by intent.created_at_utc desc,intent.id desc limit 1
+      ),
+      'projection_publication_id','e8000000-0000-4000-8000-000000000003',
+      'membership_hash',v_render_input->>'membership_hash',
+      'policy_version','1.8.0','renderer_version','1.4.0','structure_version','1.0.0',
+      'subject_text',pg_catalog.format(
+        'Timesheet queries requiring your review - %s %s',
+        v_render_input->>'shift_count',
+        case when (v_render_input->>'shift_count')::integer=1 then 'shift' else 'shifts' end
+      ),
+      'html_body','<p>Please review the listed hours.</p>',
+      'plain_body','Please review the listed hours.',
+      'credential_hash',repeat('97',32),
+      'control_plane_ticket_id','ec100000-0000-4000-8000-000000000001',
+      'agency_receipt_id','ed100000-0000-4000-8000-000000000001',
+      'data_plane_identity','query-cross-cycle','route_version','1','credential_version','1',
+      'manager_route_preparation_id',v_route_preparation->>'manager_route_preparation_id'
+    )
+  );
+  v_claim:=pg_temp.claim_fixture_command_v1(
+    'cross-cycle-verifier',(v_stage->>'dispatch_command_id')::uuid,30
+  );
+  select value into strict v_claimed
+  from pg_catalog.jsonb_array_elements(v_claim->'commands')
+  where value->>'dispatch_command_id'=v_stage->>'dispatch_command_id';
+  v_result:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_cycle_id','e6000000-0000-4000-8000-000000000001',
+    'projection_publication_id','e8000000-0000-4000-8000-000000000003',
+    'issues','[]'::jsonb
+  ));
+  perform pg_temp.assert_true((v_result->>'resolved_incidents')::integer>=1,
+    'the reappeared shift did not resolve before the staged manager send');
   v_start:=pg_temp.start_one_delivery_target_v1(
     pg_catalog.jsonb_build_object(
       'dispatch_command_id',v_stage->>'dispatch_command_id',

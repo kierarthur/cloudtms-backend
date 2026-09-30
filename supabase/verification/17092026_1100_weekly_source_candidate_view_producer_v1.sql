@@ -1733,7 +1733,7 @@ insert into public.candidate_app_sessions(
   'cf100000-0000-4000-8000-000000000001','cf000000-0000-4000-8000-000000000001',
   'TEST','c3000000-0000-4000-8000-000000000001','ACTIVE',
   extensions.digest('mytms-producer-session','sha256'),
-  '2026-09-30 00:00:00+00','2026-10-01 00:00:00+00');
+  now()+interval '1 day',now()+interval '2 days');
 insert into public.candidate_app_global_membership_links(
   membership_id,global_account_identity_hmac,account_id,candidate_id,
   candidate_code,membership_generation,state,linked_at_utc,updated_at_utc

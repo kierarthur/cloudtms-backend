@@ -394,6 +394,9 @@ declare
   v_generation uuid;
   v_request jsonb;
   v_scope jsonb;
+  v_old_request jsonb;
+  v_old_scope jsonb;
+  v_issue_input jsonb;
   v_issue_1 jsonb;
   v_issue_2 jsonb;
   v_issue_3 jsonb;
@@ -416,11 +419,7 @@ declare
   v_blocked boolean:=false;
   v_block_error text;
 begin
-  v_sync:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
-    'actor_user_id','fa100000-0000-4000-8000-000000000001',
-    'source_cycle_id','fa600000-0000-4000-8000-000000000001',
-    'projection_publication_id','fa800000-0000-4000-8000-000000000001',
-    'issues',pg_catalog.jsonb_build_array(
+  v_issue_input:=pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object(
         'work_event_id','fa900000-0000-4000-8000-000000000001',
         'candidate_timesheet_id','faa00000-0000-4000-8000-000000000001',
@@ -450,7 +449,12 @@ begin
         'candidate_start_at_local','2026-09-03 09:00',
         'candidate_end_at_local','2026-09-03 17:00','candidate_break_minutes',0
       )
-    )
+  );
+  v_sync:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','fa100000-0000-4000-8000-000000000001',
+    'source_cycle_id','fa600000-0000-4000-8000-000000000001',
+    'projection_publication_id','fa800000-0000-4000-8000-000000000001',
+    'issues',v_issue_input
   ));
   perform pg_temp.assert_true((v_sync->>'new_incidents')::integer=3,
     'three comparison issues were not created');
@@ -497,6 +501,51 @@ begin
     and pg_catalog.jsonb_array_length(v_scope->'submitted_timesheet')=3,
     'request projection did not preserve the exact week and three issues'
   );
+  -- A fresh source comparison supersedes the unanswered question in place.
+  -- The candidate must see the new hours, with the same request, and cannot
+  -- submit an answer prepared against the old comparison fingerprint.
+  v_old_request:=v_request;
+  v_old_scope:=v_scope;
+  v_issue_input:=pg_catalog.jsonb_set(v_issue_input,'{0,system_end_at_local}',
+    '"2026-09-01 18:00"'::jsonb);
+  v_sync:=public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','fa100000-0000-4000-8000-000000000001',
+    'source_cycle_id','fa600000-0000-4000-8000-000000000001',
+    'projection_publication_id','fa800000-0000-4000-8000-000000000001',
+    'issues',v_issue_input
+  ));
+  perform pg_temp.assert_true((v_sync->>'new_incidents')::integer=0,
+    'changed source hours created a second unresolved question');
+  v_request:=public.weekly_source_candidate_app_request_get_v1(
+    'fad00000-0000-4000-8000-000000000001','TEST',v_generation,v_now
+  );
+  v_scope:=v_request#>'{scopes,0}';
+  perform pg_temp.assert_true(
+    v_request->>'request_id'=v_old_request->>'request_id'
+    and pg_catalog.jsonb_array_length(v_scope->'issues')=3
+    and v_request->>'request_fingerprint'<>v_old_request->>'request_fingerprint'
+    and (select value#>>'{system_hours,end}' from pg_catalog.jsonb_array_elements(
+      v_scope->'issues') where value->>'date'='2026-09-01')='18:00',
+    'unanswered candidate question did not follow the latest source hours'
+  );
+  begin
+    perform public.weekly_source_candidate_app_draft_save_atomic_v1(
+      'fad00000-0000-4000-8000-000000000001','TEST',v_generation,
+      pg_catalog.jsonb_build_object(
+        'request_version',v_old_request->'request_version',
+        'request_fingerprint',v_old_request->>'request_fingerprint',
+        'scope_id',v_old_scope->>'scope_id',
+        'scope_version',v_old_scope->'scope_version',
+        'scope_fingerprint',v_old_scope->>'scope_fingerprint',
+        'responses','[]'::jsonb,
+        'idempotency_key','fb000000-0000-4000-8000-000000000099'
+      ),v_now
+    );
+  exception when sqlstate '40001' then
+    v_rejected:=sqlerrm='WEEKLY_SOURCE_CANDIDATE_REQUEST_STALE';
+  end;
+  perform pg_temp.assert_true(v_rejected,
+    'candidate could answer the superseded hours question');
   select value into strict v_issue_1 from pg_catalog.jsonb_array_elements(v_scope->'issues')
   where value->>'date'='2026-09-01';
   select value into strict v_issue_2 from pg_catalog.jsonb_array_elements(v_scope->'issues')
@@ -1626,6 +1675,90 @@ begin
      from public.banking_pay_workbench_jobs workbench_job
      where workbench_job.candidate_id='fa300000-0000-4000-8000-000000000001')
   ),'late Candidate evidence touched Banking Pay or Workbench state');
+
+  -- Simulate an NHSP Previously Released publication after these three signed
+  -- weeks exist. The import recheck must work without an ACTIVE submission
+  -- request, preserve already-open incidents and remain replay-safe.
+  update public.weekly_source_uploads
+  set source_format_profile_id='31111111-1111-4111-8111-111111111111'
+  where id='fa700000-0000-4000-8000-000000000001';
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000001'
+  );
+  perform pg_temp.assert_true((v_final->>'signed_weeks_checked')::integer=3,
+    'Previously Released publication did not recheck the three signed weeks');
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000001'
+  );
+  perform pg_temp.assert_true((v_final->>'new_incidents')::integer=0
+    and (v_final->>'changed_comparisons')::integer=0,
+    'unchanged Previously Released recheck created another incident or revision');
+  -- A replacement publication can omit earlier shifts. The old upload is
+  -- retained solely for durable work-event identity, not as current hours.
+  update public.weekly_source_projection_publications set state='STALE'
+  where id='fa800000-0000-4000-8000-000000000001';
+  update public.weekly_source_uploads set state='SUPERSEDED'
+  where id='fa700000-0000-4000-8000-000000000001';
+  insert into public.weekly_source_uploads(
+    id,source_cycle_id,original_filename,content_sha256,byte_count,
+    source_format_profile_id,parser_version,normaliser_version,
+    header_coordinate_map_hash,declared_scope_fingerprint,coverage_proof_kind,
+    physical_row_count,row_manifest_hash,state,uploaded_by_user_id
+  ) values (
+    'fa700000-0000-4000-8000-000000000002',
+    'fa600000-0000-4000-8000-000000000001','replacement-omits-old-shifts.xlsx',
+    decode(repeat('c1',32),'hex'),100,'31111111-1111-4111-8111-111111111111',
+    'verify','verify',decode(repeat('c2',32),'hex'),decode(repeat('c3',32),'hex'),
+    'FORMAT_MANIFEST',0,decode(repeat('c4',32),'hex'),
+    'CURRENT','fa100000-0000-4000-8000-000000000001'
+  );
+  insert into public.weekly_source_projection_publications(
+    id,source_cycle_id,authority_scope_kind,upload_id,authority_scope_version,
+    comparison_manifest_hash,issue_set_hash,state,published_at_utc
+  ) values (
+    'fa800000-0000-4000-8000-000000000002',
+    'fa600000-0000-4000-8000-000000000001','CYCLE',
+    'fa700000-0000-4000-8000-000000000002',2,
+    decode(repeat('c5',32),'hex'),decode(repeat('c6',32),'hex'),'CURRENT',
+    pg_catalog.transaction_timestamp()
+  );
+  update public.weekly_source_cycles
+  set version=2,current_complete_upload_id='fa700000-0000-4000-8000-000000000002',
+    current_projection_publication_id='fa800000-0000-4000-8000-000000000002'
+  where id='fa600000-0000-4000-8000-000000000001';
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000002'
+  );
+  perform pg_temp.assert_true((v_final->>'signed_weeks_checked')::integer=3
+    and (v_final->>'new_incidents')::integer>=1
+    and (v_final->>'changed_comparisons')::integer>=1
+    and exists(
+      select 1 from public.weekly_discrepancy_incidents incident
+      join public.weekly_issue_comparison_revisions comparison
+        on comparison.id=incident.current_comparison_revision_id
+      where incident.work_event_id='fc100000-0000-4000-8000-000000000001'
+        and incident.state='OPEN' and comparison.source_presence='ABSENT'
+        and comparison.source_row_id is null
+    ),'omitted Previously Released shifts did not become Office-visible queries');
+  v_final:=private.weekly_source_candidate_prefinal_publish_recheck_v1(
+    'fa100000-0000-4000-8000-000000000001',
+    'fa800000-0000-4000-8000-000000000002'
+  );
+  perform pg_temp.assert_true((v_final->>'new_incidents')::integer=0
+    and (v_final->>'changed_comparisons')::integer=0,
+    'rechecking the same omission restarted an incident');
+  perform pg_temp.assert_true(not exists(
+    select 1 from public.timesheets_financials financial
+    join public.contract_weeks week_row on week_row.timesheet_id=financial.timesheet_id
+    where week_row.id in (
+      'fc400000-0000-4000-8000-000000000001',
+      'fc400000-0000-4000-8000-000000000002',
+      'fc400000-0000-4000-8000-000000000003'
+    )
+  ),'Previously Released recheck created financial hours');
 
   raise notice 'WEEKLY_SOURCE_CANDIDATE_APP_CONTRACT_V1: PASS';
 end;

@@ -11,6 +11,7 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 
 const owner = read('supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql');
 const verifier = read('supabase/verification/15092026_2203_weekly_source_candidate_app_contract_v1.sql');
+const publication = read('supabase/repeatable/15092026_1534_weekly_source_upload_publication_v1.sql');
 
 const functionSource = name => {
   const marker = `create or replace function ${name}`;
@@ -40,7 +41,7 @@ test('the Candidate materialisation seam is service-only and its internal compar
   assert.match(compareSync, /weekly_source_query_require_service_v1\(\)/i);
 });
 
-test('only the Office-request and candidate-initiated signed paths invoke the narrow owner', () => {
+test('Office-request and candidate self-submit use the narrow materialisation owner', () => {
   assert.equal(
     (submit.match(/weekly_source_candidate_check_materialise_atomic_v1\s*\(/gi) || []).length,
     1,
@@ -55,6 +56,16 @@ test('only the Office-request and candidate-initiated signed paths invoke the na
   assert.match(submit, /else[\s\S]*weekly_source_candidate_app_assert_new_week_submission_v1/i);
   assert.match(submit, /'request_kind',v_scope->>'request_kind'/i);
   assert.doesNotMatch(materialise, /weekly_source_query_sync_atomic_v1|weekly_source_office_authority_v1|RECHECK_SOURCE/i);
+});
+
+test('NHSP prefinal publication rechecks signed weeks without materialising or auto-contacting candidates', () => {
+  const recheck = functionSource('private.weekly_source_candidate_prefinal_publish_recheck_v1');
+  assert.match(publication, /profile\.id=v_upload\.source_format_profile_id[\s\S]*profile\.profile_code='NHSP_PREFINAL_RELEASED_V1'[\s\S]*weekly_source_candidate_prefinal_publish_recheck_v1/i);
+  assert.match(recheck, /weekly_source_candidate_submission_compare_sync_v1/i);
+  assert.doesNotMatch(recheck, /weekly_source_candidate_check_materialise_atomic_v1|weekly_source_query_ask_candidate_atomic_v1/i);
+  assert.match(owner, /draft_item\.comparison_revision_id=comparison\.id/i);
+  assert.match(verifier, /changed source hours created a second unresolved question/i);
+  assert.match(verifier, /candidate could answer the superseded hours question/i);
 });
 
 test('the save is bound to the exact account, environment, request generation, publication and scope', () => {
