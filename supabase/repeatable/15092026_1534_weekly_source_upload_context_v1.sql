@@ -157,6 +157,7 @@ declare
   v_publication public.weekly_source_projection_publications%rowtype;
   v_profile public.weekly_source_format_profiles%rowtype;
   v_source_row public.weekly_source_upload_rows%rowtype;
+  v_office_choice private.weekly_source_office_row_choices%rowtype;
   v_source_name text;
   v_source_id text;
   v_source_id_2 text;
@@ -336,6 +337,8 @@ begin
     order by source_row.source_row_ordinal,source_row.id
   loop
     v_row_client_id:=v_client_id;
+    select * into v_office_choice from private.weekly_source_office_row_choices
+      where upload_row_id=v_source_row.id order by id desc limit 1;
     v_source_name:=nullif(pg_catalog.btrim(coalesce(
       v_source_row.bounded_raw_columns_json->>'worker_name',
       v_source_row.bounded_raw_columns_json->>'candidate',
@@ -365,6 +368,12 @@ begin
           and coalesce(membership.valid_to,'infinity'::date)
         and pg_catalog.lower(pg_catalog.btrim(client.name))=
           pg_catalog.lower(pg_catalog.btrim(coalesce(v_source_client,'')));
+    end if;
+    if v_office_choice.client_id is not null then
+      select membership.client_id into v_row_client_id
+      from public.weekly_source_group_clients membership
+      where membership.source_group_id=v_group.id and membership.client_id=v_office_choice.client_id
+        and v_source_row.work_date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date);
     end if;
     v_norm_name:=pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.btrim(coalesce(v_source_name,'')),'[[:space:]]+',' ','g'
@@ -406,6 +415,10 @@ begin
           )
         )
     ) exact_saved;
+    if v_office_choice.candidate_id is not null then
+      select coalesce(pg_catalog.array_agg(id),'{}'::uuid[]) into v_candidate_ids
+        from public.candidates where id=v_office_choice.candidate_id and active;
+    end if;
     v_candidate_id:=case when pg_catalog.cardinality(v_candidate_ids)=1 then v_candidate_ids[1] end;
     select coalesce(pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
@@ -541,6 +554,7 @@ begin
       'candidate_match_count',pg_catalog.cardinality(v_candidate_ids),
       'candidate_matches',v_candidate_matches,
       'candidate_id',v_candidate_id,
+      'office_selected_contract_id',v_office_choice.contract_id,
       'client_id',v_row_client_id,
       'contracts',v_contracts,
       'prior_accepted_contract_id',v_prior_contract_id,

@@ -141,9 +141,9 @@ test('finalisation follow-up is durable, plain and can only continue or explicit
   assert.doesNotMatch(source, /'label','retry approved hours update'/);
 });
 
-test('the workspace cannot offer finalisation before the authoritative cutoff', async () => {
+test('the workspace requires preparation and limits early finalisation to HealthRoster', async () => {
   const source = lower(await readFile(readSqlPath, 'utf8'));
-  assert.match(source, /v_finalise_enabled:=v_blocker_count=0[\s\S]*?statement_timestamp\(\)>=coalesce\([\s\S]*?scope\.cutoff_at_utc[\s\S]*?v_cycle\.cutoff_at_utc[\s\S]*?v_cycle\.state not in \('finalising','finalised'\)/);
+  assert.match(source, /v_finalise_enabled:=v_import_prepared and v_blocker_count=0[\s\S]*?and \(v_profile\.profile_code in \('healthroster_weekly_from_to_actual_v1','healthroster_weekly_explicit_actual_v1'\)\s*or pg_catalog\.statement_timestamp\(\)>=coalesce\([\s\S]*?scope\.cutoff_at_utc[\s\S]*?v_cycle\.cutoff_at_utc[\s\S]*?v_cycle\.state not in \('finalising','finalised'\)/);
 });
 
 test('rollback verifier covers unloaded paging, stale failure, mixed eligibility, exact accept, no-shifts and ACL', async () => {

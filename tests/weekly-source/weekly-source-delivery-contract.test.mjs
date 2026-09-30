@@ -5,7 +5,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const mytms = path.resolve(root, '..', 'mytms');
+const mytms = process.env.CLOUDTMS_MYTMS_SOURCE_ROOT
+  ? path.resolve(process.env.CLOUDTMS_MYTMS_SOURCE_ROOT) : path.resolve(root, '..', 'mytms');
 
 async function source(base, relative) {
   return readFile(path.join(base, relative), 'utf8');

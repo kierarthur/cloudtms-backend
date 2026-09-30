@@ -813,6 +813,57 @@ begin
       and request_kind='CHECK_HOURS'
   ),'issue comparison incorrectly replaced the missing-Timesheet submit route');
 
+  -- Prove coexistence using real generation ownership, with the extra fixture
+  -- rolled back before continuing the established requested-week scenario.
+  begin
+    perform pg_temp.assert_true(private.weekly_source_waiting_requested_week_v1(
+      'e6000000-0000-4000-8000-000000000001','e3000000-0000-4000-8000-000000000002',
+      'e2000000-0000-4000-8000-000000000001','e4000000-0000-4000-8000-000000000002','2026-09-03'),
+      'the exact outstanding requested week was not recognised');
+    perform pg_temp.assert_true(not private.weekly_source_waiting_requested_week_v1(
+      'e6000000-0000-4000-8000-000000000001','e3000000-0000-4000-8000-000000000002',
+      'e2000000-0000-4000-8000-000000000001','e4000000-0000-4000-8000-000000000002','2026-08-27'),
+      'another week incorrectly suppressed an hours question');
+    insert into public.weekly_work_events(id,candidate_id,client_id,work_date,identity_kind,
+      profile_external_key,durable_identity_hash,first_source_group_id,source_format_profile_id)
+    values('e9000000-0000-4000-8000-000000000099','e3000000-0000-4000-8000-000000000002',
+      'e2000000-0000-4000-8000-000000000001','2026-08-27','PROFILE_EXTERNAL_KEY',
+      'verify-independent-week',decode(repeat('99',32),'hex'),
+      'e5000000-0000-4000-8000-000000000001','34444444-4444-4444-8444-444444444444');
+    insert into public.timesheets(timesheet_id,booking_id,occupant_key_norm,hospital_norm,
+      ward_norm,job_title_norm,worked_start_iso,worked_end_iso,break_minutes,worked_minutes,
+      week_ending_date,r2_nurse_key,img_sha256_nurse,contract_id,sheet_scope,line_type,actual_schedule_json)
+    values('ea000000-0000-4000-8000-000000000099','VERIFY-INDEPENDENT-WEEK','robin-nurse',
+      'north-test-trust','ward-b','nurse','2026-08-27 08:00+00','2026-08-27 17:00+00',30,510,
+      '2026-08-30','verify/independent-week.png',repeat('9',64),'e4000000-0000-4000-8000-000000000002',
+      'WEEKLY','HOURS','[{"date":"2026-08-27","start":"08:00","end":"17:00","break_minutes":30}]');
+    perform public.weekly_source_query_sync_atomic_v1(pg_catalog.jsonb_build_object(
+      'actor_user_id','e1000000-0000-4000-8000-000000000001',
+      'source_cycle_id','e6000000-0000-4000-8000-000000000001',
+      'projection_publication_id','e8000000-0000-4000-8000-000000000002',
+      'issues',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'work_event_id','e9000000-0000-4000-8000-000000000099',
+        'candidate_timesheet_id','ea000000-0000-4000-8000-000000000099',
+        'candidate_timesheet_revision',1,'candidate_shift_fingerprint',repeat('99',32),
+        'contract_id','e4000000-0000-4000-8000-000000000002',
+        'issue_family','SOURCE_HOURS_DIFFER','source_presence','PRESENT',
+        'candidate_start_at_local','2026-08-27 08:00','candidate_end_at_local','2026-08-27 17:00',
+        'candidate_break_minutes',30,'system_start_at_local','2026-08-27 08:00',
+        'system_end_at_local','2026-08-27 16:00','system_break_minutes',30))));
+    perform private.weekly_source_query_candidate_generation_v1(
+      'e6000000-0000-4000-8000-000000000001','e3000000-0000-4000-8000-000000000002',
+      'e2000000-0000-4000-8000-000000000001','e8000000-0000-4000-8000-000000000002',
+      'OFFICE_ASK','e1000000-0000-4000-8000-000000000001',pg_catalog.transaction_timestamp());
+    perform pg_temp.assert_true(private.weekly_source_candidate_generation_current_v1(v_submission_generation)
+      and exists(select 1 from public.weekly_candidate_outreach_generations generation
+        where generation.candidate_id='e3000000-0000-4000-8000-000000000002'
+          and generation.request_kind='CHECK_HOURS' and generation.state='ACTIVE'
+          and private.weekly_source_candidate_generation_current_v1(generation.id)),
+      'independent missing-week and hours-check generations did not coexist');
+    raise exception 'ROLLBACK_INDEPENDENT_WEEK_PROBE' using errcode='PZ099';
+  exception when sqlstate 'PZ099' then null;
+  end;
+
   select id into strict v_submission_membership
   from public.weekly_timesheet_submission_request_memberships
   where submission_request_id=(v_submission->>'submission_request_id')::uuid
@@ -843,8 +894,16 @@ begin
     select 1 from public.weekly_route_activations
     where source_cycle_id='e6000000-0000-4000-8000-000000000001'
       and candidate_id='e3000000-0000-4000-8000-000000000002'
-      and audience_route='MANAGER' and route_mode='MANAGER_DIRECT'
-  ),'missing-Timesheet issue did not activate the manager-direct route');
+      and audience_route='MANAGER' and route_mode='CANDIDATE_FIRST'
+      and activated_by_user_id is null
+  ),'missing-Timesheet completion incorrectly created an Office manager-direct choice');
+  perform pg_temp.assert_true(exists(
+    select 1 from public.weekly_manager_cohort_due_events event
+    join public.weekly_timesheet_submission_request_memberships requested
+      on requested.id=event.requested_week_membership_id
+    where requested.state='SUBMITTED_WITH_ISSUES'
+      and private.weekly_source_manager_due_event_covers_v1(event.id,v_incident_3)
+  ),'missing-Timesheet completion did not retain exact requested-week manager authority');
   perform pg_temp.assert_true(exists(
     select 1 from public.weekly_discrepancy_incidents
     where id=v_incident_3 and candidate_action_state='NOT_REQUIRED'

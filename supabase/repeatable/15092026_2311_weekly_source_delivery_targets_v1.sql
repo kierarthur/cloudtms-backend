@@ -472,7 +472,7 @@ begin
     select 1 from public.weekly_candidate_outreach_generations generation
     join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
     where generation.id=v_command.candidate_generation_id and generation.state='ACTIVE'
-      and cohort.current_generation_id=generation.id
+      and private.weekly_source_candidate_generation_current_v1(generation.id)
   ) then
     update public.weekly_message_dispatch_targets
     set state='RETIRED',terminal_at_utc=pg_catalog.transaction_timestamp(),

@@ -154,6 +154,10 @@ declare
   v_result jsonb;
   v_upload_id uuid;
   v_context jsonb;
+  v_publication_id uuid;
+  v_recheck jsonb;
+  v_recheck_request jsonb;
+  v_rows jsonb;
 begin
   v_result:=public.weekly_source_upload_stage_begin_atomic_v1(
     pg_catalog.jsonb_build_object(
@@ -248,6 +252,55 @@ begin
     and pg_catalog.jsonb_array_length(v_context#>'{rows,0,contracts}')=2,
     'BUILD projection did not return the sealed exact source census'
   );
+  v_result:=public.weekly_source_projection_begin_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload_id,
+    'expected_authority_scope_version',(v_context->>'authority_scope_version')::bigint));
+  v_publication_id:=(v_result->>'publication_id')::uuid;
+  select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('upload_row_id',id,
+    'mapping_state','SOURCE_ROW_BLOCKED','blocker_code','VERIFICATION_MAPPING_NOT_IN_SCOPE',
+    'qualifying_contract_ids','[]'::jsonb)) into v_rows
+    from public.weekly_source_upload_rows where upload_id=v_upload_id;
+  perform public.weekly_source_projection_rows_apply_atomic_v1(
+    '91000000-0000-4000-8000-000000000001',v_publication_id,v_rows);
+  perform public.weekly_source_projection_publish_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','publication_id',v_publication_id));
+  v_recheck_request:=pg_catalog.jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','request_id',pg_catalog.gen_random_uuid(),
+    'upload_id',v_upload_id,'projection_publication_id',v_publication_id,
+    'expected_authority_scope_version',(v_context->>'authority_scope_version')::bigint,
+    'expected_row_manifest_hash',v_context->>'row_manifest_hash',
+    'upload_row_id',v_context#>>'{rows,0,upload_row_id}',
+    'candidate_id','91000000-0000-4000-8000-000000000060',
+    'client_id','91000000-0000-4000-8000-000000000020');
+  update public.candidates set active=false where id='91000000-0000-4000-8000-000000000060';
+  begin
+    perform public.weekly_source_office_recheck_begin_v1(v_recheck_request);
+    raise exception 'VERIFY_FAILED: inactive candidate link accepted';
+  exception when sqlstate '22023' then
+    if sqlerrm<>'WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING' then raise; end if;
+  end;
+  update public.candidates set active=true where id='91000000-0000-4000-8000-000000000060';
+  v_recheck:=public.weekly_source_office_recheck_begin_v1(v_recheck_request);
+  perform pg_temp.assert_true(v_recheck->>'status'='BUILDING'
+    and v_recheck->>'publication_id'<>v_publication_id::text,'Recheck did not create a fresh comparison');
+  v_result:=public.weekly_source_office_recheck_begin_v1(v_recheck_request);
+  perform pg_temp.assert_true(v_result->>'publication_id'=v_recheck->>'publication_id'
+    and (v_result->>'idempotent')::boolean,'Exact recheck retry did not retain its comparison');
+  begin
+    perform public.weekly_source_office_recheck_begin_v1(v_recheck_request||pg_catalog.jsonb_build_object('request_id',pg_catalog.gen_random_uuid()));
+    raise exception 'VERIFY_FAILED: stale recheck accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'WEEKLY_SOURCE_PREVIEW_STALE' then raise; end if;
+  end;
+  v_result:=public.weekly_source_upload_context_v1(pg_catalog.jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload_id));
+  perform pg_temp.assert_true(v_result#>>'{rows,0,candidate_id}'='91000000-0000-4000-8000-000000000060'
+    and v_result->>'row_manifest_hash'=v_context->>'row_manifest_hash','Office choice changed file evidence or lost its candidate');
+  perform public.weekly_source_projection_rows_apply_atomic_v1(
+    '91000000-0000-4000-8000-000000000001',(v_recheck->>'publication_id')::uuid,v_rows);
+  v_result:=public.weekly_source_projection_publish_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','publication_id',v_recheck->>'publication_id'));
+  perform pg_temp.assert_true(v_result->>'status'='CURRENT','Rechecked comparison did not publish');
 end;
 $build_projection_runtime$;
 

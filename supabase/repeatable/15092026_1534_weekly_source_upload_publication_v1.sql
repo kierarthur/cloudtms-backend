@@ -485,6 +485,18 @@ begin
     raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_NOT_ALLOWED' using errcode='22023';
   end if;
 
+  -- Validate even duplicate attempts; a reused byte stream is not authority
+  -- to change a checking-only profile's use.
+  if coalesce(v_metadata->>'import_use','CHECKING') not in ('CHECKING','PREPARE_FINALISATION')
+    or (v_profile.row_finalisation_capability='CHECKING_ONLY'
+      and v_metadata->>'import_use'='PREPARE_FINALISATION') then
+    raise exception 'WEEKLY_SOURCE_IMPORT_USE_INVALID' using errcode='22023';
+  end if;
+  if v_metadata->>'import_use'='PREPARE_FINALISATION' then
+    perform private.weekly_source_office_authority_v1(v_actor,'FINALISE_WEEK',v_group_id,
+      v_client_id,v_cycle.finalisation_week_ending);
+  end if;
+
   if v_profile.profile_code='NHSP_FINAL_BACKING_V1' and v_purpose='ORDINARY' then
     select upload.* into v_existing
     from public.weekly_source_uploads upload
@@ -567,6 +579,8 @@ begin
       and upload.coverage_confirmation_version is not distinct from v_confirmation_version
       and coalesce(upload.file_metadata_json->'saved_finalisation_profile_map','null'::jsonb)
           =coalesce(v_metadata->'saved_finalisation_profile_map','null'::jsonb)
+      and coalesce(upload.file_metadata_json->>'import_use','CHECKING')
+          =coalesce(v_metadata->>'import_use','CHECKING')
       and upload.state<>'REJECTED'
     order by upload.uploaded_at_utc,upload.id
     limit 1;

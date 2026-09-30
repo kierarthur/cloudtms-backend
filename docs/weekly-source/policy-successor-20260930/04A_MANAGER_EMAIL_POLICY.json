@@ -1,0 +1,319 @@
+{
+  "policyId": "cloudtms-weekly-manager-query-email",
+  "policyVersion": "1.7.0",
+  "rendererVersion": "1.3.0",
+  "structureVersion": "1.0.0",
+  "locale": "en-GB",
+  "timezone": "Europe/London",
+  "subject": "Timesheet queries requiring your review - {shift_count} {shift_word}",
+  "preheaderOneClient": "Review {shift_count} {shift_word} for {client_name}.",
+  "preheaderManyClients": "Review {shift_count} {shift_word} for {client_count} clients.",
+  "brand": "CloudTMS",
+  "heading": "Timesheet queries requiring your review",
+  "intro": "Please review the shifts below. You can respond to some now and return to the remaining queries later.",
+  "columns": ["Day/date", "Candidate hours", "System hours", "Candidate response"],
+  "candidateRequestedText": "Candidate requested your review",
+  "noSystemShiftText": "Missing or not yet authorised",
+  "sourceAbsentSystemText": "Not shown in system",
+  "sourceConditionText": {
+    "HOURS_DIFFER": "{system_start}-{system_end} ({system_break_text})",
+    "NHSP_ABSENT": "Missing or not yet authorised",
+    "SOURCE_ABSENT": "Not shown in system",
+    "HEALTHROSTER_NOT_FINALISED": "Not finalised · no actual hours"
+  },
+  "managerResponseText": {
+    "HOURS_DIFFER": ["The system hours are correct. The candidate timesheet hours are wrong.", "I have corrected the hours"],
+    "NHSP_ABSENT": ["The candidate did not work this shift", "I have added and/or authorised the shift"],
+    "SOURCE_ABSENT": ["The candidate did not work this shift", "I have added the shift"],
+    "HEALTHROSTER_NOT_FINALISED": ["The candidate did not work this shift", "I have added and/or finalised the hours"]
+  },
+  "responsesRequiringIntendedHours": [
+    "I have corrected the hours",
+    "I have added and/or authorised the shift",
+    "I have added the shift",
+    "I have added and/or finalised the hours"
+  ],
+  "intendedHoursFields": ["Start", "Finish", "Break"],
+  "managerResponseEffects": {
+    "SYSTEM_CORRECT": "resolve the candidate-versus-system hours query only; never mutate source, invoice or pay",
+    "CANDIDATE_DID_NOT_WORK": "resolve the candidate-versus-system no-work query only; never mutate source, invoice or pay; if protected pay exists leave a payment-authoriser-only Office task open",
+    "MANAGER_CORRECTED_SOURCE": "store intended start, end and break and wait for a later accepted source upload; never create source hours"
+  },
+  "cta": "Review all queries",
+  "securityText": "This secure link lets you save some responses and return later. It expires after seven days.",
+  "ignoreText": "If you were not expecting this email, please contact the Office team.",
+  "plainTextDivider": "----------------------------------------",
+  "ordering": {
+    "normalisation": "map ASCII U+0041..U+005A to U+0061..U+007A and leave every other validated Unicode scalar unchanged",
+    "comparison": "lexicographic integer Unicode code point comparison; never localeCompare, database collation, browser locale or operating-system locale",
+    "displayValueRule": "preserve original validated display spelling; reject isolated surrogates, U+0000..U+001F, U+007F..U+009F, U+061C, U+200E, U+200F, U+202A..U+202E and U+2066..U+2069",
+    "opaqueIdRule": "ASCII [A-Za-z0-9][A-Za-z0-9._:-]{0,127}, compared byte-for-byte ascending",
+    "client": ["client_name_ascii_fold_unicode_codepoint_ascending", "client_id_ascii_ascending"],
+    "candidate": ["display_name_ascii_fold_unicode_codepoint_ascending", "candidate_id_ascii_ascending"],
+    "shift": ["work_date_ascii_ascending", "source_start_instant_ascii_ascending", "issue_id_ascii_ascending"]
+  },
+  "format": {
+    "dayDate": "{weekday} {day} {month} {year}",
+    "weekdaysSundayFirst": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    "monthsJanuaryFirst": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "time": "HH:mm",
+    "hours": "{start}-{end} ({break_minutes} min break)",
+    "zeroBreak": "{start}-{end} (no break)",
+    "shiftWordOne": "shift",
+    "shiftWordMany": "shifts",
+    "subjectCountSource": "exact authorised rendered shift-row count after validation and sorting",
+    "singularRule": "use shift only when the integer count is exactly 1; otherwise use shifts"
+  },
+  "visualTokens": {
+    "maximumContentWidthPx": 900,
+    "bodyBackground": "#eef2f7",
+    "mainText": "#172033",
+    "secondaryText": "#536178",
+    "border": "#d9e0ea",
+    "brandBackground": "#07111f",
+    "actionColour": "#4f46e5",
+    "clientHeadingBackground": "#eef2ff",
+    "font": "Segoe UI, Arial, sans-serif",
+    "desktopContentPadding": "26px 28px 30px",
+    "mobileContentPadding": "20px 14px",
+    "mobileBreakpointPx": 680,
+    "minimumActionHeightPx": 44
+  },
+  "urlRules": {
+    "scheme": "https:",
+    "configuredManagerReviewOrigin": "environment-owned exact origin",
+    "configuredManagerReviewOriginEnvironmentVariable": "CLOUDTMS_MANAGER_REVIEW_ORIGIN",
+    "fixtureAllowedOrigins": ["https://example.invalid"],
+    "authorisesOnly": "responses for the exact original review-batch membership",
+    "grantsOfficeAdminMutation": false,
+    "grantsSourceFinalisationPaymentReconciliationOrInvoiceAction": false
+  },
+  "inputSchema": {
+    "fixtureKeys": ["id", "outputHtml", "outputText", "outputPng", "reviewUrl", "clients", "expectedHtmlSha256", "expectedTextSha256"],
+    "clientKeys": ["clientId", "clientName", "candidates"],
+    "candidateKeys": ["candidateId", "displayName", "shifts"],
+    "shiftKeys": ["issueId", "workDate", "sourceStartInstant", "start", "end", "breakMinutes", "systemStart", "systemEnd", "systemBreakMinutes", "systemAbsent", "issueFamily", "candidateRequested"],
+    "opaqueOrderingOnlyKeys": ["clientId", "candidateId", "issueId", "sourceStartInstant"],
+    "prohibitedKeys": ["pay", "payRate", "charge", "chargeRate", "margin", "vat", "invoice", "banking", "contractId", "sourceReference", "ward", "location", "attachment", "attachments"]
+  },
+  "constraints": {
+    "singleCta": true,
+    "inlineResponseActions": false,
+    "attachments": 0,
+    "showRates": false,
+    "showMoney": false,
+    "showOfficeRoutingCommentary": false,
+    "requiredIssueFamilies": ["HOURS_DIFFER", "NHSP_ABSENT", "SOURCE_ABSENT", "HEALTHROSTER_NOT_FINALISED"],
+    "maximumClients": 100,
+    "maximumCandidates": 100,
+    "maximumShifts": 500,
+    "capacityOverflow": {
+      "startsAtShiftCount": 501,
+      "countScope": "all currently due manager-actionable unanswered unsent rows for the recipient route, not only the screen selection",
+      "behavior": "FAIL_CLOSED_BEFORE_RENDER_LINK_OR_PROVIDER_ATTEMPT",
+      "truncate": false,
+      "silentSplit": false,
+      "dropRows": false,
+      "smallerManualSelectionMayBypass": false,
+      "keepDueWorkPending": true,
+      "officeStatus": "Needs Office action",
+      "officeReason": "This manager has more than 500 shifts waiting for one email.",
+      "officeActions": ["View details", "Recheck"],
+      "managerInformedBeforeProviderAcceptance": false
+    }
+  },
+  "deliveryStatePolicy": {
+    "recipientRouteKey": ["environment", "agency_id", "source_cycle_id", "manager_email_nfkc_lowercase"],
+    "crossRouteCombiningForbidden": ["environment", "agency_id", "source_cycle_id"],
+    "recipientGeneration": {
+      "appendOnly": true,
+      "oneMessageUsesOneGeneration": true,
+      "membership": "all current manager-actionable unanswered memberships for the recipient route when the cohort becomes due",
+      "membershipHashRequired": true,
+      "candidateAndClientActivationsRemainSeparate": true
+    },
+    "reviewBatch": {
+      "appendOnly": true,
+      "credentialScope": ["review_batch_id", "recipient_route_generation", "ordered_membership_set", "ordered_membership_hash"],
+      "getMayRefreshOnly": "latest comparison revision for the same authorised incident episode of each still-unanswered batch membership",
+      "laterOrNonBatchEpisodesForbidden": true,
+      "validUntil": ["all original memberships answered", "explicit revocation", "seven-day expiry"],
+      "laterCohortCreatesNewGenerationBatchAndLink": true,
+      "laterCohortDoesNotBroadenAlterSupersedeOrRevokeAcceptedBatch": true
+    },
+    "candidateCohorts": {
+      "timers": ["T0", "T0_PLUS_6_HOURS_REMINDER", "T0_PLUS_12_HOURS_DEADLINE"],
+      "managerDueWhen": ["EARLY_ALL as soon as every current candidate decision is complete, before or after T6, for manager-actionable unanswered unsent rows", "T6_RESPONDED at six hours for manager-actionable unanswered unsent rows with a candidate response; silence excluded and no empty email", "T12_REMAINDER at twelve hours after remaining silence becomes manager-actionable, for unanswered unsent rows only"],
+      "clocksIndependentPerCandidateCohort": true,
+      "laterDueCohortCreatesNewGeneration": true,
+      "manualSendClaimsExactRowsFromAutomaticRemainders": true,
+      "manualScheduledRace": "one accepted batch owns each row under the recipient-route lock; the other action rechecks the remainder; no duplicate row",
+      "missingTimesheetRequest": {
+        "identity": ["agency_id", "source_cycle_id", "candidate_id", "exact_ordered_missing_timesheet_scope_set", "immutable_membership_fingerprint"],
+        "t0": "candidate-visible submit-timesheet request with signed deep link to existing weekly Timesheet create/sign journey",
+        "t6": "candidate reminder",
+        "t12": "remain waiting for Timesheet and become Office action",
+        "multipleWeeks": "open the earliest outstanding selected week, create and sign one complete Weekly Timesheet, then offer Continue to next Timesheet in date order; one week's mismatch does not prevent continuing; never combine weeks",
+        "requestClosesWhen": "every original scope is completed or no longer eligible",
+        "scopeResolvedElsewhere": "skip after fresh server check",
+        "mayAddNewScopeToSentLink": false,
+        "completingOneWeekResetsT0T6T12": false,
+        "manualReminder": {
+          "officeLabel": "Remind candidate",
+          "cooldownSeconds": 3600,
+          "cooldownLabel": "Remind candidate (59:59)",
+          "identity": ["missing_timesheet_request_id", "server_allocated_reminder_sequence"],
+          "replayReturnsFirstResult": true,
+          "createsNewRequest": false,
+          "resetsOrExtendsT0T6T12": false,
+          "changesCandidateAsked": false,
+          "createsManagerMembershipOrEvent": false
+        },
+        "createsManagerMembershipOrEmailAtT12": false,
+        "submittedExactMatch": "close request automatically",
+        "submittedMismatch": "close request scope and create exact shift incidents for enabled next route",
+        "submittedMismatchAfterT12": "queue immediate EARLY_ALL when manager route and recipient are valid; no second candidate hours check and no new T6/T12 window",
+        "submittedMismatchCandidateResponseCell": "blank unless the candidate separately made a positive assertion"
+      }
+    },
+    "reimport": {
+      "unchangedIncidentSendsNothing": true,
+      "newIncidentCreatesNewEpisode": true,
+      "newIncidentResetsAffectedCohortTimers": true,
+      "newCandidateGenerationIncludesAllCurrentCandidateActionableUnansweredMembershipsInAffectedCohort": true,
+      "newManagerGenerationIncludesAllCurrentManagerActionableUnansweredMembershipsForAffectedRecipientRoute": true,
+      "resolvedOrManagerAnsweredWaitingSourceReintroduced": false,
+      "laterCohortDoesNotChangeAcceptedEarlierBatch": true
+    },
+    "manualSendCooldown": {
+      "scope": "entire recipient route",
+      "durationSeconds": 300,
+      "serverLockAndRecheckRequired": true
+    },
+    "secureReview": {
+      "linkScope": "one exact review batch, recipient-route generation and immutable ordered membership set/hash",
+      "getShowsLatestSameEpisodeFactsForAuthorisedMembershipOnly": true,
+      "mayAddLaterOrNonBatchEpisode": false,
+      "answeredMembershipsDoNotReappear": true,
+      "postBinds": ["review_batch_id", "recipient_route_generation", "membership_id", "incident_episode", "current_fact_version"],
+      "stalePostWrites": 0,
+      "stalePostReturnsRefreshedAuthorisedBatchPage": true,
+      "oldAcceptedLinkCanResumeOnlyOriginalUnansweredMembership": true,
+      "laterCohortDoesNotRevokeOldAcceptedBatch": true
+    },
+    "communicationSettingsLifecycle": {
+      "toggleOffPreserves": ["incidents", "answers", "due-event history", "accepted email batches", "sent candidate links", "sent manager links"],
+      "toggleOffStopsFutureSends": true,
+      "toggleOffRetiresAttemptsBeforeSubmissionStarted": true,
+      "attemptAtOrAfterSubmissionStartedKeepsImmutableResult": true,
+      "toggleOnDoesNotResetT0T6T12": true,
+      "toggleOnDoesNotResendAcceptedMembership": true,
+      "toggleOnReevaluatesDueUnsentWorkAgainstCurrentFacts": true,
+      "changedRecipientAppliesOnlyToFutureBatch": true
+    },
+    "correctFinalSource": {
+      "revokeLocalReceiptsInCorrectionTransaction": true,
+      "retireRemoteTicketsThroughDurableOutbox": true,
+      "staleRemotePostStillWritesZero": true
+    },
+    "deliveryFence": {
+      "threeIdentityLayersRequired": true,
+      "dueIntent": {
+        "appendOnly": true,
+        "binds": ["environment", "agency_id", "source_cycle_id", "recipient_route", "tranche", "sequence", "sorted_automatic_cohort_due_event_ids_or_accepted_manual_command_id"]
+      },
+      "render": {
+        "appendOnly": true,
+        "binds": ["due_intent_id", "review_batch_id", "recipient_route_generation", "comparison_publication", "ordered_membership_set", "ordered_membership_hash", "policy_version", "renderer_version", "structure_version", "subject_hash", "html_hash", "text_hash"]
+      },
+      "dispatchAttempt": {
+        "appendOnly": true,
+        "binds": ["render_id", "attempt_number", "provider_idempotency_key", "lease", "result"],
+        "states": ["READY", "LEASED", "SUBMISSION_STARTED", "ACCEPTED", "FAILED", "AMBIGUOUS", "RETIRED"]
+      },
+      "preProviderStartRecheckRequired": true,
+      "submissionStartedCommittedBeforeProviderCall": true,
+      "providerAttemptUsesStableIdempotencyKey": true
+    }
+  },
+  "fixtures": [
+    {
+      "id": "initial-grouped-digest",
+      "outputHtml": "assets/email-samples/initial-grouped-digest.html",
+      "outputText": "assets/email-samples/initial-grouped-digest.txt",
+      "outputPng": "assets/modal-images/08-manager-email.png",
+      "reviewUrl": "https://example.invalid/weekly-review/fixture-initial",
+      "expectedHtmlSha256": "ec648b871a4820753f94844d35f213c53b3895ca4daa3a62aceedfc6ec0333c5",
+      "expectedTextSha256": "673d4ad68444c9a9cc95c367eefffacfb8cc850d2857bc05172f69e5463a2348",
+      "clients": [
+        {
+          "clientId": "client-st-marys",
+          "clientName": "St Mary's NHS Trust",
+          "candidates": [
+            {
+              "candidateId": "can-jane-smith",
+              "displayName": "Jane Smith",
+              "shifts": [
+                {"issueId":"q-001","workDate":"2026-09-01","sourceStartInstant":"2026-09-01T08:00:00Z","start":"09:00","end":"18:00","breakMinutes":30,"systemStart":"09:00","systemEnd":"17:00","systemBreakMinutes":30,"issueFamily":"HOURS_DIFFER","candidateRequested":true},
+                {"issueId":"q-002","workDate":"2026-09-02","sourceStartInstant":"2026-09-02T07:00:00Z","start":"08:00","end":"16:00","breakMinutes":30,"systemAbsent":true,"issueFamily":"NHSP_ABSENT","candidateRequested":true}
+              ]
+            },
+            {
+              "candidateId": "can-amara-patel",
+              "displayName": "Amara Patel",
+              "shifts": [
+                {"issueId":"q-003","workDate":"2026-09-03","sourceStartInstant":"2026-09-03T19:00:00Z","start":"20:00","end":"08:00","breakMinutes":60,"systemStart":"20:00","systemEnd":"07:30","systemBreakMinutes":60,"issueFamily":"HOURS_DIFFER","candidateRequested":false}
+              ]
+            }
+          ]
+        },
+        {
+          "clientId": "client-riverside",
+          "clientName": "Riverside Community Trust",
+          "candidates": [
+            {
+              "candidateId": "can-lewis-king",
+              "displayName": "Lewis King",
+              "shifts": [
+                {"issueId":"q-006","workDate":"2026-09-04","sourceStartInstant":"2026-09-04T06:30:00Z","start":"07:30","end":"15:30","breakMinutes":30,"systemStart":"08:00","systemEnd":"16:00","systemBreakMinutes":30,"issueFamily":"HOURS_DIFFER","candidateRequested":false}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "new-incident-grouped-digest",
+      "outputHtml": "assets/email-samples/new-incident-grouped-digest.html",
+      "outputText": "assets/email-samples/new-incident-grouped-digest.txt",
+      "outputPng": "assets/modal-images/12-manager-email-new-incident.png",
+      "reviewUrl": "https://example.invalid/weekly-review/fixture-new-incident",
+      "expectedHtmlSha256": "0102bdd013bf08d4d60de8bb7ff03a72846df19b2fe59db0e40c9a572752d813",
+      "expectedTextSha256": "4bbe273772b1e9586b0b2af1df8694091ba58eb1ff8c3b8855487744d798cdfa",
+      "clients": [
+        {
+          "clientId": "client-st-marys",
+          "clientName": "St Mary's NHS Trust",
+          "candidates": [
+            {
+              "candidateId": "can-jane-smith",
+              "displayName": "Jane Smith",
+              "shifts": [
+                {"issueId":"q-001","workDate":"2026-09-01","sourceStartInstant":"2026-09-01T08:00:00Z","start":"09:00","end":"18:00","breakMinutes":30,"systemStart":"09:00","systemEnd":"17:00","systemBreakMinutes":30,"issueFamily":"HOURS_DIFFER","candidateRequested":true},
+                {"issueId":"q-005","workDate":"2026-09-04","sourceStartInstant":"2026-09-04T18:30:00Z","start":"19:30","end":"07:30","breakMinutes":60,"systemAbsent":true,"issueFamily":"NHSP_ABSENT","candidateRequested":true}
+              ]
+            },
+            {
+              "candidateId": "can-amara-patel",
+              "displayName": "Amara Patel",
+              "shifts": [
+                {"issueId":"q-003","workDate":"2026-09-03","sourceStartInstant":"2026-09-03T19:00:00Z","start":"20:00","end":"08:00","breakMinutes":60,"systemStart":"20:00","systemEnd":"07:30","systemBreakMinutes":60,"issueFamily":"HOURS_DIFFER","candidateRequested":false}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

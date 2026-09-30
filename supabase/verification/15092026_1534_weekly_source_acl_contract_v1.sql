@@ -198,6 +198,10 @@ declare
   -- a signature listed in the service array but not actually granted makes the
   -- routine sweep fail, which is how the two lists stay honest.
   v_expected_private_helpers text[]:=array[
+    'private.weekly_source_import_is_prepared_v1(uuid)',
+    'private.weekly_source_manager_due_event_covers_v1(uuid,uuid)',
+    'private.weekly_source_candidate_generation_current_v1(uuid)',
+    'private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date)',
     -- Plan 6.2 Gate 1 (proof/32 section 9): the distinct-array proof a CHECK
     -- cannot express, and the publication-receipt immutability guard.
     'private.weekly_source_uuid_array_is_distinct_v1(uuid[])',
@@ -277,6 +281,8 @@ declare
     'private.weekly_source_overlap_admission_assert_v1(uuid)'
   ]::text[];
   v_expected_service_rpcs text[]:=array[
+    'public.weekly_source_import_prepare_atomic_v1(jsonb)',
+    'public.weekly_source_office_recheck_begin_v1(jsonb)',
     'private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)',
     'private.weekly_source_invoice_batch_snapshot_v1()',
     'private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)',

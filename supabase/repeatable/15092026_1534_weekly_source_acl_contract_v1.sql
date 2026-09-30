@@ -268,6 +268,10 @@ as $function$
     -- (it cannot contain a subquery), and the BEFORE UPDATE OR DELETE /
     -- BEFORE TRUNCATE guard that raises
     -- WEEKLY_SOURCE_PUBLICATION_RECEIPT_IMMUTABLE.
+    ('private.weekly_source_import_is_prepared_v1(uuid)'),
+    ('private.weekly_source_manager_due_event_covers_v1(uuid,uuid)'),
+    ('private.weekly_source_candidate_generation_current_v1(uuid)'),
+    ('private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date)'),
     ('private.weekly_source_uuid_array_is_distinct_v1(uuid[])'),
     ('private.weekly_source_entitlement_publication_receipt_immutable_v1()'),
     -- Gate 1 review fixes: the three constraint-trigger guards that enforce the
@@ -374,6 +378,8 @@ immutable
 set search_path to 'pg_catalog','pg_temp'
 as $function$
   values
+    ('public.weekly_source_import_prepare_atomic_v1(jsonb)'),
+    ('public.weekly_source_office_recheck_begin_v1(jsonb)'),
     ('private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)'),
     ('private.weekly_source_invoice_batch_snapshot_v1()'),
     ('private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)'),

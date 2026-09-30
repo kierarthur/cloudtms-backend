@@ -1,0 +1,4393 @@
+{
+  "policyVersion": "6.3",
+  "rendererCopy": {
+    "childHeaderLabels": [
+      "Day/date and job role",
+      "Candidate hours",
+      "System hours",
+      "Issue and status",
+      "Actions"
+    ],
+    "childAcceptButton": "Accept system hours for selected shifts",
+    "defaultChildAction": "View details",
+    "candidateActionNeeded": "Action needed",
+    "managerChooseResponse": "Choose a response",
+    "managerTableHeaders": [
+      "Day/date",
+      "Candidate hours",
+      "System hours",
+      "Candidate response",
+      "Your response"
+    ],
+    "sourceDefaultLabel": "Current complete source",
+    "sourceCurrentBadge": "Current",
+    "summaryCloseButton": "Close",
+    "bulkStatusLine": "Status: Ready and needs attention",
+    "bulkFilterLabels": [
+      "All selected",
+      "Ready",
+      "Needs attention"
+    ],
+    "bulkListHeaders": [
+      "Candidate",
+      "Status"
+    ],
+    "bulkRowStates": {
+      "active": "Selected",
+      "ready": "Ready"
+    },
+    "compareMatch": "✓ Matches",
+    "compareDifferent": "! Different",
+    "compareUnitLabel": "Rate unit",
+    "compareResultLabel": "Result"
+  },
+  "date": "2026-09-30",
+  "scope": "WEEKLY_ONLY",
+  "lockedSourceProfilePolicy": {
+    "precedence": "Controls NHSP final backing reports, HealthRoster Weekly self-bill and protected shift pay wherever older screen fixtures differ.",
+    "nhspFinalBackingReport": {
+      "title": "Weekly source imports",
+      "subtitle": "NHSP backing report",
+      "contextOrder": [
+        "Source",
+        "Trust",
+        "Report number",
+        "Cutoff",
+        "Status"
+      ],
+      "contextExample": {
+        "Source": "NHSP backing report",
+        "Trust": "St Mary's NHS Trust",
+        "Report number": "1741227",
+        "Cutoff": "Wed 9 Sep 2026 at 15:00",
+        "Status": "Ready to finalise"
+      },
+      "tabs": [
+        "Ready to finalise",
+        "Blocked"
+      ],
+      "columns": [
+        "Candidate",
+        "Day/date",
+        "Actual hours",
+        "Movement",
+        "Commission",
+        "Total cost",
+        "Invoice charge",
+        "Status"
+      ],
+      "actualHoursFormat": "{start}-{end} · {break_minutes} min break",
+      "movementText": {
+        "positive": "Charge",
+        "negative": "Full reversal"
+      },
+      "historicalNegativePayStatus": "Historical reversal—candidate pay not changed",
+      "authorityScope": [
+        "Environment",
+        "Agency",
+        "Source group",
+        "Trust",
+        "Cutoff"
+      ],
+      "reportHeadingGrammar": "Agency Backing Report {canonical digits} for {configured NHSP report heading name} Agency",
+      "stickyTotals": [
+        "Lines",
+        "Charges",
+        "Full reversals",
+        "Source comparison total",
+        "CloudTMS invoice total excluding VAT"
+      ],
+      "primaryAction": "Finalise report",
+      "prohibitedColumns": [
+        "Contract start",
+        "Contract end",
+        "Contract total"
+      ],
+      "prohibitedActions": [
+        "Remove row",
+        "Exclude row",
+        "Accept price",
+        "Net differences"
+      ]
+    },
+    "healthRosterWeeklySelfBill": {
+      "title": "Weekly source imports",
+      "formatLabel": "File type",
+      "formatText": {
+        "HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1": "HealthRoster Timesheet Export",
+        "HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1": "HealthRoster Full Timesheet Export"
+      },
+      "columns": [
+        "Candidate",
+        "Day/date",
+        "System hours",
+        "Status",
+        "Action"
+      ],
+      "blankActualDisplay": "—",
+      "actualHoursFormat": "{start}-{end} · {break_minutes} min break · {net_hours} hours",
+      "sourceStatus": {
+        "rowNotFinalised": "Not finalised",
+        "rowReady": "New shift",
+        "rowBlocked": "Blocked"
+      },
+      "zeroEligibilityText": "Not eligible",
+      "candidateClaimText": "Candidate says worked",
+      "protectAction": "Protect pay",
+      "durableEventHeading": "Request Id",
+      "completeExportMayContainManyWeeks": true,
+      "coverageContext": [
+        "Invoice cycle",
+        "Export dates"
+      ],
+      "cycleMovementStatuses": [
+        "New shift",
+        "Hours changed",
+        "Shift removed",
+        "Unchanged",
+        "Not finalised",
+        "Needs correction"
+      ],
+      "unchangedRowsCreateInvoiceWork": false,
+      "profileChosenByClient": false,
+      "officeColumnMappingAllowed": false,
+      "acceptedProfileCount": 2,
+      "scheduledHoursAreActualFallback": false,
+      "finalisationDecision": {
+        "bothAbsentOrNotFinalised": "Not finalised",
+        "bothFinalisedAndActualValid": "Ready",
+        "indicatorsDisagree": "Blocked",
+        "equalActualStartEnd": "Blocked",
+        "endEarlierThanStart": "Overnight"
+      },
+      "zeroRowHoldsEligibleSiblings": false
+    },
+    "protectedShiftPay": {
+      "userFacingName": "Protected shift pay",
+      "actions": [
+        "Protect pay",
+        "Change protected shift",
+        "Stop protected pay",
+        "Wait",
+        "Accept system hours and reconcile",
+        "Record as not worked"
+      ],
+      "fieldOrder": [
+        "Candidate",
+        "Client",
+        "Work date",
+        "Start",
+        "Finish",
+        "Break",
+        "Contract",
+        "Reason"
+      ],
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "defaultOpen": false,
+        "serverOwned": true
+      },
+      "waitStatus": "Protected pay remains in place",
+      "didNotWorkConfirmation": "I confirm the candidate did not work this shift.",
+      "didNotWorkWarning": "This changes only this shift to zero hours. Other work on the same day remains unchanged. The existing payment process will calculate whether anything must be recovered.",
+      "positionOrder": [
+        "Hours covered",
+        "Current status"
+      ],
+      "truthOrder": [
+        "Hours submitted",
+        "Hours confirmed by the client system",
+        "Protected hours",
+        "Hours approved for pay"
+      ],
+      "contractChoice": {
+        "zero": "Open existing Create contract flow",
+        "one": "Select silently",
+        "many": "Show only server-qualified choices with no default"
+      },
+      "changesInvoice": false,
+      "bankingPayUiChange": false
+    }
+  },
+  "sourceInvoiceMovePolicy": {
+    "automaticGrouping": [
+      "Actual Client",
+      "Finalisation cycle",
+      "Backing report"
+    ],
+    "eligibleDestination": "Same actual Client; unissued; unpaid; compatible self-bill, VAT and currency route",
+    "singleChoiceBehaviour": "Select silently",
+    "multipleChoiceColumns": [
+      "Invoice",
+      "Cycle ending",
+      "Backing report(s)",
+      "Status",
+      "Total"
+    ],
+    "confirmation": "Move this shift to {invoice number}",
+    "multiReportHeading": "Backing reports: {ordered report numbers}",
+    "lineKeepsOriginalReport": true,
+    "changesSourceOrPay": false
+  },
+  "theme": {
+    "fontFamily": "Segoe UI, Arial, sans-serif",
+    "officeBackground": "#07111f",
+    "modalSurface": "#0b1221",
+    "raisedSurface": "#111c33",
+    "inputSurface": "#0f1a2e",
+    "primaryText": "#f8fafc",
+    "secondaryText": "#a8b3c7",
+    "divider": "#2b3952",
+    "primary": "#4f46e5",
+    "info": "#60a5fa",
+    "positive": "#22c55e",
+    "warning": "#f59e0b",
+    "danger": "#ef4444",
+    "modalRadius": 14,
+    "controlRadius": 8,
+    "bodyFontPx": 14,
+    "smallFontPx": 12,
+    "desktopModalWidthPx": 1800,
+    "desktopViewportMarginPx": 24,
+    "actionColumnWidthPx": 160,
+    "actionDirection": "column",
+    "statusWhiteSpace": "nowrap"
+  },
+  "mytmsTheme": {
+    "sourceComponents": [
+      "Screen",
+      "Card",
+      "Button",
+      "StatusPill"
+    ],
+    "nativeStackHeaderBackground": "#071426",
+    "nativeStackHeaderText": "#f5f8ff",
+    "pageBackground": "#071426",
+    "cardDefault": "#102541",
+    "cardSoft": "#0b1d35",
+    "cardSuccess": "#123f35",
+    "cardWarning": "#44371f",
+    "cardDanger": "#47212b",
+    "controlSecondary": "#152c4a",
+    "line": "#29405f",
+    "lineStrong": "#3b587d",
+    "text": "#f5f8ff",
+    "muted": "#aebbd0",
+    "mutedStrong": "#c8d4e8",
+    "blueBright": "#79b1ff",
+    "blueDeep": "#2d73d2",
+    "green": "#28b978",
+    "amber": "#e9b44b",
+    "red": "#e55261",
+    "pageHorizontalPaddingPx": 20,
+    "contentGapPx": 16,
+    "cardPaddingPx": 20,
+    "cardRadiusPx": 18,
+    "buttonRadiusPx": 14,
+    "pillRadiusPx": 999,
+    "titleFontPx": 27,
+    "titleLinePx": 33,
+    "headingFontPx": 19,
+    "headingLinePx": 25,
+    "bodyFontPx": 16,
+    "bodyLinePx": 24,
+    "smallFontPx": 13,
+    "smallLinePx": 19,
+    "labelFontPx": 12,
+    "labelLinePx": 17,
+    "componentOrder": [
+      "native stack header",
+      "Screen header",
+      "status row when applicable",
+      "Card stack"
+    ],
+    "prohibitedSubstitutes": [
+      "Office modal styling",
+      "light document page",
+      "invented branded top bar"
+    ]
+  },
+  "canvases": {
+    "desktop": {
+      "width": 1600,
+      "height": 1000
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844
+    },
+    "email": {
+      "width": 1060,
+      "height": 900
+    },
+    "popover": {
+      "width": 800,
+      "height": 720
+    }
+  },
+  "shared": {
+    "officeTitle": "Weekly source imports",
+    "officeSubtitle": "NHSP · Finalisation week ending Sun 6 Sep 2026",
+    "context": [
+      {
+        "label": "Source group",
+        "value": "NHSP"
+      },
+      {
+        "label": "Finalisation week",
+        "value": "06/09/2026"
+      },
+      {
+        "label": "Source coverage",
+        "value": "01/06/2026-06/09/2026"
+      },
+      {
+        "label": "Client",
+        "value": "All clients"
+      }
+    ],
+    "tabs": [
+      {
+        "label": "Imports"
+      },
+      {
+        "label": "Queries (12)"
+      },
+      {
+        "label": "Finalise week (4 blockers)"
+      },
+      {
+        "label": "History"
+      }
+    ]
+  },
+  "interactionPolicies": {
+    "screenSimplicity": {
+      "rule": "Show the minimum information needed for the current decision. Keep full audit and financial detail behind View details.",
+      "onePrimaryTaskPerScreen": true,
+      "progressiveDisclosure": true,
+      "officeListMaximumVisibleDataColumnsExcludingSelectionAndActions": 7,
+      "noDuplicateProblemAndInstructionColumns": true,
+      "pricingInQueryLists": "status only; money and comparison detail appear only after View pricing details",
+      "paidUnresolvedInQueryLists": "show inside Status and age; do not add a separate Pay column or Pay filter",
+      "multiSelectTableRule": "Every modal table that permits selection of multiple rows uses one three-state checkbox in the far-left sticky column-header cell directly above the row checkboxes it controls. Separate Select all and Unselect all buttons are forbidden.",
+      "singleChoiceException": "A single-choice radio list, such as Choose contract, does not receive a bulk-selection checkbox.",
+      "forbiddenVisibleCopy": [
+        "technical implementation terms",
+        "internal state names",
+        "commentary about why the design works"
+      ]
+    },
+    "candidateTimesheetDisplay": {
+      "route": "the existing MyTMS Timesheet screen and component family",
+      "submittedHours": "show the candidate's signed Timesheet hours as the normal Timesheet evidence",
+      "approvedHoursLabel": "Approved hours to be paid",
+      "approvedHoursVisibility": "show only when the currently approved hours differ from the submitted Timesheet hours",
+      "approvedHoursAuthority": "current system hours, replaced by Office-protected hours while that protection is effective, then updated by later reconciliation",
+      "differenceCopy": "These are the hours currently approved for payment. We’ll let you know if they change.",
+      "whenApprovedHoursReturnToSubmitted": "remove the extra approved-hours section after sending the change notification; keep the submitted Timesheet evidence",
+      "forbidden": [
+        "money",
+        "gross pay",
+        "transfer values",
+        "payment history",
+        "recovery amounts",
+        "remittance links",
+        "source hours label",
+        "protected hours label",
+        "exceptional payment label",
+        "reconciliation terminology"
+      ],
+      "approvedHoursChangedPush": {
+        "title": "Your approved hours have changed",
+        "body": "The approved hours for your Timesheet at {client}, week ending {week_ending}, have changed. Open your Timesheet to review them.",
+        "containsMoney": false,
+        "containsInternalReason": false
+      },
+      "noSubmissionState": {
+        "when": "the record is source-authority and the Candidate submitted no Timesheet for that week",
+        "beforeOfficeAuthorises": "no Candidate-facing Timesheet detail is created; the ordinary Submit your Timesheet request journey applies",
+        "afterOfficeAuthorises": "show a read-only Timesheet detail for the week",
+        "submissionCopy": "You did not submit a Timesheet for this week.",
+        "showOnly": "Approved hours to be paid, with hours and breaks",
+        "neverClaimSubmitted": true,
+        "listPresentation": "the week appears in the Timesheet list with the same read-only status and no submission tick",
+        "statusPill": "the existing app status pill (Approved) refers to the approved hours to be paid, never to a submission; it is always paired with the Read-only pill and the no-submission sentence",
+        "pushPolicy": "no push on first authorisation; approvedHoursChangedPush is sent only when the approved hours later change",
+        "forbidden": [
+          "money",
+          "rates",
+          "invoice",
+          "remittance",
+          "recovery",
+          "protected",
+          "exceptional",
+          "reconciliation",
+          "source hours label",
+          "any label implying the Candidate submitted these hours"
+        ],
+        "screen": "20b-worker-timesheet-no-submission.png"
+      },
+      "expenses": {
+        "ordinaryClient": "preserve the existing same-record expense-upload controls unchanged on ordinary non-source Timesheets (20a-worker-timesheet-ordinary.png, 23-worker-timesheet-expenses.png)",
+        "sourceAuthorityRecord": "never offer same-record expense entry or evidence on the original source/self-bill Timesheet; where ordinary expenses are allowed, offer only the action Add additional expense Timesheet which opens or creates the separate Manual expense Timesheet (20-worker-timesheet-approved-hours.png)",
+        "sourceSuppliedExpenseClient": "hide every Candidate and Office expense entry for the frozen scope because the expense comes from source (20c-worker-timesheet-source-fixed-expense.png)",
+        "hardCodedClientNameForbidden": true
+      }
+    },
+    "firstAuthorisationWithdrawal": {
+      "control": "the existing Unauthorise action on Simple Timesheet and Bulk Authorise (18_TIMESHEET_AUTHORISE_UI_POLICY.json editAndActions.unauthorise); no new screen, dialog or reason prompt",
+      "availability": "server-evaluated for a Weekly-Source-managed root: shown only while no Candidate payment, Banking Pay Draft, reservation, scheduled or started execution, recovery, invoice line (including an unissued invoice), invoice operation or later Weekly Source decision exists for the complete Timesheet family",
+      "reasonRequired": false,
+      "refusalCopy": {
+        "bankingActive": "This Timesheet is in a payment Draft or scheduled for payment. Cancel it in Banking Pay first, then try again.",
+        "waiting": "A payment cancellation, transfer or invoice job for this Timesheet has not finished. Try again when it has completed.",
+        "permanent": "This Timesheet has been paid, invoiced or reconciled and can no longer be unauthorised. Use the reconciliation process for changes."
+      },
+      "resultCopy": "Authorisation withdrawn. The Timesheet is awaiting authorisation again and is not eligible for payment.",
+      "protectedHours": "a protected-hours decision in the withdrawn authorisation shows as Withdrawn in the Office Weekly detail history; it is never deleted",
+      "identity": "the timesheet_id, family, version and evidence are unchanged",
+      "selfBillTreatment": "DEC-061 ruled Option A on 17 September 2026 (proof/36 section 7): the finalised source movement remains on the exact self-bill; no source line is ever omitted",
+      "withdrawnStateCopy": "Not authorised for pay · invoiced from source",
+      "withdrawnStateRule": "shown on the Office Weekly detail and the Simple Timesheet lifecycle heading while a withdrawn week remains invoiced from source; returns to the ordinary heading on re-authorisation; never shown in MyTMS",
+      "controllingSpecification": "proof/36_FIRST_AUTHORISATION_WITHDRAWAL_UNAUTHORISE_20260917.md"
+    },
+    "protectedShiftPayJourney": {
+      "releaseRule": "Released together with the complete feature and enabled wherever policy permits (screenSimplicity, design policy section 1.12). No runtime release gate, closed state or design-pending flag exists in any policy, fixture, renderer or test; pre-release proof is a delivery gate recorded only in 26_PLAN_6_2_IMPLEMENTATION_AND_PROOF_LEDGER.md.",
+      "entryPoints": {
+        "manageApprovedHours": "Weekly detail action Manage approved hours (18_TIMESHEET_AUTHORISE_UI_POLICY.json editAndActions.approvedHours) opens protected-shift-add when no protected shift exists for the selected day and protected-shift-change when one exists",
+        "reconcile": "an unresolved paid item opens reconcile-approved-hours",
+        "recordNotWorked": "Record as not worked on reconcile-approved-hours opens record-not-worked; the editor itself never records a shift as not worked"
+      },
+      "permissions": {
+        "requiredPermission": "current server Timesheet-authorise permission for that Client",
+        "withoutPermission": "Manage approved hours and every editor control are absent; a direct call is refused server-side with no write"
+      },
+      "keyboardAndResponsive": {
+        "keyboard": "every field, disclosure, checkbox and action is reachable in policy order with visible focus",
+        "narrowest": "390 px: fields stack in one column and the footer wraps with no clipping or page scroll (protected-shift-add-mobile)"
+      },
+      "staleState": {
+        "when": "the shift, Contract or approved position changed server-side after the editor opened",
+        "notice": "These hours changed on the server after you opened this screen. Nothing has been saved. Recheck to load the current position.",
+        "actions": [
+          "Cancel",
+          "Recheck"
+        ],
+        "fieldsDisabled": true,
+        "nothingSaved": true
+      },
+      "candidatePayment": {
+        "permittedImplementation": "Candidate B1 complete Candidate and Contract week target projected before Draft as the existing ordinary taxable Timesheet pay or overpayment recovery row",
+        "prohibited": [
+          "new Banking Pay page",
+          "new payment type",
+          "changed row meaning",
+          "custom financial movement",
+          "browser money",
+          "one-shift bank-payment claim",
+          "downstream Draft or execution change"
+        ],
+        "editor": {
+          "title": "Protected shift pay",
+          "statusLine": "The client has not confirmed these hours.",
+          "factOrder": [
+            "Candidate",
+            "Client",
+            "Week ending"
+          ],
+          "shiftColumns": [
+            "Day/date",
+            "Candidate hours",
+            "System hours",
+            "Issue"
+          ],
+          "selectedShiftsOnly": true,
+          "scopeCopy": "Other shifts in this week are not being approved or rejected by this decision.",
+          "calculationDisclosure": {
+            "label": "View pay calculation",
+            "defaultOpen": false,
+            "serverOwned": true
+          },
+          "confirmation": "I confirm these selected hours should be protected for pay while they remain unconfirmed by the client.",
+          "addActions": [
+            "Cancel",
+            "Protect pay"
+          ],
+          "changeActions": [
+            "Cancel",
+            "Stop protected pay",
+            "Change protected shift"
+          ],
+          "b1ShowsOrInvokesAdvanceAction": false,
+          "existingOrdinaryAdvanceFeatureIsOutsideProjectAndUnchanged": true,
+          "officeCanEditMoney": false
+        },
+        "stop": {
+          "title": "Stop protected pay",
+          "note": "Banking Pay will use its existing rules to work out whether any money must be recovered.",
+          "confirmation": "I confirm protected pay should stop for this shift.",
+          "actions": [
+            "Cancel",
+            "Stop protected pay"
+          ]
+        }
+      },
+      "reconciliation": {
+        "outreachFallbackAction": "View details",
+        "sourceInvoiceAlwaysIndependent": true,
+        "title": "Reconcile approved hours",
+        "actions": [
+          "Wait",
+          "Accept system hours and reconcile",
+          "Record as not worked"
+        ]
+      },
+      "recordNotWorked": {
+        "onlyWhenFinalSourceHasNoNonZeroEvent": true,
+        "serviceRechecksCompleteContractWeek": true,
+        "warning": "This changes only this shift to zero hours. Other work on the same day remains unchanged. The existing payment process will calculate whether anything must be recovered.",
+        "confirmation": "I confirm the candidate did not work this shift."
+      }
+    },
+    "deepLinkAuthority": {
+      "officeWeeklySourceAlert": "read-only exact incident view",
+      "candidateNotification": "exact authenticated candidate request; any save still requires current version, row answers and required signature",
+      "managerEmail": "exact original review batch and response choices only",
+      "notificationNeverGrants": [
+        "Office administration",
+        "source acceptance",
+        "finalisation",
+        "payment approval",
+        "reconciliation",
+        "invoice action"
+      ],
+      "officeMutationRequirement": "separate signed-in Weekly import-administration permission plus a fresh server-returned permitted action and ordinary confirmation"
+    },
+    "candidateNotificationPolicy": {
+      "preferenceCategoryKey": "timesheet_expense_attention",
+      "preferenceCategoryLabel": "Timesheet or expense needs attention",
+      "pushMasterKey": "push",
+      "pushMasterLabel": "Push notifications",
+      "approvalRemindersCategoryUsed": false,
+      "ordinaryHoursCheckTiming": {
+        "t0": "create initial in-app notification and eligible push",
+        "t6": "create one reminder for still-unanswered queried rows only",
+        "t12": "end candidate window and release eligible silent remainder to the configured manager journey",
+        "candidateSilenceAloneHoldsPayroll": false,
+        "unchangedComparisonRepeatsT0OrT6": false
+      },
+      "createInAppTruthWhenPushOffOrUnavailable": true,
+      "pushRequiresMasterAndCategoryAndDevicePermission": true,
+      "pushFailureDoesNotChangeTimersOrOfficeStatus": true,
+      "copy": {
+        "hoursCheck": {
+          "title": "Please check your hours",
+          "bodyOne": "1 shift at {client} needs your review.",
+          "bodyMany": "{count} shifts at {client} need your review.",
+          "action": "Check your hours"
+        },
+        "hoursCheckReminder": {
+          "title": "Hours check reminder",
+          "bodyOne": "1 shift at {client} is still waiting for your response.",
+          "bodyMany": "{count} shifts at {client} are still waiting for your response.",
+          "action": "Check your hours"
+        },
+        "oneMissingTimesheet": {
+          "title": "Please submit your Timesheet",
+          "body": "Submit your Weekly Timesheet for the week ending {date} at {client} so your hours can be checked.",
+          "action": "Submit your Timesheet"
+        },
+        "manyMissingTimesheets": {
+          "title": "Please submit your Timesheets",
+          "body": "You have {count} Weekly Timesheets to submit at {client} so your hours can be checked.",
+          "action": "Submit your Timesheet"
+        },
+        "oneTimesheetReminder": {
+          "title": "Timesheet reminder",
+          "body": "1 Weekly Timesheet at {client} is still waiting to be submitted.",
+          "action": "Submit your Timesheet"
+        },
+        "manyTimesheetReminder": {
+          "title": "Timesheet reminder",
+          "body": "{count} Weekly Timesheets at {client} are still waiting to be submitted.",
+          "action": "Submit your Timesheet"
+        }
+      },
+      "multiShiftResponse": {
+        "oneRequiredChoicePerQueriedShift": true,
+        "submitRequiresEveryCurrentQueriedShiftAnswered": true,
+        "otherWeeklyShiftsReadOnly": true,
+        "saveCreatesCompleteWeeklyRevision": true,
+        "unchangedShiftsCopiedExactly": true,
+        "oneSignaturePerCompleteWeeklyRevision": true,
+        "partialResponseWrites": 0,
+        "choice3ExactSystemMatch": "resolve the comparison after the complete signed revision is accepted",
+        "choice3StillDifferent": "positive candidate assertion; show urgent manager wording and Candidate requested your review in a later manager email"
+      }
+    },
+    "communicationSettingsLifecycle": {
+      "toggleOffPreserves": [
+        "incidents",
+        "answers",
+        "due-event history",
+        "accepted email batches",
+        "sent candidate links",
+        "sent manager links"
+      ],
+      "toggleOffStopsFutureSends": true,
+      "toggleOffRetiresAttemptsBeforeSubmissionStarted": true,
+      "attemptAtOrAfterSubmissionStartedKeepsImmutableResult": true,
+      "toggleOnDoesNotResetTimers": true,
+      "toggleOnDoesNotResendAcceptedMembership": true,
+      "toggleOnReevaluatesDueUnsentWorkAgainstCurrentFacts": true,
+      "changedRecipientAppliesOnlyToFutureBatch": true
+    },
+    "reimportCommunication": {
+      "unchangedIncidentSendsNothingAndKeepsOriginalTimers": true,
+      "newIncidentCreatesNewEpisode": true,
+      "newIncidentResetsOnlyAffectedCohortTimers": true,
+      "newCandidateGenerationIncludesAllCurrentCandidateActionableUnansweredShiftsInAffectedCohort": true,
+      "newManagerGenerationIncludesAllCurrentManagerActionableUnansweredShiftsForAffectedRecipientRoute": true,
+      "resolvedOrManagerAnsweredWaitingSourceReintroduced": false,
+      "laterCohortDoesNotChangeAcceptedEarlierBatch": true
+    },
+    "querySelection": {
+      "groupKeyFields": [
+        "source_cycle_id",
+        "candidate_id",
+        "client_id",
+        "normalised_manager_recipient_hash"
+      ],
+      "missingRecipientSentinel": "NO_MANAGER_RECIPIENT",
+      "outreachSelectionControl": "leftmost group-header checkbox plus one checkbox per group row",
+      "officeAcceptanceSelectionControl": "leftmost expanded-shift-header checkbox plus one checkbox per shift row",
+      "outreachHeaderCheckbox": {
+        "position": "far-left cell of the sticky collapsed-group column header",
+        "uncheckedClick": "select all outreach groups matching the active server filter, including unloaded groups",
+        "checkedClick": "clear all outreach-group selections matching the active server filter, including unloaded groups",
+        "indeterminateClick": "select all outreach groups matching the active server filter, including unloaded groups",
+        "states": [
+          "unchecked",
+          "indeterminate",
+          "checked"
+        ],
+        "accessibleNames": {
+          "unchecked": "Select all query groups",
+          "indeterminate": "Select all query groups",
+          "checked": "Clear all query groups"
+        }
+      },
+      "expandedShiftHeaderCheckbox": {
+        "position": "far-left cell of the sticky expanded-shift column header inside its candidate group",
+        "scope": "all eligible shifts in that expanded candidate, Client and manager-recipient group, including unloaded shifts in that group",
+        "uncheckedClick": "select every eligible shift in this expanded group for the individual Office action",
+        "checkedClick": "clear every shift selection in this expanded group",
+        "indeterminateClick": "select every eligible shift in this expanded group for the individual Office action",
+        "states": [
+          "unchecked",
+          "indeterminate",
+          "checked"
+        ],
+        "accessibleNames": {
+          "unchecked": "Select all shifts in this group",
+          "indeterminate": "Select all shifts in this group",
+          "checked": "Clear all shifts in this group"
+        },
+        "columns": [
+          "selection",
+          "Day/date and job role",
+          "Candidate hours",
+          "System hours",
+          "Issue and status",
+          "Actions"
+        ]
+      },
+      "selectionHeaderButtonsForbidden": [
+        "Select all",
+        "Unselect all",
+        "Select all shifts",
+        "Unselect all shifts"
+      ],
+      "selectionSummary": "{selected} groups selected · {eligible} eligible · {requests_or_emails} will be created · {ineligible} not included",
+      "staleCommitResult": "This information has changed. Recheck before continuing.",
+      "staleCommitAtomicity": "abort-all",
+      "managerDigestGrouping": "normalised-recipient-address",
+      "eligibility": [
+        {
+          "condition": "CURRENT_UNRESOLVED_SIGNED_TIMESHEET",
+          "askCandidate": "ELIGIBLE_WHEN_ROUTE_ON",
+          "sendManager": "ELIGIBLE_WHEN_ROUTE_AND_RECIPIENT_VALID",
+          "acceptSystem": "ELIGIBLE"
+        },
+        {
+          "condition": "TIMESHEET_MISSING",
+          "askCandidate": "SUBMIT_TIMESHEET_REQUEST",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "INELIGIBLE"
+        },
+        {
+          "condition": "CANDIDATE_ROUTE_OFF",
+          "askCandidate": "INELIGIBLE",
+          "sendManager": "UNAFFECTED",
+          "acceptSystem": "UNAFFECTED"
+        },
+        {
+          "condition": "MANAGER_ROUTE_OFF",
+          "askCandidate": "UNAFFECTED",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "UNAFFECTED"
+        },
+        {
+          "condition": "MANAGER_RECIPIENT_MISSING_OR_INVALID",
+          "askCandidate": "UNAFFECTED",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "UNAFFECTED"
+        },
+        {
+          "condition": "INCIDENT_JOURNEY_ALREADY_ASKED",
+          "askCandidate": "INELIGIBLE_NO_RESEND",
+          "sendManager": "UNAFFECTED",
+          "acceptSystem": "UNAFFECTED"
+        },
+        {
+          "condition": "MANAGER_SEND_COOLDOWN_ACTIVE",
+          "askCandidate": "UNAFFECTED",
+          "sendManager": "INELIGIBLE_UNTIL_COUNTDOWN_END",
+          "acceptSystem": "UNAFFECTED"
+        },
+        {
+          "condition": "RESOLVED_OR_ANSWERED",
+          "askCandidate": "INELIGIBLE",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "INELIGIBLE"
+        },
+        {
+          "condition": "STALE_COMPARISON",
+          "askCandidate": "ABORT_ALL_RECHECK",
+          "sendManager": "ABORT_ALL_RECHECK",
+          "acceptSystem": "ABORT_ALL_RECHECK"
+        },
+        {
+          "condition": "PRICING_WARNING_ONLY",
+          "askCandidate": "INELIGIBLE",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "INELIGIBLE"
+        },
+        {
+          "condition": "SOURCE_ROUNDING_DIFFERENCE_ONLY",
+          "askCandidate": "INELIGIBLE",
+          "sendManager": "INELIGIBLE",
+          "acceptSystem": "INELIGIBLE"
+        },
+        {
+          "condition": "HOURS_ISSUE_WITH_PRICING_WARNING",
+          "askCandidate": "ELIGIBLE_FOR_HOURS_ONLY",
+          "sendManager": "ELIGIBLE_FOR_HOURS_ONLY",
+          "acceptSystem": "HOURS_ONLY_PRICE_REMAINS"
+        },
+        {
+          "condition": "HOURS_ISSUE_WITH_SOURCE_ROUNDING_DIFFERENCE",
+          "askCandidate": "ELIGIBLE_FOR_HOURS_ONLY",
+          "sendManager": "ELIGIBLE_FOR_HOURS_ONLY",
+          "acceptSystem": "HOURS_ONLY_ROUNDING_RESULT_REMAINS_READY"
+        },
+        {
+          "condition": "PAID_UNRESOLVED_ITEM",
+          "askCandidate": "ELIGIBLE_WHEN_ROUTE_ON",
+          "sendManager": "ELIGIBLE_WHEN_ROUTE_AND_RECIPIENT_VALID",
+          "acceptSystem": "INELIGIBLE_VIEW_DETAILS_ONLY_RECONCILE_APPROVED_HOURS_IS_THE_ROUTE"
+        },
+        {
+          "condition": "SYSTEM_SHIFT_ABSENT_NO_OFFICE_APPROVED_CANDIDATE_PAYMENT",
+          "askCandidate": "ELIGIBLE_WHEN_ROUTE_ON",
+          "sendManager": "ELIGIBLE_WHEN_TIMESHEET_AND_RECIPIENT_VALID",
+          "acceptSystem": "ELIGIBLE_CHECK_ONLY_ZERO_POSITION"
+        },
+        {
+          "condition": "INVOICE_EVIDENCE_REQUIRED_MISMATCH",
+          "askCandidate": "ELIGIBLE_WHEN_ROUTE_ON",
+          "sendManager": "ELIGIBLE_WHEN_ROUTE_AND_RECIPIENT_VALID",
+          "acceptSystem": "RECORDS_OFFICE_VIEW_EVIDENCE_STILL_REQUIRED"
+        }
+      ],
+      "missingTimesheetJourney": {
+        "candidateCta": "Submit your Timesheet",
+        "candidateTarget": "existing Weekly Timesheet create-and-sign journey for the earliest outstanding member of the exact ordered candidate, client, contract and week scope set",
+        "multipleWeeks": "complete and sign one whole week at a time in ascending week-ending order, then offer Continue to next Timesheet; one week's mismatch does not prevent continuing",
+        "combineWeeksIntoOneTimesheet": false,
+        "requestClosesWhen": "every original scope is completed or no longer eligible",
+        "scopeResolvedElsewhere": "skip after fresh server check",
+        "mayAddNewScopeToSentLink": false,
+        "completingOneWeekResetsClock": false,
+        "officeAction": "Remind candidate",
+        "officeCooldownLabel": "Remind candidate (59:59)",
+        "officeCooldownSeconds": 3600,
+        "officeReminderIdentity": [
+          "missing_timesheet_request_id",
+          "server_allocated_reminder_sequence"
+        ],
+        "officeReminderReplayReturnsFirstResult": true,
+        "officeReminderCreatesNewLogicalRequest": false,
+        "officeReminderResetsT0T6T12": false,
+        "officeReminderChangesCandidateAsked": false,
+        "officeSecondaryAction": "View details",
+        "officeTarget": "existing submit-Timesheet reminder command for the exact candidate, client, contract and week, returning to the same query group",
+        "openTimesheetWhenAbsent": false,
+        "t0": "send the first submission request",
+        "t0Plus6Hours": "send the one automatic submission reminder",
+        "t0Plus12Hours": "keep Status as Waiting for Timesheet, show Needs Office action, keep the query visible and create no manager membership or email while the Timesheet is absent",
+        "lateSubmittedExactMatch": "close that week scope automatically",
+        "lateSubmittedMismatch": "create exact shift incidents and queue immediate EARLY_ALL when the manager route and recipient are valid; do not send another candidate hours check",
+        "lateSubmittedMismatchCandidateResponseCell": "blank unless the candidate separately made a positive assertion"
+      }
+    },
+    "uploadValidation": {
+      "acceptedHtml": "a supported self-contained HTML file with the worksheet table inside the selected file",
+      "rejectExcelHtmlCover": true,
+      "discoverCompanionFolder": false,
+      "excelHtmlCoverError": {
+        "title": "This file cannot be read on its own",
+        "body": "Upload the Excel workbook (.xlsx), or choose an HTML file that contains the worksheet data.",
+        "action": "Choose another file"
+      }
+    },
+    "queryProgress": {
+      "groupKeyFields": [
+        "source_cycle_id",
+        "candidate_id",
+        "client_id",
+        "normalised_manager_recipient_hash"
+      ],
+      "groupColumns": [
+        "selection",
+        "Candidate",
+        "Client",
+        "Issues",
+        "Candidate asked",
+        "Manager informed",
+        "Status",
+        "Age",
+        "Actions"
+      ],
+      "expandShifts": true,
+      "shiftColumns": [
+        "Day/date",
+        "Candidate hours",
+        "System hours",
+        "Issue and status",
+        "Action"
+      ],
+      "readyToReconcileLocations": [
+        "Status",
+        "Action"
+      ],
+      "readyToReconcileForbiddenAsStatus": true,
+      "paidUnresolvedPinned": true,
+      "paidUnresolvedNeverAgesOut": true,
+      "paidUnresolvedDisplay": "Status subtext and Age only; no separate Pay column",
+      "managerRecipientDisplay": "View details only; no Manager column in the main list",
+      "candidateAskedMeaning": "current in-app candidate request durably committed; does not claim device-push delivery",
+      "candidatePushOutcomeLocation": "View details",
+      "managerInformedMeaning": "email containing the current incident membership accepted by the email provider",
+      "managerInformedFalseStates": [
+        "queued",
+        "blocked",
+        "failed",
+        "ambiguous",
+        "over capacity"
+      ]
+    },
+    "officeAlerts": {
+      "headerLabel": "Weekly source queries",
+      "accessibleName": "Weekly source queries",
+      "panelHeading": "Weekly source queries",
+      "independentUnreadCount": true,
+      "independentListAndReadState": true,
+      "independentPreferences": true,
+      "bankingBadgeDependency": false,
+      "bankingCountDependency": false,
+      "bankingPopoverDependency": false,
+      "bankingApiDependency": false,
+      "bankingStorageDependency": false,
+      "bankingAcknowledgementDependency": false,
+      "deepLinkTarget": "read-only exact Weekly source incident view",
+      "deepLinkGrantsMutation": false,
+      "adminActionsRequireSeparatePermissionAndFreshServerCapability": true,
+      "inAppActionRequiredHistoryAlwaysAvailable": true,
+      "officePushOrEmailPreferenceAdded": false
+    },
+    "settingsPlacement": {
+      "useExistingClientSettingsModal": true,
+      "useExistingContractSettingsModal": true,
+      "preserveEveryExistingFieldAndSaveRule": true,
+      "clientTabOrder": [
+        "Timesheets",
+        "Shift times",
+        "Invoicing"
+      ],
+      "allowAdditionalClientTab": false,
+      "clientSections": [
+        {
+          "tab": "Timesheets",
+          "section": "Weekly source queries",
+          "placement": "after existing Timesheet workflow and before existing Submission"
+        },
+        {
+          "tab": "Shift times",
+          "section": "Weekly rate calculation",
+          "placement": "after existing Shift pattern"
+        },
+        {
+          "tab": "Invoicing",
+          "section": "Weekly self-bill corrections",
+          "placement": "after applicable existing self-bill and consolidation controls"
+        },
+        {
+          "tab": "Invoicing",
+          "section": "Expenses from the weekly source file",
+          "placement": "immediately after existing Candidate expense controls in Invoice rules as a distinct subsection"
+        }
+      ],
+      "contractSections": [
+        {
+          "section": "Weekly rate calculation",
+          "placement": "beside existing Contract rate and shift settings"
+        },
+        {
+          "section": "Expenses from the weekly source file",
+          "placement": "immediately after Expense Timesheet and invoice"
+        },
+        {
+          "section": "Weekly source queries",
+          "placement": "beside existing candidate-submission and email settings"
+        }
+      ],
+      "contractOverrideControl": {
+        "independentOfBroadOverride": true,
+        "inheritValue": null,
+        "enumChoices": [
+          "Use Client setting - {effective_client_value}",
+          "{explicit_value_1}",
+          "{explicit_value_2}"
+        ],
+        "booleanChoices": [
+          "Use Client setting - {effective_client_on_off}",
+          "On",
+          "Off"
+        ]
+      },
+      "normalisationRules": [
+        "Contract override wins; otherwise Client applies.",
+        "A Contract cannot activate a capability unsupported by the Client or source format.",
+        "A hidden child setting is never effective.",
+        "Leaving split-rate mode stores a null current duration-break tie child.",
+        "Turning source expenses off stores a null current expense-VAT child.",
+        "An inactive communication recipient is not effective and must be reviewed before re-enable.",
+        "Inapplicable posted values are rejected.",
+        "A settings change makes an open preview stale and requires Recheck.",
+        "Finalised revisions retain their snapshotted settings."
+      ]
+    },
+    "contractResolution": {
+      "baseSetKeys": [
+        "candidate",
+        "client",
+        "inclusive_work_date",
+        "source_route"
+      ],
+      "qualification": "For every current Candidate, Client, inclusive-work-date and source-route Contract, obtain exactly one fresh current result from the shared canonical Weekly one-shift calculation owner with source Actual hours and break, consume its same-final-rounding charge-pence sidecar, compare under NHSP_TWO_COMPONENT_PENCE_V1, and retain EXACT plus sign-consistent SOURCE_ROUNDING_EQUIVALENT without ranking. If exactly one Contract qualifies it is selected even when role or band text differs. Only when several qualify may a separately verified role/band mapping narrow the eligible shortlist; if that mapping would remove every otherwise eligible Contract, ignore it and keep the reliable shortlist. A full-negative row first reuses unique post-activation positive lineage. Without it, test only Candidate, actual Client, work-date and source-route Contracts against the signed negative result; select one automatically or ask Office only when several qualify. That choice prices the invoice reversal but never invents candidate-pay recovery lineage. Never substitute hours multiplied by one Contract rate, a source-derived hourly rate, a weekly/group total, a locked historical segment or a second bucket/rate/rounding calculation. Missing, duplicate, skipped, extra, locked-only or not-yet-parity-proved whole-shift output is UNVERIFIABLE. Generated historical reversals belong only to configured non-NHSP correction routes and do not participate in NHSP Contract qualification.",
+      "neverMatchingKeys": [
+        "pay_type",
+        "pay_rate",
+        "vat",
+        "expenses",
+        "newest_contract",
+        "uuid_order",
+        "ward",
+        "location",
+        "fuzzy_role_text"
+      ],
+      "sourcePriceRule": "Source money may qualify a Contract only through specifically approved versioned source-token and structural-comparison profiles. XLSX_BINARY64_SAME_VALUE_PENCE_V1 requires identical complete binary64 bits for one unique exact-penny candidate and is not an epsilon or decimal tolerance. Inferred hourly rates, display-value authority and direct browser comparison are forbidden.",
+      "nhspSourcePriceEvidenceUse": "QUALIFY_POSITIVE_BASE_CONTRACTS_WITH_EXACT_OR_SOURCE_ROUNDING_EQUIVALENT_NO_RANKING_BIND_NEGATIVE_TO_PRIOR_POSITIVE_THEN_FREEZE_VALIDATED_SIGNED_SOURCE_PENCE_FOR_INVOICE_ONLY",
+      "zeroBase": {
+        "openChooser": false,
+        "problem": "No matching contract",
+        "actions": [
+          "Create contract",
+          "Review source details"
+        ]
+      },
+      "unverifiableBaseSet": {
+        "openChooser": false,
+        "problem": "Contract cost could not be checked",
+        "actions": [
+          "Open charge details"
+        ],
+        "blocksFinalisation": true
+      },
+      "zeroQualifiersAfterCompleteCheck": {
+        "openChooser": false,
+        "problem": "No contract matches the shift cost",
+        "actions": [
+          "Open charge details",
+          "Create contract",
+          "Review source details"
+        ],
+        "blocksFinalisation": true
+      },
+      "oneMatch": {
+        "openChooser": false,
+        "automaticSelection": true,
+        "showConfirmation": false
+      },
+      "manyMatches": {
+        "openChooser": true,
+        "problem": "More than one contract matches",
+        "action": "Choose contract",
+        "preselect": false,
+        "rankExactAboveSourceRoundingEquivalent": false
+      },
+      "postSelectionPricing": {
+        "unavailable": {
+          "problem": "Pricing unavailable",
+          "actions": [
+            "Open charge details",
+            "Change contract when another current qualifier exists"
+          ]
+        },
+        "mismatch": {
+          "problem": "Charge does not match",
+          "actions": [
+            "Open charge details",
+            "Change contract when another current qualifier exists"
+          ]
+        },
+        "sourceRoundingEquivalent": {
+          "information": null,
+          "actions": [],
+          "blocksFinalisation": false,
+          "visibleToOffice": false,
+          "ordinaryRowStatus": "Ready"
+        },
+        "mayRemapAutomatically": false
+      },
+      "chooserColumns": [
+        "Choose",
+        "Role / band",
+        "Contract site",
+        "Contract dates",
+        "Pay type",
+        "Details"
+      ],
+      "detailsAction": "View contract",
+      "primaryAction": "Use selected contract",
+      "staleResult": "This information has changed. Recheck before continuing."
+    },
+    "nhspPriceComparison": {
+      "profile": "NHSP_TWO_COMPONENT_PENCE_V1",
+      "sourceTokenAuthority": {
+        "xlsxNumericCell": "the original OOXML <v> decimal token at the exact physical cell coordinate, captured before SheetJS numeric coercion",
+        "xlsxStringCell": "the exact decoded shared, inline or ordinary string token at the exact physical cell coordinate",
+        "htmlCell": "the fully decoded text at the exact physical table coordinate",
+        "headerRule": "exactly one normalised COMMISSION and one distinct normalised TOTAL_COST column; no hard-coded P/Q fallback",
+        "unverifiableCellKinds": [
+          "formula including cached result",
+          "error",
+          "Boolean",
+          "date",
+          "unsupported span",
+          "missing or duplicate header",
+          "ambiguous row or column coordinate"
+        ],
+        "forbiddenAuthorities": [
+          "sheet_to_json(raw:true) numeric value",
+          "cell.v",
+          "formatted cell.w",
+          "format_cell output",
+          "toFixed reconstruction",
+          "browser display text"
+        ]
+      },
+      "xlsxBinary64SameValuePence": {
+        "profile": "XLSX_BINARY64_SAME_VALUE_PENCE_V1",
+        "appliesOnlyTo": "XLSX numeric OOXML tokens with non-zero digits beyond two decimal places",
+        "algorithm": "derive the adjacent exact signed-pence candidates with decimal-integer arithmetic; encode the raw token and each exact two-decimal candidate as IEEE-754 binary64; accept only when exactly one candidate has the identical complete 64-bit representation",
+        "acceptedSuppliedFixture": {
+          "cell": "P78",
+          "rawToken": "69.069999999999993",
+          "sameBitsAs": "69.07",
+          "pence": "6907"
+        },
+        "rejectedPrecisionFixture": {
+          "rawToken": "52.5001",
+          "candidate": "52.50",
+          "result": "EXCESS_PRECISION_UNVERIFIABLE"
+        },
+        "notTolerance": true,
+        "forbidden": [
+          "epsilon",
+          "distance threshold",
+          "absolute difference",
+          "generic rounding",
+          "display rounding",
+          "HTML or string-cell application"
+        ]
+      },
+      "penceAuthority": {
+        "storage": "signed database bigint for Commission, Total Cost, source sum, current calculated charge and signed difference",
+        "api": "base-10 strings only",
+        "arithmetic": "signed integer addition and subtraction only",
+        "decimalValues": "checked Office-display projections only",
+        "browserNumberConversion": false
+      },
+      "sourceCharge": "every physical row: Commission and Total Cost are parsed from their authoritative coordinate-bound tokens to signed integer pence and added as signed integers; a positive row requires non-negative components and a positive sum, while a full-negative row requires non-positive components and a negative sum; mixed signs, lexical negative zero and an all-zero row are invalid",
+      "canonicalChargeOwner": {
+        "currentComputationOrigin": "CURRENT_FRESH_ONE_SHIFT_COMPUTATION",
+        "sharedOwner": "the same pure one-shift owner is called by compute-only comparison and the TSFIN writer",
+        "comparisonInput": "source Actual start, finish and break plus the exact current Contract, rates, policy, calendar and calculator fingerprints; source money is never an input",
+        "comparisonOutput": "exactly one identity-matched current segment and the internal charge-pence sidecar emitted by the owner's single existing final rounding operation",
+        "lockedHistoricalSegmentAllowed": false,
+        "groupOrWeeklyTotalAllowed": false,
+        "wholeShiftAvailability": "UNVERIFIABLE until the shared owner implements whole-shift mode and compute-only, TSFIN-write and rollback-contained golden masters prove identical final per-shift output",
+        "persistPenceSidecarToTimesheetFinancials": false
+      },
+      "calculatedCharge": "the fresh current identity-matched per-shift result from the shared canonical Weekly one-shift owner; consume only its same-final-rounding integer-pence sidecar and never reformat or reround charge_amount in the comparator",
+      "comparisonDomain": "exact signed integer pence only; raw decimal equality, epsilon or threshold tolerance, independent binary-floating arithmetic, and browser-side arithmetic are forbidden",
+      "results": {
+        "EXACT": "the row has one approved sign shape and source charge minus fresh signed current calculated charge equals 0 pence: positive means non-negative components with a positive sum; full-negative means non-positive components with a negative sum",
+        "SOURCE_ROUNDING_EQUIVALENT": "the row has one approved sign shape, source and calculated charge have the same non-zero sign, the exact recognised profile and current fingerprints agree, and the absolute signed-integer difference is exactly 1 pence in either direction",
+        "MISMATCH": "both amounts, lineage where required and the applicable signed profile are valid but neither accepted result applies",
+        "UNVERIFIABLE": "a component, coordinate-bound source token, sign rule, selected or prior-bound Contract, prior-positive lineage, rate, fresh current one-shift result, calculation parity, profile or fingerprint is missing, invalid, ambiguous, unsupported or stale; this includes all-zero or mixed-sign source rows, locked-historical-only calculation output and whole-shift mode before shared-owner parity"
+      },
+      "readyForFinalisation": [
+        "EXACT",
+        "SOURCE_ROUNDING_EQUIVALENT"
+      ],
+      "readyForFinalisationAppliesTo": "positive and valid full-negative NHSP physical rows after mapping and signed comparison gates; a first-activation full-negative row may invoice without candidate-pay recovery and displays Historical reversal—candidate pay not changed; generated historical reversals exist only for configured non-NHSP correction routes and require exact prior-snapshot binding and negation proof",
+      "blocksFinalisation": [
+        "MISMATCH",
+        "UNVERIFIABLE"
+      ],
+      "forbidden": [
+        "generic tolerance beyond the named one-penny same-sign row rule",
+        "epsilon or floating-point distance threshold",
+        "derived component rates",
+        "raw decimal or independent binary-floating equality",
+        "lossy or display-formatted source authority",
+        "locked historical segment as current calculation",
+        "whole-shift fallback to split windows",
+        "week-level netting",
+        "ranking exact above source-rounding-equivalent",
+        "all-zero or mixed-sign row acceptance",
+        "negative-row Contract selection from source money",
+        "NHSP reversal inference from omission"
+      ],
+      "generatedHistoricalReversal": "Configured non-NHSP correction routes only: not parsed as an NHSP source row; negate the complete prior frozen CloudTMS presentation exactly and check the positive replacement independently.",
+      "invoiceAmount": "CloudTMS first calculates each physical shift from the selected Contract and current rate policy. Exact source Commission plus Total Cost pence is then permitted only when that calculation passes EXACT or the named same-sign one-penny row rule; that exact source pence becomes the invoice presentation so each row and the invoice total agree with the self-bill. Candidate pay always remains the CloudTMS pay result and never inherits the invoice penny adjustment. A configured non-NHSP generated historical reversal uses the exact negative of the prior frozen presentation.",
+      "isolation": "source pence, calculated-comparison pence, difference, result, profile and reason remain in weekly-source audit/final-manifest/invoice-presentation data; none is written to or exposed through candidate pay, Timesheet financials, Workbench, Banking Pay or Case Resolution, and candidates and managers receive no money or pricing-unavailable detail"
+    },
+    "managerSecureReview": {
+      "emailPolicyRef": "04A_MANAGER_EMAIL_POLICY.json",
+      "subjectPolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/subject",
+      "singularAndPluralPolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/format",
+      "orderingPolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/ordering",
+      "oneClientHeadingPerClient": true,
+      "oneCandidateTablePerClientCandidate": true,
+      "nativeResponseControl": "select",
+      "correctionControlContainer": "fieldset",
+      "correctionControlHeading": "legend",
+      "tableCaption": "{candidate_name} - {client_name}",
+      "columnHeaderScope": "col",
+      "errorAssociation": "aria-describedby",
+      "saveAnnouncement": "aria-live=polite",
+      "minimumTargetPx": 44,
+      "candidateResponseBlankUnlessPositiveAssertion": true,
+      "attachments": 0,
+      "responseChoicePolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/managerResponseText",
+      "correctedHoursRequiredFieldsPolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/intendedHoursFields",
+      "correctedHoursRequiredForResponsesPolicyRef": "04A_MANAGER_EMAIL_POLICY.json#/responsesRequiringIntendedHours",
+      "correctedHoursPurpose": "record the exact intended system hours so the next source can be checked against the manager answer",
+      "zeroBreakMustBeExplicit": true,
+      "linkMembership": "exact ordered membership placed in the original email batch at send time",
+      "appendLaterMembershipsToExistingLink": false,
+      "returnLaterShows": "only unanswered memberships from that original email batch",
+      "answeredMembershipsReappear": false,
+      "laterBatchUsesNewLink": true,
+      "laterCohortMayBroadenAlterSupersedeOrRevokeAcceptedBatch": false,
+      "rowByRowResponses": true,
+      "partialBatchResponseAllowed": true,
+      "timing": {
+        "EARLY_ALL": "when every current candidate decision in the cohort is complete, before or after T6; include current manager-actionable unanswered unsent rows only",
+        "T6_RESPONDED": "at T6 include current manager-actionable unanswered unsent rows with a candidate response; silence remains unsent; create no email when empty",
+        "T12_REMAINDER": "at T12 turn remaining silence into manager-actionable work and include current unanswered unsent remainder only",
+        "lateSignedTimesheetMismatchAfterT12": "queue immediate EARLY_ALL when route and recipient are valid; do not start another candidate window",
+        "combineOnlyEventsDueAtSameInstantUnderRecipientLock": true,
+        "combiningMovesAnotherCohortClock": false,
+        "manualSendClaimsExactRowsFromAutomaticRemainders": true,
+        "manualScheduledRace": "one accepted batch owns each row under the recipient lock; the other action rechecks the remainder; no duplicate row"
+      },
+      "capacity": {
+        "maximumShiftRows": 500,
+        "overflowStartsAt": 501,
+        "countScope": "all currently due manager-actionable unanswered unsent rows for the recipient route, not only the screen selection",
+        "overflowBehavior": "FAIL_CLOSED_NO_RENDER_NO_LINK_NO_PROVIDER_ATTEMPT",
+        "truncate": false,
+        "silentSplit": false,
+        "dropRows": false,
+        "smallerManualSelectionMayBypass": false,
+        "officeStatus": "Needs Office action",
+        "officeReason": "This manager has more than 500 shifts waiting for one email.",
+        "officeActions": [
+          "View details",
+          "Recheck"
+        ],
+        "managerInformedBeforeProviderAcceptance": false
+      }
+    },
+    "timesheetSummary": {
+      "addColumn": false,
+      "preserveCanonicalStatusAndSort": true,
+      "delayReason": "Candidate payment is waiting for final weekly source validation.",
+      "duplicateMainStatusRule": "When the main badge is Processing Delayed, do not add another Delayed badge; attach the weekly reason to the cell's accessible description and Issues filter.",
+      "truthTable": [
+        {
+          "situation": "NON_WEEKLY",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "WEEKLY_SOURCE_NOT_FINAL_ORDINARY_PAY_WAITING",
+          "showSecondaryDelayed": true
+        },
+        {
+          "situation": "EVIDENCE_REQUIRED_WEEKLY_MISMATCH_BLOCKS_ORDINARY_AUTHORISATION",
+          "showSecondaryDelayed": true
+        },
+        {
+          "situation": "TIMESHEET_MISSING_AND_FINAL_SOURCE_PAY_UNAVAILABLE",
+          "showSecondaryDelayed": true
+        },
+        {
+          "situation": "FINAL_SOURCE_PAY_MATERIALISED_QUERY_OPEN",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "OFFICE_APPROVED_B1_CANDIDATE_PAY",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "PAID_UNRESOLVED_B1_ITEM",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "QUERY_OPEN_PAY_NOT_HELD",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "CANDIDATE_OR_MANAGER_SILENT",
+          "showSecondaryDelayed": "ONLY_IF_WEEKLY_VALIDATION_ITSELF_ACTIVELY_HOLDS_ORDINARY_PAY"
+        },
+        {
+          "situation": "INVOICE_ONLY_HOLD_OR_SOURCE_INVOICE_DELAY",
+          "showSecondaryDelayed": false
+        },
+        {
+          "situation": "UNRELATED_BANKING_OR_EXISTING_PAYMENT_BLOCKER",
+          "showSecondaryDelayed": "ONLY_IF_SEPARATE_ACTIVE_WEEKLY_PAY_HOLD"
+        },
+        {
+          "situation": "ZERO_OR_NOT_WORKED_NO_PAY_DUE",
+          "showSecondaryDelayed": false
+        }
+      ]
+    },
+    "reconciliationWait": {
+      "visibleAction": "Wait",
+      "storesPendingReconciliationOnly": true,
+      "createsOrPreparesFinancialOperation": false,
+      "blocksSourceBackedInvoice": false,
+      "acceptOrNotWorked": "Accept system hours and reconcile and Record as not worked are rendered beside Wait on reconcile-approved-hours wherever policy permits; no runtime gate"
+    },
+    "plainCopy": {
+      "replacements": [
+        {
+          "from": "Continuous results · header remains visible",
+          "to": "{count} unresolved"
+        },
+        {
+          "from": "No exact contract",
+          "to": "No matching contract"
+        },
+        {
+          "from": "Rate class missing",
+          "to": "No rate is set for this shift"
+        },
+        {
+          "from": "Review the two possible work events",
+          "to": "Choose which shift this relates to"
+        },
+        {
+          "from": "CloudTMS charge",
+          "to": "Calculated charge"
+        },
+        {
+          "from": "I understand that this will replace the final-source authority for this group and week.",
+          "to": "I understand this will replace the final version for this group and week."
+        }
+      ]
+    },
+    "importUse": {
+      "default": "Check hours and resolve queries",
+      "alternative": "Prepare for finalisation",
+      "checkingAppearsInFinalise": false,
+      "healthRosterEarlyAllowed": true,
+      "unfinalisedExclusionRequiresAcknowledgement": true,
+      "nhspEarlyAllowed": false
+    },
+    "notificationScope": {
+      "preserveOfficeManagerDirect": true,
+      "requestedWeekExceptionOnly": true,
+      "independentMissingAndHoursRequests": true,
+      "reminderMatchesDisplayedRequest": true
+    }
+  },
+  "weeklyTimesheetExperiencePolicy": {
+    "authorityLabels": {
+      "source": "Client source decides hours",
+      "timesheet": "Signed Timesheet decides hours"
+    },
+    "hubTabs": [
+      "Needs attention",
+      "Ready",
+      "History"
+    ],
+    "conditionalFinaliseTab": "Show only for a source-authoritative format that requires finalisation",
+    "historyDefault": "Current pay cycle",
+    "comparison": {
+      "fixedCardOrder": [
+        "Client system hours",
+        "Submitted Timesheet"
+      ],
+      "unitOrder": [
+        "Day",
+        "Night",
+        "Saturday",
+        "Sunday",
+        "Bank holiday",
+        "Additional units"
+      ],
+      "hideWhenZeroOnBothSides": true,
+      "states": {
+        "match": {
+          "tone": "positive",
+          "icon": "✓",
+          "text": "Matches"
+        },
+        "different": {
+          "tone": "danger",
+          "icon": "!",
+          "text": "Different"
+        },
+        "noTimesheet": {
+          "sourceTone": "warning",
+          "timesheetTone": "neutral",
+          "text": "No Timesheet submitted"
+        }
+      },
+      "sourceAuthorityBadges": [
+        "Used for pay and invoice",
+        "Evidence only"
+      ],
+      "timesheetAuthorityBadges": [
+        "Used to check and add the reference",
+        "Used for pay and invoice"
+      ],
+      "ratesAndMoneyForbidden": true,
+      "colourAloneForbidden": true
+    },
+    "simpleTimesheet": {
+      "preserve": [
+        "title",
+        "status",
+        "seven tabs",
+        "action bar",
+        "expenses",
+        "evidence",
+        "authorisation controls",
+        "unauthorise controls",
+        "candidate submission rejection",
+        "per-category expense rejection",
+        "process and unprocess",
+        "archive and unarchive",
+        "delete Timesheet",
+        "route actions",
+        "payment scheduling actions",
+        "manual schedule editing",
+        "multiple shifts per day",
+        "line copy paste and delete",
+        "extra shift lines",
+        "Additional Rates"
+      ],
+      "conditionalTab": "Lines",
+      "ordinaryImportComparisonMounted": false,
+      "protectedHoursBanner": "Office-approved hours are currently in use",
+      "manualWeeklyFields": [
+        "Ref #",
+        "Start",
+        "End",
+        "Break start",
+        "Break end",
+        "Break (mins)",
+        "Paid hrs"
+      ],
+      "manualScheduleActions": [
+        "Reset timesheet schedule",
+        "Clear all lines",
+        "Extra shift lines +",
+        "Extra shift lines -"
+      ]
+    },
+    "bulkAuthorise": {
+      "preserve": [
+        "three-pane shell",
+        "classification filters",
+        "selected-row list",
+        "detail pane",
+        "evidence pane",
+        "action row",
+        "candidate submission rejection",
+        "per-category expense rejection",
+        "manual schedule editor",
+        "multiple shifts per day",
+        "extra shift lines",
+        "Additional Rates",
+        "authorise and unauthorise",
+        "additional Timesheet actions",
+        "route actions"
+      ],
+      "sharedComparisonComponent": true,
+      "ordinaryImportComparisonMounted": false,
+      "selection": "One three-state checkbox in the far-left sticky section-header cell selects or clears visible eligible rows; separate Select all and Unselect all buttons are forbidden"
+    },
+    "timesheetAuthoriseFinancialSummary": {
+      "officeOnly": true,
+      "serverOwned": true,
+      "browserCalculationForbidden": true,
+      "includes": [
+        "core hours",
+        "Additional Rates",
+        "accepted expenses"
+      ],
+      "exactFigures": [
+        "Gross Total Charge including expenses excluding VAT",
+        "Gross Total Charge including expenses including VAT",
+        "Gross Pay to Candidate including expenses excluding VAT",
+        "Gross Pay to Candidate including expenses including VAT"
+      ],
+      "includingVatAlwaysShown": true,
+      "noVatRule": "Including VAT equals excluding VAT where VAT does not apply",
+      "forbiddenBreakdown": [
+        "row Pay",
+        "row Charge",
+        "rate",
+        "expense amount",
+        "margin",
+        "reserved amount",
+        "outstanding amount",
+        "net delta",
+        "technical rounding message"
+      ]
+    },
+    "timesheetRejection": {
+      "candidateSubmission": "Existing server-controlled complete-submission rejection with reason and blank replacement journey",
+      "expenseCategories": [
+        "Mileage",
+        "Travel",
+        "Accommodation",
+        "Other"
+      ],
+      "expenseScope": "The selected complete category and all supporting items",
+      "hiddenAfter": [
+        "Authorised",
+        "Invoiced",
+        "Paid"
+      ],
+      "notSynonyms": [
+        "Delete Timesheet",
+        "Archive Timesheet",
+        "Return evidence",
+        "Delete evidence"
+      ]
+    },
+    "timesheetAuthorityActions": [
+      "View Timesheet",
+      "Email manager",
+      "Recheck"
+    ],
+    "timesheetAuthorityForbiddenActions": [
+      "Ask candidate",
+      "Accept client-system hours",
+      "Protect pay",
+      "Finalise source"
+    ],
+    "referenceSetting": {
+      "label": "Reference required before pay",
+      "default": "Off",
+      "visibleOnlyWhen": "Weekly HealthRoster and signed Timesheet decides hours",
+      "clientContractHierarchyPreserved": true
+    },
+    "mytms": {
+      "ordinaryUnaffected": true,
+      "timesheetAuthorityMatchesOrdinary": true,
+      "sourceAuthorityDifferenceLabel": "Approved hours to be paid",
+      "moneyForbidden": true,
+      "expensesUnchangedExceptSourceSupplied": true
+    }
+  },
+  "screens": [
+    {
+      "id": "import-query-review",
+      "file": "01-import-query-review.png",
+      "contextFields": [
+        { "label": "Source", "value": "NHSP" },
+        { "label": "Finalisation week", "value": "27 Sep 2026" },
+        { "label": "Export period", "value": "21 Sep 2026" },
+        { "label": "Trust", "value": "All trusts" }
+      ],
+      "kind": "office-table-modal",
+      "canvas": "desktop",
+      "activeTab": 1,
+      "cycleState": {
+        "text": "Before cutoff",
+        "tone": "warning"
+      },
+      "toolbar": {
+        "filters": [
+          {
+            "label": "Status",
+            "value": "Unresolved"
+          },
+          {
+            "label": "Candidate",
+            "value": "All"
+          },
+          {
+            "label": "Issue",
+            "value": "All"
+          }
+        ],
+        "actions": [
+          {
+            "label": "Ask selected candidates",
+            "tone": "primary"
+          },
+          {
+            "label": "Send selected to manager now",
+            "tone": "secondary"
+          },
+          {
+            "label": "Recheck",
+            "tone": "ghost"
+          }
+        ]
+      },
+      "activeSelectionAction": "Send selected to manager now",
+      "selectionSummary": "0 query groups selected",
+      "columns": [
+        {
+          "key": "select",
+          "label": "",
+        "headerCheckboxState": "unchecked",
+          "headerCheckboxScope": "outreach-groups"
+        },
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "client",
+          "label": "Client"
+        },
+        {
+          "key": "issues",
+          "label": "Issues"
+        },
+        {
+          "key": "candidateAsked",
+          "label": "Candidate asked"
+        },
+        {
+          "key": "managerInformed",
+          "label": "Manager informed"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        },
+        {
+          "key": "oldest",
+          "label": "Age"
+        },
+        {
+          "key": "actions",
+          "label": "Actions"
+        }
+      ],
+      "rows": [
+        {
+          "selected": false,
+          "expanded": false,
+          "candidate": "Jane Smith",
+          "client": "St Mary's NHS Trust",
+          "manager": "Laura Green · laura.green@example.invalid",
+          "groupKey": "cycle-nhsp-2026-09-06|can-jane-smith|client-st-marys|recipient-laura-green",
+          "issues": "2",
+          "candidateAsked": true,
+          "managerInformed": false,
+          "status": {
+            "text": "Needs action",
+            "tone": "warning"
+          },
+          "oldest": "4h",
+          "actions": [
+            "Open",
+            "Remind candidate"
+          ],
+          "children": []
+        }
+      ],
+      "footer": {
+        "left": "1 hours question · 1 Office check",
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          }
+        ]
+      },
+      "shell": {
+        "officeSubtitle": "NHSP previously released shifts · Checking hours",
+        "tabs": [
+          {
+            "label": "Imports"
+          },
+          {
+            "label": "Queries"
+          },
+          {
+            "label": "Finalise report"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "officeChecks": {
+        "title": "Office checks",
+        "columns": [
+          {
+            "key": "candidate",
+            "label": "Candidate / source reference"
+          },
+          {
+            "key": "client",
+            "label": "Trust / booking reference"
+          },
+          {
+            "key": "day",
+            "label": "Day / system hours"
+          },
+          {
+            "key": "problem",
+            "label": "Problem"
+          },
+          {
+            "key": "actions",
+            "label": "Actions"
+          }
+        ],
+        "rows": [
+          {
+            "candidate": "Example Worker · CCR-02611",
+            "client": "Example Trust · 155154209",
+            "day": "Mon 21 Sep 2026 · 09:00–17:00 · 30 min break",
+            "problem": "No active candidate matches this source row",
+            "actions": [
+              "Link candidate"
+            ]
+          }
+        ]
+      },
+      "hoursQuestionsTitle": "Hours questions"
+    },
+    {
+      "id": "candidate-hours-check",
+      "file": "02-candidate-hours-check.png",
+      "kind": "candidate-mobile",
+      "canvas": "mobile",
+      "navigationTitle": "Timesheet",
+      "eyebrow": "WEEKLY TIMESHEET CHECK",
+      "title": "Check your hours",
+      "context": "Week ending Sun 6 Sep 2026 · St Mary's NHS Trust",
+      "responsePolicyRef": "interactionPolicies.candidateNotificationPolicy.multiShiftResponse",
+      "queryRows": [
+        {
+          "day": "Mon 1 Sep 2026",
+          "comparisons": [
+            {
+              "label": "Your Timesheet",
+              "time": "09:00-18:00",
+              "break": "30-minute break",
+              "tone": "info"
+            },
+            {
+              "label": "System hours",
+              "time": "09:00-17:00",
+              "break": "30-minute break",
+              "tone": "warning"
+            }
+          ],
+          "prompt": "Which is correct?",
+          "choices": [
+            {
+              "label": "My hours are wrong, the client is correct.",
+              "selected": false
+            },
+            {
+              "label": "My hours are correct.",
+              "selected": true
+            },
+            {
+              "label": "Neither set of hours is correct.",
+              "selected": false
+            }
+          ],
+          "advice": "Please contact your manager urgently and ask them to correct this shift."
+        },
+        {
+          "day": "Wed 3 Sep 2026",
+          "comparisons": [
+            {
+              "label": "Your Timesheet",
+              "time": "20:00-08:00",
+              "break": "60-minute break",
+              "tone": "info"
+            },
+            {
+              "label": "System hours",
+              "time": "20:00-07:30",
+              "break": "60-minute break",
+              "tone": "warning"
+            }
+          ],
+          "prompt": "Which is correct?",
+          "choices": [
+            {
+              "label": "My hours are wrong, the client is correct.",
+              "selected": false
+            },
+            {
+              "label": "My hours are correct.",
+              "selected": false
+            },
+            {
+              "label": "Neither set of hours is correct.",
+              "selected": true
+            }
+          ],
+          "editedHours": {
+            "start": "20:00",
+            "finish": "08:30",
+            "break": "60"
+          },
+          "result": "These hours now match. Sign and save your Timesheet to finish."
+        }
+      ],
+      "other": "Other shifts this week are shown below and cannot be changed here.",
+      "revisionScope": "One complete Weekly Timesheet revision; unchanged shifts copied exactly; one signature; no partial response.",
+      "primaryAction": "Save and confirm my hours"
+    },
+    {
+      "id": "manager-secure-review",
+      "file": "03-manager-secure-review.png",
+      "kind": "manager-review",
+      "canvas": "desktop",
+      "brand": "CloudTMS secure review",
+      "title": "Review timesheet queries",
+      "intro": "Respond to the shifts you can review now. Save your responses and return later for the rest.",
+      "completed": "2 queries already completed",
+      "accessibilityPolicyRef": "interactionPolicies.managerSecureReview",
+      "secureLink": {
+        "issuedAtUtc": "2026-09-02T09:00:00Z",
+        "expiresAtUtc": "2026-09-09T09:00:00Z",
+        "renderReferenceUtc": "2026-09-03T09:00:00Z",
+        "copy": "Secure · expires in {days} days",
+        "runtimeRule": "The product page derives the remaining validity from the server-owned expiry returned with the review batch and recomputes it on every load; it never renders a literal countdown string. This fixture's issued, expiry and reference instants exist only so the deterministic render is reproducible from policy."
+      },
+      "candidateSections": [
+        {
+          "client": "St Mary's NHS Trust",
+          "candidate": "Amara Patel",
+          "tableCaption": "Outstanding timesheet queries for Amara Patel at St Mary's NHS Trust",
+          "rows": [
+            {
+              "day": "Wed 3 Sep 2026",
+              "candidate": "20:00-08:00 (60 min break)",
+              "system": "20:00-07:30 (60 min break)",
+              "issue": "",
+              "response": "Choose a response",
+              "details": "",
+              "responseControl": {
+                "type": "select",
+                "label": "Your response for Wed 3 Sep 2026",
+                "issueFamily": "HOURS_DIFFER",
+                "selectedResponseIndex": 2
+              },
+              "correctionFields": {
+                "type": "fieldset",
+                "legend": "Corrected hours for Wed 3 Sep 2026",
+                "visibleWhenPolicy": "04A_MANAGER_EMAIL_POLICY.json#/responsesRequiringIntendedHours",
+                "fields": [
+                  {
+                    "label": "Start",
+                    "value": "20:00",
+                    "inputMode": "numeric"
+                  },
+                  {
+                    "label": "Finish",
+                    "value": "08:00",
+                    "inputMode": "numeric"
+                  },
+                  {
+                    "label": "Break",
+                    "value": "60",
+                    "suffix": "minutes",
+                    "inputMode": "numeric"
+                  }
+                ],
+                "partialSaveState": "This response has not been saved yet. Other saved responses remain complete."
+              }
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Close and return later",
+          "tone": "secondary"
+        },
+        {
+          "label": "Save responses",
+          "tone": "primary"
+        }
+      ]
+    },
+    {
+      "id": "query-progress",
+      "file": "04-query-progress.png",
+      "kind": "office-table-modal",
+      "canvas": "desktop",
+      "activeTab": 1,
+      "cycleState": {
+        "text": "Finalised",
+        "tone": "positive"
+      },
+      "notice": {
+        "tone": "danger",
+        "title": "Paid shifts still need attention",
+        "body": "Paid unresolved shifts remain at the top until resolved."
+      },
+      "toolbar": {
+        "filters": [
+          {
+            "label": "Status",
+            "value": "All unresolved"
+          },
+          {
+            "label": "Candidate",
+            "value": "All"
+          },
+          {
+            "label": "Issue",
+            "value": "All"
+          }
+        ],
+        "actions": [
+          {
+            "label": "Ask selected candidates",
+            "tone": "primary"
+          },
+          {
+            "label": "Send selected to manager now",
+            "tone": "secondary"
+          },
+          {
+            "label": "Recheck",
+            "tone": "ghost"
+          }
+        ]
+      },
+      "columns": [
+        {
+          "key": "select",
+          "label": "",
+          "headerCheckboxState": "unchecked",
+          "headerCheckboxScope": "outreach-groups"
+        },
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "client",
+          "label": "Client"
+        },
+        {
+          "key": "issues",
+          "label": "Issues"
+        },
+        {
+          "key": "candidateAsked",
+          "label": "Candidate asked"
+        },
+        {
+          "key": "managerInformed",
+          "label": "Manager informed"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        },
+        {
+          "key": "oldest",
+          "label": "Age"
+        },
+        {
+          "key": "actions",
+          "label": "Actions"
+        }
+      ],
+      "rows": [
+        {
+          "selected": false,
+          "expanded": true,
+          "candidate": "Jane Smith",
+          "client": "St Mary's NHS Trust",
+          "manager": "Laura Green · laura.green@example.invalid",
+          "issues": "1",
+          "candidateAsked": true,
+          "managerInformed": true,
+          "status": {
+            "text": "Needs Office action",
+            "tone": "danger",
+            "subtext": "Paid · unresolved",
+            "subtone": "danger"
+          },
+          "oldest": "Paid 8 days ago",
+          "actions": "View details",
+          "children": [
+            {
+              "day": "Mon 1 Sep 2026",
+              "role": "Staff Nurse",
+              "candidateHours": "09:00-18:00 (30 min break)",
+              "systemHours": "09:00-17:00 (30 min break)",
+              "issue": "Hours differ",
+              "status": "Needs Office action",
+              "nextAction": "View details"
+            }
+          ]
+        },
+        {
+          "selected": false,
+          "expanded": true,
+          "candidate": "Amara Patel",
+          "client": "St Mary's NHS Trust",
+          "manager": "Not set",
+          "groupKey": "cycle-nhsp-2026-09-06|can-amara-patel|client-st-marys|NO_MANAGER_RECIPIENT",
+          "issues": "1",
+          "candidateAsked": true,
+          "managerInformed": false,
+          "status": {
+            "text": "Waiting for Timesheet",
+            "tone": "warning",
+            "subtext": "Payment delayed",
+            "subtone": "warning"
+          },
+          "oldest": "12h overdue",
+          "actions": [
+            "Remind missing timesheet",
+            "View details"
+          ],
+          "children": [
+            {
+              "day": "Tue 2 Sep 2026",
+              "role": "Staff Nurse",
+              "candidateHours": "Timesheet not submitted",
+              "systemHours": "08:00-16:00 (30 min break)",
+              "issue": "Timesheet missing",
+              "status": "Waiting for Timesheet",
+              "nextAction": {
+                "text": "Needs Office action",
+                "tone": "warning"
+              }
+            }
+          ]
+        },
+        {
+          "selected": false,
+          "expanded": false,
+          "candidate": "Luke Morgan",
+          "client": "City Community NHS",
+          "manager": "Ruth Hall · ruth.hall@example.invalid",
+          "groupKey": "cycle-nhsp-2026-09-06|can-luke-morgan|client-city-community|recipient-ruth-hall",
+          "issues": "1",
+          "candidateAsked": true,
+          "managerInformed": false,
+          "status": {
+            "text": "Waiting for candidate",
+            "tone": "info"
+          },
+          "oldest": "2h 44m",
+          "actions": "View details"
+        }
+      ],
+      "footer": {
+        "left": "3 unresolved · sorted by Candidate A-Z",
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "finalise-week",
+      "file": "05-finalise-week.png",
+      "kind": "finalise-modal",
+      "canvas": "desktop",
+      "activeTab": 2,
+      "shell": {
+        "officeSubtitle": "NHSP backing report · St Mary's NHS Trust",
+        "context": [
+          {
+            "label": "Source",
+            "value": "NHSP backing report"
+          },
+          {
+            "label": "Trust",
+            "value": "St Mary's NHS Trust"
+          },
+          {
+            "label": "Report number",
+            "value": "1741227",
+            "type": "readonly"
+          },
+          {
+            "label": "Cutoff",
+            "value": "09/09/2026 15:00"
+          }
+        ],
+        "tabs": [
+          {
+            "label": "Imports"
+          },
+          {
+            "label": "Queries (12)"
+          },
+          {
+            "label": "Finalise report (4 blockers)"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "cycleState": {
+        "text": "4 blockers to resolve",
+        "tone": "danger"
+      },
+      "source": {
+        "label": "Current final backing report",
+        "file": "Backing_report_1741227.xlsx",
+        "summary": "Report 1741227 · Cutoff Wed 9 Sep 2026 at 15:00 · 286 movements · 284 charges · 2 full reversals"
+      },
+      "innerTabs": [
+        {
+          "label": "Ready (282)",
+          "active": false
+        },
+        {
+          "label": "Blocked (4)",
+          "active": true
+        }
+      ],
+      "columns": [
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "day",
+          "label": "Day/date"
+        },
+        {
+          "key": "problem",
+          "label": "Problem"
+        },
+        {
+          "key": "actions",
+          "label": "Action"
+        }
+      ],
+      "rows": [
+        {
+          "candidate": "Amara Patel",
+          "day": "Tue 2 Sep 2026",
+          "role": "Staff Nurse",
+          "client": "St Mary's NHS Trust",
+          "problem": {
+            "text": "More than one contract matches",
+            "tone": "danger"
+          },
+          "todo": "Choose the contract that applies to this shift",
+          "actions": "Choose contract"
+        },
+        {
+          "candidate": "Ben Walker",
+          "day": "Wed 3 Sep 2026",
+          "role": "Band 6 Nurse",
+          "client": "St Mary's NHS Trust",
+          "problem": {
+            "text": "No matching contract",
+            "tone": "danger"
+          },
+          "todo": "Create the normal contract for this band",
+          "actions": "Create contract for this band"
+        },
+        {
+          "candidate": "Dana Evans",
+          "day": "Fri 5 Sep 2026",
+          "role": "Staff Nurse",
+          "client": "St Mary's NHS Trust",
+          "problem": {
+            "text": "Overlapping shift",
+            "tone": "danger"
+          },
+          "todo": "Choose which shift this relates to",
+          "actions": "Review overlapping shift"
+        },
+        {
+          "candidate": "Elliot James",
+          "day": "Sat 6 Sep 2026",
+          "role": "Staff Nurse",
+          "client": "St Mary's NHS Trust",
+          "problem": {
+            "text": "Charge does not match",
+            "tone": "danger"
+          },
+          "todo": "Review the matched contract, rates and break allocation, then Recheck",
+          "actions": "Open charge details"
+        }
+      ],
+      "confirmation": "I confirm this is the complete final NHSP backing report for St Mary's NHS Trust, report 1741227, for the cutoff shown.",
+      "footer": {
+        "left": "282 ready · 4 blocked",
+        "actions": [
+          {
+            "label": "Recheck",
+            "tone": "secondary"
+          },
+          {
+            "label": "Finalise report",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "choose-contract",
+      "file": "18-choose-contract.png",
+      "kind": "contract-choice-modal",
+      "canvas": "desktop",
+      "title": "Choose contract",
+      "intro": "More than one contract matches this shift. Choose the one that applies.",
+      "context": [
+        {
+          "label": "Candidate",
+          "value": "Amara Patel"
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust"
+        },
+        {
+          "label": "Shift",
+          "value": "Tue 2 Sep 2026 · 08:00-16:00 · 30 min break"
+        },
+        {
+          "label": "Source role / band",
+          "value": "Band 5 Staff Nurse"
+        }
+      ],
+      "columns": [
+        {
+          "key": "choose",
+          "label": "Choose"
+        },
+        {
+          "key": "roleBand",
+          "label": "Role / band",
+          "sort": "asc"
+        },
+        {
+          "key": "site",
+          "label": "Contract site"
+        },
+        {
+          "key": "dates",
+          "label": "Contract dates"
+        },
+        {
+          "key": "payType",
+          "label": "Pay type"
+        },
+        {
+          "key": "details",
+          "label": "Details"
+        }
+      ],
+      "rows": [
+        {
+          "choose": false,
+          "roleBand": "Staff Nurse · Band 5",
+          "site": "Hillcroft House",
+          "dates": "1 Apr 2026 - 31 Mar 2027",
+          "payType": "PAYE",
+          "details": "View contract"
+        },
+        {
+          "choose": false,
+          "roleBand": "Staff Nurse · Band 5",
+          "site": "Care Pathways Newbury",
+          "dates": "1 Apr 2026 - 31 Mar 2027",
+          "payType": "Umbrella",
+          "details": "View contract"
+        }
+      ],
+      "footer": {
+        "left": "2 matching contracts",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Use selected contract",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "protected-shift-add",
+      "file": "06-protected-shift-add.png",
+      "kind": "protected-shift-editor-modal",
+      "canvas": "desktop",
+      "mode": "ADD",
+      "title": "Protected shift pay",
+      "intro": "Add a protected shift",
+      "statusLine": "The client has not confirmed these hours.",
+      "situation": "No Timesheet was submitted and the client system has no row for this shift.",
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "fields": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Work date",
+          "value": "Mon 1 Sep 2026",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Start",
+          "value": "09:00",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Finish",
+          "value": "18:00",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Break",
+          "value": "30",
+          "width": "quarter",
+          "suffix": "min",
+          "editable": true
+        },
+        {
+          "label": "Contract",
+          "value": "Staff Nurse · Band 5 · Hillcroft House · PAYE",
+          "width": "half",
+          "readOnly": true,
+          "note": "Selected automatically: one compatible contract"
+        },
+        {
+          "label": "Reason",
+          "value": "Ward manager confirmed the shift by phone; the roster export has no row for it.",
+          "editable": true,
+          "multiline": true
+        }
+      ],
+      "scopeCopy": "Other shifts in this week are not being approved or rejected by this decision.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "confirmation": "I confirm these selected hours should be protected for pay while they remain unconfirmed by the client.",
+      "footer": {
+        "left": "Week ending Sun 6 Sep 2026",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Protect pay",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "protected-shift-change",
+      "file": "06a-protected-shift-change.png",
+      "kind": "protected-shift-editor-modal",
+      "canvas": "desktop",
+      "mode": "CHANGE",
+      "title": "Protected shift pay",
+      "intro": "Change protected shift",
+      "statusLine": "The client has not confirmed these hours.",
+      "situation": "The candidate submitted 09:00-18:00. The client system shows 09:00-17:00. Protected pay is in place for 09:00-18:00 since Wed 2 Sep 2026.",
+      "comparison": {
+        "columns": [
+          "Day/date",
+          "Candidate hours",
+          "System hours",
+          "Issue"
+        ],
+        "rows": [
+          {
+            "day": "Mon 1 Sep 2026",
+            "candidateHours": "09:00-18:00 (30 min break)",
+            "systemHours": "09:00-17:00 (30 min break)",
+            "issue": "Hours differ"
+          }
+        ]
+      },
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "fields": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Work date",
+          "value": "Mon 1 Sep 2026",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Start",
+          "value": "09:00",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Finish",
+          "value": "17:30",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Break",
+          "value": "30",
+          "width": "quarter",
+          "suffix": "min",
+          "editable": true
+        },
+        {
+          "label": "Contract",
+          "value": "Staff Nurse · Band 5 · Hillcroft House · PAYE",
+          "width": "half",
+          "readOnly": true,
+          "note": "Selected automatically: one compatible contract"
+        },
+        {
+          "label": "Reason",
+          "value": "Ward manager confirmed a 17:30 finish; the roster export still shows 17:00.",
+          "editable": true,
+          "multiline": true
+        }
+      ],
+      "scopeCopy": "Other shifts in this week are not being approved or rejected by this decision.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "confirmation": "I confirm these selected hours should be protected for pay while they remain unconfirmed by the client.",
+      "footer": {
+        "left": "Week ending Sun 6 Sep 2026 · Protected since Wed 2 Sep 2026",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Stop protected pay",
+            "tone": "danger"
+          },
+          {
+            "label": "Change protected shift",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "protected-shift-stop",
+      "file": "06b-protected-shift-stop.png",
+      "kind": "confirmation-modal",
+      "canvas": "desktop",
+      "title": "Stop protected pay",
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "facts": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith"
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust"
+        },
+        {
+          "label": "Shift",
+          "value": "Mon 1 Sep 2026 · 09:00-18:00 · 30 min break"
+        },
+        {
+          "label": "Protected since",
+          "value": "Wed 2 Sep 2026"
+        },
+        {
+          "label": "Hours approved for pay after stopping",
+          "value": "09:00-17:00 · 30 min break (client system hours)"
+        },
+        {
+          "label": "Current status",
+          "value": "Protected pay in place"
+        }
+      ],
+      "field": {
+        "label": "Reason",
+        "value": "Client confirmed the roster hours; protection is no longer needed."
+      },
+      "note": "Banking Pay will use its existing rules to work out whether any money must be recovered.",
+      "confirmation": "I confirm protected pay should stop for this shift.",
+      "actions": [
+        {
+          "label": "Cancel",
+          "tone": "secondary"
+        },
+        {
+          "label": "Stop protected pay",
+          "tone": "danger"
+        }
+      ]
+    },
+    {
+      "id": "reconcile-approved-hours",
+      "file": "06c-reconcile-approved-hours.png",
+      "kind": "reconcile-approved-hours-modal",
+      "canvas": "desktop",
+      "title": "Reconcile approved hours",
+      "intro": "The client system now has final hours for a shift that was paid on protected hours.",
+      "facts": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith"
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust"
+        },
+        {
+          "label": "Day/date",
+          "value": "Mon 1 Sep 2026"
+        }
+      ],
+      "truthTitle": "Hours for this shift",
+      "truthRows": [
+        {
+          "label": "Hours submitted",
+          "value": "09:00-18:00 · 30 min break"
+        },
+        {
+          "label": "Hours confirmed by the client system",
+          "value": "09:00-17:00 · 30 min break"
+        },
+        {
+          "label": "Protected hours",
+          "value": "09:00-18:00 · 30 min break"
+        },
+        {
+          "label": "Hours approved for pay",
+          "value": "09:00-18:00 · 30 min break"
+        }
+      ],
+      "position": [
+        {
+          "label": "Hours covered",
+          "value": "8 h 30 min"
+        },
+        {
+          "label": "Current status",
+          "value": "Protected pay remains in place"
+        }
+      ],
+      "options": [
+        {
+          "label": "Wait",
+          "tone": "secondary",
+          "description": "Keep protected pay in place and check again after the next client file. Nothing is prepared for payment."
+        },
+        {
+          "label": "Accept system hours and reconcile",
+          "tone": "primary",
+          "description": "Approved hours become the client system hours. The existing payment process works out any difference."
+        },
+        {
+          "label": "Record as not worked",
+          "tone": "danger",
+          "description": "Opens Record shift as not worked for this shift only."
+        }
+      ],
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "footer": {
+        "left": "The source invoice is not changed by this decision",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Wait",
+            "tone": "secondary"
+          },
+          {
+            "label": "Accept system hours and reconcile",
+            "tone": "primary"
+          },
+          {
+            "label": "Record as not worked",
+            "tone": "danger"
+          }
+        ]
+      }
+    },
+    {
+      "id": "protected-shift-stale",
+      "file": "06d-protected-shift-stale.png",
+      "kind": "protected-shift-editor-modal",
+      "canvas": "desktop",
+      "mode": "STALE",
+      "title": "Protected shift pay",
+      "intro": "Change protected shift",
+      "statusLine": "The client has not confirmed these hours.",
+      "situation": "The candidate submitted 09:00-18:00. The client system shows 09:00-17:00. Protected pay is in place for 09:00-18:00 since Wed 2 Sep 2026.",
+      "staleNotice": "These hours changed on the server after you opened this screen. Nothing has been saved. Recheck to load the current position.",
+      "comparison": {
+        "columns": [
+          "Day/date",
+          "Candidate hours",
+          "System hours",
+          "Issue"
+        ],
+        "rows": [
+          {
+            "day": "Mon 1 Sep 2026",
+            "candidateHours": "09:00-18:00 (30 min break)",
+            "systemHours": "09:00-17:00 (30 min break)",
+            "issue": "Hours differ"
+          }
+        ]
+      },
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "fields": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Work date",
+          "value": "Mon 1 Sep 2026",
+          "width": "quarter",
+          "editable": false
+        },
+        {
+          "label": "Start",
+          "value": "09:00",
+          "width": "quarter",
+          "editable": false
+        },
+        {
+          "label": "Finish",
+          "value": "17:30",
+          "width": "quarter",
+          "editable": false
+        },
+        {
+          "label": "Break",
+          "value": "30",
+          "width": "quarter",
+          "suffix": "min",
+          "editable": false
+        },
+        {
+          "label": "Contract",
+          "value": "Staff Nurse · Band 5 · Hillcroft House · PAYE",
+          "width": "half",
+          "readOnly": true,
+          "note": "Selected automatically: one compatible contract"
+        },
+        {
+          "label": "Reason",
+          "value": "Ward manager confirmed a 17:30 finish; the roster export still shows 17:00.",
+          "editable": false,
+          "multiline": true
+        }
+      ],
+      "scopeCopy": "Other shifts in this week are not being approved or rejected by this decision.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "confirmation": "I confirm these selected hours should be protected for pay while they remain unconfirmed by the client.",
+      "footer": {
+        "left": "Week ending Sun 6 Sep 2026 · Protected since Wed 2 Sep 2026",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Recheck",
+            "tone": "primary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "protected-shift-add-mobile",
+      "file": "06e-protected-shift-add-mobile.png",
+      "kind": "protected-shift-editor-modal",
+      "canvas": "mobile",
+      "mode": "ADD",
+      "title": "Protected shift pay",
+      "intro": "Add a protected shift",
+      "statusLine": "The client has not confirmed these hours.",
+      "situation": "No Timesheet was submitted and the client system has no row for this shift.",
+      "warning": "This changes the candidate's pay position. It does not change the client source or invoice.",
+      "fields": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust",
+          "width": "half",
+          "readOnly": true
+        },
+        {
+          "label": "Work date",
+          "value": "Mon 1 Sep 2026",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Start",
+          "value": "09:00",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Finish",
+          "value": "18:00",
+          "width": "quarter",
+          "editable": true
+        },
+        {
+          "label": "Break",
+          "value": "30",
+          "width": "quarter",
+          "suffix": "min",
+          "editable": true
+        },
+        {
+          "label": "Contract",
+          "value": "Staff Nurse · Band 5 · Hillcroft House · PAYE",
+          "width": "half",
+          "readOnly": true,
+          "note": "Selected automatically: one compatible contract"
+        },
+        {
+          "label": "Reason",
+          "value": "Ward manager confirmed the shift by phone; the roster export has no row for it.",
+          "editable": true,
+          "multiline": true
+        }
+      ],
+      "scopeCopy": "Other shifts in this week are not being approved or rejected by this decision.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "confirmation": "I confirm these selected hours should be protected for pay while they remain unconfirmed by the client.",
+      "footer": {
+        "left": "Week ending Sun 6 Sep 2026",
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Protect pay",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      },
+      "captureVariants": [
+        {
+          "file": "06f-protected-shift-add-mobile-actions.png",
+          "scrollSelector": ".dialog.protected-editor",
+          "scrollTop": 720
+        }
+      ]
+    },
+    {
+      "id": "correct-final-source",
+      "file": "07-correct-final-source.png",
+      "kind": "correct-final-modal",
+      "canvas": "desktop",
+      "title": "Correct final source",
+      "intro": "The previous final version will remain in History.",
+      "fields": [
+        {
+          "label": "Replacement report",
+          "value": "Backing_report_1741228.xlsx"
+        },
+        {
+          "label": "Trust and cutoff",
+          "value": "St Mary's NHS Trust · Wed 9 Sep 2026 at 15:00"
+        },
+        {
+          "label": "Reason",
+          "value": "The wrong complete file was selected during finalisation."
+        }
+      ],
+      "summaries": [
+        {
+          "label": "Changes",
+          "value": "4",
+          "tone": "warning"
+        },
+        {
+          "label": "Ready",
+          "value": "285",
+          "tone": "positive"
+        },
+        {
+          "label": "Blockers",
+          "value": "1",
+          "tone": "danger"
+        }
+      ],
+      "innerTabs": [
+        {
+          "label": "Changes (4)",
+          "active": true
+        },
+        {
+          "label": "Blocked (1)",
+          "active": false
+        }
+      ],
+      "columns": [
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "day",
+          "label": "Day/date"
+        },
+        {
+          "key": "current",
+          "label": "Current final"
+        },
+        {
+          "key": "replacement",
+          "label": "Replacement"
+        },
+        {
+          "key": "result",
+          "label": "Result"
+        }
+      ],
+      "rows": [
+        {
+          "candidate": "Jane Smith",
+          "day": "Mon 1 Sep",
+          "role": "Staff Nurse",
+          "client": "St Mary's NHS Trust",
+          "current": "09:00-17:00 (30)",
+          "replacement": "09:00-18:00 (30)",
+          "result": {
+            "text": "Hours changed",
+            "tone": "info"
+          }
+        },
+        {
+          "candidate": "Omar Khan",
+          "day": "Tue 2 Sep",
+          "role": "Staff Nurse",
+          "client": "St Mary's NHS Trust",
+          "current": "08:00-16:00 (30)",
+          "replacement": "Not included",
+          "result": {
+            "text": "Shift removed",
+            "tone": "warning"
+          }
+        },
+        {
+          "candidate": "Lily Jones",
+          "day": "Thu 4 Sep",
+          "role": "Band 6 Nurse",
+          "client": "St Mary's NHS Trust",
+          "current": "Not included",
+          "replacement": "20:00-08:00 (60)",
+          "result": {
+            "text": "Shift added",
+            "tone": "positive"
+          }
+        }
+      ],
+      "blocker": "1 blocker remains: Ben Walker has no matching contract for Band 6.",
+      "confirmation": "I understand this will replace report 1741227 as the final report for this Trust and cutoff.",
+      "actions": [
+        {
+          "label": "Cancel",
+          "tone": "secondary"
+        },
+        {
+          "label": "Apply corrected final source",
+          "tone": "primary",
+          "disabled": true
+        }
+      ]
+    },
+    {
+      "id": "office-alert",
+      "file": "09-office-alert.png",
+      "kind": "office-alert-popover",
+      "canvas": "popover",
+      "brand": "CloudTMS Office",
+      "channel": "WEEKLY_SOURCE",
+      "headerControl": "Weekly source queries",
+      "accessibleName": "Weekly source queries",
+      "heading": "Weekly source queries",
+      "badgeCount": "2",
+      "alerts": [
+        {
+          "title": "Candidate reports incorrect system hours",
+          "body": "Jane Smith · Mon 1 Sep 2026 at St Mary's NHS Trust. Candidate Timesheet: 09:00-18:00, 30-minute break. System: 09:00-17:00, 30-minute break.",
+          "guidance": "Query this shift in NHSP.",
+          "state": "New",
+          "actions": [
+            "Open query",
+            "Clear"
+          ]
+        },
+        {
+          "title": "Candidate reports a shift missing or not yet authorised",
+          "body": "Amara Patel · Tue 2 Sep 2026 at St Mary's NHS Trust. Candidate Timesheet: 08:00-16:00, 30-minute break. System: Missing or not yet authorised.",
+          "guidance": "Ask the manager to add and/or authorise it in NHSP.",
+          "state": "Resolved since notification",
+          "actions": [
+            "View query",
+            "Clear"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "manager-response-alerts",
+      "file": "11-manager-response-alerts.png",
+      "kind": "office-alert-popover",
+      "canvas": "popover",
+      "brand": "CloudTMS Office",
+      "channel": "WEEKLY_SOURCE",
+      "headerControl": "Weekly source queries",
+      "accessibleName": "Weekly source queries",
+      "heading": "Weekly source queries",
+      "badgeCount": "2",
+      "alerts": [
+        {
+          "title": "Manager says system hours are correct",
+          "body": "Laura Green confirmed Jane Smith's system hours are correct for Mon 1 Sep 2026 at St Mary's NHS Trust. Candidate Timesheet: 09:00-18:00, 30-minute break. System: 09:00-17:00, 30-minute break.",
+          "guidance": "The query was resolved automatically.",
+          "state": "Resolved · unread",
+          "tone": "positive",
+          "actions": [
+            "View query",
+            "Clear"
+          ]
+        },
+        {
+          "title": "Manager says the hours have been corrected",
+          "body": "Laura Green says Amara Patel's Tue 2 Sep 2026 shift was added and/or authorised at St Mary's NHS Trust. Candidate Timesheet: 08:00-16:00, 30-minute break. System: Missing or not yet authorised. Manager target: 08:00-16:00, 30-minute break.",
+          "guidance": "Waiting for a later source upload to match the manager's stated hours.",
+          "state": "Awaiting new source",
+          "tone": "warning",
+          "actions": [
+            "Open query",
+            "Clear"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "imports-tab",
+      "file": "10-imports-tab.png",
+      "kind": "office-table-modal",
+      "canvas": "desktop",
+      "activeTab": 0,
+      "shell": {
+        "officeSubtitle": "NHSP backing report · St Mary's NHS Trust",
+        "context": [
+          {
+            "label": "Source",
+            "value": "NHSP backing report"
+          },
+          {
+            "label": "Trust",
+            "value": "St Mary's NHS Trust"
+          },
+          {
+            "label": "Report number",
+            "value": "1741227",
+            "type": "readonly"
+          },
+          {
+            "label": "Cutoff",
+            "value": "09/09/2026 15:00"
+          }
+        ],
+        "tabs": [
+          {
+            "label": "Imports"
+          },
+          {
+            "label": "Queries (12)"
+          },
+          {
+            "label": "Finalise report (4 blockers)"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "cycleState": {
+        "text": "Ready for finalisation",
+        "tone": "positive"
+      },
+      "toolbar": {
+        "filters": [],
+        "actions": [
+          {
+            "label": "Upload source file",
+            "tone": "primary"
+          },
+          {
+            "label": "Recheck",
+            "tone": "ghost"
+          }
+        ]
+      },
+      "notice": {
+        "tone": "info",
+        "title": "Current complete source",
+        "body": "Only the current complete source can be finalised."
+      },
+      "columns": [
+        {
+          "key": "file",
+          "label": "File",
+          "sort": "asc"
+        },
+        {
+          "key": "uploaded",
+          "label": "Uploaded"
+        },
+        {
+          "key": "rows",
+          "label": "Rows"
+        },
+        {
+          "key": "report",
+          "label": "Report"
+        },
+        {
+          "key": "cutoff",
+          "label": "Cutoff"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        },
+        {
+          "key": "final",
+          "label": "Final source"
+        },
+        {
+          "key": "actions",
+          "label": "Actions"
+        }
+      ],
+      "rows": [
+        {
+          "file": "Backing_report_1741226.xlsx",
+          "uploaded": "Today 09:12",
+          "rows": "284",
+          "report": "1741226",
+          "cutoff": "9 Sep 2026 · 15:00",
+          "status": {
+            "text": "Superseded",
+            "tone": "neutral"
+          },
+          "final": "",
+          "actions": "View"
+        },
+        {
+          "file": "Backing_report_1741227.xlsx",
+          "uploaded": "Today 13:48",
+          "rows": "286",
+          "report": "1741227",
+          "cutoff": "9 Sep 2026 · 15:00",
+          "status": {
+            "text": "Current",
+            "tone": "info",
+            "subtext": "1 pricing warning",
+            "subtone": "warning"
+          },
+          "final": "Current",
+          "actions": "Review pricing"
+        },
+        {
+          "file": "Backing_report_review.xlsx",
+          "uploaded": "Yesterday 16:03",
+          "rows": "278",
+          "report": "Not confirmed",
+          "cutoff": "Not confirmed",
+          "status": {
+            "text": "Needs attention",
+            "tone": "danger"
+          },
+          "final": "",
+          "actions": "Review"
+        }
+      ],
+      "footer": {
+        "left": "Current: report 1741227",
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "record-not-worked",
+      "file": "13-record-not-worked.png",
+      "kind": "record-not-worked-modal",
+      "canvas": "desktop",
+      "title": "Record shift as not worked",
+      "warning": "This changes only this shift to zero hours. Other work on the same day remains unchanged. The existing payment process will calculate whether anything must be recovered.",
+      "facts": [
+        {
+          "label": "Candidate",
+          "value": "Jane Smith"
+        },
+        {
+          "label": "Client",
+          "value": "St Mary's NHS Trust"
+        },
+        {
+          "label": "Shift",
+          "value": "Mon 1 Sep 2026 · 09:00-18:00 · 30 min break"
+        },
+        {
+          "label": "Candidate hours",
+          "value": "8 hours 30 minutes"
+        },
+        {
+          "label": "System hours",
+          "value": "No shift"
+        }
+      ],
+      "otherWork": "Other work on this day: 1 shift remains unchanged.",
+      "calculationDisclosure": {
+        "label": "View pay calculation",
+        "summary": "Calculated by CloudTMS",
+        "defaultOpen": false
+      },
+      "reason": {
+        "label": "Reason",
+        "value": "Client and candidate confirmed the shift was not worked.",
+        "required": true
+      },
+      "confirmation": "I confirm the candidate did not work this shift.",
+      "footer": {
+        "actions": [
+          {
+            "label": "Cancel",
+            "tone": "secondary"
+          },
+          {
+            "label": "Record as not worked",
+            "tone": "danger",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "client-settings",
+      "file": "14-client-settings.png",
+      "kind": "settings-modal",
+      "canvas": "desktop",
+      "title": "Client settings",
+      "subtitle": "St Mary's Community Services",
+      "existingStructure": true,
+      "preserveExistingFields": true,
+      "placementPolicyRef": "interactionPolicies.settingsPlacement.clientSections",
+      "activeTab": "Invoicing",
+      "tabs": [
+        {
+          "label": "Timesheets",
+          "sections": [
+            {
+              "title": "Timesheet workflow",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "Timesheet workflow",
+                  "value": "Roster validation timesheets",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Weekly source queries",
+              "fields": [
+                {
+                  "label": "Ask candidates about hour differences",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Email managers about hour differences",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Manager query email",
+                  "value": "laura.green@stmarys.example",
+                  "type": "email"
+                },
+                {
+                  "label": "Email the completed Timesheet pack",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Completed pack email",
+                  "value": "laura.green@stmarys.example",
+                  "type": "email"
+                }
+              ]
+            },
+            {
+              "title": "Submission",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "Week ending",
+                  "value": "Sunday",
+                  "type": "select"
+                },
+                {
+                  "label": "How workers enter breaks",
+                  "value": "Break length in minutes",
+                  "type": "select"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Shift times",
+          "sections": [
+            {
+              "title": "Shift pattern",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "Timezone",
+                  "value": "Europe/London",
+                  "type": "select"
+                },
+                {
+                  "label": "Use custom shift times",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Bank holiday",
+                  "value": "00:00-23:59",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Weekly rate calculation",
+              "fields": [
+                {
+                  "label": "Weekly rate calculation",
+                  "value": "One rate for the whole shift",
+                  "type": "select"
+                },
+                {
+                  "label": "Classify the shift by",
+                  "value": "Day the shift starts",
+                  "type": "select",
+                  "readOnly": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Invoicing",
+          "sections": [
+            {
+              "title": "Billing details",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "VAT chargeable",
+                  "value": "Yes",
+                  "type": "select"
+                },
+                {
+                  "label": "Payment terms",
+                  "value": "30 days",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Invoice consolidation",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "Invoice consolidation",
+                  "value": "Self-bill by finalised week",
+                  "type": "select",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "title": "Weekly self-bill corrections",
+              "fields": [
+                {
+                  "label": "How are later corrections shown?",
+                  "value": "Reverse original and replace",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Invoice rules",
+              "existing": true,
+              "fields": [
+                {
+                  "label": "Reference required to invoice",
+                  "value": "Off",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Keep Candidate expenses on a separate Timesheet",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Expense Invoice Email",
+                  "value": "expenses@stmarys.example",
+                  "type": "email"
+                }
+              ]
+            },
+            {
+              "title": "Expenses from the weekly source file",
+              "note": "Applies to new weekly Timesheets that have not been opened.",
+              "fields": [
+                {
+                  "label": "Use expenses from the source file",
+                  "value": "On",
+                  "type": "toggle"
+                },
+                {
+                  "label": "Add VAT to these client expenses",
+                  "value": "On",
+                  "type": "toggle"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Cancel",
+          "tone": "secondary"
+        },
+        {
+          "label": "Save",
+          "tone": "primary"
+        }
+      ]
+    },
+    {
+      "id": "candidate-nhsp-absent",
+      "file": "15-candidate-nhsp-absent.png",
+      "kind": "candidate-mobile",
+      "canvas": "mobile",
+      "navigationTitle": "Timesheet",
+      "eyebrow": "WEEKLY TIMESHEET CHECK",
+      "title": "Check your hours",
+      "context": "Tue 2 Sep 2026 · St Mary's NHS Trust",
+      "responsePolicyRef": "interactionPolicies.candidateNotificationPolicy.multiShiftResponse",
+      "comparisons": [
+        {
+          "label": "Your Timesheet",
+          "time": "08:00-16:00",
+          "break": "30-minute break",
+          "tone": "info"
+        },
+        {
+          "label": "System hours",
+          "time": "Missing or not yet authorised",
+          "break": "",
+          "tone": "warning"
+        }
+      ],
+      "prompt": "Which is correct?",
+      "choices": [
+        {
+          "label": "My hours are wrong, the client is correct.",
+          "selected": false
+        },
+        {
+          "label": "My hours are correct.",
+          "selected": true
+        },
+        {
+          "label": "Neither set of hours is correct.",
+          "selected": false
+        }
+      ],
+      "advice": "This shift may be missing or not yet authorised. Please contact your manager urgently and ask them to add and/or authorise it.",
+      "other": "Other shifts this week are visible below but cannot be changed here.",
+      "revisionScope": "One complete Weekly Timesheet revision; unchanged shifts copied exactly; one signature; no partial response.",
+      "primaryAction": "Save and confirm my hours"
+    },
+    {
+      "id": "timesheet-summary-status",
+      "file": "16-timesheet-summary-status.png",
+      "kind": "timesheet-summary",
+      "canvas": "desktop",
+      "title": "Timesheets Summary",
+      "filters": [
+        {
+          "label": "Issues",
+          "value": "Candidate payment is waiting for final weekly source validation."
+        },
+        {
+          "label": "Range",
+          "value": "All weeks"
+        }
+      ],
+      "columns": [
+        "Candidate",
+        "Week ending",
+        "Client",
+        "Total hours",
+        "Processing Status"
+      ],
+      "truthTableRef": "interactionPolicies.timesheetSummary.truthTable",
+      "rows": [
+        {
+          "candidate": "Jane Smith",
+          "week": "6 Sep 2026",
+          "client": "St Mary's NHS Trust",
+          "hours": "37:30",
+          "mainStatus": "Unprocessed",
+          "weeklySourcePayDelayed": true,
+          "delayStatus": "Delayed",
+          "tooltip": "Candidate payment is waiting for final weekly source validation."
+        },
+        {
+          "candidate": "Omar Khan",
+          "week": "6 Sep 2026",
+          "client": "St Mary's NHS Trust",
+          "hours": "40:00",
+          "mainStatus": "Invoiced",
+          "weeklySourcePayDelayed": false,
+          "delayStatus": "",
+          "tooltip": ""
+        },
+        {
+          "candidate": "Amara Patel",
+          "week": "6 Sep 2026",
+          "client": "City Community NHS",
+          "hours": "32:00",
+          "mainStatus": "Processing Delayed",
+          "weeklySourcePayDelayed": true,
+          "delayStatus": "",
+          "tooltip": "Candidate payment is waiting for final weekly source validation.",
+          "delayPresentation": "Attach the reason to the existing status; do not add a duplicate badge."
+        },
+        {
+          "candidate": "Luke Morgan",
+          "week": "6 Sep 2026",
+          "client": "City Community NHS",
+          "hours": "36:00",
+          "mainStatus": "Processed",
+          "weeklySourcePayDelayed": false,
+          "delayStatus": "",
+          "tooltip": ""
+        }
+      ],
+      "hoveredRow": 0,
+      "footer": "4 timesheets"
+    },
+    {
+      "id": "contract-settings",
+      "file": "17-contract-settings.png",
+      "kind": "settings-modal",
+      "canvas": "desktop",
+      "title": "Contract-specific settings",
+      "subtitle": "Jane Smith · St Mary's Community Services · Staff Nurse",
+      "existingStructure": true,
+      "preserveExistingFields": true,
+      "placementPolicyRef": "interactionPolicies.settingsPlacement.contractSections",
+      "sections": [
+        {
+          "title": "Expense Timesheet and invoice",
+          "existing": true,
+          "note": "Independent of Override client settings.",
+          "fields": [
+            {
+              "label": "Candidate expense Timesheet",
+              "value": "Use Client setting - Separate",
+              "type": "select"
+            },
+            {
+              "label": "Contract Expense Invoice Email override",
+              "value": "Use Client Expense Invoice Email",
+              "type": "email"
+            }
+          ]
+        },
+        {
+          "title": "Printed QR Timesheets",
+          "existing": true,
+          "fields": [
+            {
+              "label": "Printed QR Timesheets",
+              "value": "Use Client setting - Allowed",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Timesheet query email",
+          "existing": true,
+          "fields": [
+            {
+              "label": "Use a different query email",
+              "value": "Off",
+              "type": "toggle"
+            },
+            {
+              "label": "Contract query email",
+              "value": "Use Client timesheet query email",
+              "type": "email"
+            }
+          ]
+        },
+        {
+          "title": "Weekly rate calculation",
+          "fields": [
+            {
+              "label": "Weekly rate calculation",
+              "value": "Use Client setting - One rate for the whole shift",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Weekly source queries",
+          "fields": [
+            {
+              "label": "Ask candidates about hour differences",
+              "value": "Use Client setting - On",
+              "type": "select"
+            },
+            {
+              "label": "Email managers about hour differences",
+              "value": "Off",
+              "type": "select"
+            },
+            {
+              "label": "Email the completed Timesheet pack",
+              "value": "Use Client setting - On",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Expenses from the weekly source file",
+          "note": "Applies to new weekly Timesheets that have not been opened.",
+          "fields": [
+            {
+              "label": "Use expenses from the source file",
+              "value": "Use Client setting - On",
+              "type": "select"
+            },
+            {
+              "label": "Add VAT to these client expenses",
+              "value": "Off",
+              "type": "select"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Cancel",
+          "tone": "secondary"
+        },
+        {
+          "label": "Save",
+          "tone": "primary"
+        }
+      ]
+    },
+    {
+      "id": "healthroster-finalise",
+      "file": "21-healthroster-finalise.png",
+      "kind": "office-table-modal",
+      "canvas": "desktop",
+      "activeTab": 2,
+      "shell": {
+        "officeSubtitle": "HealthRoster Weekly self-bill · Surrey Healthcare",
+        "context": [
+          {
+            "label": "Source",
+            "value": "HealthRoster Timesheet Export"
+          },
+          {
+            "label": "Client",
+            "value": "Surrey Healthcare"
+          },
+          {
+            "label": "Invoice cycle",
+            "value": "06/09/2026"
+          },
+          {
+            "label": "Export dates",
+            "value": "01/12/2025 to 11/09/2026"
+          },
+          {
+            "label": "File",
+            "value": "Surrey Timesheet Export.xlsx"
+          }
+        ],
+        "tabs": [
+          {
+            "label": "Imports"
+          },
+          {
+            "label": "Queries (3)"
+          },
+          {
+            "label": "Finalise source (1 blocker)"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "cycleState": {
+        "text": "1 blocker to resolve",
+        "tone": "danger"
+      },
+      "notice": {
+        "tone": "info",
+        "title": "Prepared for finalisation",
+        "body": "Finalisation may be chosen before cutoff. Confirm that non-finalised shifts are excluded; any previous final positions removed within this file’s coverage are still reversed. The malformed shift below must be corrected first."
+      },
+      "toolbar": {
+        "filters": [
+          {
+            "label": "Show",
+            "value": "All source rows"
+          }
+        ],
+        "actions": [
+          {
+            "label": "Recheck",
+            "tone": "ghost"
+          }
+        ]
+      },
+      "columns": [
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "day",
+          "label": "Day/date"
+        },
+        {
+          "key": "actual",
+          "label": "System hours"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        },
+        {
+          "key": "actions",
+          "label": "Action"
+        }
+      ],
+      "rows": [
+        {
+          "candidate": "Abigail Morris",
+          "day": "Mon 31 Aug 2026",
+          "actual": "08:00-20:00 (60 min break)",
+          "status": {
+            "text": "New shift",
+            "tone": "positive"
+          },
+          "actions": "View details"
+        },
+        {
+          "candidate": "Ben Walker",
+          "day": "Tue 1 Sep 2026",
+          "actual": "No confirmed hours",
+          "status": {
+            "text": "Not finalised",
+            "tone": "warning",
+            "subtext": "Candidate says worked"
+          },
+          "actions": [
+            "View query",
+            "Protect pay"
+          ]
+        },
+        {
+          "candidate": "Cara Evans",
+          "day": "Thu 3 Sep 2026",
+          "actual": "Start or finish missing",
+          "status": {
+            "text": "Needs correction",
+            "tone": "danger"
+          },
+          "actions": "Review source row"
+        }
+      ],
+      "footer": {
+        "left": "1 new · 1 not finalised · 1 blocked",
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          },
+          {
+            "label": "Finalise source",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "nhsp-ready-finalise",
+      "file": "22-nhsp-ready-finalise.png",
+      "kind": "finalise-modal",
+      "canvas": "desktop",
+      "activeTab": 2,
+      "shell": {
+        "officeSubtitle": "NHSP backing report · St Mary's NHS Trust",
+        "context": [
+          {
+            "label": "Source",
+            "value": "NHSP backing report"
+          },
+          {
+            "label": "Trust",
+            "value": "St Mary's NHS Trust"
+          },
+          {
+            "label": "Report number",
+            "value": "1741227",
+            "type": "readonly"
+          },
+          {
+            "label": "Cutoff",
+            "value": "09/09/2026 15:00"
+          }
+        ],
+        "tabs": [
+          {
+            "label": "Imports"
+          },
+          {
+            "label": "Queries (12)"
+          },
+          {
+            "label": "Finalise report"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "cycleState": {
+        "text": "Ready for finalisation",
+        "tone": "positive"
+      },
+      "source": {
+        "label": "Current final backing report",
+        "file": "Backing_report_1741227.xlsx",
+        "summary": "Report 1741227 · Cutoff Wed 9 Sep 2026 at 15:00 · one Trust · exact invoice movements"
+      },
+      "innerTabs": [
+        {
+          "label": "Ready to Finalise (285)",
+          "active": true
+        },
+        {
+          "label": "Blocked from Finalise (0)",
+          "active": false
+        }
+      ],
+      "columns": [
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "day",
+          "label": "Day/date"
+        },
+        {
+          "key": "actual",
+          "label": "Actual hours"
+        },
+        {
+          "key": "movement",
+          "label": "Movement"
+        },
+        {
+          "key": "commission",
+          "label": "Commission"
+        },
+        {
+          "key": "totalCost",
+          "label": "Total cost"
+        },
+        {
+          "key": "invoiceCharge",
+          "label": "Invoice charge"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        }
+      ],
+      "rows": [
+        {
+          "candidate": "Amara Patel",
+          "day": "Tue 2 Sep 2026",
+          "actual": "09:00-17:00 (30)",
+          "movement": "Charge",
+          "commission": "£52.50",
+          "totalCost": "£209.85",
+          "invoiceCharge": "£262.35",
+          "status": {
+            "text": "Ready",
+            "tone": "positive"
+          }
+        },
+        {
+          "candidate": "Ben Walker",
+          "day": "Wed 3 Sep 2026",
+          "actual": "20:00-08:00 (30)",
+          "movement": "Charge",
+          "commission": "£80.50",
+          "totalCost": "£322.00",
+          "invoiceCharge": "£402.50",
+          "status": {
+            "text": "Ready",
+            "tone": "positive"
+          }
+        },
+        {
+          "candidate": "Cara Evans",
+          "day": "Thu 4 Sep 2026",
+          "actual": "09:00-17:00 (30)",
+          "movement": "Full reversal",
+          "commission": "-£52.50",
+          "totalCost": "-£209.85",
+          "invoiceCharge": "-£262.35",
+          "status": {
+            "text": "Ready",
+            "tone": "positive"
+          }
+        }
+      ],
+      "confirmation": "I confirm this is the complete final NHSP backing report for St Mary's NHS Trust, report 1741227, for the cutoff shown.",
+      "footer": {
+        "left": "285 ready · 0 blocked",
+        "actions": [
+          {
+            "label": "Recheck",
+            "tone": "secondary"
+          },
+          {
+            "label": "Finalise report",
+            "tone": "primary",
+            "disabled": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "office-timesheet-pay-history",
+      "file": "19-office-timesheet-pay-history.png",
+      "kind": "office-timesheet-history",
+      "canvas": "desktop",
+      "title": "Timesheet",
+      "subtitle": "Jane Smith · St Mary's NHS Trust · week ending Sun 6 Sep 2026",
+      "mainStatus": {
+        "text": "Invoiced",
+        "tone": "positive"
+      },
+      "reconciliationStatus": {
+        "text": "Reconciled",
+        "tone": "info"
+      },
+      "truthTitle": "Hours",
+      "truthRows": [
+        {
+          "label": "Hours submitted",
+          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break",
+          "action": "View submitted Timesheet"
+        },
+        {
+          "label": "Hours confirmed by the client system",
+          "value": "Mon 1 Sep · 09:00-17:30 · 30 min break"
+        },
+        {
+          "label": "Protected hours",
+          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break · Reconciled 22 Sep 2026"
+        },
+        {
+          "label": "Hours approved for pay",
+          "value": "Mon 1 Sep · 09:00-17:30 · 30 min break"
+        }
+      ],
+      "differenceNote": "The hours approved for pay differ from the Timesheet you submitted.",
+      "positionTitle": "Current pay position",
+      "position": [
+        {
+          "label": "Gross pay approved",
+          "value": "£110.00"
+        },
+        {
+          "label": "Gross paid",
+          "value": "£120.00"
+        },
+        {
+          "label": "Gross recovery applied",
+          "value": "£10.00"
+        },
+        {
+          "label": "Gross still due",
+          "value": "£0.00"
+        }
+      ],
+      "historyTitle": "Payment history",
+      "history": [
+        {
+          "status": "Recovery applied",
+          "tone": "warning",
+          "date": "22 Sep 2026",
+          "gross": "-£10.00 gross",
+          "hours": "Hours reconciled to 09:00-17:30",
+          "transfer": "Included in a payment of £87.20 on 22 Sep 2026",
+          "document": "View remittance"
+        },
+        {
+          "status": "Adjustment paid",
+          "tone": "positive",
+          "date": "8 Sep 2026",
+          "gross": "+£20.00 gross",
+          "hours": "Protected hours approved to 18:00",
+          "transfer": "Included in a payment of £96.40 on 8 Sep 2026",
+          "document": "View remittance"
+        },
+        {
+          "status": "Paid",
+          "tone": "positive",
+          "date": "7 Sep 2026",
+          "gross": "£100.00 gross",
+          "hours": "09:00-17:00 · 30 min break",
+          "transfer": "Included in a payment of £80.00 on 7 Sep 2026",
+          "document": "View remittance"
+        }
+      ],
+      "historyOrder": "NEWEST_FIRST",
+      "footer": {
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "worker-timesheet-approved-hours",
+      "file": "20-worker-timesheet-approved-hours.png",
+      "kind": "candidate-timesheet-history",
+      "canvas": "mobile",
+      "navigationTitle": "Timesheet",
+      "eyebrow": "CONTRACT",
+      "title": "Week ending Sun 6 Sep 2026",
+      "description": "St Mary's NHS Trust · Staff Nurse",
+      "mainStatus": {
+        "text": "Approved",
+        "tone": "positive"
+      },
+      "truthTitle": "Timesheet submitted",
+      "truthRows": [
+        {
+          "label": "Your hours",
+          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break",
+          "action": "View submitted Timesheet"
+        }
+      ],
+      "differenceNote": "",
+      "approvedTitle": "Approved hours to be paid",
+      "approvedRows": [
+        {
+          "day": "Mon 1 Sep 2026",
+          "value": "09:00-17:30 · 30 min break"
+        }
+      ],
+      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change.",
+      "route": "SOURCE_AUTHORITY",
+      "expenses": {
+        "title": "Expenses",
+        "body": "Expenses for this week are claimed on a separate expense Timesheet.",
+        "action": "Add additional expense Timesheet"
+      },
+      "captureVariants": [
+        {
+          "file": "20d-worker-timesheet-expense-link.png",
+          "scrollSelector": ".mytms-screen",
+          "scrollTop": 420
+        }
+      ]
+    },
+    {
+      "id": "worker-timesheet-ordinary",
+      "file": "20a-worker-timesheet-ordinary.png",
+      "kind": "candidate-timesheet-history",
+      "canvas": "mobile",
+      "route": "ORDINARY",
+      "navigationTitle": "Timesheet",
+      "eyebrow": "CONTRACT",
+      "title": "Week ending Sun 6 Sep 2026",
+      "description": "Riverside Care Home · Support Worker",
+      "mainStatus": {
+        "text": "Approved",
+        "tone": "positive"
+      },
+      "truthTitle": "Timesheet submitted",
+      "truthRows": [
+        {
+          "label": "Mon 1 Sep",
+          "value": "09:00-17:00 · 30 min break"
+        },
+        {
+          "label": "Tue 2 Sep",
+          "value": "09:00-17:00 · 30 min break"
+        },
+        {
+          "label": "Wed 3 Sep",
+          "value": "09:00-17:00 · 30 min break"
+        },
+        {
+          "label": "Thu 4 Sep",
+          "value": "09:00-17:00 · 30 min break"
+        },
+        {
+          "label": "Fri 5 Sep",
+          "value": "09:00-13:00 · No break",
+          "action": "View submitted Timesheet"
+        }
+      ],
+      "differenceNote": "",
+      "approvedRows": [],
+      "expenses": {
+        "title": "Expenses",
+        "body": "Add receipts or mileage evidence for this Timesheet.",
+        "action": "Add expense"
+      },
+      "captureVariants": [
+        {
+          "file": "23-worker-timesheet-expenses.png",
+          "scrollSelector": ".mytms-screen",
+          "scrollTop": 420
+        }
+      ]
+    },
+    {
+      "id": "worker-timesheet-no-submission",
+      "file": "20b-worker-timesheet-no-submission.png",
+      "kind": "candidate-timesheet-history",
+      "canvas": "mobile",
+      "route": "SOURCE_AUTHORITY_NO_SUBMISSION",
+      "readOnly": true,
+      "navigationTitle": "Timesheet",
+      "eyebrow": "CONTRACT",
+      "title": "Week ending Sun 6 Sep 2026",
+      "description": "St Mary's NHS Trust · Staff Nurse",
+      "mainStatus": {
+        "text": "Approved",
+        "tone": "positive",
+        "subtext": "Read-only",
+        "subtone": "neutral"
+      },
+      "truthTitle": "Timesheet",
+      "truthRows": [],
+      "differenceNote": "You did not submit a Timesheet for this week.",
+      "approvedTitle": "Approved hours to be paid",
+      "approvedRows": [
+        {
+          "day": "Mon 1 Sep 2026",
+          "value": "09:00-17:30 · 30 min break"
+        },
+        {
+          "day": "Wed 3 Sep 2026",
+          "value": "20:00-08:00 · 60 min break"
+        }
+      ],
+      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change."
+    },
+    {
+      "id": "worker-timesheet-source-fixed-expense",
+      "file": "20c-worker-timesheet-source-fixed-expense.png",
+      "kind": "candidate-timesheet-history",
+      "canvas": "mobile",
+      "route": "SOURCE_AUTHORITY_SOURCE_FIXED_EXPENSE",
+      "navigationTitle": "Timesheet",
+      "eyebrow": "CONTRACT",
+      "title": "Week ending Sun 6 Sep 2026",
+      "description": "St Mary's NHS Trust · Staff Nurse",
+      "mainStatus": {
+        "text": "Approved",
+        "tone": "positive"
+      },
+      "truthTitle": "Timesheet submitted",
+      "truthRows": [
+        {
+          "label": "Your hours",
+          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break",
+          "action": "View submitted Timesheet"
+        }
+      ],
+      "differenceNote": "",
+      "approvedTitle": "Approved hours to be paid",
+      "approvedRows": [
+        {
+          "day": "Mon 1 Sep 2026",
+          "value": "09:00-17:30 · 30 min break"
+        }
+      ],
+      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change."
+    },
+    {
+      "id": "weekly-imports-two-journeys",
+      "file": "24-weekly-imports-two-journeys.png",
+      "kind": "office-table-modal",
+      "canvas": "desktop",
+      "activeTab": 0,
+      "shell": {
+        "officeSubtitle": "Current pay cycle",
+        "context": [
+          {
+            "label": "Journey",
+            "value": "Signed Timesheet decides hours"
+          },
+          {
+            "label": "Client",
+            "value": "Whittington Health"
+          },
+          {
+            "label": "Pay cycle",
+            "value": "Week ending 6 Sep 2026"
+          },
+          {
+            "label": "Status",
+            "value": "Needs attention"
+          }
+        ],
+        "tabs": [
+          {
+            "label": "Needs attention (2)"
+          },
+          {
+            "label": "Ready (14)"
+          },
+          {
+            "label": "History"
+          }
+        ]
+      },
+      "cycleState": {
+        "text": "Signed Timesheet decides hours",
+        "tone": "info"
+      },
+      "notice": {
+        "tone": "info",
+        "title": "Timesheet hours are used",
+        "body": "The client system is checked so matching references can be added."
+      },
+      "toolbar": {
+        "filters": [
+          {
+            "label": "Show",
+            "value": "Current pay cycle"
+          }
+        ],
+        "actions": [
+          {
+            "label": "Recheck",
+            "tone": "secondary"
+          }
+        ]
+      },
+      "columns": [
+        {
+          "key": "select",
+          "label": "",
+          "headerCheckboxState": "indeterminate"
+        },
+        {
+          "key": "candidate",
+          "label": "Candidate",
+          "sort": "asc"
+        },
+        {
+          "key": "day",
+          "label": "Day/date"
+        },
+        {
+          "key": "issue",
+          "label": "What needs attention"
+        },
+        {
+          "key": "reference",
+          "label": "Reference"
+        },
+        {
+          "key": "status",
+          "label": "Status"
+        },
+        {
+          "key": "actions",
+          "label": "Action"
+        }
+      ],
+      "rows": [
+        {
+          "selected": true,
+          "candidate": "Abigail Morris",
+          "day": "Mon 31 Aug 2026",
+          "issue": "Hours are different",
+          "reference": "Not added",
+          "status": {
+            "text": "Manager correction needed",
+            "tone": "danger"
+          },
+          "actions": [
+            "View Timesheet",
+            "Email manager"
+          ]
+        },
+        {
+          "selected": false,
+          "selectDisabled": true,
+          "candidate": "Ben Walker",
+          "day": "Tue 1 Sep 2026",
+          "issue": "Timesheet not complete",
+          "reference": "—",
+          "status": {
+            "text": "Waiting for completed Timesheet",
+            "tone": "warning"
+          },
+          "actions": "View Timesheet"
+        }
+      ],
+      "footer": {
+        "left": "1 selected",
+        "actions": [
+          {
+            "label": "Close",
+            "tone": "secondary"
+          },
+          {
+            "label": "Email manager",
+            "tone": "primary"
+          }
+        ]
+      }
+    },
+    {
+      "id": "weekly-reference-setting",
+      "file": "30-weekly-reference-setting.png",
+      "kind": "settings-modal",
+      "canvas": "desktop",
+      "title": "Client settings",
+      "subtitle": "Whittington Health",
+      "existingStructure": true,
+      "preserveExistingFields": true,
+      "sections": [
+        {
+          "title": "Weekly HealthRoster Timesheets",
+          "note": "Shown only when signed Timesheet decides hours.",
+          "fields": [
+            {
+              "label": "Reference required before pay",
+              "value": "Off",
+              "type": "toggle"
+            },
+            {
+              "label": "Authorise when every shift matches",
+              "value": "On",
+              "type": "toggle"
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "label": "Cancel",
+          "tone": "secondary"
+        },
+        {
+          "label": "Save",
+          "tone": "primary"
+        }
+      ]
+    }
+  ],
+  "amendment": {
+    "authority": "../WEEKLY_SOURCE_IMPORT_QUERY_POLICY_AMENDMENT_20260930.md",
+    "baseArchiveSha256": "a062d8a7baaee282937acc4316dc9c3945e5685e00ec6adf624537e3e502f3bb",
+    "scope": "Successor of accepted modal policy; only import/query/finalisation amendments. Original archive remains unchanged."
+  }
+}

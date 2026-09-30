@@ -9,6 +9,61 @@
 
 begin;
 
+create or replace function private.weekly_source_candidate_generation_current_v1(p_generation_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(select 1 from public.weekly_candidate_outreach_generations generation
+    join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
+    where generation.id=p_generation_id and generation.state='ACTIVE'
+      and generation.id=case when generation.request_kind='SUBMIT_TIMESHEET'
+        then cohort.current_submission_generation_id else cohort.current_generation_id end);
+$function$;
+
+create or replace function private.weekly_source_waiting_requested_week_v1(
+  p_cycle_id uuid,p_candidate_id uuid,p_client_id uuid,p_contract_id uuid,p_work_date date
+) returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(select 1 from public.weekly_timesheet_submission_requests request
+    join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+    where request.source_cycle_id=p_cycle_id and request.candidate_id=p_candidate_id
+      and request.state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+      and membership.state='WAITING' and membership.client_id=p_client_id
+      and membership.contract_id=p_contract_id
+      and p_work_date>membership.week_ending-7 and p_work_date<=membership.week_ending);
+$function$;
+alter function private.weekly_source_candidate_generation_current_v1(uuid) owner to postgres;
+alter function private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date) owner to postgres;
+revoke all on function private.weekly_source_candidate_generation_current_v1(uuid) from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_waiting_requested_week_v1(uuid,uuid,uuid,uuid,date) from public,anon,authenticated,service_role;
+
+-- One eligibility predicate is shared by selection, rendering and the final
+-- render assertion. A one-week submission exception must not widen at a later
+-- delivery stage into a candidate-wide manager notification.
+create or replace function private.weekly_source_manager_due_event_covers_v1(p_event_id uuid,p_incident_id uuid)
+returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  select exists(
+    select 1 from public.weekly_manager_cohort_due_events event
+    join public.weekly_candidate_cohorts cohort on cohort.id=event.candidate_cohort_id
+    join public.weekly_discrepancy_incidents incident
+      on incident.id=p_incident_id and incident.candidate_id=cohort.candidate_id
+      and incident.source_cycle_id=cohort.source_cycle_id
+    join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    left join public.weekly_timesheet_submission_request_memberships requested on requested.id=event.requested_week_membership_id
+    where event.id=p_event_id and (event.requested_week_membership_id is null
+      or (requested.state='SUBMITTED_WITH_ISSUES' and requested.client_id=incident.client_id
+        and requested.contract_id=comparison.contract_id
+        and work_event.work_date>requested.week_ending-7 and work_event.work_date<=requested.week_ending
+        and incident.candidate_action_state='NOT_REQUIRED'))
+  );
+$function$;
+alter function private.weekly_source_manager_due_event_covers_v1(uuid,uuid) owner to postgres;
+revoke all on function private.weekly_source_manager_due_event_covers_v1(uuid,uuid) from public,anon,authenticated,service_role;
+
 create or replace function private.weekly_source_query_require_service_v1()
 returns void
 language plpgsql
@@ -260,10 +315,12 @@ begin
         and incident.state='OPEN' and incident.manager_action_state<>'RESPONDED'
         and (
           coalesce(pg_catalog.array_length(v_intent.sorted_due_event_ids,1),0)=0
-          or membership.candidate_cohort_id=any(
-            select event.candidate_cohort_id from public.weekly_manager_cohort_due_events event
+          or exists(
+            select 1 from public.weekly_manager_cohort_due_events event
             where event.id=any(v_intent.sorted_due_event_ids)
               and event.recipient_generation_id=v_generation.id
+              and event.candidate_cohort_id=membership.candidate_cohort_id
+              and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
           )
         )
         and (v_intent.tranche_kind<>'MANAGER_T6_RESPONDED' or incident.candidate_action_state='RESPONDED')
@@ -384,7 +441,7 @@ begin
   join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
   where generation.candidate_cohort_id=v_submission.candidate_cohort_id
     and generation.request_kind='SUBMIT_TIMESHEET' and generation.state='ACTIVE'
-    and cohort.current_generation_id=generation.id
+    and cohort.current_submission_generation_id=generation.id
   for update of generation;
 
   for v_completion in
@@ -496,11 +553,9 @@ begin
           activated_by_user_id,activated_at_utc,updated_at_utc
         ) values (
           v_submission.source_cycle_id,v_candidate_id,v_membership.client_id,
-          'MANAGER','MANAGER_DIRECT',null,pg_catalog.transaction_timestamp(),pg_catalog.transaction_timestamp()
+          'MANAGER','CANDIDATE_FIRST',null,pg_catalog.transaction_timestamp(),pg_catalog.transaction_timestamp()
         ) on conflict (source_cycle_id,candidate_id,client_id,audience_route)
-        do update set route_mode='MANAGER_DIRECT',
-          activated_at_utc=coalesce(public.weekly_route_activations.activated_at_utc,excluded.activated_at_utc),
-          updated_at_utc=excluded.updated_at_utc
+        do nothing
         returning * into v_route_activation;
         if not (v_route_id=any(v_route_ids)) then
           v_route_ids:=pg_catalog.array_append(v_route_ids,v_route_id);
@@ -1379,7 +1434,7 @@ begin
       select 1 from public.weekly_candidate_outreach_generations generation
       join public.weekly_candidate_cohorts cohort on cohort.id=generation.candidate_cohort_id
       where generation.id=v_command.candidate_generation_id and generation.state='ACTIVE'
-        and cohort.current_generation_id=generation.id
+        and private.weekly_source_candidate_generation_current_v1(generation.id)
     ) then
       update public.weekly_message_dispatch_commands set state='RETIRED',lease_owner=null,
         lease_token=null,lease_expires_at_utc=null where id=v_command.id;
@@ -1966,7 +2021,7 @@ begin
     if v_candidate_generation.state<>'ACTIVE'
        or not exists(select 1 from public.weekly_candidate_cohorts cohort
                      where cohort.id=v_candidate_generation.candidate_cohort_id
-                       and cohort.current_generation_id=v_candidate_generation.id) then
+                       and private.weekly_source_candidate_generation_current_v1(v_candidate_generation.id)) then
       raise exception 'WEEKLY_SOURCE_CANDIDATE_MESSAGE_STALE' using errcode='40001';
     end if;
     v_membership_hash:=v_candidate_generation.membership_hash;
@@ -2018,6 +2073,7 @@ begin
               select event.candidate_cohort_id from public.weekly_manager_cohort_due_events event
               where event.id=any(v_intent.sorted_due_event_ids)
                 and event.recipient_generation_id=v_generation.id
+                and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
             )
           )
           and (v_intent.tranche_kind<>'MANAGER_T6_RESPONDED' or incident.candidate_action_state='RESPONDED')
@@ -2324,6 +2380,7 @@ begin
       and membership.candidate_cohort_id=any(
         select event.candidate_cohort_id
         from public.weekly_manager_cohort_due_events event where event.id=any(v_event_ids)
+          and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
       )
       and incident.state='OPEN' and incident.manager_action_state<>'RESPONDED'
       and (
@@ -2351,6 +2408,7 @@ begin
         and membership.candidate_cohort_id=any(
           select event.candidate_cohort_id from public.weekly_manager_cohort_due_events event
           where event.id=any(v_event_ids)
+            and private.weekly_source_manager_due_event_covers_v1(event.id,incident.id)
         ) and incident.manager_action_state in ('NOT_SENT','SENT')
         and not private.weekly_source_query_manager_row_owned_v1(
           v_route.route_id,incident.id,incident.episode_number
@@ -2926,7 +2984,7 @@ begin
       updated_at_utc=excluded.updated_at_utc;
     select * into v_candidate_generation
     from public.weekly_candidate_outreach_generations
-    where candidate_cohort_id=v_selected.id and state='ACTIVE'
+    where candidate_cohort_id=v_selected.id and state='ACTIVE' and request_kind='CHECK_HOURS'
     for update;
     if found then
       update public.weekly_candidate_cohorts
@@ -3065,7 +3123,20 @@ begin
     v_actor,'ASK_CANDIDATES',v_cycle.source_group_id,v_generation.client_id,
     v_cycle.finalisation_week_ending
   );
-  if v_generation.state<>'ACTIVE' or pg_catalog.transaction_timestamp()<v_generation.manual_reminder_available_at_utc then
+  if not private.weekly_source_candidate_generation_current_v1(v_generation.id)
+    or pg_catalog.transaction_timestamp()<v_generation.manual_reminder_available_at_utc
+    or (v_generation.request_kind='CHECK_HOURS' and not exists(
+      select 1 from public.weekly_candidate_outreach_memberships membership
+      join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+      where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+        and incident.state='OPEN' and incident.candidate_action_state='ASKED'
+        and membership.comparison_revision_id=incident.current_comparison_revision_id))
+    or (v_generation.request_kind='SUBMIT_TIMESHEET' and not exists(
+      select 1 from public.weekly_timesheet_submission_requests request
+      join public.weekly_timesheet_submission_request_memberships membership on membership.submission_request_id=request.id
+      where request.candidate_cohort_id=v_generation.candidate_cohort_id
+        and request.request_generation=v_generation.generation_number
+        and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED') and membership.state='WAITING')) then
     raise exception 'WEEKLY_SOURCE_CANDIDATE_REMINDER_UNAVAILABLE' using errcode='55000';
   end if;
   select * into strict v_settings from public.weekly_source_global_settings where singleton;
@@ -3321,7 +3392,7 @@ begin
   if found and v_old_request.membership_hash=v_hash then
     return pg_catalog.jsonb_build_object(
       'ok',true,'status','UNCHANGED','submission_request_id',v_old_request.id,
-      'candidate_generation_id',v_cohort.current_generation_id,
+      'candidate_generation_id',v_cohort.current_submission_generation_id,
       'started_at_utc',v_old_request.started_at_utc,
       'reminder_due_at_utc',v_old_request.reminder_due_at_utc,
       'deadline_at_utc',v_old_request.deadline_at_utc
@@ -3346,9 +3417,9 @@ begin
   returning * into v_activation;
   select * into v_old_generation
   from public.weekly_candidate_outreach_generations
-  where candidate_cohort_id=v_cohort.id and state='ACTIVE' for update;
+  where candidate_cohort_id=v_cohort.id and state='ACTIVE' and request_kind='SUBMIT_TIMESHEET' for update;
   if found then
-    update public.weekly_candidate_cohorts set current_generation_id=null where id=v_cohort.id;
+    update public.weekly_candidate_cohorts set current_submission_generation_id=null where id=v_cohort.id;
     update public.weekly_candidate_outreach_generations
     set state='SUPERSEDED',superseded_at_utc=pg_catalog.transaction_timestamp()
     where id=v_old_generation.id;
@@ -3373,7 +3444,7 @@ begin
     pg_catalog.transaction_timestamp()+v_settings.candidate_manual_reminder_cooldown,
     'ACTIVE',v_hash
   ) returning * into v_generation;
-  update public.weekly_candidate_cohorts set current_generation_id=v_generation.id where id=v_cohort.id;
+  update public.weekly_candidate_cohorts set current_submission_generation_id=v_generation.id where id=v_cohort.id;
   insert into public.weekly_timesheet_submission_requests(
     environment,agency_id,source_cycle_id,candidate_id,candidate_cohort_id,
     request_generation,current_upload_id,current_projection_publication_id,state,
@@ -3709,6 +3780,31 @@ begin
       ) on conflict (recipient_generation_id,candidate_cohort_id,event_kind,trigger_hash) do nothing;
     end if;
   end loop;
+  -- A requested signed week is a bounded exception, not a persistent route
+  -- override. Recreate its exact due scope on generation rotation without
+  -- changing its original completion time or touching Office choices.
+  insert into public.weekly_manager_cohort_due_events(
+    recipient_generation_id,candidate_cohort_id,event_kind,cohort_started_at_utc,
+    due_at_utc,state,trigger_hash,requested_week_membership_id
+  )
+  select distinct v_new.id,membership.candidate_cohort_id,'EARLY_ALL',requested.completed_at_utc,
+    requested.completed_at_utc,'PENDING',private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_REQUESTED_WEEK_MANAGER_DUE_V1',pg_catalog.jsonb_build_object(
+        'recipient_generation_id',v_new.id,'requested_week_membership_id',requested.id)),requested.id
+  from public.weekly_manager_recipient_memberships membership
+  join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+  join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+  join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+  join public.weekly_timesheet_submission_requests request
+    on request.source_cycle_id=incident.source_cycle_id and request.candidate_id=incident.candidate_id
+  join public.weekly_timesheet_submission_request_memberships requested
+    on requested.submission_request_id=request.id and requested.client_id=incident.client_id
+    and requested.contract_id=comparison.contract_id and work_event.work_date>requested.week_ending-7
+    and work_event.work_date<=requested.week_ending and requested.state='SUBMITTED_WITH_ISSUES'
+  where membership.recipient_generation_id=v_new.id and incident.state='OPEN'
+    and incident.candidate_action_state='NOT_REQUIRED'
+    and not private.weekly_source_query_manager_row_owned_v1(v_route.id,incident.id,incident.episode_number)
+  on conflict(recipient_generation_id,candidate_cohort_id,event_kind,trigger_hash) do nothing;
   return pg_catalog.jsonb_build_object(
     'ok',true,'status','CREATED','recipient_route_id',v_route.id,
     'recipient_generation_id',v_new.id,
@@ -3794,14 +3890,7 @@ begin
   from public.weekly_route_activations
   where source_cycle_id=p_source_cycle_id and candidate_id=p_candidate_id
     and client_id=p_client_id and audience_route='CANDIDATE';
-  if found and v_activation.route_mode='CANDIDATE_FIRST'
-     and not exists(
-       select 1
-       from public.weekly_timesheet_submission_requests submission
-       where submission.source_cycle_id=p_source_cycle_id
-         and submission.candidate_id=p_candidate_id
-         and submission.state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
-     ) then
+  if found and v_activation.route_mode='CANDIDATE_FIRST' then
     v_candidate_result:=private.weekly_source_query_candidate_generation_v1(
       p_source_cycle_id,p_candidate_id,p_client_id,p_projection_publication_id,
       'NEW_INCIDENT',v_activation.activated_by_user_id,pg_catalog.transaction_timestamp()
@@ -4009,6 +4098,9 @@ begin
   where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
     and incident.client_id=p_client_id and incident.state='OPEN'
     and (
+      not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+        p_client_id,comparison.contract_id,work_event.work_date)
+    ) and (
       (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
        and incident.candidate_action_state<>'NOT_REQUIRED')
       or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')
@@ -4042,7 +4134,7 @@ begin
   returning * into v_activation;
   select * into v_old
   from public.weekly_candidate_outreach_generations
-  where candidate_cohort_id=v_cohort.id and state='ACTIVE'
+  where candidate_cohort_id=v_cohort.id and state='ACTIVE' and request_kind='CHECK_HOURS'
   for update;
   v_membership:=coalesce((
     select pg_catalog.jsonb_agg(
@@ -4058,6 +4150,9 @@ begin
     where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
       and incident.client_id=p_client_id and incident.state='OPEN'
       and (
+        not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+          p_client_id,comparison.contract_id,work_event.work_date)
+      ) and (
         (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
          and incident.candidate_action_state<>'NOT_REQUIRED')
         or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')
@@ -4117,6 +4212,9 @@ begin
     where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
       and incident.client_id=p_client_id and incident.state='OPEN'
       and (
+        not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
+          p_client_id,comparison.contract_id,work_event.work_date)
+      ) and (
         (p_trigger_kind in ('NEW_INCIDENT','REOPENED_INCIDENT')
          and incident.candidate_action_state<>'NOT_REQUIRED')
         or incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED')

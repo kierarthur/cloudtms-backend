@@ -1,0 +1,5 @@
+rendering/generated-html/
+assets/modal-images/*
+!assets/modal-images/01-import-query-review.png
+!assets/modal-images/04-query-progress.png
+!assets/modal-images/21-healthroster-finalise.png

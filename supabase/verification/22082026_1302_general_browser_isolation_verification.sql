@@ -406,8 +406,17 @@ begin
   -- The installed definition is SECURITY DEFINER with fixed
   -- search_path=pg_catalog,pg_temp and grants only owner and service_role.
   -- This updates the inventory seal; it does not change any grants.
-  if v_count<>793 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'af4aefdaef23634e2ccf876ab91ea3e5' then
+  -- 30 September: explicit preparation adds exactly the service-only
+  -- public.weekly_source_import_prepare_atomic_v1(pg_catalog.jsonb).
+  -- On the disposable full NEW candidate, this exact census returned
+  -- 794 / 76 / 0 / 634c4054d703eb1dfb219730a5dd44b3. Excluding only that
+  -- signature reproduced 793 / 76 / 0 / af4aefdaef23634e2ccf876ab91ea3e5.
+  -- No earlier ACL row changed; browser execution remains denied.
+  -- Exact-row Office recheck adds public.weekly_source_office_recheck_begin_v1(jsonb).
+  -- The disposable census is 795 / 76 / 0 / 7107ce270790a01db97e27a8dbedb222;
+  -- excluding only that signature reproduces the 794-row seal above exactly.
+  if v_count<>795 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'7107ce270790a01db97e27a8dbedb222' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

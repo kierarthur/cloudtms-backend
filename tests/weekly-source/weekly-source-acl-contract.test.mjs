@@ -76,10 +76,10 @@ test('central Weekly Source ACL and independent verifier seal the same exact ser
   // build to hold exactly one foreign grant, service_role EXECUTE, with anon
   // and authenticated denied.
   // Approved service-only helpers have expanded the original sealed surface.
-  // The sealed Weekly Source service surface currently contains 113 exact
+  // The sealed Weekly Source service surface currently contains 116 exact
   // signatures. Keep this literal coupled to both independent lists so an
   // unnoticed addition or removal fails locally before a database release.
-  assert.equal(actual.length, 113);
+  assert.equal(actual.length, 116);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
 });
@@ -105,7 +105,7 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // head). Both are registered in the repeatable and in the independent
   // verifier, and the installed ACL verifier reports
   // `registered_private_helper_count: 46` on a build from empty.
-  assert.equal(actual.length, 49);
+  assert.equal(actual.length, 53);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a
@@ -140,7 +140,7 @@ test('central Weekly Source ACL classifies every Plan 6 table exactly once', asy
 
 test('every direct Plan 6 service grant covered by the central ACL remains covered', async () => {
   const directory = path.join(root, 'supabase', 'repeatable');
-  const filenames = (await readdir(directory)).filter((name) => /^15092026_.*\.sql$/i.test(name));
+  const filenames = (await readdir(directory)).filter((name) => /\.sql$/i.test(name));
   const repeatable = await readFile(repeatablePath, 'utf8');
   const allowed = new Set(contractSignatures(repeatable).map(canonical));
   const directGrants = new Set();
@@ -182,8 +182,8 @@ test('general service-only inventory includes the Weekly Source invoice report p
   // 792 / 75 / 0 / 50de1833... to 793 / 76 / 0 / af4aefda... The only added row
   // is the owner-only public._pay_batch_draft_stale_hint_on_view_v1(uuid,int4,int4)
   // (svc=false, anon=false, auth=false); browser execution stays zero.
-  assert.match(general, /v_count<>793 or v_service_missing<>76 or v_browser_executable<>0/i);
-  assert.match(general, /v_hash<>'af4aefdaef23634e2ccf876ab91ea3e5'/i);
+  assert.match(general, /v_count<>795 or v_service_missing<>76 or v_browser_executable<>0/i);
+  assert.match(general, /v_hash<>'7107ce270790a01db97e27a8dbedb222'/i);
   assert.match(general, /public\.weekly_source_invoice_evidence_v1\(pg_catalog\.jsonb\)/);
   assert.match(auditExport, /grant execute on function public\.weekly_source_invoice_report_rows_v1\(jsonb\) to service_role/i);
   assert.match(auditExport, /revoke all on function public\.weekly_source_invoice_report_rows_v1\(jsonb\)[\s\S]*from public,anon,authenticated/i);

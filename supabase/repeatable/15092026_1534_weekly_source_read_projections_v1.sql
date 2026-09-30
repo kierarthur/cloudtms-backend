@@ -547,6 +547,7 @@ declare
   v_profile public.weekly_source_format_profiles%rowtype;
   v_guard jsonb;
   v_workspace_version text;
+  v_recheck_action jsonb:='{}'::jsonb;
   v_imports jsonb;
   v_queries jsonb;
   v_ready jsonb;
@@ -588,6 +589,11 @@ declare
   v_context_client_name text;
   v_context_cutoff timestamptz;
   v_nhsp_report_number text;
+  v_import_prepared boolean:=false;
+  v_office_checks jsonb:='{}'::jsonb;
+  v_prepare_action jsonb;
+  v_unfinalised_count integer:=0;
+  v_excluded_rows jsonb:='[]'::jsonb;
 begin
   perform private.weekly_source_query_require_service_v1();
   if p_request is null or pg_catalog.jsonb_typeof(p_request)<>'object' then
@@ -837,7 +843,7 @@ begin
   ) charge on true
   where v_publication_id is not null and source_row.upload_id=v_upload.id
     and (resolution.mapping_state is distinct from 'RESOLVED'
-      or source_row.row_finalisation_state in ('SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
+      or source_row.row_finalisation_state in ('BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
       or charge.phase_severity='FINALISATION_BLOCKER');
 
   -- PHD-014..019 / PRC-043..050.  The final NHSP source value remains
@@ -1195,7 +1201,14 @@ begin
                 'projection_publication_id',v_publication.id
               ) else '{}'::jsonb end
           ))
-        ),
+        )||case when submission_reminder.generation_id is not null then pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_object('label','Remind missing timesheet','kind','COMMAND','command','REMIND_CANDIDATE',
+            'enabled',pg_catalog.transaction_timestamp()>=submission_reminder.available_at,
+            'reason','Reminder for missing week(s): '||submission_reminder.weeks,
+            'context',pg_catalog.jsonb_build_object('candidate',query.candidate_name,
+              'client',query.client_name,'weeks',submission_reminder.weeks),
+            'payload',pg_catalog.jsonb_build_object('candidate_generation_id',submission_reminder.generation_id,
+              'projection_publication_id',v_publication.id))) else '[]'::jsonb end,
         'accept_system_hours_action',pg_catalog.jsonb_build_object(
           'label','Accept system hours','kind','COMMAND','command','ACCEPT_SYSTEM_HOURS',
           'enabled',coalesce(pg_catalog.array_length(query.accept_incident_ids,1),0)>0,
@@ -1247,8 +1260,36 @@ begin
           and cohort.candidate_id=query.candidate_id
           and cohort.client_id=query.client_id
           and cohort.manager_recipient_route_key=query.manager_recipient_route_key
+          and generation.request_kind='CHECK_HOURS'
+          and exists(select 1 from public.weekly_candidate_outreach_memberships membership
+            join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
+            where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+              and incident.state='OPEN' and incident.candidate_action_state='ASKED'
+              and membership.comparison_revision_id=incident.current_comparison_revision_id
+              and exists(select 1 from pg_catalog.jsonb_array_elements(query.children) child
+                where child->>'incident_id'=incident.id::text))
         limit 1
       ) candidate_reminder on true
+      left join lateral (
+        select generation.id generation_id,generation.manual_reminder_available_at_utc available_at,
+          pg_catalog.string_agg(distinct to_char(membership.week_ending,'FMDD Mon YYYY'),', ') weeks
+        from public.weekly_candidate_cohorts cohort
+        join public.weekly_candidate_outreach_generations generation
+          on generation.id=cohort.current_submission_generation_id and generation.state='ACTIVE'
+          and generation.request_kind='SUBMIT_TIMESHEET'
+        join public.weekly_timesheet_submission_requests request
+          on request.candidate_cohort_id=cohort.id and request.request_generation=generation.generation_number
+          and request.state in ('ACTIVE','OVERDUE','PARTLY_SUBMITTED')
+        join public.weekly_timesheet_submission_request_memberships membership
+          on membership.submission_request_id=request.id and membership.state='WAITING'
+        where cohort.source_cycle_id=v_cycle.id and cohort.candidate_id=query.candidate_id
+          and exists(select 1 from pg_catalog.jsonb_array_elements(query.missing_scopes) scope
+            where scope->>'client_id'=membership.client_id::text
+              and scope->>'contract_id'=membership.contract_id::text
+              and (scope->>'week_ending')::date=membership.week_ending)
+        group by generation.id,generation.manual_reminder_available_at_utc
+        limit 1
+      ) submission_reminder on true
       order by
         case when v_sort_key='candidate' and v_sort_direction='asc' then private.weekly_source_query_ascii_fold_v1(query.candidate_name) end asc,
         case when v_sort_key='candidate' and v_sort_direction='desc' then private.weekly_source_query_ascii_fold_v1(query.candidate_name) end desc,
@@ -1354,7 +1395,14 @@ begin
       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
 
     select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-      'row_key',source_row.id,'candidate',coalesce(candidate.display_name,source_row.source_candidate_identity),
+      'row_key',source_row.id,'candidate',coalesce(candidate.display_name,
+        nullif(source_row.bounded_raw_columns_json->>'worker_name',''),
+        nullif(source_row.bounded_raw_columns_json->>'staff_name',''),
+        nullif(source_row.bounded_raw_columns_json->>'candidate',''),source_row.source_candidate_identity),
+      'source_reference',source_row.source_candidate_identity,
+      'booking_reference',source_row.external_source_key,
+      'client',source_row.source_client_identity,
+      'mapping_state',resolution.mapping_state,
       'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
       'system_hours',case
         when source_row.start_at_local is not null and source_row.end_at_local is not null
@@ -1369,22 +1417,72 @@ begin
           when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'
           when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'Not finalised'
           when charge.phase_severity='FINALISATION_BLOCKER' then 'Charge needs checking'
+          when charge.phase_severity='PROVISIONAL_WARNING' then 'Pricing warning'
           else 'Needs correction' end,
         'tone',case
           when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'warning'
+          when resolution.mapping_state='RESOLVED' and charge.phase_severity='PROVISIONAL_WARNING' then 'warning'
           else 'danger' end),
       'problem',case
-        when resolution.mapping_state is distinct from 'RESOLVED' then 'Link this row before finalising'
+        when resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'More than one candidate matches. Choose the correct candidate.'
+        when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'No active candidate matches this source row'
+        when resolution.mapping_state='CLIENT_NOT_FOUND' then 'No eligible client matches this source row'
+        when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Review the contract for this shift'
+        when resolution.mapping_state is distinct from 'RESOLVED' then 'Review the source row matching'
         when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'This shift is not finalised'
-        when charge.phase_severity='FINALISATION_BLOCKER' then 'Check the charge for this shift'
+        when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'Check the charge for this shift'
         else 'Check the hours for this shift' end,
       'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
-        'label',case when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'Link candidate'
+        'label',case when resolution.mapping_state='CANDIDATE_NOT_FOUND'
+          or resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'Link candidate'
           when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Link client'
           when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Choose contract'
-          when charge.phase_severity='FINALISATION_BLOCKER' then 'Open charge details'
+          when resolution.mapping_state='SOURCE_ROW_BLOCKED' and resolution.candidate_id is not null and resolution.client_id is not null then 'Choose contract'
+          when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'Open charge details'
           else 'View details' end,
-        'enabled',true,'payload',pg_catalog.jsonb_build_object('upload_row_id',source_row.id)
+        'enabled',true,'payload',pg_catalog.jsonb_build_object(
+          'upload_row_id',source_row.id,
+          'candidate',coalesce(candidate.display_name,source_row.bounded_raw_columns_json->>'worker_name',
+            source_row.bounded_raw_columns_json->>'candidate',source_row.source_candidate_identity),
+          'client',source_row.source_client_identity,
+          'shift',to_char(source_row.work_date,'FMDD Mon YYYY'),
+          'source_row_ordinal',source_row.source_row_ordinal,
+          'source_role_band',source_row.role_band_source,
+          'contract_seed',case when resolution.candidate_id is not null and resolution.client_id is not null
+            then pg_catalog.jsonb_build_object('candidate_id',resolution.candidate_id,
+              'client_id',resolution.client_id,'start_date',source_row.work_date) else '{}'::jsonb end,
+          'recheck_payload',pg_catalog.jsonb_build_object('request_id',pg_catalog.gen_random_uuid(),
+            'upload_id',v_upload.id,'upload_row_id',source_row.id,
+            'projection_publication_id',v_publication.id,
+            'expected_authority_scope_version',v_publication.authority_scope_version,
+            'expected_row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex')),
+          'choices',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+            'contract_id',contract.id,'role_band',pg_catalog.concat_ws(' / ',contract.role,contract.band),
+            'site',contract.display_site,'dates',to_char(contract.start_date,'FMDD Mon YYYY')||' onwards',
+            'pay_type',contract.pay_method_snapshot) order by contract.start_date,contract.id)
+            from public.contracts contract where contract.candidate_id=resolution.candidate_id
+              and contract.client_id=resolution.client_id
+              and source_row.work_date between contract.start_date and coalesce(contract.end_date,'infinity'::date)),'[]'::jsonb),
+          'detail',pg_catalog.jsonb_build_object('candidate',coalesce(candidate.display_name,
+              source_row.bounded_raw_columns_json->>'worker_name',source_row.bounded_raw_columns_json->>'candidate',source_row.source_candidate_identity),
+            'source_reference',source_row.source_candidate_identity,'booking_reference',source_row.external_source_key,
+            'client',source_row.source_client_identity,'day_date',to_char(source_row.work_date,'FMDD Mon YYYY'),
+            'contract_id',resolution.contract_id,
+            'commission',case when charge.source_commission_pence is not null then '£'||to_char(charge.source_commission_pence::numeric/100,'FM9999999990.00') end,
+            'total_cost',case when charge.source_total_cost_pence is not null then '£'||to_char(charge.source_total_cost_pence::numeric/100,'FM9999999990.00') end,
+            'source_charge',case when charge.source_shift_charge_pence is not null then '£'||to_char(charge.source_shift_charge_pence::numeric/100,'FM9999999990.00') end,
+            'calculated_charge',case when charge.calculated_segment_charge_pence is not null then '£'||to_char(charge.calculated_segment_charge_pence::numeric/100,'FM9999999990.00') end,
+            'difference',case when charge.source_charge_difference_pence is not null then '£'||to_char(charge.source_charge_difference_pence::numeric/100,'FM9999999990.00') end,
+            'problem',case
+              when resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'More than one candidate matches. Choose the correct candidate.'
+              when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'No active candidate matches. Link an active candidate, or review the candidate record before rechecking.'
+              when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Choose the client this shift belongs to.'
+              when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Review the candidate contract, dates, role and band, then recheck.'
+              when resolution.mapping_state='SOURCE_ROW_BLOCKED' then 'Review the source details and contract rates, then recheck. The remaining hours and pricing checks have not passed yet.'
+              when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'The source charge needs review. Compare it with the contract rates before proceeding.'
+              when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'The source has not finalised this shift.'
+              else 'Review the source hours and finalisation details.' end)
+        )
       ))
     ) order by
       case when v_sort_key='candidate' and v_sort_direction='asc'
@@ -1452,16 +1550,32 @@ begin
     where source_row.upload_id=v_upload.id
       and (resolution.mapping_state is distinct from 'RESOLVED'
         or source_row.row_finalisation_state in ('SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
-        or charge.phase_severity='FINALISATION_BLOCKER');
+        or charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING'));
     v_blocked:=pg_catalog.jsonb_build_object('rows',v_rows,'total_count',pg_catalog.jsonb_array_length(v_rows),
       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
-    v_finalise_enabled:=v_blocker_count=0
+    v_import_prepared:=private.weekly_source_import_is_prepared_v1(v_upload.id);
+    v_office_checks:=v_blocked;
+    select coalesce(pg_catalog.jsonb_agg(row_data),'[]'::jsonb) into v_excluded_rows
+    from pg_catalog.jsonb_array_elements(v_rows) row_data where row_data->'status'->>'text'='Not finalised';
+    select coalesce(pg_catalog.jsonb_agg(row_data),'[]'::jsonb) into v_rows
+    from pg_catalog.jsonb_array_elements(v_rows) row_data
+    where row_data->'status'->>'text'<>'Not finalised'
+      and not exists (select 1 from public.weekly_source_charge_checks warning
+        where warning.upload_row_id=(row_data->>'row_key')::uuid
+          and warning.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
+          and warning.phase_severity='PROVISIONAL_WARNING'
+          and row_data->'status'->>'text'='Pricing warning');
+    v_blocked:=v_blocked||pg_catalog.jsonb_build_object('rows',v_rows,'total_count',pg_catalog.jsonb_array_length(v_rows));
+    select pg_catalog.count(*)::integer into v_unfinalised_count
+    from public.weekly_source_upload_rows where upload_id=v_upload.id and row_finalisation_state='SOURCE_UNFINALISED';
+    v_finalise_enabled:=v_import_prepared and v_blocker_count=0
       and (v_profile.profile_code<>'NHSP_FINAL_BACKING_V1' or v_rate_warning_unaccepted_count=0)
-      and pg_catalog.statement_timestamp()>=coalesce(
+      and (v_profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1')
+        or pg_catalog.statement_timestamp()>=coalesce(
         (select scope.cutoff_at_utc from public.weekly_source_report_scopes scope
           where scope.id=v_report_scope_id),
         v_cycle.cutoff_at_utc
-      )
+      ))
       and v_cycle.state not in ('FINALISING','FINALISED');
     v_finalise_payload:=pg_catalog.jsonb_build_object(
       'source_cycle_id',v_cycle.id,'authority_scope_kind',v_publication.authority_scope_kind,
@@ -1520,6 +1634,25 @@ begin
   else
     v_ready:=pg_catalog.jsonb_build_object('rows','[]'::jsonb,'total_count',0,'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
     v_blocked:=v_ready;
+  end if;
+
+  v_queries:=v_queries||pg_catalog.jsonb_build_object('office_checks',v_office_checks);
+  if not v_import_prepared then
+    if v_publication_id is not null and v_upload.state='CURRENT' and v_upload.purpose='ORDINARY'
+      and v_cycle.state not in ('FINALISING','FINALISED') and v_upload.coverage_state='COMPLETE'
+      and v_profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1',
+        'HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1','ROSTER_WEEKLY_SUMMARY_ACTUAL_V1') then
+      v_prepare_action:=pg_catalog.jsonb_build_object('label','Prepare for finalisation',
+        'command','PREPARE_FINALISATION','payload',pg_catalog.jsonb_build_object(
+          'upload_id',v_upload.id,'projection_publication_id',v_publication.id,
+          'expected_authority_scope_version',v_publication.authority_scope_version,
+          'expected_row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex')));
+    end if;
+    v_ready:=pg_catalog.jsonb_build_object('rows','[]'::jsonb,'total_count',0,
+      'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
+    v_blocked:=v_ready;
+    v_finalise_enabled:=false;
+    v_finalise_payload:='{}'::jsonb;
   end if;
 
   select pg_catalog.jsonb_build_object(
@@ -1747,8 +1880,25 @@ begin
   v_cycle_state_tone:=case when v_cycle.state='FINALISED' then 'positive'
     when v_cycle.state='CORRECTION_IN_PROGRESS' then 'danger' else 'warning' end;
 
+  if v_publication.state='CURRENT' and v_upload.purpose='ORDINARY'
+    and v_cycle.state not in ('FINALISING','FINALISED') then
+    v_recheck_action:=pg_catalog.jsonb_build_object('request_id',pg_catalog.gen_random_uuid(),
+      'upload_id',v_upload.id,'projection_publication_id',v_publication.id,
+      'expected_authority_scope_version',v_publication.authority_scope_version,
+      'expected_row_manifest_hash',pg_catalog.encode(v_upload.row_manifest_hash,'hex'));
+  else
+    select saved.request_json-'actor_user_id' into v_recheck_action
+      from private.weekly_source_office_rechecks saved
+      join public.weekly_source_projection_publications pending on pending.id=saved.publication_id
+      join public.weekly_source_uploads upload on upload.id=saved.upload_id
+      where saved.actor_user_id=v_actor and pending.source_cycle_id=v_cycle.id
+        and pending.state='BUILDING' and upload.state='CURRENT'
+        and pending.report_scope_id is not distinct from v_report_scope_id
+      order by saved.created_at_utc desc,saved.request_id desc limit 1;
+  end if;
   return pg_catalog.jsonb_build_object(
     'contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_workspace_version,
+    'recheck_payload',coalesce(v_recheck_action,'{}'::jsonb),
     'profile',pg_catalog.jsonb_build_object(
       'id',coalesce(v_profile.profile_code,case when v_group.source_family='NHSP' then 'NHSP_FINAL_BACKING_V1' else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end),
       'label',case when v_group.source_family='NHSP' then 'NHSP' else v_group.display_name end,
@@ -1763,6 +1913,12 @@ begin
       'paid_unresolved',v_paid_unresolved_count),
     'imports',v_imports,'queries',v_queries,
     'finalise',pg_catalog.jsonb_build_object(
+      'prepared',v_import_prepared,'prepare_action',v_prepare_action,
+      'unfinalised_count',v_unfinalised_count,
+      'excluded_rows',v_excluded_rows,
+      'exclusion_confirmation',case when v_unfinalised_count>0 and v_profile.profile_code in
+        ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1')
+        then 'I confirm that non-finalised shifts are excluded. Previously finalised shifts now missing or non-finalised within this file period may be reversed.' else null end,
       'ready',v_ready,'blocked',v_blocked,'active_list',case when v_blocker_count>0 then 'blocked' else 'ready' end,
       'confirmation_text','I confirm this is the final source for this week.',
       'confirmation_required',true,'finalise_enabled',v_finalise_enabled,

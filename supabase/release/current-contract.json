@@ -9173,7 +9173,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "ccd740f61db6cb238bb86f728d7f57782bd4906464009044bf5f9ad2dea75cb4"
+      "definition_sha256": "e3074e4b5de01813afced26b223ca24a137c2d5684d0381d990e263ffc338db1"
     },
     {
       "acl": [
@@ -9192,7 +9192,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "5dfabdf8354b44a3bd0a0c394e0679368709586d574e3f2f8d51de3ef58541b6"
+      "definition_sha256": "6a7b75f23f80cb7f8fbecfab11d2b291fa6ecb3acd08cb24a4ae297b3de1239c"
     },
     {
       "acl": [
@@ -14000,6 +14000,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_candidate_generation_current_v1(p_generation_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "689febb634b9e84fa0922a2d1c16bf8a2c3764e56bd40bc69de4d65c3e8b8881"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, pg_temp"
       ],
       "schema": "private",
@@ -15242,7 +15261,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "94680b1246d8fcca80e6bf1f6149d802bd363e33fb25f6ff36635c0bad4ca8ed"
+      "definition_sha256": "d89caa5364e0300abb8252e9c3ee497d9daf26fdbfa9c24a42f55abf3432d5fc"
     },
     {
       "acl": [
@@ -15507,6 +15526,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "95274df114316b31d89e49a04aaf5aaa75a9ea5f800ae63066cfc42a43623c91"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_import_is_prepared_v1(p_upload_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "9b52cd24d72a69ebd200f019fb215b56fc67671564221a0ecaf31783675c9c6c"
     },
     {
       "acl": [
@@ -15997,6 +16035,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "eb0738c2eecbf8bb3d08abf5b4db75ae9c9ef8c2102c047dfa66422c8f72fb2a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_manager_due_event_covers_v1(p_event_id uuid, p_incident_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "8177b515819ff92d72f5c37580d01683aba7aa2276166b4689fe9142e0d05e89"
     },
     {
       "acl": [
@@ -17521,7 +17578,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "df1808a406d1545e26722bd4e8ae85768aff48a0abe3b9523252659e874c9d27"
+      "definition_sha256": "af842fa7d10b0295da7e525f385f0e17ebe177e7a1ec64281c2b1955e8ee8be1"
     },
     {
       "acl": [
@@ -17673,7 +17730,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "47813874967b384029942ba8f45715d6a434c69b265102692035bd6fd6c9b277"
+      "definition_sha256": "47c55d83f50e9bcd44e5d5a1cdac6b46d220a04b2a119bf4105266b9b54ee565"
     },
     {
       "acl": [
@@ -17806,7 +17863,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d9f9bdc9bbc9290a6db282b25813b822b6fdecb3f8533777d355490031a5bfba"
+      "definition_sha256": "14173a5016336862a25ab0325350bbe158d5abd48303976a9c3e74e20eee3438"
     },
     {
       "acl": [
@@ -18420,6 +18477,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "76dbc3618623f852cfc9d9113fbfeaac0b5055218652d12530de758b16724b10"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_waiting_requested_week_v1(p_cycle_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_work_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "2da6a01f2a65b675794a2b5c71b913aae9aecf4bd342c57f0e28cf0c5ab3976e"
     },
     {
       "acl": [
@@ -41434,7 +41510,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b19ea985cb5898179c8c0816015027af456132ad21a68002e2735d45572d3f40"
+      "definition_sha256": "c0ed8d7f4b224c17bffa2765a38294c9d5e2c5f9c8a537795921297da13247c4"
     },
     {
       "acl": [
@@ -42174,6 +42250,30 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
+      "identity": "weekly_source_import_prepare_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2e0bfec2a0622f632123ba772592fced3c7dfbdeeafbab02be8499dc8ffae700"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
       "identity": "weekly_source_invoice_admit_atomic_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "v",
@@ -42586,7 +42686,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5a5b1d6183a41ef0f21269deb608a62538d7a960805769a99a924ea699ce7e84"
+      "definition_sha256": "b5798113c682baf8b97e2f17a7293528879a97d290afa81992886784720bdc8c"
     },
     {
       "acl": [
@@ -42634,7 +42734,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "22e1f8558e1c8c3ae521d0c93aa7aee13849decef592ff494d0acc5cd1ac2fa4"
+      "definition_sha256": "922a201b3c3fadfeafe8659e2277617da038f29f948c63aafbffd148b1d8b0c3"
     },
     {
       "acl": [
@@ -42658,7 +42758,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a963d028ca82bde76de4d4b663c00f17060d9bf0bb4f4a33a050d4d19aac7b24"
+      "definition_sha256": "8c050ea8a2905d4f0b1a98e03e440488d0061516fc9db6607c99aff1d2e53cf4"
     },
     {
       "acl": [
@@ -42870,6 +42970,30 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "public",
+      "identity": "weekly_source_office_recheck_begin_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "68144a1d8c9fbf7e678ba2fcc32548be9e57cd9f4b310637dfb03ca79fa889d8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
       "identity": "weekly_source_office_timesheet_presentation_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "s",
@@ -42898,7 +43022,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "17322b08f1f7a93777e770002db8b113298bbfc5264e5693aa7cc3691059b759"
+      "definition_sha256": "4101186644c4ed3e94b510c1b17940a523d03ae0ee5801af243de54a598e8d77"
     },
     {
       "acl": [
@@ -43162,7 +43286,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "950ec90d3034cbf9fcb502eed44e46cc59c74550f61810d1faed455803015eb8"
+      "definition_sha256": "8b391d22db77c024624e161061f790f08bd31055e2c9e9881d576793238d06f0"
     },
     {
       "acl": [
@@ -43186,7 +43310,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "874ed62db6193ca455d89e42b2f571d2c37280bcf64856135d86d5be06aa22fe"
+      "definition_sha256": "96eab71d249cb3e85f87563da5bcfa681174c2b9437b041c0061fb427f8644ea"
     },
     {
       "acl": [
@@ -43378,7 +43502,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "92ba2b860a0fcba0712b743dc21006c3e83b37fcc32fdc737a5928a2029f5e90"
+      "definition_sha256": "4d67b44704a438f61cbf4394ed1e48875a2bee8d4afe939b0d1b3217231974e5"
     },
     {
       "acl": [
@@ -43402,7 +43526,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "79faac0aa05d51ffe6459ea41be7ceb932791343d49da17e8ee0017858da423a"
+      "definition_sha256": "52dd437b767d23742330bf6efbc281ef230ba2c229c54920874d012aa97639d3"
     },
     {
       "acl": [
@@ -43474,7 +43598,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7317bd01b749701ad9a00d902095480ca0719deeaa0e74337828abba9be07623"
+      "definition_sha256": "0643ea3c1f7bde8e0ca1a54341d7bcec5688f15954672143277f2159b05f9612"
     },
     {
       "acl": [
@@ -43522,7 +43646,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0c63d64ddc48606876121ddbb2d2c5666766b86be9e6c29ae8bfde1102901aca"
+      "definition_sha256": "275a6fb96812c81e0f0e79c51d6c6dd91b3e73df3baf6bcea22dacc33f67f847"
     },
     {
       "acl": [
@@ -46968,6 +47092,61 @@
       "rls": false,
       "kind": "S",
       "name": "invoice_issue_candidate_change_seq",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "weekly_source_office_row_choices_id_seq",
       "owner": "postgres",
       "schema": "private",
       "columns": [
@@ -64918,6 +65097,524 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "weekly_source_import_preparations",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "authority_scope_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prepared_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prepared_by_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "projection_publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "row_manifest_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "upload_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_import_preparations_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_import_preparations_pkey ON private.weekly_source_import_preparations USING btree (upload_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "weekly_source_import_preparation_projection_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (projection_publication_id) REFERENCES weekly_source_projection_publications(id)"
+        },
+        {
+          "name": "weekly_source_import_preparations_authority_scope_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (authority_scope_version > 0)"
+        },
+        {
+          "name": "weekly_source_import_preparations_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (upload_id)"
+        },
+        {
+          "name": "weekly_source_import_preparations_prepared_by_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prepared_by_user_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "weekly_source_import_preparations_row_manifest_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(row_manifest_hash) = 32)"
+        },
+        {
+          "name": "weekly_source_import_preparations_upload_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (upload_id) REFERENCES weekly_source_uploads(id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "weekly_source_office_rechecks",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "upload_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_office_rechecks_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_office_rechecks_pkey ON private.weekly_source_office_rechecks USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "weekly_source_office_rechecks_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_rechecks_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id)"
+        },
+        {
+          "name": "weekly_source_office_rechecks_prior_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_rechecks_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_rechecks_request_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(request_hash) = 32)"
+        },
+        {
+          "name": "weekly_source_office_rechecks_request_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_json) = 'object'::text)"
+        },
+        {
+          "name": "weekly_source_office_rechecks_upload_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (upload_id) REFERENCES weekly_source_uploads(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "weekly_source_office_row_choices",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "chosen_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "bigint",
+          "default": null,
+          "identity": "a",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "upload_row_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "weekly_source_office_row_choices_latest_idx",
+          "definition": "CREATE INDEX weekly_source_office_row_choices_latest_idx ON private.weekly_source_office_row_choices USING btree (upload_row_id, id DESC)"
+        },
+        {
+          "name": "weekly_source_office_row_choices_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_office_row_choices_pkey ON private.weekly_source_office_row_choices USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "weekly_source_office_row_choices_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_row_choices_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_row_choices_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_id IS NOT NULL OR client_id IS NOT NULL OR contract_id IS NOT NULL)"
+        },
+        {
+          "name": "weekly_source_office_row_choices_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_row_choices_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_row_choices_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "weekly_source_office_row_choices_upload_row_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (upload_row_id) REFERENCES weekly_source_upload_rows(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null
@@ -126023,6 +126720,14 @@
           "generated": ""
         },
         {
+          "name": "current_submission_generation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "id",
           "type": "uuid",
           "default": "gen_random_uuid()",
@@ -126083,6 +126788,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (current_generation_id) REFERENCES weekly_candidate_outreach_generations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_candidate_cohorts_current_submission_generation_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (current_submission_generation_id) REFERENCES weekly_candidate_outreach_generations(id) ON DELETE RESTRICT"
         },
         {
           "name": "weekly_candidate_cohorts_manager_recipient_route_key_check",
@@ -126538,7 +127251,7 @@
         },
         {
           "name": "weekly_candidate_outreach_generations_active_uq",
-          "definition": "CREATE UNIQUE INDEX weekly_candidate_outreach_generations_active_uq ON public.weekly_candidate_outreach_generations USING btree (candidate_cohort_id) WHERE (state = 'ACTIVE'::text)"
+          "definition": "CREATE UNIQUE INDEX weekly_candidate_outreach_generations_active_uq ON public.weekly_candidate_outreach_generations USING btree (candidate_cohort_id, request_kind) WHERE (state = 'ACTIVE'::text)"
         },
         {
           "name": "weekly_candidate_outreach_generations_pkey",
@@ -134915,6 +135628,14 @@
           "generated": ""
         },
         {
+          "name": "requested_week_membership_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "state",
           "type": "text",
           "default": null,
@@ -134951,6 +135672,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (recipient_generation_id, candidate_cohort_id, event_kind, trigger_hash)"
+        },
+        {
+          "name": "weekly_manager_cohort_due_eve_requested_week_membership_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (requested_week_membership_id) REFERENCES weekly_timesheet_submission_request_memberships(id) ON DELETE RESTRICT"
         },
         {
           "name": "weekly_manager_cohort_due_events_candidate_cohort_id_fkey",

@@ -1204,7 +1204,7 @@ declare
     'actor_user_id','source_cycle_id','authority_scope_kind','report_scope_id',
     'upload_id','projection_publication_id','expected_authority_scope_version',
     'expected_row_manifest_hash','expected_comparison_manifest_hash',
-    'expected_issue_set_hash'
+    'expected_issue_set_hash','exclude_unfinalised_acknowledged'
   ]::text[];
   v_unknown_key text;
   v_actor uuid;
@@ -1437,7 +1437,17 @@ begin
       raise exception 'WEEKLY_SOURCE_CORRECTION_SESSION_STALE' using errcode='40001';
     end if;
   end if;
-  if v_finalised_at<coalesce(v_scope.cutoff_at_utc,v_cycle.cutoff_at_utc) then
+  if not private.weekly_source_import_is_prepared_v1(v_upload.id) then
+    raise exception 'WEEKLY_SOURCE_CHECKING_FILE_NOT_FINALISABLE' using errcode='55000';
+  end if;
+  if v_profile.profile_code in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1')
+    and exists(select 1 from public.weekly_source_upload_rows source_row
+      where source_row.upload_id=v_upload.id and source_row.row_finalisation_state='SOURCE_UNFINALISED')
+    and p_request->'exclude_unfinalised_acknowledged' is distinct from 'true'::jsonb then
+    raise exception 'WEEKLY_SOURCE_UNFINALISED_EXCLUSION_ACKNOWLEDGEMENT_REQUIRED' using errcode='55000';
+  end if;
+  if v_finalised_at<coalesce(v_scope.cutoff_at_utc,v_cycle.cutoff_at_utc)
+    and v_profile.profile_code not in ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1') then
     raise exception 'WEEKLY_SOURCE_CUTOFF_NOT_REACHED' using errcode='55000';
   end if;
 

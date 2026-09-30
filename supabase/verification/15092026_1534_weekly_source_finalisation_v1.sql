@@ -74,7 +74,8 @@ create function pg_temp.roster_cycle(
   p_work_date date default '2026-09-07',
   p_coverage_start date default '2026-09-07',
   p_coverage_end date default '2026-09-08',
-  p_source_group_id uuid default 'a0000000-0000-4000-8000-000000000005'
+  p_source_group_id uuid default 'a0000000-0000-4000-8000-000000000005',
+  p_prepared boolean default true
 ) returns void language plpgsql as $function$
 declare
   v_row_hash bytea:=private.weekly_source_sha256_jsonb_v1(
@@ -132,7 +133,8 @@ begin
     pg_catalog.clock_timestamp(),false,'COMPLETE','OFFICE_COMPLETE_EXPORT_ATTESTATION',
     case when p_include_row then 1 else 0 end,case when p_include_row then 1 else 0 end,
     v_row_hash,'CURRENT','a0000000-0000-4000-8000-000000000001',
-    pg_catalog.jsonb_build_object('client_id','a0000000-0000-4000-8000-000000000002')
+    pg_catalog.jsonb_build_object('client_id','a0000000-0000-4000-8000-000000000002',
+      'import_use',case when p_prepared then 'PREPARE_FINALISATION' else 'CHECKING' end)
   );
   update public.weekly_source_cycles
   set current_complete_upload_id=p_upload_id
@@ -217,7 +219,7 @@ end;
 $function$;
 
 create function pg_temp.finalise_cycle(
-  p_cycle_id uuid,p_upload_id uuid,p_publication_id uuid
+  p_cycle_id uuid,p_upload_id uuid,p_publication_id uuid,p_exclude_unfinalised boolean default false
 ) returns jsonb language plpgsql as $function$
 declare
   v_result jsonb;
@@ -227,6 +229,7 @@ begin
     'source_cycle_id',p_cycle_id,'authority_scope_kind','CYCLE',
     'upload_id',p_upload_id,'projection_publication_id',p_publication_id,
     'expected_authority_scope_version',1,
+    'exclude_unfinalised_acknowledged',p_exclude_unfinalised,
     'expected_row_manifest_hash',pg_catalog.encode(upload_row.row_manifest_hash,'hex'),
     'expected_comparison_manifest_hash',pg_catalog.encode(publication.comparison_manifest_hash,'hex'),
     'expected_issue_set_hash',pg_catalog.encode(publication.issue_set_hash,'hex')
@@ -321,8 +324,28 @@ select pg_temp.roster_cycle(
   'a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',
   'a1000000-0000-4000-8000-000000000003','a1000000-0000-4000-8000-000000000004',
   '2026-09-13','35555555-5555-4555-8555-555555555555','LINE-1','NOT_APPLICABLE',
-  '2026-09-07 09:00','2026-09-07 17:00',30,450,7500,15000,100,true
+  '2026-09-07 09:00','2026-09-07 17:00',30,450,7500,15000,100,true,p_prepared=>false
 );
+do $checking_then_prepare$
+begin
+  begin
+    perform pg_temp.finalise_cycle(
+      'a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',
+      'a1000000-0000-4000-8000-000000000003');
+    raise exception 'VERIFY_FAILED: checking file was finalised without preparation';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_CHECKING_FILE_NOT_FINALISABLE' then raise; end if;
+  end;
+  perform public.weekly_source_import_prepare_atomic_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','a0000000-0000-4000-8000-000000000001',
+    'upload_id','a1000000-0000-4000-8000-000000000002',
+    'projection_publication_id','a1000000-0000-4000-8000-000000000003',
+    'expected_authority_scope_version',1,
+    'expected_row_manifest_hash',(select pg_catalog.encode(row_manifest_hash,'hex')
+      from public.weekly_source_uploads where id='a1000000-0000-4000-8000-000000000002')
+  ));
+end;
+$checking_then_prepare$;
 select pg_temp.finalise_cycle(
   'a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',
   'a1000000-0000-4000-8000-000000000003'
@@ -560,6 +583,10 @@ select pg_temp.roster_cycle(
   '2026-10-18','33333333-3333-4333-8333-333333333333','HR-LINE-1','SOURCE_WORKED',
   '2026-09-07 20:00','2026-09-08 08:00',30,690,11500,23000,0,true
 );
+-- HealthRoster's explicit preparation is sufficient before cutoff; no clock
+-- manipulation or generic/NHSP exception is used by the production function.
+update public.weekly_source_cycles set cutoff_at_utc=pg_catalog.statement_timestamp()+interval '1 day'
+where id='a6000000-0000-4000-8000-000000000001';
 select pg_temp.finalise_cycle(
   'a6000000-0000-4000-8000-000000000001','a6000000-0000-4000-8000-000000000002',
   'a6000000-0000-4000-8000-000000000003'
@@ -570,10 +597,21 @@ select pg_temp.roster_cycle(
   '2026-10-25','33333333-3333-4333-8333-333333333333','HR-LINE-1','SOURCE_UNFINALISED',
   null,null,0,0,0,0,0,true
 );
-select pg_temp.finalise_cycle(
-  'a7000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000002',
-  'a7000000-0000-4000-8000-000000000003'
-);
+do $unfinalised_needs_ack$
+begin
+  begin
+    perform pg_temp.finalise_cycle(
+      'a7000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000002',
+      'a7000000-0000-4000-8000-000000000003');
+    raise exception 'VERIFY_FAILED: unfinalised exclusion accepted without acknowledgement';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_UNFINALISED_EXCLUSION_ACKNOWLEDGEMENT_REQUIRED' then raise; end if;
+  end;
+  perform pg_temp.finalise_cycle(
+    'a7000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000002',
+    'a7000000-0000-4000-8000-000000000003',true);
+end;
+$unfinalised_needs_ack$;
 select pg_temp.assert_true(
   (select pg_catalog.count(*)=1 from public.weekly_source_state_transitions transition_row
    where transition_row.finalisation_cycle_id='a7000000-0000-4000-8000-000000000001'

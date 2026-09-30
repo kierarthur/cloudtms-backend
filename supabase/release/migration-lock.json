@@ -995,6 +995,18 @@
       "sha256": "9b2fdc72c728e9343f2005b7378681b7bf1ee6a647a92888535b34bfb12568df"
     },
     {
+      "path": "supabase/migrations/30092026_2052_weekly_source_import_preparation.sql",
+      "sha256": "9f23daa59ebd8139bc3c7a32fa641872417c76b3539d7f95e4cec09b96906041"
+    },
+    {
+      "path": "supabase/migrations/30092026_2059_weekly_source_independent_candidate_requests.sql",
+      "sha256": "2c5a135097e8a857e597aed1845deb2a6b6883fb2f4b8300980a26ed1f49c4e9"
+    },
+    {
+      "path": "supabase/migrations/30092026_2129_weekly_source_office_resolution.sql",
+      "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
