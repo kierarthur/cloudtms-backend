@@ -14,10 +14,10 @@ on:
         type: choice
         options: [UPGRADE, NEW, ADOPT, LEGACY_UPGRADE]
       phase:
-        description: PLAN is read-only; APPLY performs the reviewed plan
+        description: PLAN is read-only; APPLY is full verification; AUTO selects the safe TEST route
         required: true
         type: choice
-        options: [PLAN, APPLY]
+        options: [PLAN, APPLY, AUTO]
       customer_key:
         description: Optional non-secret tenant key for a dedicated customer database
         required: false
@@ -64,6 +64,7 @@ jobs:
       - run: npm run db:check
       - run: npm run db:contract:coupling
       - run: node --test tests/database-release-system.test.mjs
+      - run: node --test tests/automatic-test-release-policy.test.mjs
       - id: commit
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -131,6 +132,9 @@ jobs:
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "AUTO" ]]; then
+            [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" && "$GITHUB_REPOSITORY" == "kierarthur/cloudtms-backend" && "$GITHUB_REF" == "refs/heads/test" ]] || { echo "AUTO is restricted to canonical managed TEST UPGRADE"; exit 1; }
+          fi
           if [[ "${{ inputs.mode }}" == "NEW" || "${{ inputs.mode }}" == "UPGRADE" ]]; then
             test -n "${CLOUDTMS_EXPECTED_DATABASE:-}" || { echo "Missing protected exact database name"; exit 1; }
           fi
@@ -159,6 +163,16 @@ jobs:
       - name: Apply verified release
         if: inputs.phase == 'APPLY'
         run: npm run db:apply -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Automatically select and execute the protected TEST database route
+        if: inputs.phase == 'AUTO'
+        run: node scripts/cloudtms-auto-test-release.mjs apply
+      - name: Preserve bounded automatic release evidence
+        if: always() && inputs.phase == 'AUTO'
+        uses: actions/upload-artifact@v4
+        with:
+          name: automatic-test-release-${{ needs.source-gate.outputs.commit }}
+          path: .codex-tmp/automatic-test-release.json
+          if-no-files-found: warn
       - name: Release evidence
         if: always()
         shell: bash

@@ -1,5 +1,7 @@
 # CloudTMS Database Release Bible
 
+Managed TEST deployment entry: read `docs/AUTOMATIC_TEST_DEPLOYMENT.md` and use `npm run release:test` after the required repository and build-connection preflight. The protected AUTO phase chooses the database route from fresh installed evidence; a failed release cannot be bypassed. This adds orchestration, not relaxed SQL, contract, payment or LIVE authority.
+
 ## Controlling outcome
 
 The repository is the complete, reviewable authority for CloudTMS database structure, RPCs, views, triggers, permissions, RLS posture, and verification. Database releases must be routine, reproducible, evidence-producing, and fail closed. They must never infer that an unknown populated database is safe merely because tables already exist.

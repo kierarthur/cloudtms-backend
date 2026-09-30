@@ -95,7 +95,15 @@ function verificationFilesForMode(release, mode) {
 function runVerifiers(mode, context) {
   const release = readJson('supabase/release/current-release.json');
   for (const file of verificationFilesForMode(release, mode)) {
-    psql({ file, variables: releaseVerifierVariables(file, mode, context) });
+    const started = Date.now();
+    console.log(`VERIFY START ${file}`);
+    try {
+      psql({ file, variables: releaseVerifierVariables(file, mode, context) });
+      console.log(`VERIFY PASS ${file} (${Date.now() - started} ms)`);
+    } catch (error) {
+      console.error(`VERIFY FAILED ${file} (${Date.now() - started} ms); dependent deployments remain blocked.`);
+      throw error;
+    }
   }
 }
 
