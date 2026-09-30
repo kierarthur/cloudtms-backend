@@ -35,7 +35,7 @@ try {
   validateConnectionProof(proof,sha,targets);
   for(const [,worker,branch] of targets){
     const branchCommit=git(['ls-remote','origin',`refs/heads/${branch}`]).split(/\s/)[0];
-    if(branchCommit!==proof.workers.find(x=>x.worker===worker).activeCommit)throw new Error(`Branch and active deployment differ: ${worker}; reconcile before dispatch`);
+    if(branchCommit!==proof.workers.find(x=>x.worker===worker).branchCommit)throw new Error(`Release branch differs from inspected evidence: ${worker}; reconcile before dispatch`);
   }
   // Capture Office identity before any deployment, not a moving HEAD later.
   let office;
@@ -58,9 +58,11 @@ try {
   for(const [name,worker,branch,paths] of targets){
     const previous=git(['ls-remote','origin',`refs/heads/${branch}`]).split(/\s/)[0];
     if(!/^[a-f0-9]{40}$/.test(previous))throw new Error(`Release branch must be bootstrapped and verified: ${branch}`);
-    if(previous!==proof.workers.find(x=>x.worker===worker).activeCommit)throw new Error(`Release branch changed during database verification: ${worker}; re-inspect before publishing`);
+    const inspected=proof.workers.find(x=>x.worker===worker);
+    if(previous!==inspected.branchCommit)throw new Error(`Release branch changed during database verification: ${worker}; re-inspect before publishing`);
     git(['fetch','--no-tags','origin',branch]);
-    if(!git(['diff','--name-only',previous,sha,'--',...paths])){stage(name,{status:'UNCHANGED',commit:previous});continue;}
+    if(inspected.activeCommit===previous&&!git(['diff','--name-only',previous,sha,'--',...paths])){stage(name,{status:'UNCHANGED',commit:previous,version:inspected.activeVersion});continue;}
+    if(previous===sha)throw new Error(`Source branch already at target but active build is unproved: ${worker}; inspect or explicitly rebuild this exact trigger, never claim unchanged`);
     const promotedAt=new Date().toISOString();
     git(['push','origin',`${sha}:refs/heads/${branch}`]);
     const check=await waitFor(worker,()=>api(`repos/kierarthur/cloudtms-backend/commits/${sha}/check-runs?per_page=100`).check_runs.filter(c=>c.app?.slug==='cloudflare-workers-and-pages'&&c.name===`Workers Builds: ${worker}`&&c.started_at>=promotedAt.replace(/\.\d+Z$/,'Z')).sort((a,b)=>b.id-a.id)[0],c=>c?.status==='completed'&&c.conclusion==='success',c=>c?.status==='completed'&&c.conclusion!=='success');

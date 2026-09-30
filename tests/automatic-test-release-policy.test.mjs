@@ -3,11 +3,11 @@ import test from 'node:test';
 import { chooseTestDatabaseRoute, classifyApplicationPaths, publicationStages, validateConnectionProof, selectDispatchedRun } from '../scripts/automatic-test-release-policy.mjs';
 const base = { environment:'TEST',database:'cloudtms_test_clone',identityVerified:true,ledgerVerified:true,
   latestStatus:'VERIFIED',pendingMigrations:[],pendingRepeatables:[],contractMatches:true,verificationAuthorityUnchanged:true };
-test('build connection evidence must be fresh, commit-bound and include the active commit',()=>{
+test('build connection evidence must be fresh, commit-bound and include active version and branch',()=>{
   const sha='a'.repeat(40), now=Date.now(), targets=[['backend','worker','release-branch']];
-  const proof={environment:'TEST',backendCommit:sha,checkedAt:new Date(now).toISOString(),workers:[{worker:'worker',branch:'release-branch',repository:'kierarthur/cloudtms-backend',verified:true,activeCommit:sha}]};
+  const proof={environment:'TEST',backendCommit:sha,checkedAt:new Date(now).toISOString(),workers:[{worker:'worker',branch:'release-branch',repository:'kierarthur/cloudtms-backend',verified:true,branchCommit:sha,activeVersion:'9a2a1961-4a07-4d65-9fb0-d79816b0f1d4',activeCommit:sha}]};
   assert.doesNotThrow(()=>validateConnectionProof(proof,sha,targets,now));
-  for(const patch of [{checkedAt:'invalid'},{checkedAt:new Date(now-900001).toISOString()},{environment:'LIVE'},{backendCommit:'b'.repeat(40)},{workers:[{...proof.workers[0],activeCommit:undefined}]}])
+  for(const patch of [{checkedAt:'invalid'},{checkedAt:new Date(now-900001).toISOString()},{environment:'LIVE'},{backendCommit:'b'.repeat(40)},{workers:[{...proof.workers[0],activeVersion:undefined}]}])
     assert.throws(()=>validateConnectionProof({...proof,...patch},sha,targets,now));
 });
 test('workflow selection pins one exact dispatch and refuses ambiguous concurrent runs',()=>{

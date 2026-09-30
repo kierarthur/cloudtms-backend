@@ -8,8 +8,10 @@ export function validateConnectionProof(proof, sha, targets, now = Date.now()) {
   for (const [, worker, branch] of targets) {
     const entry = proof.workers?.find(x => x.worker === worker);
     if (!entry || entry.branch !== branch || entry.repository !== 'kierarthur/cloudtms-backend'
-        || entry.verified !== true || !/^[a-f0-9]{40}$/.test(entry.activeCommit || '')) {
-      throw new Error(`Missing verified connection and active deployment commit: ${worker}`);
+        || entry.verified !== true || !/^[a-f0-9]{40}$/.test(entry.branchCommit || '')
+        || !/^[a-f0-9-]{36}$/.test(entry.activeVersion || '')
+        || (entry.activeCommit != null && !/^[a-f0-9]{40}$/.test(entry.activeCommit))) {
+      throw new Error(`Missing verified connection, branch or active version: ${worker}`);
     }
   }
 }
