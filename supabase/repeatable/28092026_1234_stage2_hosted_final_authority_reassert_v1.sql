@@ -9,10 +9,14 @@
 -- current authority is 15092026_2311. A clean NEW rebuild already produces these exact
 -- definitions; this closure only replays the complete unchanged canonical files, in their
 -- original source order, after every other pending closure. Do not edit ledgers or copy
--- hosted SQL. The shared routine private._timesheet_duplicate_expense_review_v1 is not
--- included: 26092026_0202 (definition) and 26092026_0209 (access list) remain its single
--- final authority.
+-- hosted SQL. Replaying the changed 04092026_1952 closure also reinstates older
+-- definitions of private._expense_duplicate_review_v1 and
+-- private._timesheet_duplicate_expense_review_v1. Reassert their unchanged
+-- 08092026_0631 and 26092026_0202 authorities in source order. The
+-- 26092026_0209 access-list authority remains unchanged.
 \set ON_ERROR_STOP on
+\ir 08092026_0631_candidate_duplicate_expense_anchor_inclusion_v1.sql
 \ir 15092026_2311_weekly_source_delivery_targets_v1.sql
 \ir 22092026_1226_client_initial_settings_baseline_v1.sql
 \ir 24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql
+\ir 26092026_0202_banking_pay_stage2_source_authorisation_v1.sql

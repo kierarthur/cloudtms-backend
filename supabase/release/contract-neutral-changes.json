@@ -1,7 +1,7 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "Replays the existing 24 September Candidate provisional expense-carrier authority on managed TEST UPGRADE. The hosted incremental release retained an older candidate timesheet-list definition that exposed an empty reservation. Replaying the unchanged definitions on disposable PostgreSQL 17 left the sealed contract byte-identical.",
+  "current_change": "Replays the unchanged 8 and 26 September expense-review authorities after the older 4 September Candidate closure is replayed on managed TEST UPGRADE. This restores both approved duplicate-expense-review definitions without changing their bodies or grants. The hosted failure sequence was reproduced on disposable PostgreSQL 17 and the complete final-authority replay then matched the sealed contract byte-for-byte.",
   "canonical_contract_hash": "95762a780c95f78bb79ae10eb56b872b3d355bfebc030d70748dea0cd35cac33",
   "contract_sha256": "6700098dff3939ce8051be8942ccabcaf419cc96da18dbdb0625dd830563c712",
   "files": [
@@ -12,6 +12,10 @@
     {
       "path": "supabase/repeatable/24092026_2247_candidate_provisional_expense_carrier_lifecycle.sql",
       "sha256": "0c055f4091f36cac0eabb920b19d819fd205df5dbeb55ddebc107c404cdd2c21"
+    },
+    {
+      "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
+      "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c"
     }
   ]
 }
