@@ -276,6 +276,18 @@ const execute = (dependencies, request = finaliseRequest()) => orchestrateWeekly
   dependencies,
 });
 
+test('passes only an explicit boolean exclusion acknowledgement to finalisation', async () => {
+  for (const value of ['true', 1, null, {}]) {
+    const dependencies = harness();
+    await assert.rejects(() => execute(dependencies, finaliseRequest({ exclude_unfinalised_acknowledged: value })),
+      /Confirm whether unfinalised shifts are excluded/);
+    assert.equal(dependencies.calls.length, 0);
+  }
+  const dependencies = harness();
+  await execute(dependencies, finaliseRequest({ exclude_unfinalised_acknowledged: true }));
+  assert.equal(dependencies.calls[0][1].p_request.exclude_unfinalised_acknowledged, true);
+});
+
 test('finalises source first and projects one server-built ordinary Timesheet snapshot exactly once', async () => {
   const dependencies = harness();
   const result = await execute(dependencies);

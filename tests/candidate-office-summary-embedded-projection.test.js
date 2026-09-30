@@ -241,6 +241,7 @@ test('targeted Summary patch exposes only the agreed visible state and current i
 
   assert.deepEqual(Object.keys(patch).sort(), [
     'candidate_expense_reservation','candidate_expense_reservation_error',
+    'candidate_hours_received','office_pre_source_candidate_hours','office_submission_mode_label',
     'backend_row_signature','candidate_office_projection','candidate_office_projection_error',
     'candidate_office_projection_loaded','candidate_office_projection_not_applicable','contract_week_id',
     'current_identity','display_route_label','expected_row_signature','expense_route_kind','id','is_expense_only','margin_ex_vat','processing_status',
@@ -250,7 +251,29 @@ test('targeted Summary patch exposes only the agreed visible state and current i
   assert.equal(patch.expected_row_signature, 'revision-22');
   assert.equal(patch.processing_status_display, 'Authorised for Invoicing');
   assert.equal(patch.total_hours, 12.5);
+  assert.equal(patch.candidate_hours_received, false);
+  assert.equal(patch.office_pre_source_candidate_hours, false);
+  assert.equal(patch.office_submission_mode_label, null);
   assert.equal(Object.hasOwn(patch, 'candidate_name'), false);
   assert.equal(Object.hasOwn(patch, 'client_name'), false);
+  assert.equal(Object.hasOwn(patch, 'hidden_financial_payload'), false);
+});
+
+test('targeted Summary patch carries source-candidate receipt without admitting unapproved fields', () => {
+  const patch = candidateOfficeSummaryInternals.candidateTimesheetSummaryCompactPatch({
+    timesheet_id: uuid(1), contract_week_id: uuid(2),
+    candidate_hours_received: true,
+    office_pre_source_candidate_hours: true,
+    office_submission_mode_label: 'Import',
+    total_hours: 0, total_pay_ex_vat: 0,
+    candidate_name: 'not part of a compact patch',
+    hidden_financial_payload: { prohibited: true }
+  });
+  assert.equal(patch.candidate_hours_received, true);
+  assert.equal(patch.office_pre_source_candidate_hours, true);
+  assert.equal(patch.office_submission_mode_label, 'Import');
+  assert.equal(patch.total_hours, 0);
+  assert.equal(patch.total_pay_ex_vat, 0);
+  assert.equal(Object.hasOwn(patch, 'candidate_name'), false);
   assert.equal(Object.hasOwn(patch, 'hidden_financial_payload'), false);
 });

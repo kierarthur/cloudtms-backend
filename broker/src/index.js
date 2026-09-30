@@ -199947,6 +199947,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
         previewUpload: weeklySourceUploadOwner.previewUpload,
         recordUploadPreview: weeklySourceUploadOwner.recordUploadPreview,
         acceptUpload: weeklySourceUploadOwner.acceptUpload,
+        recheckUpload: weeklySourceUploadOwner.recheckUpload,
         // WP-37 (WP-31 hostile review of WP-04, finding F2). The Mode A
         // acceptance route now runs the ESTABLISHED import-review post-commit
         // follow-up after the reference-apply owner commits, exactly as the

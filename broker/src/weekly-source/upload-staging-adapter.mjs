@@ -325,8 +325,15 @@ export function adaptWeeklySourceParserOutput(parsed, body = {}, context = {}) {
   }
   const normalisedRows = (parsed.rows ?? []).map((row) => normalisedRow(parsed, row, context));
   const count = (classification) => physicalRows.filter((row) => row.classification === classification).length;
+  const importUse = body.import_use ?? (parsed.profileId === 'NHSP_FINAL_BACKING_V1'
+    || body.purpose === 'FINAL_SOURCE_CORRECTION' ? 'PREPARE_FINALISATION' : 'CHECKING');
+  if (!['CHECKING', 'PREPARE_FINALISATION'].includes(importUse)
+      || parsed.profileId === 'NHSP_PREFINAL_RELEASED_V1' && importUse !== 'CHECKING') {
+    fail('WEEKLY_SOURCE_IMPORT_USE_INVALID', 'Choose whether this file is for checking or preparation for finalisation.');
+  }
   const metadata = {
     client_id: context.client_id ?? null,
+    import_use: importUse,
     // The bytes at this key were read and hashed before admission. Retain the
     // storage locator for later invoice evidence; it is never a browser grant.
     source_file_r2_key: text(body.file_key) || null,

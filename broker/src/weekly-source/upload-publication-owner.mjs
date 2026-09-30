@@ -412,7 +412,7 @@ function projectionRow(source, body) {
     clientId: row.client_id,
     workDate: row.work_date,
     contracts,
-    officeSelectedContractId: selectionFor(body, row.source_row_ordinal),
+    officeSelectedContractId: selectionFor(body, row.source_row_ordinal) ?? row.office_selected_contract_id ?? null,
     priorAcceptedContractId: row.prior_accepted_contract_id,
   });
   if (qualified.state !== 'RESOLVED') {
@@ -860,6 +860,30 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         version: correctionVersion,
         idempotent_replay: staged.started.status === 'DUPLICATE' || staged.published.idempotent === true,
       };
+    },
+
+    async recheckUpload(input = {}) {
+      const request = { ...(input.request ?? {}), actor_user_id: requiredUuid(input.actor?.id, 'Office user') };
+      const begun = await rpc(dependencies, 'weekly_source_office_recheck_begin_v1', request);
+      if (!begun?.ok || !['BUILDING', 'CURRENT'].includes(begun.status)) {
+        fail('WEEKLY_SOURCE_RECHECK_BEGIN_FAILED', 'The source comparison could not be rechecked.');
+      }
+      if (begun.status === 'CURRENT') return begun;
+      const context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
+        ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
+      }));
+      await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
+        p_actor_user_id: request.actor_user_id,
+        p_publication_id: begun.publication_id,
+        p_rows: buildWeeklySourceProjectionRows(context),
+      }, { request: false });
+      const result = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
+        actor_user_id: request.actor_user_id, publication_id: begun.publication_id,
+      });
+      if (!result?.ok || result.status !== 'CURRENT') {
+        fail(result?.reason_code ?? 'WEEKLY_SOURCE_RECHECK_FAILED', 'The saved source comparison is still incomplete. Retry this recheck.', 409);
+      }
+      return result;
     },
 
     async rebuildReplacementProjection(input = {}) {
