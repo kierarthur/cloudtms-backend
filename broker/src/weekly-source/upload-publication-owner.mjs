@@ -34,6 +34,28 @@ function fail(code, message, status = 409, details = {}) {
 const text = (value) => String(value ?? '').trim();
 const upper = (value) => text(value).toUpperCase();
 
+function duplicateSourceKey(parsed) {
+  const seen = new Map();
+  for (const row of parsed?.rows ?? []) {
+    const key = text(NHSP.has(parsed.profileId)
+      ? row.referenceNumber
+      : parsed.profileId === 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' ? row.lineId : row.requestId);
+    if (!key) continue;
+    const ordinal = row.physicalRow;
+    if (seen.has(key)) {
+      const label = NHSP.has(parsed.profileId) ? 'NHSP Reference Number'
+        : parsed.profileId === 'ROSTER_WEEKLY_SUMMARY_ACTUAL_V1' ? 'Line ID' : 'Request Id';
+      return {
+        code: 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY',
+        message: `Rows ${seen.get(key)} and ${ordinal} repeat the same ${label} (${key}). Correct the source file and upload it again.`,
+        physicalRow: ordinal,
+      };
+    }
+    seen.set(key, ordinal);
+  }
+  return null;
+}
+
 function requiredUuid(value, label) {
   const result = text(value).toLowerCase();
   if (!UUID.test(result)) fail('WEEKLY_SOURCE_UPLOAD_REQUEST_INVALID', `${label} is invalid.`, 400);
@@ -585,6 +607,12 @@ async function rebuildCorrectionProjection(dependencies, input, body, actorUserI
 }
 
 async function stageParsed(dependencies, body, parsed, context, actorUserId) {
+  if (parsed?.ok !== true) fail(
+    upper(parsed?.fatalErrors?.[0]?.code) || 'WEEKLY_SOURCE_PARSE_REJECTED',
+    text(parsed?.fatalErrors?.[0]?.message) || 'The source file could not be read.', 400,
+  );
+  const duplicate = duplicateSourceKey(parsed);
+  if (duplicate) fail(duplicate.code, duplicate.message, 400, { physical_row: duplicate.physicalRow });
   const adapted = adaptWeeklySourceParserOutput(parsed, { ...body, actor_user_id: actorUserId }, context);
   const started = await rpc(dependencies, 'weekly_source_upload_stage_begin_atomic_v1', adapted.beginRequest);
   if (!started?.ok) fail(started?.reason_code ?? 'WEEKLY_SOURCE_UPLOAD_BEGIN_FAILED', 'The source file could not be staged.', 502);
@@ -667,6 +695,11 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         ));
         parsed = await parseWeeklySourceFile(bytes, parserOptions(body, context));
       }
+      const duplicate = parsed?.ok === true ? duplicateSourceKey(parsed) : null;
+      if (duplicate) parsed = {
+        ...parsed, ok: false,
+        fatalErrors: [...(parsed.fatalErrors ?? []), duplicate],
+      };
       if (parsed?.ok !== true) {
         const reason = upper(parsed?.fatalErrors?.[0]?.code) || 'WEEKLY_SOURCE_PARSE_REJECTED';
         await rpc(dependencies, 'weekly_source_upload_attempt_record_atomic_v1', {
@@ -698,6 +731,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
           report_scope_id: context.report_scope_id ?? null,
           client_id: context.client_id ?? null,
           authority_scope_version: context.authority_scope_version,
+          previous_coverage: context.previous_coverage ?? null,
         },
       };
     },

@@ -208,6 +208,50 @@ test('NHSP preview resolves the server-owned report heading before parsing', asy
   assert.equal(result.accept_context.client_id, ID.client);
 });
 
+test('duplicate NHSP Reference Numbers are explained in preview and refused before staging', async () => {
+  const calls = [];
+  const parsed = {
+    ok: true, profileId: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+    rows: [
+      { physicalRow: 4, referenceNumber: '155154202' },
+      { physicalRow: 6, referenceNumber: '155154202' },
+    ],
+  };
+  const owner = createWeeklySourceUploadPublicationOwner({
+    rpc: async (name) => {
+      calls.push(name);
+      if (name === 'weekly_source_upload_context_v1') return {
+        ok: true, ...context, client_id: null, authority_scope_version: 4,
+        previous_coverage: { start_local_date: '2026-09-08', end_local_date: '2026-09-17' },
+      };
+      if (name === 'weekly_source_upload_attempt_record_atomic_v1') return { ok: true };
+      throw new Error(`Unexpected RPC ${name}`);
+    },
+  });
+  const input = {
+    body: {
+      source_group_id: ID.group, source_cycle_id: ID.cycle,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1,
+      original_filename: 'nhsp.xlsx', coverage: body.coverage,
+    },
+    bytes: new Uint8Array([1]), actor: { id: ID.actor },
+    parseWeeklySourceFile: async () => parsed,
+  };
+  const preview = await owner.previewUpload(input);
+  assert.equal(preview.parsed.ok, false);
+  assert.equal(preview.parsed.fatalErrors[0].code, 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY');
+  assert.match(preview.parsed.fatalErrors[0].message, /Rows 4 and 6.*NHSP Reference Number.*155154202/);
+  assert.deepEqual(preview.accept_context.previous_coverage, {
+    start_local_date: '2026-09-08', end_local_date: '2026-09-17',
+  });
+  await assert.rejects(owner.acceptUpload(input), (error) => {
+    assert.equal(error.code, 'WEEKLY_SOURCE_UPLOAD_DUPLICATE_EXTERNAL_KEY');
+    assert.match(error.message, /Rows 4 and 6/);
+    return true;
+  });
+  assert.equal(calls.includes('weekly_source_upload_stage_begin_atomic_v1'), false);
+});
+
 test('acceptUpload stages, seals and publishes a complete unresolved census without browser economics', async () => {
   const calls = [];
   let appliedRows;
