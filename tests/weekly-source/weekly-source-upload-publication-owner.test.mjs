@@ -76,6 +76,32 @@ const body = Object.freeze({
   coverage: { start_local_date: '2026-09-01', end_local_date: '2026-09-01' },
 });
 
+test('Office recheck uses the authenticated actor and rebuilds only the saved upload', async () => {
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name, args) => {
+    calls.push([name, args]);
+    if (name === 'weekly_source_office_recheck_begin_v1') return { ok: true, status: 'BUILDING', upload_id: ID.upload, publication_id: ID.publication };
+    if (name === 'weekly_source_upload_context_v1') return { ok: true, ...context,
+      profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1, rows: [] };
+    return { ok: true, status: 'CURRENT' };
+  } });
+  await owner.recheckUpload({ actor: { id: ID.actor }, request: { request_id: ID.group, actor_user_id: ID.client } });
+  assert.deepEqual(calls.map(([name]) => name), ['weekly_source_office_recheck_begin_v1',
+    'weekly_source_upload_context_v1', 'weekly_source_projection_rows_apply_atomic_v1', 'weekly_source_projection_publish_atomic_v1']);
+  assert.equal(calls[0][1].p_request.actor_user_id, ID.actor);
+  assert.equal(calls[1][1].p_request.upload_id, ID.upload);
+  assert.equal(calls[2][1].p_publication_id, ID.publication);
+});
+
+test('completed Office recheck replay does not rebuild or repeat follow-up work', async () => {
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name) => {
+    calls.push(name); return { ok: true, status: 'CURRENT', idempotent: true };
+  } });
+  assert.equal((await owner.recheckUpload({ actor: { id: ID.actor }, request: {} })).idempotent, true);
+  assert.deepEqual(calls, ['weekly_source_office_recheck_begin_v1']);
+});
+
 async function parseCase(profileId) {
   if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1) {
     return parseWeeklySourceFile(workbookBytes(nhspRows(false)), { profileId });
@@ -99,6 +125,22 @@ async function parseCase(profileId) {
   }
   return parseWeeklySourceFile(csvBytes(), { profileId });
 }
+
+test('import use defaults to checking for same-format exports and is explicit for preparation', async () => {
+  for (const profileId of [WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1,
+    WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1]) {
+    const parsed = await parseCase(profileId);
+    assert.equal(adaptWeeklySourceParserOutput(parsed, body, context).beginRequest.file_metadata_json.import_use, 'CHECKING');
+    assert.equal(adaptWeeklySourceParserOutput(parsed, { ...body, import_use: 'PREPARE_FINALISATION' }, context)
+      .beginRequest.file_metadata_json.import_use, 'PREPARE_FINALISATION');
+  }
+  const prefinal = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1);
+  assert.throws(() => adaptWeeklySourceParserOutput(prefinal, { ...body, import_use: 'PREPARE_FINALISATION' }, context),
+    { code: 'WEEKLY_SOURCE_IMPORT_USE_INVALID' });
+  const final = await parseCase(WEEKLY_SOURCE_PROFILE_IDS.NHSP_FINAL_BACKING_V1);
+  assert.equal(adaptWeeklySourceParserOutput(final, body, context).beginRequest.file_metadata_json.import_use, 'PREPARE_FINALISATION');
+});
 
 test('strict staging adapter preserves a complete physical census for all five profiles', async () => {
   for (const profileId of Object.values(WEEKLY_SOURCE_PROFILE_IDS)) {

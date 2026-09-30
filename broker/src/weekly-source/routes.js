@@ -16,6 +16,7 @@ const JSON_HEADERS = Object.freeze({
 
 const DIRECT_RPC_COMMANDS = Object.freeze({
   QUERY_SYNC: 'weekly_source_query_sync_atomic_v1',
+  PREPARE_FINALISATION: 'weekly_source_import_prepare_atomic_v1',
   REMIND_CANDIDATE: 'weekly_source_candidate_reminder_atomic_v1',
   ACKNOWLEDGE_NOTICE: 'weekly_source_office_notification_ack_atomic_v1',
   NO_SHIFTS_TO_IMPORT: 'weekly_source_no_shifts_attest_atomic_v1',
@@ -585,6 +586,13 @@ async function handleCommand(req, env, ctx, dependencies, user) {
       }
       throw error;
     }
+  }
+
+  if (action === 'RECHECK_SOURCE') {
+    if (typeof dependencies.recheckUpload !== 'function') {
+      fail('WEEKLY_SOURCE_RECHECK_UNAVAILABLE', 'Source rechecking is unavailable.', 503);
+    }
+    return jsonResponse(200, await dependencies.recheckUpload({ request, actor: user, env, ctx }));
   }
 
   if (action === 'FINALISE_WEEK') {

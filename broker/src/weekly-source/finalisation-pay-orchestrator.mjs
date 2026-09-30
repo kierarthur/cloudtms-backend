@@ -12,6 +12,7 @@ const FINALISE_REQUEST_KEYS = new Set([
   'report_scope_id',
   'source_cycle_id',
   'upload_id',
+  'exclude_unfinalised_acknowledged',
 ]);
 
 const RECOVERY_REQUEST_KEYS = new Set([
@@ -169,6 +170,10 @@ function normaliseFinaliseRequest(input) {
     'WEEKLY_SOURCE_FINALISATION_PAY_UNKNOWN_FIELD',
     'Finalise',
   );
+  if (request.exclude_unfinalised_acknowledged !== undefined
+      && typeof request.exclude_unfinalised_acknowledged !== 'boolean') {
+    fail('WEEKLY_SOURCE_FINALISATION_PAY_REQUEST_INVALID', 'Confirm whether unfinalised shifts are excluded.', 400);
+  }
   const scopeKind = text(
     request.authority_scope_kind,
     'WEEKLY_SOURCE_FINALISATION_PAY_REQUEST_INVALID',
@@ -227,6 +232,9 @@ function normaliseFinaliseRequest(input) {
       'WEEKLY_SOURCE_FINALISATION_PAY_REQUEST_INVALID',
       'Comparison proof',
     ),
+    ...(request.exclude_unfinalised_acknowledged === undefined ? {} : {
+      exclude_unfinalised_acknowledged: request.exclude_unfinalised_acknowledged === true,
+    }),
     expected_issue_set_hash: sha256(
       request.expected_issue_set_hash,
       'WEEKLY_SOURCE_FINALISATION_PAY_REQUEST_INVALID',
