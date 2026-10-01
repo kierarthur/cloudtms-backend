@@ -425,8 +425,15 @@ begin
   -- Excluding only those seven signatures from the same census reproduces
   -- 795 / 76 / 0 / 7107ce270790a01db97e27a8dbedb222 exactly. No existing
   -- permission changed and browser execution remains forbidden.
-  if v_count<>802 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'8bff6786009ac9a493eee90f6ce92574' then
+  -- The report-first History reader adds exactly one SECURITY DEFINER entry:
+  -- public.weekly_source_report_history_v1(pg_catalog.jsonb). Its fixed
+  -- search_path is pg_catalog,pg_temp; only service_role can execute it.
+  -- The disposable PG17 census is 803 / 76 / 0 /
+  -- 360def3739f536af43bfd598cf033e63. Excluding only that new signature
+  -- reproduces the prior 802 / 76 / 0 /
+  -- 8bff6786009ac9a493eee90f6ce92574 exactly.
+  if v_count<>803 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'360def3739f536af43bfd598cf033e63' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;
