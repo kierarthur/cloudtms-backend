@@ -1,0 +1,54 @@
+{
+  "formatVersion": 1,
+  "target": "TEST",
+  "startedAt": "2026-10-01T00:11:55.934Z",
+  "status": "DEPLOYED_ACCEPTANCE_PENDING",
+  "stages": [
+    {
+      "name": "database",
+      "status": "VERIFIED_OR_EXACT_UNCHANGED",
+      "runId": 36794968271,
+      "url": "https://github.com/kierarthur/cloudtms-backend/actions/runs/36794968271",
+      "at": "2026-10-01T00:41:36.562Z"
+    },
+    {
+      "name": "backend",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+      "checkId": 110164189392,
+      "at": "2026-10-01T00:42:28.189Z"
+    },
+    {
+      "name": "candidate-private",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+      "checkId": 110164460578,
+      "at": "2026-10-01T00:43:35.382Z"
+    },
+    {
+      "name": "candidate-synthetic",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+      "checkId": 110164724746,
+      "at": "2026-10-01T00:44:42.544Z"
+    },
+    {
+      "name": "candidate-broker",
+      "status": "BUILD_DEPLOY_SUCCEEDED",
+      "commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+      "checkId": 110165018453,
+      "at": "2026-10-01T00:45:49.831Z"
+    },
+    {
+      "name": "office",
+      "status": "PAGES_DEPLOY_SUCCEEDED",
+      "commit": "d85106b02a47f30ee6950e508c4eabdc187914bf",
+      "url": "https://api.github.com/repos/kierarthur/TEST-Frontend/pages/builds/1251394008",
+      "at": "2026-10-01T00:46:39.844Z"
+    }
+  ],
+  "commit": "083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9",
+  "officeCommit": "d85106b02a47f30ee6950e508c4eabdc187914bf",
+  "databaseRunId": 36794968271,
+  "databaseRunUrl": "https://github.com/kierarthur/cloudtms-backend/actions/runs/36794968271"
+}

@@ -1,5 +1,48 @@
 # Weekly Source full fixes — release evidence
 
+## Current status — 1 October 2026
+
+**DEPLOYED_ACCEPTANCE_PENDING.** The automatic coordinator completed the actual
+protected TEST release and every ordered application publication. The historical
+failed-run notes below are retained as an audit trail, not the current status.
+
+- Protected run: https://github.com/kierarthur/cloudtms-backend/actions/runs/36794968271 — SUCCESS.
+- Installed release: `20260926-banking-pay-stage2-h8-upgrade-083bb9d6a117`, **VERIFIED**, read back from `cloudtms_test_clone`; completed `2026-10-01T00:41:19.921Z`.
+- Database/runtime commit: `083bb9d6a117229d9e1f256f340cf4aa4ae0a3e9`. All **147 UPGRADE verifiers passed**, zero failed; contract `89cbb1631aeaffa2001cd057161c19cd062e1008bd1b9fd66085c6ba4618c2a6` matched. Zero pending migration/repeatable files were reinstalled.
+- The previously failing pending-entitlement verifier passed in 26.175 seconds overall. Its eighty-cycle assertion body remains byte-identical after LF normalisation: SHA-256 `568878abbb5e3c84cc77866ddc4e8800e24d438d91b8eaf55d8673fc1ad7ef7f`.
+- Office commit `d85106b02a47f30ee6950e508c4eabdc187914bf`, Pages build `1251394008`, built successfully. Served `index.html`, Weekly Source CSS and both changed JavaScript files returned 200 and matched the reviewed files after LF normalisation.
+- Coordinator finished `2026-10-01T00:46:39.844Z`. Active version read-back showed all four Workers at 100% on successful builds of the exact runtime commit, in the order below.
+
+| TEST Worker | Active version | Successful build |
+|---|---|---|
+| test-cloudtms-backend | ca4536eb-9ad6-4bfd-9259-b3bd2b0ac5fe | 6a6242c5-4c79-458a-a140-36191a205606 |
+| test-cloudtms-candidate-private-api | 9d1cf5f9-8637-4490-8aa9-1d7112700677 | 05360151-a85f-4a1a-8f09-d5b33a2654eb |
+| test-cloudtms-candidate-synthetic-private-api | 4f1741cb-60f2-498c-a9de-d0502cb8054d | 7777491c-d845-4828-b3c3-dfc493c0c003 |
+| test-cloudtms-candidate-broker | 72480aec-ff2b-4947-89f7-6b9323676d45 | 4658f77e-ecaf-4332-b07d-716c58f36a5a |
+
+The new coordinator's full-release path is now proved end-to-end. Route-selection
+negatives and application-only/component decisions passed local unit tests;
+this run does not claim an actual hosted execution of every alternative route.
+Instructions are in `docs/AUTOMATIC_TEST_DEPLOYMENT.md` and linked by AGENTS/Bible.
+No existing tokens were rotated; no other account's connector or LIVE was changed.
+Arthur's diagnostic Worker source/dependencies/configuration are preserved as an
+unchanged, credential-free snapshot under
+`codex_outputs/arthurrai2006-test-lab-source-20261001/` with a file-hash manifest.
+The shared original files in the primary dirty worktree were not modified.
+
+Local cleanup: after proving no other client used it, removed only owned container
+`codex-ws-full-fixes-20260930` and its disposable volume
+`1c4f29ea1aafa672b4396642178db8e6df84e42c4207851d713673bf2fa93a7e`.
+Docker's total volume inventory fell from 16.32 GB to 15.39 GB during cleanup.
+Source and evidence remain; the disposable database can be recreated from Git.
+Other containers/shared image were preserved, and no Docker virtual disk was
+compacted while other tasks were running.
+
+**Stop here for the requested model switch.** No hosted functional browser/phone
+acceptance was run. Real imports, linking, notifications/manager routing,
+HealthRoster choices, dropdown/layout journeys and device responses remain the
+explicit next acceptance stage; deployment identity checks do not prove them.
+
 ## Scope and authority
 
 User-approved TEST-only release. Deploy database authority first, compatible normal TEST backend second, Office frontend last. Pause after deployment confirmation; hosted browser/phone functional acceptance is reserved for the user's model switch. No LIVE, payment execution, diagnostic outgoing messages, historical route reset or unrelated changes.

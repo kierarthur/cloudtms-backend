@@ -1,0 +1,11 @@
+{
+  "$schema": "../cloudtms-miget-transaction-lab/node_modules/wrangler/config-schema.json",
+  "name": "codex-arthurrai2006-miget-transaction-lab",
+  "main": "../cloudtms-miget-transaction-lab/src/index.ts",
+  "account_id": "88a7276f12e3f68d6323a82d6ece49ce",
+  "compatibility_date": "2026-09-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "hyperdrive": [{"binding":"HYPERDRIVE","id":"11c78f14afea494c9d5e8d8ad57d41a2"}],
+  "observability": {"enabled":true}
+}

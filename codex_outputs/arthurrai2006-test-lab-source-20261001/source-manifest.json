@@ -1,0 +1,58 @@
+{
+  "formatVersion": 1,
+  "normalisation": "UTF-8 LF",
+  "files": [
+    {
+      "path": "cloudtms-miget-transaction-lab-arthurrai2006/README.md",
+      "sha256": "eabaa8eb0dc69b4394069aad7581789202f4df57116b08ca499dd4bb38edf859"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab-arthurrai2006/wrangler.jsonc",
+      "sha256": "1a6c459191d902b06ffe43daa531579753fcd6c85caef50af37050214e14ed79"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/.gitignore",
+      "sha256": "9fc08caaeffc13d7eb1522c0c5e561150b033dd7ce964ee95f89ea649b698585"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/README.md",
+      "sha256": "c8e8f5bd41cc691ccb1aac7d742afe1fdf0d176b703746b459f452c113758c0a"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/package-lock.json",
+      "sha256": "f5413dd72dca5451adede5cdaca67fdcae14a0b300abdc40f45490fe3a2156ae"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/package.json",
+      "sha256": "a8f1393047efb340a4eaa38a3adb946a801117207e0034433f2da1470b5d7c9e"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/src/index.ts",
+      "sha256": "188c009704231957d25dbb7490b30802dc759b1fe2e6b70958a7141c3d12801c"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/src/sql-envelope.ts",
+      "sha256": "9d6d5edcd55e8e2e5920770c06a997b4e374d483551aed3debb616fa78dd2f94"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/src/transaction-runner.ts",
+      "sha256": "8ce94d948a81e90f2bd9e82de55977ba314cac600be61b3765dcc6d1cd5dd516"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/test/sql-envelope.test.ts",
+      "sha256": "db0bd45f490ec45c8501e67d974c262716b4ad7c6a031692289532f22d8fa3f8"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/test/transaction-runner.test.ts",
+      "sha256": "884fd1d1f67c8c65781ea6c4b108e295393f1928dd563b73de2597164f946d3f"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/tsconfig.json",
+      "sha256": "945c5bafb92e3f437391cb4c772c5ff2667c9bf1b2beca280bbc4255f321f3bc"
+    },
+    {
+      "path": "cloudtms-miget-transaction-lab/wrangler.jsonc",
+      "sha256": "307ba3389b96ce002701d4e8ef2850c0245b0f82df7585881e6b9d9f1ce10071"
+    }
+  ]
+}
