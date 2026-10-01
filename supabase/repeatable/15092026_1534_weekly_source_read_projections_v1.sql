@@ -101,6 +101,43 @@ begin
 end;
 $function$;
 
+-- Semantic identity for notification replay only. The publication-bound
+-- fingerprint below remains unchanged and continues to protect mutations.
+create or replace function private.weekly_source_missing_scope_facts_v1(
+  p_projection_publication_id uuid,
+  p_candidate_id uuid,
+  p_client_id uuid,
+  p_contract_id uuid,
+  p_week_ending date
+) returns jsonb
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  select coalesce(pg_catalog.jsonb_agg(facts.value order by facts.value::text),'[]'::jsonb)
+  from (
+    select pg_catalog.jsonb_build_object(
+      'reference',row.external_source_key,'date',row.work_date,
+      'start',row.start_at_local,'end',row.end_at_local,
+      'break_minutes',row.break_minutes,'net_minutes',row.actual_net_minutes,
+      'state',row.row_finalisation_state
+    ) value
+    from public.weekly_source_projection_publications publication
+    join public.weekly_source_upload_rows row on row.upload_id=publication.upload_id
+    join lateral (
+      select resolution.* from public.weekly_source_row_resolutions resolution
+      where resolution.upload_row_id=row.id
+      order by resolution.generation desc,resolution.id desc limit 1
+    ) resolution on resolution.mapping_state='RESOLVED'
+    where publication.id=p_projection_publication_id
+      and resolution.candidate_id=p_candidate_id and resolution.client_id=p_client_id
+      and resolution.contract_id=p_contract_id
+      and row.work_date between p_week_ending-6 and p_week_ending
+  ) facts;
+$function$;
+alter function private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date) owner to current_user;
+revoke all on function private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date)
+  from public,anon,authenticated,service_role;
+
 create or replace function private.weekly_source_office_missing_scope_fingerprint_v1(
   p_projection_publication_id uuid,
   p_candidate_id uuid,
@@ -5242,6 +5279,109 @@ grant execute on function public.weekly_source_office_workspace_v1(jsonb) to ser
 grant execute on function public.weekly_source_office_timesheet_presentation_v1(jsonb) to service_role;
 grant execute on function public.weekly_source_office_bulk_query_action_atomic_v1(jsonb) to service_role;
 grant execute on function public.weekly_source_no_shifts_attest_atomic_v1(jsonb) to service_role;
+
+-- Called only by the accepted publication/query owners. This creates durable
+-- intents; provider delivery remains outside the database transaction.
+create or replace function private.weekly_source_import_outreach_v1(
+  p_projection_publication_id uuid
+) returns void
+language plpgsql volatile security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+declare
+  v_publication public.weekly_source_projection_publications%rowtype;
+  v_candidate record;
+  v_pair record;
+  v_scopes jsonb;
+  v_context jsonb;
+  v_result jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  select publication.* into strict v_publication
+  from public.weekly_source_projection_publications publication
+  where publication.id=p_projection_publication_id and publication.state='CURRENT';
+  if v_publication.correction_session_id is not null then return; end if;
+  perform private.weekly_source_query_current_publication_v1(
+    v_publication.source_cycle_id,v_publication.id);
+
+  for v_candidate in
+    select distinct groups.candidate_id
+    from private.weekly_source_office_query_groups_v1(
+      v_publication.source_cycle_id,v_publication.id,'{}'::jsonb) groups
+    where groups.outreach_eligible
+    order by groups.candidate_id
+  loop
+    -- One candidate/cycle request owner. Serialize import/recheck attempts
+    -- before inspecting memberships so concurrent imports cannot duplicate it.
+    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      'weekly-source-import-outreach:'||v_publication.source_cycle_id::text||':'||v_candidate.candidate_id::text,0));
+    select coalesce(pg_catalog.jsonb_agg(scope.value order by scope.value::text),'[]'::jsonb)
+    into v_scopes
+    from (
+      select distinct membership.value
+      from private.weekly_source_office_query_groups_v1(
+        v_publication.source_cycle_id,v_publication.id,'{}'::jsonb) groups
+      cross join lateral pg_catalog.jsonb_array_elements(groups.missing_scopes) membership
+      where groups.candidate_id=v_candidate.candidate_id and groups.outreach_eligible
+        and not exists (
+          select 1 from public.weekly_route_activations activation
+          where activation.source_cycle_id=v_publication.source_cycle_id
+            and activation.candidate_id=v_candidate.candidate_id
+            and activation.client_id=groups.client_id and activation.route_mode='MANAGER_DIRECT'
+        )
+    ) scope;
+    if pg_catalog.jsonb_array_length(v_scopes)>0 then
+      v_result:=private.weekly_source_submission_request_start_v1(
+        pg_catalog.jsonb_build_object('source_cycle_id',v_publication.source_cycle_id,
+          'projection_publication_id',v_publication.id,'candidate_id',v_candidate.candidate_id,
+          'scopes',v_scopes),true);
+    end if;
+
+    for v_pair in
+      select distinct on (incident.client_id) incident.client_id,comparison.contract_id,event.work_date
+      from public.weekly_discrepancy_incidents incident
+      join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+      join public.weekly_work_events event on event.id=incident.work_event_id
+      where incident.source_cycle_id=v_publication.source_cycle_id
+        and incident.candidate_id=v_candidate.candidate_id and incident.state='OPEN'
+        and comparison.projection_publication_id=v_publication.id
+        and incident.candidate_action_state='NOT_ASKED'
+        and not private.weekly_source_waiting_requested_week_v1(incident.source_cycle_id,
+          incident.candidate_id,incident.client_id,comparison.contract_id,event.work_date)
+        and not exists (
+          select 1 from public.weekly_route_activations activation
+          where activation.source_cycle_id=incident.source_cycle_id
+            and activation.candidate_id=incident.candidate_id
+            and activation.client_id=incident.client_id and activation.route_mode='MANAGER_DIRECT'
+        )
+      order by incident.client_id,event.work_date,incident.id
+    loop
+      v_context:=private.weekly_source_query_cohort_ensure_v1(v_publication.source_cycle_id,
+        v_candidate.candidate_id,v_pair.client_id,v_pair.contract_id,v_pair.work_date);
+      if not coalesce((v_context->>'candidate_queries_enabled')::boolean,false) then continue; end if;
+      if coalesce((v_context->>'manager_queries_enabled')::boolean,false)
+         and nullif(v_context->>'manager_route_id','') is not null then
+        insert into public.weekly_route_activations(
+          source_cycle_id,candidate_id,client_id,audience_route,route_mode,
+          activated_at_utc,updated_at_utc
+        ) values (v_publication.source_cycle_id,v_candidate.candidate_id,v_pair.client_id,
+          'MANAGER','CANDIDATE_FIRST',pg_catalog.transaction_timestamp(),pg_catalog.transaction_timestamp())
+        on conflict (source_cycle_id,candidate_id,client_id,audience_route) do nothing;
+      end if;
+      v_result:=private.weekly_source_query_candidate_generation_v1(
+        v_publication.source_cycle_id,v_candidate.candidate_id,v_pair.client_id,
+        v_publication.id,'NEW_INCIDENT',null,pg_catalog.transaction_timestamp());
+      if v_result->>'status'='CREATED' and nullif(v_context->>'manager_route_id','') is not null then
+        perform private.weekly_source_query_manager_generation_v1(
+          (v_context->>'manager_route_id')::uuid,'T6_RESPONDED',pg_catalog.transaction_timestamp(),false);
+      end if;
+    end loop;
+  end loop;
+end;
+$function$;
+alter function private.weekly_source_import_outreach_v1(uuid) owner to current_user;
+revoke all on function private.weekly_source_import_outreach_v1(uuid)
+  from public,anon,authenticated,service_role;
 
 notify pgrst, 'reload schema';
 

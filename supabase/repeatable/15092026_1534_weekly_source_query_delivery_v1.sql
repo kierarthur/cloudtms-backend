@@ -3273,8 +3273,9 @@ begin
 end;
 $function$;
 
-create or replace function public.weekly_source_timesheet_submission_request_start_atomic_v1(
-  p_request jsonb
+create or replace function private.weekly_source_submission_request_start_v1(
+  p_request jsonb,
+  p_automatic boolean
 ) returns jsonb
 language plpgsql
 volatile
@@ -3326,10 +3327,12 @@ begin
     raise exception 'WEEKLY_SOURCE_TIMESHEET_REQUEST_INVALID' using errcode='22023';
   end;
   v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
-  perform private.weekly_source_office_authority_v1(
-    v_actor,'ASK_CANDIDATES',(v_guard->>'source_group_id')::uuid,null,
-    (v_guard->>'finalisation_week_ending')::date
-  );
+  if not p_automatic then
+    perform private.weekly_source_office_authority_v1(
+      v_actor,'ASK_CANDIDATES',(v_guard->>'source_group_id')::uuid,null,
+      (v_guard->>'finalisation_week_ending')::date
+    );
+  end if;
   v_scopes:=coalesce((
     select pg_catalog.jsonb_agg(
       pg_catalog.jsonb_build_object(
@@ -3389,7 +3392,25 @@ begin
   where source_cycle_id=v_cycle_id and candidate_id=v_candidate_id
     and state in ('READY','ACTIVE','OVERDUE','PARTLY_SUBMITTED')
   for update;
-  if found and v_old_request.membership_hash=v_hash then
+  if found and (v_old_request.membership_hash=v_hash or (p_automatic and not exists (
+    -- A new publication ID is not a new request. Compare relevant waiting
+    -- weeks by business facts, retaining the original immutable membership.
+    select 1 from pg_catalog.jsonb_array_elements(v_scopes) scope
+    where not exists (
+      select 1 from public.weekly_timesheet_submission_request_memberships membership
+      where membership.submission_request_id=v_old_request.id
+        and membership.week_ending=(scope->>'week_ending')::date
+        and membership.client_id=(scope->>'client_id')::uuid
+        and membership.contract_id=(scope->>'contract_id')::uuid
+        and private.weekly_source_missing_scope_facts_v1(
+          v_old_request.current_projection_publication_id,v_candidate_id,
+          membership.client_id,membership.contract_id,membership.week_ending
+        ) = private.weekly_source_missing_scope_facts_v1(
+          v_publication_id,v_candidate_id,membership.client_id,
+          membership.contract_id,membership.week_ending
+        )
+    )
+  ))) then
     return pg_catalog.jsonb_build_object(
       'ok',true,'status','UNCHANGED','submission_request_id',v_old_request.id,
       'candidate_generation_id',v_cohort.current_submission_generation_id,
@@ -3437,7 +3458,8 @@ begin
     reminder_due_at_utc,deadline_at_utc,manual_reminder_available_at_utc,state,membership_hash
   ) values (
     v_cycle_id,v_cohort.id,v_candidate_id,v_first_client_id,v_generation_number,
-    v_activation.id,'OFFICE_ASK','SUBMIT_TIMESHEET','CANDIDATE_FIRST',
+    v_activation.id,case when p_automatic then 'NEW_INCIDENT' else 'OFFICE_ASK' end,
+    'SUBMIT_TIMESHEET','CANDIDATE_FIRST',
     pg_catalog.transaction_timestamp(),
     pg_catalog.transaction_timestamp()+v_settings.candidate_reminder_after,
     pg_catalog.transaction_timestamp()+v_settings.candidate_response_deadline_after,
@@ -3486,7 +3508,8 @@ begin
       'started_at_utc',v_submission.started_at_utc,
       'reminder_due_at_utc',v_submission.reminder_due_at_utc,
       'deadline_at_utc',v_submission.deadline_at_utc
-    ),'Candidate asked to submit a Weekly Timesheet',v_actor
+    ),case when p_automatic then 'Candidate automatically asked to submit a Weekly Timesheet after import'
+      else 'Candidate asked to submit a Weekly Timesheet' end,v_actor
   );
   return pg_catalog.jsonb_build_object(
     'ok',true,'status','CREATED','submission_request_id',v_submission.id,
@@ -3498,6 +3521,23 @@ begin
   );
 end;
 $function$;
+
+create or replace function public.weekly_source_timesheet_submission_request_start_atomic_v1(
+  p_request jsonb
+) returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+begin
+  return private.weekly_source_submission_request_start_v1(p_request,false);
+end;
+$function$;
+
+alter function private.weekly_source_submission_request_start_v1(jsonb,boolean) owner to current_user;
+revoke all on function private.weekly_source_submission_request_start_v1(jsonb,boolean)
+  from public,anon,authenticated,service_role;
 
 
 create or replace function private.weekly_source_query_manager_generation_v1(
@@ -3886,6 +3926,9 @@ declare
   v_first record;
   v_cohort_context jsonb;
 begin
+  -- Bootstrap only policy-eligible new work; previously this owner could
+  -- restart an Office-activated route but never begin the first request.
+  perform private.weekly_source_import_outreach_v1(p_projection_publication_id);
   select * into v_activation
   from public.weekly_route_activations
   where source_cycle_id=p_source_cycle_id and candidate_id=p_candidate_id
@@ -3917,7 +3960,7 @@ begin
      and nullif(v_cohort_context->>'manager_route_id','') is not null then
     perform private.weekly_source_query_manager_generation_v1(
       (v_cohort_context->>'manager_route_id')::uuid,'NEW_INCIDENT',
-      pg_catalog.transaction_timestamp(),true
+      pg_catalog.transaction_timestamp(),false
     );
   end if;
 end;
@@ -4235,7 +4278,8 @@ begin
       bounded_payload_json,idempotency_key,occurred_at_utc
     )
     select incident.id,incident.episode_number,p_projection_publication_id,
-      comparison.material_comparison_fingerprint,'REQUESTED','OFFICE',p_actor_user_id,
+      comparison.material_comparison_fingerprint,'REQUESTED',
+      case when p_actor_user_id is null then 'SYSTEM' else 'OFFICE' end,p_actor_user_id,
       pg_catalog.jsonb_build_object(
         'route','CANDIDATE_FIRST','candidate_generation_id',v_new.id
       ),
@@ -5004,6 +5048,7 @@ begin
     );
   end loop;
 
+  perform private.weekly_source_import_outreach_v1(v_publication_id);
   perform public._audit_insert(
     'weekly_source_query_sync',v_publication_id::text,'WEEKLY_SOURCE_QUERY_SYNCED',
     null,

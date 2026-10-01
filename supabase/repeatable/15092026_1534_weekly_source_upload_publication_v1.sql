@@ -3096,10 +3096,13 @@ begin
   ) then
     -- Recheck already-signed candidate evidence in the same publication
     -- transaction. This writes comparison/query evidence only: no source
-    -- financial movement, Timesheet hours, or first outreach is created here.
+    -- financial movement or Timesheet hours are created here.
     perform private.weekly_source_candidate_prefinal_publish_recheck_v1(
       v_actor,v_publication.id
     );
+  end if;
+  if v_publication.correction_session_id is null then
+    perform private.weekly_source_import_outreach_v1(v_publication.id);
   end if;
   v_fingerprint:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_SOURCE_PUBLICATION_FINGERPRINT_V1',

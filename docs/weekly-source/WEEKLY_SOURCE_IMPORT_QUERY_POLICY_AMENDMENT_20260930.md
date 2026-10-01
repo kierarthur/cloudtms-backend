@@ -52,6 +52,14 @@ Finalise report/source/week must contain only actual prepared finalisation work,
 
 ## 4. Notification routes and requested weeks
 
+### Automatic contact on import
+
+User clarification on 1 October 2026: accepting a pre-finalisation import must automatically start eligible missing-Timesheet requests and signed-hours discrepancy questions. Office does not have to select Ask candidates. Apply the existing contract/client settings, global timing, source-authority eligibility, candidate availability and manager routing policy. The manual controls remain optional interventions, not prerequisites for normal contact. Unmatched candidates and other Office-only blockers do not authorise guessed recipients or messages.
+
+An unchanged subsequent import must not send another initial candidate or manager message or restart a clock. New upload, publication, resolution, or evidence identifiers alone are not material changes. Preserve resolved decisions and accepted messages. Only changes to the relevant business facts under the existing comparison policy may supersede an old question and start new work; stale questions must not remain answerable. Keep publication-bound safety fingerprints separate from the semantic comparison used to decide whether contact is new.
+
+This clarification authorises implementation, not a claim of completion. Rollback-contained runtime proof must cover first automatic contact, disabled settings, missing versus signed weeks, preserved manager-direct routes, unchanged re-imports, changed facts, and unchanged reminder deadlines before publication.
+
 Keep three distinct reasons for contacting a manager:
 
 1. An explicit Office-selected manager-direct route, with actor and audit evidence.
