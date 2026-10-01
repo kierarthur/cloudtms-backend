@@ -17,6 +17,13 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Keep the entry harness budget separate from transaction-local application
+-- budgets applied by real RPCs below. Never exceed an existing nonzero entry
+-- budget, and cap an otherwise unbounded harness at 120 seconds.
+create temporary table ws_pending_verifier_budget on commit drop as
+select least(coalesce(nullif(setting::integer,0),120000),120000) as entry_timeout_ms,
+       null::text as section_timeout
+from pg_catalog.pg_settings where name='statement_timeout';
 -- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('private.weekly_source_entitlement_publication_receipts'::regclass);
@@ -2785,6 +2792,14 @@ $verify_release_d10_pairing$;
 --
 -- The bundle is the one section 13 left PENDING on WSREL-0002, whose root is
 -- frozen by the live DRAFT item `…bb03`.  The census is real on every tick.
+-- Earlier real Banking progress calls leave a transaction-local 3-second API
+-- budget. B4.2 is one harness statement measuring EIGHTY calls, not one API
+-- request. Restore the bounded entry budget for this aggregate measurement
+-- only; preserve every cycle/assertion and leave application budgets unchanged.
+update pg_temp.ws_pending_verifier_budget
+set section_timeout=pg_catalog.current_setting('statement_timeout');
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_b42_audit_growth$
 declare
   v_pending uuid;
@@ -2941,6 +2956,8 @@ begin
       ||'and wrote no receipt');
 end
 $verify_b42_audit_growth$;
+select pg_catalog.set_config('statement_timeout',section_timeout,true)
+from pg_temp.ws_pending_verifier_budget;
 
 -- ---------------------------------------------------------------------------
 -- 16. HANDOVER 2 round-5 ruling B4.3 - when the counter may be reset

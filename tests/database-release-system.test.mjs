@@ -15,6 +15,19 @@ import {
 } from '../supabase/verification/catalog_outer_transaction_envelope.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
+test('pending release aggregate proof restores its bounded entry budget without changing business assertions', () => {
+  const source = read('supabase/verification/17092026_0700_weekly_source_pending_entitlement_release_v1.sql');
+  assert.match(source, /least\(coalesce\(nullif\(setting::integer,0\),120000\),120000\)/);
+  assert.ok(source.indexOf('create temporary table ws_pending_verifier_budget') < source.indexOf('\\ir support/'));
+  const block = source.slice(source.indexOf('do $verify_b42_audit_growth$'), source.lastIndexOf('$verify_b42_audit_growth$;'));
+  assert.match(block, /v_ticks constant integer:=40/);
+  assert.equal((block.match(/for v_tick in 1\.\.v_ticks loop/g) || []).length, 2);
+  assert.match(block, /v_rows_a>=v_ticks/);
+  assert.match(block, /v_rows_b=0/);
+  assert.match(block, /v_row\.technical_failure_count=v_counter_before/);
+  assert.doesNotMatch(block, /set_config\('statement_timeout'|exit;|continue;/i);
+  assert.match(source.slice(source.lastIndexOf('$verify_b42_audit_growth$;')), /set_config\('statement_timeout',section_timeout,true\)/);
+});
 const filesUnder = relative => {
   const root = path.join(repoRoot, relative);
   const result = [];
