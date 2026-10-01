@@ -85,6 +85,39 @@ begin
     where request.id=original_request.id and request.state='ACTIVE'
       and request.deadline_at_utc=original_request.deadline_at_utc
       and request.membership_hash=original_request.membership_hash),'original request, immutable membership and clocks survive');
+  update public.weekly_source_uploads set state='SUPERSEDED' where id='e7000000-0000-4000-8000-000000000002';
+  insert into public.weekly_source_uploads
+  select (jsonb_populate_record(null::public.weekly_source_uploads,to_jsonb(upload)||jsonb_build_object(
+    'id','e7000000-0000-4000-8000-000000000003','state','CURRENT','content_sha256','\\x'||repeat('92',32)))).*
+  from public.weekly_source_uploads upload where upload.id='e7000000-0000-4000-8000-000000000002';
+  update public.weekly_source_projection_publications set state='STALE' where id='e8000000-0000-4000-8000-000000000002';
+  insert into public.weekly_source_projection_publications
+  select (jsonb_populate_record(null::public.weekly_source_projection_publications,to_jsonb(publication)||jsonb_build_object(
+    'id','e8000000-0000-4000-8000-000000000003','upload_id','e7000000-0000-4000-8000-000000000003','state','CURRENT'))).*
+  from public.weekly_source_projection_publications publication where publication.id='e8000000-0000-4000-8000-000000000002';
+  insert into public.weekly_source_upload_rows
+  select (jsonb_populate_record(null::public.weekly_source_upload_rows,to_jsonb(row)||jsonb_build_object(
+    'id','ec000000-0000-4000-8000-000000000003','upload_id','e7000000-0000-4000-8000-000000000003',
+    'break_minutes',45,'actual_net_minutes',435))).*
+  from public.weekly_source_upload_rows row where row.id='ec000000-0000-4000-8000-000000000002';
+  insert into public.weekly_source_row_resolutions
+  select (jsonb_populate_record(null::public.weekly_source_row_resolutions,to_jsonb(resolution)||jsonb_build_object(
+    'id','ed000000-0000-4000-8000-000000000003','upload_row_id','ec000000-0000-4000-8000-000000000003'))).*
+  from public.weekly_source_row_resolutions resolution where resolution.id='ed000000-0000-4000-8000-000000000002';
+  update public.weekly_source_cycles set current_complete_upload_id='e7000000-0000-4000-8000-000000000003',
+    current_projection_publication_id='e8000000-0000-4000-8000-000000000003'
+  where id='e6000000-0000-4000-8000-000000000001';
+  perform private.weekly_source_import_outreach_v1('e8000000-0000-4000-8000-000000000003');
+  perform pg_temp.assert_true(exists(select 1 from public.weekly_timesheet_submission_requests
+    where id=original_request.id and state='SUPERSEDED'),'material break change supersedes the old request');
+  perform pg_temp.assert_true((select count(*)=initial_count+1 from public.weekly_message_intents),
+    'material break change creates exactly one new initial intent');
+  perform private.weekly_source_import_outreach_v1('e8000000-0000-4000-8000-000000000003');
+  perform pg_temp.assert_true((select count(*)=initial_count+1 from public.weekly_message_intents),
+    'rechecking changed facts again does not send twice');
+  perform pg_temp.assert_true(not has_function_privilege('service_role',
+    'private.weekly_source_submission_request_start_v1(jsonb,boolean)','EXECUTE'),
+    'automatic request owner is not a new caller-controlled privilege bypass');
 end;
 $proof$;
 `));

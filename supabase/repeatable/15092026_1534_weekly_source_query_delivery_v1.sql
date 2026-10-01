@@ -3402,13 +3402,9 @@ begin
         and membership.week_ending=(scope->>'week_ending')::date
         and membership.client_id=(scope->>'client_id')::uuid
         and membership.contract_id=(scope->>'contract_id')::uuid
-        and private.weekly_source_missing_scope_facts_v1(
-          v_old_request.current_projection_publication_id,v_candidate_id,
-          membership.client_id,membership.contract_id,membership.week_ending
-        ) = private.weekly_source_missing_scope_facts_v1(
-          v_publication_id,v_candidate_id,membership.client_id,
-          membership.contract_id,membership.week_ending
-        )
+        and private.weekly_source_missing_scope_unchanged_v1(
+          v_old_request.current_projection_publication_id,v_publication_id,v_candidate_id,
+          membership.client_id,membership.contract_id,membership.week_ending)
     )
   ))) then
     return pg_catalog.jsonb_build_object(

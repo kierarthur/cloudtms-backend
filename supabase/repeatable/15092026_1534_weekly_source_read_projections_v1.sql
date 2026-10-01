@@ -118,8 +118,7 @@ as $function$
     select pg_catalog.jsonb_build_object(
       'reference',row.external_source_key,'date',row.work_date,
       'start',row.start_at_local,'end',row.end_at_local,
-      'break_minutes',row.break_minutes,'net_minutes',row.actual_net_minutes,
-      'state',row.row_finalisation_state
+      'break_minutes',row.break_minutes,'net_minutes',row.actual_net_minutes
     ) value
     from public.weekly_source_projection_publications publication
     join public.weekly_source_upload_rows row on row.upload_id=publication.upload_id
@@ -136,6 +135,37 @@ as $function$
 $function$;
 alter function private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date) owner to current_user;
 revoke all on function private.weekly_source_missing_scope_facts_v1(uuid,uuid,uuid,uuid,date)
+  from public,anon,authenticated,service_role;
+
+create or replace function private.weekly_source_missing_scope_unchanged_v1(
+  p_previous_publication_id uuid,p_publication_id uuid,p_candidate_id uuid,
+  p_client_id uuid,p_contract_id uuid,p_week_ending date
+) returns boolean
+language sql stable security definer
+set search_path to 'public','private','pg_catalog','pg_temp'
+as $function$
+  with coverage as (
+    select coalesce(upload.confirmed_coverage_start_local_date,p_week_ending-6) first_date,
+      coalesce(upload.confirmed_coverage_end_local_date,p_week_ending) last_date
+    from public.weekly_source_projection_publications publication
+    join public.weekly_source_uploads upload on upload.id=publication.upload_id
+    where publication.id=p_publication_id
+  ), old_facts as (
+    select coalesce(pg_catalog.jsonb_agg(fact.value order by fact.value::text),'[]'::jsonb) facts
+    from coverage cross join lateral pg_catalog.jsonb_array_elements(
+      private.weekly_source_missing_scope_facts_v1(p_previous_publication_id,p_candidate_id,
+        p_client_id,p_contract_id,p_week_ending)) fact
+    where (fact.value->>'date')::date between coverage.first_date and coverage.last_date
+  ), new_facts as (
+    select coalesce(pg_catalog.jsonb_agg(fact.value order by fact.value::text),'[]'::jsonb) facts
+    from coverage cross join lateral pg_catalog.jsonb_array_elements(
+      private.weekly_source_missing_scope_facts_v1(p_publication_id,p_candidate_id,
+        p_client_id,p_contract_id,p_week_ending)) fact
+    where (fact.value->>'date')::date between coverage.first_date and coverage.last_date
+  ) select old_facts.facts=new_facts.facts from old_facts cross join new_facts;
+$function$;
+alter function private.weekly_source_missing_scope_unchanged_v1(uuid,uuid,uuid,uuid,uuid,date) owner to current_user;
+revoke all on function private.weekly_source_missing_scope_unchanged_v1(uuid,uuid,uuid,uuid,uuid,date)
   from public,anon,authenticated,service_role;
 
 create or replace function private.weekly_source_office_missing_scope_fingerprint_v1(
