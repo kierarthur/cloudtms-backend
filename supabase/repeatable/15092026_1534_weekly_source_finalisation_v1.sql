@@ -1518,6 +1518,9 @@ begin
       raise exception 'WEEKLY_SOURCE_UPLOAD_CLIENT_MISMATCH' using errcode='55000';
     end if;
     v_client_id:=coalesce(v_resolved_client_id,v_client_id);
+    if v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_client_id then
+      raise exception 'WEEKLY_SOURCE_FINAL_CLIENT_SCOPE_REQUIRED' using errcode='55000';
+    end if;
     if v_client_id is null or not exists(
       select 1
       from public.weekly_source_group_clients group_client

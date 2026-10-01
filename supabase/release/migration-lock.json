@@ -1007,6 +1007,14 @@
       "sha256": "ab5a13a89b8a6ad917c7e41741bea4089043d19be76f16eef2b950f77ff15cc4"
     },
     {
+      "path": "supabase/migrations/01102026_1201_weekly_source_client_cycle_scope.sql",
+      "sha256": "b2105f82bdc592dc4312837648f7fe4ab7c421016f3b1160c8c97fc61b088a47"
+    },
+    {
+      "path": "supabase/migrations/01102026_1307_weekly_source_protected_shift_links.sql",
+      "sha256": "1e586d16ce64f8f8850566632d67faf011c83b5f00643bbd1ce88044f37b6b54"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

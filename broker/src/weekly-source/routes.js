@@ -15,6 +15,12 @@ const JSON_HEADERS = Object.freeze({
 });
 
 const DIRECT_RPC_COMMANDS = Object.freeze({
+  WORKSPACE_SCOPES: 'weekly_source_workspace_scopes_v1',
+  COMBINED_FINALISE_WORKSPACE: 'weekly_source_combined_finalise_workspace_v1',
+  COMBINED_REVIEW_WORKSPACE: 'weekly_source_combined_review_workspace_v1',
+  UPLOAD_DETAIL: 'weekly_source_upload_detail_v1',
+  PROTECTED_EDITOR_CONTEXT: 'weekly_source_protected_editor_context_v1',
+  PREPARE_PROTECTED_EDITOR: 'weekly_source_protected_editor_prepare_v1',
   QUERY_SYNC: 'weekly_source_query_sync_atomic_v1',
   PREPARE_FINALISATION: 'weekly_source_import_prepare_atomic_v1',
   REMIND_CANDIDATE: 'weekly_source_candidate_reminder_atomic_v1',

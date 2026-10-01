@@ -21,6 +21,7 @@ as $function$
     join public.weekly_source_cycles cycle
       on cycle.source_group_id=source_group.id
      and cycle.finalisation_week_ending=p_week_ending_date
+     and (cycle.scope_client_id is null or cycle.scope_client_id=p_client_id)
     join public.weekly_source_client_policies policy
       on policy.source_group_id=source_group.id and policy.client_id=p_client_id
      and p_week_ending_date between policy.effective_from
@@ -28,7 +29,7 @@ as $function$
     where membership.client_id=p_client_id
       and p_week_ending_date between membership.valid_from
         and coalesce(membership.valid_to,'infinity'::date)
-    order by policy.effective_from desc,policy.id desc
+    order by (cycle.scope_client_id=p_client_id) desc nulls last,policy.effective_from desc,policy.id desc
     limit 1
   )
   select coalesce((

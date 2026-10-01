@@ -24,6 +24,9 @@ declare
   v_candidate uuid;
   v_client uuid;
   v_contract uuid;
+  v_work_event uuid;
+  v_match_reason text;
+  v_separate_shift boolean:=false;
   v_version bigint;
   v_current_publication uuid;
   v_current_upload uuid;
@@ -35,7 +38,7 @@ begin
     or exists(select 1 from pg_catalog.jsonb_object_keys(p_request) key where key not in
       ('actor_user_id','request_id','upload_id','projection_publication_id',
        'expected_authority_scope_version','expected_row_manifest_hash','upload_row_id',
-       'candidate_id','client_id','contract_id')) then
+       'candidate_id','client_id','contract_id','work_event_id','match_reason','separate_shift')) then
     raise exception 'WEEKLY_SOURCE_RECHECK_REQUEST_INVALID' using errcode='22023';
   end if;
   v_actor:=(p_request->>'actor_user_id')::uuid;
@@ -86,7 +89,7 @@ begin
   if v_publication.state<>'CURRENT' or v_publication.upload_id<>v_upload.id then
     raise exception 'WEEKLY_SOURCE_PREVIEW_STALE' using errcode='40001';
   end if;
-  if p_request ?| array['candidate_id','client_id','contract_id'] then
+  if p_request ?| array['candidate_id','client_id','contract_id','work_event_id','separate_shift'] then
     select * into strict v_row from public.weekly_source_upload_rows
       where id=(p_request->>'upload_row_id')::uuid and upload_id=v_upload.id;
     select * into v_choice from private.weekly_source_office_row_choices
@@ -113,8 +116,45 @@ begin
         and v_row.work_date between start_date and coalesce(end_date,'infinity'::date)) then
       raise exception 'WEEKLY_SOURCE_CONTRACT_NOT_ELIGIBLE' using errcode='22023';
     end if;
-    insert into private.weekly_source_office_row_choices(upload_row_id,candidate_id,client_id,contract_id,actor_user_id)
-      values(v_row.id,v_candidate,v_client,v_contract,v_actor);
+    if p_request ? 'separate_shift' then
+      if p_request->'separate_shift'<>'true'::jsonb or p_request ? 'work_event_id' then
+        raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_NOT_ELIGIBLE' using errcode='22023';
+      end if;
+      v_separate_shift:=true;
+      v_match_reason:=btrim(p_request->>'match_reason');
+      v_contract:=coalesce(v_contract,v_resolution.contract_id);
+      if v_contract is null or v_match_reason is null or char_length(v_match_reason) not between 1 and 1000
+        or jsonb_array_length(private.weekly_source_protected_match_candidates_v1(v_row.id,v_candidate,v_client))=0
+        or exists(select 1 from public.weekly_exceptional_pay_family_events item
+          where item.durable_work_event_id=v_resolution.work_event_id) then
+        raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_NOT_ELIGIBLE' using errcode='22023';
+      end if;
+    elsif p_request ? 'work_event_id' then
+      v_work_event:=(p_request->>'work_event_id')::uuid;
+      v_match_reason:=btrim(p_request->>'match_reason');
+      if v_work_event is null or v_match_reason is null or char_length(v_match_reason) not between 1 and 1000
+        or not exists(select 1 from jsonb_array_elements(
+          private.weekly_source_protected_match_candidates_v1(v_row.id,v_candidate,v_client)) choice
+          where choice->>'work_event_id'=v_work_event::text
+            and choice->>'contract_id'=coalesce(v_contract,v_resolution.contract_id)::text) then
+        raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_NOT_ELIGIBLE' using errcode='22023';
+      end if;
+      v_contract:=coalesce(v_contract,v_resolution.contract_id);
+      -- A source identity already included in final authority cannot be moved
+      -- to another payable identity by this pre-finalisation choice.
+      if exists(select 1 from public.weekly_source_row_resolutions old_resolution
+        where old_resolution.upload_row_id=v_row.id and old_resolution.work_event_id<>v_work_event
+          and (exists(select 1 from public.weekly_source_final_snapshot_lines final_line
+            where final_line.work_event_id=old_resolution.work_event_id)
+            or exists(select 1 from public.weekly_source_billing_movements movement
+              where movement.work_event_id=old_resolution.work_event_id))) then
+        raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_FINAL_AUTHORITY_CONFLICT' using errcode='55000';
+      end if;
+    elsif not (p_request ?| array['candidate_id','client_id','contract_id']) then
+      v_work_event:=v_choice.work_event_id; v_match_reason:=v_choice.match_reason;
+    end if;
+    insert into private.weekly_source_office_row_choices(upload_row_id,candidate_id,client_id,contract_id,actor_user_id,work_event_id,match_reason,separate_shift)
+      values(v_row.id,v_candidate,v_client,v_contract,v_actor,v_work_event,v_match_reason,v_separate_shift);
   elsif p_request ? 'upload_row_id' then
     raise exception 'WEEKLY_SOURCE_RECHECK_REQUEST_INVALID' using errcode='22023';
   end if;

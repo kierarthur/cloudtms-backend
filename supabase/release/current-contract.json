@@ -9173,7 +9173,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "e3074e4b5de01813afced26b223ca24a137c2d5684d0381d990e263ffc338db1"
+      "definition_sha256": "17d4d75fd17f6cf78fd8fd728311c3b047931717828c2e2b0936e79501474ad0"
     },
     {
       "acl": [
@@ -9192,7 +9192,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "6a7b75f23f80cb7f8fbecfab11d2b291fa6ecb3acd08cb24a4ae297b3de1239c"
+      "definition_sha256": "74d0a30bb59ce625335c8a33b39af8f58f29bf7420903b05e24a9c900eb3cc05"
     },
     {
       "acl": [
@@ -9444,7 +9444,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5bc97ce24ab6800fe753af8cb68054778c5c5c6fff15ae59d4836a4e1e98806e"
+      "definition_sha256": "adafcdc098b02b2d09803804202c29871dc8eabf179b3a3f430b18f378a53f68"
     },
     {
       "acl": [
@@ -14235,7 +14235,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f82dd8b52565c194d4e4842019ad6f95ee53f4817ccb0ffa54e8905630309da3"
+      "definition_sha256": "5b770cd46179f483f967e597430fe405983cdb327a5e6e274976259e3b4b570b"
     },
     {
       "acl": [
@@ -14369,6 +14369,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "4052de45e318635637d7e5f2e46e8f23f96475e999fd337022bcee334795de88"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_completed_rows_v1(p_cycle_id uuid, p_client_id uuid, p_report_scope_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f821dc99d246bf15eecdcfdebf3d362b32521c783e1c32e6c8c865e04b8c5c00"
     },
     {
       "acl": [
@@ -15261,7 +15280,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d89caa5364e0300abb8252e9c3ee497d9daf26fdbfa9c24a42f55abf3432d5fc"
+      "definition_sha256": "1d3cd14e877885c484c391ecc877c2d636cb5228dabe675c3d282c8b1166b837"
     },
     {
       "acl": [
@@ -16514,7 +16533,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5c3e54efd20e18ecca4a6a19c70b78f4ae7ac00ab4c393c736adc40d817a7cc6"
+      "definition_sha256": "1665f74239b583e2be3bca9747e2f89e6d7806b506670884eb908079f3e5f981"
     },
     {
       "acl": [
@@ -17381,6 +17400,63 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, extensions, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_protected_final_source_context_v1(p_family_id uuid, p_cycle_id uuid, p_event_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "430be20e10f089551f4cf9df8997cfbf409fd4b92f0c1ca247bc4da450e934a1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_protected_match_candidates_v1(p_upload_row_id uuid, p_candidate_id uuid, p_client_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "3321cf45570ec9aa66fdb7ba06a16566677176a9f193d1b7872c7ba6a939fa0f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_protected_query_rows_v1(p_group_id uuid, p_client_id uuid, p_can_act boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "95294d1b508618e28545ff2f6e0fc74ef1a373db06c776d565520905b43db379"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -17673,7 +17749,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b7dcb291dbb7f5224dad3499f59bace9fa2c4a710cf324b3d5b11ce680377bdb"
+      "definition_sha256": "639262eb739d05e889b8b583cafc40822d9bf06489b655708783a1471079d873"
     },
     {
       "acl": [
@@ -17826,6 +17902,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "4d5d92fca5f2afbe7a11b74732ea189fee41b7caa47e1a3a591218703d82d72e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_query_resolved_decision_matches_v1(p_source_group_id uuid, p_work_event_id uuid, p_issue jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "03f1d3e05ab130b8fd9a936225bec47bdf0d353a2c047bf4b7ec8a9a74436d26"
     },
     {
       "acl": [
@@ -18229,7 +18324,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7a2434607d24533fdf1a82e4e84ef911710cd5f67a6caf192c0d0b519801ea3f"
+      "definition_sha256": "8dc7a7afdd3745506b64aaf037a0ed8b84c2a4a6da43d9b9c574315c71419a05"
     },
     {
       "acl": [
@@ -40938,7 +41033,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "de8b1db37df1d8b8d7fbe58ba83b4f8a33838051eb2b1ba10e6cb613e110c0af"
+      "definition_sha256": "2dfdad5326fe58b9a092827a348676461a49808bd6ed98056f36c8297aa07eab"
     },
     {
       "acl": [
@@ -41010,7 +41105,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9a03ef0bb21bcb8cdb0a1dff3277a9ea99d47013cee6ef24317d96bc9922c4d1"
+      "definition_sha256": "b691159b79517a766d913553042e589e3a2decd68334a8aa846533e6c649661f"
     },
     {
       "acl": [
@@ -41034,7 +41129,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "063028a34fb649a0fa433233652f2d87b693cc749303aa85e934ab0fa3056cf3"
+      "definition_sha256": "00fd05a5f7db1a21f67b65a817bf6d69e1becb538021a5a10dc6bf9eab21fce6"
     },
     {
       "acl": [
@@ -41602,6 +41697,30 @@
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "public",
+      "identity": "weekly_source_client_cycle_resolve_atomic_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "85fb83122b27cd621661b28a493f6ac2361e59375be2376bad5a4639c82cd97c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
       "identity": "weekly_source_client_settings_get_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "s",
@@ -41631,6 +41750,54 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "6c915d14a2981afe356dbdfc4f42aaead2223d4785549f554963654596824979"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_combined_finalise_workspace_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b0d673d67da4bd7f15bbf4e2ff6bc34877379a1798a1333eaad2193c4656f3ef"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_combined_review_workspace_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "83ed8011bd4b39844e94965643d20f8d158049a6059bd52e4a9e47dd1a37e543"
     },
     {
       "acl": [
@@ -42878,7 +43045,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4c6d5fe9fdaf4231e5282ceeecdf3082a842a66714cb53d98307485261027046"
+      "definition_sha256": "ef2512e41b26c0ec8fe77affff5e286cbe296811b1789c20d89dca4acdd6f1f0"
     },
     {
       "acl": [
@@ -42974,7 +43141,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "68144a1d8c9fbf7e678ba2fcc32548be9e57cd9f4b310637dfb03ca79fa889d8"
+      "definition_sha256": "a20c885d626b375efda2d72f1cfbedcca43aa63a7c84671a223201a28855ab98"
     },
     {
       "acl": [
@@ -43022,7 +43189,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4101186644c4ed3e94b510c1b17940a523d03ae0ee5801af243de54a598e8d77"
+      "definition_sha256": "c5e75c8d4efc801c03be1085dfa7bad81e758b1baa5b5425f73bc5828fb5246f"
     },
     {
       "acl": [
@@ -43214,7 +43381,55 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2bdd365d7f1cf7cdfba44823d490e0929356d12b10c9dabfa26c055b6cd39894"
+      "definition_sha256": "3fa60be18a033b7ba1e358f45d2381ddcfd50d0ab0bef90192046213866b87f7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_protected_editor_context_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "6e70fca4302ab9e95b3b0d097bbc484ff76c7879f6c99469194ef1f05b647303"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_protected_editor_prepare_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "70a0748ff42d00c06cbfc57ff762dfabc4920e907cc62341afc82d30ac17383a"
     },
     {
       "acl": [
@@ -43334,7 +43549,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f0aa8b4508de60009808fa8594e306647d2111e90fb89983326901efc666da8d"
+      "definition_sha256": "62f6d3dc99f71b1e68b767392dc79550abe36d6cc73392f16e5db7e69e99d785"
     },
     {
       "acl": [
@@ -43598,7 +43813,31 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "0643ea3c1f7bde8e0ca1a54341d7bcec5688f15954672143277f2159b05f9612"
+      "definition_sha256": "1ed144fc77e840df89d15140d5f0fd4b0ab6594b0037eabd3eb52db540a5cd3d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_upload_detail_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "a1620a8cd80d3594dbe32a65ced8a5ddca01ae92490ab06be8d699cc1f3ffc99"
     },
     {
       "acl": [
@@ -43646,7 +43885,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "275a6fb96812c81e0f0e79c51d6c6dd91b3e73df3baf6bcea22dacc33f67f847"
+      "definition_sha256": "062cbb16af1bce4cd6ea1073bd6ff6480f8ec5ca847b7c01fb01154467edee88"
     },
     {
       "acl": [
@@ -43671,6 +43910,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "c3eba3823e9aa902edd085c819f2e60b9a379bb5f9c88c7ecccf80c9753fd7ee"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_workspace_scopes_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "00fc8fd202bdd592d542ec585e0f16197fcd58dab628f9e3f28ec7a37dad2e70"
     }
   ],
   "triggers": [
@@ -65539,11 +65802,35 @@
           "generated": ""
         },
         {
+          "name": "match_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "separate_shift",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "upload_row_id",
           "type": "uuid",
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         }
       ],
@@ -65615,6 +65902,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (upload_row_id) REFERENCES weekly_source_upload_rows(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_row_choices_work_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "weekly_source_office_shift_match_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (work_event_id IS NULL AND NOT separate_shift AND match_reason IS NULL OR (work_event_id IS NOT NULL AND NOT separate_shift OR work_event_id IS NULL AND separate_shift) AND match_reason IS NOT NULL AND char_length(btrim(match_reason)) >= 1 AND char_length(btrim(match_reason)) <= 1000)"
         }
       ],
       "view_definition_sha256": null
@@ -143256,6 +143559,14 @@
           "generated": ""
         },
         {
+          "name": "scope_client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "source_group_id",
           "type": "uuid",
           "default": null,
@@ -143282,12 +143593,12 @@
       ],
       "indexes": [
         {
-          "name": "weekly_source_cycles_pkey",
-          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_pkey ON public.weekly_source_cycles USING btree (id)"
+          "name": "weekly_source_cycles_group_week_client_uq",
+          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_group_week_client_uq ON public.weekly_source_cycles USING btree (source_group_id, finalisation_week_ending, scope_client_id) NULLS NOT DISTINCT"
         },
         {
-          "name": "weekly_source_cycles_source_group_id_finalisation_week_endi_key",
-          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_source_group_id_finalisation_week_endi_key ON public.weekly_source_cycles USING btree (source_group_id, finalisation_week_ending)"
+          "name": "weekly_source_cycles_pkey",
+          "definition": "CREATE UNIQUE INDEX weekly_source_cycles_pkey ON public.weekly_source_cycles USING btree (id)"
         }
       ],
       "options": [],
@@ -143334,6 +143645,14 @@
           "definition": "FOREIGN KEY (finalised_by_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
         },
         {
+          "name": "weekly_source_cycles_group_week_client_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE NULLS NOT DISTINCT (source_group_id, finalisation_week_ending, scope_client_id)"
+        },
+        {
           "name": "weekly_source_cycles_pkey",
           "type": "p",
           "deferred": false,
@@ -143350,12 +143669,12 @@
           "definition": "CHECK (projection_state = ANY (ARRAY['NONE'::text, 'REBUILDING'::text, 'CURRENT'::text, 'FAILED'::text]))"
         },
         {
-          "name": "weekly_source_cycles_source_group_id_finalisation_week_endi_key",
-          "type": "u",
+          "name": "weekly_source_cycles_scope_client_id_fkey",
+          "type": "f",
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "UNIQUE (source_group_id, finalisation_week_ending)"
+          "definition": "FOREIGN KEY (scope_client_id) REFERENCES clients(id) ON DELETE RESTRICT"
         },
         {
           "name": "weekly_source_cycles_source_group_id_fkey",

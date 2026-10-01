@@ -164,6 +164,28 @@
     },
     "protectedShiftPay": {
       "userFacingName": "Protected shift pay",
+      "workspaceEntry": {
+        "tab": "Queries",
+        "newShiftAction": "Add protected shift",
+        "requiresImport": false,
+        "requiresCandidateSubmission": false,
+        "requiresExistingTimesheet": false,
+        "requiresBookingReference": false,
+        "requiresQualifiedContract": true,
+        "editorTitle": "Protect shift pay",
+        "breakInput": "MINUTES_ONLY_EXPLICIT_ZERO",
+        "netHoursPreview": true,
+        "preserveParentFiltersAndScroll": true,
+        "futureMatchHoursMustBeIdentical": false,
+        "ambiguousMatchRequiresOfficeChoice": true,
+        "waitingLabel": "Protected pay — awaiting source",
+        "matchLabel": "Confirm shift match",
+        "reconcileLabel": "Ready to reconcile",
+        "reconciliationLocation": "Queries > Open",
+        "candidateSignatureMayBeInvented": false,
+        "importMaySilentlyReplaceProtectedHours": false,
+        "bankingPayEconomicsChanged": false
+      },
       "actions": [
         "Protect pay",
         "Change protected shift",

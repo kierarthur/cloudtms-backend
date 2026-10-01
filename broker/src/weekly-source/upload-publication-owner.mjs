@@ -141,6 +141,23 @@ function requireSelectedClient(context) {
   }
 }
 
+async function discoverUploadScope(dependencies, body, actorUserId) {
+  let context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1',
+    scopeRequest(body, actorUserId)));
+  requireSelectedClient(context);
+  if (context.source_family === 'ROSTER') {
+    const resolved = await rpc(dependencies, 'weekly_source_client_cycle_resolve_atomic_v1', {
+      actor_user_id: actorUserId, source_cycle_id: context.source_cycle_id, client_id: context.client_id,
+    });
+    if (resolved?.ok !== true || !UUID.test(text(resolved.source_cycle_id))) {
+      fail('WEEKLY_SOURCE_CLIENT_SCOPE_UNAVAILABLE', 'The client’s import period could not be prepared.', 502);
+    }
+    context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1',
+      scopeRequest({ ...body, source_cycle_id: resolved.source_cycle_id, client_id: context.client_id }, actorUserId)));
+  }
+  return context;
+}
+
 function parserOptions(body, context) {
   const requested = body.parser_options && typeof body.parser_options === 'object'
     ? body.parser_options : {};
@@ -428,6 +445,19 @@ function projectionRow(source, body) {
   const policy = contract.effective_policy;
   const sourceAuthority = policy.authority_mode === 'SOURCE_AUTHORITY';
   const sourceMode = policy.c1_source_mode;
+  if (sourceAuthority) {
+    const matches = (row.protected_matches ?? []).filter(item => item.contract_id === qualified.selectedContractId);
+    const selected = row.office_selected_work_event_id;
+    const retained = matches.filter(item => item.retained_source_identity === true);
+    const plausible = retained.length ? retained : matches.filter(item => item.schedule_compatible === true);
+    const chosen = row.office_separate_shift === true ? null : selected ? matches.find(item => item.work_event_id === selected)
+      : plausible.length === 1 && (!base.prior_work_event_id || base.prior_work_event_id === plausible[0].work_event_id) ? plausible[0] : null;
+    if ((selected && !chosen) || (!chosen && matches.length > 0 && row.office_separate_shift !== true)) {
+      return { ...base, contract_id: qualified.selectedContractId, mapping_state: 'SOURCE_ROW_BLOCKED',
+        blocker_code: 'PROTECTED_SHIFT_MATCH_REQUIRED', qualifying_contract_ids: qualified.eligibleContractIds };
+    }
+    if (chosen) base.prior_work_event_id = chosen.work_event_id;
+  }
   const result = {
     ...base,
     mapping_state: 'RESOLVED',
@@ -667,11 +697,7 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
   return Object.freeze({
     async previewUpload({ body = {}, bytes, actor, parseWeeklySourceFile }) {
       const actorUserId = requiredUuid(actor?.id, 'Office user');
-      let context = validateContext(await rpc(
-        dependencies,
-        'weekly_source_upload_context_v1',
-        scopeRequest(body, actorUserId),
-      ));
+      let context = await discoverUploadScope(dependencies, body, actorUserId);
       requireSelectedClient(context);
       if (typeof parseWeeklySourceFile !== 'function') {
         fail('WEEKLY_SOURCE_PARSER_UNAVAILABLE', 'The source parser is unavailable.', 503);

@@ -356,6 +356,20 @@ test('APPROVE uses only server context/calculation and binds one source expense 
   assert.equal(Object.hasOwn(prepare[1].p_request, 'expected_request_kind'), false);
 });
 
+test('reconciliation carries the reviewed source identity and refuses a changed source before calculation', async () => {
+  const dependencies = dependenciesFor('RECONCILE');
+  await assert.rejects(orchestrateWeeklyProtectedAction({
+    action: 'ACCEPT_SOURCE_AND_RECONCILE',
+    request: browserRequest('ACCEPT_SOURCE_AND_RECONCILE', {
+      expected_source_hash: 'b'.repeat(64), expected_source_revision: ID.cycle,
+    }), dependencies,
+  }), { code: 'WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED' });
+  const prepare = dependencies.calls.find(([name]) => name === 'weekly_exceptional_pay_prepare_action_v1');
+  assert.equal(prepare[1].p_request.expected_source_hash, 'b'.repeat(64));
+  assert.equal(prepare[1].p_request.expected_source_revision, ID.cycle);
+  assert.ok(!dependencies.calls.some(([name]) => ['CALCULATE', 'C1_RAW', 'weekly_exceptional_pay_stage_c1_request_v1'].includes(name)));
+});
+
 test('approving another shift reuses an existing weekly family as a server-resolved amendment', async () => {
   const dependencies = dependenciesFor('APPROVE', { preparedKind: 'AMEND', sourceExpense: false });
   const result = await orchestrateWeeklyProtectedAction({

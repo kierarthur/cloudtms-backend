@@ -794,6 +794,7 @@ declare
   v_target_week_ending date;
   v_cutoff_at_utc timestamptz;
   v_days_to_cutoff integer;
+  v_import_authoritative boolean;
 begin
   if p_source_group_id is null or p_now_utc is null then
     raise exception 'WEEKLY_SOURCE_CYCLE_ENSURE_REQUEST_INVALID' using errcode='22023';
@@ -809,15 +810,24 @@ begin
     raise exception 'WEEKLY_SOURCE_CYCLE_GROUP_NOT_ACTIVE' using errcode='22023';
   end if;
 
+  v_import_authoritative:=v_group.source_family='NHSP' or (
+    exists(select 1 from public.weekly_source_client_policies policy
+      where policy.source_group_id=v_group.id and policy.authority_mode='SOURCE_AUTHORITY')
+    and not exists(select 1 from public.weekly_source_client_policies policy
+      where policy.source_group_id=v_group.id and policy.authority_mode='TIMESHEET_AUTHORITY'
+        and (p_now_utc at time zone v_group.timezone)::date between policy.effective_from
+          and coalesce(policy.effective_to,'infinity'::date)));
+
   select pg_catalog.count(*),pg_catalog.min(cycle.id::text)::uuid
   into v_open_count,v_cycle_id
   from public.weekly_source_cycles cycle
   where cycle.source_group_id=v_group.id
+    and cycle.scope_client_id is null
     and cycle.state<>'FINALISED';
-  if v_open_count>1 then
+  if v_open_count>1 and not v_import_authoritative then
     raise exception 'WEEKLY_SOURCE_MULTIPLE_OPEN_CYCLES' using errcode='55000';
   end if;
-  if v_open_count=1 then
+  if v_open_count=1 and not v_import_authoritative then
     return v_cycle_id;
   end if;
 
@@ -825,7 +835,7 @@ begin
   into v_latest_week_ending
   from public.weekly_source_cycles cycle
   where cycle.source_group_id=v_group.id;
-  if v_latest_week_ending is not null then
+  if v_latest_week_ending is not null and not v_import_authoritative then
     v_target_week_ending:=v_latest_week_ending+7;
     v_cutoff_date:=v_target_week_ending+v_group.cutoff_weekday;
   else
@@ -839,8 +849,26 @@ begin
     v_target_week_ending:=v_cutoff_date-
       extract(dow from v_cutoff_date)::integer;
   end if;
+  if v_import_authoritative and v_open_count=0 and v_latest_week_ending is not null
+    and v_target_week_ending<=v_latest_week_ending then
+    v_target_week_ending:=v_latest_week_ending+7;
+    v_cutoff_date:=v_target_week_ending+v_group.cutoff_weekday;
+  end if;
   v_cutoff_at_utc:=(v_cutoff_date+v_group.cutoff_local_time)
     at time zone v_group.timezone;
+
+  -- Advancing the current view must retain the intervening weekly obligations.
+  -- In particular, finishing an older week still creates its immediate successor.
+  if v_import_authoritative and v_latest_week_ending is not null then
+    insert into public.weekly_source_cycles(source_group_id,finalisation_week_ending,
+      cutoff_at_utc,state,version,projection_state)
+    select v_group.id,week_date::date,
+      ((week_date::date+v_group.cutoff_weekday)+v_group.cutoff_local_time) at time zone v_group.timezone,
+      'OPEN',0,'NONE'
+    from pg_catalog.generate_series((v_latest_week_ending+7)::timestamp,
+      v_target_week_ending::timestamp,interval '7 days') week_date
+    on conflict on constraint weekly_source_cycles_group_week_client_uq do nothing;
+  end if;
 
   insert into public.weekly_source_cycles(
     source_group_id,finalisation_week_ending,cutoff_at_utc,
@@ -849,14 +877,14 @@ begin
     v_group.id,v_target_week_ending,v_cutoff_at_utc,
     'OPEN',0,'NONE'
   )
-  on conflict (source_group_id,finalisation_week_ending) do nothing
+  on conflict on constraint weekly_source_cycles_group_week_client_uq do nothing
   returning id into v_cycle_id;
   if v_cycle_id is null then
     select cycle.id into strict v_cycle_id
     from public.weekly_source_cycles cycle
     where cycle.source_group_id=v_group.id
       and cycle.finalisation_week_ending=v_target_week_ending
-      and cycle.state<>'FINALISED';
+      and cycle.scope_client_id is null;
   end if;
   return v_cycle_id;
 end;

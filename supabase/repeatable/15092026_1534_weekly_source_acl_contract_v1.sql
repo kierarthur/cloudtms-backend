@@ -284,6 +284,11 @@ as $function$
     -- upload context owner for schedule compatibility and the verified
     -- band/role tie-break.
     ('private.weekly_source_schedule_compatible_v1(jsonb,date)'),
+    ('private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)'),
+    ('private.weekly_source_completed_rows_v1(uuid,uuid,uuid)'),
+    ('private.weekly_source_protected_match_candidates_v1(uuid,uuid,uuid)'),
+    ('private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb)'),
+    ('private.weekly_source_protected_query_rows_v1(uuid,uuid,boolean)'),
     ('private.weekly_source_verified_role_band_match_v1(text,text,uuid,uuid,uuid,text,date)'),
     -- 24 section 9 step 2 (WP-37): durable work identity is a COMPATIBLE
     -- schedule, never the exact Actual start and end. This is the compatibility
@@ -498,6 +503,13 @@ as $function$
     ('public.weekly_source_office_notifications_list_v1(jsonb)'),
     ('public.weekly_source_office_timesheet_presentation_v1(jsonb)'),
     ('public.weekly_source_office_workspace_v1(jsonb)'),
+    ('public.weekly_source_client_cycle_resolve_atomic_v1(jsonb)'),
+    ('public.weekly_source_protected_editor_context_v1(jsonb)'),
+    ('public.weekly_source_protected_editor_prepare_v1(jsonb)'),
+    ('public.weekly_source_workspace_scopes_v1(jsonb)'),
+    ('public.weekly_source_combined_finalise_workspace_v1(jsonb)'),
+    ('public.weekly_source_combined_review_workspace_v1(jsonb)'),
+    ('public.weekly_source_upload_detail_v1(jsonb)'),
     ('public.weekly_source_ordinary_pay_projection_apply_atomic_v1(jsonb)'),
     ('public.weekly_source_pending_entitlement_bundle_reopen_v1(uuid,text,uuid)'),
     ('public.weekly_source_pending_entitlement_release_apply_v1(jsonb)'),

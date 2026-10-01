@@ -1,6 +1,23 @@
 # Weekly Source full fixes — release evidence
 
-## Current status — 1 October 2026
+## Combined workspace release on 1 October 2026
+
+The new combined workspace, protected shift editor and resolved-question retention changes are locally implemented and awaiting protected TEST publication. The successful deployment below refers to the preceding release, not this new batch.
+
+Source is isolated on `codex/weekly-source-combined-workspace-20261001` in both repositories, based on backend `fbf252fe7e32d25a59314720dc7ac60dc7b7b9c3` and Office `d85106b02a47f30ee6950e508c4eabdc187914bf`. The controlling addition is `WEEKLY_SOURCE_COMBINED_WORKSPACE_POLICY_20261001.md`.
+
+Local evidence:
+
+- Backend main suite: 1,442 passed. Weekly Source suite: 296 passed, two opt-in concurrency fixtures skipped, zero failed. Run the disposable-database suite with `--test-concurrency=1`: concurrent fixtures sharing application change counters caused one local deadlock; the complete sequential rerun passed without weakening an assertion.
+- Office unit suite: 166 passed. Import-workspace Playwright: 39 local fixture tests passed; the three combined-view/file-detail checks passed again after final presentation changes. No hosted business acceptance was performed.
+- All 44 Weekly Source SQL verification files passed across the initial and resumed local runs. The ordinary-pay fixture now removes only its own empty automatically created successor cycle before inserting the same period explicitly; its business assertions remain intact.
+- Release-system and routing tests: 40 passed. Source integrity: 255 migrations and 677 repeatables. Local PostgreSQL 17 contract: `449913fcd32284836af92d38b28b0a8d05e3382ddd66df02a0a90bc66c55417e`.
+- Contract review found only Weekly Source routine changes, the cycle client scope and protected-shift link columns/constraints. Existing enums, schemas, RLS policies, triggers, extensions and default grants are unchanged. No Banking Pay routine definition changed.
+- Real disposable-PostgreSQL tests cover independent two-client publication/replacement, prepared-versus-checking finalisation, protected shift context without imports/submissions, changed-hours matching, unchanged resolved decisions in direct and signed-week comparison paths, and renewed questions for changed facts. Local browser fixtures cover exact independent batch requests, blocked exclusions, full-result seek and responsive layout. These do not prove real notification delivery or hosted finalisation/payment behaviour.
+
+Publish using the existing automatic TEST coordinator, with fresh Cloudflare connection evidence, protected database verification, ordered Worker builds, Office publication and identity read-back. No LIVE, payment execution, token rotation or mobile-store build belongs to this batch. Hosted acceptance remains reserved for the user after deployment.
+
+## Previous release status on 1 October 2026
 
 **DEPLOYED_ACCEPTANCE_PENDING.** The automatic coordinator completed the actual
 protected TEST release and every ordered application publication. The historical

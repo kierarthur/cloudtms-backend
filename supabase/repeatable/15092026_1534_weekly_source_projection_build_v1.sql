@@ -103,6 +103,10 @@ declare
   -- exactly one compatible root takes a named branch.
   v_compatible_count integer;
   v_compatible_event_id uuid;
+  v_protected_matches jsonb;
+  v_protected_choice uuid;
+  v_protected_count integer;
+  v_protected_separate boolean;
   v_eligible_ids jsonb;
   v_eligible_hash bytea;
   v_generation integer;
@@ -587,6 +591,42 @@ begin
         raise exception 'WEEKLY_SOURCE_EXTERNAL_EVENT_KEY_REQUIRED' using errcode='22023';
       end if;
 
+      if v_source_authority then
+        v_protected_matches:=private.weekly_source_protected_match_candidates_v1(v_source_row.id,v_candidate_id,v_client_id);
+        select choice.work_event_id,choice.separate_shift into v_protected_choice,v_protected_separate
+          from private.weekly_source_office_row_choices choice
+          where choice.upload_row_id=v_source_row.id and choice.candidate_id=v_candidate_id
+            and choice.client_id=v_client_id and choice.contract_id=v_contract_id
+          order by choice.id desc limit 1;
+        if v_protected_choice is not null then
+          if v_prior_work_event_id is distinct from v_protected_choice
+            or not exists(select 1 from jsonb_array_elements(v_protected_matches) match
+              where match->>'work_event_id'=v_protected_choice::text and match->>'contract_id'=v_contract_id::text) then
+            raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_NOT_ELIGIBLE' using errcode='40001';
+          end if;
+        elsif not coalesce(v_protected_separate,false) then
+          if exists(select 1 from jsonb_array_elements(v_protected_matches) match
+            where match->>'contract_id'=v_contract_id::text and (match->>'retained_source_identity')::boolean) then
+            select coalesce(jsonb_agg(match),'[]'::jsonb) into v_protected_matches
+              from jsonb_array_elements(v_protected_matches) match
+              where match->>'contract_id'=v_contract_id::text and (match->>'retained_source_identity')::boolean;
+          elsif exists(select 1 from jsonb_array_elements(v_protected_matches) match
+            where match->>'contract_id'=v_contract_id::text and (match->>'schedule_compatible')::boolean) then
+            select coalesce(jsonb_agg(match),'[]'::jsonb) into v_protected_matches
+              from jsonb_array_elements(v_protected_matches) match
+              where match->>'contract_id'=v_contract_id::text and (match->>'schedule_compatible')::boolean;
+          end if;
+          select count(*) into v_protected_count from jsonb_array_elements(v_protected_matches) match
+            where match->>'contract_id'=v_contract_id::text;
+          if v_protected_count>0 and (v_protected_count<>1 or not exists(
+            select 1 from jsonb_array_elements(v_protected_matches) match
+            where match->>'contract_id'=v_contract_id::text
+              and ((match->>'schedule_compatible')::boolean or (match->>'retained_source_identity')::boolean)
+              and match->>'work_event_id'=v_prior_work_event_id::text)) then
+            raise exception 'WEEKLY_SOURCE_PROTECTED_MATCH_REQUIRED' using errcode='55000';
+          end if;
+        end if;
+      end if;
       if v_prior_work_event_id is not null then
         select * into strict v_work_event
         from public.weekly_work_events work_event

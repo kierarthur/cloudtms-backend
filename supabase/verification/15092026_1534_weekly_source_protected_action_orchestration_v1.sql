@@ -330,6 +330,36 @@ select pg_temp.assert_true(
   'WAIT context must use the current protected schedule and server-observed source absence'
 );
 
+-- Office reads exactly the same proposal without creating an action run.
+select pg_temp.assert_true(
+  (select private.weekly_source_protected_final_source_context_v1(
+    (result->>'family_id')::uuid,(result->>'source_cycle_id')::uuid,
+    (result->>'work_event_id')::uuid)->'source_proposal'=result->'source_proposal'
+    from wait_context), 'read-only Office proposal must equal the canonical action proposal');
+do $stale_review$
+declare v_before bigint; v_context jsonb;
+begin
+  select result into v_context from wait_context;
+  select count(*) into v_before from public.weekly_exceptional_orchestration_runs;
+  begin
+    perform public.weekly_exceptional_pay_prepare_action_v1(jsonb_build_object(
+      'schema_version','WEEKLY_PROTECTED_ACTION_PREPARE_V1',
+      'actor_user_id','f1000000-0000-4000-8000-000000000001',
+      'family_id',v_context->>'family_id','source_cycle_id',v_context->>'source_cycle_id',
+      'work_event_id',v_context->>'work_event_id','action','RECONCILE',
+      'expected_family_bound_version','1','protected_schedule',null,'reason','stale review proof',
+      'idempotency_key','protected-stale-review-0001',
+      'expected_source_hash',repeat('ff',32),
+      'expected_source_revision','f1000000-0000-4000-8000-000000000009'));
+    raise exception 'stale review accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED' then raise; end if;
+  end;
+  perform pg_temp.assert_true((select count(*)=v_before from public.weekly_exceptional_orchestration_runs),
+    'stale review refuses before creating an orchestration run');
+end;
+$stale_review$;
+
 create temp table wait_result as
 select public.weekly_exceptional_pay_wait_atomic_v1(
   pg_catalog.jsonb_build_object(
@@ -892,6 +922,10 @@ begin
 
   v_family:=pg_temp.wp57_family(v_candidate,v_cycle,v_event,p_tag);
   v_ctx:=pg_temp.wp57_context(v_family,v_cycle,v_event,p_tag,'WAIT');
+  perform pg_temp.assert_true(
+    coalesce(v_ctx#>>'{source_proposal,source_hash}','') ~ '^[0-9a-f]{64}$'
+      and nullif(v_ctx#>>'{source_proposal,source_revision}','') is not null,
+    'every observed position, including a full reversal, must carry reviewable source evidence');
   begin
     perform pg_temp.wp57_context(v_family,v_cycle,v_event,p_tag,'RECORD_NOT_WORKED');
     v_guard:='ACCEPTED';
@@ -1009,9 +1043,12 @@ begin
   perform pg_temp.assert_true(
     pg_catalog.pg_get_functiondef(
       'public.weekly_exceptional_pay_action_context_v1(jsonb)'::regprocedure
-    ) like '%weekly_source_ordinary_projection_active_movements_v1%',
-    'STATIC: the protected-shift proposal owner must read '
-      ||'private.weekly_source_ordinary_projection_active_movements_v1');
+    ) like '%private.weekly_source_protected_final_source_context_v1%'
+    and pg_catalog.pg_get_functiondef(
+      'private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid)'::regprocedure
+    ) like '%private.weekly_source_ordinary_projection_active_movements_v1%',
+    'STATIC: protected action and Office review must share the final-source reader '
+      ||'which delegates NHSP positions to the canonical active-movement owner');
 end
 $wp57_nhsp_protected_row_order$;
 

@@ -297,6 +297,9 @@ begin
     if v_group.source_family<>'ROSTER' or v_report_scope_id is not null then
       raise exception 'WEEKLY_SOURCE_ROSTER_SCOPE_INVALID' using errcode='22023';
     end if;
+    if v_cycle.scope_client_id is not null and v_cycle.scope_client_id is distinct from v_client_id then
+      raise exception 'WEEKLY_SOURCE_CONTEXT_CLIENT_SCOPE_MISMATCH' using errcode='22023';
+    end if;
     if v_profile.single_client_required and v_client_id is null then
       raise exception 'WEEKLY_SOURCE_CLIENT_SCOPE_REQUIRED' using errcode='22023';
     end if;

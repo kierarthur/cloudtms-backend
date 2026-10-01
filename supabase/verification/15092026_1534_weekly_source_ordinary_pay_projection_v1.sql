@@ -396,6 +396,12 @@ $function$;
 -- Build a standalone first-ever NHSP full-negative on its own Contract/week
 -- root.  This is deliberately separate from the mixed positive/negative B1
 -- report so the NO_OP_FIRST_NEGATIVE receipt path is proved directly.
+-- Finalising earlier fixture periods can now allocate this empty calendar
+-- successor. Remove only that unused, fixture-owned placeholder before giving
+-- the full-negative scenario its deterministic identity, as the parent does.
+select pg_temp.remove_empty_successor(
+  'b0000000-0000-4000-8000-000000000005','2026-10-04'
+);
 insert into public.weekly_source_cycles(
   id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,
   projection_state

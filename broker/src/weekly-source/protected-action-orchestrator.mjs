@@ -46,6 +46,7 @@ const AMEND_KEYS = new Set([
 ]);
 const FOLLOW_UP_KEYS = new Set([
   ...BASE_KEYS, 'family_id', 'expected_family_bound_version',
+  'expected_source_hash', 'expected_source_revision',
 ]);
 
 export class WeeklyProtectedActionError extends Error {
@@ -166,6 +167,12 @@ function normalizeRequest(action, request) {
   if (kind === 'APPROVE' && !DATE.test(String(input.week_ending_date ?? ''))) {
     fail('WEEKLY_PROTECTED_ACTION_INVALID', 'Week ending date is invalid.');
   }
+  if (Object.hasOwn(input, 'expected_source_hash') || Object.hasOwn(input, 'expected_source_revision')) {
+    if (kind !== 'RECONCILE' || !HASH.test(input.expected_source_hash ?? '')
+        || !UUID.test(input.expected_source_revision ?? '')) {
+      fail('WEEKLY_PROTECTED_ACTION_INVALID', 'The reviewed source version is invalid.');
+    }
+  }
   return Object.freeze({
     input,
     kind,
@@ -210,6 +217,8 @@ async function prepare(normalized, dependencies) {
     action: kind,
     expected_family_bound_version: normalized.expectedFamilyBoundVersion,
     protected_schedule: kind === 'AMEND' ? schedule : null,
+    ...(input.expected_source_hash ? { expected_source_hash: input.expected_source_hash,
+      expected_source_revision: input.expected_source_revision } : {}),
     reason: normalized.reason,
     idempotency_key: normalized.idempotencyKey,
   });
@@ -240,6 +249,11 @@ async function loadContext(normalized, prepared, dependencies) {
   if (!Array.isArray(context.source_segments) || !Array.isArray(context.protected_decisions)
       || !Array.isArray(context.client_sources) || !Array.isArray(context.source_expenses)) {
     fail('WEEKLY_PROTECTED_CONTEXT_INVALID', 'The protected-hours source authority is incomplete.');
+  }
+  if (normalized.input.expected_source_hash
+      && (context.source_proposal?.source_hash !== normalized.input.expected_source_hash
+        || context.source_proposal?.source_revision !== normalized.input.expected_source_revision)) {
+    fail('WEEKLY_PROTECTED_REVIEW_SOURCE_CHANGED', 'The final source changed. Review it again before reconciling.');
   }
   return context;
 }

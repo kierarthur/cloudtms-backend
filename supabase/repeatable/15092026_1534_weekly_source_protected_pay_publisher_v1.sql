@@ -506,6 +506,32 @@ begin
         'break_minutes',v_break_minutes
       )
     );
+    -- The new-shift editor cannot silently create another payable identity for
+    -- work already recorded on this day. Exact replay keeps its original hash;
+    -- changed hours must name the existing shift and use its protected owner.
+    if not v_replay and exists(
+      select 1 from public.weekly_work_events existing
+      where existing.candidate_id=v_candidate_id and existing.client_id=v_client_id
+        and existing.work_date=v_work_date and existing.first_source_group_id=v_group.id
+        and existing.durable_identity_hash<>v_work_event_hash
+        and (
+          (existing.identity_kind='OFFICE_PROTECTED_SHIFT'
+            and not exists(select 1 from public.weekly_exceptional_pay_family_events recorded
+              where recorded.durable_work_event_id=existing.id))
+          or
+          private.weekly_source_work_event_schedule_compatible_v1(existing.id,v_start_at_local,v_end_at_local)
+          or exists(select 1 from public.weekly_exceptional_pay_family_events protected
+            where protected.durable_work_event_id=existing.id
+              and protected.start_at_local<v_end_at_local and v_start_at_local<protected.end_at_local)
+          or exists(select 1 from public.weekly_discrepancy_incidents incident
+            join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
+            where incident.work_event_id=existing.id
+              and comparison.candidate_start_at_local<v_end_at_local
+              and v_start_at_local<comparison.candidate_end_at_local)
+        )
+    ) then
+      raise exception 'WEEKLY_PROTECTED_EXISTING_SHIFT_SELECTION_REQUIRED' using errcode='55000';
+    end if;
     insert into public.weekly_work_events(
       candidate_id,client_id,work_date,identity_kind,profile_external_key,
       durable_identity_hash,first_source_group_id,source_format_profile_id

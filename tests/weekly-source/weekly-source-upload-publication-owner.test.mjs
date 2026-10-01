@@ -76,6 +76,77 @@ const body = Object.freeze({
   coverage: { start_local_date: '2026-09-01', end_local_date: '2026-09-01' },
 });
 
+function protectedMatchProjection(overrides = {}) {
+  const contractId = '30000000-0000-4000-8000-000000000001';
+  return buildWeeklySourceProjectionRows({
+    profile_id: WEEKLY_SOURCE_PROFILE_IDS.HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1,
+    rows: [{
+      upload_row_id: ID.uploadRow, source_row_ordinal: 2, candidate_match_count: 1,
+      candidate_id: ID.actor, client_id: ID.client, work_date: '2026-09-21',
+      row_finalisation_state: 'SOURCE_UNFINALISED', external_source_key: 'HR-1',
+      contracts: [{ contract_id: contractId, candidate_id: ID.actor, client_id: ID.client,
+        valid_from: '2026-01-01', valid_to: null, weekly_source_applicable: true,
+        effective_policy: { authority_mode: 'SOURCE_AUTHORITY', c1_source_mode: 'HEALTHROSTER_WEEKLY',
+          weekly_rate_classification_method: 'SPLIT_RATE_WINDOWS', policy_sha256: 'a'.repeat(64) },
+        settings_authority: { values: {} }, rates_json: {}, pay_type: 'PAYE' }],
+      ...overrides,
+    }],
+  })[0];
+}
+
+const protectedMatch = (suffix, extra = {}) => ({
+  work_event_id: `40000000-0000-4000-8000-00000000000${suffix}`,
+  contract_id: '30000000-0000-4000-8000-000000000001',
+  schedule_compatible: true, retained_source_identity: false, ...extra,
+});
+
+test('later source keeps a uniquely compatible protected identity without requiring equal hours', () => {
+  const match = protectedMatch(1, { start: '09:00', end: '16:00', break_minutes: 15 });
+  const result = protectedMatchProjection({ protected_matches: [match] });
+  assert.equal(result.mapping_state, 'RESOLVED');
+  assert.equal(result.prior_work_event_id, match.work_event_id);
+});
+
+test('two plausible protected shifts require Office selection, not first-row matching', () => {
+  const matches = [protectedMatch(1), protectedMatch(2)];
+  const blocked = protectedMatchProjection({ protected_matches: matches });
+  assert.equal(blocked.blocker_code, 'PROTECTED_SHIFT_MATCH_REQUIRED');
+  const selected = protectedMatchProjection({ protected_matches: matches,
+    office_selected_work_event_id: matches[1].work_event_id });
+  assert.equal(selected.mapping_state, 'RESOLVED');
+  assert.equal(selected.prior_work_event_id, matches[1].work_event_id);
+});
+
+test('retained source identity wins over a different overlapping protected shift', () => {
+  const retained = protectedMatch(1, { retained_source_identity: true, schedule_compatible: false });
+  const result = protectedMatchProjection({ protected_matches: [retained, protectedMatch(2)] });
+  assert.equal(result.prior_work_event_id, retained.work_event_id);
+});
+
+test('incompatible, stale and conflicting identities require review; explicit separate work stays separate', () => {
+  const match = protectedMatch(1, { schedule_compatible: false });
+  assert.equal(protectedMatchProjection({ protected_matches: [match] }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  assert.equal(protectedMatchProjection({ protected_matches: [match],
+    office_selected_work_event_id: protectedMatch(2).work_event_id }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  assert.equal(protectedMatchProjection({ protected_matches: [protectedMatch(1)],
+    prior_work_event_id: protectedMatch(2).work_event_id }).blocker_code,
+    'PROTECTED_SHIFT_MATCH_REQUIRED');
+  const separate = protectedMatchProjection({ protected_matches: [match], office_separate_shift: true });
+  assert.equal(separate.mapping_state, 'RESOLVED');
+  assert.equal(separate.prior_work_event_id, undefined);
+});
+
+test('a protected shift on another contract cannot be silently attached', () => {
+  const match = protectedMatch(1, { contract_id: '30000000-0000-4000-8000-000000000099' });
+  const result = protectedMatchProjection({ protected_matches: [match] });
+  assert.equal(result.mapping_state, 'RESOLVED');
+  assert.equal(result.prior_work_event_id, undefined);
+  assert.equal(protectedMatchProjection({ protected_matches: [match],
+    office_selected_work_event_id: match.work_event_id }).blocker_code, 'PROTECTED_SHIFT_MATCH_REQUIRED');
+});
+
 test('Office recheck uses the authenticated actor and rebuilds only the saved upload', async () => {
   const calls = [];
   const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name, args) => {
@@ -248,6 +319,49 @@ test('NHSP preview resolves the server-owned report heading before parsing', asy
   assert.equal(calls[0][1].operation, 'DISCOVER_SCOPE');
   assert.equal(result.accept_context.report_scope_id, ID.group);
   assert.equal(result.accept_context.client_id, ID.client);
+});
+
+test('ROSTER preview rereads the exact server-owned client cycle before returning acceptance authority', async () => {
+  const clientCycle = '20000000-0000-4000-8000-000000000001';
+  const calls = [];
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async (name, args) => {
+    const request = args.p_request;
+    calls.push([name, request]);
+    if (name === 'weekly_source_upload_context_v1') return {
+      ok: true, ...context, source_family: 'ROSTER',
+      source_cycle_id: request.source_cycle_id,
+      authority_scope_version: request.source_cycle_id === clientCycle ? 9 : 2,
+    };
+    if (name === 'weekly_source_client_cycle_resolve_atomic_v1') {
+      assert.equal(request.client_id, ID.client);
+      assert.equal(request.source_cycle_id, ID.cycle);
+      return {ok:true, source_cycle_id:clientCycle};
+    }
+    throw Error(`Unexpected RPC ${name}`);
+  }});
+  const result = await owner.previewUpload({
+    body: {source_group_id:ID.group,source_cycle_id:ID.cycle,client_id:ID.client,
+      profile_id:WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1},
+    bytes:csvBytes(),actor:{id:ID.actor},parseWeeklySourceFile,
+  });
+  assert.equal(result.accept_context.source_cycle_id, clientCycle);
+  assert.equal(result.accept_context.authority_scope_version, 9);
+  assert.deepEqual(calls.map(([name])=>name), [
+    'weekly_source_upload_context_v1','weekly_source_client_cycle_resolve_atomic_v1',
+    'weekly_source_upload_context_v1',
+  ]);
+});
+
+test('ROSTER preview cannot continue when the client cycle cannot be verified', async () => {
+  let parsed = false;
+  const owner = createWeeklySourceUploadPublicationOwner({rpc:async(name)=>
+    name==='weekly_source_upload_context_v1'
+      ? {ok:true,...context,source_family:'ROSTER'} : {ok:false}});
+  await assert.rejects(owner.previewUpload({body:{source_cycle_id:ID.cycle,client_id:ID.client,
+    profile_id:WEEKLY_SOURCE_PROFILE_IDS.ROSTER_WEEKLY_SUMMARY_ACTUAL_V1},
+    bytes:csvBytes(),actor:{id:ID.actor},parseWeeklySourceFile:async()=>{parsed=true;}}),
+    error=>error.code==='WEEKLY_SOURCE_CLIENT_SCOPE_UNAVAILABLE');
+  assert.equal(parsed,false);
 });
 
 test('duplicate NHSP Reference Numbers are explained in preview and refused before staging', async () => {

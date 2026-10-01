@@ -275,6 +275,9 @@ begin
     end if;
   end if;
   if v_client_id is not null then
+    if v_operation='BUILD_PROJECTION' and v_cycle.scope_client_id is not null and v_cycle.scope_client_id<>v_client_id then
+      raise exception 'WEEKLY_SOURCE_CONTEXT_CLIENT_SCOPE_MISMATCH' using errcode='22023';
+    end if;
     select client.name into strict v_client_name
     from public.clients client where client.id=v_client_id;
   elsif v_group.source_family='ROSTER' then
@@ -555,6 +558,9 @@ begin
       'candidate_matches',v_candidate_matches,
       'candidate_id',v_candidate_id,
       'office_selected_contract_id',v_office_choice.contract_id,
+      'office_selected_work_event_id',v_office_choice.work_event_id,
+      'office_separate_shift',coalesce(v_office_choice.separate_shift,false),
+      'protected_matches',private.weekly_source_protected_match_candidates_v1(v_source_row.id,v_candidate_id,v_row_client_id),
       'client_id',v_row_client_id,
       'contracts',v_contracts,
       'prior_accepted_contract_id',v_prior_contract_id,

@@ -223,6 +223,7 @@ as $function$
     where cycle.id=p_source_cycle_id
   ), incident_facts as (
     select incident.id incident_id,incident.candidate_id,incident.client_id,
+      incident.work_event_id,cycle_context.source_group_id,
       incident.candidate_action_state,incident.manager_action_state,
       incident.manager_potential_state,incident.created_at_utc,
       comparison.issue_family,comparison.contract_id,
@@ -355,6 +356,14 @@ as $function$
         and incident_facts.manager_action_state not in ('RESPONDED','NOT_REQUIRED')) manager_eligible,
       pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
         'incident_id',incident_facts.incident_id,
+        'protected_pay_seed',case when incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'
+          then pg_catalog.jsonb_build_object('source_group_id',incident_facts.source_group_id,
+            'client_id',incident_facts.client_id,'candidate_id',incident_facts.candidate_id,
+            'work_event_id',incident_facts.work_event_id,'contract_id',incident_facts.contract_id,
+            'work_date',incident_facts.work_date,
+            'start',to_char(coalesce(incident_facts.candidate_start_at_local,incident_facts.system_start_at_local),'HH24:MI'),
+            'end',to_char(coalesce(incident_facts.candidate_end_at_local,incident_facts.system_end_at_local),'HH24:MI'),
+            'break_minutes',coalesce(incident_facts.candidate_break_minutes,incident_facts.system_break_minutes)) end,
         'row_key','incident-'||incident_facts.incident_id::text,
         'day_date',to_char(incident_facts.work_date,'Dy FMDD Mon YYYY'),
         'job_role',coalesce(incident_facts.job_role,''),
@@ -552,6 +561,7 @@ declare
   v_queries jsonb;
   v_ready jsonb;
   v_blocked jsonb;
+  v_complete jsonb;
   v_history jsonb;
   v_tracker jsonb;
   v_controls jsonb;
@@ -673,11 +683,19 @@ begin
   if v_cycle_id is null then
     select cycle.id into v_cycle_id from public.weekly_source_cycles cycle
     where cycle.source_group_id=v_group.id
+      and (cycle.scope_client_id is null or cycle.scope_client_id=v_client_id)
     order by cycle.finalisation_week_ending desc,cycle.id desc limit 1;
   end if;
   select * into v_cycle from public.weekly_source_cycles
   where id=v_cycle_id and source_group_id=v_group.id;
   if not found then raise exception 'WEEKLY_SOURCE_CYCLE_NOT_FOUND' using errcode='22023'; end if;
+
+  if v_cycle.scope_client_id is not null then
+    if v_client_id is not null and v_client_id<>v_cycle.scope_client_id then
+      raise exception 'WEEKLY_SOURCE_CLIENT_CYCLE_SCOPE_MISMATCH' using errcode='22023';
+    end if;
+    v_client_id:=v_cycle.scope_client_id;
+  end if;
 
   perform private.weekly_source_office_authority_v1(
     v_actor,'VIEW_SOURCE_PROGRESS',v_group.id,v_client_id,v_cycle.finalisation_week_ending
@@ -1015,6 +1033,13 @@ begin
     from (
       select pg_catalog.jsonb_build_object(
         'row_key',upload.id,'file',upload.original_filename,
+        'client_id',coalesce(scope.client_id,v_cycle.scope_client_id),
+        'uploaded_at',upload.uploaded_at_utc,'state',upload.state,
+        'prepared',private.weekly_source_import_is_prepared_v1(upload.id),
+        'purpose_label',case when exists(select 1 from public.weekly_source_format_profiles file_profile
+          where file_profile.id=upload.source_format_profile_id and file_profile.profile_code='NHSP_FINAL_BACKING_V1')
+          or upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION'
+          then 'Finalisation report' else 'Checking hours' end,
         'uploaded',to_char(upload.uploaded_at_utc at time zone 'Europe/London','DD Mon YYYY HH24:MI'),
         'rows',upload.accepted_count,
         'coverage',case when upload.confirmed_coverage_start_local_date is null then 'Not confirmed'
@@ -1129,6 +1154,9 @@ begin
     from (
       select pg_catalog.jsonb_build_object(
         'row_key',query.group_key,'group_key',query.group_key,
+        'client_id',query.client_id,'candidate_id',query.candidate_id,
+        'candidate_sort',coalesce((select nullif(person.last_name,'') from public.candidates person
+          where person.id=query.candidate_id),query.candidate_name),
         'candidate',query.candidate_name,'client',query.client_name,'issues',query.issue_count,
         'candidate_asked',query.candidate_asked,'manager_informed',query.manager_informed,
         'status',pg_catalog.jsonb_build_object('text',query.status_text,'tone',query.status_tone),
@@ -1155,7 +1183,13 @@ begin
                     else floor(extract(epoch from (pg_catalog.transaction_timestamp()-query.first_seen_at_utc))/86400)::integer||' days' end,
                   'shifts',pg_catalog.jsonb_build_array(child.value-'actions')
                 ))
-              ))
+              ))||case when pg_catalog.jsonb_typeof(child.value->'protected_pay_seed')='object'
+                and exists(select 1 from public.tms_users office_user
+                  where office_user.id=v_actor and office_user.is_active and lower(trim(office_user.role))='admin'
+                    and (coalesce(office_user.payment_authoriser,false) or coalesce(office_user.payment_golden_key,false)))
+                then pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+                  'label','Protect pay','enabled',true,'payload',child.value->'protected_pay_seed'))
+                else '[]'::jsonb end
             ) order by child.ordinality
           )
           from pg_catalog.jsonb_array_elements(query.children) with ordinality child(value,ordinality)
@@ -1315,6 +1349,8 @@ begin
   if v_publication_id is not null then
     select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'row_key',source_row.id,'candidate',coalesce(candidate.display_name,candidate.tms_ref,'Candidate'),
+      'candidate_sort',coalesce(nullif(candidate.last_name,''),candidate.display_name,candidate.tms_ref,''),
+      'work_date',source_row.work_date,
       'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
       'client',coalesce(client.name,source_row.source_client_identity),
       'system_hours',case when source_row.start_at_local is null then pg_catalog.chr(8212)
@@ -1400,7 +1436,11 @@ begin
         nullif(source_row.bounded_raw_columns_json->>'staff_name',''),
         nullif(source_row.bounded_raw_columns_json->>'candidate',''),source_row.source_candidate_identity),
       'source_reference',source_row.source_candidate_identity,
+      'candidate_sort',coalesce(nullif(candidate.last_name,''),candidate.display_name,
+        nullif(source_row.bounded_raw_columns_json->>'worker_name',''),source_row.source_candidate_identity),
+      'work_date',source_row.work_date,
       'booking_reference',source_row.external_source_key,
+      'client_id',resolution.client_id,
       'client',source_row.source_client_identity,
       'mapping_state',resolution.mapping_state,
       'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
@@ -1424,6 +1464,7 @@ begin
           when resolution.mapping_state='RESOLVED' and charge.phase_severity='PROVISIONAL_WARNING' then 'warning'
           else 'danger' end),
       'problem',case
+        when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm whether this is the protected shift or a separate shift.'
         when resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'More than one candidate matches. Choose the correct candidate.'
         when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'No active candidate matches this source row'
         when resolution.mapping_state='CLIENT_NOT_FOUND' then 'No eligible client matches this source row'
@@ -1433,7 +1474,8 @@ begin
         when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'Check the charge for this shift'
         else 'Check the hours for this shift' end,
       'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
-        'label',case when resolution.mapping_state='CANDIDATE_NOT_FOUND'
+        'label',case when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'
+          when resolution.mapping_state='CANDIDATE_NOT_FOUND'
           or resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'Link candidate'
           when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Link client'
           when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Choose contract'
@@ -1442,6 +1484,9 @@ begin
           else 'View details' end,
         'enabled',true,'payload',pg_catalog.jsonb_build_object(
           'upload_row_id',source_row.id,
+          'match_choices',private.weekly_source_protected_match_candidates_v1(source_row.id,resolution.candidate_id,resolution.client_id),
+          'contract_id',resolution.contract_id,
+          'system_hours',to_char(source_row.start_at_local,'HH24:MI')||'–'||to_char(source_row.end_at_local,'HH24:MI')||' · '||source_row.break_minutes::text||' min break',
           'candidate',coalesce(candidate.display_name,source_row.bounded_raw_columns_json->>'worker_name',
             source_row.bounded_raw_columns_json->>'candidate',source_row.source_candidate_identity),
           'client',source_row.source_client_identity,
@@ -1474,6 +1519,7 @@ begin
             'calculated_charge',case when charge.calculated_segment_charge_pence is not null then '£'||to_char(charge.calculated_segment_charge_pence::numeric/100,'FM9999999990.00') end,
             'difference',case when charge.source_charge_difference_pence is not null then '£'||to_char(charge.source_charge_difference_pence::numeric/100,'FM9999999990.00') end,
             'problem',case
+              when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm whether the imported shift is one of the protected shifts shown. Different hours are allowed. Choose a separate shift only if it is different work.'
               when resolution.blocker_code='CANDIDATE_MAPPING_AMBIGUOUS' then 'More than one candidate matches. Choose the correct candidate.'
               when resolution.mapping_state='CANDIDATE_NOT_FOUND' then 'No active candidate matches. Link an active candidate, or review the candidate record before rechecking.'
               when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Choose the client this shift belongs to.'
@@ -1636,6 +1682,20 @@ begin
     v_blocked:=v_ready;
   end if;
 
+  v_complete:=case when v_authority_mode='SOURCE_AUTHORITY'
+    then private.weekly_source_completed_rows_v1(v_cycle.id,v_client_id,v_report_scope_id)
+    else jsonb_build_object('rows','[]'::jsonb,'total_count',0,'next_cursor','','has_more',false,'stale',false) end;
+  if v_authority_mode='SOURCE_AUTHORITY' and exists(select 1 from public.weekly_source_final_revisions completed
+    where completed.source_cycle_id=v_cycle.id and completed.state='CURRENT'
+      and completed.upload_id=v_upload.id
+      and completed.report_scope_id is not distinct from v_report_scope_id) then
+    v_ready:=pg_catalog.jsonb_build_object('rows','[]'::jsonb,'total_count',0,
+      'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
+    v_blocked:=v_ready;
+    v_blocker_count:=0;
+    v_finalise_enabled:=false;
+    v_finalise_payload:='{}'::jsonb;
+  end if;
   v_queries:=v_queries||pg_catalog.jsonb_build_object('office_checks',v_office_checks);
   if not v_import_prepared then
     if v_publication_id is not null and v_upload.state='CURRENT' and v_upload.purpose='ORDINARY'
@@ -1665,6 +1725,7 @@ begin
     'complete',not exists(
       select 1 from public.weekly_source_group_clients membership
       where membership.source_group_id=v_group.id
+        and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
         and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
         and not exists(select 1 from public.weekly_source_client_cycle_completions completion
           where completion.source_cycle_id=v_cycle.id and completion.client_id=membership.client_id and completion.state='CURRENT')
@@ -1678,6 +1739,18 @@ begin
       'detail',case when completion.id is not null then to_char(completion.attested_at_utc at time zone 'Europe/London','DD Mon YYYY HH24:MI') else '' end,
       'actions',case
         when completion.id is null
+         and v_cycle.state not in ('FINALISING','FINALISED')
+         and not exists(select 1 from public.weekly_source_final_revisions revision
+           join public.weekly_source_final_snapshot_lines snapshot on snapshot.final_revision_id=revision.id
+           where revision.source_cycle_id=v_cycle.id and revision.state in ('PREPARED','CURRENT')
+             and snapshot.client_id=membership.client_id)
+         and not exists(select 1 from public.weekly_source_uploads upload
+           join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+           left join lateral (select resolution.* from public.weekly_source_row_resolutions resolution
+             where resolution.upload_row_id=source_row.id order by resolution.generation desc,resolution.id desc limit 1) resolution on true
+           where upload.source_cycle_id=v_cycle.id
+             and (upload.id=v_cycle.current_complete_upload_id or upload.state='CURRENT')
+             and resolution.mapping_state is distinct from 'RESOLVED')
          and not exists(select 1 from public.weekly_source_report_scopes scope
            where scope.source_cycle_id=v_cycle.id and scope.client_id=membership.client_id
              and (scope.current_complete_upload_id is not null or scope.current_projection_publication_id is not null or scope.current_final_revision_id is not null))
@@ -1709,6 +1782,7 @@ begin
     left join public.weekly_source_client_cycle_completions completion
       on completion.source_cycle_id=v_cycle.id and completion.client_id=membership.client_id and completion.state='CURRENT'
     where membership.source_group_id=v_group.id
+      and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
       and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)),'[]'::jsonb)
   ) into v_tracker;
 
@@ -1862,7 +1936,8 @@ begin
           order by private.weekly_source_query_ascii_fold_v1(item.display_name) collate "C",item.id)
           from public.weekly_source_groups item where item.active),'[]'::jsonb)),
       pg_catalog.jsonb_build_object('key','cycle','label','Week','value',v_cycle.id,
-        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'))
+        'options',coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('value',item.id,'label','Week ending '||to_char(item.finalisation_week_ending,'FMDD Mon YYYY'),
+          'scope_client_id',item.scope_client_id,'finalisation_week_ending',item.finalisation_week_ending)
           order by item.finalisation_week_ending desc,item.id)
           from public.weekly_source_cycles item where item.source_group_id=v_group.id),'[]'::jsonb)),
       pg_catalog.jsonb_build_object('key','client','label','Client','value',coalesce(v_client_id::text,''),
@@ -1898,6 +1973,11 @@ begin
   end if;
   return pg_catalog.jsonb_build_object(
     'contract','WEEKLY_SOURCE_IMPORT_WORKSPACE_V1','workspace_version',v_workspace_version,
+    'combined_source_workspace',v_authority_mode='SOURCE_AUTHORITY' and exists(
+      select 1 from public.weekly_source_client_policies policy where policy.source_group_id=v_group.id
+        and policy.authority_mode='SOURCE_AUTHORITY'
+        and (v_client_id is null or policy.client_id=v_client_id)
+        and v_cycle.finalisation_week_ending between policy.effective_from and coalesce(policy.effective_to,'infinity'::date)),
     'recheck_payload',coalesce(v_recheck_action,'{}'::jsonb),
     'profile',pg_catalog.jsonb_build_object(
       'id',coalesce(v_profile.profile_code,case when v_group.source_family='NHSP' then 'NHSP_FINAL_BACKING_V1' else 'HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1' end),
@@ -1911,7 +1991,19 @@ begin
       'client_id',v_client_id,'report_scope_id',v_report_scope_id,'projection_publication_id',v_publication_id),
     'counts',pg_catalog.jsonb_build_object('queries',v_query_count,'blockers',v_blocker_count,
       'paid_unresolved',v_paid_unresolved_count),
-    'imports',v_imports,'queries',v_queries,
+    'imports',v_imports,'queries',v_queries||pg_catalog.jsonb_build_object(
+      'protected_shifts',private.weekly_source_protected_query_rows_v1(v_group.id,v_client_id,
+        exists(select 1 from public.tms_users office_user where office_user.id=v_actor and office_user.is_active
+          and lower(trim(office_user.role))='admin'
+          and (coalesce(office_user.payment_authoriser,false) or coalesce(office_user.payment_golden_key,false)))),
+      'protected_pay_enabled',exists(select 1 from public.tms_users office_user
+        where office_user.id=v_actor and office_user.is_active
+          and lower(trim(office_user.role))='admin'
+          and (coalesce(office_user.payment_authoriser,false) or coalesce(office_user.payment_golden_key,false)))
+        and exists(select 1 from public.weekly_source_client_policies policy
+          where policy.source_group_id=v_group.id and policy.authority_mode='SOURCE_AUTHORITY'
+            and (v_client_id is null or policy.client_id=v_client_id)
+            and v_cycle.finalisation_week_ending between policy.effective_from and coalesce(policy.effective_to,'infinity'::date))),
     'finalise',pg_catalog.jsonb_build_object(
       'prepared',v_import_prepared,'prepare_action',v_prepare_action,
       'unfinalised_count',v_unfinalised_count,
@@ -1919,7 +2011,9 @@ begin
       'exclusion_confirmation',case when v_unfinalised_count>0 and v_profile.profile_code in
         ('HEALTHROSTER_WEEKLY_FROM_TO_ACTUAL_V1','HEALTHROSTER_WEEKLY_EXPLICIT_ACTUAL_V1')
         then 'I confirm that non-finalised shifts are excluded. Previously finalised shifts now missing or non-finalised within this file period may be reversed.' else null end,
-      'ready',v_ready,'blocked',v_blocked,'active_list',case when v_blocker_count>0 then 'blocked' else 'ready' end,
+      'ready',v_ready,'blocked',v_blocked,'complete',v_complete,
+      'active_list',case when v_blocker_count>0 then 'blocked'
+        when (v_ready->>'total_count')::integer=0 and (v_complete->>'total_count')::integer>0 then 'complete' else 'ready' end,
       'confirmation_text','I confirm this is the final source for this week.',
       'confirmation_required',true,'finalise_enabled',v_finalise_enabled,
       'finalise_payload',v_finalise_payload,
@@ -4908,6 +5002,9 @@ begin
   if not found or v_cycle.source_group_id<>v_group_id then
     raise exception 'WEEKLY_SOURCE_NO_SHIFTS_CYCLE_NOT_FOUND' using errcode='22023';
   end if;
+  if v_cycle.scope_client_id is not null and v_cycle.scope_client_id<>v_client_id then
+    raise exception 'WEEKLY_SOURCE_NO_SHIFTS_CLIENT_SCOPE_MISMATCH' using errcode='22023';
+  end if;
   perform private.weekly_source_office_authority_v1(
     v_actor,'FINALISE_WEEK',v_group_id,v_client_id,v_cycle.finalisation_week_ending
   );
@@ -5026,6 +5123,7 @@ begin
   select not exists(
     select 1 from public.weekly_source_group_clients membership
     where membership.source_group_id=v_group_id
+      and (v_cycle.scope_client_id is null or membership.client_id=v_cycle.scope_client_id)
       and v_cycle.finalisation_week_ending between membership.valid_from
         and coalesce(membership.valid_to,'infinity'::date)
       and not exists(

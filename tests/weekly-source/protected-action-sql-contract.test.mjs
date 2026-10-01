@@ -35,9 +35,14 @@ test('all protected action RPCs are service-only and reload the API schema', () 
 });
 
 test('current source context excludes superseded Correct-final history', () => {
-  const context = functionBody(
+  const actionContext = functionBody(
     'create or replace function public.weekly_exceptional_pay_action_context_v1',
     'create or replace function public.weekly_exceptional_pay_action_publication_status_v1',
+  );
+  assert.match(actionContext, /private\.weekly_source_protected_final_source_context_v1\(/);
+  const context = functionBody(
+    'create or replace function private.weekly_source_protected_final_source_context_v1',
+    'create or replace function public.weekly_exceptional_pay_action_context_v1',
   );
   assert.ok((context.match(/revision\.state='CURRENT'/g) || []).length >= 2);
   assert.match(context, /source_cycle\.source_group_id=v_group\.id/);
@@ -47,6 +52,15 @@ test('current source context excludes superseded Correct-final history', () => {
   assert.match(context, /private\.weekly_source_ordinary_projection_active_movements_v1\(/);
   assert.match(context, /movement\.invoice_timesheet_id=any\(v_root_family\)/);
   assert.doesNotMatch(context, /order by[\s\S]{0,160}created_at_utc[\s\S]{0,80}limit 1[\s\S]{0,80}weekly_source_final_revisions/i);
+});
+
+test('final-source review helper is read-only and cannot be called by browser or service roles', () => {
+  const context = functionBody('create or replace function private.weekly_source_protected_final_source_context_v1',
+    'create or replace function public.weekly_exceptional_pay_action_context_v1');
+  assert.doesNotMatch(context, /\b(insert into|update public\.|delete from)\b/i);
+  assert.match(context, /revoke all on function private\.weekly_source_protected_final_source_context_v1\(uuid,uuid,uuid\)\s+from public,anon,authenticated,service_role/);
+  const editor = read('supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql');
+  assert.match(editor, /v_final_source:=private\.weekly_source_protected_final_source_context_v1\(/);
 });
 
 test('WAIT changes only protected lifecycle state and cannot write pay, invoice or Draft facts', () => {

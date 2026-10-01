@@ -76,10 +76,10 @@ test('central Weekly Source ACL and independent verifier seal the same exact ser
   // build to hold exactly one foreign grant, service_role EXECUTE, with anon
   // and authenticated denied.
   // Approved service-only helpers have expanded the original sealed surface.
-  // The sealed Weekly Source service surface currently contains 116 exact
+  // The sealed Weekly Source service surface currently contains 123 exact
   // signatures. Keep this literal coupled to both independent lists so an
   // unnoticed addition or removal fails locally before a database release.
-  assert.equal(actual.length, 116);
+  assert.equal(actual.length, 123);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
 });
@@ -105,7 +105,7 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // head). Both are registered in the repeatable and in the independent
   // verifier, and the installed ACL verifier reports
   // `registered_private_helper_count: 46` on a build from empty.
-  assert.equal(actual.length, 53);
+  assert.equal(actual.length, 58);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a

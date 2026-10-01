@@ -1737,6 +1737,11 @@ begin
       raise exception 'WEEKLY_SOURCE_SECURE_QUERY_NOT_APPLICABLE' using errcode='55000';
     end if;
 
+    perform 1 from public.weekly_work_events where id=v_work_event.id for update;
+    if private.weekly_source_query_resolved_decision_matches_v1(v_group.id,v_work_event.id,v_issue) then
+      v_unchanged_count:=v_unchanged_count+1;
+      continue;
+    end if;
     select * into v_incident
     from public.weekly_discrepancy_incidents
     where source_group_id=v_group.id and work_event_id=v_work_event.id

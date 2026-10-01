@@ -4347,6 +4347,7 @@ begin
   from public.weekly_source_cycles
   where id=v_publication.source_cycle_id;
   if v_publication_cycle.source_group_id<>v_cycle.source_group_id
+     or v_publication_cycle.scope_client_id is distinct from v_cycle.scope_client_id
      or v_publication_cycle.finalisation_week_ending<v_cycle.finalisation_week_ending then
     raise exception 'WEEKLY_SOURCE_QUERY_PUBLICATION_SCOPE_INVALID' using errcode='55000';
   end if;
@@ -4380,6 +4381,7 @@ begin
     'source_cycle_id',v_publication_cycle.id,
     'origin_source_cycle_id',v_cycle.id,
     'source_group_id',v_cycle.source_group_id,
+    'scope_client_id',v_publication_cycle.scope_client_id,
     'finalisation_week_ending',v_publication_cycle.finalisation_week_ending,
     'publication_id',v_publication.id,
     'upload_id',v_publication.upload_id,
@@ -4559,6 +4561,38 @@ as $function$
   );
 $function$;
 
+-- A resolution accepting the reviewed source facts survives a repeat import.
+-- Compare business facts, not upload/report IDs or a whole-week signature
+-- revision. A SOURCE_MATCHED resolution is deliberately different: its last
+-- stored comparison describes the former disagreement, not the later match.
+create or replace function private.weekly_source_query_resolved_decision_matches_v1(
+  p_source_group_id uuid,p_work_event_id uuid,p_issue jsonb
+) returns boolean language sql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+  with latest as (
+    select incident.state,incident.resolution_kind,incident.current_comparison_revision_id
+    from public.weekly_discrepancy_incidents incident
+    where incident.source_group_id=p_source_group_id and incident.work_event_id=p_work_event_id
+    order by incident.episode_number desc,incident.id desc limit 1
+  )
+  select coalesce((select latest.state='RESOLVED'
+    and latest.resolution_kind in ('OFFICE_ACCEPTED_SYSTEM_HOURS','MANAGER_CONFIRMED_SYSTEM_HOURS','CANDIDATE_CORRECTED')
+    and comparison.contract_id is not distinct from nullif(p_issue->>'contract_id','')::uuid
+    and comparison.issue_family is not distinct from upper(btrim(p_issue->>'issue_family'))
+    and comparison.source_presence is not distinct from upper(btrim(p_issue->>'source_presence'))
+    and comparison.candidate_start_at_local is not distinct from nullif(p_issue->>'candidate_start_at_local','')::timestamp
+    and comparison.candidate_end_at_local is not distinct from nullif(p_issue->>'candidate_end_at_local','')::timestamp
+    and comparison.candidate_break_minutes is not distinct from nullif(p_issue->>'candidate_break_minutes','')::integer
+    and comparison.system_start_at_local is not distinct from nullif(p_issue->>'system_start_at_local','')::timestamp
+    and comparison.system_end_at_local is not distinct from nullif(p_issue->>'system_end_at_local','')::timestamp
+    and comparison.system_break_minutes is not distinct from nullif(p_issue->>'system_break_minutes','')::integer
+    from latest join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=latest.current_comparison_revision_id),false);
+$function$;
+alter function private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb) owner to postgres;
+revoke all on function private.weekly_source_query_resolved_decision_matches_v1(uuid,uuid,jsonb) from public,anon,authenticated,service_role;
+
 create or replace function public.weekly_source_query_sync_atomic_v1(
   p_request jsonb
 ) returns jsonb
@@ -4662,7 +4696,9 @@ begin
     begin
       select * into strict v_event from public.weekly_work_events
       where id=(v_issue->>'work_event_id')::uuid
-        and first_source_group_id=v_group_id;
+        and first_source_group_id=v_group_id
+        and (nullif(v_guard->>'scope_client_id','') is null
+          or client_id=(v_guard->>'scope_client_id')::uuid);
       v_contract_id:=nullif(v_issue->>'contract_id','')::uuid;
       v_timesheet_id:=nullif(v_issue->>'candidate_timesheet_id','')::uuid;
       v_timesheet_revision:=nullif(v_issue->>'candidate_timesheet_revision','')::integer;
@@ -4743,6 +4779,11 @@ begin
       raise exception 'WEEKLY_SOURCE_SECURE_QUERY_NOT_APPLICABLE' using errcode='55000';
     end if;
 
+    perform 1 from public.weekly_work_events where id=v_event.id for update;
+    if private.weekly_source_query_resolved_decision_matches_v1(v_group_id,v_event.id,v_issue) then
+      v_unchanged_count:=v_unchanged_count+1;
+      continue;
+    end if;
     select * into v_incident
     from public.weekly_discrepancy_incidents
     where source_group_id=v_group_id and work_event_id=v_event.id and state='OPEN'
@@ -4872,6 +4913,8 @@ begin
       on origin_cycle.id=incident.source_cycle_id
     where incident.source_group_id=v_group_id
       and incident.state='OPEN'
+      and (nullif(v_guard->>'scope_client_id','') is null
+        or incident.client_id=(v_guard->>'scope_client_id')::uuid)
       and not (incident.work_event_id=any(v_seen_work_events))
       and origin_cycle.finalisation_week_ending<=(v_guard->>'finalisation_week_ending')::date
       and (
