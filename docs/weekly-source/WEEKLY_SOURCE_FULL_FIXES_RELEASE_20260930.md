@@ -17,6 +17,35 @@ Local evidence:
 
 Publish using the existing automatic TEST coordinator, with fresh Cloudflare connection evidence, protected database verification, ordered Worker builds, Office publication and identity read-back. No LIVE, payment execution, token rotation or mobile-store build belongs to this batch. Hosted acceptance remains reserved for the user after deployment.
 
+### Presentation review and first protected attempt
+
+The user rejected the simplified fixture screenshot. Office publication was held;
+the local coordinator was stopped, without cancelling the already-running protected
+database workflow. The combined views are now checked in the actual Office shell,
+not just the minimal fixture. Corrections cover flat sortable headings, filter and
+cutoff spacing, selected-tab styling on programmatic navigation, compact stacked
+actions and the protected-shift form. File details and protected-shift entry have
+real-shell screenshots; these use local fixtures, not hosted business data.
+
+Protected run `36876333760` failed the general RPC isolation census at backend
+commit `90faa74e9352c2d2c87ccee0c38006f2a4ec6b02`. It measured
+`802 / 76 / 0 / 8bff6786009ac9a493eee90f6ce92574`, against the old
+`795 / 76 / 0 / 7107ce270790a01db97e27a8dbedb222` seal. A disposable
+PostgreSQL 17 read-back reproduced both: removing only the seven new public
+Weekly Source entry points from the census reproduced the old seal exactly.
+The verifier now records that additive inventory; the unchanged service-missing
+count and zero browser-executable requirement remain enforced. The complete
+isolation verifier passes locally. This is not yet proof of a successful retry
+or of application publication. The failed install may have applied definitions
+before verification stopped; its ledger must be recovered through the protected
+workflow, never manually marked verified.
+
+After the visual correction, all 40 local import-workspace Playwright checks and
+all 166 Office unit tests passed. The 40 release-system/routing tests and database
+source/contract coupling checks passed again. Real-shell captures include the
+combined Finalise/Queries views, file details and protected-shift entry at 390px
+and 1700px. These do not claim hosted acceptance.
+
 ## Previous release status on 1 October 2026
 
 **DEPLOYED_ACCEPTANCE_PENDING.** The automatic coordinator completed the actual

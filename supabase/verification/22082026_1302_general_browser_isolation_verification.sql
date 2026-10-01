@@ -415,8 +415,18 @@ begin
   -- Exact-row Office recheck adds public.weekly_source_office_recheck_begin_v1(jsonb).
   -- The disposable census is 795 / 76 / 0 / 7107ce270790a01db97e27a8dbedb222;
   -- excluding only that signature reproduces the 794-row seal above exactly.
-  if v_count<>795 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'7107ce270790a01db97e27a8dbedb222' then
+  -- Combined Weekly Source workspace (1 October): seven new service-only
+  -- public entry points, all (jsonb): weekly_source_client_cycle_resolve_atomic_v1,
+  -- weekly_source_protected_editor_context_v1, weekly_source_protected_editor_prepare_v1,
+  -- weekly_source_workspace_scopes_v1, weekly_source_combined_finalise_workspace_v1,
+  -- weekly_source_combined_review_workspace_v1 and weekly_source_upload_detail_v1.
+  -- Disposable PG17 read-back matches the protected TEST failure exactly:
+  -- 802 / 76 / 0 / 8bff6786009ac9a493eee90f6ce92574.
+  -- Excluding only those seven signatures from the same census reproduces
+  -- 795 / 76 / 0 / 7107ce270790a01db97e27a8dbedb222 exactly. No existing
+  -- permission changed and browser execution remains forbidden.
+  if v_count<>802 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'8bff6786009ac9a493eee90f6ce92574' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;
