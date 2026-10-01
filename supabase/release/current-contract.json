@@ -16110,7 +16110,26 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "0469b88fb15403041dc6b1a8612da791fb4f397a35adf6b80446893f8e32ad0b"
+      "definition_sha256": "ce0daf03ecd42acfa155b1c54c41da8877387e99ebcb9a950aa8e00f5f3b72b7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_missing_scope_unchanged_v1(p_previous_publication_id uuid, p_publication_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_week_ending date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "7044e9ebd54a3856210e093dac3f3a321e3031715acae837a0d09e29ece524fb"
     },
     {
       "acl": [
@@ -18357,7 +18376,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e97732d222d714cb6a4d2c8626c58fe51e821a42f5ae124c3e22fe84781808af"
+      "definition_sha256": "7db037d77bfc2600949542bc6d175f50b97ed8b38376e3df2f91cd983a639879"
     },
     {
       "acl": [

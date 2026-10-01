@@ -1,5 +1,17 @@
 # Weekly Source full fixes — release evidence
 
+## Automatic import outreach and replay correction — 1 October 2026
+
+The additional approved automatic outreach is implemented locally. Accepted imports start eligible missing-timesheet and signed-hours checks through the existing policy, generation and delivery owners. Office buttons remain optional interventions. Explicit manager-direct activation is preserved; normal initial discrepancy contact does not immediately email a manager.
+
+Unchanged source facts under a different upload/publication/resolution identity retain the original missing-timesheet request, membership and deadline and create no additional initial message. A material break change creates one new request and retires the obsolete request; replaying that change creates no further intent. Existing scheduled reminders/escalations remain policy-controlled and are not duplicate import outreach.
+
+Latest local proof: 1,442 backend tests passed; 300 Weekly Source tests passed, two optional tests skipped; all 42 selected Weekly Source/browser-isolation SQL verifiers passed in the disposable PostgreSQL 17 database. No real candidate or manager messages were sent by these rollback-contained tests. The read-projections stale-view fixture now deliberately changes its cycle version because automatic initial activation makes the former Office ASK step idempotent; the stale-write rejection remains required.
+
+Protected run `36878555299` passed its verifiers but failed final contract comparison for two delivery functions. The earlier query repeatable had overwritten their later canonical definitions (comment/format identity differences). The earlier owner now includes the existing later delivery-target authority, preserving canonical per-target transport on incremental replay. Local contract read-back confirms both delivery definitions equal the previously approved contract. The new contract changes only nine Weekly Source routine entries (four new private helpers and five existing definitions), with no other catalogue section changed. Contract SHA-256: `ec93f4d4d374da9ed552f361aae7eed7b9c5299af7b076badba0adf7fdd01349`.
+
+This section records pre-deployment evidence, not successful hosted installation or user acceptance. The protected release must pass before runtime and Office promotion.
+
 ## Combined workspace release on 1 October 2026
 
 The new combined workspace, protected shift editor and resolved-question retention changes are locally implemented and awaiting protected TEST publication. The successful deployment below refers to the preceding release, not this new batch.

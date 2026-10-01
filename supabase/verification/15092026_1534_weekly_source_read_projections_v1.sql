@@ -535,8 +535,17 @@ begin
     'Candidate account preflight did not isolate the unavailable Candidate');
 
   begin
+    -- Automatic contact has already started before Office reads this screen;
+    -- ASK is now an idempotent optional intervention, not a state transition.
+    -- Advance only this fixture's authority inside the rolled-back block to
+    -- retain a real stale-command proof rather than expecting replay to fail.
+    update public.weekly_source_cycles set version=version+1
+    where id='d6000000-0000-4000-8000-000000000001';
     perform public.weekly_source_office_bulk_query_action_atomic_v1(v_original_ask_request);
   exception when sqlstate '40001' then
+    v_stale_rejected:=true;
+  when sqlstate '55000' then
+    if sqlerrm<>'SOURCE_CHECK_IN_PROGRESS' then raise; end if;
     v_stale_rejected:=true;
   end;
   perform pg_temp.assert_true(v_stale_rejected,

@@ -163,3 +163,42 @@ rollback;`;
   {input:sql,encoding:'utf8',env:{...process.env,PGOPTIONS:'-c jit=off'}});
   assert.equal(result.status,0,result.stderr || result.error?.message);
 });
+
+test('automatic mismatch contact preserves explicit manager direct and disabled candidate policy', {
+  skip: !process.env.CLOUDTMS_PROTECTED_EDITOR_LOCAL_PORT,
+}, () => runProof(`
+do $proof$
+declare
+  request jsonb:=jsonb_build_object('actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_cycle_id','e6000000-0000-4000-8000-000000000001',
+    'projection_publication_id','e8000000-0000-4000-8000-000000000001');
+  issue jsonb:=jsonb_build_object('work_event_id','e9000000-0000-4000-8000-000000000001',
+    'candidate_timesheet_id','ea000000-0000-4000-8000-000000000001',
+    'candidate_timesheet_revision',1,'candidate_shift_fingerprint',repeat('31',32),
+    'contract_id','e4000000-0000-4000-8000-000000000001','issue_family','SOURCE_HOURS_DIFFER','source_presence','PRESENT',
+    'candidate_start_at_local','2026-09-01 09:00','candidate_end_at_local','2026-09-01 19:00','candidate_break_minutes',30,
+    'system_start_at_local','2026-09-01 09:00','system_end_at_local','2026-09-01 17:00','system_break_minutes',30);
+begin
+  update public.weekly_source_client_policies set candidate_queries_enabled=false
+  where source_group_id='e5000000-0000-4000-8000-000000000001';
+  perform public.weekly_source_query_sync_atomic_v1(request||jsonb_build_object('issues',jsonb_build_array(issue)));
+  perform pg_temp.assert_true(not exists(select 1 from public.weekly_message_intents
+    where source_cycle_id=(request->>'source_cycle_id')::uuid),'disabled candidate policy does not start contact');
+  update public.weekly_source_client_policies set candidate_queries_enabled=true
+  where source_group_id='e5000000-0000-4000-8000-000000000001';
+  insert into public.weekly_route_activations(source_cycle_id,candidate_id,client_id,audience_route,
+    route_mode,activated_by_user_id,activated_at_utc)
+  select (request->>'source_cycle_id')::uuid,'e3000000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',audience,'MANAGER_DIRECT',
+    (request->>'actor_user_id')::uuid,transaction_timestamp()
+  from unnest(array['CANDIDATE','MANAGER']) audience;
+  perform private.weekly_source_import_outreach_v1((request->>'projection_publication_id')::uuid);
+  perform pg_temp.assert_true(not exists(select 1 from public.weekly_message_intents
+    where source_cycle_id=(request->>'source_cycle_id')::uuid and audience_kind='CANDIDATE'),
+    'automatic import must not overwrite deliberate manager direct with candidate first');
+  perform pg_temp.assert_true((select count(*)=2 from public.weekly_route_activations
+    where source_cycle_id=(request->>'source_cycle_id')::uuid and route_mode='MANAGER_DIRECT'
+      and activated_by_user_id=(request->>'actor_user_id')::uuid),'direct route and provenance remain unchanged');
+end;
+$proof$;
+`));
