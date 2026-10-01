@@ -5324,6 +5324,14 @@ begin
       cross join lateral pg_catalog.jsonb_array_elements(groups.missing_scopes) membership
       where groups.candidate_id=v_candidate.candidate_id and groups.outreach_eligible
         and not exists (
+          select 1 from public.timesheets sheet
+          where sheet.contract_id=(membership.value->>'contract_id')::uuid
+            and sheet.week_ending_date=(membership.value->>'week_ending')::date
+            and sheet.is_current and sheet.revoked_at is null and sheet.archived_at_utc is null
+            and sheet.sheet_scope='WEEKLY' and sheet.line_type='HOURS'
+            and sheet.r2_nurse_key is not null and sheet.img_sha256_nurse is not null
+        )
+        and not exists (
           select 1 from public.weekly_route_activations activation
           where activation.source_cycle_id=v_publication.source_cycle_id
             and activation.candidate_id=v_candidate.candidate_id

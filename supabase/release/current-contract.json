@@ -15578,6 +15578,25 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "weekly_source_import_outreach_v1(p_projection_publication_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "120d55e7cd19a9149517eb39b1dc2efcdc387d7cb6f4f65a918c3306df50d4d7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "weekly_source_invalidation_contract_assert_v1(p_candidate_id uuid, p_declared_root_ids uuid[], p_token uuid, p_context text, p_pre_existing_job_ids uuid[])",
       "parallel": "u",
       "volatility": "v",
@@ -16073,6 +16092,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "8177b515819ff92d72f5c37580d01683aba7aa2276166b4689fe9142e0d05e89"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_missing_scope_facts_v1(p_projection_publication_id uuid, p_candidate_id uuid, p_client_id uuid, p_contract_id uuid, p_week_ending date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "0469b88fb15403041dc6b1a8612da791fb4f397a35adf6b80446893f8e32ad0b"
     },
     {
       "acl": [
@@ -17654,7 +17692,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "af842fa7d10b0295da7e525f385f0e17ebe177e7a1ec64281c2b1955e8ee8be1"
+      "definition_sha256": "a13a40baef68a45771afb50d964a1fbc3f8495aefa5072561f75414528ed3982"
     },
     {
       "acl": [
@@ -17958,7 +17996,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "14173a5016336862a25ab0325350bbe158d5abd48303976a9c3e74e20eee3438"
+      "definition_sha256": "d41facd6ce2436ddd5aafb4b0f53260415012ed016af6adf4e8cc959c3873f7b"
     },
     {
       "acl": [
@@ -18301,6 +18339,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "4a2551a9d0c1c7ff44ad5bbc9cf543e0fc86b6a9dbd5ab582cb4561bb726bc7f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_submission_request_start_v1(p_request jsonb, p_automatic boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e97732d222d714cb6a4d2c8626c58fe51e821a42f5ae124c3e22fe84781808af"
     },
     {
       "acl": [
@@ -42709,7 +42766,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0cde4bb02d2ab8ce8fd9571c6135c13ab05838d3511a18a0965c2ca2654b8041"
+      "definition_sha256": "5b633e654c1b736b05dad2ffa8f8514a9a6d741e476a00bf59dc6de168e262ef"
     },
     {
       "acl": [
@@ -42781,7 +42838,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a51ed2eba8c8dd869ea5a00c026488e06acf5aac59ed0413c69ab8dfaf18eeb7"
+      "definition_sha256": "809e819a9be3ec9113beb8e855f81af1c28831f8b1d454fa38ac17a041959925"
     },
     {
       "acl": [
@@ -43357,7 +43414,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "64f5c5d4a8f8612d66507e767e0de801ac7c21ccf27579c03da59bb7bf84a081"
+      "definition_sha256": "b1d50847fc7f743de3543755a34beb926537eb49dce31867be483277ed486cb7"
     },
     {
       "acl": [
@@ -43549,7 +43606,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "62f6d3dc99f71b1e68b767392dc79550abe36d6cc73392f16e5db7e69e99d785"
+      "definition_sha256": "c3a8637898ff4413d8647a782d58ad2bd632d884eba30e46ac4d7d8dd4d6d391"
     },
     {
       "acl": [
@@ -43741,7 +43798,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "52dd437b767d23742330bf6efbc281ef230ba2c229c54920874d012aa97639d3"
+      "definition_sha256": "cb62af1685ffa1a40ca3b2c3c3ae14e663dfdfd49da0c22b392a8e3970f584ad"
     },
     {
       "acl": [

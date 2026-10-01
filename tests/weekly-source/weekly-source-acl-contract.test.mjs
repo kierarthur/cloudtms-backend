@@ -182,8 +182,10 @@ test('general service-only inventory includes the Weekly Source invoice report p
   // 792 / 75 / 0 / 50de1833... to 793 / 76 / 0 / af4aefda... The only added row
   // is the owner-only public._pay_batch_draft_stale_hint_on_view_v1(uuid,int4,int4)
   // (svc=false, anon=false, auth=false); browser execution stays zero.
-  assert.match(general, /v_count<>795 or v_service_missing<>76 or v_browser_executable<>0/i);
-  assert.match(general, /v_hash<>'7107ce270790a01db97e27a8dbedb222'/i);
+  // Seven additive combined-workspace/editor RPCs were catalogued on PG17;
+  // excluding exactly those seven reproduces the prior 795-function seal.
+  assert.match(general, /v_count<>802 or v_service_missing<>76 or v_browser_executable<>0/i);
+  assert.match(general, /v_hash<>'8bff6786009ac9a493eee90f6ce92574'/i);
   assert.match(general, /public\.weekly_source_invoice_evidence_v1\(pg_catalog\.jsonb\)/);
   assert.match(auditExport, /grant execute on function public\.weekly_source_invoice_report_rows_v1\(jsonb\) to service_role/i);
   assert.match(auditExport, /revoke all on function public\.weekly_source_invoice_report_rows_v1\(jsonb\)[\s\S]*from public,anon,authenticated/i);
