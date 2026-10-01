@@ -9192,7 +9192,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "74d0a30bb59ce625335c8a33b39af8f58f29bf7420903b05e24a9c900eb3cc05"
+      "definition_sha256": "8d45a76c9221d5ad6aaf9de2c3a72c749089007e6b97de569e232104a429a410"
     },
     {
       "acl": [

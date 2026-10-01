@@ -385,6 +385,9 @@ as $function$
   values
     ('public.weekly_source_import_prepare_atomic_v1(jsonb)'),
     ('public.weekly_source_office_recheck_begin_v1(jsonb)'),
+    -- Report-first completed History is a service-only read. Its grant is
+    -- intentionally unavailable to browser roles.
+    ('public.weekly_source_report_history_v1(jsonb)'),
     ('private.weekly_source_invoice_batch_rows_v1(jsonb,jsonb)'),
     ('private.weekly_source_invoice_batch_snapshot_v1()'),
     ('private.weekly_source_summary_pay_delayed_v1(uuid,uuid,uuid,date)'),
