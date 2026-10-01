@@ -2,7 +2,7 @@
 
 ## Automatic import outreach and replay correction — 1 October 2026
 
-The additional approved automatic outreach is implemented locally. Accepted imports start eligible missing-timesheet and signed-hours checks through the existing policy, generation and delivery owners. Office buttons remain optional interventions. Explicit manager-direct activation is preserved; normal initial discrepancy contact does not immediately email a manager.
+The additional approved automatic outreach is deployed to TEST. Accepted imports start eligible missing-timesheet and signed-hours checks through the existing policy, generation and delivery owners. Office buttons remain optional interventions. Explicit manager-direct activation is preserved; normal initial discrepancy contact does not immediately email a manager.
 
 Unchanged source facts under a different upload/publication/resolution identity retain the original missing-timesheet request, membership and deadline and create no additional initial message. A material break change creates one new request and retires the obsolete request; replaying that change creates no further intent. Existing scheduled reminders/escalations remain policy-controlled and are not duplicate import outreach.
 
@@ -10,11 +10,26 @@ Latest local proof: 1,442 backend tests passed; 300 Weekly Source tests passed, 
 
 Protected run `36878555299` passed its verifiers but failed final contract comparison for two delivery functions. The earlier query repeatable had overwritten their later canonical definitions (comment/format identity differences). The earlier owner now includes the existing later delivery-target authority, preserving canonical per-target transport on incremental replay. Local contract read-back confirms both delivery definitions equal the previously approved contract. The new contract changes only nine Weekly Source routine entries (four new private helpers and five existing definitions), with no other catalogue section changed. Contract SHA-256: `ec93f4d4d374da9ed552f361aae7eed7b9c5299af7b076badba0adf7fdd01349`.
 
-This section records pre-deployment evidence, not successful hosted installation or user acceptance. The protected release must pass before runtime and Office promotion.
+Protected run `36884277492` completed successfully: `VERIFIED UPGRADE release 20260926-banking-pay-stage2-h8-upgrade-5acb69905d4a for TEST`. All 147 hosted verifiers passed, taking 1,601.942 seconds (26 minutes 42 seconds); preparation/install/final comparison account for the remaining approximately three minutes. Only changed definitions were installed, but the previous failed release and unclassified database change required full verification. The automatic deployment system does not yet provide a broadly approved selective-verification fast path for this kind of database change.
+
+Backend source `5acb69905d4abc7eff054ff6b24eca96eff005b5` deployed in the required order. Read-back confirmed all four active versions at 100%, each linked to a successful build of that exact commit:
+
+| Worker | Active version | Build |
+|---|---|---|
+| test-cloudtms-backend | 8c2b21f5-a559-491a-864f-5f87990513ca | 13749903-e534-4c75-ad26-6b173f456eee |
+| test-cloudtms-candidate-private-api | ff4bd78f-8cd8-493a-a3bf-a57aa743b7a4 | 5908ca19-891d-44df-8b02-eba4ca15b18f |
+| test-cloudtms-candidate-synthetic-private-api | 68a23cbc-f4a6-4a87-a98f-cf1710c1af01 | 33fd12d9-c536-429a-8c5c-28bedc730b91 |
+| test-cloudtms-candidate-broker | e1189445-4818-4b62-868a-f03d1d46bb97 | ba2387c2-15a1-49a9-9bee-b10b8b942836 |
+
+Office `1a4c42039f57ca4e6aec3cd50491ec253dc4cc13` deployed through Pages run `36888823411`; coordinator completed at `2026-10-01T16:02:42.176Z`. Read-only HTTP comparisons proved the served index and all seven changed CSS/JavaScript assets match the saved release (normalised line endings only). Both previously mismatched dispatch functions were independently read from TEST and exactly matched the local PostgreSQL definitions. Status: **DEPLOYED_ACCEPTANCE_PENDING**. No hosted business-journey tests, real imports or test messages were performed after deployment.
+
+Separate CI limitation, not concealed by the protected release success: Candidate PostgreSQL runtime fixture run `36884193671` fails on PostgreSQL 17.6 and 18.1 because its installation omits `private._weekly_source_effective_policy_v1(uuid,uuid,date)`. The immediately preceding commit's run `36878411218` fails identically at `tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql:254`. This fixture issue remains outstanding; do not claim every GitHub check is green. Office's separate App-Ready job was still running at deployment read-back.
+
+Cleanup after proofs: verified no other database clients and no other container sharing the volume, then removed only task-owned disposable container `codex-combined-workspace-20261001` and its anonymous volume `9dc39feda48ff3c11d847dde97602faa14d54e30f3736120aee4a1357ddc1c3c`. Docker volume use fell from 15.65 GB to 15.39 GB (about 260 MB). This local fixture is recreatable from Git; source/evidence, shared images, other tasks' containers and all hosted databases were preserved. No Docker virtual-disk compaction was attempted.
 
 ## Combined workspace release on 1 October 2026
 
-The new combined workspace, protected shift editor and resolved-question retention changes are locally implemented and awaiting protected TEST publication. The successful deployment below refers to the preceding release, not this new batch.
+The combined workspace, protected shift editor and resolved-question retention changes are now deployed with the automatic outreach release recorded above. The older deployment sections below are retained as historical evidence.
 
 Source is isolated on `codex/weekly-source-combined-workspace-20261001` in both repositories, based on backend `fbf252fe7e32d25a59314720dc7ac60dc7b7b9c3` and Office `d85106b02a47f30ee6950e508c4eabdc187914bf`. The controlling addition is `WEEKLY_SOURCE_COMBINED_WORKSPACE_POLICY_20261001.md`.
 
