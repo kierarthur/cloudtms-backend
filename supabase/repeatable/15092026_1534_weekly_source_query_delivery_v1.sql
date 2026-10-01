@@ -5194,6 +5194,12 @@ comment on function public.weekly_source_message_dispatch_submission_start_atomi
 comment on function public.weekly_source_manager_route_prepare_atomic_v1(jsonb) is
   'Service-only reservation of the exact manager review batch and credential generation before remote registration and deterministic email rendering.';
 
+-- An incremental replay of this earlier owner must end with the current
+-- per-target transport, exactly as a clean full replay does. In particular
+-- it must not reinstate the old command claim or a differently sealed retired
+-- submission entry point while the later root's own hash is unchanged.
+\ir 15092026_2311_weekly_source_delivery_targets_v1.sql
+
 notify pgrst,'reload schema';
 
 commit;

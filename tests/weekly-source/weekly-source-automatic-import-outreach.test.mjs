@@ -11,6 +11,12 @@ function runProof(body) {
   assert.equal(result.status,0,result.stderr || result.error?.message);
 }
 
+test('incremental query owner retains the final per-target transport closure', () => {
+  const source=readFileSync('supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql','utf8');
+  assert(source.lastIndexOf('\\ir 15092026_2311_weekly_source_delivery_targets_v1.sql')>
+    source.lastIndexOf('create or replace function public.weekly_source_message_dispatch_submission_start_atomic_v1'));
+});
+
 test('missing timesheet starts automatically and equivalent new upload preserves request and clocks', {
   skip: !process.env.CLOUDTMS_PROTECTED_EDITOR_LOCAL_PORT,
 }, () => runProof(`

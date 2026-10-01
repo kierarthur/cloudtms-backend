@@ -5308,7 +5308,11 @@ begin
     select distinct groups.candidate_id
     from private.weekly_source_office_query_groups_v1(
       v_publication.source_cycle_id,v_publication.id,'{}'::jsonb) groups
-    where groups.outreach_eligible
+    where groups.candidate_app_available
+      and (select count(*) from public.candidate_app_global_membership_links membership
+        join public.candidate_app_accounts account on account.id=membership.account_id
+        where membership.candidate_id=groups.candidate_id
+          and membership.state='ACTIVE' and account.status='ACTIVE')=1
     order by groups.candidate_id
   loop
     -- One candidate/cycle request owner. Serialize import/recheck attempts
@@ -5322,7 +5326,10 @@ begin
       from private.weekly_source_office_query_groups_v1(
         v_publication.source_cycle_id,v_publication.id,'{}'::jsonb) groups
       cross join lateral pg_catalog.jsonb_array_elements(groups.missing_scopes) membership
-      where groups.candidate_id=v_candidate.candidate_id and groups.outreach_eligible
+      where groups.candidate_id=v_candidate.candidate_id
+        and coalesce((private._weekly_source_effective_policy_v1(
+          (membership.value->>'client_id')::uuid,(membership.value->>'contract_id')::uuid,
+          (membership.value->>'week_ending')::date)->>'candidate_queries_enabled')::boolean,false)
         and not exists (
           select 1 from public.timesheets sheet
           where sheet.contract_id=(membership.value->>'contract_id')::uuid
