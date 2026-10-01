@@ -479,16 +479,28 @@ begin
         when candidate.scope_client_id=candidate.client_id then candidate.current_complete_upload_id end upload_id,
       case when candidate.source_family='NHSP' then report.current_projection_publication_id
         when candidate.scope_client_id=candidate.client_id then candidate.current_projection_publication_id end publication_id,
-      completion.id completion_id,completion.completion_kind,
-      completion.attested_at_utc completed_at,
-      encode(completion.completion_hash,'hex') completion_hash,
+      coalesce(final_report.id,completion.id) completion_id,
+      case when final_report.id is not null then 'FINAL_SOURCE' else completion.completion_kind end completion_kind,
+      coalesce(final_report.finalised_at_utc,completion.attested_at_utc) completed_at,
+      encode(coalesce(final_report.manifest_hash,completion.completion_hash),'hex') completion_hash,
       coalesce(report.cutoff_at_utc,candidate.cutoff_at_utc) actual_cutoff
     from candidates candidate
     left join public.weekly_source_report_scopes report on report.source_cycle_id=candidate.cycle_id
       and report.client_id=candidate.client_id and candidate.source_family='NHSP'
     left join public.weekly_source_client_cycle_completions completion
       on completion.source_cycle_id=candidate.cycle_id and completion.client_id=candidate.client_id
-      and completion.state='CURRENT'
+      and completion.state='CURRENT' and completion.completion_kind='NO_SHIFTS_TO_IMPORT'
+    -- Completion belongs to this exact client/report. A completed sibling
+    -- report for the same client/week must not hide another pending report.
+    left join lateral (
+      select revision.id,revision.finalised_at_utc,revision.manifest_hash
+      from public.weekly_source_final_revisions revision
+      join public.weekly_source_client_manifests manifest on manifest.final_revision_id=revision.id
+        and manifest.client_id=candidate.client_id
+      where revision.source_cycle_id=candidate.cycle_id and revision.state='CURRENT'
+        and revision.report_scope_id is not distinct from report.id
+      order by revision.revision_number desc,revision.id limit 1
+    ) final_report on true
   ), facts as (
     select scopes.*,private.weekly_source_import_is_prepared_v1(scopes.upload_id) prepared
     from scopes
@@ -588,7 +600,7 @@ begin
   v_seek:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
   v_limit:=coalesce((p_request->>'limit')::integer,50);
   if v_phase not in ('ready','blocked','complete') or v_sort not in
-    ('client','candidate','day_date','status','system_hours','movement','commission','total_cost','invoice_charge','finalised_at')
+    ('client','source','period','candidate','day_date','status','system_hours','movement','commission','total_cost','invoice_charge','finalised_at')
     or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100 then
     raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
   end if;
@@ -601,6 +613,9 @@ begin
   end loop;
   for v_scope in select item from jsonb_array_elements(v_scopes) item
   loop
+    -- Completed report evidence lives in History; outstanding approved-hours
+    -- work has its independent Office-check projection in Queries.
+    if coalesce((v_scope->>'completed')::boolean,false) then continue; end if;
     v_workspace:=public.weekly_source_office_workspace_v1(jsonb_build_object(
       'actor_user_id',p_request->>'actor_user_id','tab','finalise',
       'source_group_id',v_scope->>'source_group_id','source_cycle_id',v_scope->>'source_cycle_id',
@@ -612,6 +627,7 @@ begin
     if not (v_scope->>'prepared')::boolean and not (v_scope->>'completed')::boolean then continue; end if;
     v_plans:=v_plans||jsonb_build_array(jsonb_build_object(
       'key',v_scope->>'key','client',v_scope->>'client','period',v_scope->>'period',
+      'week_ending',v_scope->>'week_ending',
       'missing_previous_report',v_scope->'missing_previous_report',
       'progress',coalesce((select tracker from jsonb_array_elements(v_workspace#>'{finalise,tracker,rows}') tracker
         where tracker->>'row_key'='tracker-'||(v_scope->>'client_id')),'{}'::jsonb),
@@ -671,9 +687,9 @@ begin
     filter(where ordinal>origin.base+v_offset and ordinal<=origin.base+v_offset+v_limit),'[]'::jsonb)
     into v_total,v_seek_base,v_page from ordered cross join origin;
   -- Counts remain whole-result counts even after a type-to-jump seek.
-  select jsonb_build_object('ready',coalesce(sum((item->>'ready_count')::integer),0),
-    'blocked',coalesce(sum((item->>'blocked_count')::integer),0),
-    'complete',coalesce(sum((item->>'complete_count')::integer),0)) into v_counts
+  select jsonb_build_object('ready',count(*) filter(where item->>'finalise_enabled'='true' and (item->>'blocked_count')::integer=0),
+    'blocked',count(*) filter(where item->>'finalise_enabled' is distinct from 'true' or coalesce((item->>'blocked_count')::integer,0)>0),
+    'complete',0) into v_counts
   from jsonb_array_elements(v_plans) item;
   return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMBINED_FINALISE_V1',
     'version',v_version,'scopes',v_plans,'obligations',v_obligations,'scope_options',v_scopes,'summary',v_meta,'counts',v_counts,'list',v_phase,
@@ -696,6 +712,7 @@ as $function$
 declare
   v_request jsonb; v_scope_page jsonb; v_scopes jsonb:='[]'; v_scope jsonb;
   v_workspace jsonb; v_owner_request jsonb; v_rows jsonb:='[]'; v_item jsonb;
+  v_follow_workspace jsonb; v_follow_up jsonb;
   v_versions jsonb:='[]'; v_owners jsonb:='[]'; v_summary jsonb;
   v_tab text:=coalesce(nullif(p_request->>'tab',''),'queries');
   v_section text:=coalesce(nullif(p_request->>'section',''),'questions');
@@ -709,7 +726,13 @@ begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
     array['actor_user_id','source_group_id','client_id','week_ending','tab','section',
-      'sort_key','sort_direction','seek','cursor','limit'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
+      'sort_key','sort_direction','seek','cursor','limit','report_key'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
+  if v_tab='history' then
+    return public.weekly_source_report_history_v1(p_request-'tab'-'section');
+  end if;
+  if p_request ? 'report_key' then
+    raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
+  end if;
   if v_tab not in ('imports','queries') or v_section not in ('questions','checks','protected','current','archive')
     or v_sort not in ('client','candidate','day_date','status','file','uploaded')
     or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100 then
@@ -754,12 +777,24 @@ begin
             and permitted->>'client_id'=v_item->>'client_id') then continue; end if;
         if v_client is not null and nullif(v_item->>'client_id','') is not null
           and (v_item->>'client_id')::uuid<>v_client then continue; end if;
+        if v_tab='imports' then
+          -- Upload errors remain in their immediate review receipt, not an
+          -- ever-growing archive. Retain only accepted current work here.
+          if v_item->>'state' is distinct from 'CURRENT' then continue; end if;
+          if exists(select 1 from public.weekly_source_final_revisions revision
+            join public.weekly_source_client_manifests manifest on manifest.final_revision_id=revision.id
+            where revision.upload_id=(v_item->>'row_key')::uuid
+              and revision.state in ('CURRENT','SUPERSEDED')
+              and (nullif(v_item->>'client_id','') is null
+                or manifest.client_id=(v_item->>'client_id')::uuid))
+            and not exists(select 1 from jsonb_array_elements(v_scopes) sibling
+              where sibling->>'upload_id'=v_item->>'row_key'
+                and not coalesce((sibling->>'completed')::boolean,false)) then continue; end if;
+        end if;
         v_rows:=v_rows||jsonb_build_array(v_item||jsonb_build_object(
           'combined_key',v_key,'scope_key',v_scope->>'source_cycle_id','source',v_scope->>'source',
-          'period',v_scope->>'period','section',case when v_tab='queries' then 'questions'
-            when v_item#>>'{status,text}'='Superseded' or v_item->>'final_source'='Finalised'
-              or ((v_item->>'state')='REJECTED' and (v_item->>'uploaded_at')::timestamptz<statement_timestamp()-interval '7 days')
-              then 'archive' else 'current' end,
+          'source_family',v_scope->>'source_family',
+          'period',v_scope->>'period','section',case when v_tab='queries' then 'questions' else 'current' end,
           'client',coalesce(nullif(v_item->>'client',''),(select name from public.clients
             where id=nullif(v_item->>'client_id','')::uuid),'Source-wide file')));
       end loop;
@@ -786,6 +821,28 @@ begin
       v_owner_request:=v_owner_request||jsonb_build_object('cursor',v_workspace#>>array[v_tab,'next_cursor']);
     end loop;
   end loop;
+  -- Finalisation does not complete its separately tracked approved-hours work.
+  -- Keep that exact owner/action reachable from outstanding Office checks.
+  if v_tab='queries' then
+    for v_scope in select item from jsonb_array_elements(v_scopes) item
+      where item->>'completion_kind'='FINAL_SOURCE'
+    loop
+      v_follow_workspace:=public.weekly_source_office_workspace_v1(jsonb_build_object(
+        'actor_user_id',p_request->>'actor_user_id','tab','finalise',
+        'source_group_id',v_scope->>'source_group_id','source_cycle_id',v_scope->>'source_cycle_id',
+        'client_id',v_scope->>'client_id','report_scope_id',v_scope->>'report_scope_id'));
+      v_follow_up:=v_follow_workspace#>'{finalise,approved_hours_follow_up}';
+      if nullif(v_follow_up->>'title','') is null then continue; end if;
+      v_key:='approved-hours:'||(v_scope->>'key');
+      v_versions:=v_versions||jsonb_build_array(jsonb_build_array(v_key,v_follow_workspace->>'workspace_version',v_follow_up));
+      v_rows:=v_rows||jsonb_build_array(jsonb_build_object(
+        'combined_key',v_key,'row_key',v_key,'section','checks',
+        'client',v_scope->>'client','client_id',v_scope->>'client_id',
+        'source',v_scope->>'source','period',v_scope->>'period',
+        'candidate','Report follow-up','status',jsonb_build_object('text',v_follow_up->>'title'),
+        'problem',v_follow_up->>'body','follow_up_scope',v_follow_workspace->'selected','actions','[]'::jsonb));
+    end loop;
+  end if;
   select jsonb_build_object('questions',count(*) filter(where item->>'section'='questions'),
     'checks',count(*) filter(where item->>'section'='checks'),'protected',count(*) filter(where item->>'section'='protected'),
     'current',count(*) filter(where item->>'section'='current'),'archive',count(*) filter(where item->>'section'='archive'))
@@ -920,6 +977,191 @@ $function$;
 alter function public.weekly_source_upload_detail_v1(jsonb) owner to postgres;
 revoke all on function public.weekly_source_upload_detail_v1(jsonb) from public,anon,authenticated;
 grant execute on function public.weekly_source_upload_detail_v1(jsonb) to service_role;
+
+-- Completed reports are durable client manifests, not uploaded files and not
+-- whatever happens to be the current checking projection. Corrections retain
+-- their earlier report revisions; explicit zero returns retain their receipt.
+create or replace function public.weekly_source_report_history_v1(p_request jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_actor uuid; v_group uuid; v_client uuid; v_week date;
+  v_limit integer; v_offset integer:=0; v_cursor jsonb; v_version text;
+  v_sort text; v_direction text; v_seek text;
+  v_reports jsonb; v_options jsonb; v_page jsonb; v_report jsonb;
+  v_total integer; v_base integer:=0; v_key text;
+  v_revision uuid; v_shifts jsonb; v_movements jsonb;
+  v_shift_count integer; v_movement_count integer;
+  v_invoice_total bigint;
+  v_final public.weekly_source_final_revisions%rowtype;
+  v_profile text; v_actions jsonb:='[]'::jsonb;
+begin
+  perform private.weekly_source_query_require_service_v1();
+  perform private._weekly_source_settings_assert_request_v1(p_request,
+    array['actor_user_id','source_group_id','client_id','week_ending','report_key',
+      'sort_key','sort_direction','seek','cursor','limit'],'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID');
+  v_actor:=(p_request->>'actor_user_id')::uuid;
+  v_group:=nullif(p_request->>'source_group_id','')::uuid;
+  v_client:=nullif(p_request->>'client_id','')::uuid;
+  v_week:=nullif(p_request->>'week_ending','')::date;
+  v_key:=nullif(p_request->>'report_key','');
+  v_limit:=coalesce((p_request->>'limit')::integer,50);
+  v_sort:=coalesce(nullif(p_request->>'sort_key',''),'finalised_at');
+  v_direction:=coalesce(nullif(p_request->>'sort_direction',''),'desc');
+  v_seek:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
+  if v_limit not between 1 and 100 or v_sort not in ('client','source','period','report','finalised_at')
+    or v_direction not in ('asc','desc') or length(v_seek)>100 then
+    raise exception 'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID' using errcode='22023';
+  end if;
+  -- History includes retired source groups; the existing global Office read
+  -- authority still requires an active administrator. No new financial right.
+  perform private.weekly_source_office_authority_v1(v_actor,'VIEW_SOURCE_PROGRESS');
+  with completed as (
+    select 'FINAL:'||manifest.id::text report_key,manifest.source_group_id,
+      manifest.source_cycle_id,manifest.client_id,manifest.finalisation_week_ending,
+      manifest.final_revision_id,manifest.backing_report_number,
+      revision.finalised_at_utc completed_at,revision.finalised_by_user_id actor_id,
+      revision.revision_number,revision.state revision_state,revision.reason,
+      encode(revision.manifest_hash,'hex') evidence_hash,'FINAL_SOURCE' completion_kind,
+      null::text attestation
+    from public.weekly_source_client_manifests manifest
+    join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+    where revision.state in ('CURRENT','SUPERSEDED')
+    union all
+    select 'ZERO:'||completion.id::text,completion.source_group_id,completion.source_cycle_id,
+      completion.client_id,cycle.finalisation_week_ending,null::uuid,null::text,
+      completion.attested_at_utc,completion.attested_by_user_id,completion.completion_generation,
+      completion.state,'NO_SHIFTS_TO_IMPORT',encode(completion.completion_hash,'hex'),
+      completion.completion_kind,completion.attestation_text
+    from public.weekly_source_client_cycle_completions completion
+    join public.weekly_source_cycles cycle on cycle.id=completion.source_cycle_id
+    where completion.completion_kind='NO_SHIFTS_TO_IMPORT'
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'report_key',completed.report_key,'source_group_id',completed.source_group_id,
+    'source_cycle_id',completed.source_cycle_id,'client_id',completed.client_id,
+    'client',client.name,'source',source_group.display_name,'source_family',source_group.source_family,
+    'week_ending',completed.finalisation_week_ending,'period',to_char(completed.finalisation_week_ending,'FMDD Mon YYYY'),
+    'final_revision_id',completed.final_revision_id,'revision_number',completed.revision_number,
+    'revision_state',completed.revision_state,'reason',completed.reason,
+    'report',coalesce(completed.backing_report_number,case when completed.completion_kind='NO_SHIFTS_TO_IMPORT'
+      then 'No shifts to import' else 'Weekly finalisation' end),
+    'finalised_at',to_char(completed.completed_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+    'finalised_at_utc',completed.completed_at,'finalised_by',coalesce(office_user.display_name,'Office'),
+    'completion_kind',completed.completion_kind,'attestation',completed.attestation,
+    'evidence_hash',completed.evidence_hash
+  ) order by completed.completed_at desc,completed.report_key),'[]'::jsonb)
+  into v_reports from completed
+  join public.clients client on client.id=completed.client_id
+  join public.weekly_source_groups source_group on source_group.id=completed.source_group_id
+  left join public.tms_users office_user on office_user.id=completed.actor_id
+  where (v_group is null or completed.source_group_id=v_group)
+    and (v_client is null or completed.client_id=v_client);
+  select coalesce(jsonb_agg(distinct jsonb_build_object('source_group_id',item->>'source_group_id',
+    'source',item->>'source','client_id',item->>'client_id','client',item->>'client',
+    'week_ending',item->>'week_ending','period',item->>'period')),'[]'::jsonb)
+    into v_options from jsonb_array_elements(v_reports) item;
+  v_version:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_REPORT_HISTORY_V1',
+    jsonb_build_object('reports',v_reports,'filter',p_request-'cursor'-'limit')),'hex');
+  if nullif(p_request->>'cursor','') is not null then
+    begin
+      v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
+      v_offset:=(v_cursor->>'offset')::integer;
+      if v_offset is null or v_offset<0 or v_cursor->>'version' is distinct from v_version then raise exception 'stale'; end if;
+    exception when others then raise exception 'WEEKLY_SOURCE_WORKSPACE_CURSOR_STALE' using errcode='40001'; end;
+  end if;
+  if v_key is not null then
+    select item into v_report from jsonb_array_elements(v_reports) item where item->>'report_key'=v_key;
+    if v_report is null then raise exception 'WEEKLY_SOURCE_COMPLETED_REPORT_NOT_FOUND' using errcode='22023'; end if;
+    v_revision:=nullif(v_report->>'final_revision_id','')::uuid;
+    v_client:=(v_report->>'client_id')::uuid;
+    select revision.* into v_final from public.weekly_source_final_revisions revision where revision.id=v_revision;
+    if v_final.state='CURRENT' and exists(select 1 from public.weekly_source_groups source_group
+      join public.weekly_source_group_clients membership on membership.source_group_id=source_group.id
+      where source_group.id=(v_report->>'source_group_id')::uuid and source_group.active
+        and membership.client_id=v_client and (v_report->>'week_ending')::date
+          between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)) then
+      perform private.weekly_source_office_authority_v1(v_actor,'CORRECT_FINAL_SOURCE',
+        (v_report->>'source_group_id')::uuid,v_client,(v_report->>'week_ending')::date);
+      select profile.profile_code into v_profile from public.weekly_source_uploads upload
+        join public.weekly_source_format_profiles profile on profile.id=upload.source_format_profile_id
+        where upload.id=v_final.upload_id;
+      v_actions:=jsonb_build_array(jsonb_build_object('label','Correct final source','enabled',true,
+        'payload',jsonb_build_object('scope_label',v_report->>'client','current_label',v_report->>'report',
+          'correction_payload',jsonb_build_object('source_cycle_id',v_final.source_cycle_id,
+            'authority_scope_kind',v_final.authority_scope_kind,'report_scope_id',v_final.report_scope_id,
+            'expected_current_final_revision_id',v_final.id,
+            'expected_final_manifest_hash',encode(v_final.manifest_hash,'hex'),
+            'idempotency_key','history-correction:'||gen_random_uuid()::text),
+          'replacement_context',jsonb_build_object('source_group_id',v_report->>'source_group_id',
+            'client_id',v_client,'profile_id',v_profile))));
+    end if;
+    with shifts as (
+      select snapshot.id::text row_key,snapshot.candidate_id,snapshot.work_date,
+        snapshot.start_at_local,snapshot.end_at_local,snapshot.break_minutes,snapshot.actual_net_minutes,
+        snapshot.external_event_identity booking_reference
+      from public.weekly_source_final_snapshot_lines snapshot
+      where snapshot.final_revision_id=v_revision and snapshot.client_id=v_client
+      union all
+      select source_row.id::text,movement.candidate_id,source_row.work_date,source_row.start_at_local,
+        source_row.end_at_local,source_row.break_minutes,source_row.actual_net_minutes,source_row.external_source_key
+      from public.weekly_source_billing_movements movement
+      join public.weekly_source_upload_rows source_row on source_row.id=movement.nhsp_upload_row_id
+      where movement.final_revision_id=v_revision and movement.actual_client_id=v_client
+    ), ordered as (
+      select shifts.*,coalesce(candidate.display_name,concat_ws(' ',candidate.first_name,candidate.last_name)) candidate_name,
+        row_number() over(order by private.weekly_source_query_ascii_fold_v1(candidate.last_name),
+          candidate.id,shifts.work_date,shifts.start_at_local,shifts.row_key) ordinal
+      from shifts join public.candidates candidate on candidate.id=shifts.candidate_id
+    )
+    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',row_key,'candidate',candidate_name,
+      'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'start',to_char(start_at_local,'HH24:MI'),
+      'end',to_char(end_at_local,'HH24:MI'),'break_minutes',break_minutes,'net_minutes',actual_net_minutes,
+      'booking_reference',booking_reference) order by ordinal)
+      filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+      into v_shift_count,v_shifts from ordered;
+    with ordered as (
+      select movement.*,coalesce(candidate.display_name,concat_ws(' ',candidate.first_name,candidate.last_name)) candidate_name,
+        event.work_date,row_number() over(order by event.work_date,candidate.last_name,candidate.id,movement.id) ordinal
+      from public.weekly_source_billing_movements movement
+      join public.candidates candidate on candidate.id=movement.candidate_id
+      join public.weekly_work_events event on event.id=movement.work_event_id
+      where movement.final_revision_id=v_revision and movement.actual_client_id=v_client
+    )
+    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',id,'candidate',candidate_name,
+      'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'movement',initcap(replace(movement_role,'_',' ')),
+      'invoice_charge_pence',invoice_presentation_charge_pence) order by ordinal)
+      filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
+      into v_movement_count,v_movements from ordered;
+    select coalesce(sum(invoice_presentation_charge_pence),0) into v_invoice_total
+      from public.weekly_source_billing_movements where final_revision_id=v_revision and actual_client_id=v_client;
+    return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMPLETED_REPORT_V1','report',v_report,
+      'shifts',v_shifts,'shift_count',v_shift_count,'movements',v_movements,'movement_count',v_movement_count,'actions',v_actions,
+      'invoice_charge_pence',v_invoice_total,'has_more',v_offset+v_limit<greatest(v_shift_count,v_movement_count),
+      'next_cursor',case when v_offset+v_limit<greatest(v_shift_count,v_movement_count) then
+        encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
+  end if;
+  with filtered as (
+    select item,private.weekly_source_query_ascii_fold_v1(case v_sort when 'period' then item->>'week_ending'
+      when 'finalised_at' then item->>'finalised_at_utc' else item->>v_sort end) sort_value
+    from jsonb_array_elements(v_reports) item where v_week is null or (item->>'week_ending')::date=v_week
+  ), ordered as (
+    select item,sort_value,row_number() over(order by case when v_direction='asc' then sort_value end collate "C" asc,
+      case when v_direction='desc' then sort_value end collate "C" desc,item->>'report_key') ordinal from filtered
+  ), origin as (select coalesce(min(ordinal) filter(where v_seek<>'' and starts_with(sort_value,v_seek)),1)-1 base from ordered)
+  select count(*)::integer,coalesce(max(origin.base),0)::integer,coalesce(jsonb_agg(item order by ordinal)
+    filter(where ordinal>origin.base+v_offset and ordinal<=origin.base+v_offset+v_limit),'[]'::jsonb)
+    into v_total,v_base,v_page from ordered cross join origin;
+  return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_REPORT_HISTORY_V1','rows',v_page,
+    'scope_options',v_options,'sort_key',v_sort,'sort_direction',v_direction,'total_count',v_total,
+    'has_more',v_base+v_offset+v_limit<v_total,'next_cursor',case when v_base+v_offset+v_limit<v_total then
+      encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
+end;
+$function$;
+alter function public.weekly_source_report_history_v1(jsonb) owner to postgres;
+revoke all on function public.weekly_source_report_history_v1(jsonb) from public,anon,authenticated;
+grant execute on function public.weekly_source_report_history_v1(jsonb) to service_role;
 
 notify pgrst, 'reload schema';
 

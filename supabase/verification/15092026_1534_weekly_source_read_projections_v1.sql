@@ -3976,4 +3976,20 @@ begin
 end;
 $gate9_gate_restored$;
 
+-- The signed route must execute its own read projection, even when no
+-- candidate/source comparison has been published for this fixture.
+do $gate9_signed_import_journey$
+declare v jsonb;
+begin
+  v:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','d1000000-0000-4000-8000-000000000001','tab','imports',
+    'source_group_id','f5000000-0000-4000-8000-000000000002',
+    'source_cycle_id','f6000000-0000-4000-8000-000000000002',
+    'client_id','f2000000-0000-4000-8000-000000000002'));
+  perform pg_temp.assert_true(v#>>'{imports,journey,authority_mode}'='TIMESHEET_AUTHORITY'
+    and v#>>'{imports,journey,waiting_count}'='0',
+    'signed import journey failed to execute its scoped waiting projection');
+end;
+$gate9_signed_import_journey$;
+
 rollback;

@@ -16590,7 +16590,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "1665f74239b583e2be3bca9747e2f89e6d7806b506670884eb908079f3e5f981"
+      "definition_sha256": "07e267aa253e0a3b425e7d127e870b9eaaaaf5c343916363adaa8b79c2b7e9a9"
     },
     {
       "acl": [
@@ -41849,7 +41849,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b0d673d67da4bd7f15bbf4e2ff6bc34877379a1798a1333eaad2193c4656f3ef"
+      "definition_sha256": "81676cfd2151b8a62a641dde41d5db7df4f20cdd9666d5961f64c2c43e0e8201"
     },
     {
       "acl": [
@@ -41873,7 +41873,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "83ed8011bd4b39844e94965643d20f8d158049a6059bd52e4a9e47dd1a37e543"
+      "definition_sha256": "abf0a88faeea70f4384ad244c221d8dee681eeb889ae3303fb0f940d36da92ff"
     },
     {
       "acl": [
@@ -43265,7 +43265,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "c5e75c8d4efc801c03be1085dfa7bad81e758b1baa5b5425f73bc5828fb5246f"
+      "definition_sha256": "bda883e613cbf8a95bb736a6e8d8aebaae2fcfd949122689853afe4876712f43"
     },
     {
       "acl": [
@@ -43626,6 +43626,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "c3a8637898ff4413d8647a782d58ad2bd632d884eba30e46ac4d7d8dd4d6d391"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "weekly_source_report_history_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e30091d8c5c1c3ab8ebc7d878e60e3c4400b47ac1813702d2c9774f79e04f635"
     },
     {
       "acl": [
@@ -44009,7 +44033,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "00fc8fd202bdd592d542ec585e0f16197fcd58dab628f9e3f28ec7a37dad2e70"
+      "definition_sha256": "17ff0765b85920f1ed6994fac1066d8a11dc8b630d903e4c65ebe7fa99903a0e"
     }
   ],
   "triggers": [

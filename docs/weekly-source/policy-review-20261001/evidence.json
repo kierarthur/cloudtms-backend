@@ -1,0 +1,104 @@
+{
+  "policyVersion": "2026-10-01-report-first-review-1",
+  "policySha256": "ae5f6be954ad6cb2ed68f4896b26201dc7fcfd7d6525443ffa351be3e00492ce",
+  "kind": "LOCAL_POLICY_MOCKUPS_NOT_RUNTIME_PROOF",
+  "screens": [
+    {
+      "id": "01-nhsp",
+      "sha256": "48654133ce8b0510ea1fff47c31f563580fb3240f52522f4699ba2da64840539",
+      "desktop": {
+        "width": 1360,
+        "contentWidth": 1360,
+        "rows": [
+          48,
+          48,
+          48,
+          48
+        ]
+      },
+      "narrow": {
+        "width": 760,
+        "contentWidth": 760
+      }
+    },
+    {
+      "id": "02-healthroster",
+      "sha256": "9ded48c75af4a8a5a09debba8af2b630fb95c20e2b432dd13a76f9f128cd5f73",
+      "desktop": {
+        "width": 1360,
+        "contentWidth": 1360,
+        "rows": [
+          48,
+          48,
+          49,
+          37,
+          78,
+          48
+        ]
+      },
+      "narrow": {
+        "width": 760,
+        "contentWidth": 760
+      }
+    },
+    {
+      "id": "03-magnit",
+      "sha256": "7cfa18193a7181c1f975548883f89d1b2c07ea9374b8a199aac4755eda7b0df8",
+      "desktop": {
+        "width": 1360,
+        "contentWidth": 1360,
+        "rows": [
+          48,
+          48,
+          48,
+          48
+        ]
+      },
+      "narrow": {
+        "width": 760,
+        "contentWidth": 760
+      }
+    },
+    {
+      "id": "04-signed-roster",
+      "sha256": "ac1670e52dc84afaba27468c67bf88a485a6892a5c63525c6fa325a0df4e2886",
+      "desktop": {
+        "width": 1360,
+        "contentWidth": 1360,
+        "rows": [
+          48,
+          48,
+          49,
+          48,
+          48
+        ]
+      },
+      "narrow": {
+        "width": 760,
+        "contentWidth": 760
+      }
+    },
+    {
+      "id": "05-query-detail",
+      "sha256": "403f054a8b7066060d8a9677c1bfa3e943f88c55aaea67803aa65f7eb10e2fdc",
+      "desktop": {
+        "width": 1360,
+        "contentWidth": 1360,
+        "rows": [
+          48,
+          49,
+          49,
+          57,
+          37,
+          37,
+          37,
+          48
+        ]
+      },
+      "narrow": {
+        "width": 760,
+        "contentWidth": 760
+      }
+    }
+  ]
+}

@@ -10664,6 +10664,11 @@ function candidateNotificationMessage(eventType, parameters = {}) {
   if (eventType === 'WEEKLY_SOURCE_REQUEST'
       || eventType === 'WEEKLY_SOURCE_REMINDER') {
     const requestKind = upper(parameters?.request_kind);
+    if (requestKind === 'CHECK_HOURS') {
+      return eventType === 'WEEKLY_SOURCE_REMINDER'
+        ? 'Please check your hours against the client’s hours. Your response is still needed.'
+        : 'Please check your hours against the client’s hours and confirm which are correct.';
+    }
     if (requestKind === 'SUBMIT_TIMESHEET') {
       const count = Number(parameters?.timesheet_count);
       const clientName = text(parameters?.client_name)

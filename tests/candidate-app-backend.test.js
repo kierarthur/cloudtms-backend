@@ -1385,6 +1385,24 @@ test('Weekly Source submission notifications preserve the public request deep li
   });
 });
 
+test('Weekly Source hours-check notifications describe the exact request without exposing private parameters', () => {
+  const requestId = '00000000-0000-4000-8000-000000000069';
+  for (const event_type of ['WEEKLY_SOURCE_REQUEST', 'WEEKLY_SOURCE_REMINDER']) {
+    const notification = safeCandidateNotification({
+      id: '00000000-0000-4000-8000-000000000068', event_type,
+      template_key: 'weekly-source-check-hours-v1',
+      template_params: { request_id: requestId, request_kind: 'CHECK_HOURS', provider_detail: 'must not return' },
+      deep_link_json: { destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId },
+      state: 'UNREAD', created_at_utc: '2026-10-01T18:09:10.000Z'
+    });
+    assert.equal(notification.payload_json.message, event_type === 'WEEKLY_SOURCE_REMINDER'
+      ? 'Please check your hours against the client’s hours. Your response is still needed.'
+      : 'Please check your hours against the client’s hours and confirm which are correct.');
+    assert.deepEqual(notification.deep_link_json, { destination: 'WEEKLY_SOURCE_REQUEST', request_id: requestId });
+    assert.equal(JSON.stringify(notification).includes('provider_detail'), false);
+  }
+});
+
 test('linked expense cancellation notification explains the reject-before-delete cause', () => {
   const workflowId = '00000000-0000-4000-8000-000000000072';
   const notification = safeCandidateNotification({

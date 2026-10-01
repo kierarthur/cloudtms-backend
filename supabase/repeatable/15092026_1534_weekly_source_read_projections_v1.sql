@@ -298,7 +298,13 @@ as $function$
       comparison.candidate_start_at_local,comparison.candidate_end_at_local,
       comparison.candidate_break_minutes,comparison.system_start_at_local,
       comparison.system_end_at_local,comparison.system_break_minutes,
-      work_event.work_date,contract.role job_role,route_context.value route_context
+      work_event.work_date,contract.role job_role,route_context.value route_context,
+      candidate_reply.bounded_payload_json->>'choice' candidate_reply_choice,
+      candidate_reply.occurred_at_utc candidate_replied_at,
+      manager_reply.bounded_payload_json->>'response_kind' manager_reply_kind,
+      manager_reply.occurred_at_utc manager_replied_at,
+      manager_item.intended_start_at_local,manager_item.intended_end_at_local,
+      manager_item.intended_break_minutes
     from cycle_context
     join public.weekly_discrepancy_incidents incident
       on incident.source_cycle_id=cycle_context.id and incident.state='OPEN'
@@ -308,6 +314,28 @@ as $function$
       on comparison_upload.id=comparison.comparison_upload_id
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     left join public.contracts contract on contract.id=comparison.contract_id
+    -- Replies belong to the current incident episode. A prior question's answer
+    -- must never be presented as the answer to materially changed hours.
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='CANDIDATE_RESPONDED'
+        and incident.candidate_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) candidate_reply on true
+    left join lateral (
+      select event.bounded_payload_json,event.occurred_at_utc
+      from public.weekly_discrepancy_events event
+      where event.incident_id=incident.id and event.issue_episode=incident.episode_number
+        and event.event_kind='MANAGER_RESPONDED'
+        and incident.manager_action_state='RESPONDED'
+      order by event.occurred_at_utc desc,event.id desc limit 1
+    ) manager_reply on true
+    left join public.weekly_manager_review_items manager_item
+      on manager_item.id=nullif(manager_reply.bounded_payload_json->>'review_item_id','')::uuid
+      and manager_item.incident_id=incident.id
+      and manager_item.incident_episode=incident.episode_number
     cross join lateral (
       select private.weekly_source_office_route_key_v1(
         incident.source_cycle_id,incident.candidate_id,incident.client_id,
@@ -423,6 +451,21 @@ as $function$
         and incident_facts.manager_action_state not in ('RESPONDED','NOT_REQUIRED')) manager_eligible,
       pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
         'incident_id',incident_facts.incident_id,
+        'candidate_response',case incident_facts.candidate_reply_choice
+          when 'CANDIDATE_CORRECT' then 'My hours are correct'
+          when 'CANDIDATE_WRONG' then 'Accepted system hours'
+          when 'NEITHER_CORRECT' then 'Submitted corrected hours'
+          else null end,
+        'candidate_responded_at',to_char(incident_facts.candidate_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_response',case incident_facts.manager_reply_kind
+          when 'SYSTEM_CORRECT' then 'System hours are correct'
+          when 'CANDIDATE_DID_NOT_WORK' then 'Candidate did not work'
+          when 'MANAGER_CORRECTED_SOURCE' then 'Reported a source correction'
+          else null end,
+        'manager_responded_at',to_char(incident_facts.manager_replied_at at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+        'manager_intended_hours',case when incident_facts.manager_reply_kind='MANAGER_CORRECTED_SOURCE'
+          then to_char(incident_facts.intended_start_at_local,'HH24:MI')||'-'||to_char(incident_facts.intended_end_at_local,'HH24:MI')
+            ||' ('||incident_facts.intended_break_minutes||' min break)' else null end,
         'protected_pay_seed',case when incident_facts.route_context->>'authority_mode'='SOURCE_AUTHORITY'
           then pg_catalog.jsonb_build_object('source_group_id',incident_facts.source_group_id,
             'client_id',incident_facts.client_id,'candidate_id',incident_facts.candidate_id,
@@ -663,6 +706,9 @@ declare
   v_document_mode text:='CHECK_ONLY';
   v_import_journey jsonb:='{}'::jsonb;
   v_import_attention_rows jsonb:='[]'::jsonb;
+  v_import_waiting_rows jsonb:='[]'::jsonb;
+  v_import_ready_rows jsonb:='[]'::jsonb;
+  v_mode_a_import_id uuid;
   v_context_client_name text;
   v_context_cutoff timestamptz;
   v_nhsp_report_number text;
@@ -1168,6 +1214,76 @@ begin
   end if;
 
   if v_authority_mode='TIMESHEET_AUTHORITY' and v_publication_id is not null then
+    -- The established import-review owns the manager correction email.  Give
+    -- Office its exact per-client review rather than reopening the upload hub.
+    select mode_a_import.id into v_mode_a_import_id
+    from public.hr_imports mode_a_import
+    where mode_a_import.coverage_operation_key=
+      private.weekly_source_mode_a_operation_key_v1(v_publication_id,v_client_id);
+
+    -- Resolved source work may arrive before the candidate and manager have
+    -- completed their Timesheet. Keep that work visible without treating it
+    -- as a comparison, an Office authorisation, or source finalisation.
+    select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'row_key','authority-waiting-'||waiting.contract_id::text,
+      'candidate',waiting.candidate_name,
+      'day_date','Week ending '||to_char(v_cycle.finalisation_week_ending,'FMDD Mon YYYY'),
+      'attention','Timesheet not yet completed',
+      'reference','Not added',
+      'timesheet_id',waiting.timesheet_id,
+      'status',pg_catalog.jsonb_build_object('text','Waiting for completed Timesheet','tone','neutral'),
+      'actions',case when waiting.timesheet_id is null then '[]'::jsonb
+        else pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+          'label','View Timesheet','enabled',true,
+          'payload',pg_catalog.jsonb_build_object('timesheet_id',waiting.timesheet_id))) end
+    ) order by private.weekly_source_query_ascii_fold_v1(waiting.candidate_name) collate "C",
+      waiting.contract_id),'[]'::jsonb) into v_import_waiting_rows
+    from (
+      select distinct on (resolution.contract_id) resolution.contract_id,
+        coalesce(candidate.display_name,candidate.tms_ref,'Candidate') candidate_name,
+        current_timesheet.timesheet_id
+      from public.weekly_source_row_resolutions resolution
+      join public.weekly_source_upload_rows source_row on source_row.id=resolution.upload_row_id
+        and source_row.upload_id=v_upload.id
+      join public.candidates candidate on candidate.id=resolution.candidate_id
+      left join lateral (
+        select timesheet_row.timesheet_id
+        from public.timesheets timesheet_row
+        where timesheet_row.contract_id=resolution.contract_id
+          and timesheet_row.week_ending_date=v_cycle.finalisation_week_ending
+          and timesheet_row.is_current
+          and timesheet_row.revoked_at is null
+        order by timesheet_row.version desc,timesheet_row.timesheet_id limit 1
+      ) current_timesheet on true
+      left join lateral (
+        select workflow.id,workflow.state,workflow.candidate_signed_at_utc,
+          workflow.manager_approved_at_utc,workflow.candidate_signature_component_id,
+          workflow.manager_signature_component_id
+        from public.candidate_submission_workflows workflow
+        where workflow.contract_id=resolution.contract_id
+          and workflow.week_ending_date=v_cycle.finalisation_week_ending
+          and workflow.scope='WEEKLY'
+          and workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')
+        order by workflow.updated_at_utc desc,workflow.id desc limit 1
+      ) current_workflow on true
+      where resolution.generation=coalesce(
+          v_publication.projection_generation,v_publication.authority_scope_version::integer)
+        and resolution.client_id=v_client_id
+        and resolution.mapping_state='RESOLVED'
+        and resolution.work_event_id is not null
+        and exists(select 1 from public.weekly_timesheet_authority_resolutions authority
+          where authority.source_cycle_id=v_cycle.id
+            and authority.contract_id=resolution.contract_id
+            and authority.work_date=source_row.work_date)
+        and (current_timesheet.timesheet_id is null
+          or (current_workflow.id is not null and not (
+            current_workflow.state='FINALISED'
+            and current_workflow.candidate_signed_at_utc is not null
+            and current_workflow.manager_approved_at_utc is not null
+            and current_workflow.candidate_signature_component_id is not null
+            and current_workflow.manager_signature_component_id is not null)))
+      order by resolution.contract_id,source_row.work_date,resolution.id
+    ) waiting;
     select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'row_key','authority-'||comparison.id::text,
       'candidate',coalesce(candidate.display_name,candidate.tms_ref,'Candidate'),
@@ -1187,18 +1303,67 @@ begin
       'actions',pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object('label','View Timesheet','enabled',true,
           'payload',pg_catalog.jsonb_build_object('timesheet_id',comparison.timesheet_id)),
-        pg_catalog.jsonb_build_object('label','Email manager','enabled',true,
+        pg_catalog.jsonb_build_object('label','Email manager','enabled',v_mode_a_import_id is not null,
           'payload',pg_catalog.jsonb_build_object('timesheet_id',comparison.timesheet_id,
-            'comparison_id',comparison.id)))
+            'comparison_id',comparison.id,'import_id',v_mode_a_import_id)))
     ) order by private.weekly_source_query_ascii_fold_v1(coalesce(candidate.display_name,candidate.tms_ref,'')) collate "C",
       comparison.work_date,comparison.id),'[]'::jsonb)
     into v_import_attention_rows
     from public.weekly_timesheet_source_comparisons comparison
     join public.timesheets timesheet_row on timesheet_row.timesheet_id=comparison.timesheet_id
       and timesheet_row.is_current
-    left join public.candidates candidate on candidate.id=timesheet_row.candidate_id
+    join public.contracts contract on contract.id=timesheet_row.contract_id
+    left join public.candidates candidate on candidate.id=contract.candidate_id
     where comparison.projection_publication_id=v_publication_id
-      and comparison.comparison_state<>'EXACT_MATCH';
+      and comparison.comparison_state<>'EXACT_MATCH'
+      and not exists(select 1 from pg_catalog.jsonb_array_elements(v_import_waiting_rows) waiting
+        where waiting->>'timesheet_id'=comparison.timesheet_id::text);
+
+    -- Ready is a Timesheet-authority handoff, never a source-finalisation
+    -- queue.  The established reference owner must already have applied the
+    -- complete matching Timesheet, and an Office-authorised head no longer
+    -- needs this action list.
+    select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'row_key','authority-ready-'||ready.timesheet_id::text,
+      'candidate',ready.candidate_name,
+      'day_date',to_char(ready.work_date,'Dy FMDD Mon YYYY'),
+      'attention','Source reference added',
+      'reference',ready.source_reference_number,
+      'status',pg_catalog.jsonb_build_object('text','Ready for Office authorisation','tone','positive'),
+      'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'label','View Timesheet','enabled',true,
+        'payload',pg_catalog.jsonb_build_object('timesheet_id',ready.timesheet_id)))
+    ) order by private.weekly_source_query_ascii_fold_v1(
+        ready.candidate_name) collate "C",ready.work_date,ready.timesheet_id),'[]'::jsonb)
+      into v_import_ready_rows
+    from (
+      select timesheet_row.timesheet_id,
+        coalesce(candidate.display_name,candidate.tms_ref,'Candidate') as candidate_name,
+        pg_catalog.min(comparison.work_date) as work_date,
+        pg_catalog.min(comparison.source_reference_number) as source_reference_number
+      from public.weekly_timesheet_source_comparisons comparison
+      join public.timesheets timesheet_row on timesheet_row.timesheet_id=comparison.timesheet_id
+        and timesheet_row.is_current and timesheet_row.authorised_at_server is null
+      join public.contracts contract on contract.id=timesheet_row.contract_id
+      left join public.candidates candidate on candidate.id=contract.candidate_id
+      where comparison.projection_publication_id=v_publication_id
+        and comparison.comparison_state='EXACT_MATCH'
+        and not exists(select 1 from pg_catalog.jsonb_array_elements(v_import_waiting_rows) waiting
+          where waiting->>'timesheet_id'=comparison.timesheet_id::text)
+        and not exists (
+          select 1 from public.weekly_timesheet_source_comparisons other
+          where other.projection_publication_id=v_publication_id
+            and other.timesheet_id=comparison.timesheet_id
+            and other.comparison_state<>'EXACT_MATCH'
+        )
+        and exists (
+          select 1 from public.weekly_timesheet_reference_apply_operations operation
+          where operation.projection_publication_id=v_publication_id
+            and operation.timesheet_id=comparison.timesheet_id
+            and operation.state='APPLIED'
+        )
+      group by timesheet_row.timesheet_id,candidate.display_name,candidate.tms_ref
+    ) ready;
   end if;
 
   v_import_journey:=pg_catalog.jsonb_build_object(
@@ -1209,8 +1374,13 @@ begin
     'body',case when v_authority_mode='TIMESHEET_AUTHORITY'
       then 'Timesheet hours are used. The client system is checked so matching references can be added.'
       else 'Client system hours are used after the source is finalised.' end,
+    'import_id',v_mode_a_import_id,
+    'waiting_rows',v_import_waiting_rows,
+    'waiting_count',pg_catalog.jsonb_array_length(v_import_waiting_rows),
     'attention_rows',v_import_attention_rows,
-    'attention_count',pg_catalog.jsonb_array_length(v_import_attention_rows)
+    'attention_count',pg_catalog.jsonb_array_length(v_import_attention_rows),
+    'ready_rows',v_import_ready_rows,
+    'ready_count',pg_catalog.jsonb_array_length(v_import_ready_rows)
   );
   v_imports:=v_imports||pg_catalog.jsonb_build_object('journey',v_import_journey);
 
