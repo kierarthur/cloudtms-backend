@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { validateConnectionProof, selectDispatchedRun } from './automatic-test-release-policy.mjs';
+import { validateConnectionProof, selectDispatchedRun, classifyApplicationPaths, publicationStages } from './automatic-test-release-policy.mjs';
 const root=process.cwd();
 const options=Object.fromEntries(process.argv.slice(2).map(s=>{const m=s.match(/^--(office-path|connections-proof)=(.+)$/);if(!m)throw new Error('Only --office-path and --connections-proof are accepted');return [m[1],m[2]];}));
 const gh=process.env.GH_BIN||'gh';
@@ -28,14 +28,16 @@ try {
   const proof=JSON.parse(fs.readFileSync(options['connections-proof']||'', 'utf8'));
   const targets=[
     ['backend','test-cloudtms-backend','deploy/cloudflare/test-cloudtms-backend',['broker','shared','package.json','package-lock.json','wrangler.toml']],
-    ['candidate-private','test-cloudtms-candidate-private-api','deploy/cloudflare/test-candidate-private-api',['candidate-private-api','shared','package.json','package-lock.json']],
-    ['candidate-synthetic','test-cloudtms-candidate-synthetic-private-api','deploy/cloudflare/test-candidate-synthetic-private-api',['candidate-synthetic-private-api','shared','package.json','package-lock.json']],
-    ['candidate-broker','test-cloudtms-candidate-broker','deploy/cloudflare/test-candidate-broker',['candidate-broker','shared','package.json','package-lock.json']],
+    ['candidate-private','test-cloudtms-candidate-private-api','deploy/cloudflare/test-candidate-private-api',['candidate-private-api','broker','shared','package.json','package-lock.json']],
+    ['candidate-synthetic','test-cloudtms-candidate-synthetic-private-api','deploy/cloudflare/test-candidate-synthetic-private-api',['candidate-synthetic-private-api','broker','shared','package.json','package-lock.json']],
+    ['candidate-broker','test-cloudtms-candidate-broker','deploy/cloudflare/test-candidate-broker',['candidate-broker','broker','shared','package.json','package-lock.json']],
   ];
   validateConnectionProof(proof,sha,targets);
   for(const [,worker,branch] of targets){
     const branchCommit=git(['ls-remote','origin',`refs/heads/${branch}`]).split(/\s/)[0];
     if(branchCommit!==proof.workers.find(x=>x.worker===worker).branchCommit)throw new Error(`Release branch differs from inspected evidence: ${worker}; reconcile before dispatch`);
+    git(['fetch','--no-tags','origin',branch]);
+    if(worker==='test-cloudtms-backend')publicationStages(classifyApplicationPaths(git(['diff','--name-only',branchCommit,sha]).split(/\r?\n/).filter(Boolean)));
   }
   // Capture Office identity before any deployment, not a moving HEAD later.
   let office;
@@ -47,9 +49,12 @@ try {
   }
   receipt.status='DATABASE';save();
   const since=new Date().toISOString();
-  execFileSync(gh,['workflow','run','database-release.yml','--repo','kierarthur/cloudtms-backend','--ref','test','-f','environment=TEST','-f','mode=UPGRADE','-f','phase=AUTO'],{stdio:'inherit'});
+  const dispatched=execFileSync(gh,['workflow','run','database-release.yml','--repo','kierarthur/cloudtms-backend','--ref','test','-f','environment=TEST','-f','mode=UPGRADE','-f','phase=AUTO'],{encoding:'utf8'}).trim();
+  const dispatchedId=dispatched.match(/https:\/\/github\.com\/kierarthur\/cloudtms-backend\/actions\/runs\/(\d+)/)?.[1];
+  if(dispatchedId){receipt.databaseRunId=Number(dispatchedId);receipt.databaseRunUrl=`https://github.com/kierarthur/cloudtms-backend/actions/runs/${dispatchedId}`;save();}
   const run=await waitFor('Protected TEST database release',()=>{
-    const selected=selectDispatchedRun(api(`repos/kierarthur/cloudtms-backend/actions/workflows/database-release.yml/runs?head_sha=${sha}&event=workflow_dispatch&per_page=20`).workflow_runs,sha,since,receipt.databaseRunId);
+    const selected=receipt.databaseRunId?api(`repos/kierarthur/cloudtms-backend/actions/runs/${receipt.databaseRunId}`):selectDispatchedRun(api(`repos/kierarthur/cloudtms-backend/actions/workflows/database-release.yml/runs?head_sha=${sha}&event=workflow_dispatch&per_page=20`).workflow_runs,sha,since);
+    if(selected&&(selected.head_sha!==sha||selected.event!=='workflow_dispatch'))throw new Error('Dispatched workflow source differs from reviewed commit; applications held');
     if(selected&&!receipt.databaseRunId){receipt.databaseRunId=selected.id;receipt.databaseRunUrl=selected.html_url;save();}
     return selected;
   },r=>r?.status==='completed'&&r.conclusion==='success',r=>r?.status==='completed'&&r.conclusion!=='success',120);

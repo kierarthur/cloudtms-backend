@@ -51,7 +51,7 @@ export function classifyApplicationPaths(paths) {
   const result = { backend: false, candidatePrivate: false, candidateSynthetic: false,
     candidateBroker: false, office: false, mobileNative: false, unknown: [] };
   for (const p of paths) {
-    if (/^(docs\/|tests\/|AGENTS\.md$)/.test(p)) continue;
+    if (/^(docs\/|tests\/|codex_outputs\/|AGENTS\.md$)/.test(p)) continue;
     if (/^(broker\/|shared\/|package(?:-lock)?\.json$|wrangler\.)/.test(p)) result.backend = true;
     else if (p.startsWith('candidate-private-api/')) result.candidatePrivate = true;
     else if (p.startsWith('candidate-synthetic-private-api/')) result.candidateSynthetic = true;
