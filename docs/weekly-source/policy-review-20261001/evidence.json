@@ -1,16 +1,16 @@
 {
-  "policyVersion": "2026-10-01-report-first-review-1",
-  "policySha256": "ae5f6be954ad6cb2ed68f4896b26201dc7fcfd7d6525443ffa351be3e00492ce",
+  "policyVersion": "2026-10-02-report-first-review-2",
+  "policySha256": "3214743fa58008c2b29fe13ce1822dee01254c01155ba4e876cae145a854ddae",
   "kind": "LOCAL_POLICY_MOCKUPS_NOT_RUNTIME_PROOF",
   "screens": [
     {
       "id": "01-nhsp",
-      "sha256": "48654133ce8b0510ea1fff47c31f563580fb3240f52522f4699ba2da64840539",
+      "sha256": "75271bbb86978aa03b151fe1e9117746e99d320a85b8de310e1a956531f0b12f",
       "desktop": {
         "width": 1360,
         "contentWidth": 1360,
         "rows": [
-          48,
+          37,
           48,
           48,
           48
@@ -23,12 +23,12 @@
     },
     {
       "id": "02-healthroster",
-      "sha256": "9ded48c75af4a8a5a09debba8af2b630fb95c20e2b432dd13a76f9f128cd5f73",
+      "sha256": "ba8d1fab66d915417a4d451695a2badaec7d9cee638560a19cdd2fdb339ef558",
       "desktop": {
         "width": 1360,
         "contentWidth": 1360,
         "rows": [
-          48,
+          37,
           48,
           49,
           37,
@@ -43,12 +43,12 @@
     },
     {
       "id": "03-magnit",
-      "sha256": "7cfa18193a7181c1f975548883f89d1b2c07ea9374b8a199aac4755eda7b0df8",
+      "sha256": "83d0e951b1890f9b19e5e7d8354878ce65f006c5097d618c1f15471382668953",
       "desktop": {
         "width": 1360,
         "contentWidth": 1360,
         "rows": [
-          48,
+          37,
           48,
           48,
           48
@@ -61,7 +61,7 @@
     },
     {
       "id": "04-signed-roster",
-      "sha256": "ac1670e52dc84afaba27468c67bf88a485a6892a5c63525c6fa325a0df4e2886",
+      "sha256": "88e920dc6769cf1f67c28291ddabda909f2fb5cb10d5147d69cc8aa27fd555f5",
       "desktop": {
         "width": 1360,
         "contentWidth": 1360,
@@ -80,17 +80,17 @@
     },
     {
       "id": "05-query-detail",
-      "sha256": "403f054a8b7066060d8a9677c1bfa3e943f88c55aaea67803aa65f7eb10e2fdc",
+      "sha256": "604deee3c62177bf220d5630b7f6fac93bf5018407ff56c43dca51d5ff5e8e14",
       "desktop": {
         "width": 1360,
         "contentWidth": 1360,
         "rows": [
-          48,
+          57,
           49,
-          49,
+          58,
           57,
           37,
-          37,
+          58,
           37,
           48
         ]

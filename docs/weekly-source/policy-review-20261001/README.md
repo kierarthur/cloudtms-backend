@@ -2,6 +2,8 @@
 
 Status: approved for implementation by the user, 1 October 2026. Implementation and verification are in progress; the mockups are not deployment evidence. Examples are illustrative, not TEST observations. This direction replaces the earlier file-history and Complete-tab proposals.
 
+The controlling 2 October decisions in `../WEEKLY_SOURCE_QUERY_FINALISATION_DECISIONS_20261002.md` supersede any conflicting wording here or in the illustrative journeys, especially manager/candidate disagreement, manual send-back, the first-authorisation gate, report selection and contextual protected pay.
+
 Latest approval clarifications: tabs are the single navigation entry to each section; remove duplicate Review queries / Review checks / Manage questions routes. Open remains for a specific record's details. Source removals and their consequences are identified automatically and disclosed in the finalisation review for Office confirmation, not left for manual calculation or manual reversal. Magnit uses the same settings-governed automatic contact policy, without deriving authority or timing from the brand name. MyTMS must retain the exact notification destination through authentication, open the hours question without an alerts-list detour, and show meaningful request-specific copy. Broken loading screens, dropdown behaviour, disabled-tab behaviour and duration-only source acceptance are included in this implementation, not deferred as cosmetic work.
 
 ## Authority and precedence

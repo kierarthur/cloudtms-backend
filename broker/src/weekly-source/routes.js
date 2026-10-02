@@ -20,6 +20,8 @@ const DIRECT_RPC_COMMANDS = Object.freeze({
   COMBINED_REVIEW_WORKSPACE: 'weekly_source_combined_review_workspace_v1',
   UPLOAD_DETAIL: 'weekly_source_upload_detail_v1',
   PROTECTED_EDITOR_CONTEXT: 'weekly_source_protected_editor_context_v1',
+  OPEN_MANUAL_REVIEW: 'weekly_source_manual_review_open_v1',
+  RESOLVE_MANUAL_REVIEW: 'weekly_source_manual_review_resolve_v1',
   PREPARE_PROTECTED_EDITOR: 'weekly_source_protected_editor_prepare_v1',
   QUERY_SYNC: 'weekly_source_query_sync_atomic_v1',
   PREPARE_FINALISATION: 'weekly_source_import_prepare_atomic_v1',

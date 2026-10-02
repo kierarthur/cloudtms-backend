@@ -647,6 +647,11 @@ begin
   );
   v_result:=public.weekly_source_manager_review_respond_atomic_v1(v_manager_response);
   perform pg_temp.assert_true((v_result->>'answered_count')::integer=1,'manager response not accepted');
+  perform pg_temp.assert_true(exists(select 1 from public.weekly_discrepancy_incidents
+    where id=(v_candidate_page->'items'->0->>'incident_id')::uuid
+      and state='OPEN' and reconciliation_state='UNRESOLVED'
+      and manager_action_state='RESPONDED'),
+    'candidate/manager disagreement closed the first-authorisation query');
   perform pg_temp.assert_true(exists(select 1 from public.office_action_notifications
     where issue_id=(v_candidate_page->'items'->0->>'incident_id')::uuid
       and event_kind='WEEKLY_MANAGER_SYSTEM_CONFIRMED'),
@@ -2574,6 +2579,62 @@ select pg_temp.assert_true(
   ) like '%WEEKLY_SOURCE_PER_TARGET_DISPATCH_REQUIRED%'
   ,'manager target-delivery claim contract was overwritten'
 );
+
+-- Office may reopen one existing imported identity without making a second
+-- payable shift. The same rollback fixture proves the two explicit exits.
+do $manual_review$
+declare
+  v_open jsonb;
+  v_resolved jsonb;
+  v_review uuid;
+begin
+  v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_row_id','fc000000-0000-4000-8000-000000000001',
+    'reason','Office needs to check the candidate pay decision'));
+  v_review:=(v_open->>'review_id')::uuid;
+  perform pg_temp.assert_true((v_open->>'ok')::boolean and v_review is not null
+    and (select state='OPEN' and work_event_id='f9000000-0000-4000-8000-000000000001'
+      from private.weekly_source_manual_reviews where id=v_review),
+    'manual review did not open against the existing work identity');
+  v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_row_id','fc000000-0000-4000-8000-000000000001',
+    'reason','Same review again'));
+  perform pg_temp.assert_true((v_open->>'already_open')::boolean
+    and (v_open->>'review_id')::uuid=v_review,
+    'manual review open was not idempotent for the existing shift');
+  -- The shift is older than this report's cutoff. Office membership is
+  -- checked at the report period, never mistakenly at the shift's work date.
+  update public.weekly_source_group_clients
+    set valid_from='2026-09-10'
+    where source_group_id='f5000000-0000-4000-8000-000000000001'
+      and client_id='f2000000-0000-4000-8000-000000000001';
+  v_resolved:=public.weekly_source_manual_review_resolve_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'review_id',v_review,'resolution_kind','OFFICE_ACCEPTED_SOURCE',
+    'expected_current_row_hash',repeat('bd',32)));
+  perform pg_temp.assert_true((v_resolved->>'ok')::boolean
+    and (select state='RESOLVED' and resolution_kind='OFFICE_ACCEPTED_SOURCE'
+      from private.weekly_source_manual_reviews where id=v_review),
+    'manual review did not resolve against the current source hash');
+  update public.weekly_source_group_clients
+    set valid_from='2026-01-01'
+    where source_group_id='f5000000-0000-4000-8000-000000000001'
+      and client_id='f2000000-0000-4000-8000-000000000001';
+  v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_row_id','fc000000-0000-4000-8000-000000000001',
+    'reason','Office is reconsidering protected pay'));
+  perform pg_temp.assert_true((v_open->>'ok')::boolean
+    and (v_open->>'already_open')::boolean is false
+    and (v_open->>'review_id')::uuid<>v_review
+    and (select count(*) from private.weekly_source_manual_reviews
+      where work_event_id='f9000000-0000-4000-8000-000000000001'
+        and state='OPEN')=1,
+    'Office cannot reopen the same imported shift after accepting source hours');
+end;
+$manual_review$;
 
 select 'weekly_source_query_delivery_v1: rollback verification passed' as result;
 

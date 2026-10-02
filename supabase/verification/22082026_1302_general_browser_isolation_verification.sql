@@ -432,8 +432,12 @@ begin
   -- 360def3739f536af43bfd598cf033e63. Excluding only that new signature
   -- reproduces the prior 802 / 76 / 0 /
   -- 8bff6786009ac9a493eee90f6ce92574 exactly.
-  if v_count<>803 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'360def3739f536af43bfd598cf033e63' then
+  -- The Office manual-review owner adds exactly two service-only jsonb RPCs.
+  -- The local PostgreSQL 17 NEW census measured 805 / 76 / 0 /
+  -- c3f1cdbb73eeca1e6bfe78428df7da14. Both signatures are also in the
+  -- independent Weekly Source ACL allowlist; no browser role can execute them.
+  if v_count<>805 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'c3f1cdbb73eeca1e6bfe78428df7da14' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

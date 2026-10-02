@@ -1178,7 +1178,19 @@ begin
         'review_item_id',v_item.id
       ),'MANAGER_RESPONSE:'||v_request_key::text||':'||v_item.id::text
     ) returning id into v_event_id;
-    if v_kind in ('SYSTEM_CORRECT','CANDIDATE_DID_NOT_WORK') then
+    -- A manager saying the source is right does not settle a candidate's
+    -- explicit assertion that their own hours are right. Keep the ordinary
+    -- open-incident authorisation hold until Office accepts current source
+    -- hours or protects pay for this existing work identity.
+    if v_kind in ('SYSTEM_CORRECT','CANDIDATE_DID_NOT_WORK')
+       and not (v_kind='SYSTEM_CORRECT' and v_incident.candidate_action_state='RESPONDED'
+         and exists (
+           select 1 from public.weekly_discrepancy_events candidate_answer
+           where candidate_answer.incident_id=v_incident.id
+             and candidate_answer.issue_episode=v_incident.episode_number
+             and candidate_answer.event_kind='CANDIDATE_RESPONDED'
+             and candidate_answer.bounded_payload_json->>'choice'='CANDIDATE_CORRECT'
+         )) then
       update public.weekly_discrepancy_incidents
       set state='RESOLVED',reconciliation_state='RECONCILED',
           candidate_action_state=case when candidate_action_state='NOT_ASKED' then 'NOT_REQUIRED' else candidate_action_state end,
@@ -1197,10 +1209,15 @@ begin
         pg_catalog.jsonb_build_object('resolution','MANAGER_CONFIRMED_SYSTEM_HOURS'),
         'MANAGER_CONFIRMED:'||v_event_id::text
       );
-    else
+    elsif v_kind='MANAGER_CORRECTED_SOURCE' then
       update public.weekly_discrepancy_incidents
       set reconciliation_state='WAITING_FOR_SOURCE',manager_action_state='RESPONDED',
           waiting_source_state='WAITING_REIMPORT'
+      where id=v_incident.id;
+    else
+      update public.weekly_discrepancy_incidents
+      set reconciliation_state='UNRESOLVED',manager_action_state='RESPONDED',
+          waiting_source_state='NOT_WAITING'
       where id=v_incident.id;
     end if;
     select * into strict v_client from public.clients where id=v_incident.client_id;

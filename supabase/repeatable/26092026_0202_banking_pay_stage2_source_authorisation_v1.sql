@@ -1506,6 +1506,52 @@ begin
       'retryable',false,'timesheet_id',p_timesheet_id);
   end if;
 
+  -- The Office projection has always described this as a first-authorisation
+  -- hold. Enforce it in the command while the canonical family locks are held,
+  -- using the Timesheet's work week rather than the source cutoff period.
+  select * into v_root from public.timesheets where timesheet_id=p_timesheet_id;
+  if not found then
+    return pg_catalog.jsonb_build_object('ok',false,
+      'code','WEEKLY_SOURCE_FIRST_AUTHORISE_TIMESHEET_MISSING','retryable',false);
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'WEEKLY_SOURCE_QUERY_FAMILY:'||v_root.contract_id::text||':'||v_root.week_ending_date::text,0));
+  if exists (
+    select 1 from private.weekly_source_manual_reviews manual_review
+    where manual_review.contract_id=v_root.contract_id
+      and manual_review.work_date between v_root.week_ending_date-6 and v_root.week_ending_date
+      and manual_review.state='OPEN'
+  ) then
+    return pg_catalog.jsonb_build_object('ok',false,
+      'code','WEEKLY_SOURCE_FIRST_AUTHORISE_QUERY_OPEN','retryable',false,
+      'reason','RESOLVE_MANUAL_QUERY');
+  end if;
+  if exists (
+    select 1 from public.weekly_discrepancy_incidents incident
+    join public.weekly_issue_comparison_revisions comparison
+      on comparison.id=incident.current_comparison_revision_id
+    join public.weekly_work_events work_event on work_event.id=incident.work_event_id
+    where incident.state='OPEN'
+      and comparison.contract_id=v_root.contract_id
+      and work_event.work_date between v_root.week_ending_date-6 and v_root.week_ending_date
+      and not exists (
+        select 1 from public.weekly_exceptional_pay_family_events protected_event
+        join public.weekly_exceptional_pay_target_families protected_family
+          on protected_family.id=protected_event.family_id
+        where protected_family.root_family_booking_id=v_root.booking_id
+          and protected_event.durable_work_event_id=incident.work_event_id
+          and protected_event.state='WAIT'
+          and protected_event.event_sequence=(
+            select max(latest.event_sequence)
+            from public.weekly_exceptional_pay_family_events latest
+            where latest.family_id=protected_event.family_id
+              and latest.durable_work_event_id=protected_event.durable_work_event_id))
+  ) then
+    return pg_catalog.jsonb_build_object('ok',false,
+      'code','WEEKLY_SOURCE_FIRST_AUTHORISE_QUERY_OPEN','retryable',false,
+      'reason','RESOLVE_OPEN_HOURS_QUERY');
+  end if;
+
   -- The UNCHANGED ordinary Authorise owner, exactly once, through its current
   -- contract.  No timestamp is passed: the owner keeps its own default.
   v_evidence_reference:=private.bpay_protected_reference_for_root_v1(p_timesheet_id);

@@ -35,7 +35,7 @@
   ],
   "intendedHoursFields": ["Start", "Finish", "Break"],
   "managerResponseEffects": {
-    "SYSTEM_CORRECT": "resolve the candidate-versus-system hours query only; never mutate source, invoice or pay",
+    "SYSTEM_CORRECT": "resolve the candidate-versus-system hours query only if the candidate has not explicitly maintained that their own hours are correct; if candidate and manager disagree, retain the ordinary open-query hold and require Office to speak to the candidate and explicitly accept current source hours or protect pay; never mutate source, invoice or pay from the manager reply alone",
     "CANDIDATE_DID_NOT_WORK": "resolve the candidate-versus-system no-work query only; never mutate source, invoice or pay; if protected pay exists leave a payment-authoriser-only Office task open",
     "MANAGER_CORRECTED_SOURCE": "store intended start, end and break and wait for a later accepted source upload; never create source hours"
   },
@@ -316,4 +316,3 @@
     }
   ]
 }
-

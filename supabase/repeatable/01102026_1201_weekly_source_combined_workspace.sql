@@ -228,6 +228,7 @@ begin
   end if;
   return jsonb_build_object('ok',true,'contract','WEEKLY_PROTECTED_EDITOR_V1',
     'allowed',true,'source_group_id',v_group_id,'source_cycle_id',v_cycle,
+    'source_family',(select source_family from public.weekly_source_groups where id=v_group_id),
     'client_id',v_client,'candidate_id',v_candidate,'work_date',v_date,
     'client',v_client_name,'candidate',v_candidate_name,'contracts',v_contracts,
     'events',v_events,'work_event_id',v_event_id,
@@ -936,6 +937,15 @@ begin
       order by attempt.attempted_at_utc desc,attempt.id desc limit 1;
   end if;
   select coalesce(jsonb_agg(jsonb_build_object(
+    'source_row_id',case when resolution.mapping_state='RESOLVED'
+      and row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+      and (private.weekly_source_office_route_key_v1(v_cycle.id,resolution.candidate_id,
+        resolution.client_id,resolution.contract_id,row.work_date))->>'authority_mode'='SOURCE_AUTHORITY'
+      and (exists(select 1 from public.weekly_source_projection_publications publication
+        where publication.upload_id=v_upload.id and publication.state='CURRENT')
+        or exists(select 1 from public.weekly_source_final_revisions revision
+          where revision.upload_id=v_upload.id and revision.state='CURRENT'))
+      then row.id end,
     'candidate',coalesce(candidate.display_name,nullif(row.bounded_raw_columns_json->>'worker_name',''),
       nullif(row.bounded_raw_columns_json->>'staff_name',''),nullif(row.bounded_raw_columns_json->>'candidate',''),row.source_candidate_identity),
     'client',coalesce(client.name,row.source_client_identity),'source_reference',row.source_candidate_identity,
@@ -987,6 +997,7 @@ set search_path to 'pg_catalog','pg_temp'
 as $function$
 declare
   v_actor uuid; v_group uuid; v_client uuid; v_week date;
+  v_date_from date; v_date_to date;
   v_limit integer; v_offset integer:=0; v_cursor jsonb; v_version text;
   v_sort text; v_direction text; v_seek text;
   v_reports jsonb; v_options jsonb; v_page jsonb; v_report jsonb;
@@ -999,18 +1010,20 @@ declare
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
-    array['actor_user_id','source_group_id','client_id','week_ending','report_key',
+    array['actor_user_id','source_group_id','client_id','week_ending','date_from','date_to','report_key',
       'sort_key','sort_direction','seek','cursor','limit'],'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID');
   v_actor:=(p_request->>'actor_user_id')::uuid;
   v_group:=nullif(p_request->>'source_group_id','')::uuid;
   v_client:=nullif(p_request->>'client_id','')::uuid;
   v_week:=nullif(p_request->>'week_ending','')::date;
+  v_date_from:=nullif(p_request->>'date_from','')::date;
+  v_date_to:=nullif(p_request->>'date_to','')::date;
   v_key:=nullif(p_request->>'report_key','');
   v_limit:=coalesce((p_request->>'limit')::integer,50);
   v_sort:=coalesce(nullif(p_request->>'sort_key',''),'finalised_at');
   v_direction:=coalesce(nullif(p_request->>'sort_direction',''),'desc');
   v_seek:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
-  if v_limit not between 1 and 100 or v_sort not in ('client','source','period','report','finalised_at')
+  if v_date_from>v_date_to or v_limit not between 1 and 100 or v_sort not in ('client','source','period','report','finalised_at')
     or v_direction not in ('asc','desc') or length(v_seek)>100 then
     raise exception 'WEEKLY_SOURCE_HISTORY_REQUEST_INVALID' using errcode='22023';
   end if;
@@ -1057,7 +1070,9 @@ begin
   join public.weekly_source_groups source_group on source_group.id=completed.source_group_id
   left join public.tms_users office_user on office_user.id=completed.actor_id
   where (v_group is null or completed.source_group_id=v_group)
-    and (v_client is null or completed.client_id=v_client);
+    and (v_client is null or completed.client_id=v_client)
+    and (v_date_from is null or (completed.completed_at at time zone 'Europe/London')::date>=v_date_from)
+    and (v_date_to is null or (completed.completed_at at time zone 'Europe/London')::date<=v_date_to);
   select coalesce(jsonb_agg(distinct jsonb_build_object('source_group_id',item->>'source_group_id',
     'source',item->>'source','client_id',item->>'client_id','client',item->>'client',
     'week_ending',item->>'week_ending','period',item->>'period')),'[]'::jsonb)
@@ -1098,14 +1113,21 @@ begin
             'client_id',v_client,'profile_id',v_profile))));
     end if;
     with shifts as (
-      select snapshot.id::text row_key,snapshot.candidate_id,snapshot.work_date,
+      select snapshot.id::text row_key,snapshot.upload_row_id source_row_id,
+        snapshot.work_event_id,snapshot.candidate_id,snapshot.work_date,
         snapshot.start_at_local,snapshot.end_at_local,snapshot.break_minutes,snapshot.actual_net_minutes,
-        snapshot.external_event_identity booking_reference
+        snapshot.external_event_identity booking_reference,
+        source_row.source_total_cost_pence,source_row.source_commission_pence,
+        source_row.source_shift_charge_pence
       from public.weekly_source_final_snapshot_lines snapshot
+      left join public.weekly_source_upload_rows source_row on source_row.id=snapshot.upload_row_id
       where snapshot.final_revision_id=v_revision and snapshot.client_id=v_client
       union all
-      select source_row.id::text,movement.candidate_id,source_row.work_date,source_row.start_at_local,
-        source_row.end_at_local,source_row.break_minutes,source_row.actual_net_minutes,source_row.external_source_key
+      select source_row.id::text,source_row.id,movement.work_event_id,
+        movement.candidate_id,source_row.work_date,source_row.start_at_local,
+        source_row.end_at_local,source_row.break_minutes,source_row.actual_net_minutes,
+        source_row.external_source_key,source_row.source_total_cost_pence,
+        source_row.source_commission_pence,source_row.source_shift_charge_pence
       from public.weekly_source_billing_movements movement
       join public.weekly_source_upload_rows source_row on source_row.id=movement.nhsp_upload_row_id
       where movement.final_revision_id=v_revision and movement.actual_client_id=v_client
@@ -1115,10 +1137,15 @@ begin
           candidate.id,shifts.work_date,shifts.start_at_local,shifts.row_key) ordinal
       from shifts join public.candidates candidate on candidate.id=shifts.candidate_id
     )
-    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',row_key,'candidate',candidate_name,
+    select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',row_key,
+      'source_row_id',case when v_final.state='CURRENT' then source_row_id end,
+      'work_event_id',work_event_id,'candidate',candidate_name,
       'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'start',to_char(start_at_local,'HH24:MI'),
       'end',to_char(end_at_local,'HH24:MI'),'break_minutes',break_minutes,'net_minutes',actual_net_minutes,
-      'booking_reference',booking_reference) order by ordinal)
+      'booking_reference',booking_reference,
+      'source_total_cost_pence',source_total_cost_pence,
+      'source_commission_pence',source_commission_pence,
+      'source_shift_charge_pence',source_shift_charge_pence) order by ordinal)
       filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
       into v_shift_count,v_shifts from ordered;
     with ordered as (
@@ -1131,7 +1158,11 @@ begin
     )
     select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',id,'candidate',candidate_name,
       'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'movement',initcap(replace(movement_role,'_',' ')),
-      'invoice_charge_pence',invoice_presentation_charge_pence) order by ordinal)
+      'source_line_kind',source_line_kind,'booking_reference',source_facts_json->>'booking_reference',
+      'pay_ex_vat_pence',round(total_pay_ex_vat*100)::bigint,
+      'invoice_charge_pence',invoice_presentation_charge_pence,
+      'vat_pence',round(vat_amount*100)::bigint,
+      'total_inc_vat_pence',round(total_inc_vat*100)::bigint) order by ordinal)
       filter(where ordinal>v_offset and ordinal<=v_offset+v_limit),'[]'::jsonb)
       into v_movement_count,v_movements from ordered;
     select coalesce(sum(invoice_presentation_charge_pence),0) into v_invoice_total
