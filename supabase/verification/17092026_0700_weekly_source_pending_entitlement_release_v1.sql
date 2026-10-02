@@ -80,6 +80,8 @@ $function$;
 -- ---------------------------------------------------------------------------
 -- 1. The installed definitions, and proof/32 section 11 by search
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_definitions$
 declare
   v_function record;
@@ -248,6 +250,8 @@ $verify_release_definitions$;
 -- ---------------------------------------------------------------------------
 -- 2. proof/32 section 10 bounds, as arithmetic
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_bounds$
 declare
   v_case record;
@@ -283,6 +287,8 @@ $verify_release_bounds$;
 -- STRUCTURED object with its own `items` array, `item_count` and an explicit
 -- `items_truncated` flag, capped by DROPPING WHOLE ITEMS at a stated 8,000
 -- characters so nothing is ever cut mid-identifier and no loss is ever silent.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_review_reason$
 declare
   v_case record;
@@ -534,6 +540,8 @@ insert into public.weekly_source_row_timesheet_lineages(
 -- `public.weekly_source_first_authorise_v1` itself calls, never by a
 -- hand-written copy of them.  Where those helpers are not installed the rows
 -- keep their old shape and the omission is announced rather than silent.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $seed_root_authorisations$
 declare
   v_bound boolean:=
@@ -814,6 +822,8 @@ values ('d0000000-0000-4000-8000-00000000ba03','d0000000-0000-4000-8000-00000000
 -- CHECK definitions on the relation is compared against an expected list, so
 -- DROPPING, WIDENING or ADDING any one of them fails here even when no
 -- behavioural negative happens to exercise it.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_request_column$
 declare
   v_actual text[];
@@ -986,6 +996,8 @@ $verify_release_request_column$;
 -- ---------------------------------------------------------------------------
 -- 6. Interface I-5 - the save
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_save$
 declare
   v_request jsonb;
@@ -1144,6 +1156,8 @@ $verify_release_save$;
 -- ---------------------------------------------------------------------------
 -- 7. G5-4 - the claim page, its clamps and the expired-lease reclaim (R13, R27)
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_claim$
 declare
   v_claim jsonb;
@@ -1227,6 +1241,11 @@ $verify_release_claim$;
 -- ---------------------------------------------------------------------------
 -- 8. G5-5 - the lease checks (R32) and the FROZEN result (R3, R5)
 -- ---------------------------------------------------------------------------
+-- A preceding Workbench fixture can leave its three-second API setting on
+-- this transaction. Reset it in its own statement: changing a GUC *inside*
+-- a DO block cannot extend a timeout scheduled when that statement began.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_apply_frozen$
 declare
   v_pending uuid;
@@ -1300,6 +1319,8 @@ begin
    where status in ('QUEUED','RUNNING')
      and id in(select (key->>0)::uuid from pg_temp.ws_verify_keys
        where rel='public.banking_pay_workbench_jobs'::regclass);
+  perform pg_catalog.set_config('statement_timeout',
+    (select entry_timeout_ms::text||'ms' from pg_temp.ws_pending_verifier_budget),true);
 
   -- R3 and R5: the root is still frozen by a live Draft item.  FROZEN advances
   -- next_check_at_utc, keeps the old head current and NEVER touches the
@@ -1321,6 +1342,8 @@ begin
     select * into v_row from public.weekly_source_pending_entitlement_bundles where id=v_pending;
     v_claim:=private.weekly_source_pending_entitlement_release_claim_page_v1(
       'weekly-source-release-worker','d0000000-0000-4000-8000-00000000cc01',60,25);
+    perform pg_catalog.set_config('statement_timeout',
+      (select entry_timeout_ms::text||'ms' from pg_temp.ws_pending_verifier_budget),true);
     if v_tick=1 then
       perform pg_temp.assert_true(
         (v_claim->>'claimed_count')::integer=1
@@ -1381,6 +1404,8 @@ $verify_release_apply_frozen$;
 -- no Banking Pay evidence at all and is releasable on its own; WSREL-0001 is
 -- still frozen by the live Draft item.  The census is run over EVERY physical
 -- member of BOTH families at once, which is what makes the bundle indivisible.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_mixed_bundle$
 declare
   v_request jsonb;
@@ -1463,6 +1488,8 @@ $verify_release_mixed_bundle$;
 -- C4 correction operation for the batch makes it
 -- `ACTIVE / WEEKLY_SOURCE_CENSUS_VOID_NOT_YET_PROVED`; once the operation is
 -- terminal the same item is `CENSUS_ERROR / WEEKLY_SOURCE_CENSUS_VOID_UNBINDABLE`.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_ruling3$
 declare
   v_pending uuid;
@@ -1606,6 +1633,8 @@ $verify_release_ruling3$;
 -- ---------------------------------------------------------------------------
 -- 10. R14 - ten consecutive technical failures, MANUAL_REVIEW, audited reopen
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_manual_review$
 declare
   v_pending uuid;
@@ -1740,6 +1769,8 @@ $verify_release_manual_review$;
 -- ---------------------------------------------------------------------------
 -- 11. R22, R23, R24 - a rotated or ambiguous stored root is MANUAL_REVIEW
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_rotation$
 declare
   v_pending uuid;
@@ -1860,6 +1891,8 @@ $verify_release_rotation$;
 -- Measured on a build from empty before this change, BOTH produced
 -- `WEEKLY_SOURCE_ROOT_ROTATED_AFTER_AUTHORISATION`, with the collision name
 -- surviving only as a text suffix.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_a6_collision_name$
 declare
   v_pending uuid;
@@ -1971,6 +2004,8 @@ $verify_a6_collision_name$;
 -- cancelled_at_utc, every family item voided, every operation terminal, no
 -- non-terminal correction request).  The census becomes RELEASABLE and the
 -- SAME coordinator publishes.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_released$
 declare
   v_guard_installed boolean;
@@ -2221,6 +2256,8 @@ $verify_release_released$;
 -- ---------------------------------------------------------------------------
 savepoint wp25_ruling_a3;
 
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_ruling_a3_supersession$
 declare
   v_root constant uuid:='d0000000-0000-4000-8000-000000000006';
@@ -2526,6 +2563,8 @@ set constraints weekly_source_entitlement_head_inventory_assert,
 -- ---------------------------------------------------------------------------
 -- 13. Round-4 ruling 6 point 7 - a rolled-back release transaction
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_rollback_record$
 declare
   v_pending uuid;
@@ -2683,6 +2722,8 @@ $verify_release_rollback_record$;
 --
 -- It is driven through the REAL immediate entry point, so the coordinator's own
 -- save-side check runs against WP-08b's row rather than being assumed.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_d10_pairing$
 declare
   v_request jsonb;
@@ -2970,6 +3011,8 @@ from pg_temp.ws_pending_verifier_budget;
 -- proves the other half: the ONLY writers that set the counter to zero are the
 -- two that have positively proved progress or carry a superseding Office
 -- decision, and no other path clears it.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_b43_counter_reset$
 declare
   v_pending uuid;
@@ -3154,6 +3197,8 @@ $verify_b43_counter_reset$;
 -- refusal with the retry budget untouched.  Two more are proved end to end
 -- earlier in this file: `WEEKLY_SOURCE_CENSUS_ERROR` in section 9 and
 -- `WEEKLY_SOURCE_ROOT_INTEGRITY_FAILURE` in section 11.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_b41_permanent_refusals$
 declare
   v_pending uuid;
@@ -3295,6 +3340,8 @@ $verify_b41_permanent_refusals$;
 -- neighbouring genuine `CENSUS_ERROR` - carrying an ACTIVE
 -- `WEEKLY_SOURCE_CENSUS_VOID_NOT_YET_PROVED` item BESIDE a real census error -
 -- which must still escalate immediately under B4.1.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_a5_frozen_is_not_a_refusal$
 declare
   v_pending uuid;
@@ -3413,6 +3460,8 @@ $verify_a5_frozen_is_not_a_refusal$;
 -- times the count that broke the original cap - drives the real refusal path,
 -- and then proves that every one of the sixty identifiers can be read back out
 -- of the child relation, a bounded page at a time, with none dropped.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_b44_lossless_identifiers$
 declare
   v_pending uuid;
@@ -3594,6 +3643,8 @@ $verify_b44_lossless_identifiers$;
 -- WP-08b's review answered three questions with "No".  They are the reason this
 -- component is trusted unattended, and WP-08c must not have weakened any of
 -- them.  Each is re-proved here against the CHANGED owners.
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_b4_three_guarantees$
 declare
   v_row record;
@@ -3740,6 +3791,8 @@ $verify_b4_three_guarantees$;
 -- ---------------------------------------------------------------------------
 -- 14. The Banking Pay evidence is byte for byte what it was (section 11)
 -- ---------------------------------------------------------------------------
+select pg_catalog.set_config('statement_timeout',entry_timeout_ms::text||'ms',true)
+from pg_temp.ws_pending_verifier_budget;
 do $verify_release_banking_untouched$
 begin
   perform pg_temp.assert_true(

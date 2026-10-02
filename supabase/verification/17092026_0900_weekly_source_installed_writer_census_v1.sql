@@ -251,9 +251,11 @@ values
    'p_auth_request_id uuid, p_actor_user_id uuid, p_action text, p_note text',
    'NON_CENSUS_LIFECYCLE_WRITER','42157edf5d4754dd6b22625c40b233ef682abbf30bcd24bc5b2853ff94b331fb',
    'Authorisation state machine. Writes only READY, AWAITING_AUTHORISATION and AUTHORISED_FOR_PAYMENT.'),
+  -- The current finalizer definition still only creates/reuses RESERVED rows;
+  -- its reservation UPDATE changes linkage and actor, not status/release fields.
   ('public','pay_batch_finalize_reservations_and_markers',
    'p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_pay_date date, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb',
-   'NON_CENSUS_LIFECYCLE_WRITER','0449fe0daa2d6e1b23aa7d991bfce84d84fce30d7d123dff6804cbe528ddc4a4',
+   'NON_CENSUS_LIFECYCLE_WRITER','49fbfaa7e3fbcefe7fde5e6937f2ac2b772fc62528460ae22246f98f7ad01d08',
    'Creates reservations: status and released_reason appear in an INSERT column list. Creation, never release.'),
   ('public','pay_batch_mark_blocked_funds',
    'p_pay_batch_id uuid, p_actor_user_id uuid, p_funds_check_json jsonb',

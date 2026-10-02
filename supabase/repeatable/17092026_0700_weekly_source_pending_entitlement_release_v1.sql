@@ -294,6 +294,7 @@ declare
   v_member_timesheet_ids uuid[]:=array[]::uuid[];
   v_census jsonb;
   v_failures jsonb:='[]'::jsonb;
+  v_inherited_statement_timeout text:=pg_catalog.current_setting('statement_timeout');
 begin
   if p_candidate_id is null
      or coalesce(pg_catalog.cardinality(p_member_root_ids),0)<1
@@ -316,6 +317,10 @@ begin
     'WORKBENCH_CANDIDATE_PENDING_ENTITLEMENT_RELEASE',
     coalesce(p_worker_run_id,pg_catalog.gen_random_uuid()),
     'WEEKLY_SOURCE_PENDING_RELEASE');
+  -- The existing Workbench serial gate applies a short UI timeout inside
+  -- this release call. Keep that bound for the gate, but restore the caller's
+  -- pre-existing budget before the independent, bounded freeze census.
+  perform pg_catalog.set_config('statement_timeout',v_inherited_statement_timeout,true);
   if coalesce((v_lock_result->>'ok')::boolean,false) is not true then
     return v_lock_result||pg_catalog.jsonb_build_object('stage','LOCK');
   end if;
