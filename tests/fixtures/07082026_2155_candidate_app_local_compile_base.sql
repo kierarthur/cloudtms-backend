@@ -1355,6 +1355,25 @@ as $function$
   );
 $function$;
 
+-- The Candidate-only runtime matrix does not install Weekly Source tables or
+-- client/group policies. Its capability reader still calls this optional
+-- resolver for an import-authoritative historical week. Reproduce the real
+-- resolver's documented absent-policy refusal so this matrix tests the
+-- Candidate fallback; integrated Weekly Source verifiers install and exercise
+-- the complete resolver separately. This fixture is never release SQL.
+create or replace function private._weekly_source_effective_policy_v1(
+  p_client_id uuid,
+  p_contract_id uuid,
+  p_work_date date
+) returns jsonb
+language plpgsql
+stable
+as $function$
+begin
+  raise exception 'WEEKLY_SOURCE_POLICY_SCOPE_NOT_FOUND' using errcode='22023';
+end;
+$function$;
+
 -- TEST already provides this canonical TSFIN context authority.  Reproduce
 -- its bounded signature in the disposable fixture so issue derivation tests
 -- exercise the same dependency instead of falling back to a summary view.
