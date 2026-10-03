@@ -1374,6 +1374,35 @@ begin
 end;
 $function$;
 
+-- No Weekly Source outreach state exists in this Candidate-only database.
+-- These deliberately empty read shapes let the Candidate admission reader
+-- prove its fallback without fabricating a request or installing the separate
+-- Weekly Source schema. The integrated release verifiers use the real tables.
+create view public.weekly_timesheet_submission_requests as
+select null::uuid id, null::uuid candidate_cohort_id, null::uuid source_cycle_id,
+  null::uuid candidate_id, null::integer request_generation, null::text state,
+  null::timestamptz deadline_at_utc where false;
+
+create view public.weekly_candidate_outreach_generations as
+select null::uuid id, null::uuid candidate_cohort_id, null::uuid source_cycle_id,
+  null::uuid candidate_id, null::integer generation_number, null::text request_kind,
+  null::text state, null::timestamptz deadline_at_utc where false;
+
+create view public.weekly_timesheet_submission_request_memberships as
+select null::uuid submission_request_id, null::text state,
+  null::uuid contract_id, null::date week_ending where false;
+
+create view public.weekly_candidate_outreach_memberships as
+select null::uuid candidate_generation_id, null::uuid incident_id,
+  null::text state where false;
+
+create view public.weekly_discrepancy_incidents as
+select null::uuid id, null::uuid current_comparison_revision_id where false;
+
+create view public.weekly_issue_comparison_revisions as
+select null::uuid id, null::uuid candidate_timesheet_id,
+  null::uuid contract_id where false;
+
 -- TEST already provides this canonical TSFIN context authority.  Reproduce
 -- its bounded signature in the disposable fixture so issue derivation tests
 -- exercise the same dependency instead of falling back to a summary view.
