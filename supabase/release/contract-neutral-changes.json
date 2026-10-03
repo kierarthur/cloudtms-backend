@@ -1,13 +1,13 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "A protected TEST retry showed that replaying the existing July instrumentation repeatable first still permits the later September Banking Pay authority closure to replace the finalizer and clear that setting. The new October repeatable runs after every existing closure, verifies the complete installed definition against the two reviewed hashes, and reasserts only plpgsql_check.mode=disabled. The installed function body is byte-identical to the repository V8 body. The semantic database contract excludes optional plpgsql_check.* instrumentation settings.",
+  "current_change": "A protected TEST retry showed that replaying the September Banking Pay final-authority closure after its communication-v2 successor reinstates the older one-candidate cancellation helper, while also clearing the finalizer instrumentation setting. The late October repeatable now reasserts the exact reviewed communication-v2 helper, verifies the complete finalizer definition against the two reviewed hashes, and restores only plpgsql_check.mode=disabled. The other communication-v2 helpers remain installed and unchanged. The semantic database contract is byte-identical to its seal.",
   "canonical_contract_hash": "d30cd656663f5198a4abb16ef7dd67721b67f2f95e1cd5f818a69c98e97ccf8f",
   "contract_sha256": "1ab5c4d66d017716c99d4d421f41d8de06eb68cbd230beb0c9093c83953d5d9a",
   "files": [
     {
       "path": "supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql",
-      "sha256": "6ae0c6d1e7bb23d7e252001a1804ef5cc85dc41f3464a83a06fd73b03ecb6673"
+      "sha256": "9a0534d38e615daf345dfe15516807461f7732190ec326032eacd79eed9233ea"
     },
     {
       "path": "supabase/repeatable/20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql",

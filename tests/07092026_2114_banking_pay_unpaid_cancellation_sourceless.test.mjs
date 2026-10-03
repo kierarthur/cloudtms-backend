@@ -29,6 +29,14 @@ const bytes = relative => fs.readFileSync(path.join(root, relative));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const count = (source, needle) => source.split(needle).length - 1;
 
+test('late TEST retry closure restores communication-v2 after historical H1/H2 replay', () => {
+  const historical = read('supabase/repeatable/05092026_1200_banking_pay_draft_v8_final_authority_closure.sql');
+  const successor = read('supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql');
+  assert.match(historical, /\\ir 05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1\.sql/);
+  assert.equal(count(successor, '\\ir 07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql'), 1);
+  assert.ok(successor.indexOf('\\ir 07092026_2013_') < successor.indexOf('ALTER FUNCTION public.pay_batch_finalize_reservations_and_markers'));
+});
+
 const paths = {
   monolith: 'supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql',
   preBank: 'supabase/repeatable/04092026_2118_banking_pay_multi_candidate_cancel_continuation_v1.sql',
