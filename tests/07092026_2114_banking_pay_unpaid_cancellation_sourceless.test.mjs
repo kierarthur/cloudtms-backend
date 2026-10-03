@@ -34,7 +34,17 @@ test('late TEST retry closure restores communication-v2 after historical H1/H2 r
   const successor = read('supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql');
   assert.match(historical, /\\ir 05092026_0405_banking_pay_one_candidate_cancellation_scope_integrity_v1\.sql/);
   assert.equal(count(successor, '\\ir 07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql'), 1);
+  assert.equal(count(successor, '\\ir 09092026_0020_banking_pay_no_money_workbench_return_v1.sql'), 1);
+  assert.ok(successor.indexOf('\\ir 07092026_2013_') < successor.indexOf('\\ir 09092026_0020_'));
   assert.ok(successor.indexOf('\\ir 07092026_2013_') < successor.indexOf('ALTER FUNCTION public.pay_batch_finalize_reservations_and_markers'));
+});
+
+test('late TEST retry restores only the exact current Stage 2 canonical producer', () => {
+  const source = read('supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql');
+  const closure = read('supabase/repeatable/03102026_0400_stage2_canonical_producer_after_h1h2_retry.sql');
+  const definition = extractFunction(source, 'public.pay_preview_candidate_build_canonical_lines');
+  assert.ok(closure.includes(definition));
+  assert.match(closure, /ALTER FUNCTION public\.pay_batch_finalize_reservations_and_markers\(uuid,text,uuid,date,date,uuid,jsonb\) SET plpgsql_check\.mode TO 'disabled';/);
 });
 
 const paths = {

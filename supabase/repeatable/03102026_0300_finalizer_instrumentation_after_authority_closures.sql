@@ -1,7 +1,7 @@
 -- A retry of the September H1/H2 final-authority closure can replay its older
--- one-candidate cancellation helper after the later communication-v2 helper
--- was already recorded in the ledger. Reassert that exact reviewed successor
--- first; the other communication-v2 helpers remain installed and unchanged.
+-- one-candidate cancellation and no-money workbench helpers after their later
+-- reviewed successors were already recorded in the ledger. Reassert those
+-- exact successors first; the other current helpers remain unchanged.
 -- The historical plpgsql_check workaround is not a Banking Pay rule. It must
 -- be reasserted after every reviewed finalizer authority closure: an UPGRADE
 -- can replay a later closure after 20072026_0302 and lose this function-local
@@ -11,6 +11,7 @@
 -- two pins differ only by PostgreSQL's displayed quoted instrumentation line;
 -- the installed TEST body and the repository V8 body were compared exactly.
 \ir 07092026_2013_banking_pay_unpaid_cancellation_communication_v2_prepare_v1.sql
+\ir 09092026_0020_banking_pay_no_money_workbench_return_v1.sql
 
 DO $finalizer_instrumentation_guard$
 DECLARE

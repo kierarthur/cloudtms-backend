@@ -1,13 +1,17 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "A protected TEST retry showed that replaying the September Banking Pay final-authority closure after its communication-v2 successor reinstates the older one-candidate cancellation helper, while also clearing the finalizer instrumentation setting. The late October repeatable now reasserts the exact reviewed communication-v2 helper, verifies the complete finalizer definition against the two reviewed hashes, and restores only plpgsql_check.mode=disabled. The other communication-v2 helpers remain installed and unchanged. The semantic database contract is byte-identical to its seal.",
+  "current_change": "A protected TEST retry replayed the September H1/H2 closure after newer communication-v2, no-money and Stage 2 owners had already been installed, reinstating older versions of three helpers. The October repeatables restore the exact reviewed communication-v2 selection and no-money workbench helpers, and mechanically extract the current Stage 2 canonical preview producer after the historical replay. They also reassert only the finalizer's plpgsql_check.mode=disabled setting. No economic, payment, provider or policy rule is changed beyond restoring those existing successors; the semantic contract is byte-identical to its seal.",
   "canonical_contract_hash": "d30cd656663f5198a4abb16ef7dd67721b67f2f95e1cd5f818a69c98e97ccf8f",
   "contract_sha256": "1ab5c4d66d017716c99d4d421f41d8de06eb68cbd230beb0c9093c83953d5d9a",
   "files": [
     {
+      "path": "supabase/repeatable/03102026_0400_stage2_canonical_producer_after_h1h2_retry.sql",
+      "sha256": "858e1bbc127e81ba59e7781aee32ef7a3be630bf4af7569261a995be18ff49d9"
+    },
+    {
       "path": "supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql",
-      "sha256": "9a0534d38e615daf345dfe15516807461f7732190ec326032eacd79eed9233ea"
+      "sha256": "847aea1d9a3ac982af20d43429ba53a372ee0af4774633d195ec2d5d0beb4057"
     },
     {
       "path": "supabase/repeatable/20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql",
