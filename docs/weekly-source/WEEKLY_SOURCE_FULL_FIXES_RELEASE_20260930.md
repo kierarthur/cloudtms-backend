@@ -1,5 +1,21 @@
 # Weekly Source full fixes — release evidence
 
+## Latest TEST release and read-only acceptance — 3 October 2026
+
+This section supersedes the historical "acceptance pending" and "stop for model
+switch" instructions below. The code and deployment described here are complete;
+the older sections remain as an audit trail of earlier attempts, not the current
+deployment status.
+
+- Backend/TEST database source: `bf80f7e5e20fffdaac38a244282989b7278c7d8b`, pushed to the feature and `test` branches. Protected database run `37095471259` passed full verification and final installed-contract comparison. The subsequent managed release run `37099847641` returned `VERIFIED_OR_EXACT_UNCHANGED` for that same source. The database release was not bypassed for Office-only follow-up changes.
+- TEST runtime remains on the four successful versions of that exact backend commit: backend `b96204ff-2e42-4763-81e2-1412f4065710`; candidate-private `2a7f03da-56fd-4992-b52c-a43fc3e97dac`; candidate-synthetic `8b08bd95-11fe-4d41-9425-90d211fe33ba`; candidate-broker `a87c3cbc-bb4a-4127-aee9-fdb3e0d8a0ba`. The last coordinator correctly reported each `UNCHANGED`, rather than republishing it.
+- Office `36d2b7eb5e32b4afd2c1ea24f3b2ef2e1d6c440d` was pushed to `main` and Pages build `1256650590` succeeded at `2026-10-03T05:29:43.859Z`. The managed receipt is `.codex-tmp/test-deployment-receipt.json` in the release worktree and reports `DEPLOYED_ACCEPTANCE_PENDING` until functional business journeys are exercised.
+- Local verification: backend main suite 1,443/1,443 passed after the canonical SQL-generation correction; targeted Office Playwright suite 49/49 passed after the latest candidate-picker context and source-reference change. Those tests did not send messages, finalise a report or authorise pay.
+- Live signed-in TEST Office, read-only browser acceptance: the Imports list shows the current previously released NHSP checking-hours file and current backing report, while obsolete files are absent. Queries shows Kier's hours disagreement separately from Office checks. The Baljit Office-check row names Rai-Baptiste Baljit, source ref `CCR-02611`, booking `155154209`, Trust, date and imported hours. Opening **Link candidate** prefills `Baljit`, shows both source identifiers and produces one candidate search result; **Apply was not clicked**. No candidate link was changed.
+- The pending 27 September report is in Finalise (one ready report, zero blocked reports); its detail lists two ready shifts, marks the 30 September cutoff as passed/not finalised, and the **Send back to Queries** action fits in the 1193px viewport with zero table overflow. The already-finalised 20 September report appears in History with period and finalisation-date filters and a View report action, not as a pending report. The browser console showed no errors in that acceptance pass.
+- No real import was uploaded, no candidate/manager contact was sent, no finalisation/pay/payment action was taken, and no MyTMS code changed in this release. Therefore live outbound notification delivery, manager replies, HealthRoster early-finalisation choices, real-file reconciliation, mobile response and financial state transitions are **not** claimed as end-to-end proved. A USB-phone run was not necessary to validate these backend/Office-only follow-up commits; it would require separate non-destructive device acceptance and, for the response journey, a controlled test message.
+- No LIVE resource, token, other account route or unrelated MyTMS worktree was changed.
+
 ## Automatic import outreach and replay correction — 1 October 2026
 
 The additional approved automatic outreach is deployed to TEST. Accepted imports start eligible missing-timesheet and signed-hours checks through the existing policy, generation and delivery owners. Office buttons remain optional interventions. Explicit manager-direct activation is preserved; normal initial discrepancy contact does not immediately email a manager.
