@@ -766,6 +766,7 @@ as $function$
 declare
   v_request jsonb; v_scope_page jsonb; v_scopes jsonb:='[]'; v_scope jsonb;
   v_workspace jsonb; v_owner_request jsonb; v_rows jsonb:='[]'; v_item jsonb;
+  v_manual_children jsonb; v_question_children jsonb; v_child jsonb;
   v_follow_workspace jsonb; v_follow_up jsonb;
   v_versions jsonb:='[]'; v_owners jsonb:='[]'; v_summary jsonb;
   v_tab text:=coalesce(nullif(p_request->>'tab',''),'queries');
@@ -775,7 +776,7 @@ declare
   v_seek text:=private.weekly_source_query_ascii_fold_v1(coalesce(p_request->>'seek',''));
   v_limit integer:=coalesce((p_request->>'limit')::integer,50);
   v_offset integer:=0; v_base integer:=0; v_total integer; v_page jsonb; v_counts jsonb;
-  v_version text; v_cursor jsonb; v_client uuid; v_seen text[]:='{}'; v_key text;
+  v_version text; v_cursor jsonb; v_client uuid; v_seen text[]:='{}'; v_key text; v_owner_key text;
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
@@ -801,28 +802,46 @@ begin
     exit when not (v_scope_page->>'has_more')::boolean;
     v_request:=v_request||jsonb_build_object('cursor',v_scope_page->>'next_cursor');
   end loop;
-  -- NHSP queries are cycle-wide even when several backing-report scopes exist.
-  for v_scope in select distinct on (item->>'source_cycle_id') item
-    from jsonb_array_elements(v_scopes) item order by item->>'source_cycle_id',item->>'key'
+  -- A cycle publication is shared across its client scopes. If it has no
+  -- cycle publication, each NHSP client's current report scope can instead
+  -- own distinct query work. Visit each such scope exactly once.
+  for v_scope in select distinct on (item->>'source_cycle_id',
+      case when v_tab='queries' and cycle.current_projection_publication_id is null then item->>'client_id' else '' end)
+      item||jsonb_build_object('cycle_publication_id',cycle.current_projection_publication_id)
+    from jsonb_array_elements(v_scopes) item
+    join public.weekly_source_cycles cycle on cycle.id=(item->>'source_cycle_id')::uuid
+    order by item->>'source_cycle_id',
+      case when v_tab='queries' and cycle.current_projection_publication_id is null then item->>'client_id' else '' end,
+      case when item->>'report_scope_id' is null then 1 else 0 end,
+      item->>'cutoff' desc nulls last,item->>'key'
   loop
     v_owner_request:=jsonb_build_object('actor_user_id',p_request->>'actor_user_id',
       'tab',v_tab,'source_group_id',v_scope->>'source_group_id',
       'source_cycle_id',v_scope->>'source_cycle_id','limit',100);
-    if v_scope->>'source_family'='ROSTER' then
+    if v_scope->>'source_family'='ROSTER' or
+      (v_tab='queries' and v_scope->>'source_family'='NHSP' and v_scope->>'cycle_publication_id' is null
+        and v_scope->>'report_scope_id' is not null) then
       v_owner_request:=v_owner_request||jsonb_build_object('client_id',v_scope->>'client_id');
+    end if;
+    if v_tab='queries' and v_scope->>'source_family'='NHSP' and v_scope->>'cycle_publication_id' is null
+      and v_scope->>'report_scope_id' is not null then
+      v_owner_request:=v_owner_request||jsonb_build_object('report_scope_id',v_scope->>'report_scope_id');
     end if;
     loop
       v_workspace:=public.weekly_source_office_workspace_v1(v_owner_request);
+      v_owner_key:=case when v_tab='imports' then v_scope->>'source_cycle_id'
+        else (v_scope->>'source_cycle_id')||':'||
+          coalesce(v_workspace#>>'{selected,projection_publication_id}','none') end;
       v_versions:=v_versions||jsonb_build_array(jsonb_build_array(v_scope->>'source_cycle_id',v_workspace->>'workspace_version'));
       if not (v_owner_request ? 'cursor') then
-        v_owners:=v_owners||jsonb_build_array(jsonb_build_object('key',v_scope->>'source_cycle_id',
+        v_owners:=v_owners||jsonb_build_array(jsonb_build_object('key',v_owner_key,
           'source',v_scope->>'source','period',v_scope->>'period','scope',v_workspace->'selected',
           'bulk_actions',v_workspace#>'{queries,bulk_actions}',
           'protected_pay_enabled',v_workspace#>'{queries,protected_pay_enabled}'));
       end if;
       for v_item in select item from jsonb_array_elements(coalesce(v_workspace#>array[v_tab,'rows'],'[]')) item
       loop
-        v_key:=v_tab||':'||(v_scope->>'source_cycle_id');
+        v_key:=v_tab||':'||v_owner_key;
         v_key:=v_key||':'||(v_item->>'row_key');
         if v_key=any(v_seen) then continue; end if;
         v_seen:=array_append(v_seen,v_key);
@@ -845,8 +864,42 @@ begin
               where sibling->>'upload_id'=v_item->>'row_key'
                 and not coalesce((sibling->>'completed')::boolean,false)) then continue; end if;
         end if;
+        if v_tab='queries' then
+          -- An Office-created pay review is an Office check, not a request for
+          -- candidate/manager hours evidence. Split only those children so a
+          -- mixed group can retain its genuine Hours questions independently.
+          select coalesce(jsonb_agg(child.value order by child.ordinality)
+              filter(where child.value ? 'manual_review_id'),'[]'::jsonb),
+            coalesce(jsonb_agg(child.value order by child.ordinality)
+              filter(where not (child.value ? 'manual_review_id')),'[]'::jsonb)
+            into v_manual_children,v_question_children
+          from jsonb_array_elements(coalesce(v_item->'children','[]'::jsonb))
+            with ordinality child(value,ordinality);
+          for v_child in select value from jsonb_array_elements(v_manual_children)
+          loop
+            v_rows:=v_rows||jsonb_build_array(jsonb_build_object(
+              'combined_key','manual-check:'||(v_child->>'manual_review_id'),
+              'row_key',v_child->>'row_key','section','checks',
+              'scope_key',v_owner_key,
+              'source',v_scope->>'source','source_family',v_scope->>'source_family',
+              'period',v_scope->>'period',
+              'client',v_item->>'client','client_id',v_item->>'client_id',
+              'candidate',v_item->>'candidate','candidate_id',v_item->>'candidate_id',
+              'day_date',v_child->>'day_date','system_hours',v_child->>'system_hours',
+              'status',v_child->'status','manual_query',v_child->'manual_query',
+              'problem','Accept current source hours or protect pay.',
+              'pay_blocking',true,'actions',v_child->'actions'));
+          end loop;
+          if jsonb_array_length(v_question_children)=0 then continue; end if;
+          if jsonb_array_length(v_manual_children)>0 then
+            v_item:=jsonb_set(v_item,'{actions,0,payload,detail,shifts}',v_question_children,false)
+              ||jsonb_build_object('children',v_question_children,
+                'issues',greatest(0,coalesce((v_item->>'issues')::integer,0)
+                  -jsonb_array_length(v_manual_children)));
+          end if;
+        end if;
         v_rows:=v_rows||jsonb_build_array(v_item||jsonb_build_object(
-          'combined_key',v_key,'scope_key',v_scope->>'source_cycle_id','source',v_scope->>'source',
+          'combined_key',v_key,'scope_key',v_owner_key,'source',v_scope->>'source',
           'source_family',v_scope->>'source_family',
           'period',v_scope->>'period','section',case when v_tab='queries' then 'questions' else 'current' end,
           'client',coalesce(nullif(v_item->>'client',''),(select name from public.clients
@@ -858,7 +911,7 @@ begin
           union all
           select item||jsonb_build_object('section','protected') from jsonb_array_elements(coalesce(v_workspace#>'{queries,protected_shifts,rows}','[]')) item
         loop
-          v_key:=(v_item->>'section')||':'||(v_item->>'row_key');
+          v_key:=(v_item->>'section')||':'||v_owner_key||':'||(v_item->>'row_key');
           if v_key=any(v_seen) then continue; end if;
           v_seen:=array_append(v_seen,v_key);
           if nullif(v_item->>'client_id','') is not null and not exists(select 1
@@ -867,7 +920,7 @@ begin
           if v_client is not null and nullif(v_item->>'client_id','') is not null
             and (v_item->>'client_id')::uuid<>v_client then continue; end if;
           v_rows:=v_rows||jsonb_build_array(v_item||jsonb_build_object('combined_key',v_key,
-            'scope_key',v_scope->>'source_cycle_id','source',v_scope->>'source','period',
+            'scope_key',v_owner_key,'source',v_scope->>'source','period',
               case when v_item->>'section'='protected' then 'Awaiting source period' else v_scope->>'period' end));
         end loop;
       end if;

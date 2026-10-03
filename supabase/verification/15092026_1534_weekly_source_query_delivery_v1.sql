@@ -2587,6 +2587,8 @@ declare
   v_open jsonb;
   v_resolved jsonb;
   v_file jsonb;
+  v_checks jsonb;
+  v_questions jsonb;
   v_review uuid;
 begin
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
@@ -2611,6 +2613,25 @@ begin
         from public.tms_users where id='e1000000-0000-4000-8000-000000000001')
       and child.value#>>'{manual_query,opened_at_uk}' is not null),
     'manual query reason, Office author and UK timestamp were not projected');
+  v_checks:=public.weekly_source_combined_review_workspace_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_group_id','f5000000-0000-4000-8000-000000000001',
+    'tab','queries','section','checks'));
+  v_questions:=public.weekly_source_combined_review_workspace_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_group_id','f5000000-0000-4000-8000-000000000001',
+    'tab','queries','section','questions'));
+  perform pg_temp.assert_true(exists(select 1 from jsonb_array_elements(v_checks->'rows') review
+    where review->>'combined_key'='manual-check:'||v_review::text
+      and review->>'pay_blocking'='true'
+      and review#>>'{manual_query,reason}'='Office needs to check the candidate pay decision'
+      and exists(select 1 from jsonb_array_elements(review->'actions') action
+        where action->>'label'='Accept current source hours')),
+    'manual pay review did not appear in pay-blocking Office checks with its exact actions');
+  perform pg_temp.assert_true(not exists(select 1 from jsonb_array_elements(v_questions->'rows') question
+    cross join lateral jsonb_array_elements(coalesce(question->'children','[]'::jsonb)) child
+    where child->>'manual_review_id'=v_review::text),
+    'manual pay review remained in Hours questions');
   v_file:=public.weekly_source_upload_detail_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'upload_id','f7000000-0000-4000-8000-000000000003'));
