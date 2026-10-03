@@ -1012,6 +1012,8 @@ create table public.mail_outbox (
   attempt_leased_at_utc timestamptz,
   attempt_lease_expires_at_utc timestamptz,
   attachments_ready boolean not null default true,
+  attachment_total_bytes bigint,
+  attachment_delivery_policy text,
   waiting_invoice_operation_id uuid
 );
 
