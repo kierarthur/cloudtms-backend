@@ -1,13 +1,13 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "A protected TEST retry replayed the September H1/H2 closure after later reviewed authorities were already ledgered, reinstating older Banking Pay and candidate-week function bodies and resetting later function-local planner settings. The October repeatables reassert the exact current successor definitions and the reviewed A35 plan_cache_mode and A34 jit settings after that historical replay. They also guard the finalizer identity and reassert only its optional plpgsql_check setting. No new economic, payment, provider or policy rule is introduced; the semantic contract is byte-identical to its seal.",
+  "current_change": "A protected TEST retry replayed the September H1/H2 closure after later reviewed authorities were already ledgered, reinstating older Banking Pay and candidate-week function bodies and resetting later function-local planner settings. The October repeatables reassert the exact current successor definitions, including the A34 finance-case baseline after the A28 canonical producer, and the reviewed A35 plan_cache_mode and A34 jit settings after that historical replay. They also guard the finalizer identity and reassert only its optional plpgsql_check setting. No new economic, payment, provider or policy rule is introduced; the semantic contract is byte-identical to its seal.",
   "canonical_contract_hash": "d30cd656663f5198a4abb16ef7dd67721b67f2f95e1cd5f818a69c98e97ccf8f",
   "contract_sha256": "1ab5c4d66d017716c99d4d421f41d8de06eb68cbd230beb0c9093c83953d5d9a",
   "files": [
     {
       "path": "supabase/repeatable/03102026_0400_stage2_canonical_producer_after_h1h2_retry.sql",
-      "sha256": "3801cf6bd79458023aa28fdb1751f79869b54ce96c0b7877aa81de4b863cecb4"
+      "sha256": "0da7da4519d08fad5f08cc215842e8b4b0275816aa83d654f6b2b8193d42ea59"
     },
     {
       "path": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
@@ -16,6 +16,10 @@
     {
       "path": "supabase/repeatable/03102026_0600_stage2_plan_cache_after_h1h2_retry.sql",
       "sha256": "27c96a73fbb1325d1b41bffca1fa4f731e2528bfb38cc66d6305df7974fe167d"
+    },
+    {
+      "path": "supabase/repeatable/03102026_0700_stage2_finance_baseline_after_h1h2_retry.sql",
+      "sha256": "7eca7df2e624c67512b0018ad4bcaf7f9a348a143ff768174e4868c7827a2338"
     },
     {
       "path": "supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql",

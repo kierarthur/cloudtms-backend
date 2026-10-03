@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Mechanically copy the adjacent Stage 2 preview producer family; never
-// replay the 2.7 MB Stage 2 bundle merely to restore these functions.
+// Mechanically copy only the canonical Stage 2 preview producer. The adjacent
+// finance baseline has a later A34 owner and must never be copied from A28.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -15,22 +15,21 @@ const marker = 'CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_ca
 assert.equal(source.split(marker).length - 1, 1, 'canonical producer owner must be unique');
 const start = source.indexOf(marker);
 const bodyStart = source.indexOf('AS $function$', start);
-const endMarker = '\n$function$;';
-const end = source.indexOf(endMarker, bodyStart);
-assert.ok(bodyStart > start && end > bodyStart, 'canonical producer function boundary changed');
-const definition = source.slice(start, end + endMarker.length);
+const closing = /^\$function\$\s*;/gm;
+closing.lastIndex = bodyStart;
+const terminator = closing.exec(source);
+assert.ok(bodyStart > start && terminator, 'canonical producer function boundary changed');
+const definition = source.slice(start, closing.lastIndex);
 assert.deepEqual([...definition.matchAll(/^CREATE OR REPLACE FUNCTION ([\w.]+)\(/gm)].map(x => x[1]), [
   'public.pay_preview_candidate_build_canonical_lines',
-  'public.pay_preview_candidate_build_finance_case_baseline',
-  'public.pay_preview_candidate_collect_scope',
 ]);
 assert.match(definition, /'component_key_type', 'MANUAL_CARRY_FORWARD'/);
 assert.match(definition, /'economic_key', jsonb_strip_nulls\(jsonb_build_object\(/);
 const hash = crypto.createHash('sha256').update(definition).digest('hex');
 const output = [
-  '-- Exact adjacent Stage 2 preview producer family reassertion after a resumed H1/H2 closure.',
+  '-- Exact Stage 2 canonical preview producer reassertion after a resumed H1/H2 closure.',
   `-- Generated from ${sourcePath}; function SHA-256 ${hash}.`,
-  '-- Replaces only these three current functions; no payment/provider action is executed.',
+  '-- Replaces the canonical function and reasserts reviewed optional finalizer instrumentation; no payment/provider action is executed.',
   '\\set ON_ERROR_STOP on',
   'begin;',
   definition,
