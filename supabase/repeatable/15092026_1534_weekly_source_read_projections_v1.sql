@@ -377,12 +377,14 @@ as $function$
       current_row.normalised_row_hash current_source_row_hash,
       current_row.start_at_local,current_row.end_at_local,
       current_row.break_minutes,contract.role job_role,
+      coalesce(nullif(office_user.display_name,''),'Office user') opened_by_name,
       route_context.value route_context
     from cycle_context
     join private.weekly_source_manual_reviews review
       on review.source_cycle_id=cycle_context.id and review.state='OPEN'
     join public.weekly_source_upload_rows source_row on source_row.id=review.upload_row_id
     join public.contracts contract on contract.id=review.contract_id
+    left join public.tms_users office_user on office_user.id=review.opened_by_user_id
     left join lateral (
       select candidate_row.*
       from public.weekly_source_upload_rows candidate_row
@@ -605,6 +607,10 @@ as $function$
           else to_char(manual.start_at_local,'HH24:MI')||'-'||
             to_char(manual.end_at_local,'HH24:MI')||' ('||manual.break_minutes||' min break)' end,
         'issue','Manually queried',
+        'manual_query',pg_catalog.jsonb_build_object(
+          'opened_by',manual.opened_by_name,
+          'opened_at_uk',to_char(manual.opened_at_utc at time zone 'Europe/London','FMDD Mon YYYY, HH24:MI'),
+          'reason',manual.office_reason),
         'status',pg_catalog.jsonb_build_object('text','Office review','tone','danger'),
         'accept_eligible',false,
         'protected_pay_seed',pg_catalog.jsonb_build_object(

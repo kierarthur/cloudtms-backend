@@ -2597,6 +2597,19 @@ begin
     and (select state='OPEN' and work_event_id='f9000000-0000-4000-8000-000000000001'
       from private.weekly_source_manual_reviews where id=v_review),
     'manual review did not open against the existing work identity');
+  perform pg_temp.assert_true(exists(
+    select 1
+    from private.weekly_source_office_query_groups_v1(
+      'f6000000-0000-4000-8000-000000000003',
+      'f8000000-0000-4000-8000-000000000003','{}'::jsonb) query_group
+    cross join lateral pg_catalog.jsonb_array_elements(query_group.children) child(value)
+    where child.value->>'manual_review_id'=v_review::text
+      and child.value#>>'{manual_query,reason}'='Office needs to check the candidate pay decision'
+      and child.value#>>'{manual_query,opened_by}'=(
+        select coalesce(nullif(display_name,''),'Office user')
+        from public.tms_users where id='e1000000-0000-4000-8000-000000000001')
+      and child.value#>>'{manual_query,opened_at_uk}' is not null),
+    'manual query reason, Office author and UK timestamp were not projected');
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_row_id','fc000000-0000-4000-8000-000000000001',
