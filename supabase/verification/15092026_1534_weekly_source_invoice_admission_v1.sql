@@ -828,12 +828,12 @@ begin
   v_prepare:=public.weekly_exceptional_pay_prepare_family_v1(
     pg_catalog.jsonb_build_object(
       'actor_user_id','a0000000-0000-4000-8000-000000000001',
-      'source_cycle_id','a5000000-0000-4000-8000-000000000001',
+      'source_cycle_id','a4000000-0000-4000-8000-000000000001',
       'candidate_id','a0000000-0000-4000-8000-000000000003',
       'client_id','a0000000-0000-4000-8000-000000000002',
       'contract_id','a0000000-0000-4000-8000-000000000004',
-      'week_ending_date','2026-10-11','work_date','2026-10-06',
-      'start_at_local','2026-10-06 09:00','end_at_local','2026-10-06 17:00',
+      'week_ending_date','2026-09-27','work_date','2026-09-25',
+      'start_at_local','2026-09-25 09:00','end_at_local','2026-09-25 17:00',
       'break_minutes',30,'reason','Protect a claimed shift while source is absent.',
       'idempotency_key','invoice-proof-protected-zero-0001'
     )
