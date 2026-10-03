@@ -154,11 +154,37 @@ begin
       to_char(comparison.candidate_start_at_local,'HH24:MI')||'–'||to_char(comparison.candidate_end_at_local,'HH24:MI')
         ||' · '||comparison.candidate_break_minutes::text||' min break' end,
     'candidate_timesheet_id',comparison.candidate_timesheet_id,
+    'booking_reference',source_row.external_source_key,
+    'candidate_sort',(select coalesce(nullif(candidate.last_name,''),candidate.display_name)
+      from public.candidates candidate where candidate.id=v_candidate),
+    'pay_query_open',query_location.source_cycle_id is not null,
+    'query_source_group_id',case when query_location.source_cycle_id is not null then v_group_id end,
+    'query_week_ending',query_cycle.finalisation_week_ending,
+    'final_report_key',case when final_report.manifest_id is not null then 'FINAL:'||final_report.manifest_id::text end,
+    'final_report_week_ending',final_report.week_ending,
+    'finalise_source_cycle_id',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_upload.source_cycle_id end,
+    'finalise_report_scope_id',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_upload.report_scope_id end,
+    'finalise_week_ending',case when source_row.id is not null
+      and (source_profile.profile_code='NHSP_FINAL_BACKING_V1'
+        or source_upload.file_metadata_json->>'import_use'='PREPARE_FINALISATION')
+      then source_cycle.finalisation_week_ending end,
     'family_id',family.id,'contract_id',coalesce(family.contract_id,resolution.contract_id,comparison.contract_id),
     'expected_family_bound_version',family.bound_version::text,
     'protected_state',protected.state,
     'start',to_char(coalesce(protected.start_at_local,comparison.candidate_start_at_local,source_row.start_at_local),'HH24:MI'),
     'end',to_char(coalesce(protected.end_at_local,comparison.candidate_end_at_local,source_row.end_at_local),'HH24:MI'),
+    'source_start',to_char(source_row.start_at_local,'HH24:MI'),
+    'source_end',to_char(source_row.end_at_local,'HH24:MI'),
+    'candidate_start',to_char(comparison.candidate_start_at_local,'HH24:MI'),
+    'candidate_end',to_char(comparison.candidate_end_at_local,'HH24:MI'),
+    'protected_start',to_char(protected.start_at_local,'HH24:MI'),
+    'protected_end',to_char(protected.end_at_local,'HH24:MI'),
     'break_minutes',coalesce(protected.break_minutes,comparison.candidate_break_minutes,source_row.break_minutes)
   ) order by event.id),'[]'::jsonb) into v_events
   from public.weekly_work_events event
@@ -176,7 +202,34 @@ begin
     order by item.created_at_utc desc,item.id desc limit 1
   ) link on true
   left join public.weekly_source_upload_rows source_row on source_row.id=link.upload_row_id
+  left join public.weekly_source_uploads source_upload on source_upload.id=source_row.upload_id
+  left join public.weekly_source_cycles source_cycle on source_cycle.id=source_upload.source_cycle_id
+  left join public.weekly_source_format_profiles source_profile on source_profile.id=source_upload.source_format_profile_id
   left join public.weekly_source_row_resolutions resolution on resolution.id=link.row_resolution_id
+  left join lateral (
+    select coalesce(
+      (select review.source_cycle_id from private.weekly_source_manual_reviews review
+        where review.source_group_id=v_group_id and review.work_event_id=event.id and review.state='OPEN'
+        order by review.opened_at_utc desc,review.id desc limit 1),
+      (select incident.source_cycle_id from public.weekly_discrepancy_incidents incident
+        join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+        where incident_cycle.source_group_id=v_group_id and incident.work_event_id=event.id
+          and incident.state='OPEN'
+        order by incident.created_at_utc desc,incident.id desc limit 1)) source_cycle_id
+  ) query_location on true
+  left join public.weekly_source_cycles query_cycle on query_cycle.id=query_location.source_cycle_id
+  left join lateral (
+    select manifest.id manifest_id,manifest.finalisation_week_ending week_ending
+    from public.weekly_source_client_manifests manifest
+    join public.weekly_source_final_revisions revision on revision.id=manifest.final_revision_id
+    where manifest.source_group_id=v_group_id and manifest.client_id=v_client
+      and revision.state='CURRENT'
+      and (exists(select 1 from public.weekly_source_final_snapshot_lines snapshot
+            where snapshot.final_revision_id=revision.id and snapshot.work_event_id=event.id)
+        or exists(select 1 from public.weekly_source_billing_movements movement
+            where movement.final_revision_id=revision.id and movement.work_event_id=event.id))
+    order by revision.finalised_at_utc desc,manifest.id desc limit 1
+  ) final_report on true
   left join lateral (
     select revision.* from public.weekly_discrepancy_incidents incident
     join public.weekly_issue_comparison_revisions revision on revision.id=incident.current_comparison_revision_id
@@ -943,9 +996,16 @@ begin
         resolution.client_id,resolution.contract_id,row.work_date))->>'authority_mode'='SOURCE_AUTHORITY'
       and (exists(select 1 from public.weekly_source_projection_publications publication
         where publication.upload_id=v_upload.id and publication.state='CURRENT')
-        or exists(select 1 from public.weekly_source_final_revisions revision
+      or exists(select 1 from public.weekly_source_final_revisions revision
           where revision.upload_id=v_upload.id and revision.state='CURRENT'))
       then row.id end,
+    'pay_query_open',exists(select 1 from private.weekly_source_manual_reviews review
+      where review.source_group_id=v_cycle.source_group_id
+        and review.work_event_id=resolution.work_event_id and review.state='OPEN')
+      or exists(select 1 from public.weekly_discrepancy_incidents incident
+        join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+        where incident_cycle.source_group_id=v_cycle.source_group_id
+          and incident.work_event_id=resolution.work_event_id and incident.state='OPEN'),
     'candidate',coalesce(candidate.display_name,nullif(row.bounded_raw_columns_json->>'worker_name',''),
       nullif(row.bounded_raw_columns_json->>'staff_name',''),nullif(row.bounded_raw_columns_json->>'candidate',''),row.source_candidate_identity),
     'client',coalesce(client.name,row.source_client_identity),'source_reference',row.source_candidate_identity,
@@ -1139,6 +1199,13 @@ begin
     )
     select count(*)::integer,coalesce(jsonb_agg(jsonb_build_object('row_key',row_key,
       'source_row_id',case when v_final.state='CURRENT' then source_row_id end,
+      'pay_query_open',exists(select 1 from private.weekly_source_manual_reviews review
+        where review.source_group_id=(v_report->>'source_group_id')::uuid
+          and review.work_event_id=ordered.work_event_id and review.state='OPEN')
+        or exists(select 1 from public.weekly_discrepancy_incidents incident
+          join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+          where incident_cycle.source_group_id=(v_report->>'source_group_id')::uuid
+            and incident.work_event_id=ordered.work_event_id and incident.state='OPEN'),
       'work_event_id',work_event_id,'candidate',candidate_name,
       'day_date',to_char(work_date,'Dy FMDD Mon YYYY'),'start',to_char(start_at_local,'HH24:MI'),
       'end',to_char(end_at_local,'HH24:MI'),'break_minutes',break_minutes,'net_minutes',actual_net_minutes,

@@ -1708,8 +1708,15 @@ begin
           ||to_char(pg_catalog.abs(source_row.source_shift_charge_pence)::numeric/100,'FM9999999990.00') end,
       'status',pg_catalog.jsonb_build_object('text','Ready','tone','positive'),
       'actions',case when source_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED')
+        and not exists(select 1 from private.weekly_source_manual_reviews review
+          where review.source_group_id=v_cycle.source_group_id
+            and review.work_event_id=resolution.work_event_id and review.state='OPEN')
+        and not exists(select 1 from public.weekly_discrepancy_incidents incident
+          join public.weekly_source_cycles incident_cycle on incident_cycle.id=incident.source_cycle_id
+          where incident_cycle.source_group_id=v_cycle.source_group_id
+            and incident.work_event_id=resolution.work_event_id and incident.state='OPEN')
         then pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
-          'label','Send back to Queries','kind','COMMAND','command','OPEN_MANUAL_REVIEW',
+          'label','Send to Pay Queries','kind','COMMAND','command','OPEN_MANUAL_REVIEW',
           'enabled',true,'payload',pg_catalog.jsonb_build_object('source_row_id',source_row.id),
           'context',pg_catalog.jsonb_build_object('candidate',coalesce(candidate.display_name,candidate.tms_ref),
             'client',coalesce(client.name,source_row.source_client_identity),
@@ -1786,6 +1793,9 @@ begin
       'client_id',resolution.client_id,
       'client',source_row.source_client_identity,
       'mapping_state',resolution.mapping_state,
+      'pay_blocking',resolution.mapping_state is distinct from 'RESOLVED'
+        or source_row.row_finalisation_state in
+          ('SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE'),
       'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
       'system_hours',case
         when source_row.start_at_local is not null and source_row.end_at_local is not null

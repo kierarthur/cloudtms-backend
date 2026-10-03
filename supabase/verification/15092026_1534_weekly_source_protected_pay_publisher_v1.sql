@@ -129,6 +129,17 @@ select pg_temp.assert_true(
    from first_result),
   'a later source cycle must be allowed to protect an unresolved historic work week'
 );
+select pg_temp.assert_true(exists(
+  select 1 from first_result first,
+    lateral public.weekly_source_protected_editor_context_v1(pg_catalog.jsonb_build_object(
+      'actor_user_id','e1000000-0000-4000-8000-000000000001',
+      'candidate_id','e1000000-0000-4000-8000-000000000004',
+      'client_id','e1000000-0000-4000-8000-000000000003',
+      'work_date','2026-09-07')) context(value),
+    lateral pg_catalog.jsonb_array_elements(context.value->'events') event
+  where event->>'work_event_id'=first.result->>'work_event_id'
+    and event->>'pay_query_open'='false'
+), 'the editor must identify an existing non-queried shift without inventing a report route');
 select pg_temp.assert_true(
   (select count(*)=1 from public.weekly_exceptional_pay_target_families
    where id=(select (result->>'family_id')::uuid from first_result)
@@ -276,6 +287,31 @@ begin
   end;
 end;
 $non_authoriser_refused$;
+
+do $future_work_refused$
+declare
+  v_date date:=(pg_catalog.clock_timestamp() at time zone 'Europe/London')::date+1;
+  v_week_end date;
+begin
+  v_week_end:=v_date+((7-extract(dow from v_date)::integer)%7);
+  begin
+    perform public.weekly_exceptional_pay_prepare_family_v1(pg_catalog.jsonb_build_object(
+      'actor_user_id','e1000000-0000-4000-8000-000000000001',
+      'source_cycle_id','e1000000-0000-4000-8000-00000000000a',
+      'candidate_id','e1000000-0000-4000-8000-000000000004',
+      'client_id','e1000000-0000-4000-8000-000000000003',
+      'contract_id','e1000000-0000-4000-8000-000000000005',
+      'week_ending_date',v_week_end,'work_date',v_date,
+      'start_at_local',v_date::text||' 09:00:00',
+      'end_at_local',v_date::text||' 17:00:00','break_minutes',30,
+      'reason','Future work must not be protected.',
+      'idempotency_key','protected-family-future-test'));
+    raise exception 'FUTURE_WORK_WAS_ACCEPTED';
+  exception when sqlstate '22023' then
+    if sqlerrm<>'WEEKLY_PROTECTED_FAMILY_REQUEST_INVALID' then raise; end if;
+  end;
+end;
+$future_work_refused$;
 
 select pg_temp.assert_true(
   not has_function_privilege('anon',

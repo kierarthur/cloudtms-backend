@@ -2586,6 +2586,7 @@ do $manual_review$
 declare
   v_open jsonb;
   v_resolved jsonb;
+  v_file jsonb;
   v_review uuid;
 begin
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
@@ -2610,6 +2611,13 @@ begin
         from public.tms_users where id='e1000000-0000-4000-8000-000000000001')
       and child.value#>>'{manual_query,opened_at_uk}' is not null),
     'manual query reason, Office author and UK timestamp were not projected');
+  v_file:=public.weekly_source_upload_detail_v1(jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'upload_id','f7000000-0000-4000-8000-000000000003'));
+  perform pg_temp.assert_true(exists(select 1 from jsonb_array_elements(v_file->'shifts') shift
+    where shift->>'source_row_id'='fc000000-0000-4000-8000-000000000001'
+      and shift->>'pay_query_open'='true'),
+    'the source-file action did not hide a shift already in Pay Queries');
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_row_id','fc000000-0000-4000-8000-000000000001',

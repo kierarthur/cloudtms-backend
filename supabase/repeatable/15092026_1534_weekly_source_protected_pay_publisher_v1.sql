@@ -206,6 +206,7 @@ begin
      or v_end_at_local<=v_start_at_local
      or v_break_minutes>=extract(epoch from (v_end_at_local-v_start_at_local))/60
      or v_work_date<>v_start_at_local::date
+     or v_work_date>(pg_catalog.clock_timestamp() at time zone 'Europe/London')::date
      or v_work_date not between v_week_start_date and v_week_ending_date
      or pg_catalog.char_length(v_reason) not between 1 and 1000
      or pg_catalog.char_length(v_idempotency_key) not between 16 and 200 then
@@ -511,11 +512,13 @@ begin
     -- changed hours must name the existing shift and use its protected owner.
     if not v_replay and exists(
       select 1 from public.weekly_work_events existing
-      where existing.candidate_id=v_candidate_id and existing.client_id=v_client_id
-        and existing.work_date=v_work_date and existing.first_source_group_id=v_group.id
+      where existing.candidate_id=v_candidate_id
+        and existing.work_date between v_work_date-1 and v_work_date+1
         and existing.durable_identity_hash<>v_work_event_hash
         and (
-          (existing.identity_kind='OFFICE_PROTECTED_SHIFT'
+          (existing.work_date=v_work_date and existing.client_id=v_client_id
+            and existing.first_source_group_id=v_group.id
+            and existing.identity_kind='OFFICE_PROTECTED_SHIFT'
             and not exists(select 1 from public.weekly_exceptional_pay_family_events recorded
               where recorded.durable_work_event_id=existing.id))
           or
