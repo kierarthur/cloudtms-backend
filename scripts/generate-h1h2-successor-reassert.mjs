@@ -11,7 +11,10 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputPath = 'supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql';
 const owners = [
-  ['29082026_0326_banking_pay_release_authority_repair_v1.sql', ['public.contract_week_manual_upsert_atomic']],
+  // The older 2908 Banking Pay closure also defines this identity, but the
+  // 2708 Candidate owner was later updated with the approved Plan 6.2 G6-11
+  // managed-root guard and is the verified current body (pin d05fe8c...).
+  ['27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql', ['public.contract_week_manual_upsert_atomic']],
   ['04092026_2355_banking_pay_workbench_selection_owner_reassert_v1.sql', ['public.pay_workbench_session_set_selected_rows']],
   ['08092026_0518_banking_pay_candidate_dirty_cohort_authority_v1.sql', ['private.pay_workbench_candidate_dirty_cohort_stage_v1', 'public.pay_workbench_candidate_dirty_apply_job_process']],
   ['08092026_1200_banking_pay_cancel_return_selection_intent_v1.sql', ['public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1']],
@@ -55,6 +58,10 @@ function extract(source, identity) {
   const definition = source.slice(start, closeRegex.lastIndex);
   assert.equal([...definition.matchAll(/^CREATE OR REPLACE FUNCTION /gm)].length, 1,
     `${identity}: extraction crossed another function boundary`);
+  if (identity === 'public.contract_week_manual_upsert_atomic') {
+    assert.match(definition, /private\.weekly_source_managed_root_guard_v1\(/,
+      'Plan 6.2 managed-root refusal must survive the historical replay');
+  }
   return definition;
 }
 

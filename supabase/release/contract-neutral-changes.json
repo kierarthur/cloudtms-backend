@@ -11,7 +11,7 @@
     },
     {
       "path": "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
-      "sha256": "7bab30f08891a6c017abc63cd293392333e2eed9891cb8a7711ea8696303787c"
+      "sha256": "a6c9243fd8e69a303bc5ad55978374a7a4a814e0a401abd38c18eb4d1c6b3625"
     },
     {
       "path": "supabase/repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql",
