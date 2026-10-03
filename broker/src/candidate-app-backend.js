@@ -6227,7 +6227,7 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
       throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
     }
-    const page = await rpcCall(deps, 'candidate_app_timesheet_page_v1', candidateRpcArgs(access, env, {
+    const page = await rpcCall(deps, 'candidate_app_timesheet_page_v2', candidateRpcArgs(access, env, {
       p_view: requestedView.toUpperCase(),
       p_cursor: cursor,
       p_limit: rawLimit

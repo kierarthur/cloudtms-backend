@@ -403,12 +403,13 @@
     },
     "candidateTimesheetDisplay": {
       "route": "the existing MyTMS Timesheet screen and component family",
-      "submittedHours": "show the candidate's signed Timesheet hours as the normal Timesheet evidence",
+      "submittedHours": "for import-authoritative Timesheets, show a concise Hours submitted or Hours not submitted badge; keep the existing permitted view and amend routes for the candidate's own evidence, but do not show submitted numeric hours on the initial detail screen",
       "approvedHoursLabel": "Approved hours to be paid",
-      "approvedHoursVisibility": "show only when the currently approved hours differ from the submitted Timesheet hours",
+      "approvedHoursVisibility": "for import-authoritative Timesheets, show only a verified current approved-hours total prominently on the detail screen, with a tap-to-expand date, clock-time and break breakdown; show it whether or not it differs from the candidate submission",
+      "approvedHoursList": "label the import-authoritative list fact Approved hours; display only a total certified by the current committed entitlement; when no hours have yet been approved show Not yet processed, and when an existing approval cannot be verified show Approved hours unavailable rather than zero or a financial or submitted-hours fallback",
       "approvedHoursAuthority": "current system hours, replaced by Office-protected hours while that protection is effective, then updated by later reconciliation",
       "differenceCopy": "These are the hours currently approved for payment. We’ll let you know if they change.",
-      "whenApprovedHoursReturnToSubmitted": "remove the extra approved-hours section after sending the change notification; keep the submitted Timesheet evidence",
+      "whenApprovedHoursReturnToSubmitted": "keep the verified approved-hours total and breakdown visible after sending the change notification even if they again match the candidate submission; retain the separate candidate submission evidence behind its existing permitted route",
       "forbidden": [
         "money",
         "gross pay",
@@ -431,11 +432,11 @@
         "when": "the record is source-authority and the Candidate submitted no Timesheet for that week",
         "beforeOfficeAuthorises": "no Candidate-facing Timesheet detail is created; the ordinary Submit your Timesheet request journey applies",
         "afterOfficeAuthorises": "show a read-only Timesheet detail for the week",
-        "submissionCopy": "You did not submit a Timesheet for this week.",
-        "showOnly": "Approved hours to be paid, with hours and breaks",
+        "submissionCopy": "Hours not submitted",
+        "showOnly": "the verified approved-hours total with an expandable date, time and break breakdown, plus the no-submission badge; do not present a financial total as approved when entitlement is unavailable",
         "neverClaimSubmitted": true,
         "listPresentation": "the week appears in the Timesheet list with the same read-only status and no submission tick",
-        "statusPill": "the existing app status pill (Approved) refers to the approved hours to be paid, never to a submission; it is always paired with the Read-only pill and the no-submission sentence",
+        "statusPill": "the existing app status pill (Approved) refers to the approved hours to be paid, never to a submission; it is paired with the Read-only pill and Hours not submitted badge",
         "pushPolicy": "no push on first authorisation; approvedHoursChangedPush is sent only when the approved hours later change",
         "forbidden": [
           "money",
@@ -4084,23 +4085,24 @@
         "text": "Approved",
         "tone": "positive"
       },
-      "truthTitle": "Timesheet submitted",
+      "truthTitle": "Your hours",
       "truthRows": [
         {
-          "label": "Your hours",
-          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break",
+          "label": "Hours submitted",
           "action": "View submitted Timesheet"
         }
       ],
       "differenceNote": "",
       "approvedTitle": "Approved hours to be paid",
+      "approvedTotal": "8.00 hours",
+      "approvedRowsVisibility": "on_tap",
       "approvedRows": [
         {
           "day": "Mon 1 Sep 2026",
           "value": "09:00-17:30 · 30 min break"
         }
       ],
-      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change.",
+      "approvedNote": "",
       "route": "SOURCE_AUTHORITY",
       "expenses": {
         "title": "Expenses",
@@ -4185,10 +4187,12 @@
         "subtext": "Read-only",
         "subtone": "neutral"
       },
-      "truthTitle": "Timesheet",
+      "truthTitle": "Your hours",
       "truthRows": [],
-      "differenceNote": "You did not submit a Timesheet for this week.",
+      "differenceNote": "Hours not submitted",
       "approvedTitle": "Approved hours to be paid",
+      "approvedTotal": "19.00 hours",
+      "approvedRowsVisibility": "on_tap",
       "approvedRows": [
         {
           "day": "Mon 1 Sep 2026",
@@ -4199,7 +4203,7 @@
           "value": "20:00-08:00 · 60 min break"
         }
       ],
-      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change."
+      "approvedNote": ""
     },
     {
       "id": "worker-timesheet-source-fixed-expense",
@@ -4215,23 +4219,24 @@
         "text": "Approved",
         "tone": "positive"
       },
-      "truthTitle": "Timesheet submitted",
+      "truthTitle": "Your hours",
       "truthRows": [
         {
-          "label": "Your hours",
-          "value": "Mon 1 Sep · 09:00-18:00 · 30 min break",
+          "label": "Hours submitted",
           "action": "View submitted Timesheet"
         }
       ],
       "differenceNote": "",
       "approvedTitle": "Approved hours to be paid",
+      "approvedTotal": "8.00 hours",
+      "approvedRowsVisibility": "on_tap",
       "approvedRows": [
         {
           "day": "Mon 1 Sep 2026",
           "value": "09:00-17:30 · 30 min break"
         }
       ],
-      "approvedNote": "These are the hours currently approved for payment. We’ll let you know if they change."
+      "approvedNote": ""
     },
     {
       "id": "weekly-imports-two-journeys",

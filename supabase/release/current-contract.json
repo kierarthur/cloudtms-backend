@@ -14136,6 +14136,25 @@
         "search_path=public, private, pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "weekly_source_candidate_list_approval_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "2b456b045aae3199f28a6b7a0a179b09b12fe44ed19cab6c457df8aa9044ce93"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "weekly_source_candidate_notification_intent_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -14254,7 +14273,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "f6890d5de1993aaaeefd6fa700029a8b594ebdccf2c473612fa951c15d48bf2e"
+      "definition_sha256": "c4d80488828e58e21a12dcd5d7937d25842f0c3ec6bd5355fc1837d0f05065d4"
     },
     {
       "acl": [
@@ -24046,6 +24065,30 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "21f4d6377708ec8fb568c0bcd5be4aa85f26abe8bde6a4cec92eb9ff45303900"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_app_timesheet_page_v2(p_session_id uuid, p_environment text, p_view text, p_cursor text, p_limit integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b68c14e24f4036e02e24fe1eb0154a4df6741292f1fd27c312c9146195a92001"
     },
     {
       "acl": [

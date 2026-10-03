@@ -2017,7 +2017,7 @@ test('timesheet page boundary defaults to Current and validates the explicit His
       assert.equal((await response.json()).view, expected);
     }
     assert.equal(rpcCalls.length, 2);
-    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_page_v1');
+    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_page_v2');
     assert.equal(rpcCalls[0].args.p_view, 'CURRENT');
     assert.equal(rpcCalls[0].args.p_limit, 50);
     assert.equal(rpcCalls[1].args.p_view, 'HISTORY');
