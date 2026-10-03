@@ -54,6 +54,16 @@ test('current source context excludes superseded Correct-final history', () => {
   assert.doesNotMatch(context, /order by[\s\S]{0,160}created_at_utc[\s\S]{0,80}limit 1[\s\S]{0,80}weekly_source_final_revisions/i);
 });
 
+test('zero-root rate provenance uses the root week policy, not the shift-date policy', () => {
+  const context = functionBody(
+    'create or replace function public.weekly_exceptional_pay_action_context_v1',
+    'create or replace function public.weekly_exceptional_pay_action_publication_status_v1',
+  );
+  assert.match(context, /v_policy:=private\._weekly_source_effective_policy_v1\(\s*v_contract\.client_id,v_contract\.id,v_event\.work_date\s*\)/);
+  assert.match(context, /v_root_policy:=private\._weekly_source_effective_policy_v1\(\s*v_contract\.client_id,v_contract\.id,v_family\.week_ending_date\s*\)/);
+  assert.match(context, /'effective_policy_sha256',v_root_policy->>'policy_sha256'/);
+});
+
 test('final-source review helper is read-only and cannot be called by browser or service roles', () => {
   const context = functionBody('create or replace function private.weekly_source_protected_final_source_context_v1',
     'create or replace function public.weekly_exceptional_pay_action_context_v1');

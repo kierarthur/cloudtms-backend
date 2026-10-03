@@ -689,6 +689,7 @@ declare
   v_end timestamp without time zone;
   v_break integer;
   v_policy jsonb;
+  v_root_policy jsonb;
   v_settings jsonb;
   v_source_mode text;
   v_source_segments jsonb:='[]'::jsonb;
@@ -795,6 +796,12 @@ begin
   );
   v_policy:=private._weekly_source_effective_policy_v1(
     v_contract.client_id,v_contract.id,v_event.work_date
+  );
+  -- The selected shift uses its work-date policy, but the zero-value root
+  -- financial is a weekly Timesheet. Its rate-source fingerprint must match
+  -- the root prepare owner's week-ending policy exactly.
+  v_root_policy:=private._weekly_source_effective_policy_v1(
+    v_contract.client_id,v_contract.id,v_family.week_ending_date
   );
   v_settings:=(private._timesheet_settings_authority_frozen_v1(v_root.timesheet_id)->'values')
     -'resolved_at_utc';
@@ -958,7 +965,7 @@ begin
     'source_profile_domain',case when v_source_mode='NHSP_WEEKLY'
       then 'NHSP_TRUST_BACKING_REPORT' else 'ROSTER_FINAL_AUTHORITY' end,
     'target_family_id',v_family.id,'root_timesheet_id',v_root.timesheet_id,
-    'effective_policy_sha256',v_policy->>'policy_sha256'
+    'effective_policy_sha256',v_root_policy->>'policy_sha256'
   );
 
   return pg_catalog.jsonb_build_object(
