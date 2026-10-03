@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Mechanically copy one reviewed current authority; never replay the 2.7 MB
-// Stage 2 bundle merely to restore this function after an older closure.
+// Mechanically copy the adjacent Stage 2 preview producer family; never
+// replay the 2.7 MB Stage 2 bundle merely to restore these functions.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -19,13 +19,18 @@ const endMarker = '\n$function$;';
 const end = source.indexOf(endMarker, bodyStart);
 assert.ok(bodyStart > start && end > bodyStart, 'canonical producer function boundary changed');
 const definition = source.slice(start, end + endMarker.length);
+assert.deepEqual([...definition.matchAll(/^CREATE OR REPLACE FUNCTION ([\w.]+)\(/gm)].map(x => x[1]), [
+  'public.pay_preview_candidate_build_canonical_lines',
+  'public.pay_preview_candidate_build_finance_case_baseline',
+  'public.pay_preview_candidate_collect_scope',
+]);
 assert.match(definition, /'component_key_type', 'MANUAL_CARRY_FORWARD'/);
 assert.match(definition, /'economic_key', jsonb_strip_nulls\(jsonb_build_object\(/);
 const hash = crypto.createHash('sha256').update(definition).digest('hex');
 const output = [
-  '-- Exact Stage 2 canonical producer reassertion after a resumed H1/H2 closure.',
+  '-- Exact adjacent Stage 2 preview producer family reassertion after a resumed H1/H2 closure.',
   `-- Generated from ${sourcePath}; function SHA-256 ${hash}.`,
-  '-- Replaces only this current function; no payment/provider action is executed.',
+  '-- Replaces only these three current functions; no payment/provider action is executed.',
   '\\set ON_ERROR_STOP on',
   'begin;',
   definition,

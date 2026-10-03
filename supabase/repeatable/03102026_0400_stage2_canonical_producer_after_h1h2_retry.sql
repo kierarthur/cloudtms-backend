@@ -1,6 +1,6 @@
--- Exact Stage 2 canonical producer reassertion after a resumed H1/H2 closure.
+-- Exact adjacent Stage 2 preview producer family reassertion after a resumed H1/H2 closure.
 -- Generated from supabase/repeatable/26092026_0203_banking_pay_stage2_workbench_draft_v1.sql; function SHA-256 b0845aabbf78ec5cf8d19772083879edbcc880eb04e3504838bf83048b565f38.
--- Replaces only this current function; no payment/provider action is executed.
+-- Replaces only these three current functions; no payment/provider action is executed.
 \set ON_ERROR_STOP on
 begin;
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
