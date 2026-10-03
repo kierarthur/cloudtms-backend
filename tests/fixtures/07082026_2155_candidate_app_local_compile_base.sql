@@ -1017,6 +1017,15 @@ create table public.mail_outbox (
   waiting_invoice_operation_id uuid
 );
 
+-- Candidate-only mail tests have no Weekly Source completion events. The
+-- production predicate is installed and verified in the integrated release;
+-- this fixture must never admit a completed-pack copy claim.
+create function private._weekly_source_completed_pack_copy_claim_event_valid_v1(
+  p_mail public.mail_outbox
+) returns boolean language sql stable as $function$
+  select false;
+$function$;
+
 create table public.audit_events (
   id uuid primary key default gen_random_uuid(),
   ts_utc timestamptz not null default now(),
