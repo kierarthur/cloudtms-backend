@@ -1356,12 +1356,11 @@ as $function$
 $function$;
 
 -- The Candidate-only runtime matrix does not install Weekly Source tables or
--- client/group policies. Its capability reader still calls this optional
--- resolver for an import-authoritative historical week. Reproduce the real
--- absence of a resolved policy as NULL so this matrix can prove the
--- Candidate view-only fallback; integrated Weekly Source verifiers install
--- and exercise the complete resolver separately. This fixture is never
--- release SQL.
+-- client/group policies. Its import-authoritative test record is view-only:
+-- model an IMPORT_ONLY source policy so the matrix proves that Candidate
+-- cannot open an hours workflow for that record. Integrated Weekly Source
+-- verifiers install and exercise the complete resolver separately. This
+-- fixture is never release SQL.
 create or replace function private._weekly_source_effective_policy_v1(
   p_client_id uuid,
   p_contract_id uuid,
@@ -1371,7 +1370,10 @@ language plpgsql
 stable
 as $function$
 begin
-  return null;
+  return pg_catalog.jsonb_build_object(
+    'authority_mode','SOURCE_AUTHORITY',
+    'document_mode','IMPORT_ONLY'
+  );
 end;
 $function$;
 
