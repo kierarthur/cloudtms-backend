@@ -1358,9 +1358,10 @@ $function$;
 -- The Candidate-only runtime matrix does not install Weekly Source tables or
 -- client/group policies. Its capability reader still calls this optional
 -- resolver for an import-authoritative historical week. Reproduce the real
--- resolver's documented absent-policy refusal so this matrix tests the
--- Candidate fallback; integrated Weekly Source verifiers install and exercise
--- the complete resolver separately. This fixture is never release SQL.
+-- absence of a resolved policy as NULL so this matrix can prove the
+-- Candidate view-only fallback; integrated Weekly Source verifiers install
+-- and exercise the complete resolver separately. This fixture is never
+-- release SQL.
 create or replace function private._weekly_source_effective_policy_v1(
   p_client_id uuid,
   p_contract_id uuid,
@@ -1370,7 +1371,7 @@ language plpgsql
 stable
 as $function$
 begin
-  raise exception 'WEEKLY_SOURCE_POLICY_SCOPE_NOT_FOUND' using errcode='22023';
+  return null;
 end;
 $function$;
 
