@@ -115,29 +115,14 @@ begin
   select coalesce(pg_catalog.array_agg(eligible.warning_key order by eligible.warning_key),'{}'::text[])
     into v_eligible_keys
   from (
-    select 'all-zero-source-charge'::text warning_key
-    where exists(
-      select 1
-      from public.weekly_source_charge_checks charge
-      join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
-      left join public.weekly_source_charge_acceptances acceptance
-        on acceptance.charge_check_id=charge.id
-      where source_row.upload_id=v_upload.id
-        and charge.generation=v_publication.projection_generation
-        and charge.comparison_result='ZERO_SOURCE_CHARGE'
-        and charge.phase_severity='PROVISIONAL_WARNING'
-        and charge.blocker_code is null
-        and acceptance.id is null
-    )
-    union all
-    select 'charge-check:'||charge.id::text
+    select 'charge-check:'||charge.id::text warning_key
     from public.weekly_source_charge_checks charge
     join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
     left join public.weekly_source_charge_acceptances acceptance
       on acceptance.charge_check_id=charge.id
     where source_row.upload_id=v_upload.id
       and charge.generation=v_publication.projection_generation
-      and charge.comparison_result='MISMATCH'
+      and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
       and charge.phase_severity='PROVISIONAL_WARNING'
       and charge.blocker_code is null
       and acceptance.id is null
@@ -159,9 +144,7 @@ begin
   end if;
 
   select coalesce(pg_catalog.array_agg(charge.id order by charge.id),'{}'::uuid[]),
-    pg_catalog.count(distinct case
-      when charge.comparison_result='ZERO_SOURCE_CHARGE' then 'all-zero-source-charge'
-      else 'charge-check:'||charge.id::text end)::integer
+    pg_catalog.count(distinct 'charge-check:'||charge.id::text)::integer
     into v_ids,v_mapped_key_count
   from public.weekly_source_charge_checks charge
   join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
@@ -173,9 +156,7 @@ begin
     and charge.phase_severity='PROVISIONAL_WARNING'
     and charge.blocker_code is null
     and acceptance.id is null
-    and (case when charge.comparison_result='ZERO_SOURCE_CHARGE'
-      then 'all-zero-source-charge'
-      else 'charge-check:'||charge.id::text end)=any(v_selected_keys);
+    and ('charge-check:'||charge.id::text)=any(v_selected_keys);
   if coalesce(pg_catalog.array_length(v_ids,1),0)=0
      or v_mapped_key_count<>pg_catalog.array_length(v_selected_keys,1) then
     raise exception 'WEEKLY_SOURCE_CHARGE_ACCEPT_SELECTION_STALE' using errcode='40001';

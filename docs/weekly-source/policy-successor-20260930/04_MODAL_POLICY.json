@@ -1185,13 +1185,15 @@
       },
       "readyForFinalisation": [
         "EXACT",
-        "SOURCE_ROUNDING_EQUIVALENT"
+        "SOURCE_ROUNDING_EQUIVALENT",
+        "MISMATCH or ZERO_SOURCE_CHARGE only with a current fingerprint-bound Office source-charge acceptance"
       ],
       "readyForFinalisationAppliesTo": "positive and valid full-negative NHSP physical rows after mapping and signed comparison gates; a first-activation full-negative row may invoice without candidate-pay recovery and displays Historical reversal—candidate pay not changed; generated historical reversals exist only for configured non-NHSP correction routes and require exact prior-snapshot binding and negation proof",
       "blocksFinalisation": [
-        "MISMATCH",
+        "MISMATCH or ZERO_SOURCE_CHARGE until accepted on the current final backing report",
         "UNVERIFIABLE"
       ],
+      "finalReportChargeDecisionPresentation": "An unaccepted eligible NHSP source-charge warning belongs in exactly one Blocked shift row, never Ready or a separate warning table. Show the number of issues and the highest-priority action; resolve mapping or structural blockers first. Expand that row to compare source Commission, Total Cost and sum with the selected Contract's fresh calculated charge and difference. Office may explicitly accept one, several or all eligible current shifts with an audited confirmation; the acceptance changes no source amount, candidate pay or invoice authority. Recheck all bindings under the atomic report finalisation lock. Checking imports cannot accept a final charge. Later corrected complete reports create physical correction movements instead of rewriting issued invoices. See WEEKLY_SOURCE_QUERY_FINALISATION_DECISIONS_20261002.md, 3 October successor amendment.",
       "forbidden": [
         "generic tolerance beyond the named one-penny same-sign row rule",
         "epsilon or floating-point distance threshold",
@@ -1202,7 +1204,7 @@
         "whole-shift fallback to split windows",
         "week-level netting",
         "ranking exact above source-rounding-equivalent",
-        "all-zero or mixed-sign row acceptance",
+        "structurally invalid all-zero or mixed-sign row acceptance",
         "negative-row Contract selection from source money",
         "NHSP reversal inference from omission"
       ],

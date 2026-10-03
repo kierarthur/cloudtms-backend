@@ -1884,12 +1884,40 @@ do $accept_zero_charge$
 declare
   v_generation bigint;
   v_workspace_version text;
+  v_warning_key text;
   v_proof text;
   v_result jsonb;
+  v_workspace jsonb;
 begin
   select projection_generation into strict v_generation
   from public.weekly_source_projection_publications
   where id='b4000000-0000-4000-8000-000000000006';
+  select 'charge-check:'||charge.id::text into strict v_warning_key
+  from public.weekly_source_charge_checks charge
+  join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
+  join public.weekly_source_projection_publications publication
+    on publication.upload_id=source_row.upload_id
+  where publication.id='b4000000-0000-4000-8000-000000000006'
+    and charge.generation=v_generation
+    and charge.comparison_result='ZERO_SOURCE_CHARGE'
+    and charge.phase_severity='PROVISIONAL_WARNING'
+    and charge.blocker_code is null;
+  v_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','a0000000-0000-4000-8000-000000000001',
+    'tab','finalise',
+    'source_group_id','b0000000-0000-4000-8000-000000000005',
+    'source_cycle_id','b4000000-0000-4000-8000-000000000001',
+    'client_id','b0000000-0000-4000-8000-000000000002',
+    'report_scope_id','b4000000-0000-4000-8000-000000000002',
+    'projection_publication_id','b4000000-0000-4000-8000-000000000006'
+  ));
+  if (v_workspace#>>'{finalise,ready,total_count}')::integer<>0
+     or (v_workspace#>>'{finalise,blocked,total_count}')::integer<>1
+     or v_workspace#>>'{finalise,blocked,rows,0,charge_warning_key}'<>v_warning_key
+     or v_workspace#>>'{finalise,blocked,rows,0,status,text}'<>'Charge decision needed' then
+    raise exception 'ASSERTION_FAILED: one unaccepted zero-charge shift must appear only in Finalise Blocked %',
+      v_workspace->'finalise';
+  end if;
   v_workspace_version:=private.weekly_source_office_workspace_version_v1(
     'b4000000-0000-4000-8000-000000000001',
     'b4000000-0000-4000-8000-000000000006'
@@ -1901,18 +1929,32 @@ begin
       'projection_publication_id','b4000000-0000-4000-8000-000000000006'::uuid,
       'projection_generation',v_generation,
       'workspace_version',v_workspace_version,
-      'eligible_warning_keys',pg_catalog.jsonb_build_array('all-zero-source-charge')
+      'eligible_warning_keys',pg_catalog.jsonb_build_array(v_warning_key)
     )
   ),'hex');
   v_result:=public.weekly_source_charge_accept_atomic_v1(pg_catalog.jsonb_build_object(
     'actor_user_id','a0000000-0000-4000-8000-000000000001',
     'source_cycle_id','b4000000-0000-4000-8000-000000000001',
     'projection_publication_id','b4000000-0000-4000-8000-000000000006',
-    'warning_keys',pg_catalog.jsonb_build_array('all-zero-source-charge'),
+    'warning_keys',pg_catalog.jsonb_build_array(v_warning_key),
     'selection_proof',v_proof
   ));
   if v_result->>'status'<>'ACCEPTED' or (v_result->>'accepted_count')::integer<>1 then
     raise exception 'ASSERTION_FAILED: zero source charge was not accepted through the Office owner %',v_result;
+  end if;
+  v_workspace:=public.weekly_source_office_workspace_v1(pg_catalog.jsonb_build_object(
+    'actor_user_id','a0000000-0000-4000-8000-000000000001',
+    'tab','finalise',
+    'source_group_id','b0000000-0000-4000-8000-000000000005',
+    'source_cycle_id','b4000000-0000-4000-8000-000000000001',
+    'client_id','b0000000-0000-4000-8000-000000000002',
+    'report_scope_id','b4000000-0000-4000-8000-000000000002',
+    'projection_publication_id','b4000000-0000-4000-8000-000000000006'
+  ));
+  if (v_workspace#>>'{finalise,ready,total_count}')::integer<>1
+     or (v_workspace#>>'{finalise,blocked,total_count}')::integer<>0 then
+    raise exception 'ASSERTION_FAILED: accepted zero-charge shift must move to Finalise Ready %',
+      v_workspace->'finalise';
   end if;
 end;
 $accept_zero_charge$;

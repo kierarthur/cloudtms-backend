@@ -1087,10 +1087,13 @@ begin
     where charge.upload_row_id=source_row.id
     order by charge.generation desc,charge.id desc limit 1
   ) charge on true
+  left join public.weekly_source_charge_acceptances charge_acceptance
+    on charge_acceptance.charge_check_id=charge.id
   where v_publication_id is not null and source_row.upload_id=v_upload.id
     and (resolution.mapping_state is distinct from 'RESOLVED'
       or source_row.row_finalisation_state in ('BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
-      or charge.phase_severity='FINALISATION_BLOCKER');
+      or charge.phase_severity='FINALISATION_BLOCKER'
+      or (charge.phase_severity='PROVISIONAL_WARNING' and charge_acceptance.id is null));
 
   -- PHD-014..019 / PRC-043..050.  The final NHSP source value remains
   -- authoritative, but a known disparity or structurally valid zero charge is
@@ -1118,76 +1121,46 @@ begin
       and charge.blocker_code is null;
 
     if v_rate_warning_count>0 then
-      select coalesce(pg_catalog.jsonb_agg(warning.row_json order by warning.sort_order,warning.warning_key),'[]'::jsonb)
+      select coalesce(pg_catalog.jsonb_agg(warning.row_json order by warning.work_date,warning.candidate_name,warning.warning_key),'[]'::jsonb)
       into v_rate_warning_rows
       from (
-        select 0 sort_order,'all-zero-source-charge'::text warning_key,
-          pg_catalog.jsonb_build_object(
-            'warning_key','all-zero-source-charge',
-            'candidate',pg_catalog.count(distinct coalesce(resolution.candidate_id::text,source_row.source_candidate_identity))::text
-              ||case when pg_catalog.count(distinct coalesce(resolution.candidate_id::text,source_row.source_candidate_identity))=1
-                then ' affected candidate' else ' affected candidates' end,
-            'day_date',case when pg_catalog.count(*)=1 then pg_catalog.min(to_char(source_row.work_date,'Dy FMDD Mon YYYY')) else 'Multiple shifts' end,
-            'source_charge','£0.00','warning','Possible NHSP rate card issue','warning_tone','warning',
-            'action_label',case when pg_catalog.count(*) filter (where acceptance.id is null)>0
-              then 'View affected shifts' else 'Accepted' end,
-            'accept_eligible',v_profile.profile_code='NHSP_FINAL_BACKING_V1'
-              and pg_catalog.count(*) filter (where acceptance.id is null)>0,
-            'detail_rows',coalesce((
-              select pg_catalog.jsonb_agg(detail.row_json order by detail.work_date,detail.candidate_name,detail.charge_check_id)
-              from (
-                select zero_charge.id charge_check_id,zero_row.work_date,
-                  coalesce(zero_candidate.display_name,zero_candidate.tms_ref,zero_row.source_candidate_identity,'Candidate') candidate_name,
-                  pg_catalog.jsonb_build_object(
-                    'candidate',coalesce(zero_candidate.display_name,zero_candidate.tms_ref,zero_row.source_candidate_identity,'Candidate'),
-                    'day_date',to_char(zero_row.work_date,'Dy FMDD Mon YYYY'),
-                    'source_charge','£0.00','warning','Possible NHSP rate card issue'
-                  ) row_json
-                from public.weekly_source_charge_checks zero_charge
-                join public.weekly_source_upload_rows zero_row on zero_row.id=zero_charge.upload_row_id
-                left join public.weekly_source_row_resolutions zero_resolution on zero_resolution.id=zero_charge.row_resolution_id
-                left join public.candidates zero_candidate on zero_candidate.id=zero_resolution.candidate_id
-                where zero_row.upload_id=v_upload.id
-                  and zero_charge.generation=v_publication.projection_generation
-                  and zero_charge.comparison_result='ZERO_SOURCE_CHARGE'
-                  and zero_charge.phase_severity='PROVISIONAL_WARNING'
-                  and zero_charge.blocker_code is null
-                order by zero_row.work_date,candidate_name,zero_charge.id
-                limit 100
-              ) detail
-            ),'[]'::jsonb)
-          ) row_json
-        from public.weekly_source_charge_checks charge
-        join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
-        left join public.weekly_source_row_resolutions resolution on resolution.id=charge.row_resolution_id
-        left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
-        where source_row.upload_id=v_upload.id
-          and charge.generation=v_publication.projection_generation
-          and charge.comparison_result='ZERO_SOURCE_CHARGE'
-          and charge.phase_severity='PROVISIONAL_WARNING'
-          and charge.blocker_code is null
-        having pg_catalog.count(*)>0
-        union all
-        select 1 sort_order,'charge-check:'||charge.id::text warning_key,
+        select source_row.work_date,
+          coalesce(candidate.display_name,candidate.tms_ref,source_row.source_candidate_identity,'Candidate') candidate_name,
+          'charge-check:'||charge.id::text warning_key,
           pg_catalog.jsonb_build_object(
             'warning_key','charge-check:'||charge.id::text,
+            'source_row_id',source_row.id,
             'candidate',coalesce(candidate.display_name,candidate.tms_ref,source_row.source_candidate_identity,'Candidate'),
             'day_date',to_char(source_row.work_date,'Dy FMDD Mon YYYY'),
             'source_charge',case when charge.source_shift_charge_pence<0 then '-£' else '£' end
               ||to_char(pg_catalog.abs(charge.source_shift_charge_pence)::numeric/100,'FM9999999990.00'),
-            'warning','Rate card expired or wrong Contract rate','warning_tone','warning',
-            'action_label',case when acceptance.id is null then 'Review rate warning' else 'Accepted' end,
-            'accept_eligible',v_profile.profile_code='NHSP_FINAL_BACKING_V1' and acceptance.id is null,
+            'commission',case when charge.source_commission_pence<0 then '-£' else '£' end
+              ||to_char(pg_catalog.abs(charge.source_commission_pence)::numeric/100,'FM9999999990.00'),
+            'total_cost',case when charge.source_total_cost_pence<0 then '-£' else '£' end
+              ||to_char(pg_catalog.abs(charge.source_total_cost_pence)::numeric/100,'FM9999999990.00'),
+            'calculated_charge',case when charge.calculated_segment_charge_pence<0 then '-£' else '£' end
+              ||to_char(pg_catalog.abs(charge.calculated_segment_charge_pence)::numeric/100,'FM9999999990.00'),
+            'difference',case when charge.source_charge_difference_pence<0 then '-£' else '£' end
+              ||to_char(pg_catalog.abs(charge.source_charge_difference_pence)::numeric/100,'FM9999999990.00'),
+            'contract',pg_catalog.concat_ws(' · ',contract.role,contract.band,contract.display_site),
+            'warning',case when charge.comparison_result='ZERO_SOURCE_CHARGE'
+              then 'Possible NHSP rate card issue' else 'Rate card expired or wrong Contract rate' end,
+            'warning_tone','warning',
+            'action_label',case when acceptance.id is null then 'Review charge' else 'Accepted' end,
+            'accept_eligible',v_profile.profile_code='NHSP_FINAL_BACKING_V1'
+              and resolution.mapping_state='RESOLVED' and resolution.contract_id is not null
+              and acceptance.id is null,
             'detail_rows','[]'::jsonb
           ) row_json
         from public.weekly_source_charge_checks charge
         join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
         left join public.weekly_source_row_resolutions resolution on resolution.id=charge.row_resolution_id
         left join public.candidates candidate on candidate.id=resolution.candidate_id
+        left join public.contracts contract on contract.id=resolution.contract_id
         left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
         where source_row.upload_id=v_upload.id
           and charge.generation=v_publication.projection_generation
-          and charge.comparison_result='MISMATCH'
+          and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
           and charge.phase_severity='PROVISIONAL_WARNING'
           and charge.blocker_code is null
       ) warning;
@@ -1196,25 +1169,13 @@ begin
         select coalesce(pg_catalog.jsonb_agg(key_value order by key_value),'[]'::jsonb)
         into v_rate_warning_keys
         from (
-          select 'all-zero-source-charge'::text key_value
-          where exists(
-            select 1 from public.weekly_source_charge_checks charge
-            join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
-            left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
-            where source_row.upload_id=v_upload.id
-              and charge.generation=v_publication.projection_generation
-              and charge.comparison_result='ZERO_SOURCE_CHARGE'
-              and charge.phase_severity='PROVISIONAL_WARNING'
-              and charge.blocker_code is null and acceptance.id is null
-          )
-          union all
-          select 'charge-check:'||charge.id::text
+          select 'charge-check:'||charge.id::text key_value
           from public.weekly_source_charge_checks charge
           join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
           left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
           where source_row.upload_id=v_upload.id
             and charge.generation=v_publication.projection_generation
-            and charge.comparison_result='MISMATCH'
+            and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
             and charge.phase_severity='PROVISIONAL_WARNING'
             and charge.blocker_code is null and acceptance.id is null
         ) eligible;
@@ -1797,9 +1758,12 @@ begin
     left join public.clients client on client.id=resolution.client_id
     left join lateral (select charge.* from public.weekly_source_charge_checks charge
       where charge.upload_row_id=source_row.id order by charge.generation desc,charge.id desc limit 1) charge on true
+    left join public.weekly_source_charge_acceptances charge_acceptance
+      on charge_acceptance.charge_check_id=charge.id
     where source_row.upload_id=v_upload.id
       and source_row.row_finalisation_state in ('NOT_APPLICABLE','SOURCE_WORKED','SOURCE_ABSENT_ZERO')
-      and coalesce(charge.phase_severity,'NONE')<>'FINALISATION_BLOCKER';
+      and coalesce(charge.phase_severity,'NONE')<>'FINALISATION_BLOCKER'
+      and (charge.phase_severity is distinct from 'PROVISIONAL_WARNING' or charge_acceptance.id is not null);
     v_ready:=pg_catalog.jsonb_build_object('rows',v_rows,'total_count',pg_catalog.jsonb_array_length(v_rows),
       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
 
@@ -1829,12 +1793,15 @@ begin
         'text',case
           when resolution.mapping_state is distinct from 'RESOLVED' then 'Needs correction'
           when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'Not finalised'
+          when source_row.row_finalisation_state in ('BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
+            then 'Source shift needs correction'
           when charge.phase_severity='FINALISATION_BLOCKER' then 'Charge needs checking'
-          when charge.phase_severity='PROVISIONAL_WARNING' then 'Pricing warning'
+          when charge.phase_severity='PROVISIONAL_WARNING' and charge_acceptance.id is null then 'Charge decision needed'
           else 'Needs correction' end,
         'tone',case
           when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'warning'
-          when resolution.mapping_state='RESOLVED' and charge.phase_severity='PROVISIONAL_WARNING' then 'warning'
+          when resolution.mapping_state='RESOLVED' and charge.phase_severity='PROVISIONAL_WARNING'
+            and charge_acceptance.id is null then 'warning'
           else 'danger' end),
       'problem',case
         when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm whether this is the protected shift or a separate shift.'
@@ -1844,8 +1811,18 @@ begin
         when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Review the contract for this shift'
         when resolution.mapping_state is distinct from 'RESOLVED' then 'Review the source row matching'
         when source_row.row_finalisation_state='SOURCE_UNFINALISED' then 'This shift is not finalised'
-        when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'Check the charge for this shift'
+        when source_row.row_finalisation_state in ('BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
+          then 'Check the source shift status and hours'
+        when charge.phase_severity='FINALISATION_BLOCKER' then 'Check the charge for this shift'
+        when charge.phase_severity='PROVISIONAL_WARNING' and charge_acceptance.id is null then 'Accept the final NHSP source charge'
         else 'Check the hours for this shift' end,
+      'issue_count',(
+        (case when resolution.mapping_state is distinct from 'RESOLVED' then 1 else 0 end)
+        +(case when source_row.row_finalisation_state in ('SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE') then 1 else 0 end)
+        +(case when charge.phase_severity='FINALISATION_BLOCKER'
+          or (charge.phase_severity='PROVISIONAL_WARNING' and charge_acceptance.id is null) then 1 else 0 end)),
+      'charge_warning_key',case when charge.phase_severity='PROVISIONAL_WARNING'
+        and charge_acceptance.id is null then 'charge-check:'||charge.id::text end,
       'actions',pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'label',case when resolution.blocker_code='PROTECTED_SHIFT_MATCH_REQUIRED' then 'Confirm shift match'
           when resolution.mapping_state='CANDIDATE_NOT_FOUND'
@@ -1853,6 +1830,7 @@ begin
           when resolution.mapping_state='CLIENT_NOT_FOUND' then 'Link client'
           when resolution.mapping_state in ('NO_ELIGIBLE_CONTRACT','AMBIGUOUS_CONTRACT','CONTRACT_SELECTION_REQUIRED') then 'Choose contract'
           when resolution.mapping_state='SOURCE_ROW_BLOCKED' and resolution.candidate_id is not null and resolution.client_id is not null then 'Choose contract'
+          when source_row.row_finalisation_state in ('BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE') then 'View details'
           when charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING') then 'Open charge details'
           else 'View details' end,
         'enabled',true,'payload',pg_catalog.jsonb_build_object(
@@ -1966,10 +1944,13 @@ begin
     left join public.candidates candidate on candidate.id=resolution.candidate_id
     left join lateral (select latest.* from public.weekly_source_charge_checks latest
       where latest.upload_row_id=source_row.id order by latest.generation desc,latest.id desc limit 1) charge on true
+    left join public.weekly_source_charge_acceptances charge_acceptance
+      on charge_acceptance.charge_check_id=charge.id
     where source_row.upload_id=v_upload.id
       and (resolution.mapping_state is distinct from 'RESOLVED'
         or source_row.row_finalisation_state in ('SOURCE_UNFINALISED','BLOCK_FINALISATION_DISAGREEMENT','BLOCK_ACTUAL_TUPLE')
-        or charge.phase_severity in ('FINALISATION_BLOCKER','PROVISIONAL_WARNING'));
+        or charge.phase_severity='FINALISATION_BLOCKER'
+        or (charge.phase_severity='PROVISIONAL_WARNING' and charge_acceptance.id is null));
     v_blocked:=pg_catalog.jsonb_build_object('rows',v_rows,'total_count',pg_catalog.jsonb_array_length(v_rows),
       'next_cursor','','has_more',false,'record_version',v_workspace_version,'stale',false);
     v_import_prepared:=private.weekly_source_import_is_prepared_v1(v_upload.id);
@@ -1978,12 +1959,7 @@ begin
     from pg_catalog.jsonb_array_elements(v_rows) row_data where row_data->'status'->>'text'='Not finalised';
     select coalesce(pg_catalog.jsonb_agg(row_data),'[]'::jsonb) into v_rows
     from pg_catalog.jsonb_array_elements(v_rows) row_data
-    where row_data->'status'->>'text'<>'Not finalised'
-      and not exists (select 1 from public.weekly_source_charge_checks warning
-        where warning.upload_row_id=(row_data->>'row_key')::uuid
-          and warning.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version::integer)
-          and warning.phase_severity='PROVISIONAL_WARNING'
-          and row_data->'status'->>'text'='Pricing warning');
+    where row_data->'status'->>'text'<>'Not finalised';
     v_blocked:=v_blocked||pg_catalog.jsonb_build_object('rows',v_rows,'total_count',pg_catalog.jsonb_array_length(v_rows));
     select pg_catalog.count(*)::integer into v_unfinalised_count
     from public.weekly_source_upload_rows where upload_id=v_upload.id and row_finalisation_state='SOURCE_UNFINALISED';

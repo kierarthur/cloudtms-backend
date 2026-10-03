@@ -38,8 +38,8 @@ test('known NHSP price warnings have an immutable fingerprint-bound acceptance r
 test('Office accepts opaque warning keys under one current server proof, never browser financial facts', () => {
   assert.match(acceptance, /'warning_keys','selection_proof'/);
   assert.match(acceptance, /'NHSP_RATE_WARNING_SELECTION_V1'/);
-  assert.match(acceptance, /'all-zero-source-charge'/);
   assert.match(acceptance, /'charge-check:'\|\|charge\.id::text/);
+  assert.match(acceptance, /comparison_result in \('MISMATCH','ZERO_SOURCE_CHARGE'\)/);
   assert.match(acceptance, /v_selected_keys<@v_eligible_keys/);
   assert.match(acceptance, /WEEKLY_SOURCE_CHARGE_ACCEPT_SELECTION_STALE/);
   assert.match(acceptance, /v_profile\.profile_code<>'NHSP_FINAL_BACKING_V1'/);
@@ -58,17 +58,19 @@ test('Weekly Source first-use paths do not schema-qualify PostgreSQL conditional
   }
 });
 
-test('workspace groups zero-charge warnings and fails finalisation closed until current acceptance', () => {
+test('workspace projects one charge decision per shift and fails finalisation closed until current acceptance', () => {
   assert.match(workspace, /'contract','NHSP_RATE_WARNING_WORKSPACE_V1'/);
   assert.match(workspace, /'phase'.*'PREFINAL'[\s\S]*'FINAL_AWAITING_ACCEPTANCE'[\s\S]*'READY'/);
-  assert.match(workspace, /'warning_key','all-zero-source-charge'/);
-  assert.match(workspace, /'warning','Possible NHSP rate card issue'/);
-  assert.match(workspace, /'warning','Rate card expired or wrong Contract rate'/);
+  assert.match(workspace, /'source_row_id',source_row\.id/);
+  assert.match(workspace, /'warning_key','charge-check:'\|\|charge\.id::text/);
+  assert.match(workspace, /then 'Possible NHSP rate card issue' else 'Rate card expired or wrong Contract rate'/);
   assert.match(workspace, /'title','Possible Trust rate card issue'/);
   assert.match(workspace, /'action','ACCEPT_NHSP_SOURCE_CHARGES'/);
   assert.match(workspace, /'key','warning_keys','proof_key','selection_proof'/);
   assert.match(workspace, /v_rate_warning_unaccepted_count=0/);
   assert.match(workspace, /'rate_warnings',v_rate_warnings/);
+  assert.match(workspace, /charge\.phase_severity is distinct from 'PROVISIONAL_WARNING' or charge_acceptance\.id is not null/);
+  assert.match(workspace, /charge\.phase_severity='PROVISIONAL_WARNING' and charge_acceptance\.id is null/);
 });
 
 test('a valid zero-charge NHSP worked row remains publishable, positive for pay, and overlap checked', () => {

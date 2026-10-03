@@ -248,7 +248,7 @@ test('NHSP rate-warning acceptance sends only opaque warning keys and the server
   const payload = {
     source_cycle_id: '82000000-0000-4000-8000-000000000002',
     projection_publication_id: '82000000-0000-4000-8000-000000000003',
-    warning_keys: ['all-zero-source-charge', 'charge-check:82000000-0000-4000-8000-000000000004'],
+    warning_keys: ['charge-check:82000000-0000-4000-8000-000000000004', 'charge-check:82000000-0000-4000-8000-000000000005'],
     selection_proof: 'a'.repeat(64),
   };
   const response = await dispatchWeeklySourceRequest(
