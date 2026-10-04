@@ -1482,7 +1482,15 @@ begin
   v_total_pay:=pg_catalog.round(v_total_pay,2);
 
   if v_family.current_generation_id is null then
-    if v_run.request_kind<>'APPROVE' then
+    -- Before the prepare owner distinguished empty from published families,
+    -- a retry could be recorded as AMEND even though nothing was published.
+    -- Preserve that immutable request and permit only its first generation;
+    -- never treat an existing staged/published entitlement as an initial one.
+    if v_run.request_kind not in ('APPROVE','AMEND')
+       or v_family.current_generation_number<>0
+       or v_family.current_lifecycle_state<>'PENDING_APPROVAL'
+       or exists(select 1 from public.weekly_exceptional_pay_generations existing
+         where existing.family_id=v_family.id) then
       raise exception 'WEEKLY_PROTECTED_C1_INITIAL_ACTION_INVALID' using errcode='55000';
     end if;
     v_prior_vector:=pg_catalog.jsonb_build_object(

@@ -191,3 +191,38 @@ Local route/release tests: 39/39 passed. Protected source inventory remains 253 
 User approved Arthur's separate rollback-only connection and new credential, with no existing token rotation. Installed direct MCP/plugin `cloudtms-miget-transaction-lab-arthurrai2006`; Worker `codex-arthurrai2006-miget-transaction-lab`; Windows user variable `CLOUDTMS_MIGET_TRANSACTION_LAB_ARTHURRAI2006_TOKEN`. It reuses the existing transaction lab source unchanged and binds only agency TEST. Existing Operations, Kier and shared lab routes remain untouched. Authenticated HTTP discovery and rollback/fresh-connection absence proof passed on cloudtms_test_clone; anonymous access returned401. Restart Codex fully and start a new task to load the native tool before continuing the exact failing-verifier diagnosis. No further protected release was run and runtime/Office remain held. New configuration and proof README are in the primary backend's `infra/miget/cloudtms-miget-transaction-lab-arthurrai2006`; workspace AGENTS records account routing. Preserve unrelated primary-clone changes. Do not infer full feature deployment from this connector setup.
 
 Do not call these proved by local fixtures: real-file upload and subsequent linking/recheck; real candidate request/push delivery; manager routing under each genuine authority; HealthRoster early finalisation/exclusion; device response/stale-request behaviour; actual Office keyboard/dropdown/layout journeys. Preserve the user's real data and obtain narrowly scoped authority before acceptance tests that create messages, finalisation or financial state. Check installed definitions/deployment identities first and use read-only observations where possible.
+
+## Protected-pay retry repair, 4 October 2026
+
+The hosted browser reproduced Kier Arthur's manually queried imported shift on
+8 September (01:00–04:00, 30-minute break), extended to 05:00. The staged request
+failed with `WEEKLY_PROTECTED_C1_INITIAL_ACTION_INVALID`: an earlier failed
+preparation had already created the family but had not published a generation.
+The prepare owner incorrectly classified every existing family as an amendment.
+
+The prepare owner now distinguishes an empty family from a published decision.
+A fresh request for an empty family remains its first approval. Exact retries
+retain their immutable request kind; the C1 owner accepts an older misclassified
+AMEND only when the family has no generation, generation number zero,
+PENDING_APPROVAL lifecycle and no historical generation row. It still publishes
+generation one as INITIAL_APPROVAL. Existing published decisions retain the
+normal amendment path. No run, entitlement or ledger is rewritten to conceal
+the earlier failure; identity, overlap, authorisation and C1 guards remain.
+
+Pre-install evidence: backend suite 1,445 passed; Weekly Source unit harness
+passed; the four focused C1 SQL contract tests passed. Arthur's account-specific
+rollback lab executed the revised owners and preparation verifier, including a
+new request retrying the same previously prepared event: all 36 statements
+passed on cloudtms_test_clone, rollback succeeded, and a fresh connection proved
+fixture absence and restoration of both installed definitions. The generated
+contract delta contains only the two intended routine definition hashes, with
+all signatures, ACLs, security settings and other catalogue objects unchanged.
+The second clean PostgreSQL 17 NEW replay completed VERIFIED with the reviewed
+contract hash 29b2b32b504679285e10839f15f35afa02dd717e32065cbcc25f7bedd6467ced;
+every portable verifier passed. Release-system/routing/export tests passed 41/41.
+
+The user requires the real Kier browser save to pass before the next Office
+publication and Play release. Those acceptance stages remain pending until the
+protected TEST database installation completes; this section is not a claim
+that either the save or mobile-store publication is already complete. No LIVE,
+provider, payment execution, outgoing diagnostic message or Policy X change.

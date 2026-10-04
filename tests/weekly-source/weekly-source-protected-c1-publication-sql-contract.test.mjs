@@ -7,6 +7,17 @@ const sql = readFileSync(new URL(
   import.meta.url,
 ), 'utf8');
 
+test('empty-family retry is an initial approval without rewriting prior request identities', () => {
+  const prepare = readFileSync(new URL(
+    '../../supabase/repeatable/15092026_1534_weekly_source_protected_pay_publisher_v1.sql', import.meta.url,
+  ), 'utf8');
+  assert.match(prepare, /v_request_kind:=case when v_family\.current_generation_id is null\s+then 'APPROVE' else 'AMEND' end;/);
+  assert.match(prepare, /if v_replay then[\s\S]*?v_request_kind:=v_run\.request_kind;/);
+  assert.match(sql, /if v_family\.current_generation_id is null then[\s\S]*?v_run\.request_kind not in \('APPROVE','AMEND'\)[\s\S]*?v_family\.current_generation_number<>0[\s\S]*?v_family\.current_lifecycle_state<>'PENDING_APPROVAL'[\s\S]*?exists\(select 1 from public\.weekly_exceptional_pay_generations existing[\s\S]*?existing\.family_id=v_family\.id\)[\s\S]*?WEEKLY_PROTECTED_C1_INITIAL_ACTION_INVALID/);
+  assert.match(sql, /v_generation_number:=1;\s*v_generation_reason:='INITIAL_APPROVAL';/);
+  assert.doesNotMatch(sql, /update public\.weekly_exceptional_orchestration_runs\s+set request_kind/i);
+});
+
 test('protected C1 durable owners are service-only and complete the exact staged generation', () => {
   for (const name of [
     'weekly_exceptional_pay_record_c1_unknown_v1',
@@ -38,4 +49,3 @@ test('durable checkpoints accept the exact control or status envelope but no uni
   assert.match(sql, /weekly_exceptional_json_keys_exact_v1\(v_result,v_control_result_keys\)[\s\S]*?or private\.weekly_exceptional_json_keys_exact_v1\(v_result,v_status_result_keys\)/i);
   assert.doesNotMatch(sql, /v_result_keys constant text\[\]/i);
 });
-

@@ -597,7 +597,10 @@ begin
       if v_family.c1_publication_state in ('PENDING','PUBLISHING') then
         raise exception 'WEEKLY_PROTECTED_PUBLICATION_BUSY' using errcode='55000';
       end if;
-      v_request_kind:='AMEND';
+      -- Preparing a family is not a published pay decision. A failed first
+      -- attempt can leave this identity present with no generation to amend.
+      v_request_kind:=case when v_family.current_generation_id is null
+        then 'APPROVE' else 'AMEND' end;
     end if;
   else
     if v_replay then

@@ -248,7 +248,7 @@ select public.weekly_exceptional_pay_prepare_family_v1(
   )
 ) as result;
 select pg_temp.assert_true(
-  (select result->>'request_kind'='AMEND'
+  (select result->>'request_kind'='APPROVE'
           and not (result->>'created_family')::boolean
           and (result->>'created_work_event')::boolean
    from additional_result)
@@ -262,7 +262,38 @@ select pg_temp.assert_true(
        where event.id in (
          (select (result->>'work_event_id')::uuid from first_result),
          (select (result->>'work_event_id')::uuid from additional_result))),
-  'a later protected shift must reuse the same complete weekly family'
+  'a later preparation must reuse the empty family and still request its first approval'
+);
+
+-- A browser can return after an earlier preparation failed before staging.
+-- Its new request must approve the existing event, not amend an absent pay
+-- generation and not create another work identity or root Timesheet.
+create temp table empty_family_retry_result as
+select public.weekly_exceptional_pay_prepare_family_v1(
+  pg_catalog.jsonb_build_object(
+    'actor_user_id','e1000000-0000-4000-8000-000000000001',
+    'source_cycle_id','e1000000-0000-4000-8000-00000000000a',
+    'candidate_id','e1000000-0000-4000-8000-000000000004',
+    'client_id','e1000000-0000-4000-8000-000000000003',
+    'contract_id','e1000000-0000-4000-8000-000000000005',
+    'week_ending_date','2026-09-13','work_date','2026-09-07',
+    'work_event_id',(select result->>'work_event_id' from first_result),
+    'start_at_local','2026-09-07 09:00:00',
+    'end_at_local','2026-09-07 18:00:00','break_minutes',30,
+    'reason','Retry the previously prepared existing shift.',
+    'idempotency_key','protected-family-empty-retry-0001'
+  )
+) as result;
+select pg_temp.assert_true(
+  (select retry.result->>'request_kind'='APPROVE'
+      and retry.result->>'family_id'=first.result->>'family_id'
+      and retry.result->>'root_timesheet_id'=first.result->>'root_timesheet_id'
+      and retry.result->>'work_event_id'=first.result->>'work_event_id'
+      and not (retry.result->>'created_work_event')::boolean
+      and not (retry.result->>'created_family')::boolean
+      and not (retry.result->>'created_root')::boolean
+   from empty_family_retry_result retry cross join first_result first),
+  'retrying an empty family approves the same shift without duplicating any identity'
 );
 
 do $non_authoriser_refused$
