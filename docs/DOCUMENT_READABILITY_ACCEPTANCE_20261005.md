@@ -1,6 +1,6 @@
 # Timesheet and expense document readability — 5 October 2026
 
-Status: implemented and locally verified; not a deployment receipt.
+Status: implemented, locally verified and deployed to the normal TEST Worker family. Existing persisted documents remain immutable.
 
 ## Reviewed existing documents
 
@@ -31,3 +31,9 @@ Wrangler 4.125.0 compiled the real TEST private Worker and synthetic TEST privat
 No database definitions, pay values, Timesheet grouping, approval eligibility, invoice-source policy or Banking Pay interfaces are changed by this presentation batch.
 
 The independent release copy is based on the previously verified `23aa32eef75ea219afffbbb9b2fe2faa7fba38c8` database source. Only the two renderers, their focused tests and this record are included; unfinished joint Source/Banking edits and private visual artifacts are excluded. Its complete backend suite passed 1,448 tests, the focused renderer suite passed 328 tests, database source integrity passed with unchanged 256 migrations/684 repeatables, and dependency/credential guards passed. Hosted publication still requires the automatic TEST coordinator and current connection proof.
+
+## Protected TEST publication
+
+The automatic coordinator released exact commit `f7576bdf1f72ad18bfd3c89850d7639654b56607` on 5 October 2026. Protected database run `37377049578` returned `VERIFIED_OR_EXACT_UNCHANGED`; this renderer batch installed no new SQL. The normal backend, real private Candidate API, synthetic private Candidate API and public Candidate broker then deployed in that order, completing at 21:44 UTC. Fresh Cloudflare API reads independently proved all four active versions at 100% and their successful Git builds at that exact commit.
+
+Normal backend `/healthz`, Candidate broker `/healthz` and signed private-service readiness through `/readyz` passed. These are deployed-runtime probes, not a newly submitted claim or new manager decision. Private visual QA screenshots show newly generated renderer output; historical signed evidence was deliberately not regenerated, overwritten or relabelled. Office and unfinished joint Source/Banking definitions were not included in this release.
