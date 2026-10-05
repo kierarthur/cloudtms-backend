@@ -626,6 +626,18 @@ function drawText(
   });
 }
 
+// Grow filled-in values with the actual writing area, not the minimum layout
+// row. Width fitting still preserves every character and the existing floor.
+function filledValueFontSize(heightMm, baseSize, maximumSize = 12) {
+  return Math.max(baseSize, Math.min(maximumSize, (heightMm - 1.8) * MM_TO_PT * 0.7));
+}
+
+function drawCellValue(page, font, value, x, top, width, height, preferredSize, color = CORPORATE_INK) {
+  const size = fitText(font, value, width - 1.6, preferredSize);
+  drawText(page, font, value, x + 0.8,
+    top + Math.max(0.5, (height - size / MM_TO_PT) / 2), size, null, color);
+}
+
 function drawCenteredText(page, font, value, x, top, width, size, color = CORPORATE_INK) {
   const text = safeText(value);
   const actual = fitText(font, text, width - 2, size);
@@ -965,24 +977,29 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const client = model.client || {};
   const workerValueX = detailsGeometry.workerX + 31;
   const paperReturnPanel = paperReturnQrPanelRequested(model);
-  const workerRows = paperReturnPanel ? [11, 25, 39] : [8, 14, 20];
+  const detailRowHeight = (Math.min(detailsHeight, 26) - 6) / 3;
+  const workerRows = paperReturnPanel ? [11, 25, 39]
+    : [0, 1, 2].map(index => 6 + detailRowHeight * (index + 0.3));
   const clientRows = paperReturnPanel ? [15, 33] : [9, 17];
-  drawText(page, bold, 'Surname:', detailsGeometry.workerX + 2, detailsTop + workerRows[0], layout.smallFont);
+  const detailValueFont = Math.max(layout.baseFont,
+    Math.min(11, (detailsHeight - workerRows[2] - 0.8) * MM_TO_PT));
+  const detailLabelFont = Math.max(layout.smallFont, Math.min(8, detailValueFont));
+  drawText(page, bold, 'Surname:', detailsGeometry.workerX + 2, detailsTop + workerRows[0], detailLabelFont);
   drawText(page, regular, safeText(worker.surname), workerValueX, detailsTop + workerRows[0],
-    layout.baseFont, detailsGeometry.workerWidth - 33);
-  drawText(page, bold, 'First name:', detailsGeometry.workerX + 2, detailsTop + workerRows[1], layout.smallFont);
+    detailValueFont, detailsGeometry.workerWidth - 33);
+  drawText(page, bold, 'First name:', detailsGeometry.workerX + 2, detailsTop + workerRows[1], detailLabelFont);
   drawText(page, regular, safeText(worker.first_name), workerValueX, detailsTop + workerRows[1],
-    layout.baseFont, detailsGeometry.workerWidth - 33);
-  drawText(page, bold, 'Job Profile Title:', detailsGeometry.workerX + 2, detailsTop + workerRows[2], layout.smallFont);
+    detailValueFont, detailsGeometry.workerWidth - 33);
+  drawText(page, bold, 'Job Profile Title:', detailsGeometry.workerX + 2, detailsTop + workerRows[2], detailLabelFont);
   drawText(page, regular, safeText(worker.job_profile_title), workerValueX, detailsTop + workerRows[2],
-    layout.baseFont, detailsGeometry.workerWidth - 33);
+    detailValueFont, detailsGeometry.workerWidth - 33);
   const clientValueX = detailsGeometry.clientX + 39;
-  drawText(page, bold, 'Client Name / Hospital:', detailsGeometry.clientX + 2, detailsTop + clientRows[0], layout.smallFont);
+  drawText(page, bold, 'Client Name / Hospital:', detailsGeometry.clientX + 2, detailsTop + clientRows[0], detailLabelFont);
   drawText(page, regular, safeText(client.name || client.hospital_display || client.hospital),
-    clientValueX, detailsTop + clientRows[0], layout.baseFont, detailsGeometry.clientWidth - 41);
-  drawText(page, bold, 'Site / Ward:', detailsGeometry.clientX + 2, detailsTop + clientRows[1], layout.smallFont);
+    clientValueX, detailsTop + clientRows[0], detailValueFont, detailsGeometry.clientWidth - 41);
+  drawText(page, bold, 'Site / Ward:', detailsGeometry.clientX + 2, detailsTop + clientRows[1], detailLabelFont);
   drawText(page, regular, safeText(client.site_ward || client.hospital_ward_display || client.ward_display),
-    clientValueX, detailsTop + clientRows[1], layout.baseFont, detailsGeometry.clientWidth - 41);
+    clientValueX, detailsTop + clientRows[1], detailValueFont, detailsGeometry.clientWidth - 41);
 
   if (detailsGeometry.centreBox) {
     const qrBox = {
@@ -1032,24 +1049,23 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   }
   columns.forEach((column, index) => {
     drawText(page, bold, column[0], columnStarts[index] + 0.8,
-      scheduleTop + 1.6, layout.smallFont, column[1] - 1.6, CORPORATE_WHITE);
+      scheduleTop + 1.6, Math.max(layout.smallFont, 8), column[1] - 1.6, CORPORATE_WHITE);
   });
 
   let rowTop = scheduleTop + scheduleHeaderHeight;
+  const scheduleValueFont = filledValueFontSize(scheduleRowHeight, layout.baseFont);
   const days = model.week_period.days;
   for (const day of days) {
     const shifts = Array.isArray(day.shift_lines) ? day.shift_lines : [];
     const dayLineCount = Math.max(1, shifts.length);
     const dayHeight = dayLineCount * scheduleRowHeight;
-    const rowTextTop = rowTop + Math.max(1.1, (scheduleRowHeight - layout.baseFont * 0.36) / 2);
-    drawText(page, bold, safeText(day.weekday_abbreviation || day.weekday_name).slice(0, 3), columnStarts[0] + 0.8, rowTextTop, layout.baseFont, columns[0][1] - 1.6, CORPORATE_NAVY);
-    drawText(page, regular, formatDmy(day.date), columnStarts[1] + 0.8, rowTextTop, layout.baseFont, columns[1][1] - 1.6);
+    drawCellValue(page, bold, safeText(day.weekday_abbreviation || day.weekday_name).slice(0, 3), columnStarts[0], rowTop, columns[0][1], scheduleRowHeight, scheduleValueFont, CORPORATE_NAVY);
+    drawCellValue(page, regular, formatDmy(day.date), columnStarts[1], rowTop, columns[1][1], scheduleRowHeight, scheduleValueFont);
     for (let index = 1; index < dayLineCount; index += 1) {
       drawLine(page, columnStarts[2], rowTop + index * scheduleRowHeight, right, rowTop + index * scheduleRowHeight, 0.22);
     }
     shifts.forEach((shift, index) => {
-      const lineTop = rowTop + index * scheduleRowHeight
-        + Math.max(1.05, (scheduleRowHeight - layout.baseFont * 0.36) / 2);
+      const lineTop = rowTop + index * scheduleRowHeight;
       const [breakStart, breakEnd] = shiftBreakDisplay(shift);
       const paidMinutes = Number(shift.paid_minutes || 0);
       const values = [
@@ -1064,9 +1080,8 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       ];
       values.forEach((value, valueIndex) => {
         const columnIndex = valueIndex + 2;
-        drawText(page, regular, value, columnStarts[columnIndex] + 0.8, lineTop,
-          valueIndex === 5 ? layout.smallFont : layout.baseFont,
-          columns[columnIndex][1] - 1.6);
+        drawCellValue(page, regular, value, columnStarts[columnIndex], lineTop,
+          columns[columnIndex][1], scheduleRowHeight, scheduleValueFont);
       });
     });
     rowTop += dayHeight;
@@ -1077,9 +1092,10 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const totalTop = scheduleTop + scheduleHeaderHeight + bodyHeight;
   fillBox(page, margin, totalTop, width, scheduleTotalHeight, CORPORATE_PALE_BLUE);
   drawLine(page, margin, totalTop, right, totalTop, 0.35, CORPORATE_NAVY);
-  drawText(page, bold, 'Total overall hours claimed (excluding breaks):', margin + 2, totalTop + 1.3, layout.baseFont, 150);
-  drawText(page, bold, `${decimalHours(totalMinutes)}  (${formatOfficialTimesheetHoursWords(totalMinutes)})`,
-    right - 88, totalTop + 1.3, layout.baseFont, 86);
+  const totalValueFont = filledValueFontSize(scheduleTotalHeight, layout.baseFont, 11.5);
+  drawCellValue(page, bold, 'Total overall hours claimed (excluding breaks):', margin + 1.2, totalTop, 151.6, scheduleTotalHeight, totalValueFont);
+  drawCellValue(page, bold, `${decimalHours(totalMinutes)}  (${formatOfficialTimesheetHoursWords(totalMinutes)})`,
+    right - 88.8, totalTop, 87.6, scheduleTotalHeight, totalValueFont);
   top = scheduleTop + scheduleHeight + layout.gap;
 
   if (additionalRows.length) {
@@ -1109,8 +1125,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       addX += columnWidth;
     });
     additionalRows.forEach((row, index) => {
-      const lineTop = headerDivider + index * additionalRowHeight
-        + Math.max(0.8, (additionalRowHeight - layout.baseFont * 0.36) / 2);
+      const lineTop = headerDivider + index * additionalRowHeight;
       const values = [
         row.rate_type,
         row.date ? formatDmy(row.date) : '',
@@ -1118,7 +1133,8 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
         row.unit
       ];
       values.forEach((value, valueIndex) =>
-        drawText(page, regular, value, addStarts[valueIndex] + 1, lineTop, layout.baseFont, addWidths[valueIndex] - 2));
+        drawCellValue(page, regular, value, addStarts[valueIndex] + 0.2, lineTop,
+          addWidths[valueIndex] - 0.4, additionalRowHeight, filledValueFontSize(additionalRowHeight, layout.baseFont)));
     });
     top += additionalHeight + layout.gap;
   }
@@ -1162,7 +1178,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
     drawLine(page, box.x + declarationWidth - 24, signatureLineTop, box.x + declarationWidth - 2, signatureLineTop);
     if (box.date) {
-      drawText(page, regular, formatDmy(box.date), box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
+      drawText(page, regular, formatDmy(box.date), box.x + declarationWidth - 24, top + declarationHeight - 6.2, Math.max(layout.smallFont, 8.5), 22);
     }
     drawText(page, regular, 'Date', box.x + declarationWidth - 24, top + declarationHeight - 2.5, layout.smallFont, 22);
     const signatureAllowed = model.form_variant === 'ELECTRONIC_SIGNED'
@@ -1222,6 +1238,9 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       declaration_height_mm: declarationHeight,
       declaration_top_mm: declarationTop,
       schedule_row_height_mm: scheduleRowHeight,
+      schedule_value_preferred_font_pt: scheduleValueFont,
+      detail_value_preferred_font_pt: detailValueFont,
+      total_value_preferred_font_pt: totalValueFont,
       additional_unit_row_height_mm: additionalRows.length ? additionalRowHeight : 0,
       unused_vertical_gap_mm: unusedVerticalGap,
       page_fill_verified: unusedVerticalGap <= 0.01,

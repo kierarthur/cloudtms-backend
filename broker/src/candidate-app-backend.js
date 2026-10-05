@@ -4950,6 +4950,68 @@ async function embedExpenseSource(pdf, page, env, component, renderInput, conten
   return true;
 }
 
+function expenseTextLines(font, value, size, width) {
+  const lines = [];
+  let line = '';
+  // Character-level fallback also preserves long, unbroken names/references.
+  for (const character of String(value ?? '')) {
+    if (line && font.widthOfTextAtSize(line + character, size) > width) {
+      const space = line.lastIndexOf(' ');
+      if (space > 0) {
+        lines.push(line.slice(0, space));
+        line = line.slice(space + 1) + character;
+      } else {
+        lines.push(line);
+        line = character;
+      }
+    } else line += character;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawExpenseValue(page, font, value, x, y, width, preferredSize, options = {}) {
+  const string = String(value ?? '');
+  const measured = font.widthOfTextAtSize(string, preferredSize);
+  const size = measured > width ? preferredSize * width / measured : preferredSize;
+  const textWidth = font.widthOfTextAtSize(string, size);
+  page.drawText(string, { x: options.right ? x + width - textWidth : x, y,
+    size, font, color: options.color || rgb(0.08, 0.12, 0.2) });
+}
+
+function drawExpenseIdentity(page, font, lines, top, width) {
+  let y = top;
+  for (const value of lines) {
+    for (const line of expenseTextLines(font, value, 14, width)) {
+      if (y < 160) throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+      page.drawText(line, { x: 42, y, size: 14, font, color: rgb(0.08, 0.12, 0.2) });
+      y -= 18;
+    }
+    y -= 6;
+  }
+  return y;
+}
+
+function expenseClaimHeaderLines(font, lines, width) {
+  const result = [];
+  let line = 'Claim: ';
+  for (const value of lines) {
+    const next = line === 'Claim: ' ? line + value : line + ' | ' + value;
+    if (font.widthOfTextAtSize(next, 12) <= width) line = next;
+    else {
+      if (line !== 'Claim: ') result.push(line);
+      line = line === 'Claim: ' ? line + value : value;
+      if (font.widthOfTextAtSize(line, 12) > width) {
+        const wrapped = expenseTextLines(font, line, 12, width);
+        result.push(...wrapped.slice(0, -1));
+        line = wrapped.at(-1);
+      }
+    }
+  }
+  result.push(line);
+  return result;
+}
+
 async function renderExpensePage(env, contract, state, phase) {
   const { workflow, component } = state;
   const pdf = await PDFDocument.create({ updateMetadata: false });
@@ -4971,67 +5033,68 @@ async function renderExpensePage(env, contract, state, phase) {
   const displayOrdinal = isPaperReturn
     ? contract.review_ordinal
     : component.review_ordinal || contract.review_ordinal;
-  page.drawText(`${branding.agency_name} | Page ${displayOrdinal} | ${component.expense_category || 'General'}`, {
-    x: 36, y: 797, size: 9, font: regular, color: rgb(0.86, 0.9, 0.96)
-  });
+  drawExpenseValue(page, regular,
+    `${branding.agency_name} | Page ${displayOrdinal} | ${component.expense_category || 'General'}`,
+    36, 797, 370, 10, { color: rgb(0.86, 0.9, 0.96) });
+  const summary = expenseSummaryDisplayLines(workflow);
+  const claimLinesAtTop = expenseClaimHeaderLines(regular, summary.lines, isPaperReturn ? 395 : 523);
+  const claimTotalY = 772 - claimLinesAtTop.length * 15 - 4;
+  let mileageBannerY = Math.min(isPaperReturn ? 654 : 716, claimTotalY - 48);
+  const sourceTop = isMileageEvidence ? mileageBannerY - 12
+    : Math.min(isPaperReturn ? 650 : 748, claimTotalY - 18);
   const hasSource = await embedExpenseSource(
     pdf, page, env, component, contract.render_input,
-    isMileageEvidence ? (isPaperReturn ? 642 : 704) : (isPaperReturn ? 650 : 748),
-    isMileageEvidence ? (isPaperReturn ? 502 : 514) : (isPaperReturn ? 510 : 558)
+    sourceTop,
+    sourceTop - (isPaperReturn ? 140 : 190)
   );
   if (hasSource && !isExpenseSummary) {
-    const summary = expenseSummaryDisplayLines(workflow);
-    page.drawText(`Claim: ${summary.lines.join(' | ')}`.slice(0, 105), {
-      x: 36, y: 777, size: 8, font: regular, color: rgb(0.08, 0.12, 0.2)
-    });
-    page.drawText(`Claim total: ${summary.total}`.slice(0, 80), {
-      x: 36, y: 765, size: 8, font: bold, color: rgb(0.08, 0.12, 0.2)
-    });
+    claimLinesAtTop.forEach((line, index) => page.drawText(line, {
+      x: 36, y: 772 - index * 15, size: 12, font: regular,
+      color: rgb(0.08, 0.12, 0.2) }));
+    drawExpenseValue(page, bold, `Claim total: ${summary.total}`,
+      36, claimTotalY, isPaperReturn ? 395 : 523, 16);
   }
   if (!hasSource) {
     const lines = expenseLines(workflow, component).slice(0, 24);
     if (isExpenseSummary) {
       const identity = lines.slice(0, 3);
-      let y = 752;
-      for (const line of identity) {
-        page.drawText(line.slice(0, 100), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
-        y -= 20;
-      }
+      let y = drawExpenseIdentity(page, regular, identity, 752, isPaperReturn ? 389 : 511);
       const claimLines = lines.slice(3, -1);
       const totalLine = lines.at(-1) || 'Total claim: £0.00';
-      page.drawRectangle({ x: 42, y: isPaperReturn ? 625 : 670, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-      page.drawText('Claim details', { x: 54, y: isPaperReturn ? 636 : 681, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
-      y = isPaperReturn ? 587 : 632;
+      const claimHeaderY = Math.min(isPaperReturn ? 625 : 670, y - 26);
+      if (claimHeaderY - claimLines.length * 38 - 55 < 145) {
+        throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+      }
+      page.drawRectangle({ x: 42, y: claimHeaderY, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      page.drawText('Claim details', { x: 54, y: claimHeaderY + 10, size: 14, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      y = claimHeaderY - 38;
       for (const line of claimLines) {
         const colon = line.indexOf(':');
         const label = colon >= 0 ? line.slice(0, colon) : line;
         const value = colon >= 0 ? line.slice(colon + 1).trim() : '';
         page.drawRectangle({ x: 42, y: y - 10, width: 511, height: 38, borderColor: rgb(0.4, 0.47, 0.55), borderWidth: 0.7 });
-        page.drawText(label.slice(0, 45), { x: 54, y: y + 3, size: 10, font: regular });
-        page.drawText(value.slice(0, 45), { x: 365, y: y + 3, size: 10, font: bold });
+        drawExpenseValue(page, regular, label, 54, y + 1, 295, 14);
+        drawExpenseValue(page, bold, value, 365, y, 176, 18, { right: true });
         y -= 38;
       }
       page.drawRectangle({ x: 42, y: y - 17, width: 511, height: 45, color: rgb(0.95, 0.97, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-      page.drawText(totalLine.slice(0, 90), { x: 365, y: y - 1, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      const totalColon = totalLine.indexOf(':');
+      drawExpenseValue(page, bold, totalLine.slice(0, totalColon + 1), 54, y - 1, 295, 15);
+      drawExpenseValue(page, bold, totalLine.slice(totalColon + 1).trim(), 365, y - 2, 176, 20, { right: true });
     } else {
-      let y = 750;
-      for (const line of lines) {
-        page.drawText(line.slice(0, 110), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
-        y -= 18;
-      }
+      const identityBottom = drawExpenseIdentity(page, regular, lines, 750, isPaperReturn ? 389 : 511);
+      if (isMileageEvidence) mileageBannerY = Math.min(mileageBannerY, identityBottom - 40);
     }
   }
   if (isMileageEvidence) {
     const mileageUnits = submittedMileageUnits(parseJson(workflow.immutable_submission_json, {}) || {});
     const label = `Total mileage for this claim: ${mileageUnits} ${mileageUnitLabel(mileageUnits)}`;
     page.drawRectangle({
-      x: 36, y: isPaperReturn ? 654 : 716, width: isPaperReturn ? 395 : 523, height: 38,
+      x: 36, y: mileageBannerY, width: isPaperReturn ? 395 : 523, height: 38,
       color: rgb(0.9, 0.95, 0.98), borderColor: rgb(0.1, 0.42, 0.62), borderWidth: 1
     });
-    page.drawText(label.slice(0, 80), {
-      x: 50, y: isPaperReturn ? 668 : 730, size: 12, font: bold,
-      color: rgb(0.04, 0.2, 0.32)
-    });
+    drawExpenseValue(page, bold, label, 50, mileageBannerY + 12,
+      isPaperReturn ? 367 : 495, 15, { color: rgb(0.04, 0.2, 0.32) });
   }
   if (isPaperReturn) {
     await drawCandidatePaperPageQr(page, paperReturnQrText, {
@@ -5047,11 +5110,11 @@ async function renderExpensePage(env, contract, state, phase) {
     });
   } else if (phase === 'FINAL') {
     page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawText(`Approved by ${workflow.manager_name || contract.manager?.name || ''}`, { x: 48, y: 116, size: 10, font: bold });
-    page.drawText(`Position: ${workflow.manager_position || contract.manager?.position || ''}`, { x: 48, y: 98, size: 9, font: regular });
-    page.drawText(`Approval date: ${londonCalendarDate(
+    drawExpenseValue(page, bold, `Approved by ${workflow.manager_name || contract.manager?.name || ''}`, 48, 116, 264, 12);
+    drawExpenseValue(page, regular, `Position: ${workflow.manager_position || contract.manager?.position || ''}`, 48, 98, 264, 11);
+    drawExpenseValue(page, regular, `Approval date: ${londonCalendarDate(
       workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
-    ) || ''}`, { x: 48, y: 80, size: 9, font: regular });
+    ) || ''}`, 48, 80, 264, 11);
     const signature = await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256);
     if (!signature.data?.data_url) throw new CandidateHttpError(409, 'MANAGER_SIGNATURE_REQUIRED');
     const decoded = base64UrlDecode(signature.data.data_url.split(',')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''));
@@ -5100,13 +5163,7 @@ async function renderCandidateExpenseSummaryPdf(env, job) {
       .filter(Boolean).join(' · ') || '-'}`,
     `Week ending: ${ukDate(identity.week_ending_date) || '-'}`
   ];
-  let y = 748;
-  for (const line of identityLines) {
-    page.drawText(line.slice(0, 100), {
-      x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2)
-    });
-    y -= 18;
-  }
+  let y = drawExpenseIdentity(page, regular, identityLines, 748, 511);
   y -= 14;
   const rows = [
     ['MILEAGE', 'Mileage', totals.mileage_pay_ex_vat],
@@ -5115,28 +5172,28 @@ async function renderCandidateExpenseSummaryPdf(env, job) {
     ['OTHER', 'Other', totals.other_pay_ex_vat]
   ].filter(([category, , rawAmount]) => Number(rawAmount || 0) !== 0
     || (category === 'MILEAGE' && Number(totals.mileage_units || 0) !== 0));
+  if (y - rows.length * 42 - 50 < 100) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_TEXT_CAPACITY_EXCEEDED');
+  }
   for (const [category, label, rawAmount] of rows) {
     const amount = Number(rawAmount || 0);
     page.drawRectangle({ x: 42, y: y - 12, width: 511, height: 42,
       borderColor: rgb(0.4, 0.47, 0.55), borderWidth: 0.7 });
-    page.drawText(label, { x: 56, y: y + 3, size: 11, font: regular });
+    page.drawText(label, { x: 56, y: y + 1, size: 14, font: regular });
     const evidenceCount = Number(evidenceCounts[category] || 0);
     const detail = category === 'MILEAGE'
       ? `${Number(totals.mileage_units || 0)} ${mileageUnitLabel(totals.mileage_units || 0)} · ${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`
       : `${evidenceCount} supporting item${evidenceCount === 1 ? '' : 's'}`;
-    page.drawText(detail.slice(0, 58), {
-      x: 175, y: y + 3, size: 9, font: regular, color: rgb(0.25, 0.3, 0.38)
-    });
-    page.drawText(`£${amount.toFixed(2)}`, {
-      x: 450, y: y + 3, size: 11, font: bold
-    });
+    drawExpenseValue(page, regular, detail, 190, y + 3, 239, 11,
+      { color: rgb(0.25, 0.3, 0.38) });
+    drawExpenseValue(page, bold, `£${amount.toFixed(2)}`, 441, y, 100, 18, { right: true });
     y -= 42;
   }
   const total = Number(totals.total_pay_ex_vat || 0);
   page.drawRectangle({ x: 42, y: y - 16, width: 511, height: 48,
     color: rgb(0.93, 0.96, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-  page.drawText('Total expenses', { x: 56, y: y + 1, size: 12, font: bold });
-  page.drawText(`£${total.toFixed(2)}`, { x: 450, y: y + 1, size: 12, font: bold });
+  page.drawText('Total expenses', { x: 56, y: y, size: 16, font: bold });
+  drawExpenseValue(page, bold, `£${total.toFixed(2)}`, 441, y - 1, 100, 20, { right: true });
   page.drawText('This page does not require a signature or date.', {
     x: 42, y: 75, size: 9, font: regular, color: rgb(0.25, 0.3, 0.38)
   });
@@ -12529,6 +12586,7 @@ export const candidateAppBackendInternals = Object.freeze({
   candidatePaperEmailDeliveryByWorkflow,
   enrichCandidatePaperDeliveryState,
   renderExpensePage,
+  renderCandidateExpenseSummaryPdf,
   validateComponentBytes,
   renderContracts,
   lifecycleSignature,

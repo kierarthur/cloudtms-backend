@@ -346,9 +346,9 @@ test('expense QR pages reserve a clear area without shrinking the physical code'
     backend.indexOf('async function renderCandidateExpenseSummaryPdf(')
   );
   assert.match(expensePage,
-    /isMileageEvidence \? \(isPaperReturn \? 642 : 704\) : \(isPaperReturn \? 650 : 748\)/);
+    /const sourceTop = isMileageEvidence \? mileageBannerY - 12[\s\S]*Math\.min\(isPaperReturn \? 650 : 748, claimTotalY - 18\)/);
   assert.match(expensePage,
-    /isMileageEvidence \? \(isPaperReturn \? 502 : 514\) : \(isPaperReturn \? 510 : 558\)/);
+    /sourceTop - \(isPaperReturn \? 140 : 190\)/);
   assert.match(expensePage, /x: page\.getWidth\(\) - 124,[\s\S]*y: 688,[\s\S]*size: 88/);
   assert.match(expensePage, /isPaperReturn \? 625 : 670/);
   const summaryFooter = expensePage.slice(expensePage.lastIndexOf('if (isExpenseSummary) {'));
