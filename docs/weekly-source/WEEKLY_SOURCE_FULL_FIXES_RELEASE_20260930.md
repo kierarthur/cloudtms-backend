@@ -298,3 +298,41 @@ The next deployment must rerun all 149 protected hosted verifiers through
 assertion bypass is authorised. Runtime and Office remain unpublished by this
 retry until that full protected release is VERIFIED. The actual Kier protected
 pay save must then pass before Office publication, as the user required.
+
+## Hosted economic-drift diagnosis, 6 October
+
+Managed run `37462230684` at `9d4eb39632cd14362f81dea5ecaf50b351741ccd`
+passed standalone ordinary-pay (189,978 ms), finalisation (21,281 ms) and
+correct-final-source (211,903 ms), then failed invoice-admission (363,455 ms).
+Its included ordinary-pay fixture raised `PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT`.
+Runtime and Office publication were held. This is not yet attributed to a
+fixture defect, concurrent data change or application mutation.
+
+The complete invoice-admission closure passed in an owned PostgreSQL 17.11
+clone in 11,579 ms with every original assertion retained; only an in-memory
+exception DETAIL added changed relation names. Receipt
+`INVOICE_FINGERPRINT_DIAGNOSIS_d18b5bc2-b5fb-45c2-be1b-21b932b3cc73.json`.
+The clone was removed and the original golden, role/HBA/profile and complete
+fresh snapshot were unchanged. Handover 2 reported no hosted business writes
+during the failed release window; its shared native window was returned.
+
+Arthur's hosted rollback lab showed stable complete-row fingerprints for all
+eleven economic relations during a short read-only diagnostic. A separate
+234-statement NET-fixture rehearsal retained every predicate but hit its existing
+120-second statement limit in `ws_verify_other_jobs_fingerprint`; it is NOT a
+passed reproduction or grounds to extend the timeout. Both rehearsals rolled
+back and fresh connections proved the temporary/fixture objects absent.
+
+Both ordinary-pay economic-drift exceptions now retain their original SQLSTATE,
+message and unchanged full before/after predicates, adding DETAIL containing
+only changed relation names. No hashes, row values or financial payloads are
+disclosed. Hosted rollback positive/negative diagnostic controls passed; seven
+fingerprint source controls and the 1,450-test main suite passed, with integrity
+and contract coupling unchanged. The next managed release uses these diagnostics
+without bypassing the outstanding full verification or publishing Office early.
+
+Separately verified in installed agency TEST: expense-invoice routing is enabled;
+the installed delivery owner chooses the frozen configured expense email for
+the EXPENSE stream, preserves self-bill hours suppression and blocks missing
+expense recipients. The self-bill separation correction does not change this
+existing delivery owner, configured addresses or frozen historical claims.

@@ -47,6 +47,19 @@ test('ordinary-pay companion uses the same complete economic fingerprint for all
   assert.match(ordinary, /PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT/);
 });
 
+test('ordinary-pay economic failures identify changed relations without disclosing rows or relaxing the guard', () => {
+  const ordinary = readFileSync(new URL('../../supabase/verification/15092026_1534_weekly_source_ordinary_pay_projection_v1.sql', import.meta.url), 'utf8');
+  for (const guard of ['PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT', 'PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT']) {
+    const at = ordinary.indexOf(`message='${guard}'`);
+    assert.ok(at > 0);
+    const diagnostic = ordinary.slice(at, ordinary.indexOf(';', at));
+    assert.match(diagnostic, /detail=\(select string_agg\(expected\.key,',' order by expected\.key\)/);
+    assert.match(diagnostic, /where expected\.value is distinct from v_after->expected\.key/);
+    assert.doesNotMatch(diagnostic, /string_agg\(expected\.value|limit|sample/i);
+  }
+  assert.equal((ordinary.match(/if v_after is distinct from v_before then/g) || []).length, 2);
+});
+
 for (const filename of ['17092026_1100_weekly_source_candidate_view_producer_v1.sql', '17092026_1200_weekly_source_audit_and_export_v1.sql']) {
   const source = readFileSync(new URL(`../../supabase/verification/${filename}`, import.meta.url), 'utf8');
   test(`${filename}: complete historical job and economic checks remain bounded`, () => {

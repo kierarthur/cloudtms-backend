@@ -1465,7 +1465,10 @@ begin
       v_after:=v_after||jsonb_build_object(v_relation,v_hash);
     end loop;
     if v_after is distinct from v_before then
-      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT';
+      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT',
+        detail=(select string_agg(expected.key,',' order by expected.key)
+          from jsonb_each(v_before) expected
+          where expected.value is distinct from v_after->expected.key);
     end if;
   end loop;
   if (select count(*) from public.banking_pay_workbench_jobs j
@@ -1498,7 +1501,10 @@ begin
     v_after:=v_after||jsonb_build_object(v_relation,v_hash);
   end loop;
   if v_after is distinct from v_before then
-    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT';
+    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT',
+      detail=(select string_agg(expected.key,',' order by expected.key)
+        from jsonb_each(v_before) expected
+        where expected.value is distinct from v_after->expected.key);
   end if;
 end;
 $paid_root_owned_setup_fanout$;
