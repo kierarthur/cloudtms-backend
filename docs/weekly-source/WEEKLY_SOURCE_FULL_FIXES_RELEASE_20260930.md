@@ -336,3 +336,38 @@ the installed delivery owner chooses the frozen configured expense email for
 the EXPENSE stream, preserves self-bill hours suppression and blocks missing
 expense recipients. The self-bill separation correction does not change this
 existing delivery owner, configured addresses or frozen historical claims.
+
+## Invoice-issue fixture statement boundary, 6 October
+
+Managed run `37466322099` at `b651b28446e16698e4860170b6925a1aeb302737`
+passed invoice admission (391,740 ms), invoice batch integration (91,417 ms)
+and the previously oversized read-projection fixture (287,588 ms). It later
+stopped in `02092026_1833_weekly_source_invoice_issue_validator_v1.sql`:
+the single WP-33 scenario block exceeded the statement timeout while checking
+case A5. This is not an economic-drift assertion. The user confirmed no TEST
+edits during the earlier drift window; that earlier cause remains unproved.
+
+The verifier now pins the same two subjects once in a temporary singleton row
+and invokes each of the 16 original scenario sections in a separate SQL
+statement, all inside the same existing outer rollback-only transaction.
+Every original scenario assertion and raise-to-undo subtransaction is retained
+byte-for-byte and in order (scenario-body SHA-256
+`fd907b7225ff1e750efaecc6b4ba716562435307a92a84e2c0443c3afe3b267a`).
+There is no runtime-function, economic-policy, timeout, owner, contract, grant,
+release-ledger or verifier-selection change. Source tests prevent regrouping
+the calls into one long statement and prevent state-dependent subject reselection.
+
+The complete original verifier and the complete split verifier both passed
+in an independently owned PostgreSQL 17.11 container at the same current
+self-bill authority: 14,511 ms and 14,971 ms respectively. The split run also
+proved refusal of unknown cases and false/null assertions. Receipt
+`INVOICE_ISSUE_STATEMENT_QUALIFICATION_3524a3bf-02e5-44f7-be73-e3ef5b4d82cd.json`.
+The source golden was copied only through a read-only consistent dump, without
+using or modifying Handover 2's active clone. Both task-owned containers/volumes
+from qualification were removed; the existing six containers were preserved.
+No separate image or build cache was created. The 1,450-test main suite,
+16 focused invoice/scenario tests, integrity and contract coupling passed.
+
+This is local qualification, not a completed hosted release. Runtime/Office
+publication and the actual Kier Save acceptance remain held until the full
+managed hosted verifier set succeeds at the new reviewed commit.

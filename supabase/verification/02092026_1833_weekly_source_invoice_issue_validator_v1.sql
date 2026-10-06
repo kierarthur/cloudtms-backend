@@ -1467,7 +1467,15 @@ $wp28_routes$;
 -- each case silently re-selects a different invoice once a fixture has changed
 -- that state, which was executed and observed while writing this block.
 -- ---------------------------------------------------------------------------
-do $wp33_routes$
+create temporary table iss_wp33_subjects (
+  singleton boolean primary key check (singleton),
+  exempt_invoice uuid not null, exempt_timesheet uuid not null,
+  present_invoice uuid not null, present_timesheet uuid not null,
+  contract_id uuid not null
+) on commit drop;
+-- Pin once in the existing outer rollback-only transaction. Each independent
+-- scenario is a separate bounded statement, not a longer statement timeout.
+do $wp33_subjects$
 declare
   v_exempt_inv uuid;
   v_exempt_ts uuid;
@@ -1515,6 +1523,29 @@ begin
   select timesheet_row.contract_id into v_contract
   from public.timesheets timesheet_row where timesheet_row.timesheet_id=v_exempt_ts;
 
+  insert into pg_temp.iss_wp33_subjects values
+    (true,v_exempt_inv,v_exempt_ts,v_present_inv,v_present_ts,v_contract);
+end;
+$wp33_subjects$;
+
+create function pg_temp.iss_wp33_routes(p_case text)
+returns void language plpgsql as $wp33_routes$
+declare
+  v_exempt_inv uuid;
+  v_exempt_ts uuid;
+  v_present_inv uuid;
+  v_present_ts uuid;
+  v_contract uuid;
+  v_verdict jsonb;
+  v_direct text;
+  v_proof jsonb;
+  v_result text;
+begin
+  select exempt_invoice,exempt_timesheet,present_invoice,present_timesheet,contract_id
+  into strict v_exempt_inv,v_exempt_ts,v_present_inv,v_present_ts,v_contract
+  from pg_temp.iss_wp33_subjects where singleton;
+  case p_case
+  when 'PROOF' then
   -- =======================================================================
   -- The first-authorisation proof itself.  R8A keeps AWAITING_FIRST_AUTHORISATION
   -- as its own named state ("AWAITING_FIRST_AUTHORISATION permits the
@@ -1546,6 +1577,7 @@ begin
       ||'authorisation');
 
   -- =======================================================================
+  when 'A1' then
   -- A1  AWAITING FIRST AUTHORISATION.
   --     invoice: ISSUES, disposition AWAITING_FIRST_AUTHORISATION_EXEMPT
   --     pay:     BLOCKED, WEEKLY_SOURCE_PAYMENT_TSFIN_EXPECTED_BUT_MISSING
@@ -1583,6 +1615,7 @@ begin
       ||'instead of sitting beside it');
 
   -- =======================================================================
+  when 'A2A' then
   -- A2  ABSENT TSFIN that is NOT awaiting a first authorisation.  Four shapes,
   --     each proved separately: ordinarily authorised; previously authorised
   --     (which is also the 24 section 4.1A withdrawal shape); previously
@@ -1617,6 +1650,7 @@ begin
   exception when raise_exception then
     if sqlerrm<>'WP33_UNDO_A2A' then raise; end if;
   end;
+  when 'A2B' then
   begin
     insert into public.weekly_source_root_authorisations(
       root_timesheet_id,family_booking_id,timesheet_version,
@@ -1642,6 +1676,7 @@ begin
   exception when raise_exception then
     if sqlerrm<>'WP33_UNDO_A2B' then raise; end if;
   end;
+  when 'A2C' then
   begin
     insert into public.timesheets_financials(timesheet_id,timesheet_version,is_current)
     select timesheet_row.timesheet_id,timesheet_row.version,false
@@ -1664,6 +1699,7 @@ begin
   exception when raise_exception then
     if sqlerrm<>'WP33_UNDO_A2C' then raise; end if;
   end;
+  when 'A2D' then
   begin
     update public.contracts set candidate_id=null where id=v_contract;
     v_proof:=private.weekly_source_invoice_tsfin_first_authorisation_v1(v_exempt_ts);
@@ -1682,6 +1718,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A3' then
   -- A3  STALE TSFIN.  This is acceptance row ISS-013 and the case the product
   --     owner countermanded.  WP-33 measured that the installed predicate keys
   --     on public.timesheets_financials.is_stale alone, reads no reason and
@@ -1718,6 +1755,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A4' then
   -- A4  CURRENT TSFIN.  invoice ISSUES; pay disposition is CLEAR.
   -- =======================================================================
   v_verdict:=private.weekly_source_invoice_issue_validate_v1(v_present_inv);
@@ -1734,6 +1772,7 @@ begin
     'WP-33 A4 current TSFIN','invoice or pay disposition wrong: '||v_direct);
 
   -- =======================================================================
+  when 'A5' then
   -- A5  STALE SOURCE REVISION.  The source side, which R8A keeps blocking.
   --     invoice: BLOCKED, WEEKLY_SOURCE_ISSUE_STALE_FINAL_REVISION, ok=false
   --     pay:     unchanged - the Candidate-pay state is untouched, which is the
@@ -1772,6 +1811,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A6' then
   -- A6  SOURCE CALCULATION / AMOUNT EVIDENCE.  invoice BLOCKED; pay untouched.
   --
   --     R8A names "source calculation or price comparison ... amount, VAT,
@@ -1807,6 +1847,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A7' then
   -- A7  STALE PLACEMENT OR INVOICE BINDING.  invoice BLOCKED; pay untouched.
   -- =======================================================================
   begin
@@ -1833,6 +1874,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A8' then
   -- A8  MIXED / UNBOUND.  An extra invoice line with no current binding.
   --     invoice: BLOCKED, WEEKLY_SOURCE_ISSUE_UNBOUND_LINE, ok=false
   --     pay:     untouched
@@ -1876,6 +1918,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'A9' then
   -- A9  ORDINARY NON-SELF-BILL ROUTE, UNCHANGED, with a SENTINEL that should
   --     differ shown differing.  R8A: "Ordinary non-self-bill and
   --     evidence-required invoice routes retain their existing TSFIN and
@@ -1913,6 +1956,7 @@ begin
       ||'comparison proves nothing: '||v_result);
 
   -- =======================================================================
+  when 'A10' then
   -- A10 THE BOUND.  "Wholly sealed" is a positive test and is never inherited.
   --     A5..A8 each already assert the skip is refused once the invoice stops
   --     being wholly sealed; this adds the two degenerate inputs.
@@ -1936,6 +1980,7 @@ begin
       ||'invoice, a null invoice, or a code outside the closed enumeration');
 
   -- =======================================================================
+  when 'ORDERING' then
   -- ORDERING INDEPENDENCE, on the REAL asynchronous seam, in both directions.
   -- =======================================================================
   perform pg_temp.iss_assert(
@@ -1975,6 +2020,7 @@ begin
   end;
 
   -- =======================================================================
+  when 'FORGED' then
   -- Invalid and forged state documents cannot reach any non-blocking outcome.
   -- The predicate still computes the whole Candidate-pay truth; what R8A moved
   -- is where that truth is CONSUMED, so these stay exactly as fail-closed.
@@ -2000,8 +2046,28 @@ begin
       ->'blocker_codes' ? 'WEEKLY_SOURCE_ISSUE_TSFIN_STATE_UNDETERMINED',
     'WP-33 forged','an invalid or forged financial-record state reached a '
       ||'non-blocking outcome');
+  else
+    raise exception 'WP33_UNKNOWN_VERIFICATION_CASE';
+  end case;
 end;
 $wp33_routes$;
+
+select pg_temp.iss_wp33_routes('PROOF');
+select pg_temp.iss_wp33_routes('A1');
+select pg_temp.iss_wp33_routes('A2A');
+select pg_temp.iss_wp33_routes('A2B');
+select pg_temp.iss_wp33_routes('A2C');
+select pg_temp.iss_wp33_routes('A2D');
+select pg_temp.iss_wp33_routes('A3');
+select pg_temp.iss_wp33_routes('A4');
+select pg_temp.iss_wp33_routes('A5');
+select pg_temp.iss_wp33_routes('A6');
+select pg_temp.iss_wp33_routes('A7');
+select pg_temp.iss_wp33_routes('A8');
+select pg_temp.iss_wp33_routes('A9');
+select pg_temp.iss_wp33_routes('A10');
+select pg_temp.iss_wp33_routes('ORDERING');
+select pg_temp.iss_wp33_routes('FORGED');
 
 
 
