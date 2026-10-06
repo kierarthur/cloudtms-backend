@@ -22,6 +22,7 @@
 \pset pager off
 
 begin;
+\ir support/06102026_1117_source_workbench_fixture_isolation.sql
 
 select pg_catalog.set_config('request.jwt.claim.role','service_role',true);
 -- Normal request-end seam for pre-existing verifier facts; no old worker jobs run.
@@ -33,12 +34,13 @@ declare
  v_economic_before jsonb;v_economic_after jsonb;v_relation text;v_hash text;
 begin
  if exists(select 1 from public.banking_pay_workbench_sessions where status='OPEN' and discarded_at_utc is null)
+   or exists(select 1 from public.banking_pay_workbench_session_scope where candidate_id='b8550000-0000-4000-8000-000000000003'::uuid)
    or exists(select 1 from public.banking_pay_workbench_jobs where status='RUNNING')
    or exists(select 1 from public.banking_pay_workbench_candidate_delta_projection_runs where status in ('RUNNING','PROCESSING','IN_PROGRESS')) then
    raise exception using errcode='P0001',message='PRESENTATION_EXISTING_ACTIVE_LANE_NOT_QUIET';
  end if;
  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_jobs_before from public.banking_pay_workbench_jobs j;
- select jsonb_build_object('sessions',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_sessions x),'scope',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_session_scope x),'source_lines',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_source_lines x),'delta_runs',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_delta_projection_runs x)) into v_bank_before;
+ v_bank_before:=pg_temp.ws_verify_workbench_fingerprint();
   v_economic_before:='{}'::jsonb;
   foreach v_relation in array array['public.timesheets','public.timesheets_financials','public.weekly_source_billing_movements','public.weekly_source_projection_publications','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_root_authorisations','public.invoices','public.pay_advances','public.pay_finance_case_components','public.pay_batches','public.banking_pay_operations'] loop
     execute format('select md5(coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),''[]''::jsonb)::text) from %s x',v_relation) into v_hash;
@@ -101,7 +103,7 @@ begin
   -- END V9 PREWORKER REAL REQUEST BOUNDARY
 
  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_jobs_after from public.banking_pay_workbench_jobs j;
- select jsonb_build_object('sessions',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_sessions x),'scope',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_session_scope x),'source_lines',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_source_lines x),'delta_runs',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_delta_projection_runs x)) into v_bank_after;
+ v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   v_economic_after:='{}'::jsonb;
   foreach v_relation in array array['public.timesheets','public.timesheets_financials','public.weekly_source_billing_movements','public.weekly_source_projection_publications','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_root_authorisations','public.invoices','public.pay_advances','public.pay_finance_case_components','public.pay_batches','public.banking_pay_operations'] loop
     execute format('select md5(coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),''[]''::jsonb)::text) from %s x',v_relation) into v_hash;
@@ -243,6 +245,7 @@ begin
   if (select active_owner from private.bpay_next_module_control where id=1)
        is distinct from 'LEGACY'
      or exists(select 1 from public.banking_pay_workbench_sessions where status='OPEN' and discarded_at_utc is null)
+     or exists(select 1 from public.banking_pay_workbench_session_scope where candidate_id='b8550000-0000-4000-8000-000000000003'::uuid)
      or exists(select 1 from public.banking_pay_workbench_candidate_source_lines where candidate_id=v_candidate)
      or exists(select 1 from public.banking_pay_workbench_candidate_delta_projection_runs
        where status in ('RUNNING','PROCESSING','IN_PROGRESS'))
@@ -333,7 +336,7 @@ begin
   if v_other_jobs is distinct from v_prior_jobs then
     raise exception using errcode='P0001',message='PRESENTATION_FACTS_CHANGED_EXISTING_JOB_ROWS';
   end if;
-  select jsonb_build_object('sessions',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_sessions x),'scope',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_session_scope x),'source_lines',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_source_lines x),'delta_runs',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_delta_projection_runs x)) into v_bank_after;
+  v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   if v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PRESENTATION_EXISTING_BANK_ROW_DRIFT';
   end if;
@@ -525,7 +528,7 @@ begin
       from public.banking_pay_workbench_jobs j;
     select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
       from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
-    select jsonb_build_object('sessions',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_sessions x),'scope',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_session_scope x),'source_lines',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_source_lines x),'delta_runs',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_delta_projection_runs x)) into v_bank_after;
+    v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   if v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PRESENTATION_EXISTING_BANK_ROW_DRIFT';
   end if;
@@ -533,6 +536,7 @@ begin
        or exists(select 1 from public.banking_pay_workbench_jobs j
          where j.id=any(v_owned) and j.status not in ('QUEUED','SUCCEEDED'))
        or exists(select 1 from public.banking_pay_workbench_sessions where status='OPEN' and discarded_at_utc is null)
+       or exists(select 1 from public.banking_pay_workbench_session_scope where candidate_id='b8550000-0000-4000-8000-000000000003'::uuid)
        or exists(select 1 from public.banking_pay_workbench_candidate_source_lines where candidate_id=v_candidate) then
       raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_CHILD_OR_NON_TARGET_DRIFT';
     end if;
@@ -564,7 +568,7 @@ begin
   -- BEGIN V7 NON-TARGET COMPLETE ROW READBACK
   select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
     from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
-  select jsonb_build_object('sessions',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_sessions x),'scope',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_session_scope x),'source_lines',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_source_lines x),'delta_runs',(select coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),'[]'::jsonb) from public.banking_pay_workbench_candidate_delta_projection_runs x)) into v_bank_after;
+  v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   if v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PRESENTATION_EXISTING_BANK_ROW_DRIFT';
   end if;

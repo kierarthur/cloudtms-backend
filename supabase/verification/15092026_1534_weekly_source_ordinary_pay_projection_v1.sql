@@ -10,6 +10,16 @@
 begin;
 \endif
 set local request.jwt.claim.role='service_role';
+\ir support/06102026_1117_source_workbench_fixture_isolation.sql
+create temporary table ws_paid_existing_job_ids on commit drop as
+select id from public.banking_pay_workbench_jobs;
+do $paid_fixture_namespace$
+begin
+  if exists(select 1 from public.candidates
+    where id='a0000000-0000-4000-8000-000000000003') then
+    raise exception 'PAID_FIXTURE_CANDIDATE_NAMESPACE_COLLISION';
+  end if;
+end $paid_fixture_namespace$;
 \set weekly_source_verification_outer_transaction true
 \ir 15092026_1534_weekly_source_finalisation_v1.sql
 
@@ -1145,6 +1155,9 @@ declare
   v_ordinary uuid[];
   v_call integer;
   v_all_ids uuid[];
+  v_expected_all_ids uuid[];
+  v_bank_before jsonb;
+  v_bank_after jsonb;
   -- BEGIN V9 NAMED BOUNDARY DECLARATIONS
   v_pending_count integer;
   v_old_finalising text;
@@ -1153,8 +1166,9 @@ declare
 begin
   if (select active_owner from private.bpay_next_module_control where id=1)
        is distinct from 'LEGACY'
-     or exists(select 1 from public.banking_pay_workbench_sessions)
-     or exists(select 1 from public.banking_pay_workbench_candidate_source_lines)
+     or exists(select 1 from public.banking_pay_workbench_sessions where status='OPEN' and discarded_at_utc is null)
+     or exists(select 1 from public.banking_pay_workbench_session_scope where candidate_id=v_candidate)
+     or exists(select 1 from public.banking_pay_workbench_candidate_source_lines where candidate_id=v_candidate)
      or exists(select 1 from public.banking_pay_workbench_candidate_delta_projection_runs
        where status in ('RUNNING','PROCESSING','IN_PROGRESS'))
      or exists(select 1 from public.banking_pay_workbench_jobs where status='RUNNING') then
@@ -1186,7 +1200,7 @@ begin
   end if;
 
   -- BEGIN V7 ALL TWELVE OWNED SETUP JOBS
-  -- The initial empty job namespace is checked before the genuine fixture.
+  -- The pre-fixture job namespace is preserved, not required to be empty.
   -- Its four contract/client fanouts and eight Candidate dirty jobs are all
   -- setup work. The worker may interleave and genuinely requeue either type.
   select array_agg(j.id order by j.id) into v_ordinary
@@ -1225,14 +1239,18 @@ begin
     from unnest(v_jobs||v_ordinary) id;
   select array_agg(j.id order by j.id) into v_all_ids
     from public.banking_pay_workbench_jobs j;
+  select array_agg(id order by id) into v_expected_all_ids from (
+    select id from pg_temp.ws_paid_existing_job_ids
+    union all select unnest(v_owned)
+  ) expected;
   v_claim_now:=clock_timestamp();
-  if cardinality(v_owned)<>12 or v_all_ids is distinct from v_owned
+  if cardinality(v_owned)<>12 or v_all_ids is distinct from v_expected_all_ids
      or (select count(*) from public.banking_pay_workbench_jobs j
        where j.id=any(v_owned) and j.status='QUEUED' and j.run_at_utc<=v_claim_now)<>12 then
     raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_DUE_NOT_EXACT';
   end if;
-  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs
-    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+  v_other_jobs:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
+  v_bank_before:=pg_temp.ws_verify_workbench_fingerprint();
   -- END V7 ALL TWELVE OWNED SETUP JOBS
 
   -- Retain complete fixture economic rows internally, never in output.
@@ -1422,13 +1440,14 @@ begin
     -- END V9 PENDING COHORT REAL REQUEST BOUNDARY
     select array_agg(j.id order by j.id) into v_all_ids
       from public.banking_pay_workbench_jobs j;
-    select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
-      from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
-    if v_all_ids is distinct from v_owned or v_other_jobs_after is distinct from v_other_jobs
+    v_other_jobs_after:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
+    v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
+    if v_all_ids is distinct from v_expected_all_ids or v_other_jobs_after is distinct from v_other_jobs
+       or v_bank_after is distinct from v_bank_before
        or exists(select 1 from public.banking_pay_workbench_jobs j
          where j.id=any(v_owned) and j.status not in ('QUEUED','SUCCEEDED'))
-       or exists(select 1 from public.banking_pay_workbench_sessions)
-       or exists(select 1 from public.banking_pay_workbench_candidate_source_lines) then
+       or exists(select 1 from public.banking_pay_workbench_session_scope where candidate_id=v_candidate)
+       or exists(select 1 from public.banking_pay_workbench_candidate_source_lines where candidate_id=v_candidate) then
       raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_CHILD_OR_NON_TARGET_DRIFT';
     end if;
     v_after:='{}'::jsonb;
@@ -1451,15 +1470,16 @@ begin
   if (select count(*) from public.banking_pay_workbench_jobs j
       where j.id=any(v_owned) and j.status='SUCCEEDED' and j.completed_at_utc is not null)<>12
      or exists(select 1 from public.banking_pay_workbench_jobs j
-       where j.status in ('QUEUED','RUNNING')) then
+       where j.id=any(v_owned) and j.status in ('QUEUED','RUNNING')) then
     raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_NOT_TERMINAL_WITHIN_BOUND';
   end if;
   -- END V7 BOUNDED GENUINE TWELVE JOB COMPLETION
 
   -- BEGIN V7 NON-TARGET COMPLETE ROW READBACK
-  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
-    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
-  if v_other_jobs_after is distinct from v_other_jobs then
+  v_other_jobs_after:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
+  v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
+  if v_other_jobs_after is distinct from v_other_jobs
+     or v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PAID_FIXTURE_OTHER_JOB_ROW_DRIFT';
   end if;
   -- END V7 NON-TARGET COMPLETE ROW READBACK
