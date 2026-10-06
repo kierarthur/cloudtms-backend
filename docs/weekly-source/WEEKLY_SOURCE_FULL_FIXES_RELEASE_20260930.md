@@ -371,3 +371,51 @@ No separate image or build cache was created. The 1,450-test main suite,
 This is local qualification, not a completed hosted release. Runtime/Office
 publication and the actual Kier Save acceptance remain held until the full
 managed hosted verifier set succeeds at the new reviewed commit.
+
+## Import Review generic-plan correction, 6 October
+
+Managed run `37472572598` at `b066d63cabf7424552d22ab745bebefb5c20fc8a`
+passed invoice admission and the preceding protected-pay checks, then stopped
+in the complete Mode A dispatch verifier after 54,660 ms. PostgreSQL raised
+SQLSTATE `54000`: a string buffer already containing 1,073,741,809 bytes could
+not grow. Its stack identified the real Import Review catalogue INSERT, not
+the financial-fingerprint assertion. Runtime and Office publication stopped.
+
+Arthur's rollback-only lab reproduced that exact buffer error with the complete
+original verifier under `force_generic_plan`; the default-plan original passed.
+The smallest tested correction is `classified AS MATERIALIZED`: PostgreSQL
+classifies the already bounded source rows once and reuses those results instead
+of expanding the lateral classification joins into downstream query plans.
+The corrected complete verifier passed with the forced generic plan, and a fresh
+connection proved restoration of the original routine plus absence of fixtures
+and capture triggers. This establishes a reproduced planning condition and its
+tested correction; it does not establish that every previous failure had this cause.
+
+The new complete replacement authority preserves the previous repository body
+byte-for-byte apart from that one materialization keyword. The predecessor
+canonical definition MD5 `efbe6d963014519a39f9588e54b39ed2` matches both hosted
+TEST and the source-derived PostgreSQL 17 golden; the original body SHA256 is
+`396167f93338a59c9ca1f668253a5931e6052bf0dc81c15506d93ba3f8e7ddfe`.
+Signature, owner, SECURITY DEFINER, search path, volatility, browser/service
+denial, 501-row classification boundary and 5,000-action ceiling are preserved.
+No Banking Pay, protected-pay, invoice or source-resolution rule changes.
+No runtime query-plan setting, timeout, memory allocation or verifier exclusion.
+
+Local PostgreSQL 17.11 qualification compiled the exact staged LF replacement,
+compared its full generated predecessor contract, then proved exactly one
+routine-definition hash change. Complete original custom-plan and corrected
+custom/generic/automatic Mode A checks returned identical decisions (896/948/
+735/970 ms respectively). Current Daily compatibility security passed; the
+complete split invoice-issue verifier also passed under the generic plan
+(20,818 ms). Receipt `CATALOG_PLAN_QUALIFICATION_de814a8d-9f54-48bb-8612-9b8a21413327.json`.
+The local seal generated contract `a3e6bac5b0c6a09cca601acbd9b8fde6f6b4afd5086383b73999f148c3e50980`.
+Every task-owned diagnostic container and volume was removed; the shared golden
+was read only. An additional historical, non-release Daily diagnostic refuses
+the provider-mapped owner because it hardcodes `postgres`; it is not a substitute
+for the current provider-neutral mandatory security verifier, which passed.
+
+The existing mandatory Mode A verifier now forces a generic plan only inside
+its rollback transaction, retaining all scenarios and assertions so the exact
+planning regression is continuously exercised. All 149 hosted verifiers still
+have to pass in the canonical managed release. Actual Kier Save and ordered
+runtime/Office acceptance remain required before publication is claimed complete.

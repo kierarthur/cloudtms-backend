@@ -22,6 +22,10 @@
 \set ON_ERROR_STOP on
 
 begin;
+-- Regression: reused generic plans must not expand the review classification
+-- into the one-gigabyte plan buffer failure. Test-only and transaction-local;
+-- all existing Mode A scenarios, assertions and rollback guards remain intact.
+set local plan_cache_mode=force_generic_plan;
 -- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.weekly_discrepancy_events'::regclass);
