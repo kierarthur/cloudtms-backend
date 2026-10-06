@@ -1,9 +1,9 @@
 {
   "purpose": "Contract-neutral database source change: the freshly re-sealed contract is byte-identical, so current-contract.json cannot change. Checked by scripts/verify-database-contract-coupling.mjs only when this file changes in the same commit.",
   "change": "Stage 2 v5.3: the A34 closure first revokes ACL entries granted TO the separate physical superuser role named postgres (residue of releases run before ACL grantees were mapped) on objects the release owner owns, before its unchanged fail-closed check. The contract export maps that role and the owner to the same logical owner and the step refuses any revoke that would change that view, so the sealed contract is unchanged.",
-  "current_change": "A protected TEST retry replayed the September H1/H2 closure after later reviewed authorities were already ledgered, reinstating older Banking Pay and candidate-week function bodies and resetting later function-local planner settings. The October repeatables reassert the exact current successor definitions, including the A34 finance-case baseline after the A28 canonical producer, and the reviewed A35 plan_cache_mode and A34 jit settings after that historical replay. They also guard the finalizer identity and reassert only its optional plpgsql_check setting. No new economic, payment, provider or policy rule is introduced; the semantic contract is byte-identical to its seal.",
-  "canonical_contract_hash": "d30cd656663f5198a4abb16ef7dd67721b67f2f95e1cd5f818a69c98e97ccf8f",
-  "contract_sha256": "1ab5c4d66d017716c99d4d421f41d8de06eb68cbd230beb0c9093c83953d5d9a",
+  "current_change": "The failed protected TEST release at 420513 installed its exact 138 pending repeatables but historical includes superseded seven current routine definitions/configurations. One new final repeatable reasserts five existing canonical leaves in their reviewed order and only the exact current invalidation helper CREATE, never its historical whole page. The actual combined unit was compiled by the unchanged managed engine and executed under the restricted local PostgreSQL 17.11 owner; complete catalogue, ledger, business facts and original golden snapshot remained equal. The generated current contract is byte-identical. Exact recursive-hash registration uses the existing SOURCE_REASSERT packaging policy without a parser or economic-policy waiver. No payment, provider, activation or hosted VERIFIED claim is made by this attestation.",
+  "canonical_contract_hash": "9497e4b8e2c614ee093906ca3c2d434dab1c572408dca4885e158cf70b1a9cb2",
+  "contract_sha256": "c468368739256377f42cfe273510178d25687dd44458fe7c1615453051032c51",
   "files": [
     {
       "path": "supabase/repeatable/03102026_0400_stage2_canonical_producer_after_h1h2_retry.sql",
@@ -40,6 +40,10 @@
     {
       "path": "supabase/repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql",
       "sha256": "14376be3eb19d15b519f9f9c05c1d8dae935c65ca8800facfda5fc5558f64b1c"
+    },
+    {
+      "path": "supabase/repeatable/06102026_1041_source_pending_order_canonical_reassert.sql",
+      "sha256": "fe7041b97a159cabd05cc5976d7e0e34589fd8beb85f3d6b853163cae177bc04"
     }
   ]
 }

@@ -42,7 +42,7 @@ test('session reset is fresh-file equivalent without releasing its advisory guar
 });
 
 test('exact replay policy covers only audited current exceptions and refuses changed closure',()=>{
-  assert.equal(MANAGED_EXCEPTIONS.length,37);
+  assert.equal(MANAGED_EXCEPTIONS.length,38);
   for(const entry of MANAGED_EXCEPTIONS){
     const closure=readManagedClosure(entry.path,repoRoot);
     assert.equal(executionPolicy(closure),entry);
@@ -66,7 +66,7 @@ test('whole current NEW selected inventory classifies with unchanged LF/closure 
       if(unit.exception)replay++;else atomic++;
     }
   }
-  assert.equal(replay,37);assert.ok(atomic>500);
+  assert.equal(replay,38);assert.ok(atomic>500);
 });
 
 function context(mode='UPGRADE') {return {mode,releaseId:'test-managed',gitCommit:'a'.repeat(40),expectedHash:'b'.repeat(64),

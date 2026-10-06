@@ -44,6 +44,7 @@ const rows = [
   ['repeatable/22092026_1620_banking_pay_installed_owner_reassert_v1.sql','14447b519484557d69439246cc6b3e2c7efd0197b70432d29d36dafa7f4666a1','MODAL'],
   ['repeatable/26092026_0208_banking_pay_stage2_backfill_complete_v1.sql','346d43137bb2ca23de7988a774465204b728aa758d86931303b3604dda3e9de7','BACKFILL'],
   ['repeatable/28092026_1234_stage2_hosted_final_authority_reassert_v1.sql','e95320c23ee1236d4ff469412c157f334233bd1b4fe90877fdf5cbb24a6561db','SOURCE_REASSERT'],
+  ['repeatable/06102026_1041_source_pending_order_canonical_reassert.sql','087ef13f52e24925527033115ceb7a127ce29f62e70cd440bce2dceee8eef7ec','SOURCE_REASSERT'],
   ['repeatable/03102026_0300_finalizer_instrumentation_after_authority_closures.sql','2c86099adcb66732872c56923b9eb1806967761af7a5a8912663360f020b6b81','INSTRUMENTATION'],
   ['repeatable/03102026_0600_stage2_plan_cache_after_h1h2_retry.sql','b7f5a59950b185313a9059733cde9f031fd6cdc9327b15bbbbaa7ed3044f21ba','PLAN_CACHE'],
 ];
