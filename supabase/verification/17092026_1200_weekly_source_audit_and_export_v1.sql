@@ -51,6 +51,8 @@
 begin;
 \ir support/06102026_1117_source_workbench_fixture_isolation.sql
 \ir support/06102026_1410_source_full_row_fingerprints.sql
+\ir support/06102026_1716_source_financial_drift_diagnostics.sql
+\ir support/06102026_1723_source_financial_drift_diagnostic_controls.sql
 -- Transaction-local fixture accounting; existing customer rows are not an empty-table precondition.
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.banking_pay_workbench_jobs'::regclass);
@@ -393,6 +395,11 @@ begin
   ] loop
     v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_before:=v_before||jsonb_build_object(v_relation,v_hash);
+    if pg_temp.ws_verify_financial_drift_capture(v_relation::regclass,'BEFORE')
+       is distinct from v_hash then
+      raise exception using errcode='P0001',message='PAID_FIXTURE_ECONOMIC_BASELINE_CHANGED_DURING_CAPTURE',
+        detail=jsonb_build_object('relation',v_relation)::text;
+    end if;
   end loop;
 
   -- BEGIN V9 EXACT INSTALLED NAMED FINALIZER
@@ -593,7 +600,8 @@ begin
       v_after:=v_after||jsonb_build_object(v_relation,v_hash);
     end loop;
     if v_after is distinct from v_before then
-      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT';
+      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT',
+        detail=pg_temp.ws_verify_financial_drift_detail(v_before,v_after,v_call);
     end if;
   end loop;
   if (select count(*) from public.banking_pay_workbench_jobs j
@@ -628,7 +636,8 @@ begin
     v_after:=v_after||jsonb_build_object(v_relation,v_hash);
   end loop;
   if v_after is distinct from v_before then
-    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT';
+    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT',
+      detail=pg_temp.ws_verify_financial_drift_detail(v_before,v_after,null);
   end if;
 end;
 $paid_root_owned_setup_fanout$;
