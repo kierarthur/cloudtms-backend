@@ -21,7 +21,8 @@
 \set ON_ERROR_STOP on
 \pset pager off
 
-begin;
+begin isolation level repeatable read;
+\ir support/06102026_1818_source_verifier_snapshot_guard.sql
 \ir support/06102026_1117_source_workbench_fixture_isolation.sql
 \ir support/06102026_1410_source_full_row_fingerprints.sql
 

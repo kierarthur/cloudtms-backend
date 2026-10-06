@@ -22,11 +22,15 @@ test('capture reinclude does not reset accumulated evidence', () => {
 });
 test('ordinary projection initializes included as well as standalone paths', () => {
   const s=read('15092026_1534_weekly_source_ordinary_pay_projection_v1.sql');
-  const setup=s.indexOf('\\ir support/22092026_1850_source_fixture_capture.sql');
+  const setup=s.indexOf('\\ir support/06102026_1117_source_workbench_fixture_isolation.sql');
+  assert.ok(setup>=0);
+  assert.match(read('support/06102026_1117_source_workbench_fixture_isolation.sql'),
+    /\\ir 22092026_1850_source_fixture_capture\.sql/);
   assert.ok(s.indexOf('\\endif')<setup);
   assert.ok(setup<s.indexOf('\\ir 15092026_1534_weekly_source_finalisation_v1.sql'));
-  assert.match(s,/billing_movement_count=pg_temp.ws_verify_writes/);
-  assert.doesNotMatch(s,/WEEKLY_SOURCE_ORDINARY_PROJECTION_MOVEMENT_BOUNDARY_V1/);
+  assert.match(s,/billing_movement_count=\(\s*select pg_catalog\.count\(\*\) from public\.weekly_source_billing_movements/);
+  assert.match(s,/and billing_movement_hash=\(/);
+  assert.equal((s.match(/WEEKLY_SOURCE_ORDINARY_PROJECTION_MOVEMENT_BOUNDARY_V1/g)||[]).length,2);
 });
 test('fixture queue drains cannot retire unrelated queued jobs', () => {
   for(const n of ['17092026_0600_weekly_source_first_authorisation_v1.sql','17092026_0700_weekly_source_pending_entitlement_release_v1.sql','17092026_0300_weekly_source_entitlement_publication_v1.sql','17092026_1200_weekly_source_audit_and_export_v1.sql','17092026_0110_weekly_source_banking_pay_absence_v1.sql']) {

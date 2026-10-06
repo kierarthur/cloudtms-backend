@@ -7,8 +7,9 @@
 
 \if :{?weekly_source_ordinary_verification_outer_transaction}
 \else
-begin;
+begin isolation level repeatable read;
 \endif
+\ir support/06102026_1818_source_verifier_snapshot_guard.sql
 set local request.jwt.claim.role='service_role';
 \ir support/06102026_1117_source_workbench_fixture_isolation.sql
 \ir support/06102026_1410_source_full_row_fingerprints.sql

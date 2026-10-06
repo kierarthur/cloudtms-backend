@@ -9,7 +9,7 @@
 \set weekly_source_ordinary_verification_outer_transaction true
 \set weekly_source_verification_correction_presentation 'FULL_REVERSAL_REPLACEMENT'
 \set weekly_source_verification_expense_vat_enabled false
-begin;
+begin isolation level repeatable read;
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.invoices'::regclass);
 -- scoped to fixture rows: hosted TEST holds real manifests, invoices and bindings
@@ -921,7 +921,7 @@ rollback;
 -- expenses. Only an exact same-correction-unit non-NHSP pair may share a line.
 \set weekly_source_verification_correction_presentation 'NET_DIFFERENCE_PRESENTATION'
 \set weekly_source_verification_expense_vat_enabled true
-begin;
+begin isolation level repeatable read;
 \ir support/22092026_1850_source_fixture_capture.sql
 select pg_temp.ws_verify_watch('public.invoices'::regclass);
 -- scoped to fixture rows: hosted TEST holds real manifests, invoices, Timesheets

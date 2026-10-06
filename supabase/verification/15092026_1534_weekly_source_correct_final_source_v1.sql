@@ -7,7 +7,7 @@
 
 \set ON_ERROR_STOP on
 
-begin;
+begin isolation level repeatable read;
 set local request.jwt.claim.role='service_role';
 \set weekly_source_verification_outer_transaction true
 \set weekly_source_ordinary_verification_outer_transaction true
