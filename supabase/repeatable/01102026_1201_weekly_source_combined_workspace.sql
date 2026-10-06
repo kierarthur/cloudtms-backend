@@ -88,6 +88,12 @@ declare
   v_signed jsonb;
   v_final_source jsonb;
   v_history jsonb:='[]'::jsonb;
+  v_pending boolean:=false;
+  v_resume jsonb;
+  v_original jsonb;
+  v_original_hash bytea;
+  v_approval public.weekly_exceptional_payment_approvals%rowtype;
+  v_run public.weekly_exceptional_orchestration_runs%rowtype;
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
@@ -247,7 +253,68 @@ begin
   if v_event_id is not null then
     select item into v_event from jsonb_array_elements(v_events) item where item->>'work_event_id'=v_event_id::text;
     if v_event is null then
-      raise exception 'WEEKLY_PROTECTED_EDITOR_SHIFT_STALE' using errcode='40001';
+      raise exception 'WEEKLY_PROTECTED_EDITOR_SHIFT_STALE' using errcode='PT409';
+    end if;
+    select family.current_generation_id is null
+      and family.c1_publication_state in ('PENDING','PUBLISHING') into v_pending
+    from public.weekly_exceptional_pay_target_families family
+    where family.id=(v_event->>'family_id')::uuid;
+    if v_pending then
+      -- Resume only a retained first approval, never a guessed amendment or
+      -- reconstructed financial target. The original actor and exact request
+      -- fingerprint remain the existing preparation owner's authority.
+      select approval.* into v_approval
+      from public.weekly_exceptional_payment_approvals approval
+      join public.weekly_exceptional_pay_family_events recorded
+        on recorded.evidence_approval_id=approval.id
+      where recorded.family_id=(v_event->>'family_id')::uuid
+        and recorded.durable_work_event_id=v_event_id
+        and recorded.event_sequence=1 and approval.withdrawn_at_utc is null;
+      if found then
+        select run.* into v_run from public.weekly_exceptional_orchestration_runs run
+        where run.id=v_approval.creation_orchestration_run_id
+          and run.family_id=(v_event->>'family_id')::uuid
+          and run.request_kind='APPROVE' and run.state='RUNNING'
+          and run.requested_by_user_id=v_actor
+          and v_approval.approved_by_user_id=v_actor
+          and v_approval.candidate_id=v_candidate and v_approval.client_id=v_client
+          and v_approval.protected_work_date=v_date
+          and exists(select 1 from public.weekly_source_cycles original_cycle
+            where original_cycle.id=v_approval.source_cycle_id
+              and original_cycle.source_group_id=v_group_id)
+          and 1=(select count(*) from public.weekly_exceptional_c1_publication_requests publication
+            where publication.orchestration_run_id=run.id and publication.family_id=run.family_id
+              and publication.state='READY');
+        if found then
+          v_original:=jsonb_build_object('actor_user_id',v_actor,
+            'source_cycle_id',v_approval.source_cycle_id,'candidate_id',v_candidate,
+            'client_id',v_client,'contract_id',v_approval.contract_id,
+            'week_ending_date',v_approval.week_ending::text,'work_event_id',v_event_id,
+            'work_date',v_date::text,
+            'start_at_local',to_char(v_approval.protected_start_at_local,'YYYY-MM-DD HH24:MI:SS'),
+            'end_at_local',to_char(v_approval.protected_end_at_local,'YYYY-MM-DD HH24:MI:SS'),
+            'break_minutes',v_approval.protected_break_minutes,
+            'evidence_timesheet_id',v_approval.evidence_timesheet_id,
+            'reason',v_approval.approval_reason,'idempotency_key',v_run.idempotency_key);
+          v_original_hash:=private.weekly_source_sha256_jsonb_v1(
+            'WEEKLY_PROTECTED_PREPARE_FAMILY_REQUEST_V1',v_original);
+          if v_original_hash is distinct from v_run.request_fingerprint then
+            -- A source-absent first approval originally requested creation of
+            -- its work identity. Only an exact hash permits this null variant.
+            v_original:=v_original||jsonb_build_object('work_event_id',null);
+            v_original_hash:=private.weekly_source_sha256_jsonb_v1(
+              'WEEKLY_PROTECTED_PREPARE_FAMILY_REQUEST_V1',v_original);
+          end if;
+          if v_original_hash=v_run.request_fingerprint then
+            perform private.weekly_source_office_authority_v1(v_actor,'APPROVE_PROTECTED_PAY',
+              v_group_id,v_client,(select finalisation_week_ending from public.weekly_source_cycles
+                where id=v_approval.source_cycle_id));
+            v_resume:=(v_original-array['actor_user_id','start_at_local','end_at_local'])
+              ||jsonb_build_object('start',to_char(v_approval.protected_start_at_local,'HH24:MI'),
+                'end',to_char(v_approval.protected_end_at_local,'HH24:MI'));
+          end if;
+        end if;
+      end if;
     end if;
     if nullif(v_event->>'family_id','') is not null and v_cycle is not null then
       v_final_source:=private.weekly_source_protected_final_source_context_v1(
@@ -287,6 +354,7 @@ begin
     'events',v_events,'work_event_id',v_event_id,
     'family_id',v_event->>'family_id','expected_family_bound_version',v_event->>'expected_family_bound_version',
     'protected_state',v_event->>'protected_state','shift_contract_id',v_event->>'contract_id',
+    'pending_approval',coalesce(v_pending,false),'resume_request',v_resume,
     'can_reconcile',coalesce((v_final_source->>'source_observed')::boolean,false),
     'final_source_proposal',v_final_source->'source_proposal',
     'history',v_history,
@@ -310,6 +378,14 @@ declare
   v_scoped jsonb;
 begin
   v_context:=public.weekly_source_protected_editor_context_v1(p_request);
+  if coalesce((v_context->>'pending_approval')::boolean,false) then
+    if v_context->'resume_request' is null or v_context->'resume_request'='null'::jsonb then
+      raise exception 'WEEKLY_PROTECTED_PENDING_REQUEST_UNAVAILABLE' using errcode='PT409';
+    end if;
+    -- A replay must retain its original period and key. Allocating a newer
+    -- open cycle here changes the fingerprint and cannot resume that Save.
+    return v_context||jsonb_build_object('source_cycle_id',v_context->'resume_request'->>'source_cycle_id');
+  end if;
   v_cycle:=private._weekly_source_settings_ensure_open_cycle_v1((v_context->>'source_group_id')::uuid);
   v_scoped:=public.weekly_source_client_cycle_resolve_atomic_v1(jsonb_build_object(
     'actor_user_id',p_request->>'actor_user_id','source_cycle_id',v_cycle,'client_id',p_request->>'client_id'));

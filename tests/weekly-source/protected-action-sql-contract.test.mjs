@@ -95,6 +95,16 @@ test('the rollback proof covers every protected Office action and exact replay',
   assert.match(verifier, /^rollback;$/m);
 });
 
+test('stale protected actions return a non-retrying HTTP conflict before writing a run', () => {
+  const prepare = functionBody('create or replace function public.weekly_exceptional_pay_prepare_action_v1',
+    'create or replace function private.weekly_source_protected_final_source_context_v1');
+  assert.match(prepare, /raise exception 'WEEKLY_PROTECTED_ACTION_STALE' using errcode='PT409';/);
+  assert.doesNotMatch(prepare, /raise exception 'WEEKLY_PROTECTED_ACTION_STALE' using errcode='40001';/);
+  assert.ok(prepare.indexOf("raise exception 'WEEKLY_PROTECTED_ACTION_STALE'")
+    < prepare.indexOf('insert into public.weekly_exceptional_orchestration_runs'));
+  assert.match(verifier, /exception when sqlstate 'PT409' then\s*if sqlerrm<>'WEEKLY_PROTECTED_ACTION_STALE' then raise; end if;/);
+});
+
 test('first approval and later actions serialize one shared idempotency namespace', () => {
   const lock = /pg_catalog\.pg_advisory_xact_lock\(pg_catalog\.hashtextextended\(\s*'weekly-exceptional-orchestration\|'\|\|v_(?:idempotency_key|key),0\s*\)\)/i;
   assert.match(familyOwner, lock);
@@ -107,4 +117,22 @@ test('first approval and later actions serialize one shared idempotency namespac
     owner.indexOf('pg_catalog.pg_advisory_xact_lock')
       < owner.indexOf('where run.idempotency_key=v_key'),
   );
+});
+
+test('pending editor recovery proves the original factual fingerprint before exposing an exact retry', () => {
+  const sql = read('supabase/repeatable/01102026_1201_weekly_source_combined_workspace.sql');
+  const context = sql.slice(sql.indexOf('create or replace function public.weekly_source_protected_editor_context_v1'),
+    sql.indexOf('create or replace function public.weekly_source_protected_editor_prepare_v1'));
+  const prepare = sql.slice(sql.indexOf('create or replace function public.weekly_source_protected_editor_prepare_v1'),
+    sql.indexOf('alter function public.weekly_source_protected_editor_context_v1'));
+  assert.match(context, /run\.requested_by_user_id=v_actor/);
+  assert.match(context, /run\.request_kind='APPROVE' and run\.state='RUNNING'/);
+  assert.match(context, /publication\.state='READY'/);
+  assert.match(context, /if v_original_hash=v_run\.request_fingerprint then/);
+  assert.match(context, /'idempotency_key',v_run\.idempotency_key/);
+  assert.match(context, /'source_cycle_id',v_approval\.source_cycle_id/);
+  assert.doesNotMatch(context, /\b(?:update|insert into|delete from) public\./);
+  assert.ok(prepare.indexOf("'resume_request'->>'source_cycle_id'")
+    < prepare.indexOf('_weekly_source_settings_ensure_open_cycle_v1'));
+  assert.match(prepare, /WEEKLY_PROTECTED_PENDING_REQUEST_UNAVAILABLE' using errcode='PT409'/);
 });

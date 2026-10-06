@@ -446,7 +446,7 @@ begin
       )
     );
     raise exception 'STALE_ACTION_WAS_ACCEPTED';
-  exception when serialization_failure then
+  exception when sqlstate 'PT409' then
     if sqlerrm<>'WEEKLY_PROTECTED_ACTION_STALE' then raise; end if;
   end;
 end;

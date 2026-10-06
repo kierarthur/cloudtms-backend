@@ -203,7 +203,10 @@ begin
      )
      or v_family.c1_publication_state in ('PENDING','PUBLISHING')
      or v_family.bound_version<>v_expected_version then
-    raise exception 'WEEKLY_PROTECTED_ACTION_STALE' using errcode='40001';
+    -- A business-version refusal is not a retryable PostgreSQL serialization
+    -- failure. PostgREST 14 retries 40001, so return the same refusal as HTTP
+    -- conflict without repeating the request or creating an orchestration run.
+    raise exception 'WEEKLY_PROTECTED_ACTION_STALE' using errcode='PT409';
   end if;
 
   -- A new Office review is bound to the exact final-source observation shown.
