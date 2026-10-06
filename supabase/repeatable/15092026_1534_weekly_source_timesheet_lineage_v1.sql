@@ -222,6 +222,8 @@ declare
   v_root_authorisation jsonb;
   v_bound_timesheet_id uuid;
   v_finalisation_root_set text;
+  v_finalisation_lock_operation_text text;
+  v_finalisation_lock_operation private.bpay_next_source_current_lock_operations%rowtype;
 begin
   if coalesce(
        pg_catalog.current_setting('request.jwt.claim.role',true),
@@ -248,6 +250,7 @@ begin
   from public.weekly_source_uploads
   where id=v_source_row.upload_id;
 
+  perform private.weekly_source_pay_query_admit_v2();
   -- Lock in the same outer-to-inner order as finalisation.  The initial reads
   -- above discover only the keys; every authoritative fact is re-read after
   -- its owner has been locked.
@@ -543,6 +546,36 @@ begin
   -- publishes that set here.  A root this owner discovers that the set does not
   -- contain would be locked out of that sorted order, so refuse retryably
   -- instead.  Outside a finalisation the setting is absent and nothing changes.
+  v_finalisation_lock_operation_text:=nullif(pg_catalog.btrim(coalesce(
+    pg_catalog.current_setting('cloudtms.weekly_source_finalisation_lock_operation',true),''
+  )), '');
+  if v_finalisation_lock_operation_text is not null
+     and (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    -- One owner-private operation UUID replaces the whole-root CSV only for
+    -- NEXT. It is not authority by itself: bind transaction and actual Source
+    -- upload/publication/generation/exact old correction revision first.
+    select o.* into v_finalisation_lock_operation
+    from private.bpay_next_source_current_lock_operations o
+    where o.id=v_finalisation_lock_operation_text::uuid
+      and o.transaction_id=pg_catalog.pg_current_xact_id()
+      and o.upload_id=v_upload.id and o.projection_publication_id=v_publication.id
+      and o.generation=v_resolution.generation
+      and o.old_revision_id is not distinct from case when v_is_correction
+        then v_correction.expected_current_final_revision_id else null end
+      and o.source_group_id=v_group.id and o.client_id=v_resolution.client_id;
+    if not found then
+      raise exception 'WEEKLY_SOURCE_FINALISATION_LOCK_OPERATION_UNBOUND' using errcode='40001';
+    end if;
+    if v_known_root_timesheet_id is not null and not exists(
+      select 1 from private.bpay_next_source_current_lock_members m
+      join public.timesheets t on t.timesheet_id=m.root_timesheet_id
+      where m.operation_id=v_finalisation_lock_operation.id
+        and m.root_timesheet_id=v_known_root_timesheet_id and m.raw_booking_id=t.booking_id
+    ) then
+      raise exception 'WEEKLY_SOURCE_FINALISATION_ROOT_SET_CHANGED_DURING_LOCK' using errcode='40001';
+    end if;
+  else
+  -- Retain the unrelated/default OFF Source guard exactly as before.
   v_finalisation_root_set:=nullif(pg_catalog.btrim(coalesce(
     pg_catalog.current_setting('cloudtms.weekly_source_finalisation_root_set',true),''
   )),'');
@@ -556,6 +589,7 @@ begin
           'code','WEEKLY_SOURCE_FINALISATION_ROOT_SET_CHANGED_DURING_LOCK',
           'observed_root_timesheet_id',v_known_root_timesheet_id
         )::text;
+  end if;
   end if;
 
   if v_known_root_timesheet_id is not null then
@@ -714,6 +748,17 @@ begin
       pg_catalog.statement_timestamp(),pg_catalog.statement_timestamp()
     ) returning * into v_timesheet;
     v_created_timesheet:=true;
+
+    if v_finalisation_lock_operation.id is not null then
+      -- Only this genuine INSERT RETURNING may add a new private root; never
+      -- a lookup/fallback or a root that appeared externally. No pre-existing
+      -- booking key is invented: retain the Source base-week creation serial
+      -- policy. Subsequent WORK/expense rows can re-enter this exact own root.
+      insert into private.bpay_next_source_current_lock_members(
+        operation_id,root_timesheet_id,raw_booking_id,canonical_booking_id
+      ) values(v_finalisation_lock_operation.id,v_timesheet.timesheet_id,
+        v_timesheet.booking_id,pg_catalog.btrim(v_timesheet.booking_id));
+    end if;
 
     update public.contract_weeks
     set timesheet_id=v_timesheet.timesheet_id,

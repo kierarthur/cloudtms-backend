@@ -432,15 +432,18 @@ as $function$
     where work.first_source_group_id=p_group_id and (p_client_id is null or contract.client_id=p_client_id)
     order by event.family_id,event.durable_work_event_id,event.event_sequence desc
   ), rows as (
-      select jsonb_build_object('row_key','protected-'||item.durable_work_event_id::text,
+      select jsonb_build_object('row_key','protected-'||item.family_id::text||':'||item.durable_work_event_id::text,
+        'family_id',item.family_id,'work_event_id',item.durable_work_event_id,
+        'requires_attention',decision.needs_review,'pay_blocking',false,
         'client_id',item.client_id,'work_date',item.work_date,
         'candidate_sort',(select coalesce(nullif(person.last_name,''),person.display_name) from public.candidates person where person.id=item.candidate_id),
       'candidate',item.candidate_name,'client',item.client_name,'day_date',to_char(item.work_date,'Dy FMDD Mon YYYY'),
       'protected_hours',to_char(item.start_at_local,'HH24:MI')||'–'||to_char(item.end_at_local,'HH24:MI')||' · '||item.break_minutes::text||' min break',
-      'status',jsonb_build_object('text',case when coalesce((source.value->>'source_observed')::boolean,false)
+      'status',jsonb_build_object('text',case when decision.needs_review
         then 'Ready to reconcile' else 'Protected pay — awaiting source' end,'tone','warning'),
       'actions',jsonb_build_array(jsonb_build_object('label','Change protected shift','enabled',p_can_act,'payload',payload.value),
-        jsonb_build_object('label','Review protected pay','enabled',p_can_act,'payload',payload.value))
+        jsonb_build_object('label',case when decision.needs_review then 'Review and reconcile'
+          else 'Review protected pay' end,'enabled',p_can_act,'payload',payload.value))
     ) value from items item
     cross join lateral (select jsonb_build_object('source_group_id',p_group_id,
       'client_id',item.client_id,'candidate_id',item.candidate_id,'work_date',item.work_date,
@@ -454,6 +457,15 @@ as $function$
     left join lateral (select private.weekly_source_protected_final_source_context_v1(
       item.family_id,action_cycle.id,item.durable_work_event_id) value
       where action_cycle.id is not null and item.state='WAIT') source on true
+    cross join lateral (select coalesce((source.value->>'source_observed')::boolean,false)
+      and (source.value#>'{source_proposal,selected_work_event_id}'
+        is distinct from item.source_proposal_snapshot_json->'selected_work_event_id'
+        or source.value#>'{source_proposal,source_present}'
+          is distinct from item.source_proposal_snapshot_json->'source_present'
+        or source.value#>'{source_proposal,source_revision}'
+          is distinct from item.source_proposal_snapshot_json->'source_revision'
+        or source.value#>'{source_proposal,source_hash}'
+          is distinct from item.source_proposal_snapshot_json->'source_hash') needs_review) decision
     where item.state='WAIT'
   ) select jsonb_build_object('rows',coalesce(jsonb_agg(value),'[]'::jsonb),'total_count',count(*),
     'next_cursor','','has_more',false,'stale',false) from rows;
@@ -777,11 +789,13 @@ declare
   v_limit integer:=coalesce((p_request->>'limit')::integer,50);
   v_offset integer:=0; v_base integer:=0; v_total integer; v_page jsonb; v_counts jsonb;
   v_version text; v_cursor jsonb; v_client uuid; v_seen text[]:='{}'; v_key text; v_owner_key text;
+  v_attention jsonb; v_attention_first boolean:=coalesce((p_request->>'attention_first')::boolean,false);
+  v_attention_kind text:=coalesce(p_request->>'attention_kind','');
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
     array['actor_user_id','source_group_id','client_id','week_ending','tab','section',
-      'sort_key','sort_direction','seek','cursor','limit','report_key'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
+      'sort_key','sort_direction','seek','cursor','limit','report_key','attention_first','attention_kind'],'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID');
   if v_tab='history' then
     return public.weekly_source_report_history_v1(p_request-'tab'-'section');
   end if;
@@ -790,11 +804,13 @@ begin
   end if;
   if v_tab not in ('imports','queries') or v_section not in ('questions','checks','protected','current','archive')
     or v_sort not in ('client','candidate','day_date','status','file','uploaded')
-    or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100 then
+    or v_direction not in ('asc','desc') or v_limit not between 1 and 100 or length(v_seek)>100
+    or v_attention_kind not in ('','missing_source','questions','checks','protected')
+    or (p_request ? 'attention_first' and jsonb_typeof(p_request->'attention_first')<>'boolean') then
     raise exception 'WEEKLY_SOURCE_COMBINED_REQUEST_INVALID' using errcode='22023';
   end if;
   v_client:=nullif(p_request->>'client_id','')::uuid;
-  v_request:=p_request-'tab'-'section'-'sort_key'-'sort_direction'-'seek'-'cursor'-'limit';
+  v_request:=p_request-'tab'-'section'-'sort_key'-'sort_direction'-'seek'-'cursor'-'limit'-'attention_first'-'attention_kind';
   loop
     v_scope_page:=public.weekly_source_workspace_scopes_v1(v_request);
     v_summary:=v_scope_page-'rows'-'next_cursor'-'has_more';
@@ -911,7 +927,9 @@ begin
           union all
           select item||jsonb_build_object('section','protected') from jsonb_array_elements(coalesce(v_workspace#>'{queries,protected_shifts,rows}','[]')) item
         loop
-          v_key:=(v_item->>'section')||':'||v_owner_key||':'||(v_item->>'row_key');
+          v_key:=case when v_item->>'section'='protected' then
+            'protected:'||(v_item->>'family_id')||':'||(v_item->>'work_event_id')
+            else (v_item->>'section')||':'||v_owner_key||':'||(v_item->>'row_key') end;
           if v_key=any(v_seen) then continue; end if;
           v_seen:=array_append(v_seen,v_key);
           if nullif(v_item->>'client_id','') is not null and not exists(select 1
@@ -946,16 +964,75 @@ begin
         'combined_key',v_key,'row_key',v_key,'section','checks',
         'client',v_scope->>'client','client_id',v_scope->>'client_id',
         'source',v_scope->>'source','period',v_scope->>'period',
-        'candidate','Report follow-up','status',jsonb_build_object('text',v_follow_up->>'title'),
+        'candidate','Report follow-up','requires_attention',
+          v_follow_up->>'state' in ('ACTION_REQUIRED','RECOVERY_REQUIRED')
+          or jsonb_typeof(v_follow_up->'action')='object',
+        'status',jsonb_build_object('text',v_follow_up->>'title'),
         'problem',v_follow_up->>'body','follow_up_scope',v_follow_workspace->'selected','actions','[]'::jsonb));
     end loop;
   end if;
+  -- Classify the complete permitted collection before counting or paging.
+  -- A waiting signature alone is informational; red unresolved work and green
+  -- charge/reconciliation decisions remain visible and count as Office work.
+  select coalesce(jsonb_agg(item||jsonb_build_object(
+    'attention_missing_source_count',case when item->>'section'='questions' then
+      (select count(*) from jsonb_array_elements(coalesce(item->'children','[]')) child
+        where child->'candidate_shift_absent_from_import'='true'::jsonb) else 0 end,
+    'attention_question_count',case when item->>'section'='questions' then
+      (select count(*) from jsonb_array_elements(coalesce(item->'children','[]')) child
+        where child->>'issue' is distinct from 'Timesheet missing'
+          and child->'candidate_shift_absent_from_import' is distinct from 'true'::jsonb) else 0 end,
+    'requires_attention',case
+    when item->>'section'='questions' then exists(select 1
+      from jsonb_array_elements(coalesce(item->'children','[]')) child
+      where child->>'issue' is distinct from 'Timesheet missing')
+    when item->>'section'='checks' then case when item ? 'follow_up_scope'
+      then coalesce((item->>'requires_attention')::boolean,false) else true end
+    when item->>'section'='protected' then coalesce((item->>'requires_attention')::boolean,false)
+    else false end)),'[]') into v_rows from jsonb_array_elements(v_rows) item;
+  select jsonb_build_object('missing_source',coalesce(sum((item->>'attention_missing_source_count')::integer),0),
+    'questions',coalesce(sum((item->>'attention_question_count')::integer),0),
+    'checks',count(*) filter(where item->>'section'='checks'),
+    'protected',count(*) filter(where item->>'section'='protected'),
+    'total',coalesce(sum((item->>'attention_missing_source_count')::integer
+      +(item->>'attention_question_count')::integer),0)
+      +count(*) filter(where item->>'section' in ('checks','protected')),'complete',true) into v_attention
+  from jsonb_array_elements(v_rows) item where item->'requires_attention'='true'::jsonb;
   select jsonb_build_object('questions',count(*) filter(where item->>'section'='questions'),
     'checks',count(*) filter(where item->>'section'='checks'),'protected',count(*) filter(where item->>'section'='protected'),
     'current',count(*) filter(where item->>'section'='current'),'archive',count(*) filter(where item->>'section'='archive'))
     into v_counts from jsonb_array_elements(v_rows) item;
   v_version:=encode(private.weekly_source_sha256_jsonb_v1('WEEKLY_SOURCE_COMBINED_REVIEW_V1',
-    jsonb_build_object('scopes',v_summary->>'version','owners',v_versions,'filters',p_request-'cursor'-'limit')),'hex');
+    jsonb_build_object('scopes',v_summary->>'version','owners',v_versions,'attention_rows',v_rows,
+      'filters',p_request-'cursor'-'limit')),'hex');
+  -- Attention is an exact view filter, not a tab-total alias. The full census
+  -- above stays intact; only this page collection is narrowed. Never rewrite
+  -- server-owned action selections or comparison/financial proof payloads.
+  if v_attention_kind<>'' then
+    select coalesce(jsonb_agg(item),'[]') into v_rows from jsonb_array_elements(v_rows) item
+    where item->'requires_attention'='true'::jsonb and case v_attention_kind
+      when 'missing_source' then item->>'section'='questions' and (item->>'attention_missing_source_count')::integer>0
+      when 'questions' then item->>'section'='questions' and (item->>'attention_question_count')::integer>0
+      when 'checks' then item->>'section'='checks'
+      when 'protected' then item->>'section'='protected'
+      else false end;
+    if v_attention_kind in ('missing_source','questions') then
+      for v_item in select item from jsonb_array_elements(v_rows) item
+      loop
+        select coalesce(jsonb_agg(child.value order by child.ordinality),'[]') into v_question_children
+          from jsonb_array_elements(v_item->'children') with ordinality child(value,ordinality)
+          where child.value->>'issue' is distinct from 'Timesheet missing' and case v_attention_kind
+            when 'missing_source' then child.value->'candidate_shift_absent_from_import'='true'::jsonb
+            else child.value->'candidate_shift_absent_from_import' is distinct from 'true'::jsonb end;
+        v_item:=v_item||jsonb_build_object('children',v_question_children,'issues',jsonb_array_length(v_question_children),
+          'actions',(select coalesce(jsonb_agg(case when action->>'label'='Open'
+            then jsonb_set(action,'{payload,detail,shifts}',v_question_children,false) else action end),'[]')
+            from jsonb_array_elements(coalesce(v_item->'actions','[]')) action));
+        select coalesce(jsonb_agg(case when item->>'combined_key'=v_item->>'combined_key' then v_item else item end),'[]')
+          into v_rows from jsonb_array_elements(v_rows) item;
+      end loop;
+    end if;
+  end if;
   if nullif(p_request->>'cursor','') is not null then
     begin
       v_cursor:=convert_from(decode(p_request->>'cursor','base64'),'UTF8')::jsonb;
@@ -970,7 +1047,13 @@ begin
       when 'status' then item#>>'{status,text}' end,'')) sort_value
     from jsonb_array_elements(v_rows) item where item->>'section'=v_section
   ), ordered as (
-    select *,row_number() over(order by case when v_direction='asc' then sort_value end collate "C" asc,
+    select *,row_number() over(order by case when v_attention_first and v_seek='' then
+      case v_attention_kind when 'missing_source' then ((item->>'attention_missing_source_count')::integer>0)::integer
+        when 'questions' then ((item->>'attention_question_count')::integer>0)::integer
+        else 0 end else 0 end desc,
+      case when v_attention_first and v_seek=''
+      then coalesce((item->>'requires_attention')::boolean,false)::integer else 0 end desc,
+      case when v_direction='asc' then sort_value end collate "C" asc,
       case when v_direction='desc' then sort_value end collate "C" desc,
       private.weekly_source_query_ascii_fold_v1(item->>'client') collate "C",
       private.weekly_source_query_ascii_fold_v1(coalesce(item->>'candidate_sort',item->>'candidate')) collate "C",
@@ -981,7 +1064,9 @@ begin
     into v_total,v_base,v_page from ordered cross join origin;
   return jsonb_build_object('ok',true,'contract','WEEKLY_SOURCE_COMBINED_REVIEW_V1','tab',v_tab,'section',v_section,
     'version',v_version,'rows',v_page,'total_count',v_total,'owners',v_owners,'scope_options',v_scopes,
-    'summary',v_summary,'counts',v_counts,'sort_key',v_sort,'sort_direction',v_direction,
+    'summary',v_summary,'counts',v_counts,'attention',v_attention,
+    'attention_kind',v_attention_kind,
+    'sort_key',v_sort,'sort_direction',v_direction,
     'has_more',v_base+v_offset+v_limit<v_total,'next_cursor',case when v_base+v_offset+v_limit<v_total
       then encode(convert_to(jsonb_build_object('version',v_version,'offset',v_offset+v_limit)::text,'UTF8'),'base64') else '' end);
 end;

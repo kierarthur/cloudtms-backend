@@ -273,9 +273,14 @@ declare
   v_total numeric;
 begin
   if coalesce((p_context->>'authorised_for_pay')::boolean,false) is not true then
-    -- `24 section 17` names the card `Approved hours to be paid`.  Showing a
-    -- not-yet-approved proposal under that label would be a false statement to
-    -- the Candidate.
+    -- V4: confirmed protected Save can be displayed before first Authorise.
+    -- The strict private receipt reader certifies the actual saved row only;
+    -- this is not financial eligibility or an unsaved proposed target.
+    -- Non-import-authoritative Timesheets retain their previous behaviour.
+    if p_context->>'authority_mode'='SOURCE_AUTHORITY' then
+      return private.weekly_source_candidate_saved_local_hours_v2(
+        (p_context->>'timesheet_id')::uuid);
+    end if;
     return pg_catalog.jsonb_build_object(
       'state','NO_APPROVED_ENTITLEMENT','reason','NOT_AUTHORISED_FOR_PAY',
       'authority',null,'head_id',null,'rows','[]'::jsonb);
@@ -318,10 +323,10 @@ begin
   end if;
 
   if v_head_count=0 then
-    -- No head.  Under TIMESHEET authority the Timesheet's own schedule IS the
-    -- approved fact, and that is not a source figure, so it stands.  Under
-    -- SOURCE authority nothing has been approved through the entitlement route
-    -- and the Candidate is told nothing rather than told the source.
+    -- No head. Ordinary TIMESHEET authority retains its existing schedule
+    -- read. SOURCE first authorisation can genuinely have authorised TSFIN
+    -- and no HEAD: only the exact certified I1 origin/detail qualifies, never
+    -- an arbitrary saved snapshot, source row or Candidate submission.
     if p_context->>'authority_mode' is distinct from 'SOURCE_AUTHORITY' then
       return pg_catalog.jsonb_build_object(
         'state','AVAILABLE','reason',null,
@@ -329,9 +334,14 @@ begin
         'rows',private.weekly_source_candidate_app_schedule_v1(
           v_timesheet.actual_schedule_json,v_timesheet.additional_units_per_day));
     end if;
-    return pg_catalog.jsonb_build_object(
-      'state','NO_APPROVED_ENTITLEMENT','reason','NO_COMMITTED_HEAD',
-      'authority',null,'head_id',null,'rows','[]'::jsonb);
+    return private.weekly_source_candidate_initial_approval_v2(v_timesheet.timesheet_id);
+  end if;
+
+  if p_context->>'authority_mode'='SOURCE_AUTHORITY' then
+    -- Exact current approved clocks/rates were sealed by their owning decision.
+    -- Do not reconstruct clocks from today's upload or a newer WAIT event merely
+    -- because its total happens to equal the previously approved duration.
+    return private.weekly_source_candidate_head_hours_v2(v_timesheet.timesheet_id);
   end if;
 
   select head_row.* into v_head

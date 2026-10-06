@@ -140,52 +140,37 @@ test('ordinary generation excludes source-owned roots without changing any other
 -- lineage can only be invoiced from its final-source Client manifest.  This
 -- replacement must be installed after weekly_source_row_timesheet_lineages.
 `;
-  // WP-27 (Gate 13 hostile review F4; standing rule 3).  The exclusion is no
-  // longer keyed on the physical id.  The earlier constant pinned
-  // `lineage.timesheet_id=financial.timesheet_id`, which the reviewer executed
-  // as a double-invoice path: a lineage-bound root that rotates keeps its
-  // lineage on the OLD physical id, so the new current version was offered to
-  // the ordinary batch as READY.  That text is superseded; the byte-for-byte
-  // equivalence assertion below is unchanged and still proves that nothing else
-  // in the classifier moved.
-  const exclusion = `      -- Gate 13 hostile review F4 / standing rule 3: after S8 a physical root
-      -- id is not a family identity, so this predicate - the one thing that
-      -- keeps ordinary invoicing and Weekly-Source self-billing apart - is
-      -- keyed on the Timesheet FAMILY.  A lineage-bound root that rotates keeps
-      -- its lineage row on the OLD physical id; keyed on the bare id, the new
-      -- current version was offered to the ordinary batch as READY and the same
-      -- worked time could be invoiced twice.  Resolution goes through the one
-      -- installed resolver adapter (proof/34 s10 rule 12); there is no second
-      -- identity mechanism and no inline re-derivation here.  The resolver
-      -- falls back to the singleton {id} for a Timesheet with no booking
-      -- identity, so an unrotated Timesheet is classified exactly as before.
-      and not exists (
-        select 1
-        from public.weekly_source_row_timesheet_lineages lineage
-        where lineage.timesheet_id=any(
-          private.weekly_source_invoice_family_timesheet_ids_v1(
-            financial.timesheet_id
-          )
-        )
-      )
-`;
+  // Reverse only the two reviewed source-ownership CTEs. Every downstream
+  // classifier byte, and the original ordinary candidate facts, must agree.
+  const ordinaryCte = ordinaryClassifier.slice(ordinaryClassifier.indexOf('  source_candidates as materialized ('),
+    ordinaryClassifier.indexOf('  command as materialized ('));
+  const changedStart=isolatedOrdinaryClassifier.indexOf('  source_candidate_families as materialized (');
+  const changedEnd=isolatedOrdinaryClassifier.indexOf('  command as materialized (',changedStart);
+  assert.ok(changedStart>0 && changedEnd>changedStart);
+  const familyCte=isolatedOrdinaryClassifier.slice(changedStart,
+    isolatedOrdinaryClassifier.indexOf('  source_candidates as materialized (',changedStart));
+  assert.equal(familyCte.replace('source_candidate_families','source_candidates')
+    .replace('financial.timesheet_id,\n      private.weekly_source_invoice_family_timesheet_ids_v1(financial.timesheet_id) family_ids',
+      'financial.timesheet_id').replace('      and financial.client_id is not null\n',
+      '      and financial.client_id is not null\n    order by financial.timesheet_id\n'),ordinaryCte);
   assert.ok(isolatedOrdinaryClassifier.startsWith(header));
   assert.match(isolatedOrdinaryClassifier, /weekly_source_row_timesheet_lineages lineage/);
   // the family is resolved through the one installed resolver adapter, and the
   // bare physical-id predicate is gone
   assert.match(
     isolatedOrdinaryClassifier,
-    /where lineage\.timesheet_id=any\(\s*private\.weekly_source_invoice_family_timesheet_ids_v1\(/,
+    /where lineage\.timesheet_id=any\(candidate\.family_ids\)/,
   );
+  assert.match(isolatedOrdinaryClassifier,/family\.root_timesheet_id=any\(candidate\.family_ids\)\s+and family\.ownership_state='TARGET_MANAGED'/);
+  assert.equal((isolatedOrdinaryClassifier.match(/private\.weekly_source_invoice_family_timesheet_ids_v1\(/g)||[]).length,1);
   assert.doesNotMatch(
     isolatedOrdinaryClassifier,
     /where lineage\.timesheet_id=financial\.timesheet_id/,
   );
   const restored = isolatedOrdinaryClassifier
-    .slice(header.length)
-    .replace(exclusion, '');
+    .slice(header.length,changedStart)+ordinaryCte+isolatedOrdinaryClassifier.slice(changedEnd);
   assert.equal(restored, ordinaryClassifier,
-    'the post-source override may differ from legacy classification only by the lineage exclusion');
+    'only the reviewed Source ownership discovery CTEs may differ');
 });
 
 test('runtime catalogue proof recognizes the family-keyed lineage exclusion independent of SQL whitespace', () => {
@@ -193,7 +178,7 @@ test('runtime catalogue proof recognizes the family-keyed lineage exclusion inde
   // required the physical-id text and is superseded.
   assert.match(
     verifier,
-    /pg_catalog\.regexp_replace\(v_definition,'\[\[:space:\]\]\+','','g'\)\s+not like '%lineage\.timesheet_id=any\(private\.weekly_source_invoice_family_timesheet_ids_v1\(financial\.timesheet_id\)\)%'/i,
+    /not like '%lineage\.timesheet_id=any\(candidate\.family_ids\)%'/i,
   );
   assert.match(
     verifier,
@@ -205,4 +190,13 @@ test('the isolation verifier executes a rotated lineage-bound family, it does no
   assert.match(verifier, /weekly_source_invoice_family_timesheet_ids_v1/);
   assert.match(verifier, /rotated lineage-bound root/i);
   assert.match(verifier, /_invoice_batch_generate_classification_v2\(/);
+  assert.match(verifier, /\\ir 05102026_0552_weekly_source_invoice_isolation_fixture_v1\.sql/);
+  assert.doesNotMatch(verifier, /\\ir 15092026_1534_weekly_source_ordinary_pay_projection_v1\.sql/);
+  const fixture = read('supabase/verification/05102026_0552_weekly_source_invoice_isolation_fixture_v1.sql');
+  assert.match(fixture, /weekly_source_import_prepare_atomic_v1/);
+  assert.match(fixture, /weekly_source_finalise_atomic_v1/);
+  assert.match(fixture, /weekly_source_ordinary_pay_projection_apply_atomic_v1/);
+  assert.match(fixture, /financial\.total_hours=7\.50/);
+  assert.match(fixture, /first preparation, not Authorise, paid state or TARGET ownership/);
+  assert.doesNotMatch(fixture, /paid_at_utc\s*=|insert into public\.weekly_source_root_authorisations|projection-a6-paid-refusal/i);
 });

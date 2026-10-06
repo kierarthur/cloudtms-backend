@@ -171,6 +171,7 @@ begin
   select * into strict v_group
   from public.weekly_source_groups
   where id=v_cycle.source_group_id;
+  perform private.weekly_source_pay_query_admit_v2();
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       pg_catalog.encode(v_upload.declared_scope_fingerprint,'hex'),73241837

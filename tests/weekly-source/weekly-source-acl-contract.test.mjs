@@ -55,6 +55,30 @@ const verificationPrivateHelpers = (sql) => declaredArray(sql, 'v_expected_priva
 
 const canonical = (value) => String(value).replaceAll(/\s+/g, '').toLowerCase();
 
+// GRANT EXECUTE can name several routines. Split only outside their parameter
+// lists, so a grouped grant is checked as each real signature, not one invented
+// signature; commas within argument lists must remain intact.
+function grantSignatures(list) {
+  const result=[];
+  let depth=0,start=0;
+  for(let index=0;index<list.length;index++) {
+    if(list[index]==='(')depth++;
+    else if(list[index]===')')depth--;
+    else if(list[index]===',' && depth===0) {
+      result.push(canonical(list.slice(start,index)));start=index+1;
+    }
+    assert(depth>=0,'grant parameter list is balanced');
+  }
+  assert.equal(depth,0);
+  result.push(canonical(list.slice(start)));
+  return result;
+}
+
+test('service-grant parser retains every grouped signature and parameter comma',()=>{
+  assert.deepEqual(grantSignatures('public.a(jsonb), private.b(uuid, text), public.c()'),
+    ['public.a(jsonb)','private.b(uuid,text)','public.c()']);
+});
+
 test('central Weekly Source ACL and independent verifier seal the same exact service surface', async () => {
   const [repeatable, verification] = await Promise.all([
     readFile(repeatablePath, 'utf8'), readFile(verificationPath, 'utf8')
@@ -76,10 +100,12 @@ test('central Weekly Source ACL and independent verifier seal the same exact ser
   // build to hold exactly one foreign grant, service_role EXECUTE, with anon
   // and authenticated denied.
   // Approved service-only helpers have expanded the original sealed surface.
-  // The sealed Weekly Source service surface currently contains 123 exact
+  // The independently qualified pre-channel Source v3 seal contains 132
+  // service signatures and 96 owner-only helpers, including scope/summary RPCs.
+  // The sealed Weekly Source service surface currently contains 132 exact
   // signatures. Keep this literal coupled to both independent lists so an
   // unnoticed addition or removal fails locally before a database release.
-  assert.equal(actual.length, 123);
+  assert.equal(actual.length, 132);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
 });
@@ -105,7 +131,11 @@ test('central Weekly Source ACL registers private helpers apart from the service
   // head). Both are registered in the repeatable and in the independent
   // verifier, and the installed ACL verifier reports
   // `registered_private_helper_count: 46` on a build from empty.
-  assert.equal(actual.length, 58);
+  // Approved I1/I2, local Save and display-only receipt readers are additive,
+  // owner-only entries, not new service or browser RPCs.
+  // The qualified pay facts, exact covered-incident predicate and contact
+  // retirement helper add three owner-only entries, never browser RPCs.
+  assert.equal(actual.length, 96);
   assert.equal(new Set(actual).size, actual.length);
   assert.deepEqual([...actual].sort(), [...expected].sort());
   // Every registered helper is private, and no helper may also be listed as a
@@ -148,7 +178,7 @@ test('every direct Plan 6 service grant covered by the central ACL remains cover
     const sql = await readFile(path.join(directory, filename), 'utf8');
     for (const match of sql.matchAll(
       /grant\s+execute\s+on\s+function\s+((?:public|private)\.[a-z0-9_]+\([^;]*?\))\s+to\s+service_role/gi
-    )) directGrants.add(canonical(match[1]));
+    )) for(const signature of grantSignatures(match[1])) directGrants.add(signature);
   }
   const governed = [...directGrants].filter((signature) =>
     /^(?:public|private)\.(?:_?(?:ctms_)?weekly_source_|weekly_exceptional_)/.test(signature)
@@ -184,8 +214,10 @@ test('general service-only inventory includes the Weekly Source invoice report p
   // (svc=false, anon=false, auth=false); browser execution stays zero.
   // Seven additive combined-workspace/editor RPCs were catalogued on PG17;
   // excluding exactly those seven reproduces the prior 795-function seal.
-  assert.match(general, /v_count<>802 or v_service_missing<>76 or v_browser_executable<>0/i);
-  assert.match(general, /v_hash<>'8bff6786009ac9a493eee90f6ce92574'/i);
+  // Exact original Source v3 general seal from the restricted-role full replay.
+  // Service omissions and zero browser execution remain unchanged.
+  assert.match(general, /v_count<>824 or v_service_missing<>76 or v_browser_executable<>0/i);
+  assert.match(general, /v_hash<>'2cb2ef197993c05bb0c1566b04c601dd'/i);
   assert.match(general, /public\.weekly_source_invoice_evidence_v1\(pg_catalog\.jsonb\)/);
   assert.match(auditExport, /grant execute on function public\.weekly_source_invoice_report_rows_v1\(jsonb\) to service_role/i);
   assert.match(auditExport, /revoke all on function public\.weekly_source_invoice_report_rows_v1\(jsonb\)[\s\S]*from public,anon,authenticated/i);

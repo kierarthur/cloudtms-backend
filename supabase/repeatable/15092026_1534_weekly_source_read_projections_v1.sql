@@ -9,6 +9,9 @@
 
 begin;
 
+-- Compile the real qualified-coverage helpers before their SQL callers.
+\ir 05102026_1417_weekly_source_coverage_support/qualified_coverage.inc
+
 create or replace function private.weekly_source_office_group_key_v1(
   p_source_cycle_id uuid,
   p_candidate_id uuid,
@@ -294,7 +297,7 @@ as $function$
       incident.candidate_action_state,incident.manager_action_state,
       incident.manager_potential_state,incident.created_at_utc,
       comparison.issue_family,comparison.contract_id,
-      comparison.candidate_timesheet_id,comparison.source_presence,
+      comparison.candidate_timesheet_id,comparison.source_presence,comparison.source_row_id,
       comparison.candidate_start_at_local,comparison.candidate_end_at_local,
       comparison.candidate_break_minutes,comparison.system_start_at_local,
       comparison.system_end_at_local,comparison.system_break_minutes,
@@ -368,6 +371,7 @@ as $function$
     -- publication; visibility is based on the OPEN incident, not a rewrite of
     -- that revision or a second notification clock.
     where comparison.issue_family<>'CANDIDATE_TIMESHEET_MISSING'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
       and (comparison.projection_publication_id=p_projection_publication_id
         or (cycle_context.profile_code='NHSP_PREFINAL_RELEASED_V1'
           and comparison_upload.source_cycle_id=cycle_context.id
@@ -525,6 +529,11 @@ as $function$
         and incident_facts.manager_action_state not in ('RESPONDED','NOT_REQUIRED')) manager_eligible,
       pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
         'incident_id',incident_facts.incident_id,
+        'candidate_shift_absent_from_import',incident_facts.issue_family='SOURCE_MISSING_OR_NOT_AUTHORISED'
+          and incident_facts.source_presence='ABSENT' and incident_facts.source_row_id is null
+          and incident_facts.candidate_timesheet_id is not null
+          and incident_facts.candidate_start_at_local is not null
+          and incident_facts.candidate_end_at_local>incident_facts.candidate_start_at_local,
         'candidate_response',case incident_facts.candidate_reply_choice
           when 'CANDIDATE_CORRECT' then 'My hours are correct'
           when 'CANDIDATE_WRONG' then 'Accepted system hours'
@@ -1104,7 +1113,7 @@ begin
   -- PHD-014..019 / PRC-043..050.  The final NHSP source value remains
   -- authoritative, but a known disparity or structurally valid zero charge is
   -- shown as one concise, server-owned warning decision.  The Trust-wide zero
-  -- pattern is grouped into one row to avoid an alert storm.  No source money
+  -- pattern has one notice, with a decision for each shift. No source money
   -- from this projection is ever an input to Candidate pay.
   if v_publication_id is not null
      and v_profile.profile_code in ('NHSP_PREFINAL_RELEASED_V1','NHSP_FINAL_BACKING_V1') then
@@ -1121,7 +1130,7 @@ begin
     left join public.weekly_source_charge_acceptances acceptance
       on acceptance.charge_check_id=charge.id
     where source_row.upload_id=v_upload.id
-      and charge.generation=v_publication.projection_generation
+      and charge.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version)
       and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
       and charge.phase_severity='PROVISIONAL_WARNING'
       and charge.blocker_code is null;
@@ -1165,7 +1174,7 @@ begin
         left join public.contracts contract on contract.id=resolution.contract_id
         left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
         where source_row.upload_id=v_upload.id
-          and charge.generation=v_publication.projection_generation
+          and charge.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version)
           and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
           and charge.phase_severity='PROVISIONAL_WARNING'
           and charge.blocker_code is null
@@ -1180,7 +1189,7 @@ begin
           join public.weekly_source_upload_rows source_row on source_row.id=charge.upload_row_id
           left join public.weekly_source_charge_acceptances acceptance on acceptance.charge_check_id=charge.id
           where source_row.upload_id=v_upload.id
-            and charge.generation=v_publication.projection_generation
+            and charge.generation=coalesce(v_publication.projection_generation,v_publication.authority_scope_version)
             and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
             and charge.phase_severity='PROVISIONAL_WARNING'
             and charge.blocker_code is null and acceptance.id is null
@@ -1188,7 +1197,7 @@ begin
         v_rate_warning_selection_proof:=pg_catalog.encode(private.weekly_source_sha256_jsonb_v1(
           'NHSP_RATE_WARNING_SELECTION_V1',pg_catalog.jsonb_build_object(
             'source_cycle_id',v_cycle.id,'projection_publication_id',v_publication.id,
-            'projection_generation',v_publication.projection_generation,
+            'projection_generation',coalesce(v_publication.projection_generation,v_publication.authority_scope_version),
             'workspace_version',v_workspace_version,
             'eligible_warning_keys',v_rate_warning_keys
           )),'hex');
@@ -3932,6 +3941,7 @@ declare
   v_comparison text;
   v_authority_mode text;
   v_protected_items integer:=0;
+  v_next boolean:=false;
 begin
   v_comparison:=p_facts->>'comparison_state';
   v_authority_mode:=p_facts->>'authority_mode';
@@ -3995,19 +4005,31 @@ begin
       and head_row.state='COMMITTED_CURRENT';
   end if;
 
-  v_allocation:=private.weekly_source_settlement_allocation_v1(p_root_timesheet_id);
-  v_payment:=private.weekly_source_office_payment_progress_v1(v_members);
+  v_next:=private.weekly_source_office_next_owner_v1();
+  if v_next then
+    -- NEXT never writes the retained allocation ledger. Its absence cannot
+    -- establish no payment or no processing. Preserve genuine Source facts
+    -- below, but keep the independent payment leaf explicitly unknown.
+    v_allocation:=jsonb_build_object('ok',false,'reason','ROOT_ACTIVITY_NOT_INDEXED',
+      'unavailable_class','POSITION_WITHHELD','batch_count',null,'settlement_count',null);
+    v_payment:=jsonb_build_object('ok',false,'reason','ROOT_ACTIVITY_NOT_INDEXED','state',null);
+  else
+    v_allocation:=private.weekly_source_settlement_allocation_v1(p_root_timesheet_id);
+    v_payment:=private.weekly_source_office_payment_progress_v1(v_members);
+  end if;
   v_invoices:=private.weekly_source_office_invoice_movements_v1(v_members);
   v_proposal:=private.weekly_source_office_proposal_view_v1(p_root_timesheet_id,v_members);
 
   v_settled:=coalesce((v_allocation->>'ok')::boolean,false)
     and v_allocation->>'state'='AVAILABLE';
+  if not v_next then
   v_batch_count:=coalesce((v_allocation->>'batch_count')::integer,0);
   -- `settlement_count` and `batch_count` are JSON numbers on AVAILABLE,
   -- NO_SETTLEMENT and BOTH unavailable classes (WP-11d D4), so the phase can be
   -- resolved unconditionally.  They are counts of financial EVENTS and are never
   -- conflated with an amount or an hours figure.
   v_settlement_count:=coalesce((v_allocation->>'settlement_count')::integer,0);
+  end if;
   -- The class is READ, not derived.  WP-11d publishes `unavailable_class` with
   -- exactly the distinction this projection needs, present and null on AVAILABLE
   -- and NO_SETTLEMENT so it can be read unconditionally:
@@ -4036,7 +4058,7 @@ begin
       'reason',v_allocation->>'reason',
       'unavailable_class',v_allocation->>'unavailable_class'));
   end if;
-  if coalesce((v_payment->>'ok')::boolean,false) is not true then
+  if not v_next and coalesce((v_payment->>'ok')::boolean,false) is not true then
     v_errors:=v_errors||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'code','PAYMENT_PROGRESS_UNAVAILABLE','reason',v_payment->>'reason'));
   end if;
@@ -4096,6 +4118,12 @@ begin
   elsif coalesce((v_proposal->>'present')::boolean,false)
         and coalesce(v_proposal->>'bundle_kind','SINGLE_ROOT')='CROSS_CONTRACT_A_B' then
     v_phase:='CROSS_CONTRACT_PENDING';
+  elsif v_next then
+    -- Existing unresolved representation, not a new Stage and not an unpaid
+    -- claim. Independent approved/paid informational leaves remain readable.
+    v_phase:=null;
+    v_errors:=jsonb_build_array(jsonb_build_object('code','ROOT_ACTIVITY_NOT_INDEXED',
+      'detail','The complete payment-processing status is not yet available.'));
   elsif coalesce((v_proposal->>'present')::boolean,false) then
     v_phase:=case when v_settlement_count>0 then 'LATER_CHANGE_PENDING_PAID'
       else 'LATER_CHANGE_PENDING_UNPAID' end;
@@ -4110,7 +4138,7 @@ begin
     v_phase:='AUTHORISED_NOT_PAID';
   end if;
 
-  return private.weekly_source_office_lifecycle_result_v1(v_phase,v_overlays,'[]'::jsonb,null)
+  return private.weekly_source_office_lifecycle_result_v1(v_phase,v_overlays,v_errors,null)
     ||pg_catalog.jsonb_build_object(
       'member_timesheet_ids',pg_catalog.to_jsonb(v_members),
       'canonical_timesheet_id',v_canonical,
@@ -4266,6 +4294,7 @@ declare
   v_manage_allowed boolean:=false;
   v_add_expense_allowed boolean:=false;
   v_record_version text;
+  v_operational_category jsonb;
   v_pay_ex numeric:=0;
   v_pay_inc numeric:=0;
   v_charge_ex numeric:=0;
@@ -4283,6 +4312,8 @@ declare
   v_paid jsonb;
   v_phase text;
   v_first_authorisation boolean:=false;
+  v_next boolean:=false;
+  v_next_evidence jsonb;
   -- WP-30 (WP-27 sweep finding N5), standing rule 3.  The current source
   -- publication for a week is found through the source-row lineage binding and
   -- the source comparison, both of which are facts about the Timesheet FAMILY.
@@ -4379,6 +4410,9 @@ begin
     when coalesce((v_policy->>'source_fixed_expenses_enabled')::boolean,false)
       then 'SOURCE_SUPPLIED' else 'SEPARATE_ADDITIONAL_TIMESHEET' end;
   v_add_expense_allowed:=v_source_expense_policy='SEPARATE_ADDITIONAL_TIMESHEET';
+  -- Categorisation is a read-only, current-owner fact. It does not authorise
+  -- payment, archive the record, or change any invoice movement.
+  v_operational_category:=private.weekly_source_timesheet_category_v2(v_timesheet.timesheet_id);
 
   -- One family resolution, through the one installed adapter, read by both
   -- limbs.  Standing rule 3's fail-closed branch is the adapter's own fallback
@@ -4410,7 +4444,13 @@ begin
     select * into strict v_cycle from public.weekly_source_cycles where id=v_publication.source_cycle_id;
     perform private.weekly_source_query_current_publication_v1(v_cycle.id,v_publication.id);
   elsif v_policy->>'authority_mode'='SOURCE_AUTHORITY'
-      and v_timesheet.authorised_at_server is not null then
+      and v_timesheet.authorised_at_server is not null
+      and not coalesce((
+        v_operational_category->>'presentation_category' in ('PROCESSING_DELAYED','WITHDRAWN')
+        and v_operational_category->'is_archived'='false'::jsonb
+        and v_operational_category#>>'{category_basis,facts,root_timesheet_id}'=v_timesheet.timesheet_id::text
+        and v_operational_category#>>'{category_basis,facts,root_version}'=v_timesheet.version::text
+      ),false) then
     -- A formerly authorised source week with no current publication is
     -- inconsistent and retains the previous fail-closed behaviour.
     raise exception 'SOURCE_CHECK_IN_PROGRESS' using errcode='55000';
@@ -4796,6 +4836,17 @@ begin
   -- cache, and never guessed when the evidence is unreadable.
   v_paid:=private.weekly_source_office_schedule_from_allocation_v1(
     v_settlement,'WEEKLY_SOURCE_SETTLEMENT_ALLOCATION');
+  v_next:=private.weekly_source_office_next_owner_v1();
+  if v_next then
+    v_next_evidence:=jsonb_build_object('contract','WEEKLY_SOURCE_OFFICE_NEXT_EVIDENCE_V1',
+      'components',private.weekly_source_office_next_paid_evidence_page_v1(
+        v_actor,v_timesheet.timesheet_id,'COMPONENTS'),
+      'active_holds',private.weekly_source_office_next_paid_evidence_page_v1(
+        v_actor,v_timesheet.timesheet_id,'ACTIVE_HOLDS'));
+    -- The strict Worker adapter replaces only these informational schedules
+    -- after validating the complete contextual pages. No legacy fallback.
+    v_paid:=private.weekly_source_office_schedule_absent_v1('ROOT_ACTIVITY_NOT_INDEXED');
+  end if;
 
   v_schedules:=pg_catalog.jsonb_build_object(
     'submitted',private.weekly_source_office_schedule_from_actual_v1(
@@ -4812,7 +4863,8 @@ begin
         'NOT_IN_A_FIRST_AUTHORISATION_PHASE') end,
     'currently_approved',v_currently_approved,
     'approved',v_currently_approved,
-    'processing',case when v_phase='PAYMENT_PROCESSING' then v_currently_approved
+    'processing',case when not v_next and v_phase='PAYMENT_PROCESSING' then v_currently_approved
+      when v_next then private.weekly_source_office_schedule_absent_v1('ROOT_ACTIVITY_NOT_INDEXED')
       else private.weekly_source_office_schedule_absent_v1('NO_PAYMENT_IN_FLIGHT') end,
     'paid_to_date',v_paid,
     'current_paid',v_paid);
@@ -4836,12 +4888,15 @@ begin
       'proposal_state',v_lifecycle#>'{proposal,state}',
       'proposal_bundle_revision',v_lifecycle#>'{proposal,bundle_revision}',
       'settlement_state',v_settlement->'state',
-      'settlement_last_settled_at_utc',v_settlement->'last_settled_at_utc'
+      'settlement_last_settled_at_utc',v_settlement->'last_settled_at_utc',
+      'operational_category_basis',v_operational_category->'category_basis'
     )),'hex');
 
   return pg_catalog.jsonb_build_object(
     'applicable',true,'contract','WEEKLY_SOURCE_OFFICE_PRESENTATION_V1','scope','WEEKLY',
+    'root_timesheet_id',v_timesheet.timesheet_id,
     'record_version',v_record_version,'freshness','CURRENT','route',v_route,'authority',v_authority,
+    'operational_category',v_operational_category,
     'source_expense_policy',v_source_expense_policy,
     'submitted_timesheet_available',v_submitted_available,'submitted_timesheet_complete',v_submitted_complete,
     'comparison',pg_catalog.jsonb_build_object('state',v_comparison_state,
@@ -4883,7 +4938,8 @@ begin
     'lifecycle',v_lifecycle||pg_catalog.jsonb_build_object('schedules',v_schedules),
     'candidate_lifecycle',v_candidate_lifecycle,
     'proposal',v_lifecycle->'proposal',
-    'invoice_movement_history',v_lifecycle->'invoice_movements');
+    'invoice_movement_history',v_lifecycle->'invoice_movements')
+  ||case when v_next then jsonb_build_object('next_paid_evidence',v_next_evidence) else '{}'::jsonb end;
 exception
   when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
     raise exception 'WEEKLY_SOURCE_PRESENTATION_REQUEST_INVALID' using errcode='22023';
@@ -5058,8 +5114,12 @@ begin
   end if;
 
   v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  if v_action='ACCEPT_SYSTEM_HOURS' then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_cycle_id for update;
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
   v_current_version:=private.weekly_source_office_workspace_version_v1(v_cycle_id,v_publication_id);
   if v_current_version is distinct from v_expected_version then
     raise exception 'WEEKLY_SOURCE_BULK_WORKSPACE_STALE' using errcode='40001';
@@ -5238,6 +5298,7 @@ begin
           where incident.source_cycle_id=v_cycle_id
             and incident.candidate_id=v_candidate.candidate_id
             and incident.client_id=v_client.client_id and incident.state='OPEN'
+            and not private.weekly_source_covered_hours_incident_v1(incident.id)
             and incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED');
           if coalesce(pg_catalog.cardinality(v_exact_incidents),0)=0 then continue; end if;
           v_owner_result:=public.weekly_source_query_ask_candidate_atomic_v1(

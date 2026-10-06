@@ -1244,6 +1244,10 @@ declare
   v_finalisation_root_ids uuid[];
   v_finalisation_root_recheck uuid[];
   v_finalisation_lock_result jsonb;
+  v_next_source_hooks boolean:=false;
+  v_finalisation_lock_operation uuid;
+  v_prior_finalisation_lock_operation text;
+  v_prior_finalisation_root_set text;
   v_economic_id uuid;
   v_timesheet_id uuid;
   v_economic public.weekly_source_row_economic_snapshots%rowtype;
@@ -1345,6 +1349,10 @@ begin
   v_expected_issue_hash:=private.weekly_source_finalisation_hex32_v1(
     p_request->>'expected_issue_set_hash','WEEKLY_SOURCE_ISSUE_HASH_REQUIRED'
   );
+
+  -- Fresh Final admission precedes the first cycle/business lock. Recursive
+  -- lineage/current-publication owners inherit this transaction's admission.
+  perform private.weekly_source_pay_query_admit_v2();
 
   select * into v_cycle
   from public.weekly_source_cycles where id=v_cycle_id for update;
@@ -1701,6 +1709,24 @@ begin
   -- Candidate would invent a lock ladder the pack does not describe.
   -- proof/34 section 5 asks this path only for the family lock set and the
   -- resolver, which is exactly what it takes.
+  select active_owner='NEXT' into v_next_source_hooks
+  from private.bpay_next_module_control where id=1 for share;
+  if coalesce(v_next_source_hooks,false) then
+  v_prior_finalisation_lock_operation:=coalesce(pg_catalog.current_setting('cloudtms.weekly_source_finalisation_lock_operation',true),'');
+  v_prior_finalisation_root_set:=coalesce(pg_catalog.current_setting('cloudtms.weekly_source_finalisation_root_set',true),'');
+  -- Include prior-only CURRENT HR cancellation and positive-expense omission
+  -- roots BEFORE taking any booking key. Current partial indexes provide the
+  -- coverage inventory; only this upload/exact corrected revision contributes
+  -- immutable emitted roots. No historical chooser is added here.
+  v_finalisation_lock_operation:=private.bpay_next_source_current_lock_inventory_v1(
+    v_upload.id,v_generation,case when p_prepare_only then v_correction.expected_current_final_revision_id else null end,
+    v_group.id,v_client_id,v_coverage_start,v_coverage_end
+  );
+  perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_lock_operation',v_finalisation_lock_operation::text,true);
+  perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set','',true);
+  else
+  -- Retained default LEGACY / DISABLED Source path: no selector inventory,
+  -- no assumption that pre-existing Source facts have been bootstrapped.
   select pg_catalog.array_agg(distinct contract_week.timesheet_id)
   into v_finalisation_root_ids
   from public.weekly_source_upload_rows source_row
@@ -1771,6 +1797,8 @@ begin
     coalesce(pg_catalog.array_to_string(v_finalisation_root_ids,','),''),
     true
   );
+  perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_lock_operation','',true);
+  end if;
 
   -- The source Timesheet owner is the only component permitted to create or
   -- reuse ordinary Timesheet lineage.  Finalisation calls it, then validates
@@ -2610,6 +2638,14 @@ begin
       and movement.actual_client_id=v_manifest.client_id;
   end loop;
 
+  if v_finalisation_lock_operation is not null then
+    -- Includes the later positive-expense lineage calls. Advisory/row locks
+    -- remain transaction-held; remove only this operation's working copies.
+    perform private.bpay_next_source_current_lock_release_v1(v_finalisation_lock_operation);
+    perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_lock_operation',v_prior_finalisation_lock_operation,true);
+    perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set',v_prior_finalisation_root_set,true);
+  end if;
+
   if p_prepare_only then
     return pg_catalog.jsonb_build_object(
       'ok',true,'status','PREPARED','idempotent',false,
@@ -2694,6 +2730,18 @@ begin
     end if;
   end if;
 
+  -- Only this genuine new CURRENT transition may resolve contained manual
+  -- queries. PREPARED and retained Final replay returned earlier. Query-only
+  -- resolution shares this transaction; it never changes frozen pay or money.
+  perform private.weekly_source_manual_reviews_finalised_v1(v_revision_id,v_actor);
+
+  -- PREPARED returned above and remains invisible. Capture only AFTER the
+  -- real cycle/report CURRENT CAS; any failure rolls back Source and selector
+  -- together. The same immutable economic/lineage facts remain authoritative.
+  if coalesce(v_next_source_hooks,false) then
+    perform private.bpay_next_source_current_publish_revision_v1(v_revision_id);
+  end if;
+
   if p_correction_session_id is null and exists(
     select 1
     from public.weekly_source_cycles cycle
@@ -2717,7 +2765,19 @@ begin
   );
 exception
   when invalid_text_representation or numeric_value_out_of_range or datetime_field_overflow then
+    -- The function subtransaction already rolled back Source/cache/control
+    -- writes on entry to this handler. Restore only the caller's exact GUCs.
+    if v_finalisation_lock_operation is not null then
+      perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_lock_operation',v_prior_finalisation_lock_operation,true);
+      perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set',v_prior_finalisation_root_set,true);
+    end if;
     raise exception 'WEEKLY_SOURCE_FINALISE_VALUE_INVALID' using errcode='22023';
+  when others then
+    if v_finalisation_lock_operation is not null then
+      perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_lock_operation',v_prior_finalisation_lock_operation,true);
+      perform pg_catalog.set_config('cloudtms.weekly_source_finalisation_root_set',v_prior_finalisation_root_set,true);
+    end if;
+    raise;
 end;
 $function$;
 

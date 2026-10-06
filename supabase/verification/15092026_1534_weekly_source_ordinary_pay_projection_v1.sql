@@ -1115,6 +1115,399 @@ $target_managed_collision$;
 -- Paid roots remain on the already-supported correction/rollover route.  The
 -- new owner writes only an immutable refusal receipt and never changes the
 -- paid Timesheet, TSFIN or frozen source movement.
+-- A paid timestamp is not approved entitlement. Establish genuine Office
+-- first authorisation before modelling payment; retain the real I-1 guards.
+-- BEGIN PAID ROOT OWNED SETUP FANOUT COMPLETION V1
+-- E-only proposal: finish actual fixture-created LEGACY continuation work.
+-- No manual job transition, new authority, financial patch or retry.
+do $paid_root_owned_setup_fanout$
+declare
+  v_candidate constant uuid := 'a0000000-0000-4000-8000-000000000003';
+  v_expected_scopes constant text[] := array[
+    'CLIENT:a0000000-0000-4000-8000-000000000002',
+    'CLIENT:b0000000-0000-4000-8000-000000000002',
+    'CONTRACT:a0000000-0000-4000-8000-000000000004',
+    'CONTRACT:b0000000-0000-4000-8000-000000000004'
+  ];
+  v_jobs uuid[];
+  v_scopes text[];
+  v_job_count integer;
+  v_result jsonb;
+  v_before jsonb := '{}'::jsonb;
+  v_after jsonb := '{}'::jsonb;
+  v_relation text;
+  v_hash text;
+  v_claim_now timestamptz;
+  v_eligible uuid[];
+  v_other_jobs jsonb;
+  v_other_jobs_after jsonb;
+  v_owned uuid[];
+  v_ordinary uuid[];
+  v_call integer;
+  v_all_ids uuid[];
+  -- BEGIN V9 NAMED BOUNDARY DECLARATIONS
+  v_pending_count integer;
+  v_old_finalising text;
+  v_old_scope_token text;
+  -- END V9 NAMED BOUNDARY DECLARATIONS
+begin
+  if (select active_owner from private.bpay_next_module_control where id=1)
+       is distinct from 'LEGACY'
+     or exists(select 1 from public.banking_pay_workbench_sessions)
+     or exists(select 1 from public.banking_pay_workbench_candidate_source_lines)
+     or exists(select 1 from public.banking_pay_workbench_candidate_delta_projection_runs
+       where status in ('RUNNING','PROCESSING','IN_PROGRESS'))
+     or exists(select 1 from public.banking_pay_workbench_jobs where status='RUNNING') then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_NOT_QUIET';
+  end if;
+
+  -- Contract INSERTs populate candidate_ids; the preceding client_settings
+  -- INSERT coalesces into the same CLIENT dedupe key through the real merger.
+  select array_agg(j.id order by j.id),count(*)::integer,
+         array_agg((j.payload_json->>'scope_kind')||':'||(j.payload_json->>'scope_id')
+           order by (j.payload_json->>'scope_kind')||':'||(j.payload_json->>'scope_id'))
+    into v_jobs,v_job_count,v_scopes
+    from public.banking_pay_workbench_jobs j
+   where j.status='QUEUED'
+     and j.job_type='CONTRACT_CLIENT_DIRTY_FANOUT'
+     and j.session_id is null and j.candidate_id is null
+     and public._pay_workbench_candidate_serial_candidate_id(j.candidate_id,j.payload_json)=v_candidate
+     and j.payload_json->'candidate_ids'=jsonb_build_array(v_candidate::text)
+     and j.payload_json->>'queue_class'='DIRTY_TRIGGER_PRIORITY'
+     and j.payload_json->>'trigger_table'='contracts'
+     and j.payload_json->>'trigger_op'='INSERT'
+     and j.payload_json->>'reason'='DIRTY_TRIGGER:CONTRACTS:INSERT'
+     and j.payload_json->>'source_build_required'='true'
+     and j.payload_json->>'fallback_reason'='CONTRACT_CLIENT_OR_CLIENT_SETTINGS_DIRTY'
+     and j.dedupe_key='DIRTY_TRIGGER:CONTRACT_CLIENT_DIRTY_FANOUT:'
+       ||(j.payload_json->>'scope_kind')||':'||(j.payload_json->>'scope_id');
+  if v_job_count<>4 or v_scopes is distinct from v_expected_scopes then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_PROVENANCE_NOT_EXACT';
+  end if;
+
+  -- BEGIN V7 ALL TWELVE OWNED SETUP JOBS
+  -- The initial empty job namespace is checked before the genuine fixture.
+  -- Its four contract/client fanouts and eight Candidate dirty jobs are all
+  -- setup work. The worker may interleave and genuinely requeue either type.
+  select array_agg(j.id order by j.id) into v_ordinary
+    from public.banking_pay_workbench_jobs j
+   where j.status='QUEUED' and j.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+     and j.session_id is null and j.snapshot_run_id is null
+     and j.candidate_id=v_candidate
+     and j.payload_json->>'candidate_id'=v_candidate::text
+     and j.payload_json->>'scope_kind'='CANDIDATE'
+     and j.payload_json->>'scope_id'=v_candidate::text
+     and j.payload_json->>'queue_class'='DIRTY_TRIGGER_PRIORITY'
+     and j.payload_json->>'policy_x_authority_scope'='PRE_DRAFT_LIVE_TRUTH'
+     and j.payload_json->>'policy_x_dirtying_only'='true'
+     and j.payload_json->>'economic_truth_mutation_allowed'='false'
+     and j.payload_json->>'trigger_table' in
+       ('candidates','timesheets','timesheets_financials','timesheet_pay_state')
+     and j.payload_json->>'trigger_op' in ('INSERT','UPDATE')
+     and j.payload_json->>'reason_latest'=
+       'DIRTY_TRIGGER:'||upper(j.payload_json->>'trigger_table')||':'||(j.payload_json->>'trigger_op')
+     and jsonb_typeof(j.payload_json->'targeted_timesheet_ids')='array'
+     and jsonb_typeof(j.payload_json->'linked_timesheet_ids')='array'
+     and not exists(
+       select 1 from jsonb_array_elements_text(
+         (j.payload_json->'targeted_timesheet_ids')||(j.payload_json->'linked_timesheet_ids')) target(id)
+       where not exists(select 1 from public.timesheets t join public.contracts c on c.id=t.contract_id
+         where t.timesheet_id::text=target.id and c.candidate_id=v_candidate))
+     and j.dedupe_key='DIRTY_TRIGGER:WORKBENCH_CANDIDATE_DIRTY_APPLY:CANDIDATE:'
+       ||v_candidate::text||':TIMESHEETS:'||
+       case when jsonb_array_length(j.payload_json->'targeted_timesheet_ids')=0 then 'ALL'
+         else (select string_agg(target.id,',' order by target.id)
+           from jsonb_array_elements_text(j.payload_json->'targeted_timesheet_ids') target(id)) end;
+  if cardinality(v_ordinary) is distinct from 8 then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_PROVENANCE_NOT_EXACT';
+  end if;
+  select array_agg(id order by id) into v_owned
+    from unnest(v_jobs||v_ordinary) id;
+  select array_agg(j.id order by j.id) into v_all_ids
+    from public.banking_pay_workbench_jobs j;
+  v_claim_now:=clock_timestamp();
+  if cardinality(v_owned)<>12 or v_all_ids is distinct from v_owned
+     or (select count(*) from public.banking_pay_workbench_jobs j
+       where j.id=any(v_owned) and j.status='QUEUED' and j.run_at_utc<=v_claim_now)<>12 then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_DUE_NOT_EXACT';
+  end if;
+  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs
+    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+  -- END V7 ALL TWELVE OWNED SETUP JOBS
+
+  -- Retain complete fixture economic rows internally, never in output.
+  -- This local finite fixture snapshot is not a production scan-cost claim.
+  foreach v_relation in array array[
+    'public.timesheets','public.timesheets_financials',
+    'public.weekly_source_billing_movements',
+    'public.weekly_source_projection_publications',
+    'public.weekly_source_ordinary_pay_projection_receipts',
+    'public.weekly_source_root_authorisations',
+    'public.invoices','public.pay_advances','public.pay_finance_case_components',
+    'public.pay_batches','public.banking_pay_operations'
+  ] loop
+    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_before:=v_before||jsonb_build_object(v_relation,v_hash);
+  end loop;
+
+  -- BEGIN V9 EXACT INSTALLED NAMED FINALIZER
+  -- Same canonical cf8 baseline; root readback6538cf pins this unchanged owner.
+  if (select count(*) from pg_catalog.pg_proc p
+      join pg_catalog.pg_language l on l.oid=p.prolang
+      where p.oid=to_regprocedure('public.pay_workbench_scope_change_finalize_trg_v1()')
+        and p.proowner=current_user::regrole and p.prosecdef
+        and p.prokind='f' and p.pronargs=0 and p.prorettype='pg_catalog.trigger'::regtype
+        and p.provolatile='v' and p.proparallel='u' and l.lanname='plpgsql'
+        and p.proconfig=array['search_path=public, pg_catalog']::text[]
+        and md5(p.prosrc)='b1e01887b71866f545b62dd3b2cb658e'
+        and md5(pg_catalog.pg_get_functiondef(p.oid))='03b772a328097a1206446fbd2038a296'
+        and (select count(*) from pg_catalog.aclexplode(p.proacl) a)=2
+        and not exists(select 1 from pg_catalog.aclexplode(p.proacl) a
+          where a.privilege_type<>'EXECUTE' or a.is_grantable
+            or a.grantor<>p.proowner
+            or a.grantee not in(p.proowner,'service_role'::regrole))
+        and has_function_privilege(current_user,p.oid,'EXECUTE')
+        and has_function_privilege('service_role',p.oid,'EXECUTE')
+        and not has_function_privilege('anon',p.oid,'EXECUTE')
+        and not has_function_privilege('authenticated',p.oid,'EXECUTE'))<>1
+     or (select count(*) from pg_catalog.pg_trigger t
+       where t.tgrelid='public.banking_pay_scope_change_transactions'::regclass
+         and t.tgname='trg_pay_workbench_scope_change_finalize_v1'
+         and t.tgfoid=to_regprocedure('public.pay_workbench_scope_change_finalize_trg_v1()')
+         and not t.tgisinternal and t.tgenabled='O' and t.tgtype=5
+         and t.tgdeferrable and t.tginitdeferred and t.tgqual is null
+         and t.tgnargs=0 and octet_length(t.tgargs)=0)<>1 then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_NAMED_FINALIZER_POSTURE_NOT_EXACT';
+  end if;
+  -- END V9 EXACT INSTALLED NAMED FINALIZER
+
+  -- BEGIN V9 PREWORKER REAL REQUEST BOUNDARY
+  -- Registered3108 models request COMMIT with this named real trigger only.
+  -- These two transaction-local resets are not authorisation/payment gates.
+  v_old_finalising:=current_setting('cloudtms.scope_generation_finalising',true);
+  v_old_scope_token:=current_setting('cloudtms.banking_pay_scope_tx_token',true);
+  if coalesce(v_old_finalising,'') not in('','false')
+     or (coalesce(v_old_scope_token,'')<>'' and (
+       v_old_scope_token !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or not exists(select 1 from public.banking_pay_scope_change_transactions s
+         where s.tx_token::text=v_old_scope_token and s.state='PENDING'))) then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_PREWORKER_SCOPE_CONTEXT_NOT_EXACT';
+  end if;
+  execute 'SET CONSTRAINTS public.trg_pay_workbench_scope_change_finalize_v1 IMMEDIATE';
+  perform set_config('cloudtms.scope_generation_finalising','false',true);
+  perform set_config('cloudtms.banking_pay_scope_tx_token','',true);
+  execute 'SET CONSTRAINTS public.trg_pay_workbench_scope_change_finalize_v1 DEFERRED';
+  if current_setting('cloudtms.scope_generation_finalising',true)<>'false'
+     or current_setting('cloudtms.banking_pay_scope_tx_token',true)<>''
+     or (coalesce(v_old_scope_token,'')<>'' and not exists(
+       select 1 from public.banking_pay_scope_change_transactions s
+       where s.tx_token::text=v_old_scope_token and s.state in('FINALIZED','NOOP'))) then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_PREWORKER_SCOPE_NOT_FINALIZED';
+  end if;
+  -- END V9 PREWORKER REAL REQUEST BOUNDARY
+
+  -- BEGIN V7 BOUNDED GENUINE TWELVE JOB COMPLETION
+  -- At most three calls, each capped at twelve, with the actual current clock.
+  -- This is a finite fixture stop bound, not a product completion guarantee.
+  for v_call in 1..3 loop
+    exit when (select count(*) from public.banking_pay_workbench_jobs j
+      where j.id=any(v_owned) and j.status='SUCCEEDED' and j.completed_at_utc is not null)=12;
+    v_claim_now:=clock_timestamp();
+    v_result:=public.pay_workbench_dirty_apply_jobs_chunk(
+      12,v_claim_now,null::uuid,v_candidate,'SOURCE_PAID_FIXTURE_SETUP_TWELVE',180
+    );
+    if v_result->>'ok' is distinct from 'true'
+       or v_result->>'failed' is distinct from '0'
+       or v_result->>'recovered_stale_count' is distinct from '0'
+       or jsonb_typeof(v_result->'job_results') is distinct from 'array'
+       or jsonb_typeof(v_result->'processed') is distinct from 'number'
+       or jsonb_typeof(v_result->'succeeded') is distinct from 'number'
+       or jsonb_typeof(v_result->'requeued') is distinct from 'number'
+       or coalesce(v_result->>'processed','') !~ '^(?:[1-9]|1[0-2])$'
+       or coalesce(v_result->>'succeeded','') !~ '^(?:[0-9]|1[0-2])$'
+       or coalesce(v_result->>'requeued','') !~ '^(?:[0-9]|1[0-2])$'
+       or jsonb_array_length(v_result->'job_results')<>(v_result->>'processed')::integer
+       or (v_result->>'succeeded')::integer+(v_result->>'requeued')::integer<>(v_result->>'processed')::integer
+       or exists(select 1 from jsonb_array_elements(v_result->'job_results') r
+         where r->>'job_id' is null or not((r->>'job_id')::uuid=any(v_owned))
+           or r->>'job_type' is distinct from (select j.job_type from public.banking_pay_workbench_jobs j
+             where j.id=(r->>'job_id')::uuid)
+           or coalesce(r->>'status','') not in ('SUCCEEDED','REQUEUED')
+           or r#>>'{stage_result,ok}' is distinct from 'true'
+           or coalesce(r#>>'{stage_result,candidate_serial_delayed}','false')<>'false'
+           -- BEGIN V9 EXACT TERMINAL OR GENUINE COHORT PENDING
+           or (r->>'job_type'='CONTRACT_CLIENT_DIRTY_FANOUT' and (
+                r#>>'{stage_result,has_more}' is distinct from 'false'
+             or r#>>'{stage_result,candidate_count}' is distinct from '1'
+             or r#>>'{stage_result,affected_scope_count}' is distinct from '0'
+             or r#>>'{stage_result,affected_session_count}' is distinct from '0'
+             or r#>>'{stage_result,enqueued_count}' is distinct from '0'))
+           or (r->>'job_type'='WORKBENCH_CANDIDATE_DIRTY_APPLY' and not coalesce((
+                r#>>'{stage_result,candidate_id}'=v_candidate::text
+             and r#>>'{stage_result,has_more}'='false'
+             and r#>>'{stage_result,sessions_touched}'='0'
+             and r#>>'{stage_result,jobs_queued}'='0'
+             and r#>>'{stage_result,dirty_scope_count}'='0'
+             and r#>>'{stage_result,dirty_source_line_count}'='0'
+             and r#>>'{stage_result,dirty_line_count}'='0'
+             and r#>>'{stage_result,dirty_preview_count}'='0'
+           ) or (
+               r->>'status'='REQUEUED'
+               and r#>>'{stage_result,job_id}'=r->>'job_id'
+               and r#>>'{stage_result,job_type}'='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+               and r#>>'{stage_result,candidate_id}'=v_candidate::text
+               and r#>>'{stage_result,dirty_apply_cohort_action}' in
+                 ('COHORT_REISSUED_PENDING_FINALIZATION','WAITING_FOR_COHORT_FINALIZATION')
+               and r#>>'{stage_result,dirty_apply_cohort_authority_scope}' in
+                 ('TARGETED_UNION','CANDIDATE_FULL_LIVE')
+               and jsonb_typeof(r#>'{stage_result,dirty_apply_cohort_member_count}')='number'
+               and (r#>>'{stage_result,dirty_apply_cohort_member_count}') ~ '^(?:[1-9]|1[0-2])$'
+               and r#>>'{stage_result,dirty_apply_cohort_excluded_request_owned_count}'='0'
+               and r#>>'{stage_result,preinvalidated_scope_reissued}'='true'
+               and r#>>'{stage_result,preinvalidated_scope_reissue_pending_finalization}'='true'
+               and r#>>'{stage_result,has_more}'='true'
+               and r#>>'{stage_result,more_due}'='true'
+               and r#>>'{stage_result,rerun_required}'='true'
+               and r#>>'{stage_result,dirty_apply_complete}'='false'
+               and r#>>'{stage_result,dirty_apply_row_marking_applied}'='false'
+               and r#>>'{stage_result,dirty_marking_skipped}'='true'
+               and r#>>'{stage_result,session_progress_dirtying_skipped}'='true'
+               and r#>>'{stage_result,policy_x_authority_scope}'='PRE_DRAFT_LIVE_TRUTH'
+               and jsonb_typeof(r#>'{stage_result,effective_scope_change_generation}')='null'
+               and (r#>>'{stage_result,made_progress}')=
+                 (r#>>'{stage_result,dirty_apply_cohort_action}'='COHORT_REISSUED_PENDING_FINALIZATION')::text
+               and not((r->'stage_result') ?| array['sessions_touched','jobs_queued',
+                 'dirty_scope_count','dirty_source_line_count','dirty_line_count','dirty_preview_count'])
+               and (r#>>'{stage_result,effective_scope_change_tx_token}') ~*
+                 '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               and exists(select 1 from public.banking_pay_scope_change_transactions s
+                 where s.tx_token::text=r#>>'{stage_result,effective_scope_change_tx_token}'
+                   and s.state='PENDING')
+           ),false))) then
+           -- END V9 EXACT TERMINAL OR GENUINE COHORT PENDING
+      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_PROCESSOR_NOT_EXACT';
+    end if;
+    -- BEGIN V9 PENDING COHORT REAL REQUEST BOUNDARY
+    -- Only the positively qualified intermediate branch may require a flush.
+    select count(*)::integer into v_pending_count
+      from jsonb_array_elements(v_result->'job_results') r
+      where r->>'job_type'='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+        and r#>>'{stage_result,dirty_apply_cohort_action}' in
+          ('COHORT_REISSUED_PENDING_FINALIZATION','WAITING_FOR_COHORT_FINALIZATION')
+        and r#>>'{stage_result,has_more}'='true';
+    if v_pending_count>0 then
+      v_old_finalising:=current_setting('cloudtms.scope_generation_finalising',true);
+      v_old_scope_token:=current_setting('cloudtms.banking_pay_scope_tx_token',true);
+      if coalesce(v_old_finalising,'') not in('','false')
+         or (coalesce(v_old_scope_token,'')<>'' and not exists(
+           select 1 from jsonb_array_elements(v_result->'job_results') r
+           where r#>>'{stage_result,effective_scope_change_tx_token}'=v_old_scope_token)) then
+        raise exception using errcode='P0001',message='PAID_FIXTURE_PENDING_SCOPE_CONTEXT_NOT_EXACT';
+      end if;
+      execute 'SET CONSTRAINTS public.trg_pay_workbench_scope_change_finalize_v1 IMMEDIATE';
+      perform set_config('cloudtms.scope_generation_finalising','false',true);
+      perform set_config('cloudtms.banking_pay_scope_tx_token','',true);
+      execute 'SET CONSTRAINTS public.trg_pay_workbench_scope_change_finalize_v1 DEFERRED';
+      if current_setting('cloudtms.scope_generation_finalising',true)<>'false'
+         or current_setting('cloudtms.banking_pay_scope_tx_token',true)<>''
+         or exists(select 1 from jsonb_array_elements(v_result->'job_results') r
+           where r#>>'{stage_result,dirty_apply_cohort_action}' in
+             ('COHORT_REISSUED_PENDING_FINALIZATION','WAITING_FOR_COHORT_FINALIZATION')
+             and not exists(select 1 from public.banking_pay_scope_change_transactions s
+               where s.tx_token::text=r#>>'{stage_result,effective_scope_change_tx_token}'
+                 and s.state in('FINALIZED','NOOP'))) then
+        raise exception using errcode='P0001',message='PAID_FIXTURE_PENDING_SCOPE_NOT_FINALIZED';
+      end if;
+    end if;
+    -- END V9 PENDING COHORT REAL REQUEST BOUNDARY
+    select array_agg(j.id order by j.id) into v_all_ids
+      from public.banking_pay_workbench_jobs j;
+    select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
+      from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+    if v_all_ids is distinct from v_owned or v_other_jobs_after is distinct from v_other_jobs
+       or exists(select 1 from public.banking_pay_workbench_jobs j
+         where j.id=any(v_owned) and j.status not in ('QUEUED','SUCCEEDED'))
+       or exists(select 1 from public.banking_pay_workbench_sessions)
+       or exists(select 1 from public.banking_pay_workbench_candidate_source_lines) then
+      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_CHILD_OR_NON_TARGET_DRIFT';
+    end if;
+    v_after:='{}'::jsonb;
+    foreach v_relation in array array[
+      'public.timesheets','public.timesheets_financials',
+      'public.weekly_source_billing_movements',
+      'public.weekly_source_projection_publications',
+      'public.weekly_source_ordinary_pay_projection_receipts',
+      'public.weekly_source_root_authorisations',
+      'public.invoices','public.pay_advances','public.pay_finance_case_components',
+      'public.pay_batches','public.banking_pay_operations'
+    ] loop
+      execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+      v_after:=v_after||jsonb_build_object(v_relation,v_hash);
+    end loop;
+    if v_after is distinct from v_before then
+      raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_ECONOMIC_ROW_DRIFT';
+    end if;
+  end loop;
+  if (select count(*) from public.banking_pay_workbench_jobs j
+      where j.id=any(v_owned) and j.status='SUCCEEDED' and j.completed_at_utc is not null)<>12
+     or exists(select 1 from public.banking_pay_workbench_jobs j
+       where j.status in ('QUEUED','RUNNING')) then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_NOT_TERMINAL_WITHIN_BOUND';
+  end if;
+  -- END V7 BOUNDED GENUINE TWELVE JOB COMPLETION
+
+  -- BEGIN V7 NON-TARGET COMPLETE ROW READBACK
+  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
+    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+  if v_other_jobs_after is distinct from v_other_jobs then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_OTHER_JOB_ROW_DRIFT';
+  end if;
+  -- END V7 NON-TARGET COMPLETE ROW READBACK
+
+  foreach v_relation in array array[
+    'public.timesheets','public.timesheets_financials',
+    'public.weekly_source_billing_movements',
+    'public.weekly_source_projection_publications',
+    'public.weekly_source_ordinary_pay_projection_receipts',
+    'public.weekly_source_root_authorisations',
+    'public.invoices','public.pay_advances','public.pay_finance_case_components',
+    'public.pay_batches','public.banking_pay_operations'
+  ] loop
+    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_after:=v_after||jsonb_build_object(v_relation,v_hash);
+  end loop;
+  if v_after is distinct from v_before then
+    raise exception using errcode='P0001',message='PAID_FIXTURE_FANOUT_ECONOMIC_ROW_DRIFT';
+  end if;
+end;
+$paid_root_owned_setup_fanout$;
+-- END PAID ROOT OWNED SETUP FANOUT COMPLETION V1
+create temp table paid_root_first_authorisation as
+select public.weekly_source_first_authorise_v1(
+  receipt.root_timesheet_id,receipt.root_timesheet_id,null,
+  'a0000000-0000-4000-8000-000000000001'
+) as result
+from public.weekly_source_ordinary_pay_projection_receipts receipt
+where receipt.idempotency_key='projection-a4';
+select pg_temp.assert_true(
+  (select count(*)=1 and bool_and(coalesce((result->>'ok')::boolean,false))
+   from paid_root_first_authorisation)
+  and exists(
+    select 1 from public.weekly_source_ordinary_pay_projection_receipts receipt
+    join public.weekly_source_root_authorisations authorisation
+      on authorisation.root_timesheet_id=receipt.root_timesheet_id
+    join public.timesheets root on root.timesheet_id=receipt.root_timesheet_id
+    join public.timesheets_financials financial
+      on financial.id=receipt.published_timesheet_financial_id
+    where receipt.idempotency_key='projection-a4'
+      and authorisation.withdrawn_at_utc is null
+      and root.authorised_at_server is not null
+      and financial.authorised_at_utc is not null
+      and private.weekly_source_effective_inventory_v1(receipt.root_timesheet_id)
+            #>>'{approval_basis,coverage_complete}'='true'
+  ),
+  'paid-root fixture must have genuine live first authorisation before payment'
+);
 update public.timesheets_financials financial
 set paid_at_utc=pg_catalog.statement_timestamp()
 from public.weekly_source_ordinary_pay_projection_receipts receipt

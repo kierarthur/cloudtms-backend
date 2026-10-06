@@ -22,6 +22,7 @@ const rowAdmission = read('supabase/repeatable/17092026_1500_weekly_source_row_a
 const deliveryTargets = read('supabase/repeatable/15092026_2311_weekly_source_delivery_targets_v1.sql');
 const issueValidator = read('supabase/repeatable/02092026_1833_weekly_source_invoice_issue_validator_v1.sql');
 const invoiceAdmission = read('supabase/repeatable/15092026_1534_weekly_source_invoice_admission_v1.sql');
+const finalisationVerifier = read('supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql');
 
 test('known NHSP price warnings have an immutable fingerprint-bound acceptance record', () => {
   assert.match(schema, /create table public\.weekly_source_charge_acceptances/);
@@ -56,6 +57,43 @@ test('Weekly Source first-use paths do not schema-qualify PostgreSQL conditional
       /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i,
     );
   }
+});
+
+test('initial and rebuilt warning generations agree in the workspace and acceptance owner', () => {
+  assert.match(acceptance,
+    /v_generation:=coalesce\(v_publication\.projection_generation,v_publication\.authority_scope_version\);/);
+  assert.doesNotMatch(executableSql(acceptance), /or v_publication\.projection_generation is null/);
+  assert.equal((acceptance.match(/charge\.generation=v_generation/g) ?? []).length, 2);
+  assert.match(acceptance, /v_check\.generation<>v_generation/);
+  assert.match(acceptance, /resolution\.generation=v_generation/);
+  assert.match(acceptance, /economic\.generation=v_generation/);
+  assert.match(acceptance, /'projection_generation',v_generation/);
+  assert.equal((workspace.match(/charge\.generation=coalesce\(v_publication\.projection_generation,v_publication\.authority_scope_version\)/g) ?? []).length, 3);
+  assert.match(workspace, /'projection_generation',coalesce\(v_publication\.projection_generation,v_publication\.authority_scope_version\)/);
+});
+
+test('all three selection clauses use individual zero-charge shift keys, not a grouped key', () => {
+  const eligibility = acceptance.slice(acceptance.indexOf('into v_eligible_keys'),
+    acceptance.indexOf('v_workspace_version:='));
+  assert.match(eligibility, /select 'charge-check:'\|\|charge\.id::text warning_key/);
+  assert.match(eligibility, /charge\.comparison_result in \('MISMATCH','ZERO_SOURCE_CHARGE'\)/);
+  assert.match(eligibility, /acceptance\.id is null/);
+  const mapping = acceptance.slice(acceptance.indexOf('into v_ids,v_mapped_key_count'),
+    acceptance.indexOf('foreach v_check_id'));
+  assert.match(mapping, /\('charge-check:'\|\|charge\.id::text\)=any\(v_selected_keys\)/);
+  assert.match(acceptance, /count\(distinct 'charge-check:'\|\|charge\.id::text\)/);
+  assert.doesNotMatch(executableSql(acceptance), /all-zero-source-charge/);
+});
+
+test('the included real finalisation verifier uses a current individual warning key and proves Blocked to Ready', () => {
+  const block = finalisationVerifier.slice(finalisationVerifier.indexOf('do $accept_zero_charge$'),
+    finalisationVerifier.indexOf('$accept_zero_charge$;', finalisationVerifier.indexOf('do $accept_zero_charge$')));
+  assert.match(block, /select 'charge-check:'\|\|charge\.id::text into strict v_warning_key/);
+  assert.match(block, /'eligible_warning_keys',pg_catalog\.jsonb_build_array\(v_warning_key\)/);
+  assert.match(block, /'warning_keys',pg_catalog\.jsonb_build_array\(v_warning_key\)/);
+  assert.doesNotMatch(executableSql(block), /all-zero-source-charge/);
+  assert.match(block, /one unaccepted zero-charge shift must appear only in Finalise Blocked/);
+  assert.match(block, /accepted zero-charge shift must move to Finalise Ready/);
 });
 
 test('workspace projects one charge decision per shift and fails finalisation closed until current acceptance', () => {

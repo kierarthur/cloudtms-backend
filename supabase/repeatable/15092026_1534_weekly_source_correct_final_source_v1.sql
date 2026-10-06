@@ -29,6 +29,10 @@ declare
   v_roots jsonb;
   v_family uuid[];
   v_family_after_lock uuid[];
+  v_current_lock_upload public.weekly_source_uploads%rowtype;
+  v_current_lock_publication public.weekly_source_projection_publications%rowtype;
+  v_current_lock_generation integer;
+  v_current_lock_operation uuid;
 begin
   if p_prior_final_revision_id is null or p_actor_user_id is null then
     raise exception 'WEEKLY_SOURCE_CORRECTION_PRECONDITION_INPUT_INVALID'
@@ -150,6 +154,30 @@ begin
       using errcode='55000';
   end if;
 
+  -- Establish the complete sorted booking inventory BEFORE this owner's
+  -- first old-family row lock. PREPARE/APPLY also include actual replacement
+  -- upload roots and maintained prior-only CURRENT HR/expense coverage roots;
+  -- OPEN has no replacement and locks only genuine exact prior membership.
+  if coalesce(p_lock_roots,true) and (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    if p_excluding_correction_session_id is not null then
+      select u.* into v_current_lock_upload from public.weekly_final_source_correction_sessions s
+        join public.weekly_source_uploads u on u.id=s.replacement_correction_upload_id
+        where s.id=p_excluding_correction_session_id;
+      if found then
+        select p.* into strict v_current_lock_publication from public.weekly_final_source_correction_sessions s
+          join public.weekly_source_projection_publications p on p.id=s.replacement_projection_publication_id
+          where s.id=p_excluding_correction_session_id and p.upload_id=v_current_lock_upload.id;
+        if v_current_lock_publication.authority_scope_version>2147483647 then
+          raise exception 'WEEKLY_SOURCE_GENERATION_OVERFLOW' using errcode='22003';end if;
+        v_current_lock_generation:=coalesce(v_current_lock_publication.projection_generation,v_current_lock_publication.authority_scope_version::integer);
+      end if;
+    end if;
+    v_current_lock_operation:=private.bpay_next_source_current_lock_inventory_v1(
+      v_current_lock_upload.id,v_current_lock_generation,v_revision.id,v_group.id,v_manifest.client_id,
+      v_current_lock_upload.confirmed_coverage_start_local_date,v_current_lock_upload.confirmed_coverage_end_local_date
+    );
+  end if;
+
   for v_receipt in
     select receipt.*
     from public.weekly_source_ordinary_pay_projection_receipts receipt
@@ -253,6 +281,10 @@ begin
         using errcode='55000',detail=v_preflight::text;
     end if;
   end loop;
+
+  if v_current_lock_operation is not null then
+    perform private.bpay_next_source_current_lock_release_v1(v_current_lock_operation);
+  end if;
 
   select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
     'root_timesheet_id',receipt.root_timesheet_id,
@@ -1310,6 +1342,10 @@ begin
     );
   end if;
 
+  -- Exact retained PREPARE replay above remains exempt. Fresh correction
+  -- admission precedes the outer cycle lock and the nested Final engine.
+  perform private.weekly_source_pay_query_admit_v2();
+
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_session.source_cycle_id for update;
   select * into strict v_group from public.weekly_source_groups
@@ -1614,6 +1650,10 @@ begin
     end if;
     return v_session.result_json||pg_catalog.jsonb_build_object('idempotent_replay',true);
   end if;
+
+  -- Exact retained APPLIED replay above remains exempt. Fresh correction
+  -- admission precedes cycle/session locks and the CURRENT authority CAS.
+  perform private.weekly_source_pay_query_admit_v2();
 
   select * into strict v_cycle from public.weekly_source_cycles
   where id=v_session.source_cycle_id for update;
@@ -1992,6 +2032,19 @@ begin
     raise exception 'WEEKLY_SOURCE_CORRECTION_AUTHORITY_CAS_LOST' using errcode='40001';
   end if;
   v_new_revision_id:=v_prepared_revision.id;
+
+  -- APPLIED replay returned earlier; only the successful new CURRENT CAS
+  -- resolves report-contained manual queries before the existing selector.
+  -- Keep the completion receipt below that selector in its original order.
+  perform private.weekly_source_manual_reviews_finalised_v1(v_new_revision_id,v_actor);
+
+  -- Source old/new and cycle/report CURRENT CAS succeeded. Retract only the
+  -- exact old captured revision, publish genuine new origins, and retain an
+  -- explicit new observation even for an empty correction. Outside readers
+  -- cannot observe this intermediate state: it is the same owner transaction.
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.bpay_next_source_current_apply_correction_v1(v_session.id);
+  end if;
 
   update public.weekly_source_client_cycle_completions completion
   set state='SUPERSEDED',superseded_at_utc=pg_catalog.transaction_timestamp()

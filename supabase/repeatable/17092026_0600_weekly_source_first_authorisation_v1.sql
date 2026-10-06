@@ -2707,6 +2707,9 @@ begin
         p_actor_user_id,'WEEKLY_SOURCE_FIRST_AUTHORISATION_WITHDRAWN',
         v_prior_hash,v_event_hash
       ) returning id into v_event_id;
+      if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+        perform private.bpay_next_protected_current_decision_capture_v1(v_event_id);
+      end if;
       v_event_ids:=v_event_ids||v_event_id;
     end if;
   end loop;

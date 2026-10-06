@@ -165,7 +165,8 @@ BEGIN
        and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
             or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
      or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
-     or v_weekly_source_protected_rotation THEN
+     or (v_weekly_source_protected_rotation and not
+         private.weekly_source_local_preauthorisation_write_allowed_v1(p_timesheet_id,null::jsonb)) THEN
     RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
       USING ERRCODE = '55000',
             DETAIL = jsonb_build_object(
@@ -7834,13 +7835,13 @@ BEGIN
         OR LOWER(COALESCE(enriched_row.processing_status_display, '')) LIKE '%' || v_q || '%'
       )
       AND (
-        (v_tools_stage IS NULL AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived')
-        OR (v_tools_stage = 'archived' AND LOWER(COALESCE(enriched_row.tools_stage, '')) = 'archived')
+        v_tools_stage IS NULL
+        OR (v_tools_stage IN ('archived','withdrawn')
+          AND LOWER(COALESCE(enriched_row.tools_stage, '')) IN ('archived','withdrawn'))
         OR (
           v_tools_stage IS NOT NULL
-          AND v_tools_stage <> 'archived'
+          AND v_tools_stage NOT IN ('archived','withdrawn')
           AND LOWER(COALESCE(enriched_row.tools_stage, '')) = v_tools_stage
-          AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived'
         )
       )
       AND (

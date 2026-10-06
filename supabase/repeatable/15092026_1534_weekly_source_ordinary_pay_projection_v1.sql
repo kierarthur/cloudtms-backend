@@ -26,6 +26,7 @@
 \set ON_ERROR_STOP on
 
 begin;
+\ir includes/05102026_0659_bpay_next_protected_owner_route_v1.sqlinc
 
 create or replace function private.weekly_source_ordinary_projection_hex32_v1(
   p_value text,
@@ -593,6 +594,146 @@ $function$;
 -- fixed-scale decimal STRINGS, and no adjustment_id anywhere (WB-007, WB-013,
 -- 24 section 5: an ordinary non-advance ts_pay_adjustments occurrence stays
 -- independently owned and is composed once by the Workbench, outside the head).
+-- Nonmonetary protected-only identity. No block means the established ordinary
+-- branch remains unchanged. Presence must be exact; invalid evidence never
+-- falls back to a clock hash. Source acceptance separately scopes the event
+-- against its actual accepted schedule and complete approved-before inventory.
+create or replace function private.weekly_source_protected_component_event_v1(
+  p_segment jsonb
+) returns text language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_identity jsonb;
+  v_event text;
+begin
+  if not (p_segment ? 'weekly_protected_component_identity') then return null; end if;
+  v_identity:=p_segment->'weekly_protected_component_identity';
+  if jsonb_typeof(v_identity) is distinct from 'object'
+     or not (v_identity ?& array['schema_version','work_event_id']) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  if exists(select 1 from jsonb_object_keys(v_identity) k(key)
+      where k.key not in ('schema_version','work_event_id'))
+     or v_identity->>'schema_version' is distinct from 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_V1'
+     or jsonb_typeof(v_identity->'work_event_id') is distinct from 'string' then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  v_event:=v_identity->>'work_event_id';
+  if v_event !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     or p_segment->>'segment_id' is distinct from ('weekly-source-event:'||v_event)
+     or (p_segment ? 'weekly_source' and
+       p_segment#>>'{weekly_source,work_event_id}' is distinct from v_event) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_IDENTITY_INVALID' using errcode='22023'; end if;
+  return v_event;
+end;
+$function$;
+
+-- The caller must obtain p_context from the actual action-context owner under
+-- its existing stage locks. Browser JSON is never an approval/context basis.
+-- This checks identity against the COMPLETE accepted schedule before sealing;
+-- the existing calculator remains the sole owner of financial values.
+create or replace function private.weekly_source_protected_component_manifest_v1(
+  p_context jsonb,p_target_snapshot jsonb
+) returns jsonb language plpgsql immutable
+set search_path to 'pg_catalog','pg_temp'
+as $function$
+declare
+  v_expected jsonb; v_segments jsonb; v_prior jsonb;
+  v_row record; v_event text; v_prior_event text;
+begin
+  if jsonb_typeof(p_context) is distinct from 'object'
+     or p_context->>'ok' is distinct from 'true'
+     or p_context->>'contract' is distinct from 'WEEKLY_PROTECTED_ACTION_CONTEXT_V1'
+     or jsonb_typeof(p_context->'source_segments') is distinct from 'array'
+     or jsonb_typeof(p_context->'protected_decisions') is distinct from 'array'
+     or jsonb_typeof(p_context->'approved_component_identity_components') is distinct from 'array'
+     or jsonb_typeof(p_target_snapshot) is distinct from 'object'
+     or p_target_snapshot->>'schema_version' is distinct from 'WEEKLY_PROTECTED_TARGET_SNAPSHOT_V1'
+     or jsonb_typeof(p_target_snapshot->'actual_schedule_json') is distinct from 'array'
+     or jsonb_typeof(p_target_snapshot#>'{tsfin_snapshot_json,invoice_breakdown_json,segments}') is distinct from 'array'
+     or p_target_snapshot#>>'{tsfin_snapshot_json,timesheet_id}' is distinct from p_context->>'root_timesheet_id' then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+  if exists(select 1 from unnest(array['family_id','root_timesheet_id','contract_id','candidate_id']) k
+      where coalesce((p_context->>k) !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',true)) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+  if exists(select 1 from jsonb_array_elements(p_context->'source_segments') r
+       group by r->>'work_event_id' having count(*)<>1)
+     or exists(select 1 from jsonb_array_elements(p_context->'protected_decisions') r
+       group by r->>'work_event_id' having count(*)<>1)
+     or exists(select 1 from jsonb_array_elements(p_context->'protected_decisions') r
+       where coalesce(r->>'state' not in ('WAIT','ACCEPTED_SOURCE','NOT_WORKED'),true)) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_INVALID' using errcode='22023'; end if;
+
+  -- Same complete-set rule as composeWeeklyProtectedTargetSchedule: WAIT
+  -- replaces this event's clocks; accepted source uses actual source; absent
+  -- accepted source and NOT_WORKED contribute no worked segment. Preserve
+  -- source metadata without manufacturing imported provenance for protection.
+  with sources as (
+    select r as data,r->>'work_event_id' as event_id
+      from jsonb_array_elements(p_context->'source_segments') r
+  ), decisions as (
+    select r as data,r->>'work_event_id' as event_id
+      from jsonb_array_elements(p_context->'protected_decisions') r
+  ), active as (
+    select coalesce(s.event_id,d.event_id) as event_id,s.data as source_data,
+      coalesce(d.data->>'state','SOURCE') as state,
+      case when d.data->>'state'='WAIT' then d.data->'fixed_schedule' else s.data end as clocks
+    from sources s full join decisions d on d.event_id=s.event_id
+    where d.data->>'state' is distinct from 'NOT_WORKED'
+  ), normalized as (
+    select coalesce(source_data,'{}'::jsonb)||jsonb_build_object(
+      'date',coalesce(clocks->>'work_date',clocks->>'date'),
+      'start',coalesce(clocks->>'start',clocks->>'start_time'),
+      'end',coalesce(clocks->>'end',clocks->>'end_time'),
+      'break_mins',coalesce((clocks->>'break_minutes')::integer,(clocks->>'break_mins')::integer,0),
+      'work_event_id',event_id,'protected_target_state',state) as data
+    from active where clocks is not null and clocks<>'null'::jsonb
+  )
+  select coalesce(jsonb_agg(data order by (data->>'date') collate "C",
+    (data->>'start') collate "C",(data->>'end') collate "C",(data->>'work_event_id') collate "C"),'[]'::jsonb)
+    into v_expected from normalized;
+  v_segments:=p_target_snapshot#>'{tsfin_snapshot_json,invoice_breakdown_json,segments}';
+  if p_target_snapshot->'actual_schedule_json' is distinct from v_expected
+     or jsonb_array_length(v_segments)<>jsonb_array_length(v_expected) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_NOT_EXACT' using errcode='55000'; end if;
+  for v_row in select expected.value as accepted,calculated.value as calculated
+      from jsonb_array_elements(v_expected) with ordinality expected(value,ordinality)
+      join jsonb_array_elements(v_segments) with ordinality calculated(value,ordinality)
+        using(ordinality)
+  loop
+    v_event:=private.weekly_source_protected_component_event_v1(v_row.calculated);
+    if v_event is null or v_event is distinct from v_row.accepted->>'work_event_id'
+       or v_row.calculated->'date' is distinct from v_row.accepted->'date'
+       or v_row.calculated->'start' is distinct from v_row.accepted->'start'
+       or v_row.calculated->'end' is distinct from v_row.accepted->'end'
+       or v_row.calculated->'break_mins' is distinct from v_row.accepted->'break_mins' then
+      raise exception 'WEEKLY_PROTECTED_COMPONENT_OUTPUT_NOT_EXACT' using errcode='55000'; end if;
+  end loop;
+  v_prior:=p_context->'approved_component_identity_components';
+  for v_row in select r as data from jsonb_array_elements(v_prior) r
+      where r->>'component_kind'='WORKED_TIME'
+  loop
+    v_prior_event:=v_row.data->>'component_member_identity';
+    if coalesce(v_prior_event !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',true)
+       or v_row.data->>'economic_key_type' is distinct from 'SEGMENT'
+       or v_row.data->>'economic_key_value' is distinct from ('weekly-source-event:'||v_prior_event) then
+      raise exception 'WEEKLY_PROTECTED_COMPONENT_LEGACY_IDENTITY_UNAVAILABLE' using errcode='55000'; end if;
+  end loop;
+  if exists(select 1 from jsonb_array_elements(v_prior) r
+      where r->>'component_kind'='WORKED_TIME'
+      group by r->>'component_member_identity' having count(*)<>1) then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_INVALID' using errcode='22023'; end if;
+  return jsonb_build_object('schema_version','WEEKLY_PROTECTED_COMPONENT_MANIFEST_V1',
+    'family_id',p_context->'family_id','root_timesheet_id',p_context->'root_timesheet_id',
+    'contract_id',p_context->'contract_id','candidate_id',p_context->'candidate_id',
+    'accepted_schedule_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_PROTECTED_COMPONENT_ACCEPTED_SCHEDULE_V1',v_expected),'hex'),
+    'calculated_segments_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_PROTECTED_COMPONENT_CALCULATED_SEGMENTS_V1',v_segments),'hex'),
+    'approved_components_sha256',encode(private.weekly_source_sha256_jsonb_v1(
+      'WEEKLY_PROTECTED_COMPONENT_APPROVED_COMPONENTS_V1',v_prior),'hex'));
+end;
+$function$;
+
 create or replace function private.weekly_source_entitlement_components_v1(
   p_segments jsonb,
   p_expenses jsonb
@@ -611,10 +752,12 @@ as $function$
       -- snapshot carries no `weekly_source` block, so the stable identity falls
       -- back to the segment id itself.  It must never be null, or two unrelated
       -- segments would derive the same component id.
-      coalesce(segment.value#>>'{weekly_source,work_event_id}',
+      coalesce(private.weekly_source_protected_component_event_v1(segment.value),
+               segment.value#>>'{weekly_source,work_event_id}',
                segment.value->>'segment_id') as component_member_identity,
       segment.value->>'segment_id' as segment_id,
-      coalesce(segment.value#>>'{weekly_source,work_event_id}',
+      coalesce(private.weekly_source_protected_component_event_v1(segment.value),
+               segment.value#>>'{weekly_source,work_event_id}',
                segment.value->>'segment_id') as segment_key,
       segment.value#>>'{weekly_source,calculation_fingerprint}' as segment_stable_key,
       segment.value->>'date' as work_date,
@@ -746,6 +889,7 @@ declare
   v_head_id uuid;
   v_head_count integer:=0;
   v_inventory_digest text;
+  v_result jsonb;
 begin
   v_identity:=private.weekly_source_resolve_root_identity_v1(p_root_timesheet_id);
   if coalesce((v_identity->>'ok')::boolean,false) is not true
@@ -862,13 +1006,15 @@ begin
       into v_hashed
     from public.weekly_source_entitlement_head_components component
     where component.head_id=v_head.id;
-    return pg_catalog.jsonb_build_object(
+    v_result:=pg_catalog.jsonb_build_object(
       'ok',true,'code',null,
       'authority',v_authority,'head_id',v_head_id,
       'components',v_hashed,
       'inventory_digest',pg_catalog.encode(v_head.inventory_digest,'hex'),
       'component_count',v_head.component_count
     );
+    return v_result||pg_catalog.jsonb_build_object('approval_basis',
+      private.weekly_source_inventory_approval_basis_v2(p_root_timesheet_id,v_result));
   end if;
 
   -- No head: the effective entitlement is the root's current authorised
@@ -898,6 +1044,13 @@ begin
   end if;
 
   v_components:=private.weekly_source_entitlement_components_v1(v_segments,v_expenses);
+
+  if v_financial.id is not null then
+    v_components:=private.weekly_source_initial_additional_components_v2(
+      v_components,v_financial.additional_units_json,
+      v_financial.additional_pay_ex_vat,v_financial.additional_charge_ex_vat,
+      v_identity->>'family_booking_id');
+  end if;
 
   -- Hash every component with the COORDINATOR'S own canonicaliser, CONTENT
   -- projection and encoder, so a TSFIN-derived component and the head component
@@ -941,13 +1094,15 @@ begin
     private.weekly_source_publication_request_digest_v1(
       pg_catalog.jsonb_build_object('components',v_pairs)),'hex');
 
-  return pg_catalog.jsonb_build_object(
+  v_result:=pg_catalog.jsonb_build_object(
     'ok',true,'code',null,
     'authority',v_authority,'head_id',null,
     'components',v_hashed,
     'inventory_digest',v_inventory_digest,
     'component_count',pg_catalog.jsonb_array_length(v_hashed)
   );
+  return v_result||pg_catalog.jsonb_build_object('approval_basis',
+    private.weekly_source_inventory_approval_basis_v2(p_root_timesheet_id,v_result));
 end;
 $function$;
 
@@ -1827,6 +1982,8 @@ declare
   v_week_mismatch integer;
   v_revision_chain_rows integer;
   v_revision_agency_id uuid;
+  v_local_context jsonb;
+  v_local_rebuilt jsonb;
   v_i integer;
 begin
   v_canonical:=private.weekly_source_publication_request_canonical_v1(
@@ -1854,6 +2011,34 @@ begin
               'code','WEEKLY_SOURCE_PROPOSAL_AGENCY_INVALID',
               'field','p_agency_id','reason','NULL_NOT_ALLOWED')::text;
   end if;
+  if v_financial#>>'{source_revision,origin_kind}'='PROTECTED_LOCAL_DECISION_V1' then
+    -- Local protection has its own actual Source cycle/family provenance. It
+    -- must not invent a Final revision merely to satisfy this recorder. Reuse
+    -- the sole qualified Local context and constructor, keeping all canonical
+    -- member/component/before-position facts exact before any proposal write.
+    if jsonb_array_length(v_canonical->'member_root_ids')<>1 then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+    v_local_context:=private.weekly_source_local_publication_context_v2(
+      (v_financial#>>'{source_revision,publication_request_id}')::uuid,
+      (v_financial#>>'{source_revision,generation_id}')::uuid,
+      (v_canonical->'member_root_ids'->>0)::uuid);
+    if v_local_context is null
+       or v_local_context->>'actor_user_id' is distinct from p_actor_user_id::text then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+    v_revision_agency_id:=(v_local_context->>'agency_id')::uuid;
+    v_local_rebuilt:=private.weekly_source_entitlement_proposal_request_v2(
+      (v_canonical->'member_root_ids'->>0)::uuid,v_financial->'source_revision','PROTECTED',
+      (v_canonical->>'decision_bundle_id')::uuid,(v_canonical->>'bundle_revision')::bigint,
+      (v_canonical->'head_ids'->>0)::uuid,(v_canonical->>'decision_id')::uuid,
+      v_financial#>'{member_entitlements,0,components}','UNCHANGED');
+    if private.weekly_source_publication_request_canonical_v1(v_local_rebuilt,'IMMEDIATE',null)
+         is distinct from v_canonical
+       or v_local_rebuilt->'control' is distinct from p_request->'control' then
+      raise exception 'WEEKLY_PROTECTED_LOCAL_PROPOSAL_UNQUALIFIED' using errcode='55000';
+    end if;
+  else
   -- Never a `limit 1`: the chain is three primary keys, and a count that is not
   -- exactly one means the source revision this bundle names cannot be anchored
   -- to one agency, which is a refusal rather than a choice.
@@ -1879,6 +2064,7 @@ begin
   join public.weekly_source_groups group_row
     on group_row.id=cycle_row.source_group_id
   where revision_row.id=(v_financial->'source_revision'->>'final_revision_id')::uuid;
+  end if;
   if p_agency_id is distinct from v_revision_agency_id then
     raise exception 'WEEKLY_SOURCE_PROPOSAL_AGENCY_DISAGREES_WITH_SOURCE_REVISION'
       using errcode='22023',
@@ -2822,6 +3008,9 @@ begin
     v_components:=private.weekly_source_entitlement_components_v1(
       v_expected_segments,v_expected_source_expenses
     );
+    v_components:=private.weekly_source_retain_approved_additional_v2(
+      v_root_timesheet_id,v_components
+    );
     v_decision_bundle_id:=private.weekly_source_entitlement_derived_uuid_v1(
       'WEEKLY_SOURCE_DECISION_BUNDLE_V1',
       pg_catalog.btrim(v_timesheet.booking_id)||'|'||v_revision.id::text
@@ -3429,7 +3618,18 @@ create or replace function private.weekly_source_ordinary_projection_active_move
 language sql stable security definer
 set search_path to 'public','private','pg_catalog','pg_temp'
 as $function$
-  with family as materialized (
+  with root_scope as materialized (
+    select ts.booking_id,ts.contract_id,ts.week_ending_date,c.candidate_id,c.client_id,
+      coalesce(module.active_owner='NEXT' and exists(
+        select 1 from public.weekly_exceptional_pay_target_families f
+        where f.root_timesheet_id=ts.timesheet_id and f.root_family_booking_id=ts.booking_id
+          and pg_catalog.btrim(f.root_family_booking_id)=pg_catalog.btrim(ts.booking_id)
+          and private.bpay_next_protected_owner_route_v1(f.id)='NEXT'
+      ),false) as use_next
+    from public.timesheets ts join public.contracts c on c.id=ts.contract_id
+    left join private.bpay_next_module_control module on module.id=1
+    where ts.timesheet_id=p_root_timesheet_id
+  ), family as materialized (
     -- WP-62 (WP-57 handoff N1, executed): a Timesheet family can carry more
     -- than one physical member after a rotation, and a movement keeps the
     -- member that was current when its report was finalised.  Pairing a full
@@ -3442,9 +3642,14 @@ as $function$
     -- resolver.  For an unrotated family it returns exactly
     -- {p_root_timesheet_id}, so every decision below is unchanged there, and
     -- the answer is the same whichever member of a family is asked.
-    select private.weekly_source_invoice_family_timesheet_ids_v1(
-      p_root_timesheet_id
-    ) as timesheet_ids
+    -- NEXT uses the exact immutable Source lineage's raw family key; only
+    -- retained C1 invokes the old physical-family resolver. This changes
+    -- membership, NOT the Source revision-ladder cancellation calculation
+    -- below. It is not a maintained-current observation or bounded-history
+    -- claim; a separate real producer-owned current factual binding is next.
+    select root_scope.*,case when use_next then array[p_root_timesheet_id]
+      else private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id) end as timesheet_ids
+    from root_scope
   ), target as (
     select target_revision.finalised_at_utc,target_revision.revision_number,
            target_cycle.finalisation_week_ending,target_revision.id,
@@ -3491,7 +3696,25 @@ as $function$
       on source_cycle.id=movement.finalisation_cycle_id
     cross join target
     cross join family
-    where movement.invoice_timesheet_id=any(family.timesheet_ids)
+    where ((not family.use_next and movement.invoice_timesheet_id=any(family.timesheet_ids))
+      or (family.use_next and exists(
+        select 1 from public.weekly_source_row_timesheet_lineages lineage
+        where lineage.row_resolution_id=case
+          when coalesce(movement.source_facts_json->>'row_resolution_id','')
+            ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+            then (movement.source_facts_json->>'row_resolution_id')::uuid
+          else (select (prior.source_facts_json->>'row_resolution_id')::uuid
+            from public.weekly_source_billing_movements prior
+            where prior.id=movement.prior_movement_id and prior.work_event_id=movement.work_event_id
+              and prior.candidate_id=movement.candidate_id and prior.contract_id=movement.contract_id
+              and prior.actual_client_id=movement.actual_client_id and prior.movement_role in ('POSITIVE','REPLACEMENT')
+              and coalesce(prior.source_facts_json->>'row_resolution_id','')
+                ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$') end
+          and lineage.family_booking_id=family.booking_id and lineage.work_event_id=movement.work_event_id
+          and lineage.candidate_id=family.candidate_id and lineage.client_id=family.client_id
+          and lineage.contract_id=family.contract_id and lineage.week_ending_date=family.week_ending_date
+          and movement.candidate_id=family.candidate_id and movement.actual_client_id=family.client_id
+          and movement.contract_id=family.contract_id)))
       and movement.expense_authority_generation_id is null
       and movement.source_line_kind<>'SOURCE_FIXED_EXPENSE'
       and (revision.state='CURRENT' or revision.id=target.id)
@@ -3625,7 +3848,18 @@ create or replace function private.weekly_source_ordinary_projection_current_seg
 language sql stable security definer
 set search_path to 'public','private','pg_catalog','pg_temp'
 as $function$
-  with family as materialized (
+  with root_scope as materialized (
+    select ts.booking_id,ts.contract_id,ts.week_ending_date,c.candidate_id,c.client_id,
+      coalesce(module.active_owner='NEXT' and exists(
+        select 1 from public.weekly_exceptional_pay_target_families f
+        where f.root_timesheet_id=ts.timesheet_id and f.root_family_booking_id=ts.booking_id
+          and pg_catalog.btrim(f.root_family_booking_id)=pg_catalog.btrim(ts.booking_id)
+          and private.bpay_next_protected_owner_route_v1(f.id)='NEXT'
+      ),false) as use_next
+    from public.timesheets ts join public.contracts c on c.id=ts.contract_id
+    left join private.bpay_next_module_control module on module.id=1
+    where ts.timesheet_id=p_root_timesheet_id
+  ), family as materialized (
     -- WP-62: the live-position owner answers over the whole Timesheet family,
     -- so the lineage a segment is composed from must be found over the same
     -- family.  Keyed on the physical root alone, the composer dropped a live
@@ -3633,9 +3867,9 @@ as $function$
     -- completeness check refused every rotated family that kept working
     -- (executed: WEEKLY_SOURCE_ACTIVE_SEGMENT_MANIFEST_INCOMPLETE).  Same
     -- adapter, resolved once; unrotated families are unchanged.
-    select private.weekly_source_invoice_family_timesheet_ids_v1(
-      p_root_timesheet_id
-    ) as timesheet_ids
+    select root_scope.*,case when use_next then array[p_root_timesheet_id]
+      else private.weekly_source_invoice_family_timesheet_ids_v1(p_root_timesheet_id) end as timesheet_ids
+    from root_scope
   ), active as (
     select *
     from private.weekly_source_ordinary_projection_active_movements_v1(
@@ -3681,7 +3915,13 @@ as $function$
      and economic.work_event_id=facts.work_event_id
     join public.weekly_source_row_timesheet_lineages lineage
       on lineage.row_resolution_id=resolution.id
-     and lineage.timesheet_id=any(family.timesheet_ids)
+     and ((not family.use_next and lineage.timesheet_id=any(family.timesheet_ids))
+       or (family.use_next and lineage.family_booking_id=family.booking_id
+         and lineage.work_event_id=facts.work_event_id and lineage.candidate_id=family.candidate_id
+         and lineage.client_id=family.client_id and lineage.contract_id=family.contract_id
+         and lineage.week_ending_date=family.week_ending_date
+         and facts.candidate_id=family.candidate_id and facts.actual_client_id=family.client_id
+         and facts.contract_id=family.contract_id))
     where (facts.canonical_pay_vector_json->>'row_sign')::integer=1
       and (facts.canonical_charge_vector_json->>'row_sign')::integer=1
   )
@@ -4064,6 +4304,7 @@ declare
   v_published_financial_id uuid;
   v_live_generation_count integer;
   v_prepared_kind text;
+  v_components jsonb;
   v_decision_bundle_id uuid;
   v_decision_id uuid;
   v_head_id uuid;
@@ -4376,6 +4617,11 @@ begin
     -- Never-authorised root: the zero source TSFIN may be prepared through the
     -- established mutable, unauthorised writer (24 section 4.1).  The public
     -- schedule is NOT touched and the root is NOT authorised.
+    v_components:=private.weekly_source_initial_additional_components_v2(
+      '[]'::jsonb,v_canonical_tsfin->'additional_units_json',
+      (v_canonical_tsfin->>'additional_pay_ex_vat')::numeric,
+      (v_canonical_tsfin->>'additional_charge_ex_vat')::numeric,v_timesheet.booking_id
+    );
     v_write_result:=public.tsfin_write_current_snapshot_single_bounded(
       v_root_timesheet_id,v_timesheet.version,v_canonical_tsfin,v_actor_user_id,
       pg_catalog.transaction_timestamp()
@@ -4387,12 +4633,18 @@ begin
         using errcode='55000',detail=coalesce(v_write_result,'{}'::jsonb)::text;
     end if;
     v_published_financial_id:=(v_write_result->>'timesheet_financials_id')::uuid;
-    v_prepared_kind:='ZERO_TSFIN_AWAITING_FIRST_AUTHORISATION';
+    v_prepared_kind:=case when jsonb_array_length(v_components)=0
+      then 'ZERO_TSFIN_AWAITING_FIRST_AUTHORISATION'
+      else 'RETAINED_ADDITIONAL_TSFIN_AWAITING_FIRST_AUTHORISATION' end;
   else
-    -- Already authorised: write nothing at all.  The certified zero becomes a
-    -- complete PROTECTED head with component_count = 0, published by the Office
-    -- decision owner through the Gate 5 coordinator.
-    v_prepared_kind:='CERTIFIED_ZERO_PROPOSAL';
+    -- Already authorised: preserve approved Additional in the full proposal.
+    -- No worked Source hours is not a certified zero while those items remain.
+    -- Write nothing on the approved root; the real decision owner publishes.
+    v_components:=private.weekly_source_retain_approved_additional_v2(
+      v_root_timesheet_id,'[]'::jsonb
+    );
+    v_prepared_kind:=case when jsonb_array_length(v_components)=0
+      then 'CERTIFIED_ZERO_PROPOSAL' else 'RETAINED_ADDITIONAL_PROPOSAL' end;
   end if;
 
   -- Record the certified-zero proposal whenever the cycle has a current final
@@ -4414,7 +4666,7 @@ begin
     );
     v_proposal_request:=private.weekly_source_entitlement_proposal_request_v1(
       v_root_timesheet_id,v_cycle.current_final_revision_id,'PROTECTED',
-      v_decision_bundle_id,1::bigint,v_head_id,v_decision_id,'[]'::jsonb
+      v_decision_bundle_id,1::bigint,v_head_id,v_decision_id,v_components
     );
     v_proposal:=private.weekly_source_entitlement_proposal_record_v1(
       v_proposal_request,v_family.agency_id,v_family.contract_id,
@@ -4479,6 +4731,10 @@ alter function private.weekly_source_entitlement_component_id_v1(text,text,text,
   owner to postgres;
 alter function private.weekly_source_entitlement_components_v1(jsonb,jsonb)
   owner to postgres;
+alter function private.weekly_source_protected_component_event_v1(jsonb)
+  owner to postgres;
+alter function private.weekly_source_protected_component_manifest_v1(jsonb,jsonb)
+  owner to postgres;
 alter function private.weekly_source_effective_inventory_v1(uuid)
   owner to postgres;
 alter function private.weekly_source_target_family_for_root_v1(uuid)
@@ -4497,6 +4753,10 @@ revoke all on function private.weekly_source_entitlement_derived_uuid_v1(text,te
 revoke all on function private.weekly_source_entitlement_component_id_v1(text,text,text,text)
   from public,anon,authenticated,service_role;
 revoke all on function private.weekly_source_entitlement_components_v1(jsonb,jsonb)
+  from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_protected_component_event_v1(jsonb)
+  from public,anon,authenticated,service_role;
+revoke all on function private.weekly_source_protected_component_manifest_v1(jsonb,jsonb)
   from public,anon,authenticated,service_role;
 revoke all on function private.weekly_source_effective_inventory_v1(uuid)
   from public,anon,authenticated,service_role;

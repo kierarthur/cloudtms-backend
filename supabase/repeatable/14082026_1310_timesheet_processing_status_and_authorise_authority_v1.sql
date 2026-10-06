@@ -1279,6 +1279,8 @@ BEGIN
         ELSE 'PARTIALLY_INVOICED'
       END AS invoice_segment_stage,
       CASE
+        WHEN source_category.category_json->>'presentation_category' IS NOT NULL
+          THEN source_category.category_json->>'presentation_category'
         WHEN sr0.timesheet_id IS NOT NULL
          AND EXISTS (
            SELECT 1
@@ -1305,6 +1307,9 @@ BEGIN
         ELSE 'PROCESSING_DELAYED'
       END AS tools_stage,
       CASE
+        WHEN source_category.category_json->>'presentation_category' IN ('ARCHIVED','WITHDRAWN') THEN 'Withdrawn'
+        WHEN source_category.category_json->>'presentation_category'='PROCESSING_DELAYED'
+          THEN 'Processing Delayed'
         WHEN sr0.timesheet_id IS NOT NULL
          AND EXISTS (
            SELECT 1
@@ -1379,6 +1384,10 @@ BEGIN
         0
       )::numeric AS net_delta_ex_vat
     FROM issue_normalised_rows AS sr0
+    LEFT JOIN LATERAL (
+      SELECT private.weekly_source_timesheet_category_v2(sr0.timesheet_id) AS category_json
+      OFFSET 0
+    ) AS source_category ON TRUE
     LEFT JOIN public.timesheet_summary_pay_state_cache AS summary_pay_cache
       ON summary_pay_cache.timesheet_id = sr0.timesheet_id
     LEFT JOIN public.timesheet_pay_state AS tps
@@ -1672,19 +1681,41 @@ BEGIN
     LIMIT 1;
   END IF;
 
-  SELECT
-    COALESCE(vts.client_requires_hr, COALESCE(v_contract_requires_hr, false)),
-    COALESCE(vts.hr_validation_required_for_invoice, COALESCE(v_contract_requires_hr, false)),
-    CASE
-      WHEN vts.validation_status IS NULL THEN NULL::text
-      ELSE UPPER(vts.validation_status::text)
-    END
-    INTO v_client_requires_hr,
-         v_hr_validation_required_for_invoice,
-         v_validation_status
-  FROM public.v_timesheets_summary_base AS vts
-  WHERE vts.timesheet_id = v_current_ts.timesheet_id
-  LIMIT 1;
+  -- Exact current-root flags only. Do not rebuild the summary of every
+  -- Timesheet to authorise one root; retain the same dated/frozen settings,
+  -- current-financial selection and latest-validation semantics.
+  WITH bpay_authorisation_point_flags AS MATERIALIZED (
+    SELECT ts.timesheet_id, COALESCE(tf.total_hours,0) AS total_hours,
+      public.contract_settings_effective_get_v1(
+        COALESCE(tf.client_id,ct.client_id),COALESCE(ts.contract_id,cw.contract_id),
+        COALESCE((ts.worked_start_iso AT TIME ZONE 'Europe/London')::date,
+          (ts.scheduled_start_iso AT TIME ZONE 'Europe/London')::date,ts.week_ending_date),
+        CASE WHEN ts.sheet_scope='DAILY'::public.timesheet_scope_enum THEN 'DAILY' ELSE 'FINANCE' END,
+        ts.timesheet_id) AS settings_json,
+      UPPER(vl.status::text) AS validation_status
+    FROM public.timesheets ts
+    LEFT JOIN public.contract_weeks cw ON cw.timesheet_id=ts.timesheet_id
+    LEFT JOIN public.contracts ct ON ct.id=COALESCE(ts.contract_id,cw.contract_id)
+    LEFT JOIN LATERAL (
+      SELECT f.client_id,f.total_hours FROM public.timesheets_financials f
+      WHERE f.timesheet_id=ts.timesheet_id AND f.is_current=true
+      ORDER BY f.created_at DESC LIMIT 1
+    ) tf ON true
+    LEFT JOIN LATERAL (
+      SELECT tv.status FROM public.timesheet_validations tv
+      WHERE tv.timesheet_id=ts.timesheet_id ORDER BY tv.created_at DESC LIMIT 1
+    ) vl ON true
+    WHERE ts.timesheet_id=v_current_ts.timesheet_id AND ts.is_current=true
+    LIMIT 1
+  )
+  SELECT COALESCE((point.settings_json#>>'{values,requires_hr}')::boolean,false),
+    (point.timesheet_id IS NOT NULL
+      AND COALESCE((point.settings_json#>>'{values,hr_validation_required_for_invoice}')::boolean,false)
+      AND NOT COALESCE((point.settings_json#>>'{values,no_timesheet_required}')::boolean,false)
+      AND point.total_hours>0),
+    point.validation_status
+  INTO v_client_requires_hr,v_hr_validation_required_for_invoice,v_validation_status
+  FROM bpay_authorisation_point_flags point;
 
   v_client_requires_hr := COALESCE(v_client_requires_hr, v_contract_requires_hr, false);
   v_hr_validation_required_for_invoice := COALESCE(v_hr_validation_required_for_invoice, v_contract_requires_hr, false);
@@ -2085,6 +2116,7 @@ DECLARE
   v_out jsonb := '{}'::jsonb;
   v_error_state text := NULL;
   v_capability_items jsonb := NULL;
+  v_next_candidate_id uuid;
 BEGIN
   PERFORM set_config('lock_timeout', '300ms', true);
 
@@ -2329,6 +2361,31 @@ BEGIN
        WHERE blocked.item_json->>'lifecycle_group_id'=work_rows.item_json->>'lifecycle_group_id'
          AND blocked.failure_code IS NOT NULL
      );
+
+  -- The NEXT approval trigger publishes each financial row. A multi-row
+  -- UPDATE has no guaranteed row-trigger order, so reserve every affected
+  -- Candidate before its first row can acquire the agency command clock.
+  -- This follows the Source publisher's Candidate-before-clock order and
+  -- avoids a later bulk row waiting on a Candidate that is waiting on us.
+  IF (SELECT control.active_owner FROM private.bpay_next_module_control control
+      WHERE control.id=1)='NEXT' THEN
+    FOR v_next_candidate_id IN
+      SELECT DISTINCT contract_row.candidate_id
+      FROM pg_temp.timesheet_authorise_bulk_work work_rows
+      JOIN public.contracts contract_row
+        ON contract_row.id=work_rows.current_contract_id
+      WHERE work_rows.failure_code IS NULL
+        AND private.bpay_next_approval_route_v1(work_rows.current_timesheet_id)
+            IN ('ORDINARY_HOURS','EXPENSE_CARRIER')
+      ORDER BY contract_row.candidate_id
+    LOOP
+      INSERT INTO private.bpay_next_worker_control(candidate_id)
+      VALUES (v_next_candidate_id)
+      ON CONFLICT (candidate_id) DO NOTHING;
+      PERFORM 1 FROM private.bpay_next_worker_control
+       WHERE candidate_id=v_next_candidate_id FOR UPDATE;
+    END LOOP;
+  END IF;
 
   CREATE TEMP TABLE timesheet_authorise_bulk_updated_ts ON COMMIT DROP AS
   WITH updated_rows AS (

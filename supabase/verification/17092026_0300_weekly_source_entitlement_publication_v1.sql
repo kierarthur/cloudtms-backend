@@ -28,6 +28,9 @@ select pg_temp.ws_verify_watch('public.weekly_source_entitlement_heads'::regclas
 select pg_temp.ws_verify_watch('public.weekly_source_root_authorisations'::regclass);
 
 set local request.jwt.claim.role='service_role';
+\if :{?BPAY_NEXT_PAIR_DETAIL_PROBE}
+select pg_catalog.set_config('bpay.next_pair_detail_probe','on',true);
+\endif
 
 create function pg_temp.assert_true(p_condition boolean,p_message text)
 returns void language plpgsql as $function$
@@ -1073,6 +1076,8 @@ declare
   v_jobs_before uuid[];
   v_new_jobs uuid[];
   v_token uuid;
+  v_component jsonb;
+  v_detail jsonb;
 begin
   v_request:=pg_temp.single_root_request(
     'c0000000-0000-4000-8000-0000000000b1',1,'c0000000-0000-4000-8000-0000000000c1',
@@ -1081,6 +1086,37 @@ begin
       pg_temp.component(1,'c1c1c1c1-0000-4000-8000-000000000001','7.5','75.00'),
       pg_temp.component(2,'c1c1c1c1-0000-4000-8000-000000000002','2.25','22.50')));
   perform pg_temp.mk_bundle(v_request);
+
+  -- Optional local Banking Pay test only: supply the two initial head
+  -- components with explicit accepted shift detail before the real Source
+  -- publisher creates its head. Ordinary Source verification is unchanged.
+  if pg_catalog.current_setting('bpay.next_pair_detail_probe',true)='on' then
+    for v_component in
+      select value from pg_catalog.jsonb_array_elements(
+        v_request->'financial_request'->'member_entitlements'->0->'components')
+    loop
+      v_detail:=pg_catalog.jsonb_build_object(
+        'work_date','2026-03-02','start','09:00',
+        'end',case when v_component->>'component_ordinal'='1'
+          then '17:00' else '11:15' end,
+        'overnight',false,
+        'break_minutes',case when v_component->>'component_ordinal'='1'
+          then 30 else 0 end,
+        'rates',pg_catalog.jsonb_build_object('day',10));
+      insert into private.bpay_next_source_chosen_detail
+        (head_id,component_id,decision_bundle_id,bundle_revision,
+         component_sha256,detail_json,detail_sha256)
+      values (
+        'c0000000-0000-4000-8000-0000000000c1',
+        (v_component->>'component_id')::uuid,
+        'c0000000-0000-4000-8000-0000000000b1',1,
+        private.weekly_source_publication_request_digest_v1(
+          private.weekly_source_publication_component_content_v1(
+            private.weekly_source_publication_component_canonical_v1(
+              v_component,'bpay.next.pair.fixture'))),
+        v_detail,pg_catalog.sha256(pg_catalog.convert_to(v_detail::text,'UTF8')));
+    end loop;
+  end if;
 
   select coalesce(pg_catalog.array_agg(job_row.id),array[]::uuid[]) into v_jobs_before
     from public.banking_pay_workbench_jobs as job_row;
@@ -1841,6 +1877,8 @@ declare
   v_request jsonb;
   v_variant jsonb;
   v_whole jsonb;
+  v_pair_detail_copy_probe jsonb;
+  v_pair_detail_copy_count integer;
   v_lock jsonb;
   v_heads_before bigint;
   v_receipts_before bigint;
@@ -2213,6 +2251,74 @@ begin
     v_variant,'IMMEDIATE',v_lock,null,null,null,'{}'::jsonb,'{}'::jsonb);
   perform pg_temp.assert_true((v_result->>'ok')::boolean,
     'the whole-entitlement A/B publication must succeed: '||v_result::text);
+
+  if pg_catalog.current_setting('bpay.next_pair_detail_probe',true)='on' then
+    perform pg_temp.assert_true((
+      select pg_catalog.count(*)=2
+      from private.bpay_next_work_revision old_r
+      join private.bpay_next_approved_line old_l
+        on old_l.revision_id=old_r.id
+      join private.bpay_next_shift_detail old_s
+        on old_s.approved_line_id=old_l.id
+      join private.bpay_next_work_revision new_r
+        on new_r.source_head_id='c0000000-0000-4000-8000-0000000000c7'
+      join private.bpay_next_approved_line new_l
+        on new_l.revision_id=new_r.id
+       and new_l.source_component_id=old_l.source_component_id
+      join private.bpay_next_shift_detail new_s
+        on new_s.approved_line_id=new_l.id
+      where old_r.source_head_id='c0000000-0000-4000-8000-0000000000c1'
+        and new_s.shift_start_local=old_s.shift_start_local
+        and new_s.shift_end_local=old_s.shift_end_local
+        and new_s.shift_overnight=old_s.shift_overnight
+        and (select coalesce(pg_catalog.sum(b.break_minutes),0)
+             from private.bpay_next_break_detail b
+             where b.shift_detail_id=new_s.id)
+            =(select coalesce(pg_catalog.sum(b.break_minutes),0)
+                from private.bpay_next_break_detail b
+                where b.shift_detail_id=old_s.id)
+        and (select rd.source_pay_rate
+             from private.bpay_next_rate_detail rd
+             where rd.approved_line_id=new_l.id and rd.bucket='DAY')
+            =(select rd.source_pay_rate
+                from private.bpay_next_rate_detail rd
+                where rd.approved_line_id=old_l.id and rd.bucket='DAY')
+        and exists (
+          select 1 from private.bpay_next_source_chosen_detail d
+          where d.head_id=new_r.source_head_id
+            and d.component_id=new_l.source_component_id
+            and d.component_sha256=
+              pg_catalog.decode(pg_catalog.split_part(new_l.evidence_ref,'#',2),'hex'))
+    ),'Banking Pay pair must copy both populated frozen shifts, breaks, '
+       ||'rates and exact successor detail');
+    v_pair_detail_copy_probe:=pg_catalog.jsonb_set(
+      pg_catalog.jsonb_set(pg_catalog.jsonb_set(v_whole,
+        '{decision_bundle_id}',
+        '"c0000000-0000-4000-8000-00000000b60b"'::jsonb),
+        '{head_ids}',pg_catalog.jsonb_build_array(
+          'c0000000-0000-4000-8000-0000000000c8',
+          'c0000000-0000-4000-8000-0000000000c9')),
+        '{decision_id}',
+        '"c0000000-0000-4000-8000-00000000d60b"'::jsonb);
+    perform pg_temp.mk_bundle(v_pair_detail_copy_probe);
+    v_pair_detail_copy_count:=private.bpay_next_capture_chosen_source_detail_v1(
+      'c0000000-0000-4000-8000-0000000000c9',
+      'c0000000-0000-4000-8000-00000000b60b',1,
+      v_pair_detail_copy_probe->'financial_request'->'member_entitlements'->1->'components',
+      null,'c0000000-0000-4000-8000-0000000000c7');
+    perform pg_temp.assert_true(
+      v_pair_detail_copy_count=2 and (
+        select pg_catalog.count(*)=2
+        from private.bpay_next_source_chosen_detail before_d
+        join private.bpay_next_source_chosen_detail copied_d
+          on copied_d.component_id=before_d.component_id
+         and copied_d.head_id='c0000000-0000-4000-8000-0000000000c9'
+         and copied_d.detail_sha256=before_d.detail_sha256
+        where before_d.head_id='c0000000-0000-4000-8000-0000000000c7'),
+      'Banking Pay pair detail must be copyable by the later Office KEEP owner');
+    raise notice 'BPAY_NEXT_PAIR_DETAIL_AND_KEEP_COPY_PASS components=%',
+      v_pair_detail_copy_count;
+  end if;
 
   -- A keeps nothing and says so explicitly; B-after is B-before plus everything
   -- that moved; the old A head is superseded, not deleted.
@@ -4156,4 +4262,10 @@ select pg_catalog.jsonb_build_object(
   'banking_pay_definitions_changed',0
 ) as result;
 
+-- A joined, rollback-contained Banking Pay fixture may add assertions while
+-- this Source publisher's transaction is still open. Ordinary verification
+-- always takes the default rollback branch.
+\if :{?BPAY_NEXT_HOLD_SOURCE_PUBLICATION}
+\else
 rollback;
+\endif

@@ -376,7 +376,8 @@ BEGIN
        and (COALESCE((v_weekly_source_guard->>'ok')::boolean, true)
             or COALESCE((v_weekly_source_guard->>'weekly_source_bound')::boolean, true)))
      or COALESCE((v_weekly_source_guard->>'authorisation_record_without_authorised_timesheet')::boolean, false)
-     or v_weekly_source_protected_rotation THEN
+     or (v_weekly_source_protected_rotation and not
+         private.weekly_source_local_preauthorisation_write_allowed_v1(p_timesheet_id,snap)) THEN
     RAISE EXCEPTION 'WEEKLY_SOURCE_MANAGED_ROOT_ROTATION_REFUSED'
       USING ERRCODE = '55000',
             DETAIL = jsonb_build_object(

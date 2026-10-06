@@ -2585,21 +2585,40 @@ select pg_temp.assert_true(
 do $manual_review$
 declare
   v_open jsonb;
+  v_request jsonb;
+  v_replay jsonb;
+  v_code text;
   v_resolved jsonb;
   v_file jsonb;
   v_checks jsonb;
   v_questions jsonb;
   v_review uuid;
 begin
-  v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
+  -- V2 retains a command-bound receipt. A new Office request and an exact
+  -- retry are separate cases; a retry cannot change the submitted reason.
+  v_request:=jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_row_id','fc000000-0000-4000-8000-000000000001',
-    'reason','Office needs to check the candidate pay decision'));
+    'reason','Office needs to check the candidate pay decision',
+    'command_id','ff000000-0000-4000-8000-000000000001');
+  v_open:=public.weekly_source_manual_review_open_v1(v_request);
   v_review:=(v_open->>'review_id')::uuid;
   perform pg_temp.assert_true((v_open->>'ok')::boolean and v_review is not null
     and (select state='OPEN' and work_event_id='f9000000-0000-4000-8000-000000000001'
       from private.weekly_source_manual_reviews where id=v_review),
     'manual review did not open against the existing work identity');
+  v_replay:=public.weekly_source_manual_review_open_v1(v_request);
+  perform pg_temp.assert_true(v_replay=v_open||jsonb_build_object('idempotent_replay',true),
+    'manual review exact command replay did not retain the original receipt');
+  begin
+    perform public.weekly_source_manual_review_open_v1(
+      v_request||jsonb_build_object('reason','Changed reason on the same command'));
+    raise exception 'VERIFY_FAILED: changed manual review command was accepted';
+  exception when unique_violation then
+    get stacked diagnostics v_code=message_text;
+    perform pg_temp.assert_true(v_code='WEEKLY_SOURCE_MANUAL_REVIEW_COMMAND_COLLISION',
+      'manual review changed-payload retry did not reject command collision');
+  end;
   perform pg_temp.assert_true(exists(
     select 1
     from private.weekly_source_office_query_groups_v1(
@@ -2642,10 +2661,11 @@ begin
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_row_id','fc000000-0000-4000-8000-000000000001',
-    'reason','Same review again'));
+    'reason','Same review again',
+    'command_id','ff000000-0000-4000-8000-000000000002'));
   perform pg_temp.assert_true((v_open->>'already_open')::boolean
     and (v_open->>'review_id')::uuid=v_review,
-    'manual review open was not idempotent for the existing shift');
+    'a new Office command duplicated the existing open manual review');
   -- The shift is older than this report's cutoff. Office membership is
   -- checked at the report period, never mistakenly at the shift's work date.
   update public.weekly_source_group_clients
@@ -2655,7 +2675,8 @@ begin
   v_resolved:=public.weekly_source_manual_review_resolve_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'review_id',v_review,'resolution_kind','OFFICE_ACCEPTED_SOURCE',
-    'expected_current_row_hash',repeat('bd',32)));
+    'expected_current_row_hash',repeat('bd',32),
+    'command_id','ff000000-0000-4000-8000-000000000003'));
   perform pg_temp.assert_true((v_resolved->>'ok')::boolean
     and (select state='RESOLVED' and resolution_kind='OFFICE_ACCEPTED_SOURCE'
       from private.weekly_source_manual_reviews where id=v_review),
@@ -2667,7 +2688,8 @@ begin
   v_open:=public.weekly_source_manual_review_open_v1(jsonb_build_object(
     'actor_user_id','e1000000-0000-4000-8000-000000000001',
     'source_row_id','fc000000-0000-4000-8000-000000000001',
-    'reason','Office is reconsidering protected pay'));
+    'reason','Office is reconsidering protected pay',
+    'command_id','ff000000-0000-4000-8000-000000000004'));
   perform pg_temp.assert_true((v_open->>'ok')::boolean
     and (v_open->>'already_open')::boolean is false
     and (v_open->>'review_id')::uuid<>v_review

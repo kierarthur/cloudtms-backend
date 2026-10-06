@@ -964,7 +964,10 @@ declare
   v_schedule jsonb;
   v_rate_classification jsonb;
   v_source_proposal jsonb;
+  v_selected_source_witness jsonb;
   v_target_snapshot jsonb;
+  v_component_identity_context jsonb;
+  v_component_identity_basis jsonb;
   v_start jsonb;
   v_sources jsonb;
   v_components jsonb;
@@ -1024,6 +1027,7 @@ declare
   v_payment_event_kind text;
   v_other_wait_count integer:=0;
   v_family_event_sequence bigint;
+  v_family_event_id uuid;
   v_target_event_sequence bigint;
   v_total_pay numeric(12,2):=0;
   v_payload_total bigint:=0;
@@ -1246,6 +1250,31 @@ begin
     raise exception 'WEEKLY_PROTECTED_C1_POLICY_INVALID' using errcode='55000';
   end if;
 
+  -- Existing WITHDRAW/RECONCILE actions accept actual Source, including
+  -- certified absence; this does not define any other removal action. A
+  -- Final-only synthetic zero proposal is not proof that Source is absent.
+  -- Keep replay above this fresh admission check; do not reinterpret a saved
+  -- decision after subsequent imports or change the Banking publication owner.
+  if v_run.request_kind in ('WITHDRAW','RECONCILE') then
+    v_selected_source_witness:=private.weekly_source_selected_source_witness_v1(
+      v_family.id,v_cycle.id,v_event.id
+    );
+    if v_selected_source_witness is null
+       or v_selected_source_witness->'source_proposal' is distinct from v_source_proposal
+       or (v_selected_source_witness->>'kind'='CURRENT_ROW' and (
+         v_selected_source_witness#>>'{basis,final_revision_id}' is null
+         or v_selected_source_witness#>>'{basis,final_revision_id}' is distinct from v_source_proposal->>'source_revision'
+         or v_source_proposal->'source_present' is distinct from 'true'::jsonb
+       ))
+       or (v_selected_source_witness->>'kind'='CERTIFIED_ABSENCE' and (
+         v_source_proposal->'source_present' is distinct from 'false'::jsonb
+         or v_source_proposal->>'source_minutes' is distinct from '0'
+       ))
+       or coalesce(v_selected_source_witness->>'kind' not in ('CURRENT_ROW','CERTIFIED_ABSENCE'),true) then
+      raise exception 'WEEKLY_PROTECTED_C1_SELECTED_SOURCE_UNAVAILABLE' using errcode='55000';
+    end if;
+  end if;
+
   if (v_start->>'actor_user_id')::uuid is distinct from v_actor_user_id
      or (v_start->>'candidate_id')::uuid is distinct from v_family.candidate_id
      or (v_start->>'contract_id')::uuid is distinct from v_family.contract_id
@@ -1271,8 +1300,12 @@ begin
     from public.weekly_exceptional_c1_publication_requests request
     where request.generation_id=v_prior_generation.id
       and request.family_id=v_family.id
-      and request.state='PUBLISHED';
-    if v_publication.c1_head_revision is distinct from v_expected_head_revision then
+      and (request.state='PUBLISHED' or (request.state='RETIRED' and exists(
+        select 1 from private.weekly_source_local_protected_decision_receipts receipt
+        where receipt.publication_request_id=request.id and receipt.generation_id=v_prior_generation.id
+          and receipt.state='COMPLETE')));
+    if (case when v_publication.state='RETIRED' then v_prior_generation.generation_number::bigint
+             else v_publication.c1_head_revision end) is distinct from v_expected_head_revision then
       raise exception 'WEEKLY_PROTECTED_C1_HEAD_INVALID' using errcode='55000';
     end if;
     v_publication.id:=null;
@@ -1558,6 +1591,30 @@ begin
     'entitlement_sha256',v_start->>'entitlement_sha256',
     'approved_pay_ex_vat',pg_catalog.to_char(v_total_pay,'FM9999999990.00')
   );
+  -- Identity metadata is admitted only against this fresh, actual server
+  -- context under the established stage locks, never the caller's manifest.
+  -- Matching clocks are not a historical identity-derivation fallback.
+  v_component_identity_context:=public.weekly_exceptional_pay_action_context_v1(
+    jsonb_build_object('schema_version','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',
+      'actor_user_id',v_actor_user_id,'family_id',v_family.id,
+      'orchestration_run_id',v_run.id,'source_cycle_id',v_cycle.id,
+      'work_event_id',v_event.id,'protected_schedule',v_schedule,
+      'evidence_timesheet_id',v_evidence_timesheet_id));
+  if v_component_identity_context->>'root_timesheet_id' is distinct from v_root.timesheet_id::text
+     or v_component_identity_context#>>'{current_financial,id}' is distinct from v_fin.id::text
+     or v_component_identity_context->>'family_bound_version' is distinct from v_expected_bound_version::text
+     or v_component_identity_context->'source_proposal' is distinct from v_source_proposal then
+    raise exception 'WEEKLY_PROTECTED_COMPONENT_MANIFEST_UNAVAILABLE' using errcode='55000'; end if;
+  v_component_identity_basis:=private.weekly_source_protected_component_manifest_v1(
+    v_component_identity_context,v_target_snapshot);
+  v_next_vector:=v_next_vector||jsonb_build_object(
+    'protected_component_identity_basis',v_component_identity_basis);
+  -- Seal the common before-position at approval. A later authorised amendment
+  -- must not silently replace an entitlement published after this calculation.
+  if v_root.authorised_at_server is not null then
+    v_next_vector:=v_next_vector||pg_catalog.jsonb_build_object(
+      'prior_effective_inventory',private.weekly_source_effective_inventory_v1(v_root.timesheet_id));
+  end if;
   v_next_vector_hash:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_PROTECTED_COMPLETE_VECTOR_V1',v_next_vector
   );
@@ -1650,7 +1707,10 @@ begin
     v_source_proposal,v_source_proposal_hash,v_schedule,v_schedule_hash,v_family_event_state,
     v_comparison_revision_id,v_final_revision_id,v_actor_user_id,v_reason,
     v_prior_family_event_hash,v_family_event_hash
-  );
+  ) returning id into v_family_event_id;
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.bpay_next_protected_current_decision_capture_v1(v_family_event_id);
+  end if;
 
   select coalesce(max(event_sequence),0)+1,
          (array_agg(event_hash order by event_sequence desc))[1]

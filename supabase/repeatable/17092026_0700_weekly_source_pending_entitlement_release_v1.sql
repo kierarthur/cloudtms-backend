@@ -1208,6 +1208,7 @@ begin
   end if;
 
   -- ---- 3. the section 6 locks, the integrity gate and the census -----------
+  perform private.weekly_source_pay_query_admit_v2();
   v_lock_census:=private.weekly_source_pending_release_lock_and_census_v1(
     v_bundle.candidate_id,
     v_bundle.member_root_ids,

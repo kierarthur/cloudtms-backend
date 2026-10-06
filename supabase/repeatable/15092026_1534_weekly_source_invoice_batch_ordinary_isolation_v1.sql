@@ -53,8 +53,9 @@ begin
         at time zone 'Europe/London'
       )::date today
   ),
-  source_candidates as materialized (
-    select distinct financial.timesheet_id
+  source_candidate_families as materialized (
+    select distinct financial.timesheet_id,
+      private.weekly_source_invoice_family_timesheet_ids_v1(financial.timesheet_id) family_ids
     from public.timesheets_financials financial
     join public.timesheets timesheet
       on timesheet.timesheet_id=financial.timesheet_id
@@ -62,6 +63,9 @@ begin
      and timesheet.revoked_at is null
     where financial.is_current
       and financial.client_id is not null
+  ),
+  source_candidates as materialized (
+    select candidate.timesheet_id from source_candidate_families candidate
       -- Gate 13 hostile review F4 / standing rule 3: after S8 a physical root
       -- id is not a family identity, so this predicate - the one thing that
       -- keeps ordinary invoicing and Weekly-Source self-billing apart - is
@@ -73,16 +77,20 @@ begin
       -- identity mechanism and no inline re-derivation here.  The resolver
       -- falls back to the singleton {id} for a Timesheet with no booking
       -- identity, so an unrotated Timesheet is classified exactly as before.
+    where candidate.family_ids is not null and cardinality(candidate.family_ids)>0
       and not exists (
         select 1
         from public.weekly_source_row_timesheet_lineages lineage
-        where lineage.timesheet_id=any(
-          private.weekly_source_invoice_family_timesheet_ids_v1(
-            financial.timesheet_id
-          )
-        )
+        where lineage.timesheet_id=any(candidate.family_ids)
       )
-    order by financial.timesheet_id
+      -- Protected-only ownership is the same Source invoice boundary as
+      -- lineage. It cannot enter ordinary discovery before a valid import.
+      and not exists (
+        select 1 from public.weekly_exceptional_pay_target_families family
+        where family.root_timesheet_id=any(candidate.family_ids)
+          and family.ownership_state='TARGET_MANAGED'
+      )
+    order by candidate.timesheet_id
   ),
   command as materialized (
     select jsonb_build_array(jsonb_build_object(

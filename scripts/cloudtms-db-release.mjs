@@ -7,10 +7,10 @@ import {
   canonicalContractHash, contractDifference, contractDifferenceDetails, databaseUrl, exportContract, inventory,
   formatPlanSection, legacyUpgradeInventory, psql, readJson, releaseAdmissionSql, releaseVerifierVariables,
   repoRoot, shellGitHead, validateExpectedDatabase, validateTarget,
-  verifyIntegrity, writeJson,
+  verifyIntegrity, writeJson, mapExecutableSqlSource, executableSqlFile, openManagedPsqlSession, deadlockRetryCountForFile,
 } from './cloudtms-db-release-lib.mjs';
 import { requireWeeklySourceHandover2Approval } from './weekly-source-external-approval.mjs';
-import { readerReleasePhases, prepareSourceReaders, readerActivationSql } from './weekly-source-reader-release.mjs';
+import { applyManagedRelease, identitySql, managedReleaseContext, resumeCheckSql } from './cloudtms-managed-release.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
 const options = Object.fromEntries(rest.map(arg => {
@@ -300,7 +300,7 @@ function reloadPostgrestSchemaCache() {
   psql({ sql: `notify pgrst, 'reload schema';` });
 }
 
-function applyRelease() {
+async function applyRelease() {
   verifyIntegrity();
   const release = readJson('supabase/release/current-release.json');
   const environment = required('environment', process.env.CLOUDTMS_ENVIRONMENT);
@@ -340,6 +340,26 @@ function applyRelease() {
     customerKey,
   };
 
+  if (mode === 'NEW' || mode === 'UPGRADE') {
+    await applyManagedRelease({
+      root: repoRoot, current, release,
+      context: { ...releaseVerifierContext, mode, expectedHash },
+      mapSource: mapExecutableSqlSource,
+      executableFile: file => executableSqlFile(file,{canonical:true}),
+      openSession: openManagedPsqlSession,
+      deadlockRetries: deadlockRetryCountForFile,
+      preapply: runBankingPayCatalogPreapply,
+      verify: () => {
+        runVerifiers(mode,releaseVerifierContext);
+        const verified=compareExpected(release.contractPath);
+        return {...verified,evidence:{verificationFiles:verificationFilesForMode(release,mode)}};
+      },
+      log: message=>console.log(message),
+    });
+    console.log(`VERIFIED ${mode} release ${releaseId} for ${environment}.`);
+    return;
+  }
+
   if (mode === 'LEGACY_UPGRADE') {
     const legacy = legacyUpgradeState(current, environment);
     for (const file of release.legacyUpgradeBootstrapFiles) psql({ file });
@@ -371,43 +391,6 @@ function applyRelease() {
     });
     console.log(`VERIFIED LEGACY_UPGRADE release ${releaseId} for ${environment}.`);
     return;
-  } else if (mode === 'NEW') {
-    const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));
-    if (count !== 0) throw new Error(`NEW requires an empty application schema; found ${count} objects`);
-    for (const file of release.baselineFiles) psql({ file });
-    psql({ file: release.controlPlaneMigration });
-    ensureIdentity(environment, customerKey);
-    psql({ file: release.bootstrapFile, variables: { cloudtms_environment: environment } });
-    admitRelease({ releaseId, mode, expectedHash });
-    activeReleaseId = releaseId;
-    // The immutable baseline contains every migration before the release
-    // control-plane anchor. Apply every later locked migration in chronological
-    // order so a new agency receives the same current schema as UPGRADE.
-    const controlPlaneIndex = current.migrations.findIndex(
-      item => item.path === release.controlPlaneMigration,
-    );
-    if (controlPlaneIndex < 0) {
-      throw new Error(`Control-plane migration is missing from inventory: ${release.controlPlaneMigration}`);
-    }
-    const postBaselineMigrations = current.migrations.slice(controlPlaneIndex + 1);
-    for (const item of postBaselineMigrations) psql({ file: item.path });
-    // The immutable baseline already contains its signed routine snapshot.
-    // Install only repeatables added or changed since that snapshot; replaying
-    // retired historical roots could temporarily revive superseded authority.
-    const baselineRepeatables = new Map(
-      readJson(release.baselineRepeatableLock).repeatables.map(item => [item.path, item.sha256])
-    );
-    const pendingRepeatables = current.repeatables.filter(
-      item => baselineRepeatables.get(item.path) !== item.sha256
-    );
-    runBankingPayCatalogPreapply(pendingRepeatables.map(item => item.path));
-    const phases = readerReleasePhases(pendingRepeatables, current.repeatables);
-    for (const item of phases.ordinary) psql({ file: item.path });
-    if (phases.readers.length) {
-      prepareSourceReaders(sql => psql({ sql }));
-      psql({ sql: readerActivationSql(phases.readers, file => fs.readFileSync(path.join(repoRoot, file), 'utf8')) });
-    }
-    recordInventory(releaseId);
   } else if (mode === 'ADOPT') {
     const pre = compareExpected(release.contractPath);
     psql({ file: release.controlPlaneMigration });
@@ -415,31 +398,6 @@ function applyRelease() {
     admitRelease({ releaseId, mode, expectedHash: pre.sha256 });
     activeReleaseId = releaseId;
     recordInventory(releaseId);
-  } else {
-    const identity = psql({ sql: `select environment || '|' || coalesce(customer_key,'') from private.cloudtms_database_identity where singleton;` });
-    if (identity !== `${environment}|${customerKey}`) throw new Error('Installed database identity does not match requested target');
-    const installedMigrations = assertUpgradeLedger(current);
-    const installedRepeatables = new Map(JSON.parse(psql({ sql: `select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',closure_sha256)),'[]'::jsonb)::text from private.cloudtms_repeatable_ledger;` }) || '[]').map(x => [x.path, x.sha256]));
-    const pendingRepeatables = current.repeatables.filter(item => installedRepeatables.get(item.path) !== item.sha256);
-    admitRelease({ releaseId, mode, expectedHash });
-    activeReleaseId = releaseId;
-    for (const item of current.migrations) {
-      if (installedMigrations.has(item.path)) continue;
-      psql({ file: item.path });
-      psql({ sql: `insert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)});` });
-    }
-    runBankingPayCatalogPreapply(pendingRepeatables.map(item => item.path));
-    const phases = readerReleasePhases(pendingRepeatables, current.repeatables);
-    for (const item of phases.ordinary) {
-      psql({ file: item.path });
-      psql({ sql: `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();` });
-    }
-    if (phases.readers.length) {
-      prepareSourceReaders(sql => psql({ sql }));
-      psql({ sql: readerActivationSql(phases.readers,
-        file => fs.readFileSync(path.join(repoRoot, file), 'utf8'),
-        item => `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();`) });
-    }
   }
   reloadPostgrestSchemaCache();
   runVerifiers(mode, releaseVerifierContext);
@@ -523,13 +481,25 @@ try {
     }
     if (mode === 'NEW') {
       const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));
-      if (count !== 0) throw new Error(`NEW requires an empty application schema; found ${count} objects`);
+      if (count !== 0) {
+        const present=psql({sql:`select (to_regclass('private.cloudtms_database_releases') is not null)::text;`})==='true';
+        if(!present)throw new Error(`NEW requires an empty application schema; found ${count} objects without a managed bootstrap receipt`);
+        const current=inventory(),gitCommit=shellGitHead();
+        const context=managedReleaseContext({root:repoRoot,current,release,context:{mode,environment,expectedDatabase,gitCommit,
+          expectedHash:canonicalContractHash(readJson(release.contractPath)),
+          customerKey:options['customer-key']??process.env.CLOUDTMS_CUSTOMER_KEY??'',
+          releaseId:`${release.releaseId}-new-${gitCommit.slice(0,12)}`}});
+        psql({sql:identitySql(context)});
+        if(psql({sql:resumeCheckSql(context)})!=='true')throw new Error('NEW requires an empty application schema or the exact managed bootstrap receipt');
+        assertUpgradeLedger(current);
+        console.log('READ-ONLY NEW RESUME PLAN: exact commit/manifest/bootstrap receipt matched; APPLY still requires the same-session writer mutex and all original verifiers.');
+      }
     }
     if (mode === 'NEW' || mode === 'UPGRADE') {
       console.log('SOURCE READER ORDER: when either exact reader changes, install other pending authority first; resume bounded private inventory preparation; activate both reader definitions atomically only after completion. Existing reader definitions remain until activation. A 1000-call invocation quantum is resumable, not a population limit.');
     }
     console.log(`READ-ONLY PLAN PASSED: ${mode} -> ${environment}. No database changes were made.`);
-  } else if (command === 'apply') applyRelease();
+  } else if (command === 'apply') await applyRelease();
   else throw new Error('Command must be new, check, lock:update, export-contract, compare-contract, plan, or apply');
 } catch (error) {
   if (activeReleaseId && process.env.CLOUDTMS_DATABASE_URL) {

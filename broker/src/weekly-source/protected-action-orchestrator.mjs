@@ -3,11 +3,6 @@ import {
   listWeeklySourceC1ComponentKeys,
 } from '../banking-pay/weekly-source-c1-components.mjs';
 import {
-  publishDurableWeeklySourceC1,
-  recoverDurableWeeklySourceC1,
-  stageAndPublishDurableWeeklySourceC1,
-} from '../banking-pay/weekly-source-c1-durable-publication.mjs';
-import {
   prepareWeeklySourceC1Publication,
 } from '../banking-pay/weekly-source-c1-publication.mjs';
 import {
@@ -139,7 +134,7 @@ async function privateUuid(seed) {
 }
 
 function requireDependencies(dependencies) {
-  for (const name of ['dataRpc', 'calculateWeeklySnapshot', 'c1RawRpc']) {
+  for (const name of ['dataRpc', 'calculateWeeklySnapshot']) {
     if (typeof dependencies?.[name] !== 'function') {
       fail('WEEKLY_PROTECTED_DEPENDENCY_UNAVAILABLE', 'Approved hours cannot be changed right now.', { dependency: name });
     }
@@ -286,14 +281,19 @@ async function publicationStatus(normalized, prepared, dependencies) {
   return status;
 }
 
-function durablePublicationInput(normalized, status, dependencies) {
-  return {
-    data_rpc: dependencies.dataRpc,
-    c1_raw_rpc: dependencies.c1RawRpc,
+async function completeLocalDecision(normalized, status, dependencies) {
+  const result = await rpc(dependencies, 'weekly_exceptional_pay_complete_local_v1', {
+    schema_version: 'WEEKLY_PROTECTED_LOCAL_COMPLETE_V1',
     actor_user_id: normalized.actorUserId,
     publication_request_id: status.publication_request_id,
     expected_request_sha256: status.request_sha256,
-  };
+    idempotency_key: `${normalized.idempotencyKey}:local-complete`,
+  });
+  if (result?.ok !== true || !['PUBLISHED', 'SAVED_PENDING_FREEZE'].includes(result.outcome)) {
+    fail(result?.code ?? 'WEEKLY_PROTECTED_LOCAL_COMPLETE_REFUSED',
+      'The protected hours could not be saved. Your changes have been kept.', result ?? {});
+  }
+  return result;
 }
 
 function zeroRootSnapshot(context, calculated) {
@@ -377,7 +377,9 @@ function stageSnapshot(calculation, target) {
 
 /**
  * Execute one Office protected-hours action through the existing Weekly
- * calculator and complete-entitlement C1 route.  This owner never calculates
+ * calculator and CloudTMS-owned complete-entitlement route. The immutable C1
+ * stream remains historical calculation evidence, not an external Save gate.
+ * This owner never calculates
  * a residual, creates a Draft, mutates an invoice or calls Banking Pay.
  */
 export async function orchestrateWeeklyProtectedAction(input = {}) {
@@ -399,10 +401,15 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
   if (normalized.kind !== 'WAIT') {
     const status = await publicationStatus(normalized, prepared, dependencies);
     if (status.staged) {
-      const durable = durablePublicationInput(normalized, status, dependencies);
-      return normalized.recover
-        ? recoverDurableWeeklySourceC1(durable)
-        : publishDurableWeeklySourceC1(durable);
+      // A lost response replays the same local database receipt. Do not make
+      // an external START/status/publish call or recalculate an immutable target.
+      return completeLocalDecision(normalized, status, dependencies);
+    }
+    if (prepared.run_state === 'COMPLETE' && prepared.idempotent_replay === true) {
+      fail(
+        'WEEKLY_PROTECTED_PUBLICATION_STATUS_INVALID',
+        'The protected-hours publication status is unavailable.',
+      );
     }
     if (normalized.recover) {
       fail(
@@ -523,15 +530,12 @@ export async function orchestrateWeeklyProtectedAction(input = {}) {
     reason: normalized.reason,
     idempotency_key: `${normalized.idempotencyKey}:stage`,
   };
-  const durableInput = {
-    data_rpc: dependencies.dataRpc,
-    c1_raw_rpc: dependencies.c1RawRpc,
-    stage_request: stageRequest,
-    actor_user_id: normalized.actorUserId,
-    publication_request_id: requestId,
-    expected_request_sha256: publication.request_sha256,
-  };
-  return stageAndPublishDurableWeeklySourceC1(durableInput);
+  const staged = await rpc(dependencies, 'weekly_exceptional_pay_stage_c1_request_v1', stageRequest);
+  if (staged?.ok !== true || staged.publication_request_id !== requestId
+      || staged.request_sha256 !== publication.request_sha256) {
+    fail('WEEKLY_PROTECTED_STAGE_RESULT_INVALID', 'The protected hours could not be prepared safely.');
+  }
+  return completeLocalDecision(normalized, staged, dependencies);
 }
 
 export const WEEKLY_PROTECTED_ACTION_ORCHESTRATOR_CONTRACT = Object.freeze({
@@ -539,6 +543,7 @@ export const WEEKLY_PROTECTED_ACTION_ORCHESTRATOR_CONTRACT = Object.freeze({
   actions: Object.freeze(Object.keys(ACTION)),
   browserFinancialFactsAccepted: false,
   c1AutomaticRetry: false,
+  externalC1RequiredForSave: false,
   workbenchBypass: false,
   invoiceMutation: false,
 });

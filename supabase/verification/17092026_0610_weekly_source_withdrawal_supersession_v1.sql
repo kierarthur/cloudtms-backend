@@ -1133,9 +1133,12 @@ begin
        and p.proname='pay_workbench_unit_economic_occurrence_page_v1'),
     'A3: the selector must still consume only current committed heads');
   -- The three CALL-ONLY owners are pinned by hash, because nothing else in this
-  -- reader-repair programme is editing them. Authorise and invalidate retain
-  -- the 18 September NEW-build pins. Unauthorise retains the later PHD-022
-  -- source-owner correction as explained at its pin below.
+  -- Source reader-repair programme is editing them. Authorise retains the
+  -- reviewed H1/H2 successor (03102026_0500); invalidate retains the reviewed
+  -- factual legacy callback boundary (04102026_0555). Their exact LF body
+  -- hashes independently match the restricted native installed read-back.
+  -- Unauthorise retains the PHD-022 source-owner correction below. This fixture
+  -- never replaces any owner to satisfy an obsolete September fingerprint.
   perform pg_temp.assert_true(
     (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
       join pg_catalog.pg_namespace n on n.oid=p.pronamespace
@@ -1149,11 +1152,11 @@ begin
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='public' and p.proname='timesheet_authorise_generic_atomic')
-    ='cd5f05df8e4be03dec4b3f1bc56adaa6'
+    ='643b1bf291f93b2ab92e5b9b76c8ef69'
     and (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           join pg_catalog.pg_namespace n on n.oid=p.pronamespace
          where n.nspname='private' and p.proname='pay_workbench_scope_invalidate_v1')
-    ='0d26de465bc221f6a41043fb27c8d797',
+    ='31dff4424dcbf63f476451f59d9025f4',
     'the three CALL-ONLY owners must match their retained source-owner pins');
   -- Exactly one definition of each, so the pins above cannot be satisfied by a
   -- second overload nobody noticed.

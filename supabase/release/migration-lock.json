@@ -1019,6 +1019,154 @@
       "sha256": "cadac3950ea836a35005eecf1f0b064bdf935d90d6f8b74f2a3377b7ae0afce4"
     },
     {
+      "path": "supabase/migrations/03102026_1324_banking_pay_next_core.sql",
+      "sha256": "f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c"
+    },
+    {
+      "path": "supabase/migrations/04102026_0300_banking_pay_next_case_instruction_core.sql",
+      "sha256": "04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e"
+    },
+    {
+      "path": "supabase/migrations/04102026_0320_banking_pay_next_case_create_request.sql",
+      "sha256": "870ff18f1d7d9af464c19f0138da2bc4438ec1953dc82800653069cdd53e042b"
+    },
+    {
+      "path": "supabase/migrations/04102026_0340_banking_pay_next_protected_source_receipt.sql",
+      "sha256": "3b2f62d68c8138f871dd5736dfd3176d7b762b90154eb3c44b771e0dc3b9deab"
+    },
+    {
+      "path": "supabase/migrations/04102026_0350_banking_pay_next_reissue_cancel_request.sql",
+      "sha256": "1cf953a9bc2c4e9610827e652c2ad0abe730ae5e02ff5b86bf481a6de5def6c4"
+    },
+    {
+      "path": "supabase/migrations/04102026_0370_banking_pay_next_case_prepare_binding.sql",
+      "sha256": "cae36029cf5b3a2ceef5831a2b41065b89c8160294b46dce81ef6f5da88ffe37"
+    },
+    {
+      "path": "supabase/migrations/04102026_0380_banking_pay_next_case_net_binding.sql",
+      "sha256": "9b750149eb86e7ddd6cff218783cbff2674c64abf3a117f20e66579d5f3d291e"
+    },
+    {
+      "path": "supabase/migrations/04102026_0400_banking_pay_next_case_transfer_binding.sql",
+      "sha256": "1a7ca4f86eca7e96775ad4cfc47a8165768d1c41ad87f6f81752555d2648c987"
+    },
+    {
+      "path": "supabase/migrations/04102026_0440_banking_pay_next_non_earnings_return_week_binding.sql",
+      "sha256": "48cadfd0ee39e25db84452002e949b824a0292d9a63e3ea064284fd7b711cea8"
+    },
+    {
+      "path": "supabase/migrations/04102026_0450_banking_pay_next_case_cancel_binding.sql",
+      "sha256": "ab0db5929f3613e989080cfd1fb00acc04938e2cebdaf1e2f3c9fcc659317b9d"
+    },
+    {
+      "path": "supabase/migrations/04102026_0470_banking_pay_next_source_current_selector.sql",
+      "sha256": "aaa556bd02cb80f1107f450909ea13aa17c69d6a13f27ce6b1c119edfd3045cd"
+    },
+    {
+      "path": "supabase/migrations/04102026_0480_banking_pay_next_internal_zero_execution.sql",
+      "sha256": "032fcf4d3456b66c67c49a6399ee6a13207e223cb37b5d5fff0de3439e70f70b"
+    },
+    {
+      "path": "supabase/migrations/04102026_0500_banking_pay_next_source_current_hooks.sql",
+      "sha256": "dc6150316e0095ab9397ccaad05c82e184d60a776370757bb3547f2f88bfcf86"
+    },
+    {
+      "path": "supabase/migrations/04102026_0501_banking_pay_next_preparation_expiry.sql",
+      "sha256": "c9758121675a070ae40f1be352a40247f357309ae94efca59baf6de002cac845"
+    },
+    {
+      "path": "supabase/migrations/04102026_0502_banking_pay_next_queue_recovery.sql",
+      "sha256": "ad151f934eaa1585a849cf965d6b0d9d9672f46dfb5dd9226db8c8cf335167bb"
+    },
+    {
+      "path": "supabase/migrations/04102026_0503_banking_pay_next_expiry_sweep_cursor.sql",
+      "sha256": "37148abc7861a35a68cb7785b845a236bd2fc9d9aa84a765885e243d0f97e917"
+    },
+    {
+      "path": "supabase/migrations/04102026_0504_banking_pay_next_factual_email_claim_index.sql",
+      "sha256": "dc5fac7e18364a698ff35acbbc1656b76fc5077e532946d5a920b27d4a7dd308"
+    },
+    {
+      "path": "supabase/migrations/04102026_1134_bpay_next_ordinary_day_shift_facts.sql",
+      "sha256": "30eaa4340f857ea2e397ad223dd097280f513ecc9e916293a2b91dded7d756d9"
+    },
+    {
+      "path": "supabase/migrations/04102026_1241_bpay_next_component_selection.sql",
+      "sha256": "21716604ef859fea23dd1f15d0e5f642528b2f9457e9e96c7acf32615164fe3d"
+    },
+    {
+      "path": "supabase/migrations/04102026_1242_banking_pay_next_current_case_reader_index.sql",
+      "sha256": "1e5cd4d3ab18685749cc459af750892c4e81ba673b7583859b7d39a0a69e52cf"
+    },
+    {
+      "path": "supabase/migrations/04102026_1257_weekly_source_local_protected_decision_receipts_v1.sql",
+      "sha256": "922970716a88115ff592a0d3f4c6bd900d4b32c35f8f99ecec05d18a1a3812b1"
+    },
+    {
+      "path": "supabase/migrations/04102026_1519_banking_pay_next_work_collection.sql",
+      "sha256": "924fe1d8feb9b3767bae3261ba711b7837b4c2479cf689c780f3e651e28875d3"
+    },
+    {
+      "path": "supabase/migrations/04102026_1637_bpay_next_work_collection_recovery.sql",
+      "sha256": "96c18eba594b864429858b65f1ff8e27225500f7c81b07058f2d17e61012ea9c"
+    },
+    {
+      "path": "supabase/migrations/04102026_1647_banking_pay_next_work_collection_write_off.sql",
+      "sha256": "eb17aa10fbcc81d50210f0e1ed8998e9c80b0c35d621a4a85ebe59e8b5d484e2"
+    },
+    {
+      "path": "supabase/migrations/04102026_1827_banking_pay_next_candidate_destination_group.sql",
+      "sha256": "af9849f6e83784b0064ee58179aabc740d396764c3639ef7132967f394c9512d"
+    },
+    {
+      "path": "supabase/migrations/04102026_2011_banking_pay_next_split_week_basis.sql",
+      "sha256": "b83a83ebf2597a988f459d753688606278a5dff5c7a5fb23f83df7a65f4690ee"
+    },
+    {
+      "path": "supabase/migrations/04102026_2025_banking_pay_next_destination_lifecycle.sql",
+      "sha256": "c36df5188713a13e5ee23796466eef4ce2227b9c0405f9958c415de8422e633d"
+    },
+    {
+      "path": "supabase/migrations/04102026_2049_banking_pay_next_current_stored_credit_index.sql",
+      "sha256": "ae63bfbe69c7fc3154dbcd5ecbe87800e13f411038f82cf5e7cc63b1e3c6563e"
+    },
+    {
+      "path": "supabase/migrations/04102026_2106_banking_pay_next_source_inventory_digest.sql",
+      "sha256": "31df0e1994407e98867ea2f9de182a1c8c770b3a3d3c42fbc350c9a138ca17f8"
+    },
+    {
+      "path": "supabase/migrations/04102026_2133_banking_pay_next_destination_cancel_checkpoint.sql",
+      "sha256": "1c86962a8c241f7a9627cead33331d9fc262d4aa5a6df9563ab3974e0985b665"
+    },
+    {
+      "path": "supabase/migrations/04102026_2137_weekly_source_head_origin_evidence_v2.sql",
+      "sha256": "588fe37cb2bc87da4a0cdee3aa308ad99533ec7ad341ddf979c31b1f6c3eff32"
+    },
+    {
+      "path": "supabase/migrations/04102026_2155_weekly_source_accepted_publication_actions_v1.sql",
+      "sha256": "f37a15755f4863ab415b9242de9c3a38ea60369856346300aff74745742e1448"
+    },
+    {
+      "path": "supabase/migrations/05102026_0044_bpay_next_run_work_query_pin_v2.sql",
+      "sha256": "2898d4d77b7406e6b099fd691c3457f8715414e81881695e4885072285c600d7"
+    },
+    {
+      "path": "supabase/migrations/05102026_0155_weekly_source_local_publication_origin_v2.sql",
+      "sha256": "2c065e71ed09ef1d393f30f6518776379c1ea14e43e50c861d624a69ba7391e1"
+    },
+    {
+      "path": "supabase/migrations/05102026_0355_weekly_source_local_flat_origin_cutover_v1.sql",
+      "sha256": "0d74a542023102d246fedbf26cceda01c4b88f94c79cf1dbb01eb7eea35be98f"
+    },
+    {
+      "path": "supabase/migrations/05102026_0428_weekly_source_manual_review_commands.sql",
+      "sha256": "606142d073bbac41b2d8ddff13cc463b9a92f301e6cbaedc11a41789374ab591"
+    },
+    {
+      "path": "supabase/migrations/05102026_0432_weekly_source_later_change_receipt_index.sql",
+      "sha256": "99f580841a8445ad687a916d2ea91c78f1ff5178b2af858fa226ea710bbcb7d8"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

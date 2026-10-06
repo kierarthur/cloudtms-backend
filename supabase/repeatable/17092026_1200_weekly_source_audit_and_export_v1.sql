@@ -2673,8 +2673,9 @@ $function$;
 
 drop trigger if exists weekly_source_candidate_hours_push_head
   on public.weekly_source_entitlement_heads;
-create trigger weekly_source_candidate_hours_push_head
+create constraint trigger weekly_source_candidate_hours_push_head
 after insert or update on public.weekly_source_entitlement_heads
+deferrable initially immediate
 for each row execute function private.weekly_source_candidate_hours_push_head_v1();
 
 create or replace function public.weekly_source_candidate_hours_push_v1(

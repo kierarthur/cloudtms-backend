@@ -560,10 +560,19 @@ begin
     array['source_revision','contract_choices','member_entitlements'],
     'financial_request');
 
+  -- Encoding only: the closed Local producer has no fabricated nullable Final.
+  -- Its factual receipt/whole-vector authority remains the publisher's job.
+  if v_financial#>>'{source_revision,origin_kind}'='PROTECTED_LOCAL_DECISION_V1' then
+    v_source_revision:=private.weekly_source_local_origin_canonical_v2(
+      v_financial->'source_revision');
+  else
   perform private.weekly_source_publication_require_keys_v1(
     v_financial->'source_revision',
-    array['final_revision_id','source_cycle_id','revision_number','manifest_hash',
-          'policy_fingerprint'],
+    case when v_financial#>>'{source_revision,origin_kind}'='CURRENT_FINAL_SOURCE_V1'
+      then array['final_revision_id','source_cycle_id','revision_number','manifest_hash',
+                 'policy_fingerprint','origin_kind','accepted_action_id']
+      else array['final_revision_id','source_cycle_id','revision_number','manifest_hash',
+                 'policy_fingerprint'] end,
     'financial_request.source_revision');
   v_source_revision:=pg_catalog.jsonb_build_object(
     'final_revision_id',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'final_revision_id','financial_request.source_revision.final_revision_id','UUID'),
@@ -571,6 +580,17 @@ begin
     'revision_number',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'revision_number','financial_request.source_revision.revision_number','INT'),
     'manifest_hash',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'manifest_hash','financial_request.source_revision.manifest_hash','HEX32'),
     'policy_fingerprint',private.weekly_source_publication_scalar_v1(v_financial->'source_revision'->'policy_fingerprint','financial_request.source_revision.policy_fingerprint','HEX32'));
+  -- Closed accepted-Final provenance. This only encodes the exact fact; it
+  -- grants no retained-content exception. The integrated publisher must verify
+  -- the immutable acceptance and complete before/vector through both guards.
+  if v_financial#>>'{source_revision,origin_kind}'='CURRENT_FINAL_SOURCE_V1' then
+    v_source_revision:=v_source_revision||pg_catalog.jsonb_build_object(
+      'origin_kind','CURRENT_FINAL_SOURCE_V1',
+      'accepted_action_id',private.weekly_source_publication_scalar_v1(
+        v_financial#>'{source_revision,accepted_action_id}',
+        'financial_request.source_revision.accepted_action_id','UUID'));
+  end if;
+  end if;
 
   if pg_catalog.jsonb_typeof(v_financial->'contract_choices')<>'array'
      or pg_catalog.jsonb_array_length(v_financial->'contract_choices')<>v_member_count then
@@ -2586,6 +2606,10 @@ begin
               'code','WEEKLY_SOURCE_PUBLICATION_SCOPE_TOKEN_UNAVAILABLE')::text;
   end if;
 
+  -- Notification reads the exact certified HEAD only after this coordinator has
+  -- completed every aligned auth pointer, receipt and bundle. Defer ONLY its
+  -- existing HEAD event; financial activation/order and all refusals stay intact.
+  set constraints public.weekly_source_candidate_hours_push_head deferred;
   for v_i in 1..v_n loop
     if v_current_head_ids[v_i] is not null then
       update public.weekly_source_entitlement_heads
@@ -2826,6 +2850,10 @@ begin
        and bundle_revision=v_bundle_revision;
   end if;
 
+  -- The same automatic HEAD trigger now sees the complete approved publication.
+  -- Its original privacy/reconciliation/dedupe/withhold semantics are unchanged.
+  set constraints public.weekly_source_candidate_hours_push_head immediate;
+
   for v_i in 1..v_n loop
     v_result_heads:=v_result_heads||pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object(
@@ -2969,6 +2997,7 @@ begin
   end if;
 
   -- Interface I-1 (WP-03), late-bound.
+  perform private.weekly_source_pay_query_admit_v2();
   v_lock_result:=private.weekly_source_lock_and_resolve_families_v1(
     v_candidate_id,
     v_member_root_ids,

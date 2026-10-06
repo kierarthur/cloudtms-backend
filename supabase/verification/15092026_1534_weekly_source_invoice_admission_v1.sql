@@ -421,6 +421,59 @@ begin
 end;
 $issue_unissue$;
 
+-- A protected TARGET_MANAGED root with no source movement is valid for C1
+-- preparation but cannot be inserted into any invoice by a legacy path.
+do $protected_zero_root$
+declare
+  v_prepare jsonb;
+  v_root uuid;
+  v_invoice uuid:=pg_temp.invoice_for_cycle(
+    'a3000000-0000-4000-8000-000000000001'
+  );
+begin
+  -- The protected-family producer intentionally requires the existing
+  -- payment-authoriser capability.  Elevate only this transaction-local
+  -- fixture actor; invoice admission itself remains an Office-admin action.
+  update public.tms_users
+  set payment_authoriser=true
+  where id='a0000000-0000-4000-8000-000000000001';
+
+  v_prepare:=public.weekly_exceptional_pay_prepare_family_v1(
+    pg_catalog.jsonb_build_object(
+      'actor_user_id','a0000000-0000-4000-8000-000000000001',
+      'source_cycle_id','a4000000-0000-4000-8000-000000000001',
+      'candidate_id','a0000000-0000-4000-8000-000000000003',
+      'client_id','a0000000-0000-4000-8000-000000000002',
+      'contract_id','a0000000-0000-4000-8000-000000000004',
+      'week_ending_date','2026-09-27','work_date','2026-09-25',
+      'start_at_local','2026-09-25 09:00','end_at_local','2026-09-25 17:00',
+      'break_minutes',30,'reason','Protect a claimed shift while source is absent.',
+      'idempotency_key','invoice-proof-protected-zero-0001'
+    )
+  );
+  v_root:=(v_prepare->>'root_timesheet_id')::uuid;
+  if not private.weekly_source_invoice_movement_only_integrity_v1(v_root)
+     or exists(select 1 from public.weekly_source_billing_movements
+               where invoice_timesheet_id=v_root)
+     or exists(select 1 from public.invoice_lines where timesheet_id=v_root) then
+    raise exception 'ASSERTION_FAILED: protected zero-source root integrity failed';
+  end if;
+  begin
+    insert into public.invoice_lines(
+      invoice_id,timesheet_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
+      total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,
+      meta_json,source_key
+    ) values (
+      v_invoice,v_root,'Forbidden protected source-absent line',0,0,0,0,0,
+      0,0,0,0,0,0,'{}'::jsonb,'FORBIDDEN-PROTECTED-ZERO'
+    );
+    raise exception 'ASSERTION_FAILED: legacy invoice path admitted protected zero root';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED' then raise; end if;
+  end;
+end;
+$protected_zero_root$;
+
 -- Gate 7 items G7-1 and G7-2 (24 section 12; 25 section 8).
 -- ONE immutable source presentation line moves between idle DRAFT invoices for
 -- the same Client, including a different source group and finalised week. A
@@ -807,59 +860,6 @@ begin
   end if;
 end;
 $single_presentation_move$;
-
--- A protected TARGET_MANAGED root with no source movement is valid for C1
--- preparation but cannot be inserted into any invoice by a legacy path.
-do $protected_zero_root$
-declare
-  v_prepare jsonb;
-  v_root uuid;
-  v_invoice uuid:=pg_temp.invoice_for_cycle(
-    'a3000000-0000-4000-8000-000000000001'
-  );
-begin
-  -- The protected-family producer intentionally requires the existing
-  -- payment-authoriser capability.  Elevate only this transaction-local
-  -- fixture actor; invoice admission itself remains an Office-admin action.
-  update public.tms_users
-  set payment_authoriser=true
-  where id='a0000000-0000-4000-8000-000000000001';
-
-  v_prepare:=public.weekly_exceptional_pay_prepare_family_v1(
-    pg_catalog.jsonb_build_object(
-      'actor_user_id','a0000000-0000-4000-8000-000000000001',
-      'source_cycle_id','a4000000-0000-4000-8000-000000000001',
-      'candidate_id','a0000000-0000-4000-8000-000000000003',
-      'client_id','a0000000-0000-4000-8000-000000000002',
-      'contract_id','a0000000-0000-4000-8000-000000000004',
-      'week_ending_date','2026-09-27','work_date','2026-09-25',
-      'start_at_local','2026-09-25 09:00','end_at_local','2026-09-25 17:00',
-      'break_minutes',30,'reason','Protect a claimed shift while source is absent.',
-      'idempotency_key','invoice-proof-protected-zero-0001'
-    )
-  );
-  v_root:=(v_prepare->>'root_timesheet_id')::uuid;
-  if not private.weekly_source_invoice_movement_only_integrity_v1(v_root)
-     or exists(select 1 from public.weekly_source_billing_movements
-               where invoice_timesheet_id=v_root)
-     or exists(select 1 from public.invoice_lines where timesheet_id=v_root) then
-    raise exception 'ASSERTION_FAILED: protected zero-source root integrity failed';
-  end if;
-  begin
-    insert into public.invoice_lines(
-      invoice_id,timesheet_id,description,hours_day,hours_night,hours_sat,hours_sun,hours_bh,
-      total_pay_ex_vat,total_charge_ex_vat,margin_ex_vat,vat_rate_pct,vat_amount,total_inc_vat,
-      meta_json,source_key
-    ) values (
-      v_invoice,v_root,'Forbidden protected source-absent line',0,0,0,0,0,
-      0,0,0,0,0,0,'{}'::jsonb,'FORBIDDEN-PROTECTED-ZERO'
-    );
-    raise exception 'ASSERTION_FAILED: legacy invoice path admitted protected zero root';
-  exception when sqlstate '55000' then
-    if sqlerrm<>'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED' then raise; end if;
-  end;
-end;
-$protected_zero_root$;
 
 select pg_temp.assert_true(
   pg_catalog.strpos(pg_catalog.pg_get_functiondef(

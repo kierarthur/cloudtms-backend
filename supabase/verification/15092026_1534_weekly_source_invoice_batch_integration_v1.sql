@@ -98,7 +98,11 @@ begin
   ) into v_definition;
   if v_definition not like '%public.weekly_source_row_timesheet_lineages%'
      or pg_catalog.regexp_replace(v_definition,'[[:space:]]+','','g')
-          not like '%lineage.timesheet_id=any(private.weekly_source_invoice_family_timesheet_ids_v1(financial.timesheet_id))%' then
+          not like '%lineage.timesheet_id=any(candidate.family_ids)%'
+     or pg_catalog.regexp_replace(v_definition,'[[:space:]]+','','g')
+          not like '%private.weekly_source_invoice_family_timesheet_ids_v1(financial.timesheet_id)family_ids%'
+     or pg_catalog.regexp_replace(v_definition,'[[:space:]]+','','g')
+          not like '%family.root_timesheet_id=any(candidate.family_ids)andfamily.ownership_state=''TARGET_MANAGED''%' then
     raise exception 'ordinary invoice generation still admits weekly source-owned timesheets';
   end if;
   if pg_catalog.regexp_replace(v_definition,'[[:space:]]+','','g')
@@ -140,7 +144,7 @@ $verify$;
 \set weekly_source_verification_expense_vat_enabled false
 begin;
 set local request.jwt.claim.role='service_role';
-\ir 15092026_1534_weekly_source_ordinary_pay_projection_v1.sql
+\ir 05102026_0552_weekly_source_invoice_isolation_fixture_v1.sql
 
 create function pg_temp.wp27_groups_naming(p_id uuid, p_now timestamptz)
 returns bigint language sql as $wp27$
@@ -177,6 +181,8 @@ declare
   v_old uuid;
   v_new constant uuid:='fedcba98-0000-4000-8000-0000000027a1';
   v_control constant uuid:='fedcba98-0000-4000-8000-0000000027a2';
+  v_protected_old constant uuid:='fedcba98-0000-4000-8000-0000000027a3';
+  v_protected_new constant uuid:='fedcba98-0000-4000-8000-0000000027a4';
   v_now constant timestamptz:='2026-11-02 09:00+00';
   v_invoice uuid;
   v_family uuid[];
@@ -230,6 +236,55 @@ begin
     raise exception 'WP-27 rotation case: the line owner guard refused an ordinary control Timesheet';
   end if;
 
+  -- The new TARGET_MANAGED branch must be proved WITHOUT a lineage. Keep the
+  -- ordinary positive control on its own family; create/rotate a second family
+  -- and record protected ownership on its old physical root only.
+  create temp table wp27_protected_ts on commit drop as select * from wp27_control_ts;
+  update wp27_protected_ts set timesheet_id=v_protected_old,
+    booking_id='wp27-verifier-protected-only';
+  insert into public.timesheets select * from wp27_protected_ts;
+  create temp table wp27_protected_fin on commit drop as select * from wp27_control_fin;
+  update wp27_protected_fin set id=pg_catalog.gen_random_uuid(),timesheet_id=v_protected_old;
+  insert into public.timesheets_financials select * from wp27_protected_fin;
+  if pg_temp.wp27_groups_naming(v_protected_old,v_now)<1 then
+    raise exception 'WP-27 protected-only fixture was not an ordinary candidate before ownership';
+  end if;
+  update public.timesheets set is_current=false where timesheet_id=v_protected_old;
+  update wp27_protected_ts set timesheet_id=v_protected_new,version=2;
+  insert into public.timesheets select * from wp27_protected_ts;
+  update public.timesheets_financials set is_current=false where timesheet_id=v_protected_old;
+  update wp27_protected_fin set id=pg_catalog.gen_random_uuid(),timesheet_id=v_protected_new,timesheet_version=2;
+  insert into public.timesheets_financials select * from wp27_protected_fin;
+  if pg_temp.wp27_groups_naming(v_protected_new,v_now)<1
+     or pg_temp.wp27_line_probe(v_protected_new,v_invoice)<>'ACCEPTED' then
+    raise exception 'WP-27 rotated protected-only fixture was not an ordinary candidate before ownership';
+  end if;
+  insert into public.weekly_exceptional_pay_target_families(
+    agency_id,candidate_id,contract_id,week_start_date,week_ending_date,
+    root_timesheet_id,root_family_booking_id,ownership_state,
+    first_signed_evidence_fingerprint,current_lifecycle_state,creation_idempotency_key
+  ) select 'a0000000-0000-4000-8000-000000000006'::uuid,c.candidate_id,t.contract_id,
+    t.week_ending_date-6,t.week_ending_date,v_protected_old,t.booking_id,'TARGET_MANAGED',
+    pg_catalog.sha256('WP27_PROTECTED_ONLY'::bytea),'PROTECTED','wp27-verifier-protected-only'
+    from public.timesheets t join public.contracts c on c.id=t.contract_id
+    where t.timesheet_id=v_protected_new;
+  v_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_protected_new);
+  if not (v_protected_old=any(v_family) and v_protected_new=any(v_family))
+     or exists(select 1 from public.weekly_source_row_timesheet_lineages
+       where timesheet_id=any(v_family)) then
+    raise exception 'WP-27 protected-only fixture is not an exact lineage-free rotated family';
+  end if;
+  if pg_temp.wp27_groups_naming(v_protected_old,v_now)<>0
+     or pg_temp.wp27_groups_naming(v_protected_new,v_now)<>0
+     or pg_temp.wp27_line_probe(v_protected_old,v_invoice)<>'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED'
+     or pg_temp.wp27_line_probe(v_protected_new,v_invoice)<>'WEEKLY_SOURCE_INVOICE_MOVEMENT_OWNER_REQUIRED' then
+    raise exception 'WP-27 protected-only ownership did not exclude discovery and direct ordinary lines';
+  end if;
+  if pg_temp.wp27_groups_naming(v_control,v_now)<1
+     or pg_temp.wp27_line_probe(v_control,v_invoice)<>'ACCEPTED' then
+    raise exception 'WP-27 protected-only exclusion changed the unrelated ordinary positive control';
+  end if;
+
   -- rotate the lineage-bound root: same booking, new current version, old
   -- demoted, financial row carried across.  ROT-001 / WP-03 G3 allow
   -- pre-authorisation rotation, and lineage rows exist before authorisation.
@@ -277,30 +332,15 @@ begin
     raise exception 'WP-27 F4: the line owner guard did not fire for the old lineage-bound root';
   end if;
 
-  -- F5: a protected family recorded against the OLD root is this family's
-  -- protected state when the family is approached by the NEW physical root.
-  insert into public.weekly_exceptional_pay_target_families(
-    agency_id,candidate_id,contract_id,week_start_date,week_ending_date,
-    root_timesheet_id,root_family_booking_id,ownership_state,
-    first_signed_evidence_fingerprint,current_lifecycle_state,creation_idempotency_key
-  )
-  select 'a0000000-0000-4000-8000-000000000006'::uuid, -- the fixture agency, never a real group's
-         contract_row.candidate_id,timesheet_row.contract_id,
-         timesheet_row.week_ending_date-6,timesheet_row.week_ending_date,
-         v_old,pg_catalog.btrim(timesheet_row.booking_id),'TARGET_MANAGED',
-         pg_catalog.sha256('WP27_ROTATION_CASE'::bytea),'PROTECTED',
-         'wp27-verifier-rotation-family'
-  from public.timesheets timesheet_row
-  join public.contracts contract_row on contract_row.id=timesheet_row.contract_id
-  where timesheet_row.timesheet_id=v_new;
-
+  -- F5 is now the stronger protected-only proof above; do not insert a second
+  -- target family sharing its immutable agency/Candidate/contract/week key.
   if exists(select 1 from public.weekly_exceptional_pay_target_families
-            where root_timesheet_id=v_new and ownership_state='TARGET_MANAGED') then
+            where root_timesheet_id=v_protected_new and ownership_state='TARGET_MANAGED') then
     raise exception 'WP-27 F5: the probe family was recorded against the wrong physical root';
   end if;
   if not exists(select 1 from public.weekly_exceptional_pay_target_families
                 where root_timesheet_id=any(
-                  private.weekly_source_invoice_family_timesheet_ids_v1(v_new))
+                  private.weekly_source_invoice_family_timesheet_ids_v1(v_protected_new))
                   and ownership_state='TARGET_MANAGED') then
     raise exception 'WP-27 F5: a protected family on a rotated sibling is invisible to the family predicate';
   end if;

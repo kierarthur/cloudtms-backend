@@ -9,6 +9,9 @@
 
 begin;
 
+-- Compile the real qualified-coverage helpers before their SQL callers.
+\ir 05102026_1417_weekly_source_coverage_support/qualified_coverage.inc
+
 create or replace function private.weekly_source_candidate_generation_current_v1(p_generation_id uuid)
 returns boolean language sql stable security definer
 set search_path to 'pg_catalog','pg_temp'
@@ -54,7 +57,8 @@ as $function$
     join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     left join public.weekly_timesheet_submission_request_memberships requested on requested.id=event.requested_week_membership_id
-    where event.id=p_event_id and (event.requested_week_membership_id is null
+    where event.id=p_event_id and not private.weekly_source_covered_hours_incident_v1(incident.id)
+      and (event.requested_week_membership_id is null
       or (requested.state='SUBMITTED_WITH_ISSUES' and requested.client_id=incident.client_id
         and requested.contract_id=comparison.contract_id
         and work_event.work_date>requested.week_ending-7 and work_event.work_date<=requested.week_ending
@@ -229,7 +233,8 @@ begin
   join public.weekly_work_events work_event on work_event.id=incident.work_event_id
   join public.clients client on client.id=incident.client_id
   where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
-    and incident.state='OPEN';
+    and incident.state='OPEN'
+    and not private.weekly_source_covered_hours_incident_v1(incident.id);
   return pg_catalog.jsonb_build_object(
     'ok',true,'request_kind','CHECK_HOURS','title','Check your Timesheet hours',
     'deadline_at_utc',v_generation.deadline_at_utc,'items',v_items
@@ -545,6 +550,7 @@ begin
           and work_event.work_date>v_membership.week_ending-7
           and work_event.work_date<=v_membership.week_ending
           and incident.manager_potential_state='AVAILABLE'
+          and not private.weekly_source_covered_hours_incident_v1(incident.id)
           and not private.weekly_source_query_manager_row_owned_v1(
             v_route_id,incident.id,incident.episode_number
           );
@@ -675,10 +681,15 @@ begin
     v_actor,'ACCEPT_SYSTEM_HOURS',(v_guard->>'source_group_id')::uuid,null,
     (v_guard->>'finalisation_week_ending')::date
   );
+  perform private.weekly_source_pay_query_admit_v2();
   for v_incident in
     select incident.* from public.weekly_discrepancy_incidents incident
     where incident.id=any(v_requested) order by incident.id for update
   loop
+    v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+    perform private.weekly_source_office_authority_v1(
+      v_actor,'ACCEPT_SYSTEM_HOURS',(v_guard->>'source_group_id')::uuid,null,
+      (v_guard->>'finalisation_week_ending')::date);
     if v_incident.source_cycle_id<>v_cycle_id or v_incident.state<>'OPEN' then
       raise exception 'WEEKLY_SOURCE_ACCEPT_SYSTEM_SELECTION_STALE' using errcode='40001';
     end if;
@@ -871,7 +882,9 @@ begin
   set response_state='FILTERED_RESOLVED'
   from public.weekly_discrepancy_incidents incident
   where item.review_batch_id=v_batch.id and item.incident_id=incident.id
-    and item.response_state='UNANSWERED' and incident.state<>'OPEN';
+    and item.response_state='UNANSWERED' and (incident.state<>'OPEN'
+      or (item.incident_episode=incident.episode_number
+        and private.weekly_source_covered_hours_incident_v1(incident.id)));
 
   select coalesce(pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
@@ -945,6 +958,7 @@ begin
     join public.candidates candidate on candidate.id=incident.candidate_id
     join public.weekly_source_groups source_group on source_group.id=incident.source_group_id
     where item.review_batch_id=v_batch.id and item.response_state='UNANSWERED'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
   ) row_data;
   if v_remaining=0 and v_batch.state='ACTIVE' then
     update public.weekly_manager_review_batches
@@ -1065,6 +1079,7 @@ begin
       'answered_count',v_existing_count
     );
   end if;
+  perform private.weekly_source_pay_query_admit_v2();
   select receipt.* into strict v_receipt
   from public.weekly_manager_route_receipts receipt
   join public.weekly_manager_review_batches batch on batch.id=receipt.review_batch_id
@@ -1110,6 +1125,7 @@ begin
     );
     if v_incident.state<>'OPEN' or v_incident.episode_number<>(v_response->>'incident_episode')::integer
        or v_item.incident_episode<>v_incident.episode_number
+       or private.weekly_source_covered_hours_incident_v1(v_incident.id)
        or v_expected<>v_comparison.material_comparison_fingerprint then
       raise exception 'WEEKLY_SOURCE_MANAGER_RESPONSE_ITEM_STALE' using errcode='40001';
     end if;
@@ -1183,7 +1199,7 @@ begin
     -- open-incident authorisation hold until Office accepts current source
     -- hours or protects pay for this existing work identity.
     if v_kind in ('SYSTEM_CORRECT','CANDIDATE_DID_NOT_WORK')
-       and not (v_kind='SYSTEM_CORRECT' and v_incident.candidate_action_state='RESPONDED'
+       and not (v_incident.candidate_action_state='RESPONDED'
          and exists (
            select 1 from public.weekly_discrepancy_events candidate_answer
            where candidate_answer.incident_id=v_incident.id
@@ -1466,6 +1482,7 @@ begin
         on incident.id=membership.incident_id
       where membership.candidate_generation_id=v_command.candidate_generation_id
         and membership.state='ACTIONABLE' and incident.state='OPEN'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
     ) and not exists(
       select 1
       from public.weekly_candidate_outreach_generations generation
@@ -1490,6 +1507,8 @@ begin
       join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
       where membership.candidate_generation_id=v_command.candidate_generation_id
         and membership.state='ACTIONABLE'
+        and incident.state='OPEN'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
       union all
       select null::uuid,membership.client_id,membership.contract_id,membership.week_ending
       from public.weekly_candidate_outreach_generations generation
@@ -1540,6 +1559,7 @@ begin
         and (
           item.response_state<>'UNANSWERED'
           or incident.state<>'OPEN'
+          or private.weekly_source_covered_hours_incident_v1(incident.id)
           or item.incident_episode<>incident.episode_number
           or item.sent_comparison_revision_id<>incident.current_comparison_revision_id
           or item.sent_comparison_fingerprint<>comparison.material_comparison_fingerprint
@@ -1551,6 +1571,7 @@ begin
       join public.weekly_discrepancy_incidents incident on incident.id=item.incident_id
       where batch.message_render_id=v_render.id
         and item.response_state='UNANSWERED' and incident.state='OPEN'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
     ) then
       update public.weekly_message_dispatch_commands set state='RETIRED',lease_owner=null,
         lease_token=null,lease_expires_at_utc=null where id=v_command.id;
@@ -2084,6 +2105,7 @@ begin
         join public.candidates candidate on candidate.id=incident.candidate_id
         where membership.recipient_generation_id=v_generation.id
           and incident.state='OPEN' and incident.manager_action_state<>'RESPONDED'
+          and not private.weekly_source_covered_hours_incident_v1(incident.id)
           and (
             coalesce(pg_catalog.array_length(v_intent.sorted_due_event_ids,1),0)=0
             or membership.candidate_cohort_id=any(
@@ -2315,7 +2337,10 @@ begin
       and (
         (generation.request_kind='CHECK_HOURS' and exists(
           select 1 from public.weekly_candidate_outreach_memberships membership
+          join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
           where membership.candidate_generation_id=generation.id and membership.state='ACTIONABLE'
+            and incident.state='OPEN'
+            and not private.weekly_source_covered_hours_incident_v1(incident.id)
         ))
         or
         (generation.request_kind='SUBMIT_TIMESHEET' and exists(
@@ -2348,6 +2373,8 @@ begin
       join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
       join public.weekly_issue_comparison_revisions comparison on comparison.id=incident.current_comparison_revision_id
       where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
+        and incident.state='OPEN'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
       on conflict (event_kind,idempotency_key) do nothing;
     end if;
     v_candidate_count:=v_candidate_count+1;
@@ -2543,6 +2570,7 @@ begin
     );
   end if;
 
+  perform private.weekly_source_pay_query_admit_v2();
   select * into strict v_generation
   from public.weekly_candidate_outreach_generations
   where id=v_generation_id for update;
@@ -2594,7 +2622,8 @@ begin
       raise exception 'WEEKLY_SOURCE_CANDIDATE_RESPONSE_ITEM_STALE' using errcode='40001';
     end;
     if v_incident.state<>'OPEN' or v_incident.candidate_id<>v_candidate_id
-       or v_incident.source_cycle_id<>v_cycle.id then
+       or v_incident.source_cycle_id<>v_cycle.id
+       or private.weekly_source_covered_hours_incident_v1(v_incident.id) then
       raise exception 'WEEKLY_SOURCE_CANDIDATE_RESPONSE_ITEM_STALE' using errcode='40001';
     end if;
     v_expected:=private.weekly_source_query_hex32_v1(
@@ -2913,6 +2942,7 @@ begin
   loop
     if v_incident.source_cycle_id<>v_cycle_id or v_incident.state<>'OPEN'
        or v_incident.manager_potential_state<>'AVAILABLE'
+       or private.weekly_source_covered_hours_incident_v1(v_incident.id)
        or v_incident.manager_action_state in ('RESPONDED','NOT_REQUIRED') then
       raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE' using errcode='40001';
     end if;
@@ -2974,6 +3004,7 @@ begin
       on comparison.id=incident.current_comparison_revision_id
      and comparison.candidate_timesheet_id is not null
     where cohort.id=any(v_selected_cohort_ids)
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
       and not (incident.id=any(v_requested))
   ) then
     raise exception 'WEEKLY_SOURCE_MANAGER_SEND_SELECTION_STALE' using errcode='40001';
@@ -3147,6 +3178,7 @@ begin
       join public.weekly_discrepancy_incidents incident on incident.id=membership.incident_id
       where membership.candidate_generation_id=v_generation.id and membership.state='ACTIONABLE'
         and incident.state='OPEN' and incident.candidate_action_state='ASKED'
+        and not private.weekly_source_covered_hours_incident_v1(incident.id)
         and membership.comparison_revision_id=incident.current_comparison_revision_id))
     or (v_generation.request_kind='SUBMIT_TIMESHEET' and not exists(
       select 1 from public.weekly_timesheet_submission_requests request
@@ -3246,6 +3278,7 @@ begin
   join public.weekly_work_events work_event on work_event.id=incident.work_event_id
   where incident.source_cycle_id=v_cycle_id and incident.candidate_id=v_candidate_id
     and incident.client_id=v_client_id and incident.state='OPEN'
+    and not private.weekly_source_covered_hours_incident_v1(incident.id)
     and incident.candidate_action_state not in ('RESPONDED','NOT_REQUIRED');
   if v_current is null or v_current is distinct from v_requested then
     raise exception 'WEEKLY_SOURCE_ASK_CANDIDATE_SELECTION_STALE' using errcode='40001';
@@ -3636,6 +3669,7 @@ begin
     join public.candidates candidate on candidate.id=incident.candidate_id
     where cohort.source_cycle_id=v_route.source_cycle_id
       and cohort.manager_recipient_route_key=v_route.normalised_recipient_hash
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
   ),'[]'::jsonb);
   if pg_catalog.jsonb_array_length(v_membership)=0 then
     return pg_catalog.jsonb_build_object('ok',true,'status','NO_MANAGER_ACTIONABLE_INCIDENTS');
@@ -3739,6 +3773,7 @@ begin
     join public.candidates candidate on candidate.id=incident.candidate_id
     where cohort.source_cycle_id=v_route.source_cycle_id
       and cohort.manager_recipient_route_key=v_route.normalised_recipient_hash
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
     order by private.weekly_source_query_ascii_fold_v1(client.name) collate "C",
              client.id::text collate "C",
              private.weekly_source_query_ascii_fold_v1(coalesce(
@@ -4153,6 +4188,7 @@ begin
   join public.weekly_work_events work_event on work_event.id=incident.work_event_id
   where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
     and incident.client_id=p_client_id and incident.state='OPEN'
+    and not private.weekly_source_covered_hours_incident_v1(incident.id)
     and (
       not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
         p_client_id,comparison.contract_id,work_event.work_date)
@@ -4205,6 +4241,7 @@ begin
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
       and incident.client_id=p_client_id and incident.state='OPEN'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
       and (
         not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
           p_client_id,comparison.contract_id,work_event.work_date)
@@ -4267,6 +4304,7 @@ begin
     join public.weekly_work_events work_event on work_event.id=incident.work_event_id
     where incident.source_cycle_id=p_source_cycle_id and incident.candidate_id=p_candidate_id
       and incident.client_id=p_client_id and incident.state='OPEN'
+      and not private.weekly_source_covered_hours_incident_v1(incident.id)
       and (
         not private.weekly_source_waiting_requested_week_v1(p_source_cycle_id,p_candidate_id,
           p_client_id,comparison.contract_id,work_event.work_date)
@@ -4730,7 +4768,11 @@ begin
   perform private.weekly_source_office_authority_v1(
     v_actor,'RECHECK_SOURCE',v_group_id,null,(v_guard->>'finalisation_week_ending')::date
   );
+  perform private.weekly_source_pay_query_admit_v2();
   perform 1 from public.weekly_source_cycles where id=v_cycle_id for update;
+  v_guard:=private.weekly_source_query_current_publication_v1(v_cycle_id,v_publication_id);
+  perform private.weekly_source_office_authority_v1(
+    v_actor,'RECHECK_SOURCE',v_group_id,null,(v_guard->>'finalisation_week_ending')::date);
 
   for v_issue in
     select value

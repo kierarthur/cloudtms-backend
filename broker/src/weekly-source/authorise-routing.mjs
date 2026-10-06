@@ -18,7 +18,7 @@
 // no new parallel route is introduced beside the one the Office actually clicks.
 //
 // WHAT DECIDES.  The database, not the broker.  The Weekly Source Office
-// presentation owner reports `applicable`, which is true exactly when the Weekly
+// scope owner reports `applicable`, which is true exactly when the Weekly
 // Source lifecycle view model mounts for the week: WEEKLY scope, HOURS line
 // type, a Contract, and the Client in an active Weekly Source group valid for
 // that week ending date.  None of that rule is reproduced here.
@@ -27,14 +27,13 @@
 // refused rather than sent to the ordinary owner, because authorising a Weekly
 // Source week through the ordinary owner is exactly the silent defect F2
 // reports: it succeeds, writes no generation, and leaves the week permanently
-// unpublishable.  `SOURCE_CHECK_IN_PROGRESS` is the presentation owner's own
-// refusal for a source-authority week with no current publication and is
-// surfaced unchanged rather than reinterpreted.
+// unpublishable. Source publication, pay-query and financial admission remain
+// with the actual first-authorisation owner, not this informational scope read.
 //
 // This module changes no database owner, adds no privilege, and decides no
-// money value.
+// money value. Paid/processing information is not an authorisation dependency.
 
-export const WEEKLY_SOURCE_AUTHORISE_PROBE_RPC = 'weekly_source_office_timesheet_presentation_v1';
+export const WEEKLY_SOURCE_AUTHORISE_PROBE_RPC = 'weekly_source_office_authorise_scope_v1';
 export const WEEKLY_SOURCE_FIRST_AUTHORISE_RPC = 'weekly_source_first_authorise_v1';
 
 /** PostgREST returns a scalar; the broker's callers unwrap the same three shapes. */
@@ -79,6 +78,14 @@ export async function weeklySourceAuthoriseRouting(rpc, timesheetId, actorUserId
       ),
       WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
     );
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+        || Object.keys(payload).length !== 2
+        || !Object.prototype.hasOwnProperty.call(payload, 'contract')
+        || !Object.prototype.hasOwnProperty.call(payload, 'applicable')
+        || payload.contract !== 'WEEKLY_SOURCE_AUTHORISE_SCOPE_V1'
+        || typeof payload.applicable !== 'boolean') {
+      throw new Error('WEEKLY_SOURCE_AUTHORISE_SCOPE_CONTRACT_INVALID');
+    }
   } catch (error) {
     const text = rpcErrorText(error);
     if (/SOURCE_CHECK_IN_PROGRESS/i.test(text)) {

@@ -1116,7 +1116,7 @@ $unclassified_removals$;
 -- acknowledged one fails the release.
 --
 -- READ THIS BEFORE RELYING ON IT. Acknowledgement is drift detection, not proof.
--- The twenty-two routines below are recorded because they execute dynamic SQL, not
+-- The exact routines below are recorded because they execute dynamic SQL, not
 -- because anyone has proved that what they build cannot touch evidence. Three of
 -- them -- public.codex_debug_exec_sql, codex_debug_query_sql and
 -- codex_debug_select_sql -- take the SQL to run AS A PARAMETER, are SECURITY
@@ -1137,6 +1137,24 @@ create temporary table wp18_dynamic_sql_acknowledged (
 );
 insert into wp18_dynamic_sql_acknowledged
   (schema_name, routine_name, identity_arguments, definition_sha256) values
+-- BEGIN EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
+-- Twelve fixed-query readers: reviewed saved bodies equal the actual RELEASE8
+-- catalogue. These are exact installed-definition hashes, not source-file hashes.
+-- No prefix exemption or arbitrary-SQL permission; acknowledgement is NOT proof
+-- that dynamic SQL cannot write evidence. Existing scanner/refusal stays intact.
+  ('private','bpay_next_current_case_page_v1','p_candidate_id uuid, p_after_case_id uuid, p_limit integer','68d98f65f4ed6a9033c3066136d6f04ee99967cd85a1277616abbf3181f87df6'),
+  ('private','bpay_next_current_stored_credit_page_v1','p_candidate_id uuid, p_after_legacy_case_id uuid, p_limit integer','0b450bf8cce85f2df493206827fa04f0097987f02bab4a7df133c41465bfa955'),
+  ('private','bpay_next_current_work_page_v1','p_candidate_id uuid, p_after_week date, p_after_work_id uuid, p_limit integer','b4ed30958ceda2b5f985bbc988392bd78bc9402d25d4a8ef38ce3e631ba7502d'),
+  ('private','bpay_next_return_cash_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','58829da8c927cba024275c7f1671c00f9c669b503ce645605754a5b104b2f76e'),
+  ('private','bpay_next_worker_status_page_v1','p_run_id uuid, p_worker_id uuid, p_after_transfer_no integer, p_limit integer','0deaa3a4e8837bbf589c96da1b7c0c816293136389cd254904dd8c64b170ac16'),
+  ('private','weekly_source_candidate_head_hours_v2','p_root_timesheet_id uuid','b9efe6c24313518405e74f44e76c10e8004cfb2180380067c9fb2775aeb18705'),
+  ('private','weekly_source_inventory_approval_basis_v2','p_root_timesheet_id uuid, p_inventory jsonb','31f8d99baef2085b88b2c8aaf98af4c144f3e8840d7827e0bac8ca2fa9dbc027'),
+  ('private','weekly_source_office_next_owner_v1','','001751c12bc8813cb2072ca66f086d6c6446899c676f8b02399f5dd32f6e801a'),
+  ('private','weekly_source_office_next_paid_evidence_page_v1','p_actor_user_id uuid, p_root_timesheet_id uuid, p_kind text, p_context_id uuid, p_after jsonb, p_limit integer','157e793c64dd7f77f48bf66f0c122a3700c5c25080d2eddb2b76b98390f3e666'),
+  ('public','bpay_next_frozen_detail_page_v1','p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','4de2038c498221730a7198238380c99c55b35d72d1e19dda4d1d9060c7edc82a'),
+  ('public','bpay_next_original_csv_advice_page_v1','p_actor_user_id uuid, p_instruction_id uuid, p_kind text, p_run_work_id uuid, p_run_line_id uuid, p_shift_detail_id uuid, p_after_work_id uuid, p_after_member_no bigint, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','ee1586e2b496f5ea44b2654064c5816c001d48fbf1d24e1e2af168b030630329'),
+  ('public','bpay_next_source_paid_evidence_page_v1','p_request jsonb','be406d7689b0c10d08538797125488265eaaf32b6c13d7d0bee851ace6f41ca1'),
+-- END EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
   ('private','_invoice_candidate_revision_trigger_v2','','bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9'),
   ('private','_invoice_candidate_triggers_install_v2','','c9d4486ef51f8e8e42813a34bcaf378438c77dc620c95457d1e2559bae6fb16a'),
   ('private','_invoice_generation_advance_batch_legacy_20260726','p_claims jsonb, p_now_utc timestamp with time zone','25865e0a1371419207009b54706654934ca476ab6ee2d159cd93367741d112ef'),
@@ -1159,14 +1177,16 @@ insert into wp18_dynamic_sql_acknowledged
   ('public','id_consolidation_run_draft_commit','p_id_ref text, p_bank_upload_code text, p_actor_user_id uuid','d4280107db960db290d515b52dae737b8ec6739561e60579f28acb170d246bb2'),
   ('public','invoice_issue_one','p_invoice_id uuid, p_actor_user_id uuid','c49c6056de2d20dbf45e5be231a10ad2e5fd91fefc37b5c431e94e355a9b817c'),
   ('public','pay_remittance_maybe_queue_for_trigger','p_pay_batch_id uuid, p_trigger text, p_scope text, p_actor_user_id uuid, p_only_confirmed boolean, p_root_operation_id uuid, p_operation_mode boolean','1745985bd2a722750514f77a5ce5f4ae5744b23dc2c4f0c37f3a8e53faad54db'),
-  -- Banking Pay Stage 2 A35 adds only SET plan_cache_mode=force_custom_plan; the
-  -- body (prosrc) is unchanged. Exact final installed definition on NEW, baseline
-  -- UPGRADE and seeded UPGRADE. Still an acknowledgement, NOT a safety proof.
-  ('public','pay_timesheet_summary_pay_state_refresh_trigger','','eebad381e621378d5553d7ab34f6eae1ad143214df0fe0ac28dee718543c1953'),
+  -- A35's plan-cache setting is retained. A8 adds only the initial locked-owner
+  -- callback gate: removing its exact marked block reconstructs the prior
+  -- installed hash eebad381... . No old writer/ACL/body is otherwise changed.
+  -- Exact RELEASE8 acknowledgement, NOT an absence/safety proof.
+  ('public','pay_timesheet_summary_pay_state_refresh_trigger','','9f8c6601ba521b79488da734ab5ebbb2c37fcfd89abd28607043f7b6ab92dacb'),
   ('public','pay_workbench_candidate_dirty_apply_job_process','p_job_id uuid, p_limit integer','1f03edcfb744072a75aea55a6d2accde8ec446c0b167c8fe152054e257f5200e'),
   ('public','pay_workbench_claim_due_jobs','p_limit integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid, p_allowed_job_types text[]','8849ce5f2ba63b8fb68fbb82496993cc3a338e994cddcf9f012340db250648c5'),
   ('public','pay_workbench_enqueue_candidate_refresh','p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb','afff514075f85f88642783e6b72db24b64e922b4112274473f67e33c92694d79'),
-  ('public','pay_workbench_mark_candidate_dirty','','c01fb95d6d26d1edc413fbceec53b21331bf919adb9142f7aa11e22caee49abf'),
+  -- The same exact A8 gate alone reconstructs prior c01fb95d... on removal.
+  ('public','pay_workbench_mark_candidate_dirty','','bd837271b3094d9e972a822de07b8febf066fb4b0f0d8208fb57be983b650202'),
   ('public','pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1','p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb','5a7aabeaf72d13d040e05e7b1179f2e10d40587dd553f54a23c04cc08bd66b18'),
   ('public','pay_workbench_preview_rows_materialise_chunk','p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer','a956d26311d7eb018b6c55de20049ecca5edb85e1a48e16dd386b10b8d400add');
 do $dynamic_sql$
@@ -1262,7 +1282,57 @@ $mask_integrity$;
 do $identifier_integrity$
 declare
   offending text;
+  factual_oid oid;
+  factual_unicode_literal text := $factual_unicode_literal$U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'$factual_unicode_literal$;
 begin
+  -- BEGIN EXACT FACTUAL EMAIL NON-WRITER CLASSIFICATION
+  -- This one immutable SQL predicate has three exact U& single-quoted string
+  -- literals, not Unicode-quoted identifiers. The original mask leaves their
+  -- introducers behind. Pin its actual full definition/body and posture before
+  -- excluding ONLY its validated OID from 8f; no other scanner is bypassed.
+  factual_oid := pg_catalog.to_regprocedure(
+    'private.bpay_next_legacy_email_is_factual_v1(pg_catalog.text,pg_catalog.text,pg_catalog.text)');
+  if factual_oid is null or not exists (
+    select 1
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    join pg_catalog.pg_language l on l.oid=p.prolang
+    where p.oid=factual_oid
+      and n.nspname='private' and p.proname='bpay_next_legacy_email_is_factual_v1'
+      and p.prokind='f' and l.lanname='sql'
+      and p.prorettype='pg_catalog.bool'::regtype and not p.proretset
+      and p.provolatile='i' and p.proparallel='s'
+      and not p.prosecdef and not p.proisstrict and not p.proleakproof
+      and p.proowner=current_user::regrole::oid
+      and p.proconfig is not distinct from array['search_path=pg_catalog']::text[]
+      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+        pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid),chr(13)||chr(10),chr(10)),
+        'UTF8')),'hex')='098100b4c7c4591507d7412c925d0dd9efc9197465ecec6c8ce0e3d7bd4a9990'
+      and pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+        pg_catalog.replace(p.prosrc,chr(13)||chr(10),chr(10)),
+        'UTF8')),'hex')='89ad0431423b6847481fd6c7165fda696d0c831f02b78b3dee0f1e88ee87a988'
+      and pg_catalog.array_length(pg_catalog.string_to_array(p.prosrc,factual_unicode_literal),1)=4
+      and pg_catalog.replace(p.prosrc,factual_unicode_literal,'') !~ '[Uu]&'
+      and p.prosrc !~ '[Uu]&"'
+      and (select pg_catalog.count(*) from pg_catalog.aclexplode(
+        coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))))=2
+      and not exists (
+        select 1 from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where a.privilege_type<>'EXECUTE' or a.is_grantable or a.grantor<>p.proowner
+          or a.grantee not in (p.proowner,pg_catalog.to_regrole('service_role')::oid))
+      and exists (
+        select 1 from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where a.grantee=p.proowner and a.privilege_type='EXECUTE')
+      and exists (
+        select 1 from pg_catalog.aclexplode(
+          coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where a.grantee=pg_catalog.to_regrole('service_role')::oid and a.privilege_type='EXECUTE')
+  ) then
+    raise exception using errcode='55000',message='WEEKLY_SOURCE_FACTUAL_EMAIL_NON_WRITER_CHANGED';
+  end if;
+  -- END EXACT FACTUAL EMAIL NON-WRITER CLASSIFICATION
   select pg_catalog.string_agg(distinct
            def.schema_name || '.' || def.routine_name || '(' || def.identity_arguments || ')',
            E'\n  ')
@@ -1277,7 +1347,8 @@ begin
       where inventory_row.schema_name = def.schema_name
         and inventory_row.routine_name = def.routine_name
         and inventory_row.identity_arguments = def.identity_arguments
-    );
+    )
+    and def.oid<>factual_oid;
 
   if offending is not null then
     raise exception E'WEEKLY_SOURCE_EVIDENCE_IDENTIFIER_NOT_CANONICAL:\n  %\nThis routine carries a Unicode-escape identifier introducer, or a quoted identifier in a write target list, that section 2 could not reduce to a bare relation name. A lexical scan cannot prove what relation it targets. Classify it by hand in section 1 or rewrite the identifier plainly.', offending;
@@ -1422,13 +1493,20 @@ begin
   ) as triggers;
 
   expected := array[
+    'pay_advance_reservations|bpay_next_legacy_writer_fence_row|private.bpay_next_legacy_writer_fence_v1',
+    'pay_advance_reservations|bpay_next_legacy_writer_fence_truncate|private.bpay_next_legacy_writer_fence_v1',
+    'pay_advance_reservations|bpay_next_stored_credit_legacy_guard_v1|private.bpay_next_stored_credit_legacy_guard_v1',
     'pay_advance_reservations|trg_bpay_wb_reservations_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_advance_reservations|trg_bpay_wb_reservations_insert_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_advance_reservations|trg_bpay_wb_reservations_update_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
+    'pay_bank_transfers|bpay_next_legacy_writer_fence_row|private.bpay_next_legacy_writer_fence_v1',
+    'pay_bank_transfers|bpay_next_legacy_writer_fence_truncate|private.bpay_next_legacy_writer_fence_v1',
     'pay_bank_transfers|trg_bpay_wb_transfers_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_bank_transfers|trg_pay_bank_transfers_normalise_status_biu|public._pay_bank_transfers_normalise_status_biu',
     'pay_bank_transfers|trg_ts_summary_pay_cache_transfers_au|public.pay_timesheet_summary_pay_state_refresh_trigger',
     'pay_batch_items|bpay_item_work_reference_v1|private.bpay_item_work_reference_v1',
+    'pay_batch_items|bpay_next_legacy_writer_fence_row|private.bpay_next_legacy_writer_fence_v1',
+    'pay_batch_items|bpay_next_legacy_writer_fence_truncate|private.bpay_next_legacy_writer_fence_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_insert_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
     'pay_batch_items|trg_bpay_wb_batch_items_update_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
@@ -1436,6 +1514,8 @@ begin
     'pay_batch_items|trg_retention_capture_pay_batch_items_update|public.timesheet_financial_retention_capture_trigger_v1',
     'pay_batch_items|trg_ts_summary_pay_cache_items_ad|public.pay_timesheet_summary_pay_state_refresh_trigger',
     'pay_batch_items|trg_ts_summary_pay_cache_items_au|public.pay_timesheet_summary_pay_state_refresh_trigger',
+    'pay_batches|bpay_next_legacy_writer_fence_row|private.bpay_next_legacy_writer_fence_v1',
+    'pay_batches|bpay_next_legacy_writer_fence_truncate|private.bpay_next_legacy_writer_fence_v1',
     'pay_batches|trg_banking_alert_success_events_pay_batches_insert|public.banking_alert_success_event_capture_pay_batch',
     'pay_batches|trg_banking_alert_success_events_pay_batches_update|public.banking_alert_success_event_capture_pay_batch',
     'pay_batches|trg_bpay_wb_batches_delete_dirty_v1|private.pay_workbench_financial_scope_dirty_transition_v1',
@@ -1449,6 +1529,64 @@ begin
       pg_catalog.array_to_string(expected, E'\n  '),
       pg_catalog.array_to_string(coalesce(observed, array[]::text[]), E'\n  ');
   end if;
+
+  -- BEGIN EXACT NEXT EVIDENCE GUARD POSTURE
+  -- The nine added bindings were individually source/catalogue-reviewed:
+  -- eight ENABLE ALWAYS 0550 fences and one ordinary 1827 claimed-credit guard.
+  -- Pin their shape too; adding names alone must not admit a disabled/partial
+  -- fence, a WHEN exemption, or a changed/granted guard. The assertion callee
+  -- retains the actual singleton FOR SHARE owner check; no module activation.
+  select pg_catalog.string_agg(approved.table_name || '|' || approved.trigger_name, E'\n  ')
+  into offending
+  from (values
+      ('pay_advance_reservations','bpay_next_legacy_writer_fence_row','private.bpay_next_legacy_writer_fence_v1()','A',31),
+      ('pay_advance_reservations','bpay_next_legacy_writer_fence_truncate','private.bpay_next_legacy_writer_fence_v1()','A',34),
+      ('pay_advance_reservations','bpay_next_stored_credit_legacy_guard_v1','private.bpay_next_stored_credit_legacy_guard_v1()','O',31),
+      ('pay_bank_transfers','bpay_next_legacy_writer_fence_row','private.bpay_next_legacy_writer_fence_v1()','A',31),
+      ('pay_bank_transfers','bpay_next_legacy_writer_fence_truncate','private.bpay_next_legacy_writer_fence_v1()','A',34),
+      ('pay_batch_items','bpay_next_legacy_writer_fence_row','private.bpay_next_legacy_writer_fence_v1()','A',31),
+      ('pay_batch_items','bpay_next_legacy_writer_fence_truncate','private.bpay_next_legacy_writer_fence_v1()','A',34),
+      ('pay_batches','bpay_next_legacy_writer_fence_row','private.bpay_next_legacy_writer_fence_v1()','A',31),
+      ('pay_batches','bpay_next_legacy_writer_fence_truncate','private.bpay_next_legacy_writer_fence_v1()','A',34)
+  ) as approved(table_name,trigger_name,routine_identity,enabled,trigger_type)
+  left join pg_catalog.pg_namespace n on n.nspname='public'
+  left join pg_catalog.pg_class c on c.relnamespace=n.oid and c.relname=approved.table_name
+  left join pg_catalog.pg_trigger t on t.tgrelid=c.oid and t.tgname=approved.trigger_name
+  where t.oid is null or t.tgisinternal
+     or t.tgfoid is distinct from pg_catalog.to_regprocedure(approved.routine_identity)
+     or t.tgenabled::text is distinct from approved.enabled
+     or t.tgtype is distinct from approved.trigger_type::smallint
+     or t.tgnargs<>0 or t.tgqual is not null or t.tgattr::text<>''
+     or t.tgoldtable is not null or t.tgnewtable is not null
+     or t.tgdeferrable or t.tginitdeferred or t.tgconstraint<>0;
+  if offending is not null then
+    raise exception E'WEEKLY_SOURCE_NEXT_EVIDENCE_GUARD_BINDING_CHANGED:\n  %', offending;
+  end if;
+
+  select pg_catalog.string_agg(approved.routine_identity, E'\n  ')
+  into offending
+  from (values
+      ('private.bpay_next_legacy_writer_fence_v1()','trigger',true,'362abb92f3a6db9ab9428a89053bc8fb8f649268f3314e3a67f58f88d4e1a534'),
+      ('private.bpay_next_assert_legacy_writer_v1()','void',true,'10341a6edebb62f21922cdec5c1871497e0fb3d0af858d77b6166992bee5855f'),
+      ('private.bpay_next_stored_credit_legacy_guard_v1()','trigger',false,'54ed6be1a6d91d559eec3b65d2ffe65d8f41e5779ff6851d9d6ebcc5c557b37a')
+  ) as approved(routine_identity,result_type,security_definer,definition_sha256)
+  left join pg_catalog.pg_proc p on p.oid=pg_catalog.to_regprocedure(approved.routine_identity)
+  left join pg_catalog.pg_language l on l.oid=p.prolang
+  where p.oid is null or p.proowner is distinct from current_user::regrole::oid
+     or p.prokind<>'f' or l.lanname is distinct from 'plpgsql'
+     or p.prorettype is distinct from pg_catalog.to_regtype('pg_catalog.' || approved.result_type)
+     or p.provolatile<>'v' or p.prosecdef is distinct from approved.security_definer
+     or p.proconfig is distinct from array['search_path=pg_catalog, private']::text[]
+     or pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+          pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid),chr(13)||chr(10),chr(10)),
+          'UTF8')),'hex')<>approved.definition_sha256
+     or exists (select 1 from pg_catalog.aclexplode(coalesce(p.proacl,
+           pg_catalog.acldefault('f',p.proowner))) a
+         where a.privilege_type='EXECUTE' and a.grantee<>p.proowner);
+  if offending is not null then
+    raise exception E'WEEKLY_SOURCE_NEXT_EVIDENCE_GUARD_ROUTINE_CHANGED:\n  %', offending;
+  end if;
+  -- END EXACT NEXT EVIDENCE GUARD POSTURE
 
   -- 11c. Trigger functions outside public and private: code section 2 never reads.
   select pg_catalog.string_agg(distinct tn.nspname || '.' || tp.proname || ' (trigger ' || t.tgname || ')', E'\n  ')

@@ -436,8 +436,30 @@ begin
   -- The local PostgreSQL 17 NEW census measured 805 / 76 / 0 /
   -- c3f1cdbb73eeca1e6bfe78428df7da14. Both signatures are also in the
   -- independent Weekly Source ACL allowlist; no browser role can execute them.
-  if v_count<>805 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'c3f1cdbb73eeca1e6bfe78428df7da14' then
+  -- The reset replacement adds exactly twelve bpay_next service entry points
+  -- plus weekly_exceptional_pay_next_publication_status_v1 and
+  -- weekly_exceptional_pay_publish_next_v1. Actual non-superuser PG17 NEW
+  -- read-back:819/76/0/54e63afacbe051008a19c873ae1e6647. Excluding ONLY
+  -- those fourteen new signatures reproduces805/76/0/
+  -- c3f1cdbb73eeca1e6bfe78428df7da14 exactly. Every new entry is service-only;
+  -- no old missing service grant is repaired or browser grant admitted here.
+  -- Current reset successors add EXACTLY three service-only public entries:
+  -- public.bpay_next_bind_stored_credit_v1(pg_catalog.uuid,pg_catalog.uuid,pg_catalog.uuid),
+  -- public.weekly_exceptional_pay_complete_local_v1(pg_catalog.jsonb), and
+  -- public.bpay_next_source_paid_evidence_page_v1(pg_catalog.jsonb).
+  -- Actual clean non-superuser NEW7 catalogue:822/76/0/3303d05b216d5527b559b76f9c7949b0.
+  -- Excluding ONLY those three reproduces819/76/0/54e63afacbe051008a19c873ae1e6647
+  -- exactly. No earlier privilege or browser exposure changed; this seal does
+  -- not forgive any missing service grant or omit any new entry from checking.
+  -- The finite joined Source package adds only the service-only
+  -- public.weekly_source_office_authorise_scope_v1(pg_catalog.jsonb) and
+  -- public.weekly_source_office_summary_rows_v1(pg_catalog.jsonb).
+  -- Actual non-superuser NEW8 definitions plus read-only catalogue comparison:
+  -- 824/76/0/2cb2ef197993c05bb0c1566b04c601dd; removing ONLY these two rows
+  -- reproduces the complete NEW7 822/76/0/3303d05b216d5527b559b76f9c7949b0.
+  -- No removed/changed earlier ACL row, new omission or browser exposure.
+  if v_count<>824 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'2cb2ef197993c05bb0c1566b04c601dd' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

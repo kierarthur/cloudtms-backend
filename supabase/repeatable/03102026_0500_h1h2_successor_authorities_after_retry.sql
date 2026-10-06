@@ -8470,7 +8470,7 @@ BEGIN
 END;
 $function$;
 
--- public.timesheet_authorise_generic_atomic from supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql; definition SHA-256 bae8b7130c37253b30dc98d243927610a0ee1a2861dc31ac00c6988e0248311a.
+-- public.timesheet_authorise_generic_atomic from supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql; definition SHA-256 ac2a629861064047d8f104f4f4aa26f5af6793cf459f2b8891d19939c5649bb0.
 CREATE OR REPLACE FUNCTION public.timesheet_authorise_generic_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone DEFAULT now(), p_expected_row_signature text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -8697,19 +8697,41 @@ WHERE ts.timesheet_id=v_current_ts.timesheet_id AND ts.is_current=true
 LIMIT 1
 ;
   ELSE
-  SELECT
-    COALESCE(vts.client_requires_hr, COALESCE(v_contract_requires_hr, false)),
-    COALESCE(vts.hr_validation_required_for_invoice, COALESCE(v_contract_requires_hr, false)),
-    CASE
-      WHEN vts.validation_status IS NULL THEN NULL::text
-      ELSE UPPER(vts.validation_status::text)
-    END
-    INTO v_client_requires_hr,
-         v_hr_validation_required_for_invoice,
-         v_validation_status
-  FROM public.v_timesheets_summary_base AS vts
-  WHERE vts.timesheet_id = v_current_ts.timesheet_id
-  LIMIT 1;
+  -- Exact current-root flags only. Do not rebuild the summary of every
+  -- Timesheet to authorise one root; retain the same dated/frozen settings,
+  -- current-financial selection and latest-validation semantics.
+  WITH bpay_authorisation_point_flags AS MATERIALIZED (
+    SELECT ts.timesheet_id, COALESCE(tf.total_hours,0) AS total_hours,
+      public.contract_settings_effective_get_v1(
+        COALESCE(tf.client_id,ct.client_id),COALESCE(ts.contract_id,cw.contract_id),
+        COALESCE((ts.worked_start_iso AT TIME ZONE 'Europe/London')::date,
+          (ts.scheduled_start_iso AT TIME ZONE 'Europe/London')::date,ts.week_ending_date),
+        CASE WHEN ts.sheet_scope='DAILY'::public.timesheet_scope_enum THEN 'DAILY' ELSE 'FINANCE' END,
+        ts.timesheet_id) AS settings_json,
+      UPPER(vl.status::text) AS validation_status
+    FROM public.timesheets ts
+    LEFT JOIN public.contract_weeks cw ON cw.timesheet_id=ts.timesheet_id
+    LEFT JOIN public.contracts ct ON ct.id=COALESCE(ts.contract_id,cw.contract_id)
+    LEFT JOIN LATERAL (
+      SELECT f.client_id,f.total_hours FROM public.timesheets_financials f
+      WHERE f.timesheet_id=ts.timesheet_id AND f.is_current=true
+      ORDER BY f.created_at DESC LIMIT 1
+    ) tf ON true
+    LEFT JOIN LATERAL (
+      SELECT tv.status FROM public.timesheet_validations tv
+      WHERE tv.timesheet_id=ts.timesheet_id ORDER BY tv.created_at DESC LIMIT 1
+    ) vl ON true
+    WHERE ts.timesheet_id=v_current_ts.timesheet_id AND ts.is_current=true
+    LIMIT 1
+  )
+  SELECT COALESCE((point.settings_json#>>'{values,requires_hr}')::boolean,false),
+    (point.timesheet_id IS NOT NULL
+      AND COALESCE((point.settings_json#>>'{values,hr_validation_required_for_invoice}')::boolean,false)
+      AND NOT COALESCE((point.settings_json#>>'{values,no_timesheet_required}')::boolean,false)
+      AND point.total_hours>0),
+    point.validation_status
+  INTO v_client_requires_hr,v_hr_validation_required_for_invoice,v_validation_status
+  FROM bpay_authorisation_point_flags point;
   END IF;
 
   v_client_requires_hr := COALESCE(v_client_requires_hr, v_contract_requires_hr, false);

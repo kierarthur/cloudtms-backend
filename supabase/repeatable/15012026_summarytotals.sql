@@ -429,7 +429,11 @@ BEGIN
         OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
       )
       AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
-      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_tools_stage IS NULL
+        OR (v_tools_stage IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) IN ('ARCHIVED','WITHDRAWN'))
+        OR (v_tools_stage NOT IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage))
       AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
       AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
       AND (
@@ -827,7 +831,11 @@ BEGIN
         OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
       )
       AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
-      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_tools_stage IS NULL
+        OR (v_tools_stage IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) IN ('ARCHIVED','WITHDRAWN'))
+        OR (v_tools_stage NOT IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage))
       AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
       AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
       AND (
@@ -2438,7 +2446,11 @@ BEGIN
         OR COALESCE(summary_row.hospital_norm, '') ILIKE v_q_like ESCAPE '\'
       )
       AND (v_summary_stage IS NULL OR UPPER(COALESCE(summary_row.summary_stage, '')) = v_summary_stage)
-      AND (v_tools_stage IS NULL OR UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage)
+      AND (v_tools_stage IS NULL
+        OR (v_tools_stage IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) IN ('ARCHIVED','WITHDRAWN'))
+        OR (v_tools_stage NOT IN ('ARCHIVED','WITHDRAWN')
+          AND UPPER(COALESCE(summary_row.tools_stage, '')) = v_tools_stage))
       AND (v_we_from IS NULL OR summary_row.week_ending_date >= v_we_from)
       AND (v_we_to IS NULL OR summary_row.week_ending_date <= v_we_to)
       AND (

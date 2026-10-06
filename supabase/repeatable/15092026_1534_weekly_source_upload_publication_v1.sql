@@ -2820,6 +2820,7 @@ begin
     v_scope_upload:=v_scope.current_complete_upload_id;
     v_client_id:=v_scope.client_id;
   end if;
+  perform private.weekly_source_pay_query_admit_v2();
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(pg_catalog.encode(v_upload.declared_scope_fingerprint,'hex'),73241837)
   );

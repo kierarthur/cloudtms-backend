@@ -169,6 +169,7 @@ declare
   v_lock_result jsonb;
   v_family_identity jsonb;
   v_known_root_timesheet_id uuid;
+  v_saved_route jsonb;
 begin
   if not private.weekly_exceptional_json_keys_exact_v1(p_request,v_allowed_keys)
      or not (p_request ?& array[
@@ -213,7 +214,12 @@ begin
     raise exception 'WEEKLY_PROTECTED_FAMILY_REQUEST_INVALID' using errcode='22023';
   end if;
 
-  -- Review F1 and F4.  The I-1 lock set must be the FIRST lock this owner
+  v_saved_route:=private.weekly_source_protected_saved_prepare_route_v1(p_request,
+    'WEEKLY_PROTECTED_PREPARE_FAMILY_REQUEST_V1','APPROVE');
+  if v_saved_route is not null then return v_saved_route; end if;
+  perform private.weekly_source_pay_query_admit_v2();
+  -- Review F1 and F4. After query admission, the I-1 lock set precedes the
+  -- existing business locks this owner
   -- takes: no row lock, no FOR UPDATE and no other advisory key before it,
   -- because every installed rotation owner takes the family advisory key and
   -- the family rows before anything else (core 08082026_2035_...:126-131,
@@ -268,7 +274,7 @@ begin
   for share;
 
   perform private.weekly_source_office_authority_v1(
-    v_actor_user_id,'APPROVE_PROTECTED_PAY',v_group.id,v_client_id,v_work_date
+    v_actor_user_id,'APPROVE_PROTECTED_PAY',v_group.id,v_client_id,v_cycle.finalisation_week_ending
   );
 
   -- The source cycle records when Office discovered or is reconciling the
@@ -278,7 +284,7 @@ begin
        select 1 from public.weekly_source_group_clients membership
        where membership.source_group_id=v_group.id
          and membership.client_id=v_client_id
-         and v_work_date between membership.valid_from
+         and v_cycle.finalisation_week_ending between membership.valid_from
            and coalesce(membership.valid_to,'infinity'::date)
      ) then
     raise exception 'WEEKLY_PROTECTED_FAMILY_SCOPE_INVALID' using errcode='55000';

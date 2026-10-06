@@ -1,4 +1,5 @@
 begin;
+\ir includes/05102026_0659_bpay_next_protected_owner_route_v1.sqlinc
 
 -- The browser chooses only an Office action and, for approve/amend, factual
 -- shift times.  This owner opens every later protected-hours action against
@@ -45,6 +46,7 @@ declare
   v_break integer;
   v_replay boolean:=false;
   v_review_source jsonb;
+  v_saved_route jsonb;
 begin
   if pg_catalog.jsonb_typeof(p_request)<>'object'
      or not private.weekly_exceptional_json_keys_exact_v1(p_request,
@@ -75,6 +77,10 @@ begin
     raise exception 'WEEKLY_PROTECTED_ACTION_REQUEST_INVALID' using errcode='22023';
   end if;
 
+  v_saved_route:=private.weekly_source_protected_saved_prepare_route_v1(p_request,
+    'WEEKLY_PROTECTED_PREPARE_ACTION_REQUEST_V1',v_action);
+  if v_saved_route is not null then return v_saved_route; end if;
+  perform private.weekly_source_pay_query_admit_v2();
   -- Share the same global idempotency lock as first approval.  Concurrent
   -- first attempts for one key therefore become one write plus one exact
   -- replay instead of leaking the ledger's unique constraint.
@@ -146,7 +152,7 @@ begin
     );
   end if;
   perform private.weekly_source_office_authority_v1(
-    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,v_event.work_date
+    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,v_cycle.finalisation_week_ending
   );
   v_policy:=private._weekly_source_effective_policy_v1(
     v_contract.client_id,v_contract.id,v_event.work_date
@@ -160,7 +166,7 @@ begin
        select 1 from public.weekly_source_group_clients membership
        where membership.source_group_id=v_group.id
          and membership.client_id=v_contract.client_id
-         and v_event.work_date between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
+         and v_cycle.finalisation_week_ending between membership.valid_from and coalesce(membership.valid_to,'infinity'::date)
      )
      or v_policy->>'authority_mode'<>'SOURCE_AUTHORITY'
      or coalesce((v_policy->>'self_bill_enabled')::boolean,false) is not true
@@ -285,6 +291,8 @@ declare
   v_source_head_count integer:=0;
   v_ambiguous_event_count integer:=0;
   v_source_observed boolean:=false;
+  v_next_source_segments jsonb:='[]'::jsonb;
+  v_retain_next_facts boolean:=false;
 begin
   select family.* into strict v_family
     from public.weekly_exceptional_pay_target_families family where family.id=p_family_id;
@@ -304,7 +312,20 @@ begin
   if v_source_mode not in ('NHSP_WEEKLY','HEALTHROSTER_WEEKLY') or v_source_mode is null then
     raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';
   end if;
-  v_root_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_family.root_timesheet_id);
+  v_retain_next_facts:=(select active_owner from private.bpay_next_module_control where id=1)='NEXT'
+    and private.bpay_next_protected_owner_route_v1(v_family.id)='NEXT';
+  if v_retain_next_facts then
+    -- Actual exact current root/contract-week binding, not version discovery.
+    perform 1 from public.timesheets root join public.contract_weeks cw on cw.timesheet_id=root.timesheet_id
+      where root.timesheet_id=v_family.root_timesheet_id and root.booking_id=v_family.root_family_booking_id
+        and root.is_current and not root.is_adjustment and root.revoked_at is null and root.archived_at_utc is null
+        and root.contract_id=v_family.contract_id and root.week_ending_date=v_family.week_ending_date
+        and cw.contract_id=v_family.contract_id and cw.week_ending_date=v_family.week_ending_date and cw.additional_seq=0;
+    if not found then raise exception 'WEEKLY_PROTECTED_NEXT_CURRENT_ROOT_NOT_EXACT' using errcode='55000';end if;
+    v_root_family:=array[v_family.root_timesheet_id];
+  else
+    v_root_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_family.root_timesheet_id);
+  end if;
   if v_root_family is null or cardinality(v_root_family)=0 then
     raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_FAMILY_UNRESOLVED' using errcode='55000';
   end if;
@@ -428,7 +449,16 @@ begin
           select 1
           from public.weekly_source_billing_movements movement
           where movement.final_revision_id=revision.id
-            and movement.invoice_timesheet_id=any(v_root_family)
+            and ((not v_retain_next_facts and movement.invoice_timesheet_id=any(v_root_family))
+            or (v_retain_next_facts and exists(
+              select 1 from public.weekly_source_row_timesheet_lineages lineage
+              where lineage.row_resolution_id=case when coalesce(movement.source_facts_json->>'row_resolution_id','')
+                ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                then (movement.source_facts_json->>'row_resolution_id')::uuid else null end
+                and lineage.family_booking_id=v_family.root_family_booking_id
+                and lineage.work_event_id=movement.work_event_id and lineage.candidate_id=v_family.candidate_id
+                and lineage.client_id=v_contract.client_id and lineage.contract_id=v_family.contract_id
+                and lineage.week_ending_date=v_family.week_ending_date)))
             and movement.source_line_kind in (
               'NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE')
             and movement.candidate_id=v_family.candidate_id
@@ -466,7 +496,16 @@ begin
         from public.weekly_source_billing_movements movement
         join public.weekly_source_final_revisions revision
           on revision.id=movement.final_revision_id and revision.state='CURRENT'
-        where movement.invoice_timesheet_id=any(v_root_family)
+        where ((not v_retain_next_facts and movement.invoice_timesheet_id=any(v_root_family))
+            or (v_retain_next_facts and exists(
+              select 1 from public.weekly_source_row_timesheet_lineages lineage
+              where lineage.row_resolution_id=case when coalesce(movement.source_facts_json->>'row_resolution_id','')
+                ~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                then (movement.source_facts_json->>'row_resolution_id')::uuid else null end
+                and lineage.family_booking_id=v_family.root_family_booking_id
+                and lineage.work_event_id=movement.work_event_id and lineage.candidate_id=v_family.candidate_id
+                and lineage.client_id=v_contract.client_id and lineage.contract_id=v_family.contract_id
+                and lineage.week_ending_date=v_family.week_ending_date)))
           and movement.source_line_kind in (
             'NHSP_PHYSICAL_POSITIVE','NHSP_PHYSICAL_FULL_NEGATIVE')
           and movement.candidate_id=v_family.candidate_id
@@ -634,12 +673,72 @@ begin
   end if;
 
 
+  -- NEXT retains the genuine selected Source economics, not the contract-rate
+  -- protected preview. The existing projection owner remains the sole chooser
+  -- of active movements. A missing final approval legitimately has no Source
+  -- vectors; present Source without exact immutable vectors fails closed.
+  if v_retain_next_facts then
+    if v_source_head_revision is null and pg_catalog.jsonb_array_length(v_source_segments)>0 then
+      with selected as (
+        select distinct revision.id,cycle.finalisation_week_ending,
+               revision.finalised_at_utc,revision.revision_number
+        from pg_catalog.jsonb_array_elements(v_client_sources) s(value)
+        join public.weekly_source_final_revisions revision
+          on revision.id=(s.value->>'external_revision')::uuid and revision.state='CURRENT'
+        join public.weekly_source_cycles cycle on cycle.id=revision.source_cycle_id
+        where (s.value->>'source_present')::boolean and cycle.source_group_id=v_group.id
+      )
+      select pg_catalog.count(*)::integer,pg_catalog.min(head.id::text)::uuid
+        into v_source_head_count,v_source_head_revision
+      from selected head where not exists(select 1 from selected peer
+        where (peer.finalisation_week_ending,peer.finalised_at_utc,peer.revision_number)
+          >(head.finalisation_week_ending,head.finalised_at_utc,head.revision_number));
+      if v_source_head_count<>1 then
+        raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_LADDER_NOT_EXACT' using errcode='55000';
+      end if;
+    end if;
+    if v_source_head_revision is not null then
+      v_next_source_segments:=private.weekly_source_ordinary_projection_current_segments_v1(
+        v_family.root_timesheet_id,v_source_head_revision);
+    end if;
+    if pg_catalog.jsonb_array_length(v_next_source_segments)<>pg_catalog.jsonb_array_length(v_source_segments)
+       or exists(select 1 from pg_catalog.jsonb_array_elements(v_source_segments) s(value)
+         where (select pg_catalog.count(*) from pg_catalog.jsonb_array_elements(v_next_source_segments) n(value)
+           where n.value#>>'{weekly_source,work_event_id}'=s.value->>'work_event_id'
+             and n.value->>'date'=s.value->>'date' and n.value->>'start'=s.value->>'start'
+             and n.value->>'end'=s.value->>'end'
+             and n.value->>'break_mins'=s.value->>'break_mins')<>1) then
+      raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_VECTOR_NOT_EXACT' using errcode='55000';
+    end if;
+    -- Numeric evidence leaves PostgreSQL as text; no JS Number round-trip.
+    select coalesce(pg_catalog.jsonb_agg(n.value||pg_catalog.jsonb_build_object(
+      'weekly_source',(n.value->'weekly_source')||pg_catalog.jsonb_build_object(
+        'pay_vector',(n.value#>'{weekly_source,pay_vector}')||pg_catalog.jsonb_build_object(
+          'total_pence',n.value#>>'{weekly_source,pay_vector,total_pence}',
+          'hours',(select pg_catalog.jsonb_object_agg(k.key,k.value)
+            from pg_catalog.jsonb_each_text(n.value#>'{weekly_source,pay_vector,hours}') k),
+          'rates',(select pg_catalog.jsonb_object_agg(k.key,k.value)
+            from pg_catalog.jsonb_each_text(n.value#>'{weekly_source,pay_vector,rates}') k)),
+        'charge_vector',(n.value#>'{weekly_source,charge_vector}')||pg_catalog.jsonb_build_object(
+          'total_pence',n.value#>>'{weekly_source,charge_vector,total_pence}',
+          'rates',(select pg_catalog.jsonb_object_agg(k.key,k.value)
+            from pg_catalog.jsonb_each_text(n.value#>'{weekly_source,charge_vector,rates}') k))
+      )) order by n.ordinality),'[]'::jsonb) into v_next_source_segments
+    from pg_catalog.jsonb_array_elements(v_next_source_segments) with ordinality n(value,ordinality);
+    if pg_catalog.jsonb_array_length(v_next_source_segments)>100
+       or pg_catalog.octet_length(v_next_source_segments::text)>120000 then
+      raise exception 'WEEKLY_PROTECTED_NEXT_SOURCE_PAGE_BOUND' using errcode='54000';
+    end if;
+  end if;
+
   return jsonb_build_object('source_segments',v_source_segments,'client_sources',v_client_sources,
     'current_final_revision_id',v_current_final,'source_observed',v_source_observed,
     'source_proposal',jsonb_build_object(
       'selected_work_event_id',v_event.id,'source_present',v_selected_source_present,
       'source_minutes',v_selected_source_minutes,'source_revision',v_selected_source_revision,
-      'source_hash',v_selected_source_hash,'source_segments',v_source_segments));
+      'source_hash',v_selected_source_hash,'source_segments',v_source_segments))
+    ||case when v_retain_next_facts
+      then pg_catalog.jsonb_build_object('next_source_segments',v_next_source_segments) else '{}'::jsonb end;
 end;
 $function$;
 alter function private.weekly_source_protected_final_source_context_v1(uuid,uuid,uuid) owner to postgres;
@@ -710,7 +809,10 @@ declare
   v_fin_hash text;
   v_provider_hash text;
   v_rate_refs jsonb;
+  v_component_identity_inventory jsonb;
+  v_component_identity_components jsonb;
   v_final_source jsonb;
+  v_next_context boolean:=false;
 begin
   if pg_catalog.jsonb_typeof(p_request)<>'object'
      or not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
@@ -743,6 +845,10 @@ begin
     raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_INVALID' using errcode='22023';
   end if;
 
+  -- Fresh context has no immutable decision receipt exemption. Admission
+  -- precedes its first family/business lock and is reentrant for an owner.
+  perform private.weekly_source_pay_query_admit_v2();
+
   select family.* into strict v_family
   from public.weekly_exceptional_pay_target_families family
   where family.id=v_family_id for share;
@@ -765,9 +871,13 @@ begin
   -- BEFORE the family-scoped state below is read, in the SAME mode and the same
   -- timesheet_id order the installed code here already uses (`for share`), and
   -- before the root's own `for share` so no new lock ordering is introduced.
-  v_root_family:=private.weekly_source_invoice_family_timesheet_ids_v1(
-    v_family.root_timesheet_id
-  );
+  v_next_context:=(select active_owner from private.bpay_next_module_control where id=1)='NEXT'
+    and private.bpay_next_protected_owner_route_v1(v_family.id)='NEXT';
+  if v_next_context then
+    v_root_family:=array[v_family.root_timesheet_id];
+  else
+    v_root_family:=private.weekly_source_invoice_family_timesheet_ids_v1(v_family.root_timesheet_id);
+  end if;
   -- Standing rule 3's fail-closed branch: an explicit cardinality test, never a
   -- `limit`.  This owner already refuses on every other unprovable scope fact.
   if v_root_family is null or pg_catalog.cardinality(v_root_family)=0 then
@@ -813,6 +923,7 @@ begin
      or v_contract.candidate_id is distinct from v_family.candidate_id
      or v_contract_week.timesheet_id is distinct from v_root.timesheet_id
      or v_root.contract_id is distinct from v_contract.id
+     or (v_next_context and v_root.booking_id is distinct from v_family.root_family_booking_id)
      or v_root.week_ending_date is distinct from v_family.week_ending_date
      or not v_root.is_current or v_root.is_adjustment
      or v_root.revoked_at is not null or v_root.archived_at_utc is not null
@@ -923,7 +1034,11 @@ begin
     'document_sha256',pg_catalog.encode(authority.authority_hash,'hex'),
     'pay_ex_vat',authority.candidate_reimbursement_ex_vat::text,
     'charge_ex_vat',authority.client_charge_ex_vat::text
-  ) order by authority.work_event_id),'[]'::jsonb)
+  )||case when v_final_source ? 'next_source_segments'
+    then pg_catalog.jsonb_build_object('work_event_id',authority.work_event_id,
+      'final_revision_id',authority.final_revision_id,
+      'source_observation_kind',authority.source_observation_kind) else '{}'::jsonb end
+   order by authority.work_event_id),'[]'::jsonb)
   into v_source_expenses
   from (
     select authority.*,
@@ -937,14 +1052,24 @@ begin
     join public.weekly_source_cycles source_cycle on source_cycle.id=revision.source_cycle_id
     where authority.contract_id=v_family.contract_id and authority.state='CURRENT'
       and source_cycle.source_group_id=v_group.id
-      and authority.source_expense_pence>0
-      and exists(
-        select 1 from public.weekly_source_row_timesheet_lineages lineage
-        where lineage.work_event_id=authority.work_event_id
-          and lineage.contract_id=authority.contract_id
-          and lineage.timesheet_id=any(v_root_family)
-      )
-  ) authority where authority.event_rank=1;
+      and ((not v_next_context and authority.source_expense_pence>0 and exists(
+          select 1 from public.weekly_source_row_timesheet_lineages lineage
+          where lineage.work_event_id=authority.work_event_id and lineage.contract_id=authority.contract_id
+            and lineage.timesheet_id=any(v_root_family)))
+        or (v_next_context and exists(
+          select 1 from public.weekly_work_events event where event.id=authority.work_event_id
+            and event.candidate_id=v_family.candidate_id and event.client_id=v_contract.client_id
+            and event.work_date between v_family.week_start_date and v_family.week_ending_date
+        ) and ((authority.source_observation_kind='OMITTED_IN_COMPLETE_COVERAGE' and authority.source_expense_pence=0)
+          or exists(
+            select 1 from public.weekly_source_row_expense_policy_snapshots expense_snapshot
+            join public.weekly_source_row_timesheet_lineages lineage on lineage.row_resolution_id=expense_snapshot.row_resolution_id
+            where expense_snapshot.id=authority.row_expense_policy_snapshot_id
+              and lineage.family_booking_id=v_family.root_family_booking_id
+              and lineage.work_event_id=authority.work_event_id and lineage.candidate_id=v_family.candidate_id
+              and lineage.client_id=v_contract.client_id and lineage.contract_id=v_family.contract_id
+              and lineage.week_ending_date=v_family.week_ending_date))))
+  ) authority where authority.event_rank=1 and authority.source_expense_pence>0;
 
   v_fin_hash:=case when v_fin.id is null then null else pg_catalog.encode(
     private.weekly_source_sha256_jsonb_v1(
@@ -968,6 +1093,29 @@ begin
     'effective_policy_sha256',v_root_policy->>'policy_sha256'
   );
 
+  -- Local/common identity admission is independent of Banking work completion.
+  -- An already authorised root requires its genuine complete current I1 basis;
+  -- an actual unauthorised first Save must not invent that approved basis.
+  if v_family.target_domain_version='C1_V1' then
+    if v_root.authorised_at_server is not null then
+      v_component_identity_inventory:=private.weekly_source_effective_inventory_v1(v_root.timesheet_id);
+      if v_component_identity_inventory->>'ok' is distinct from 'true'
+         or v_component_identity_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true'
+         or v_component_identity_inventory#>>'{approval_basis,scope,root_timesheet_id}'
+              is distinct from v_root.timesheet_id::text
+         or jsonb_typeof(v_component_identity_inventory->'components') is distinct from 'array' then
+        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
+      v_component_identity_components:=v_component_identity_inventory->'components';
+    else
+      if exists(select 1 from public.weekly_source_root_authorisations a
+          where a.family_booking_id=v_root.booking_id)
+         or exists(select 1 from public.weekly_source_entitlement_heads h
+          where h.root_family_booking_id=v_root.booking_id and h.state='COMMITTED_CURRENT') then
+        raise exception 'WEEKLY_PROTECTED_COMPONENT_APPROVED_BASIS_UNAVAILABLE' using errcode='55000'; end if;
+      v_component_identity_components:='[]'::jsonb;
+    end if;
+  end if;
+
   return pg_catalog.jsonb_build_object(
     'ok',true,'contract','WEEKLY_PROTECTED_ACTION_CONTEXT_V1',
     'action',v_run.request_kind,'family_id',v_family.id,
@@ -984,6 +1132,7 @@ begin
     'timesheet',pg_catalog.to_jsonb(v_root),'contract_week',pg_catalog.to_jsonb(v_contract_week),
     'contract_record',pg_catalog.to_jsonb(v_contract),
     'current_financial',case when v_fin.id is null then null else pg_catalog.to_jsonb(v_fin) end,
+    'approved_component_identity_components',v_component_identity_components,
     'requires_zero_financial',v_fin.id is null,
     'protected_schedule',v_schedule,'source_segments',v_source_segments,
     'protected_decisions',v_decisions,'source_proposal',pg_catalog.jsonb_build_object(
@@ -1013,6 +1162,12 @@ begin
       'target_enabled',true,'target_vat_chargeable',null
     ),
     'expected_head_revision',coalesce((
+      select generation.generation_number::bigint
+      from private.weekly_source_local_protected_decision_receipts receipt
+      join public.weekly_exceptional_pay_generations generation on generation.id=receipt.generation_id
+      where receipt.family_id=v_family.id and receipt.state='COMPLETE'
+        and generation.id=v_family.current_generation_id
+    ),(
       select request.c1_head_revision
       from public.weekly_exceptional_c1_publication_requests request
       where request.family_id=v_family.id and request.state='PUBLISHED'
@@ -1020,7 +1175,9 @@ begin
     ),0)::text,
     'request_sequence',(v_family.current_generation_number+1)::text,
     'zero_rate_source_refs',v_rate_refs
-  );
+  )||case when v_final_source ? 'next_source_segments'
+    then pg_catalog.jsonb_build_object('next_source_segments',v_final_source->'next_source_segments',
+      'family_bound_version',v_family.bound_version::text) else '{}'::jsonb end;
 exception
   when no_data_found or too_many_rows then
     raise exception 'WEEKLY_PROTECTED_ACTION_CONTEXT_SCOPE_INVALID' using errcode='55000';
@@ -1050,7 +1207,7 @@ declare
   v_approval public.weekly_exceptional_payment_approvals%rowtype;
   v_cycle public.weekly_source_cycles%rowtype;
   v_group public.weekly_source_groups%rowtype;
-  v_contract public.contracts%rowtype;
+  v_publication_count integer;
 begin
   if pg_catalog.jsonb_typeof(p_request)<>'object'
      or not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
@@ -1071,19 +1228,18 @@ begin
   select run.* into strict v_run
   from public.weekly_exceptional_orchestration_runs run
   where run.id=v_run_id and run.family_id=v_family.id;
-  select contract.* into strict v_contract
-  from public.contracts contract where contract.id=v_family.contract_id;
   if v_run.requested_by_user_id is distinct from v_actor then
     raise exception 'WEEKLY_PROTECTED_PUBLICATION_STATUS_SCOPE_INVALID' using errcode='55000';
   end if;
 
-  select request.* into v_publication
+  select count(*) into v_publication_count
   from public.weekly_exceptional_c1_publication_requests request
   where request.family_id=v_family.id
-    and request.orchestration_run_id=v_run.id
-  order by request.created_at_utc desc,request.id desc
-  limit 1;
-  if not found then
+    and request.orchestration_run_id=v_run.id;
+  if v_publication_count>1 then
+    raise exception 'WEEKLY_PROTECTED_PUBLICATION_STATUS_SCOPE_INVALID' using errcode='55000';
+  end if;
+  if v_publication_count=0 then
     perform 1 from public.tms_users office_user
     where office_user.id=v_actor and office_user.is_active
       and (office_user.payment_authoriser or office_user.payment_golden_key);
@@ -1095,21 +1251,22 @@ begin
       'orchestration_run_id',v_run.id,'run_state',v_run.state
     );
   end if;
+  select request.* into strict v_publication
+  from public.weekly_exceptional_c1_publication_requests request
+  where request.family_id=v_family.id and request.orchestration_run_id=v_run.id;
 
   select approval.* into strict v_approval
   from public.weekly_exceptional_payment_approvals approval
   where approval.creation_orchestration_run_id=v_run.id
-    and approval.pay_target_family_id=v_family.id
-  order by approval.approved_at_utc desc,approval.id desc
-  limit 1;
+    and approval.pay_target_family_id=v_family.id;
   select cycle.* into strict v_cycle
   from public.weekly_source_cycles cycle where cycle.id=v_approval.source_cycle_id;
   select source_group.* into strict v_group
   from public.weekly_source_groups source_group
   where source_group.id=v_cycle.source_group_id;
   perform private.weekly_source_office_authority_v1(
-    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,
-    v_approval.protected_work_date
+    v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_approval.client_id,
+    v_cycle.finalisation_week_ending
   );
   return pg_catalog.jsonb_build_object(
     'ok',true,'staged',true,'family_id',v_family.id,
@@ -1151,6 +1308,7 @@ declare
   v_run public.weekly_exceptional_orchestration_runs%rowtype;
   v_approval public.weekly_exceptional_payment_approvals%rowtype;
   v_prior_event public.weekly_exceptional_pay_family_events%rowtype;
+  v_family_event_id uuid;
   v_generation public.weekly_exceptional_pay_generations%rowtype;
   v_sequence bigint;
   v_prior_hash bytea;
@@ -1161,6 +1319,11 @@ declare
   v_source_hash bytea;
   v_after bytea;
   v_key text;
+  v_completed_witness public.weekly_exceptional_orchestration_runs%rowtype;
+  v_completed_replay boolean:=false;
+  v_pending public.weekly_exceptional_pending_reconciliation_targets%rowtype;
+  v_incident uuid;
+  v_next_wait boolean;
 begin
   if pg_catalog.jsonb_typeof(p_request)<>'object'
      or not private.weekly_exceptional_json_keys_exact_v1(p_request,v_keys)
@@ -1184,13 +1347,39 @@ begin
     raise exception 'WEEKLY_PROTECTED_WAIT_REQUEST_INVALID' using errcode='22023';
   end;
   v_key:=pg_catalog.btrim(coalesce(p_request->>'idempotency_key',''));
+  -- Prepare is a separate RPC. A fresh Wait must independently enter the
+  -- shared admission boundary before acquiring any business-row locks.
+  -- Only an already completed, no-write return may bypass that boundary.
+  select run.* into v_completed_witness
+  from public.weekly_exceptional_orchestration_runs run
+  where run.id=v_run_id and run.family_id=v_family_id
+    and run.requested_by_user_id=v_actor and run.request_kind='WAIT'
+    and run.state='COMPLETE' and run.completed_at_utc is not null
+    and pg_catalog.isfinite(run.completed_at_utc)
+    and pg_catalog.octet_length(run.after_state_fingerprint)=32
+    and run.request_fingerprint is not null
+    and run.before_state_fingerprint is not null;
+  v_completed_replay:=found;
+  if not v_completed_replay then
+    perform private.weekly_source_pay_query_admit_v2();
+  end if;
   select family.* into strict v_family
   from public.weekly_exceptional_pay_target_families family
   where family.id=v_family_id for update;
   select run.* into strict v_run
   from public.weekly_exceptional_orchestration_runs run
   where run.id=v_run_id and run.family_id=v_family.id for update;
+  if v_completed_replay and v_run is distinct from v_completed_witness then
+    -- Never fall through to a write after skipping fresh admission.
+    raise exception 'WEEKLY_PROTECTED_WAIT_SCOPE_INVALID' using errcode='55000';
+  end if;
   if v_run.state='COMPLETE' then
+    if v_run.request_kind<>'WAIT' or v_run.requested_by_user_id is distinct from v_actor
+       or v_run.completed_at_utc is null or not pg_catalog.isfinite(v_run.completed_at_utc)
+       or pg_catalog.octet_length(v_run.after_state_fingerprint) is distinct from 32
+       or v_run.request_fingerprint is null or v_run.before_state_fingerprint is null then
+      raise exception 'WEEKLY_PROTECTED_WAIT_SCOPE_INVALID' using errcode='55000';
+    end if;
     return pg_catalog.jsonb_build_object(
       'ok',true,'outcome','WAITING_FOR_SOURCE','idempotent_replay',true,
       'family_id',v_family.id,'family_bound_version',v_family.bound_version
@@ -1221,10 +1410,10 @@ begin
   v_source_hash:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_PROTECTED_SOURCE_PROPOSAL_V1',p_request->'source_proposal'
   );
-  select coalesce(max(event_sequence),0)+1,
-         (array_agg(event_hash order by event_sequence desc))[1]
-    into v_sequence,v_prior_hash
-  from public.weekly_exceptional_pay_family_events where family_id=v_family.id;
+  select event_sequence,event_hash into v_sequence,v_prior_hash
+  from public.weekly_exceptional_pay_family_events where family_id=v_family.id
+  order by event_sequence desc limit 1;
+  v_sequence:=coalesce(v_sequence,0)+1;
   v_event_hash:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_PROTECTED_FAMILY_EVENT_V1',pg_catalog.jsonb_build_object(
       'family_id',v_family.id,'event_sequence',v_sequence,
@@ -1252,11 +1441,14 @@ begin
     p_request->'protected_schedule',v_prior_event.fixed_office_target_hash,'WAIT',
     v_prior_event.current_comparison_revision_id,v_prior_event.current_final_revision_id,
     v_actor,p_request->>'reason',v_prior_hash,v_event_hash
-  );
-  select coalesce(max(event_sequence),0)+1,
-         (array_agg(event_hash order by event_sequence desc))[1]
-    into v_target_sequence,v_prior_target_hash
-  from public.weekly_exceptional_pay_target_events where family_id=v_family.id;
+  ) returning id into v_family_event_id;
+  if (select active_owner from private.bpay_next_module_control where id=1)='NEXT' then
+    perform private.bpay_next_protected_current_decision_capture_v1(v_family_event_id);
+  end if;
+  select event_sequence,event_hash into v_target_sequence,v_prior_target_hash
+  from public.weekly_exceptional_pay_target_events where family_id=v_family.id
+  order by event_sequence desc limit 1;
+  v_target_sequence:=coalesce(v_target_sequence,0)+1;
   v_target_hash:=private.weekly_source_sha256_jsonb_v1(
     'WEEKLY_PROTECTED_TARGET_EVENT_V1',pg_catalog.jsonb_build_object(
       'family_id',v_family.id,'event_sequence',v_target_sequence,
@@ -1279,21 +1471,75 @@ begin
     v_expected_hash,v_expected_hash,'WAIT','WAITING_SOURCE',null,
     v_actor,v_target_hash,v_key||':target-event'
   );
-  update public.weekly_exceptional_pending_reconciliation_targets target
-  set state='SUPERSEDED',completed_at_utc=pg_catalog.statement_timestamp()
-  where target.family_id=v_family.id and target.state='ACTIVE';
-  insert into public.weekly_exceptional_pending_reconciliation_targets(
-    family_id,approval_id,durable_work_event_id,incident_id,
-    current_final_revision_id,intended_outcome,
-    source_action_policy_target_fingerprint,state
-  ) values (
-    v_family.id,v_approval.id,v_event_id,
-    (select incident.id from public.weekly_discrepancy_incidents incident
-      where incident.work_event_id=v_event_id
-        and incident.candidate_id=v_family.candidate_id
-      order by incident.episode_number desc limit 1),
-    v_prior_event.current_final_revision_id,'WAIT',v_source_hash,'ACTIVE'
-  );
+  v_next_wait:=v_family.target_domain_version='NEXT_V1';
+  if v_next_wait then
+    select incident.id into v_incident from public.weekly_discrepancy_incidents incident
+      where incident.work_event_id=v_event_id and incident.candidate_id=v_family.candidate_id
+        and incident.source_group_id=(select cycle.source_group_id from public.weekly_source_cycles cycle where cycle.id=v_cycle_id)
+      order by incident.episode_number desc limit 1;
+    select target.* into v_pending from public.weekly_exceptional_pending_reconciliation_targets target
+      where target.family_id=v_family.id and target.approval_id=v_approval.id
+        and target.source_action_policy_target_fingerprint=v_source_hash for update;
+    if found and (v_pending.state<>'ACTIVE' or v_pending.completed_at_utc is not null
+        or v_pending.durable_work_event_id<>v_event_id or v_pending.incident_id is distinct from v_incident
+        or v_pending.current_final_revision_id is distinct from v_prior_event.current_final_revision_id
+        or v_pending.intended_outcome<>'WAIT'
+        or v_generation.complete_next_vector_hash<>v_expected_hash
+        or v_prior_event.fixed_office_target_snapshot_json is distinct from p_request->'protected_schedule'
+        or v_prior_event.source_proposal_snapshot_json is distinct from p_request->'source_proposal') then
+      raise exception 'WEEKLY_PROTECTED_WAIT_PENDING_CONFLICT' using errcode='23514';
+    end if;
+    -- The existing partial UNIQUE(family_id,approval_id) WHERE ACTIVE bounds
+    -- this transition to one row. Keep an exact existing ACTIVE key itself;
+    -- do not erase audit history or disturb another protected event's wait.
+    update public.weekly_exceptional_pending_reconciliation_targets target
+      set state='SUPERSEDED',completed_at_utc=pg_catalog.statement_timestamp()
+      where target.family_id=v_family.id and target.approval_id=v_approval.id and target.state='ACTIVE'
+        and (v_pending.id is null or target.id<>v_pending.id);
+    if v_pending.id is null then
+      insert into public.weekly_exceptional_pending_reconciliation_targets(
+        family_id,approval_id,durable_work_event_id,incident_id,current_final_revision_id,
+        intended_outcome,source_action_policy_target_fingerprint,state)
+      values(v_family.id,v_approval.id,v_event_id,v_incident,v_prior_event.current_final_revision_id,'WAIT',v_source_hash,'ACTIVE');
+    end if;
+  else
+    update public.weekly_exceptional_pending_reconciliation_targets target
+    set state='SUPERSEDED',completed_at_utc=pg_catalog.statement_timestamp()
+    -- Wait is per existing work identity, not a decision for every sibling.
+    where target.family_id=v_family.id and target.durable_work_event_id=v_event_id
+      and target.state='ACTIVE'
+      and not (target.approval_id=v_approval.id
+        and target.source_action_policy_target_fingerprint=v_source_hash);
+    insert into public.weekly_exceptional_pending_reconciliation_targets(
+      family_id,approval_id,durable_work_event_id,incident_id,
+      current_final_revision_id,intended_outcome,
+      source_action_policy_target_fingerprint,state
+    ) values (
+      v_family.id,v_approval.id,v_event_id,
+      (select incident.id from public.weekly_discrepancy_incidents incident
+        where incident.work_event_id=v_event_id
+          and incident.candidate_id=v_family.candidate_id
+        order by incident.episode_number desc limit 1),
+      v_prior_event.current_final_revision_id,'WAIT',v_source_hash,'ACTIVE'
+    )
+    -- A newly requested Wait for the same proposal retains the same pending
+    -- identity. Replays still return above; a new command gets its own audit.
+    -- Only retain an exact already-active row. Never reopen any retired decision
+    -- (including superseded), or reuse another work/incident/revision's row.
+    on conflict (family_id,approval_id,source_action_policy_target_fingerprint)
+    do update set state='ACTIVE',completed_at_utc=null
+    where weekly_exceptional_pending_reconciliation_targets.durable_work_event_id=v_event_id
+      and weekly_exceptional_pending_reconciliation_targets.incident_id
+        is not distinct from excluded.incident_id
+      and weekly_exceptional_pending_reconciliation_targets.intended_outcome='WAIT'
+      and weekly_exceptional_pending_reconciliation_targets.current_final_revision_id
+        is not distinct from v_prior_event.current_final_revision_id
+      and weekly_exceptional_pending_reconciliation_targets.state='ACTIVE'
+      and weekly_exceptional_pending_reconciliation_targets.completed_at_utc is null;
+    if not found then
+      raise exception 'WEEKLY_PROTECTED_WAIT_SCOPE_INVALID' using errcode='55000';
+    end if;
+  end if;
   insert into public.weekly_exceptional_payment_events(
     family_id,approval_id,event_kind,lifecycle_view,bounded_payload_json,idempotency_key
   ) values (
@@ -1383,12 +1629,18 @@ declare
   v_head_count integer;
   v_authority_kind text;
   v_components jsonb;
+  v_chosen_segments jsonb;
   v_request jsonb;
   v_result jsonb;
   v_published boolean:=false;
   v_request_hash bytea;
   v_request_hash_hex text;
   v_audit public.audit_events%rowtype;
+  v_locks jsonb;
+  v_inventory jsonb;
+  v_accepted_action_id uuid;
+  v_successor_revision bigint;
+  v_recorded jsonb;
 begin
   if coalesce(
        pg_catalog.current_setting('request.jwt.claim.role',true),
@@ -1433,6 +1685,25 @@ begin
     'WEEKLY_SOURCE_LATER_CHANGE_DECISION_V1',p_request-'idempotency_key'
   );
   v_request_hash_hex:=pg_catalog.encode(v_request_hash,'hex');
+
+  -- Exact original actor/full-payload audit replay precedes fresh admission.
+  -- Keep the original lookup below the idempotency lock for a first-call race.
+  select audit_row.* into v_audit
+  from public.audit_events audit_row
+  where audit_row.action='WEEKLY_SOURCE_LATER_CHANGE_DECIDED'
+    and audit_row.after_json->>'idempotency_key'=v_idempotency_key
+  order by audit_row.ts_utc,audit_row.id
+  limit 1;
+  if found then
+    if v_audit.after_json->>'request_hash' is distinct from v_request_hash_hex then
+      raise exception 'WEEKLY_SOURCE_LATER_CHANGE_IDEMPOTENCY_COLLISION'
+        using errcode='22023';
+    end if;
+    return coalesce(v_audit.after_json->'result','{}'::jsonb)
+      ||pg_catalog.jsonb_build_object('idempotent_replay',true);
+  end if;
+  perform private.weekly_source_pay_query_admit_v2();
+
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
     'WEEKLY_SOURCE_LATER_CHANGE_DECISION|'||v_idempotency_key,0
   ));
@@ -1479,8 +1750,33 @@ begin
   -- active admin who is a payment authoriser.  No new whitelist entry.
   perform private.weekly_source_office_authority_v1(
     v_actor,'APPROVE_PROTECTED_PAY',v_group.id,v_contract.client_id,
-    v_timesheet.week_ending_date
+    v_cycle.finalisation_week_ending
   );
+
+  -- The accepted decision and publication share I-1's existing lock order.
+  -- Take it before the bundle, then re-resolve the physical root under lock.
+  -- An immutable proposal actor is never updated in place.
+  v_locks:=private.weekly_source_lock_and_resolve_families_v1(
+    v_contract.candidate_id,array[v_root_timesheet_id],
+    'WORKBENCH_CANDIDATE_ENTITLEMENT_PUBLICATION',pg_catalog.gen_random_uuid(),
+    'WEEKLY_SOURCE_ENTITLEMENT_PUBLICATION');
+  if v_locks->>'ok' is distinct from 'true' or v_locks->>'gate' is distinct from 'GRANTED' then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_UNAVAILABLE' using errcode='55000';
+  end if;
+  v_identity:=private.weekly_source_resolve_root_identity_v1(v_root_timesheet_id);
+  if v_identity->>'ok' is distinct from 'true'
+    or v_identity->>'canonical_timesheet_id' is distinct from v_root_timesheet_id::text then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_STALE' using errcode='55000';
+  end if;
+  select * into strict v_timesheet from public.timesheets where timesheet_id=v_root_timesheet_id;
+  select * into strict v_contract from public.contracts where id=v_timesheet.contract_id;
+  if v_revision.state is distinct from 'CURRENT'
+    or not exists(select 1 from public.weekly_source_final_revisions revision
+      where revision.id=v_final_revision_id and revision.state='CURRENT'
+        and revision.manifest_hash=v_revision.manifest_hash
+        and revision.policy_fingerprint=v_revision.policy_fingerprint) then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_STALE' using errcode='55000';
+  end if;
 
   select * into v_bundle
   from public.weekly_source_entitlement_decision_bundles bundle_row
@@ -1500,7 +1796,14 @@ begin
   -- re-decide published money while the actor stamp and the ABANDONED update
   -- (both `where state='PROPOSED'`) silently matched zero rows.
   if v_bundle.state<>'PROPOSED'
-     or v_bundle.source_root_timesheet_id is distinct from v_root_timesheet_id then
+     or v_bundle.source_root_timesheet_id is distinct from v_root_timesheet_id
+     or v_bundle.bundle_kind is distinct from 'SINGLE_ROOT'
+     or v_bundle.candidate_id is distinct from v_contract.candidate_id
+     or v_bundle.agency_id is distinct from v_group.agency_id
+     or v_bundle.source_contract_id is distinct from v_contract.id
+     or v_bundle.source_root_family_booking_id is distinct from v_timesheet.booking_id
+     or v_bundle.week_ending_date is distinct from v_timesheet.week_ending_date
+     or cardinality(v_bundle.proposed_head_ids)<>1 then
     return pg_catalog.jsonb_build_object(
       'ok',false,'published',false,
       'code','WEEKLY_SOURCE_DECISION_BUNDLE_NOT_PROPOSED','retryable',false,
@@ -1521,15 +1824,8 @@ begin
   -- neither unique index is treated as making more than one impossible
   -- (Part 1 rule 5), and no `limit` decides anything.
   --
-  -- No row lock is taken over the family here, deliberately.  This owner takes
-  -- an advisory lock on its idempotency key and `for update` on the decision
-  -- bundle, and takes NO lock at all on public.timesheets; adding family row
-  -- locks would inject a new lock class, in a different order from the family-
-  -- ordered lockers, into a path that has none.  The residual race is therefore
-  -- real and stated rather than claimed closed: a rotation that commits between
-  -- private.weekly_source_resolve_root_identity_v1 above (which already
-  -- requires the root to be the canonical current member) and this read is not
-  -- seen.
+  -- I-1 above serialises the same canonical family before the bundle lock;
+  -- the committed head is read within that existing rotation/identity boundary.
   v_head_family:=private.weekly_source_invoice_family_timesheet_ids_v1(
     v_root_timesheet_id
   );
@@ -1568,11 +1864,15 @@ begin
     -- The complete proposed entitlement, rebuilt from the server's own
     -- snapshot builders at the declared current source revision.
     v_authority_kind:='LOCKED_FINAL_SOURCE';
+    v_chosen_segments:=private.weekly_source_ordinary_projection_current_segments_v1(
+      v_root_timesheet_id,v_final_revision_id);
     v_components:=private.weekly_source_entitlement_components_v1(
-      private.weekly_source_ordinary_projection_current_segments_v1(
-        v_root_timesheet_id,v_final_revision_id),
+      v_chosen_segments,
       private.weekly_source_ordinary_projection_current_expenses_v1(
         v_root_timesheet_id,v_final_revision_id)
+    );
+    v_components:=private.weekly_source_retain_approved_additional_v2(
+      v_root_timesheet_id,v_components
     );
   else
     -- 24 section 4.2 and section 6.4: `Keep currently approved hours`
@@ -1666,22 +1966,73 @@ begin
     v_bundle.proposed_head_ids[1],v_bundle.decision_id,v_components
   );
 
-  -- proof/32 section 2: the coordinator copies the actor "once from the
-  -- immutable accepted Office decision" and never from the caller, so the real
-  -- Office actor is stamped on the bundle row before the coordinator reads it.
-  -- decision_id is a digest field and is deliberately NOT changed.
+  -- V4 I2: accepting an actual reviewed Final is an immutable successor, not
+  -- an actor overwrite on a staged/KEEP proposal. First bind the original APP
+  -- vector exactly to what Office reviewed, then add only accepted provenance.
+  -- KEEP receives no normal-Final retained-content exception.
+  if v_decision='APPROVE_UPDATED_HOURS' then
+    if v_bundle.request_digest is distinct from private.weekly_source_publication_request_digest_v1(
+        private.weekly_source_publication_request_canonical_v1(v_request,'IMMEDIATE',null::uuid)) then
+      raise exception 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE' using errcode='55000';
+    end if;
+    v_inventory:=private.weekly_source_effective_inventory_v1(v_root_timesheet_id);
+    if v_inventory->>'ok' is distinct from 'true'
+      or v_inventory#>>'{approval_basis,coverage_complete}' is distinct from 'true' then
+      raise exception 'WEEKLY_SOURCE_LATER_CHANGE_SCOPE_UNAVAILABLE' using errcode='55000';
+    end if;
+    v_accepted_action_id:=pg_catalog.gen_random_uuid();
+    v_request:=pg_catalog.jsonb_set(v_request,'{financial_request,source_revision}',
+      (v_request#>'{financial_request,source_revision}')||pg_catalog.jsonb_build_object(
+        'origin_kind','CURRENT_FINAL_SOURCE_V1','accepted_action_id',v_accepted_action_id));
+  end if;
+  if exists(select 1 from public.weekly_source_entitlement_decision_bundles later
+    where later.decision_bundle_id=v_bundle.decision_bundle_id
+      and later.bundle_revision>v_bundle.bundle_revision) then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE' using errcode='55000';
+  end if;
+  v_successor_revision:=v_bundle.bundle_revision+1;
+  v_request:=pg_catalog.jsonb_set(v_request,'{bundle_revision}',to_jsonb(v_successor_revision));
   update public.weekly_source_entitlement_decision_bundles
-  set decided_by_user_id=v_actor
+  set state='ABANDONED'
   where decision_bundle_id=v_bundle.decision_bundle_id
     and bundle_revision=v_bundle.bundle_revision
     and state='PROPOSED';
+  if not found then raise exception 'WEEKLY_SOURCE_LATER_CHANGE_REVIEW_STALE' using errcode='55000'; end if;
+  v_recorded:=private.weekly_source_entitlement_proposal_record_v1(
+    v_request,v_group.agency_id,v_contract.id,v_timesheet.week_ending_date,v_actor);
+  if v_recorded->>'ok' is distinct from 'true' or v_recorded->>'created' is distinct from 'true' then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_ACCEPTANCE_FAILED' using errcode='55000';
+  end if;
+  if v_decision='APPROVE_UPDATED_HOURS' then
+    if private.weekly_source_accepted_publication_action_record_v1(
+       p_request,v_request,v_inventory#>'{approval_basis,origin}') is distinct from v_accepted_action_id then
+      raise exception 'WEEKLY_SOURCE_LATER_CHANGE_ACCEPTANCE_FAILED' using errcode='55000';
+    end if;
+  end if;
+
+  -- Capture the actual accepted Source artifact before publication regardless
+  -- of financial module owner. This writes only exact chosen detail; it neither
+  -- activates Banking NEXT nor admits its financial producer. Missing capture
+  -- authority refuses atomically. KEEP copies only genuine prior HEAD detail.
+  perform private.bpay_next_capture_chosen_source_detail_v1(
+    v_bundle.proposed_head_ids[1],v_bundle.decision_bundle_id,
+    v_successor_revision,v_components,
+    case when v_decision='APPROVE_UPDATED_HOURS' then v_chosen_segments end,
+    case when v_decision='KEEP_CURRENTLY_APPROVED_HOURS' then v_head.id end);
 
   v_result:=private.weekly_source_entitlement_publish_immediate_v1(v_request);
+  -- A real refusal rolls back acceptance/abandonment together. Do not audit a
+  -- failed partial write as an idempotent decision that can never be retried.
+  if v_result->>'ok' is distinct from 'true' then
+    raise exception 'WEEKLY_SOURCE_LATER_CHANGE_PUBLICATION_REFUSED'
+      using errcode='55000',detail=v_result::text;
+  end if;
   v_published:=coalesce((v_result->>'published')::boolean,false);
   v_result:=v_result||pg_catalog.jsonb_build_object(
     'decision',v_decision,'retained',false,
     'decision_bundle_id',v_bundle.decision_bundle_id,
-    'bundle_revision',v_bundle.bundle_revision,
+    'bundle_revision',v_successor_revision,
+    'reviewed_bundle_revision',v_bundle.bundle_revision,
     'authority_kind',v_authority_kind
   );
 
@@ -1691,7 +2042,8 @@ begin
     pg_catalog.jsonb_build_object(
       'decision',v_decision,
       'outcome',case when v_published then 'PUBLISHED' else 'NOT_PUBLISHED' end,
-      'bundle_revision',v_bundle.bundle_revision,
+      'bundle_revision',v_successor_revision,
+      'reviewed_bundle_revision',v_bundle.bundle_revision,
       'root_timesheet_id',v_root_timesheet_id,
       'final_revision_id',v_final_revision_id,
       'authority_kind',v_authority_kind,

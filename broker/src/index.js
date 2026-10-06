@@ -65,6 +65,8 @@ import {
 } from './weekly-source/correct-final-source-orchestrator.mjs';
 import { adaptWeeklyCorrectFinalServiceSnapshot } from './weekly-source/correct-final-source-snapshot-adapter.mjs';
 import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';
+import { projectWeeklyProtectedComponentIdentity } from './weekly-source/protected-component-identity.mjs';
+import { applyNextPaidEvidence } from './weekly-source/next-paid-evidence.mjs';
 import {
   orchestrateWeeklySourceFinalisation,
   recoverWeeklySourceFinalisationPayProjection
@@ -3041,7 +3043,7 @@ async function calculateWeeklyProtectedSnapshot(env, input = {}) {
     candidate_id: context.candidate_id,
     client_id: context.client_id
   };
-  return buildWeeklyScheduleSegmentsSnapshot(
+  const calculation = await buildWeeklyScheduleSegmentsSnapshot(
     env,
     timesheet,
     context.contract_week,
@@ -3053,6 +3055,12 @@ async function calculateWeeklyProtectedSnapshot(env, input = {}) {
       ignore_locked_segments_for_preview: true
     }
   );
+  // The generic calculator remains unchanged for ordinary/non-import flows.
+  // Direct NEXT owns its existing event projection; Local/common uses the
+  // complete genuine Source basis returned by the exact action context.
+  if (input.retainNextPreviewFacts === true) return calculation;
+  return projectWeeklyProtectedComponentIdentity({ calculation, schedule,
+    approvedComponents: context.approved_component_identity_components });
 }
 
 async function buildWeeklyCorrectFinalServiceSnapshot(env, input = {}) {
@@ -87010,13 +87018,44 @@ async function attachWeeklySourceOfficeTimesheetPresentation(
       { p_request: { actor_user_id: actorId, timesheet_id: timesheetId } },
       { timeoutMs: 20_000 }
     );
-    const presentation = unwrapWeeklySourceOfficePresentation(raw, functionName);
+    let presentation = unwrapWeeklySourceOfficePresentation(raw, functionName);
     if (!presentation || presentation.applicable === false) return payload;
     if (String(presentation.contract || '').trim() !== 'WEEKLY_SOURCE_OFFICE_PRESENTATION_V1'
         || upper(presentation.scope) !== 'WEEKLY') {
       throw new Error('WEEKLY_SOURCE_PRESENTATION_CONTRACT_INVALID');
     }
-    return { ...payload, weekly_source_presentation: presentation };
+    // The optional additive Source identity is independent of Banking pages.
+    // When present it must be the exact requested physical root. Older legacy
+    // replies without it retain their existing path; they cannot qualify the
+    // narrowly independent NEXT proposal decision in Office.
+    if (Object.prototype.hasOwnProperty.call(presentation, 'root_timesheet_id')
+        && (typeof presentation.root_timesheet_id !== 'string'
+          || presentation.root_timesheet_id.toLowerCase() !== timesheetId.toLowerCase())) {
+      throw new Error('WEEKLY_SOURCE_PRESENTATION_ROOT_MISMATCH');
+    }
+    presentation = await applyNextPaidEvidence(presentation, actorId, timesheetId);
+    const category = presentation.operational_category;
+    const categoryFields = category && typeof category === 'object' && !Array.isArray(category)
+      && ['PROCESSING_DELAYED', 'WITHDRAWN', 'ARCHIVED'].includes(category.presentation_category)
+      ? {
+        tools_stage: category.presentation_category,
+        processing_status_display: category.presentation_category === 'PROCESSING_DELAYED'
+          ? 'Processing Delayed' : 'Withdrawn',
+        weekly_source_operational_category: category,
+        weekly_source_processing_reason: category.processing_reason || null
+      }
+      : category && typeof category === 'object' && !Array.isArray(category)
+        ? { weekly_source_operational_category: null, weekly_source_processing_reason: null }
+        : {};
+    // Pass through the exact server-owned category to existing detail/patch
+    // shapes. Never infer physical archive state or action permission here.
+    const result = { ...payload, ...categoryFields, weekly_source_presentation: presentation };
+    for (const key of ['timesheet', 'data_row', 'row', 'effective']) {
+      if (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key])) {
+        result[key] = { ...payload[key], ...categoryFields };
+      }
+    }
+    return result;
   } catch (error) {
     const sourcePotentiallyApplies = payload.is_import_authoritative === true
       || payload.healthroster_compare?.required === true
@@ -87431,6 +87470,20 @@ async function readCandidateTimesheetSummaryCursor(env) {
   }
 }
 
+async function readWeeklySourceOfficeSummaryRows(env, actorUserId, filters, rpc = sbRpc) {
+  const functionName = 'weekly_source_office_summary_rows_v1';
+  const raw = await rpc(env, functionName,
+    { p_request: { actor_user_id: actorUserId, p_filters: filters } });
+  const payload = unwrapWeeklySourceOfficePresentation(raw, functionName);
+  if (!payload || payload.contract !== 'WEEKLY_SOURCE_OFFICE_SUMMARY_ROWS_V1'
+      || !Array.isArray(payload.rows) || payload.rows.length > 200) {
+    throw new Error('WEEKLY_SOURCE_SUMMARY_CONTRACT_INVALID');
+  }
+  // The SQL wrapper pairs canonical paged rows with category evidence in one
+  // statement. Never repair membership or financial/action facts in JavaScript.
+  return payload.rows;
+}
+
 function candidateTimesheetSummaryCompactPatch(row) {
   const currentIdentity = row?.candidate_office_projection?.current_identity || null;
   const rowSignature = currentIdentity?.row_signature
@@ -87453,6 +87506,12 @@ function candidateTimesheetSummaryCompactPatch(row) {
     office_pre_source_candidate_hours: row?.office_pre_source_candidate_hours === true,
     processing_status: row?.processing_status ?? null,
     processing_status_display: row?.processing_status_display ?? null,
+    ...(Object.prototype.hasOwnProperty.call(row || {}, 'weekly_source_root_version') ? {
+      tools_stage: row?.tools_stage ?? null,
+      weekly_source_root_version: row?.weekly_source_root_version ?? null,
+      weekly_source_operational_category: row?.weekly_source_operational_category ?? null,
+      weekly_source_processing_reason: row?.weekly_source_processing_reason ?? null
+    } : {}),
     total_hours: row?.total_hours ?? null,
     total_pay_ex_vat: row?.total_pay_ex_vat ?? null,
     margin_ex_vat: row?.margin_ex_vat ?? null,
@@ -87557,12 +87616,8 @@ async function handleCandidateTimesheetSummaryPatches(env, req) {
   if (!ids.length) return withCORS(env, req, badRequest('Candidate Timesheet Summary identities were invalid.'));
 
   try {
-    const raw = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', {
-      p_filters: { ids,limit: Math.min(ids.length,200),offset: 0 }
-    });
-    const rows = Array.isArray(raw)
-      ? raw
-      : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.rows) ? raw.rows : []));
+    const rows = await readWeeklySourceOfficeSummaryRows(env, user.id,
+      { ids,limit: Math.min(ids.length,200),offset: 0 });
     const presentedRows = await attachCandidateDailyOfficePresentation(env,rows);
     const projectedRows = attachTimesheetExpensePresentation(
       await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
@@ -88030,8 +88085,7 @@ async function handleTimesheetsSummary(env, req) {
             limit: scanPageSize,
             offset: scanOffset
           };
-          const scanResponse = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: scanFilters });
-          rawRows = rpcRows(scanResponse, 'timesheet_summary_lightweight_rows_v1');
+          rawRows = await readWeeklySourceOfficeSummaryRows(env, user.id, scanFilters);
         }
 
         if (!rawRows.length) break;
@@ -88157,9 +88211,8 @@ async function handleTimesheetsSummary(env, req) {
       }));
     }
 
-    const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
     const normalizedRows = normalizeSummaryRows(
-      rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1')
+      await readWeeklySourceOfficeSummaryRows(env, user.id, rowFilters)
     );
     const presentedRows = await attachCandidateDailyOfficePresentation(env,normalizedRows);
     const outRows = attachTimesheetExpensePresentation(
@@ -199752,7 +199805,8 @@ export const timesheetRouteSortInternals = Object.freeze({
 });
 export const weeklySourceOfficePresentationInternals = Object.freeze({
   unwrapWeeklySourceOfficePresentation,
-  attachWeeklySourceOfficeTimesheetPresentation
+  attachWeeklySourceOfficeTimesheetPresentation,
+  readWeeklySourceOfficeSummaryRows
 });
 export const candidateWeeklyScheduleInternals = Object.freeze({
   candidateScheduleLocalTimeAliases

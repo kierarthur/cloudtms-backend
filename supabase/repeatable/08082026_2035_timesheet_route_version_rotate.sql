@@ -1088,6 +1088,12 @@ declare
   v_office_service boolean:=false;
   v_weekly_source_booking_id text;
   v_weekly_source_guard jsonb;
+  v_import_current public.timesheets%rowtype;
+  v_import_week public.contract_weeks%rowtype;
+  v_import_fin public.timesheets_financials%rowtype;
+  v_import_contract_id uuid;
+  v_import_client_id uuid;
+  v_import_authority jsonb;
 begin
   -- Plan 6.2 G6-11 (proof/34 section 3).  An authorised Weekly-Source-managed
   -- root may never be rotated.  The refusal joins the existing block list ahead
@@ -1159,6 +1165,57 @@ begin
         'timesheet_id',p_current_timesheet_id,
         'reason',v_weekly_source_guard->>'reason'
       )::text;
+  end if;
+  -- Banking Pay RESET: the flag-off legacy ALLOW_QR_AGAIN branch does not
+  -- perform its own import-authority check. The current confirmation preview
+  -- and coordinated core both refuse imported roots. Enforce that same
+  -- retained classifier here, before either mutation owner can be dispatched.
+  -- The existing guard resolved this exact canonical current root while the
+  -- compatible booking locks above are held; do not resolve a second family
+  -- or classify a stale caller-named physical member. Unknown/unbound malformed
+  -- identifiers keep the existing downstream typed outcomes.
+  if coalesce((v_weekly_source_guard->>'ok')::boolean,false)
+     and nullif(v_weekly_source_guard->>'canonical_timesheet_id','') is not null then
+    select import_current.* into v_import_current
+    from public.timesheets import_current
+    where import_current.timesheet_id=(v_weekly_source_guard->>'canonical_timesheet_id')::uuid
+      and import_current.is_current=true;
+    if found then
+      select import_week.* into v_import_week
+      from public.contract_weeks import_week
+      where import_week.timesheet_id=v_import_current.timesheet_id
+      order by import_week.updated_at desc,import_week.created_at desc limit 1;
+      select import_fin.* into v_import_fin
+      from public.timesheets_financials import_fin
+      where import_fin.timesheet_id=v_import_current.timesheet_id
+        and import_fin.is_current=true
+      order by import_fin.updated_at desc,import_fin.created_at desc limit 1;
+      v_import_contract_id:=coalesce(v_import_week.contract_id,v_import_current.contract_id);
+      v_import_client_id:=v_import_fin.client_id;
+      if v_import_contract_id is not null then
+        select coalesce(import_contract.client_id,v_import_client_id)
+        into v_import_client_id from public.contracts import_contract
+        where import_contract.id=v_import_contract_id;
+      end if;
+      if v_import_client_id is not null then
+        v_import_authority:=private._candidate_import_authoritative_v1(
+          v_import_client_id,v_import_contract_id,v_import_current.timesheet_id,
+          case when v_import_fin.id is null then null else to_jsonb(v_import_fin) end,
+          v_import_current.week_ending_date
+        );
+        if coalesce((v_import_authority->>'is_import_authoritative')::boolean,false) then
+          raise exception 'ROUTE_CHANGE_IMPORT_AUTHORITATIVE_BLOCK'
+            using errcode='55000',detail=jsonb_build_object(
+              'code','ROUTE_CHANGE_IMPORT_AUTHORITATIVE_BLOCK',
+              'entry_point','E1:public.timesheet_route_version_rotate',
+              'block_reason','IMPORT_AUTHORITATIVE',
+              'source_family',v_import_authority->>'source_family',
+              'current_timesheet_id',v_import_current.timesheet_id,
+              'action',upper(btrim(coalesce(p_target_action,'')))
+            )::text;
+        end if;
+      end if;
+    end if;
   end if;
   select candidate_app_environment into v_environment
   from public.settings_defaults where id=1;

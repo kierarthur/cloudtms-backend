@@ -276,12 +276,12 @@ function dependenciesFor(kind, options = {}) {
     calls,
     dataRpc: async (name, args) => {
       calls.push([name, args]);
-      if (name === 'weekly_exceptional_pay_prepare_family_v1') return prepared(preparedKind);
+      if (name === 'weekly_exceptional_pay_prepare_family_v1') return options.preparedResult ?? prepared(preparedKind);
       if (name === 'weekly_exceptional_pay_prepare_action_v1') {
         const protectedSchedule = kind === 'AMEND'
           ? args.p_request.protected_schedule
           : schedule;
-        return prepared(kind, protectedSchedule);
+        return options.preparedResult ?? prepared(kind, protectedSchedule);
       }
       if (name === 'weekly_exceptional_pay_action_publication_status_v1') {
         return options.publicationStatus ?? { ok: true, staged: false };
@@ -309,16 +309,8 @@ function dependenciesFor(kind, options = {}) {
           request_sha256: stagedRequest.c1_request.request_sha256,
         };
       }
-      if (name === 'weekly_exceptional_pay_read_c1_request_v1') {
-        const request = stagedRequest?.c1_request ?? options.stagedRequest?.c1_request;
-        return {
-          ok: true,
-          contract: 'WEEKLY_PROTECTED_C1_READ_V1',
-          state: 'PUBLISHED',
-          publication: { request, request_sha256: request.request_sha256, records: [] },
-          resume_checkpoint: null,
-          unknown_checkpoint: null,
-        };
+      if (name === 'weekly_exceptional_pay_complete_local_v1') {
+        return options.localResult ?? { ok: true, outcome: 'PUBLISHED', state: 'LIVE' };
       }
       throw new Error(`Unexpected data RPC ${name}`);
     },
@@ -442,7 +434,26 @@ test('a source-absent first approval prepares an explicit-zero ordinary root bef
   assert.equal(dependencies.calls.filter(([name]) => name === 'CALCULATE').length, 2);
 });
 
-test('a staged replay is read by exact durable identity without recalculation', async () => {
+test('a completed replay with contradictory unstaged status refuses before fresh work', async () => {
+  const dependencies = dependenciesFor('RECONCILE', {
+    preparedResult: {
+      family_id: ID.family, orchestration_run_id: ID.run,
+      request_kind: 'RECONCILE', run_state: 'COMPLETE', idempotent_replay: true,
+    },
+    publicationStatus: { ok: true, staged: false },
+  });
+  await assert.rejects(orchestrateWeeklyProtectedAction({
+    action: 'ACCEPT_SOURCE_AND_RECONCILE',
+    request: browserRequest('ACCEPT_SOURCE_AND_RECONCILE'), dependencies,
+  }), (error) => error instanceof WeeklyProtectedActionError
+    && error.code === 'WEEKLY_PROTECTED_PUBLICATION_STATUS_INVALID');
+  assert.deepEqual(dependencies.calls.map(([name]) => name), [
+    'weekly_exceptional_pay_prepare_action_v1',
+    'weekly_exceptional_pay_action_publication_status_v1',
+  ]);
+});
+
+test('a staged replay completes the exact local receipt without recalculation', async () => {
   const stagedRequest = {
     c1_request: {
       request_id: '92000000-0000-4000-8000-000000000001',
@@ -452,6 +463,10 @@ test('a staged replay is read by exact durable identity without recalculation', 
     },
   };
   const dependencies = dependenciesFor('RECONCILE', {
+    preparedResult: {
+      family_id: ID.family, orchestration_run_id: ID.run,
+      request_kind: 'RECONCILE', run_state: 'COMPLETE', idempotent_replay: true,
+    },
     publicationStatus: {
       ok: true, staged: true,
       publication_request_id: stagedRequest.c1_request.request_id,
@@ -459,6 +474,7 @@ test('a staged replay is read by exact durable identity without recalculation', 
       publication_state: 'PUBLISHED',
     },
     stagedRequest,
+    localResult: { ok: true, outcome: 'PUBLISHED', idempotent_replay: true },
   });
   const result = await orchestrateWeeklyProtectedAction({
     action: 'ACCEPT_SOURCE_AND_RECONCILE',
@@ -470,7 +486,7 @@ test('a staged replay is read by exact durable identity without recalculation', 
   assert.equal(dependencies.calls.some(([name]) => name === 'CALCULATE'), false);
 });
 
-test('explicit unknown-outcome recovery selects the recovery owner and never recalculates', async () => {
+test('a lost Save response retries the same local owner, never external C1', async () => {
   const stagedRequest = {
     c1_request: {
       request_id: '92000000-0000-4000-8000-000000000002',
@@ -488,13 +504,35 @@ test('explicit unknown-outcome recovery selects the recovery owner and never rec
     },
     stagedRequest,
   });
-  await assert.rejects(orchestrateWeeklyProtectedAction({
+  const result = await orchestrateWeeklyProtectedAction({
     action: 'ACCEPT_SOURCE_AND_RECONCILE',
     request: browserRequest('ACCEPT_SOURCE_AND_RECONCILE', { recover_unknown_outcome: true }),
     dependencies,
-  }), (error) => error?.code === 'C1_DURABLE_RECOVERY_NOT_REQUIRED');
+  });
+  assert.equal(result.outcome, 'PUBLISHED');
   assert.equal(dependencies.calls.some(([name]) => name === 'weekly_exceptional_pay_action_context_v1'), false);
   assert.equal(dependencies.calls.some(([name]) => name === 'CALCULATE'), false);
+});
+
+test('Save needs no Banking Pay transport dependency and returns truthful frozen deferral', async () => {
+  const dependencies = dependenciesFor('APPROVE', {
+    localResult: { ok: true, outcome: 'SAVED_PENDING_FREEZE', state: 'PENDING' },
+  });
+  delete dependencies.c1RawRpc;
+  const result = await orchestrateWeeklyProtectedAction({ action: 'APPROVE_PROTECTED_HOURS',
+    request: browserRequest('APPROVE_PROTECTED_HOURS'), dependencies });
+  assert.equal(result.outcome, 'SAVED_PENDING_FREEZE');
+  assert.equal(dependencies.calls.filter(([name]) => name === 'weekly_exceptional_pay_complete_local_v1').length, 1);
+  assert.equal(dependencies.calls.some(([name]) => /read_c1|record_c1|C1_RAW/.test(name)), false);
+});
+
+test('a staged request is not successful until the local owner confirms it', async () => {
+  for (const localResult of [{ ok: false, code: 'WEEKLY_PROTECTED_LOCAL_STATE_CHANGED' },
+    { ok: true, outcome: 'STAGED' }]) {
+    await assert.rejects(orchestrateWeeklyProtectedAction({ action: 'APPROVE_PROTECTED_HOURS',
+      request: browserRequest('APPROVE_PROTECTED_HOURS'),
+      dependencies: dependenciesFor('APPROVE', { localResult }) }), WeeklyProtectedActionError);
+  }
 });
 
 test('closed input rejects browser money/C1 fields and stale version refusals are surfaced', async () => {

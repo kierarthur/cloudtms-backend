@@ -1,4 +1,4 @@
--- Candidate list and detail must use the same committed approved-hours head.
+-- Candidate list and detail use the same positively certified approved basis.
 -- A financial total or a Candidate submission is not evidence of approval.
 
 \set ON_ERROR_STOP on
@@ -30,9 +30,10 @@ begin
   if v_entitlement->>'state' is distinct from 'AVAILABLE' then
     return pg_catalog.jsonb_build_object('state','UNAVAILABLE','total_hours',null);
   end if;
-  -- SOURCE_AUTHORITY approval always has a committed head whose numeric total
-  -- is verified against its resolved component times by the resolver.
-  if v_entitlement->>'authority' is distinct from 'HEAD'
+  -- Genuine HEAD, first-authorised TSFIN, or positively confirmed local Save.
+  -- Saved-local authority is display-only, never first authorisation.
+  if coalesce(v_entitlement->>'authority','') not in
+       ('HEAD','INITIAL_AUTHORISED_TSFIN_V1','SAVED_UNAUTHORISED_LOCAL_V1')
      or v_entitlement->>'total_hours' is null then
     return pg_catalog.jsonb_build_object('state','UNAVAILABLE','total_hours',null);
   end if;
@@ -67,7 +68,8 @@ begin
   if v_entitlement->>'state'='NO_APPROVED_ENTITLEMENT' then
     v_approval:=pg_catalog.jsonb_build_object('state','NOT_PROCESSED','total_hours',null);
   elsif v_entitlement->>'state'='AVAILABLE'
-    and v_entitlement->>'authority'='HEAD'
+    and v_entitlement->>'authority' in
+      ('HEAD','INITIAL_AUTHORISED_TSFIN_V1','SAVED_UNAUTHORISED_LOCAL_V1')
     and v_entitlement->>'total_hours' is not null
     and (v_entitlement->>'total_hours')::numeric>=0 then
     v_approval:=pg_catalog.jsonb_build_object('state','AVAILABLE',
@@ -110,13 +112,8 @@ begin
   for v_item in select value from pg_catalog.jsonb_array_elements(
     coalesce(v_page->'items','[]'::jsonb)) loop
     if v_item->>'route_family'='IMPORT_AUTHORITATIVE' then
-      if coalesce((v_item->>'authorised')::boolean,false) then
-        v_approval:=private.weekly_source_candidate_list_approval_v1(
-          nullif(v_item->>'timesheet_id','')::uuid);
-      else
-        v_approval:=pg_catalog.jsonb_build_object(
-          'state','NOT_PROCESSED','total_hours',null);
-      end if;
+      v_approval:=private.weekly_source_candidate_list_approval_v1(
+        nullif(v_item->>'timesheet_id','')::uuid);
       v_item:=v_item||pg_catalog.jsonb_build_object(
         'approved_hours_state',v_approval->'state',
         'approved_total_hours',v_approval->'total_hours');

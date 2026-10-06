@@ -35,6 +35,7 @@ declare
   v_publication public.weekly_source_projection_publications%rowtype;
   v_upload public.weekly_source_uploads%rowtype;
   v_profile public.weekly_source_format_profiles%rowtype;
+  v_generation bigint;
   v_check_id uuid;
   v_check public.weekly_source_charge_checks%rowtype;
   v_resolution public.weekly_source_row_resolutions%rowtype;
@@ -102,8 +103,12 @@ begin
   end if;
   select * into strict v_upload from public.weekly_source_uploads where id=v_publication.upload_id;
   select * into strict v_profile from public.weekly_source_format_profiles where id=v_upload.source_format_profile_id;
+  -- Initial publications use the authority-scope version as their mapping
+  -- generation; only a rebuilt publication stores an explicit generation.
+  -- Match the existing projection builder/publisher, without changing either.
+  v_generation:=coalesce(v_publication.projection_generation,v_publication.authority_scope_version);
   if v_upload.state<>'CURRENT' or v_profile.profile_code<>'NHSP_FINAL_BACKING_V1'
-     or v_publication.projection_generation is null then
+     or v_generation is null then
     raise exception 'WEEKLY_SOURCE_CHARGE_ACCEPT_PUBLICATION_INVALID' using errcode='55000';
   end if;
   v_policy_fingerprint:=private.weekly_source_charge_acceptance_policy_fingerprint_v1();
@@ -121,7 +126,7 @@ begin
     left join public.weekly_source_charge_acceptances acceptance
       on acceptance.charge_check_id=charge.id
     where source_row.upload_id=v_upload.id
-      and charge.generation=v_publication.projection_generation
+      and charge.generation=v_generation
       and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
       and charge.phase_severity='PROVISIONAL_WARNING'
       and charge.blocker_code is null
@@ -133,7 +138,7 @@ begin
     pg_catalog.jsonb_build_object(
       'source_cycle_id',v_cycle_id,
       'projection_publication_id',v_publication.id,
-      'projection_generation',v_publication.projection_generation,
+      'projection_generation',v_generation,
       'workspace_version',v_workspace_version,
       'eligible_warning_keys',to_jsonb(v_eligible_keys)
     )
@@ -151,7 +156,7 @@ begin
   left join public.weekly_source_charge_acceptances acceptance
     on acceptance.charge_check_id=charge.id
   where source_row.upload_id=v_upload.id
-    and charge.generation=v_publication.projection_generation
+    and charge.generation=v_generation
     and charge.comparison_result in ('MISMATCH','ZERO_SOURCE_CHARGE')
     and charge.phase_severity='PROVISIONAL_WARNING'
     and charge.blocker_code is null
@@ -165,7 +170,7 @@ begin
   foreach v_check_id in array v_ids loop
     select * into v_check from public.weekly_source_charge_checks charge
     where charge.id=v_check_id for update;
-    if not found or v_check.generation<>v_publication.projection_generation
+    if not found or v_check.generation<>v_generation
        or v_check.comparison_result not in ('MISMATCH','ZERO_SOURCE_CHARGE')
        or v_check.phase_severity<>'PROVISIONAL_WARNING'
        or v_check.blocker_code is not null then
@@ -176,7 +181,7 @@ begin
     select * into strict v_resolution from public.weekly_source_row_resolutions resolution
       where resolution.id=v_check.row_resolution_id
         and resolution.upload_row_id=v_row.id
-        and resolution.generation=v_publication.projection_generation;
+        and resolution.generation=v_generation;
     if v_resolution.mapping_state<>'RESOLVED' or v_resolution.contract_id is null
        or v_resolution.contract_selection_method is null then
       raise exception 'WEEKLY_SOURCE_CHARGE_ACCEPT_CONTRACT_UNRESOLVED' using errcode='55000';
@@ -184,7 +189,7 @@ begin
     select * into strict v_economic from public.weekly_source_row_economic_snapshots economic
       where economic.row_resolution_id=v_resolution.id
         and economic.upload_row_id=v_row.id
-        and economic.generation=v_publication.projection_generation
+        and economic.generation=v_generation
         and economic.contract_id=v_resolution.contract_id;
     if v_check.charge_calculation_fingerprint is distinct from v_economic.calculation_fingerprint
        or v_resolution.contract_and_rate_fingerprint is distinct from v_economic.contract_and_rate_fingerprint

@@ -420,7 +420,12 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /validateExpectedDatabase[\s\S]*assertCurrentDatabase\(expectedDatabase\)/);
   assert.match(source, /select pg_catalog\.current_database\(\);/);
   assert.doesNotMatch(source, /marking existing migrations/);
-  assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*readerReleasePhases[\s\S]*for \(const item of phases\.ordinary\) psql\(\{ file: item\.path \}\)[\s\S]*prepareSourceReaders[\s\S]*readerActivationSql[\s\S]*recordInventory/);
+  assert.match(source, /mode === 'NEW' \|\| mode === 'UPGRADE'[\s\S]*await applyManagedRelease\([\s\S]*openSession: openManagedPsqlSession[\s\S]*preapply: runBankingPayCatalogPreapply[\s\S]*runVerifiers\(mode,releaseVerifierContext\)[\s\S]*compareExpected\(release\.contractPath\)/);
+  const managed=read('scripts/cloudtms-managed-release.mjs');
+  assert.match(managed,/compileBootstrap[\s\S]*current\.migrations\.slice\(0,anchor\+1\)/);
+  assert.match(managed,/baselineRepeatableLock[\s\S]*baseline\.map\(row=>repeatableLedgerSql/);
+  assert.match(managed,/readerReleasePhases[\s\S]*prepareManagedSourceReaders[\s\S]*readerActivationSql/);
+  assert.doesNotMatch(source,/for \(const item of postBaselineMigrations\) psql/);
   assert.match(source, /mode === 'NEW'[\s\S]*release\.newVerificationFiles/);
   const release = readJson('supabase/release/current-release.json');
   assert.ok(release.verificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));

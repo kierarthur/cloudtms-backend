@@ -124,6 +124,16 @@ begin
     raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_REQUEST_INVALID' using errcode='22023';
   end if;
   select * into v_review from private.weekly_source_manual_reviews where id=v_review_id;
+  if found and v_review.state='RESOLVED' and v_review.resolution_kind=v_kind
+     and v_review.resolved_by_user_id=v_actor then
+    -- Exact retry after the atomic protected Save or a lost response. No
+    -- second resolution, new audit row or current-source reinterpretation.
+    perform private.weekly_source_office_authority_v1(v_actor,
+      case when v_kind='PROTECTED_PAY' then 'APPROVE_PROTECTED_PAY' else 'ACCEPT_SYSTEM_HOURS' end,
+      v_review.source_group_id,v_review.client_id,v_review.work_date);
+    return jsonb_build_object('ok',true,'review_id',v_review.id,
+      'resolution_kind',v_kind,'idempotent_replay',true);
+  end if;
   if not found or v_review.state<>'OPEN' then
     raise exception 'WEEKLY_SOURCE_MANUAL_REVIEW_NOT_OPEN' using errcode='40001';
   end if;
@@ -183,6 +193,14 @@ begin
       and family.week_ending_date=v_week
       and protected_event.durable_work_event_id=v_review.work_event_id
       and protected_event.state='WAIT'
+      and exists(select 1 from public.weekly_exceptional_payment_approvals approved
+        join public.weekly_exceptional_c1_publication_requests request
+          on request.orchestration_run_id=approved.creation_orchestration_run_id
+        where approved.id=protected_event.evidence_approval_id
+          and (request.state='PUBLISHED' or exists(
+            select 1 from private.weekly_source_local_protected_decision_receipts receipt
+            where receipt.publication_request_id=request.id
+              and receipt.state in ('COMPLETE','PENDING_FREEZE'))))
       and protected_event.event_sequence=(select max(latest.event_sequence)
         from public.weekly_exceptional_pay_family_events latest
         where latest.family_id=protected_event.family_id

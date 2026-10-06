@@ -15689,6 +15689,7 @@ DECLARE
   v_component_values jsonb := '{}'::jsonb;
   v_diagnostic_payload jsonb := '{}'::jsonb;
   v_candidate_component jsonb := '{}'::jsonb;
+  v_source_category jsonb;
   v_candidate_component_enabled boolean := private._candidate_feature_enabled_current_v1('candidate_record_role_capabilities');
   v_temp_log_enabled boolean := false;
   v_signature text := NULL;
@@ -15846,6 +15847,19 @@ BEGIN
     v_signature_payload := v_signature_payload || jsonb_build_object('candidate_app', v_candidate_component);
   END IF;
 
+  -- Source presentation is not archive/action authority. Bind its exact
+  -- origin/application/duty basis so the existing stale-signature guard also
+  -- notices a genuine later Source decision without changing ordinary hashes.
+  IF v_current_ts.timesheet_id IS NOT NULL AND (
+    EXISTS(SELECT 1 FROM public.weekly_source_row_timesheet_lineages l
+      WHERE l.family_booking_id=v_current_ts.booking_id)
+    OR EXISTS(SELECT 1 FROM public.weekly_exceptional_pay_target_families f
+      WHERE f.root_family_booking_id=v_current_ts.booking_id)
+  ) THEN
+    v_source_category:=private.weekly_source_timesheet_category_v2(v_current_ts.timesheet_id);
+    v_signature_payload:=v_signature_payload||jsonb_build_object(
+      'weekly_source_category_basis',v_source_category->'category_basis');
+  END IF;
   v_signature := MD5(v_signature_payload::text);
 
   IF COALESCE(p_include_payload, false) THEN

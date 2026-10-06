@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ManagedPsqlSession } from './cloudtms-managed-psql.mjs';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -306,27 +307,84 @@ export function deadlockRetryCountForFile(file) {
   return 3;
 }
 
-function copyLogicalOwnerSqlTree(source, destination) {
+function copyLogicalOwnerSqlTree(source, destination, canonical = false) {
   fs.mkdirSync(destination, { recursive: true });
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
     const sourcePath = path.join(source, entry.name);
     const destinationPath = path.join(destination, entry.name);
-    if (entry.isDirectory()) copyLogicalOwnerSqlTree(sourcePath, destinationPath);
-    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.sql')) {
+    if (entry.isDirectory()) copyLogicalOwnerSqlTree(sourcePath, destinationPath, canonical);
+    // Transaction-neutral support includes belong to the mapped executable
+    // tree, but must not become standalone migration/repeatable inventory.
+    else if (entry.isFile() && /\.(?:sql|inc|sqlinc)$/i.test(entry.name)) {
       fs.writeFileSync(
         destinationPath,
-        entry.name === '22082026_1505_cloudtms_test_acl_baseline.sql'
-          ? mapGeneratedAclBaselineSql(fs.readFileSync(sourcePath, 'utf8'))
-          : mapLogicalPostgresOwnerSql(fs.readFileSync(sourcePath, 'utf8')),
+        executableSqlSource(sourcePath, canonical),
       );
     }
   }
 }
 
-function executableSqlFile(file) {
+export function executableSqlSource(file, canonical = false) {
+  const source = fs.readFileSync(file, 'utf8');
+  const text = canonical ? source.replaceAll('\r\n', '\n') : source;
+  return mapExecutableSqlSource(text,file);
+}
+
+// These two immutable/current authority files use audited, fixed-object DO
+// loops for ownership. The general mapper deliberately leaves quoted SQL
+// opaque. Bind this exceptional executable-only rewrite to BOTH its exact
+// repository path and complete LF-canonical source bytes; never rewrite an
+// arbitrary function body or alter the canonical migration/closure locks.
+const DYNAMIC_LOGICAL_OWNER_SOURCES = new Map([
+  ['supabase/migrations/04102026_1827_banking_pay_next_candidate_destination_group.sql', {
+    sha256: 'af9849f6e83784b0064ee58179aabc740d396764c3639ef7132967f394c9512d',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+  }],
+  ['supabase/repeatable/04102026_1827_banking_pay_next_candidate_destination_group_v1.sql', {
+    sha256: '33891038c2865684c091f7bd3df4ce188bb42e026129163216e3bc341feb198c',
+    literal: "'alter function %s owner to postgres'",
+    replacement: "'alter function %s owner to CURRENT_USER'",
+  }],
+]);
+
+export function logicalPostgresExecutablePolicy() {
+  // Validate the same provider mode used by every executable mapping route.
+  mapLogicalPostgresOwnerSql('');
+  return {
+    version: 'CLOUDTMS_LOGICAL_POSTGRES_EXECUTABLE_POLICY_V1',
+    mode: process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || 'ORIGINAL_OWNER',
+    dynamicSources: [...DYNAMIC_LOGICAL_OWNER_SOURCES].map(([file, authority]) => ({
+      path: file, canonicalSourceSha256: authority.sha256,
+      literal: authority.literal, replacement: authority.replacement,
+    })),
+  };
+}
+
+export function mapExecutableSqlSource(text,file) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  let mapped = mode && path.basename(file) === '22082026_1505_cloudtms_test_acl_baseline.sql'
+    ? mapGeneratedAclBaselineSql(text) : mapLogicalPostgresOwnerSql(text);
+  if (!mode) return mapped;
+  const absolute = path.isAbsolute(file) ? file : path.resolve(repoRoot, file);
+  const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/').toLowerCase();
+  const authority = DYNAMIC_LOGICAL_OWNER_SOURCES.get(relative);
+  if (!authority) return mapped;
+  const original = String(text);
+  if (sha256(original.replaceAll('\r\n', '\n')) !== authority.sha256) {
+    throw new Error(`DYNAMIC_LOGICAL_OWNER_SOURCE_HASH_MISMATCH: ${relative}`);
+  }
+  if (original.split(authority.literal).length !== 2 || mapped.split(authority.literal).length !== 2) {
+    throw new Error(`DYNAMIC_LOGICAL_OWNER_LITERAL_MISMATCH: ${relative}`);
+  }
+  return mapped.replace(authority.literal, authority.replacement);
+}
+
+const managedExecutableRoots = new Map();
+export function executableSqlFile(file, { canonical = false } = {}) {
   const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
   const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
-  if (!mode) return absolute;
+  if (!mode && !canonical) return absolute;
   mapLogicalPostgresOwnerSql('');
   const authorityRoot = path.join(repoRoot, 'supabase');
   const relative = path.relative(authorityRoot, absolute);
@@ -337,6 +395,16 @@ function executableSqlFile(file) {
       throw new Error('Logical owner mapping is limited to SQL authority under supabase/');
     }
     return absolute;
+  }
+  if (canonical) {
+    const key = mode || 'ORIGINAL_OWNER';
+    if (!managedExecutableRoots.has(key)) {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudtms-managed-owner-'));
+      copyLogicalOwnerSqlTree(authorityRoot, path.join(directory, 'supabase'), true);
+      managedExecutableRoots.set(key, directory);
+      process.once('exit', () => { try { fs.rmSync(directory, { recursive: true, force: true }); } catch {} });
+    }
+    return path.join(managedExecutableRoots.get(key), 'supabase', relative);
   }
   if (!logicalOwnerSqlRoot) {
     logicalOwnerSqlRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudtms-logical-owner-'));
@@ -518,6 +586,16 @@ export function databaseUrl() {
   const value = process.env.CLOUDTMS_DATABASE_URL;
   if (!value) throw new Error('CLOUDTMS_DATABASE_URL is required');
   return value;
+}
+
+export function openManagedPsqlSession() {
+  const timeout = process.env.CLOUDTMS_RELEASE_COMMAND_TIMEOUT_MS;
+  if (timeout && !/^[0-9]+$/.test(timeout)) throw new Error('CLOUDTMS_RELEASE_COMMAND_TIMEOUT_MS is invalid');
+  return new ManagedPsqlSession({ bin: process.env.PSQL_BIN || 'psql',
+    args: [databaseUrl(), '-X', '-q', '-tA', '-v', 'ON_ERROR_STOP=1',
+      '-v', 'VERBOSITY=sqlstate', '-v', 'SHOW_CONTEXT=never', '-v', 'ECHO=none'],
+    cwd: repoRoot, timeoutMs: timeout ? Number(timeout) : 1_800_000,
+    env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' } });
 }
 
 export function validateTarget(environment, expectedTarget) {
