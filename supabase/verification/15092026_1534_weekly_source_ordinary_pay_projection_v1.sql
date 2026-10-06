@@ -11,6 +11,7 @@ begin;
 \endif
 set local request.jwt.claim.role='service_role';
 \ir support/06102026_1117_source_workbench_fixture_isolation.sql
+\ir support/06102026_1410_source_full_row_fingerprints.sql
 create temporary table ws_paid_existing_job_ids on commit drop as
 select id from public.banking_pay_workbench_jobs;
 do $paid_fixture_namespace$
@@ -1264,7 +1265,7 @@ begin
     'public.invoices','public.pay_advances','public.pay_finance_case_components',
     'public.pay_batches','public.banking_pay_operations'
   ] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_before:=v_before||jsonb_build_object(v_relation,v_hash);
   end loop;
 
@@ -1460,7 +1461,7 @@ begin
       'public.invoices','public.pay_advances','public.pay_finance_case_components',
       'public.pay_batches','public.banking_pay_operations'
     ] loop
-      execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+      v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
       v_after:=v_after||jsonb_build_object(v_relation,v_hash);
     end loop;
     if v_after is distinct from v_before then
@@ -1493,7 +1494,7 @@ begin
     'public.invoices','public.pay_advances','public.pay_finance_case_components',
     'public.pay_batches','public.banking_pay_operations'
   ] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_after:=v_after||jsonb_build_object(v_relation,v_hash);
   end loop;
   if v_after is distinct from v_before then

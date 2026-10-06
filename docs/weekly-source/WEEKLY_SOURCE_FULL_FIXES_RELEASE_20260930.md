@@ -258,3 +258,43 @@ role/HBA and complete fresh snapshot were unchanged. The native test window was
 returned to Handover 2. Local main suite: 1,450 passed; focused policy/fixture suite:
 25 passed; integrity and generated-contract coupling passed. This is pre-install
 evidence, not a claim that the protected hosted release has succeeded.
+
+## Complete historical-row snapshots, 6 October — verifier-only correction
+
+Protected run `37457085853` passed the self-bill authority and corrected invoice
+integration checks, then stopped at read-projections line 4162 with PostgreSQL
+`54000`: total JSONB array elements exceeded 268435455 bytes. Arthur's agency
+TEST rollback lab reproduced that exact error when aggregating all historical
+Workbench jobs. The populated table had 34,647 jobs. This was a verification
+snapshot representation failure, not an application or payment failure.
+
+All full-history copies in the read-projections, Candidate-view and audit/export
+verifiers now retain each pre-boundary job as an individual temporary row. Exact
+before/after job IDs and the original permitted-metadata checks remain. Later
+complete-history comparisons use full-row SHA256 digests, count and multiplicity;
+the Candidate-variant savepoint comparison uses the same method. Economic-row
+comparisons in those three verifiers and their ordinary-pay companion share
+`support/06102026_1410_source_full_row_fingerprints.sql`. Every complete row is
+hashed before aggregation: no sampling, truncation, DISTINCT or LIMIT. All
+existing financial-drift, non-target-job and worker-completion guards remain.
+The helper exists only in pg_temp inside rollback verification; no installed
+routine, payment policy, Banking owner, timeout or verifier path changes.
+
+The complete ordinary-pay, read-projections, Candidate-view and audit/export
+verifiers passed in an isolated PostgreSQL 17.11 clone at the current self-bill
+authority. Update, duplicate-multiplicity, same-count replacement, restoration
+and empty-count fingerprint controls passed. Every run rolled back and its full
+fresh snapshot matched. The owned clone was removed; shared golden, roles and
+HBA were unchanged. Receipt `READ_FINGERPRINT_QUALIFICATION_f7a375e4-b2a5-4a4a-9ce1-0e57d343bea0.json`
+SHA256 `b7f541263b82df8fd2354ca1d8d9a3c48323fa47b2377202dcb62b06cbd9374d`.
+Arthur's actual populated-history proof also passed with complete per-job rows
+and fresh-connection absence after rollback. Local source controls: six passed;
+main suite: 1,450 passed; Weekly Source pure harness, integrity and contract
+coupling passed. Remaining full-row aggregates were reviewed and are bounded to
+exact fixture heads, Candidates, Timesheets or evidence—not complete history.
+
+The next deployment must rerun all 149 protected hosted verifiers through
+`npm run release:test`, using fresh connection evidence. No smaller route or
+assertion bypass is authorised. Runtime and Office remain unpublished by this
+retry until that full protected release is VERIFIED. The actual Kier protected
+pay save must then pass before Office publication, as the user required.

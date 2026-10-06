@@ -12,6 +12,8 @@
 begin;
 \ir support/06102026_1117_source_workbench_fixture_isolation.sql
 
+\ir support/06102026_1410_source_full_row_fingerprints.sql
+
 select pg_catalog.set_config('request.jwt.claim.role','service_role',true);
 
 create or replace function pg_temp.assert_true(p_ok boolean,p_message text)
@@ -4056,6 +4058,10 @@ select pg_temp.assert_true(
 -- BEGIN GENUINE CERTIFIED PRESENTATION CAPSULE
 -- Normal request-end seam for pre-existing verifier facts; no old worker jobs run.
 create temporary table bpspv_existing_setup_state(snapshot_json jsonb) on commit drop;
+-- Keep one complete pre-boundary job per temporary row, not all job payloads
+-- inside one JSONB array. Retain exact metadata-difference checks below.
+create temporary table bpspv_existing_jobs_before(id uuid primary key,row_json jsonb not null) on commit drop;
+create temporary table bpspv_existing_jobs_after_ids(id uuid primary key) on commit drop;
 do $presentation_existing_request_boundary$
 declare
  v_old_finalising text;v_old_scope_token text;
@@ -4068,11 +4074,12 @@ begin
    or exists(select 1 from public.banking_pay_workbench_candidate_delta_projection_runs where status in ('RUNNING','PROCESSING','IN_PROGRESS')) then
    raise exception using errcode='P0001',message='PRESENTATION_EXISTING_ACTIVE_LANE_NOT_QUIET';
  end if;
- select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_jobs_before from public.banking_pay_workbench_jobs j;
+ insert into pg_temp.bpspv_existing_jobs_before select j.id,to_jsonb(j) from public.banking_pay_workbench_jobs j;
+ select coalesce(jsonb_agg(j.id order by j.id),'[]'::jsonb) into v_jobs_before from pg_temp.bpspv_existing_jobs_before j;
  v_bank_before:=pg_temp.ws_verify_workbench_fingerprint();
   v_economic_before:='{}'::jsonb;
   foreach v_relation in array array['public.timesheets','public.timesheets_financials','public.weekly_source_billing_movements','public.weekly_source_projection_publications','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_root_authorisations','public.invoices','public.pay_advances','public.pay_finance_case_components','public.pay_batches','public.banking_pay_operations'] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),''[]''::jsonb)::text) from %s x',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_economic_before:=v_economic_before||jsonb_build_object(v_relation,v_hash);
   end loop;
   -- BEGIN V9 EXACT INSTALLED NAMED FINALIZER
@@ -4131,18 +4138,19 @@ begin
   end if;
   -- END V9 PREWORKER REAL REQUEST BOUNDARY
 
- select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_jobs_after from public.banking_pay_workbench_jobs j;
+ insert into pg_temp.bpspv_existing_jobs_after_ids select j.id from public.banking_pay_workbench_jobs j;
+ select coalesce(jsonb_agg(j.id order by j.id),'[]'::jsonb) into v_jobs_after from pg_temp.bpspv_existing_jobs_after_ids j;
  v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   v_economic_after:='{}'::jsonb;
   foreach v_relation in array array['public.timesheets','public.timesheets_financials','public.weekly_source_billing_movements','public.weekly_source_projection_publications','public.weekly_source_ordinary_pay_projection_receipts','public.weekly_source_root_authorisations','public.invoices','public.pay_advances','public.pay_finance_case_components','public.pay_batches','public.banking_pay_operations'] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(x) order by to_jsonb(x)::text),''[]''::jsonb)::text) from %s x',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_economic_after:=v_economic_after||jsonb_build_object(v_relation,v_hash);
   end loop;
  if v_economic_after is distinct from v_economic_before or v_bank_after is distinct from v_bank_before
-   or (select coalesce(jsonb_agg(r->'id' order by r->>'id'),'[]'::jsonb) from jsonb_array_elements(v_jobs_before) r)
-      is distinct from (select coalesce(jsonb_agg(r->'id' order by r->>'id'),'[]'::jsonb) from jsonb_array_elements(v_jobs_after) r)
-   or exists(select 1 from jsonb_array_elements(v_jobs_before) old_row
-      join public.banking_pay_workbench_jobs j on j.id=(old_row->>'id')::uuid
+   or v_jobs_before is distinct from v_jobs_after
+   or exists(select 1 from pg_temp.bpspv_existing_jobs_before prior
+      cross join lateral (select prior.row_json as old_row) original
+      join public.banking_pay_workbench_jobs j on j.id=prior.id
       where to_jsonb(j) is distinct from old_row and (
         (to_jsonb(j)-array['scope_change_generation','scope_change_tx_token','payload_json','updated_at_utc'])
           is distinct from (old_row-array['scope_change_generation','scope_change_tx_token','payload_json','updated_at_utc'])
@@ -4158,7 +4166,8 @@ begin
       )) then
    raise exception using errcode='P0001',message='PRESENTATION_EXISTING_REQUEST_BOUNDARY_NON_METADATA_DRIFT';
  end if;
- insert into pg_temp.bpspv_existing_setup_state values(jsonb_build_object('jobs',v_jobs_after,'bank',v_bank_after));
+ insert into pg_temp.bpspv_existing_setup_state values(jsonb_build_object(
+   'jobs',pg_temp.ws_verify_other_jobs_fingerprint(array[]::uuid[]),'bank',v_bank_after));
 end $presentation_existing_request_boundary$;
 -- Genuine current Source evidence only; not an old Banking route proof.
 -- Root supplies exact candidate definitions and current dependency readback first.
@@ -4345,7 +4354,7 @@ begin
     from unnest(v_jobs||v_ordinary) id;
   v_owned_count:=cardinality(v_jobs)+cardinality(v_ordinary);
   select array_agg(id order by id) into v_expected_all_ids from (
-    select (r->>'id')::uuid as id from jsonb_array_elements(v_prior_jobs) r
+    select id from pg_temp.bpspv_existing_jobs_after_ids
     union all select unnest(v_owned)
   ) expected;
   select array_agg(j.id order by j.id) into v_all_ids
@@ -4356,8 +4365,7 @@ begin
        where j.id=any(v_owned) and j.status='QUEUED' and j.run_at_utc<=v_claim_now)<>v_owned_count then
     raise exception using errcode='P0001',message='PAID_FIXTURE_TWELVE_DUE_NOT_EXACT';
   end if;
-  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs
-    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+  v_other_jobs:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
   -- END V7 ALL TWELVE OWNED SETUP JOBS
 
   if v_other_jobs is distinct from v_prior_jobs then
@@ -4378,7 +4386,7 @@ begin
     'public.invoices','public.pay_advances','public.pay_finance_case_components',
     'public.pay_batches','public.banking_pay_operations'
   ] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_before:=v_before||jsonb_build_object(v_relation,v_hash);
   end loop;
 
@@ -4553,8 +4561,7 @@ begin
     -- END V9 PENDING COHORT REAL REQUEST BOUNDARY
     select array_agg(j.id order by j.id) into v_all_ids
       from public.banking_pay_workbench_jobs j;
-    select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
-      from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+    v_other_jobs_after:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
     v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   if v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PRESENTATION_EXISTING_BANK_ROW_DRIFT';
@@ -4577,7 +4584,7 @@ begin
       'public.invoices','public.pay_advances','public.pay_finance_case_components',
       'public.pay_batches','public.banking_pay_operations'
     ] loop
-      execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+      v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
       v_after:=v_after||jsonb_build_object(v_relation,v_hash);
     end loop;
     if v_after is distinct from v_before then
@@ -4593,8 +4600,7 @@ begin
   -- END V7 BOUNDED GENUINE TWELVE JOB COMPLETION
 
   -- BEGIN V7 NON-TARGET COMPLETE ROW READBACK
-  select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb) into v_other_jobs_after
-    from public.banking_pay_workbench_jobs j where not(j.id=any(v_owned));
+  v_other_jobs_after:=pg_temp.ws_verify_other_jobs_fingerprint(v_owned);
   v_bank_after:=pg_temp.ws_verify_workbench_fingerprint();
   if v_bank_after is distinct from v_bank_before then
     raise exception using errcode='P0001',message='PRESENTATION_EXISTING_BANK_ROW_DRIFT';
@@ -4613,7 +4619,7 @@ begin
     'public.invoices','public.pay_advances','public.pay_finance_case_components',
     'public.pay_batches','public.banking_pay_operations'
   ] loop
-    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),''[]''::jsonb)::text) from %s t',v_relation) into v_hash;
+    v_hash:=pg_temp.ws_verify_full_relation_fingerprint(v_relation::regclass);
     v_after:=v_after||jsonb_build_object(v_relation,v_hash);
   end loop;
   if v_after is distinct from v_before then
@@ -4998,8 +5004,7 @@ create temporary table g9_candidate_variant_restore(snapshot_json jsonb);
 insert into pg_temp.g9_candidate_variant_restore
 select jsonb_build_object('root',to_jsonb(t),'financial',to_jsonb(f),
   'inventory',private.weekly_source_effective_inventory_v1(t.timesheet_id),
-  'jobs',(select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb)
-    from public.banking_pay_workbench_jobs j))
+  'jobs',pg_temp.ws_verify_other_jobs_fingerprint(array[]::uuid[]))
 from public.timesheets t join public.timesheets_financials f
   on f.timesheet_id=t.timesheet_id and f.is_current
 where t.contract_id='b8550000-0000-4000-8000-000000000014' and t.is_current
@@ -5071,8 +5076,7 @@ begin
  select snapshot_json into strict v_before from pg_temp.g9_candidate_variant_restore;
  select jsonb_build_object('root',to_jsonb(t),'financial',to_jsonb(f),
    'inventory',private.weekly_source_effective_inventory_v1(t.timesheet_id),
-   'jobs',(select coalesce(jsonb_agg(to_jsonb(j) order by j.id),'[]'::jsonb)
-     from public.banking_pay_workbench_jobs j)) into strict v_after
+   'jobs',pg_temp.ws_verify_other_jobs_fingerprint(array[]::uuid[])) into strict v_after
  from public.timesheets t join public.timesheets_financials f
    on f.timesheet_id=t.timesheet_id and f.is_current
  where t.contract_id='b8550000-0000-4000-8000-000000000014' and t.is_current
