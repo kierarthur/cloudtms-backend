@@ -226,3 +226,35 @@ publication and Play release. Those acceptance stages remain pending until the
 protected TEST database installation completes; this section is not a claim
 that either the save or mobile-store publication is already complete. No LIVE,
 provider, payment execution, outgoing diagnostic message or Policy X change.
+
+## Self-bill expenses and populated-database invoice verification, 6 October
+
+The user confirmed that self-billed Candidate expenses must be separate even
+when ordinary hours are not import-authoritative. The shared effective-settings
+resolver now enforces that rule using the existing Client/Contract override
+precedence. Ordinary Weekly/Daily hour entry remains ordinary; import authority
+and frozen financial snapshots are unchanged. No Banking guard or economic owner
+is altered. The user will withdraw the existing approved Arthur Rai claim;
+this release does not repair, withdraw or rewrite that claim.
+
+The earlier protected release failed because the invoice fixture asserted that
+the entire populated TEST database had no first-authorised/TARGET history and
+exactly one current financial row. Its own first-preparation assertions and
+projection receipt lookups now use exact fixture identities. Insert capture
+rejects changes to unrelated rows, and complete watched-row fingerprints must
+remain unchanged after the entire invoice integration. All existing invoice
+rotation, ordinary positive controls and protected-family exclusions remain.
+
+Pre-publication proof: the full effective-settings regression passed in Arthur's
+server-owned agency TEST rollback lab with a fresh connection proving restoration
+and fixture absence. In an isolated PostgreSQL 17.11 clone, the staged resolver
+produced exactly one routine-definition change in the generated contract; all
+business rows, ledgers and other security/catalogue authority stayed unchanged.
+Both complete SQL regressions passed. Invoice integration also passed with genuine
+unrelated Source financial history; the old global assertion failed on that same
+history. Namespace collision and unrelated-row mutation were correctly rejected.
+Every case rolled back. The owned clone was removed; the shared golden database,
+role/HBA and complete fresh snapshot were unchanged. The native test window was
+returned to Handover 2. Local main suite: 1,450 passed; focused policy/fixture suite:
+25 passed; integrity and generated-contract coupling passed. This is pre-install
+evidence, not a claim that the protected hosted release has succeeded.

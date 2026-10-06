@@ -347,6 +347,11 @@ begin
 end
 $wp27_rotation$;
 
+select pg_temp.assert_true(
+  pg_temp.invoice_fixture_nontarget_fingerprint()=
+    (select fingerprint from pg_temp.invoice_fixture_nontarget_before),
+  'invoice fixture must preserve every unrelated full-row financial and Workbench fingerprint');
+
 select pg_catalog.jsonb_build_object(
   'ok',true,'verification','weekly_source_invoice_batch_integration_v1',
   'rotated lineage-bound root offered to the ordinary batch',false,

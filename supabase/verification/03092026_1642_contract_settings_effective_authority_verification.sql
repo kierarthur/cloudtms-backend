@@ -27,6 +27,7 @@ declare
   v_flags jsonb;
   v_pay_impact jsonb;
   v_definition text;
+  v_previous_finalise_context text;
 begin
   update public.settings_defaults
   set bh_list='["2026-12-28"]'::jsonb,
@@ -97,6 +98,90 @@ begin
      or (v_authority#>'{values,bh_list}' ? '2099-01-01') then
     raise exception 'GLOBAL_CLIENT_AUTHORITY_RESOLUTION_INVALID:%',v_authority;
   end if;
+
+  -- Self-billing mandates separate Candidate expense carriers without turning
+  -- ordinary hour entry into import-controlled work. Both Client inheritance
+  -- and explicit Contract override are checked with the expense preference off.
+  v_policy:=private._candidate_policy_resolve_v1(v_client,v_contract,'2026-05-31');
+  if v_policy->>'expenses_require_separate_timesheet' is distinct from 'false'
+     or v_policy->>'import_expense_separation_mandatory' is distinct from 'false' then
+    raise exception 'ORDINARY_NON_SELF_BILL_COMBINED_POLICY_CHANGED';
+  end if;
+  update public.client_settings set self_bill_no_invoices_sent=true
+  where client_id=v_client;
+  v_policy:=private._candidate_policy_resolve_v1(v_client,v_contract,'2026-05-31');
+  v_authority:=private._contract_settings_effective_core_v1(
+    v_client,v_contract,'2026-05-31','WEEKLY',null
+  );
+  if v_policy->>'expenses_require_separate_timesheet' is distinct from 'true'
+     or v_policy->>'expenses_require_separate_timesheet_source' is distinct from 'SELF_BILL_MANDATORY'
+     or v_policy->>'import_expense_separation_mandatory' is distinct from 'false'
+     or v_authority->>'configured_route' is distinct from 'STANDARD_WEEKLY'
+     or v_authority#>>'{applicability,candidate_hours_view_only}' is distinct from 'false'
+     or v_authority#>>'{applicability,import_authoritative}' is distinct from 'false' then
+    raise exception 'ORDINARY_SELF_BILL_CLIENT_EXPENSE_SEPARATION_INVALID';
+  end if;
+  v_authority:=private._contract_settings_effective_core_v1(
+    v_client,v_contract,'2026-05-31','DAILY',null
+  );
+  if v_authority#>>'{values,candidate_expenses_require_separate_timesheet}' is distinct from 'true'
+     or v_authority#>>'{applicability,candidate_hours_view_only}' is distinct from 'false'
+     or v_authority#>>'{applicability,import_authoritative}' is distinct from 'false' then
+    raise exception 'ORDINARY_SELF_BILL_DAILY_EXPENSE_SEPARATION_INVALID';
+  end if;
+
+  -- A true Contract override controls self-billing independently from the
+  -- Client. A false expense-separation preference cannot bypass self-billing.
+  update public.contracts set overrideclientsettings=true,self_bill=false,
+    candidate_expenses_require_separate_timesheet_override=false
+  where id=v_contract;
+  v_policy:=private._candidate_policy_resolve_v1(v_client,v_contract,'2026-05-31');
+  if v_policy->>'expenses_require_separate_timesheet' is distinct from 'false' then
+    raise exception 'SELF_BILL_CONTRACT_FALSE_OVERRIDE_IGNORED';
+  end if;
+  update public.client_settings set self_bill_no_invoices_sent=false
+  where client_id=v_client;
+  update public.contracts set self_bill=true where id=v_contract;
+  v_policy:=private._candidate_policy_resolve_v1(v_client,v_contract,'2026-05-31');
+  if v_policy->>'expenses_require_separate_timesheet' is distinct from 'true'
+     or v_policy->>'expenses_require_separate_timesheet_source' is distinct from 'SELF_BILL_MANDATORY'
+     or v_policy->>'import_expense_separation_mandatory' is distinct from 'false' then
+    raise exception 'SELF_BILL_CONTRACT_TRUE_OVERRIDE_NOT_ENFORCED';
+  end if;
+
+  -- First-use final-state admission rejects a stale combined caller but keeps
+  -- an hours-only submission and a separate expense-only submission valid.
+  v_previous_finalise_context:=current_setting('cloudtms.candidate_electronic_finalise',true);
+  perform set_config('cloudtms.candidate_electronic_finalise','self-bill-verification',true);
+  begin
+    perform private._candidate_weekly_final_state_guard_v1(
+      v_week_one,null,'{"line_type":"HOURS"}'::jsonb,'{}'::jsonb,
+      '{"total_hours":8,"accommodation_pay_ex_vat":25}'::jsonb
+    );
+    raise exception 'SELF_BILL_COMBINED_SUBMISSION_ADMITTED';
+  exception when sqlstate '22023' then
+    if sqlerrm is distinct from 'HOURS_AND_EXPENSES_REQUIRE_SEPARATE_TIMESHEETS' then
+      raise;
+    end if;
+  end;
+  v_flags:=private._candidate_weekly_final_state_guard_v1(
+    v_week_one,null,'{"line_type":"HOURS"}'::jsonb,'{}'::jsonb,
+    '{"total_hours":8}'::jsonb
+  );
+  if v_flags->>'record_role' is distinct from 'HOURS_ONLY' then
+    raise exception 'SELF_BILL_ORDINARY_HOUR_ENTRY_BLOCKED';
+  end if;
+  v_flags:=private._candidate_weekly_final_state_guard_v1(
+    v_adjustment_week,null,'{"line_type":"EXPENSES"}'::jsonb,'{}'::jsonb,
+    '{"total_hours":0,"accommodation_pay_ex_vat":25}'::jsonb
+  );
+  if v_flags->>'record_role' is distinct from 'EXPENSE_ONLY' then
+    raise exception 'SELF_BILL_SEPARATE_EXPENSE_ENTRY_BLOCKED';
+  end if;
+  perform set_config('cloudtms.candidate_electronic_finalise',coalesce(v_previous_finalise_context,''),true);
+  update public.contracts set overrideclientsettings=false,self_bill=false,
+    candidate_expenses_require_separate_timesheet_override=null
+  where id=v_contract;
 
   -- A Client change refreshes both remaining planned weeks while Contract
   -- override is off. Dedicated NHSP Weekly is always authoritative.

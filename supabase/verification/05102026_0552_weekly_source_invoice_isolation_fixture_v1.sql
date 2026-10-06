@@ -3,7 +3,62 @@
 -- Finite helper/setup bodies copied from the reviewed existing verifiers.
 -- This does not execute or certify their unrelated later lifecycle cases.
 \set ON_ERROR_STOP on
-\set ON_ERROR_STOP on
+
+-- Existing TEST history is valid, not an empty-database prerequisite. Capture
+-- fixture inserts and reject any UPDATE/DELETE/TRUNCATE of unrelated history.
+\ir support/06102026_1117_source_workbench_fixture_isolation.sql
+do $invoice_fixture_watch$
+declare v_relation regclass;
+begin
+  if exists(select 1 from public.candidates where id='a0000000-0000-4000-8000-000000000003')
+     or exists(select 1 from public.contracts where id='a0000000-0000-4000-8000-000000000004')
+     or exists(select 1 from public.weekly_source_cycles where id='a1000000-0000-4000-8000-000000000001')
+     or exists(select 1 from public.timesheets where timesheet_id in (
+       'fedcba98-0000-4000-8000-0000000027a1','fedcba98-0000-4000-8000-0000000027a2',
+       'fedcba98-0000-4000-8000-0000000027a3','fedcba98-0000-4000-8000-0000000027a4')) then
+    raise exception 'INVOICE_FIXTURE_NAMESPACE_COLLISION';
+  end if;
+  foreach v_relation in array array[
+    'public.timesheets'::regclass,
+    'public.timesheets_financials'::regclass,
+    'public.weekly_source_root_authorisations'::regclass,
+    'public.weekly_exceptional_pay_target_families'::regclass,
+    'public.invoices'::regclass,
+    'public.invoice_lines'::regclass
+  ] loop
+    perform pg_temp.ws_verify_watch(v_relation);
+  end loop;
+end $invoice_fixture_watch$;
+
+create function pg_temp.invoice_fixture_nontarget_fingerprint()
+returns jsonb language plpgsql set search_path='' as $f$
+declare v_relation record; v_fingerprint jsonb; v_result jsonb:='{}'::jsonb;
+begin
+  for v_relation in
+    select watched.rel,watched.key_expression,
+      pg_catalog.format('%I.%I',namespace.nspname,relation.relname) as qualified_name
+    from pg_temp.ws_verify_relations watched
+    join pg_catalog.pg_class relation on relation.oid=watched.rel
+    join pg_catalog.pg_namespace namespace on namespace.oid=relation.relnamespace
+    order by namespace.nspname,relation.relname
+  loop
+    execute pg_catalog.format($q$
+      select pg_catalog.jsonb_build_object('count',pg_catalog.count(*),'sha256',
+        pg_catalog.encode(extensions.digest(coalesce(
+          pg_catalog.string_agg(row_digest,'' order by row_digest),''),'sha256'),'hex'))
+      from (select pg_catalog.encode(extensions.digest(
+        pg_catalog.to_jsonb(x)::text,'sha256'),'hex') as row_digest
+        from %s x where not exists (
+          select 1 from pg_temp.ws_verify_keys own
+          where own.rel=%s and own.key=pg_catalog.jsonb_build_array(%s))) rows
+    $q$,v_relation.qualified_name,v_relation.rel::oid,
+      pg_catalog.replace(v_relation.key_expression,'($1)','x')) into v_fingerprint;
+    v_result:=v_result||pg_catalog.jsonb_build_object(v_relation.qualified_name,v_fingerprint);
+  end loop;
+  return v_result;
+end $f$;
+create temporary table invoice_fixture_nontarget_before on commit drop as
+  select pg_temp.invoice_fixture_nontarget_fingerprint() as fingerprint;
 
 \if :{?weekly_source_verification_correction_presentation}
 \else
@@ -599,7 +654,9 @@ select pg_temp.assert_true(
    from public.timesheets_financials financial
    join public.weekly_source_ordinary_pay_projection_receipts receipt
      on receipt.published_timesheet_financial_id=financial.id
-   where receipt.idempotency_key='projection-a1'),
+   where receipt.idempotency_key='projection-a1'
+     and receipt.final_revision_id=(select id from public.weekly_source_final_revisions
+       where source_cycle_id='a1000000-0000-4000-8000-000000000001' and state='CURRENT')),
   'ADD must publish source hours plus source-fixed expense through current TSFIN'
 );
 select pg_temp.assert_true(
@@ -608,7 +665,9 @@ select pg_temp.assert_true(
    join public.weekly_source_ordinary_pay_projection_receipts receipt
      on receipt.published_timesheet_financial_id=
           materialisation.candidate_timesheet_financial_id
-   where receipt.idempotency_key='projection-a1'),
+   where receipt.idempotency_key='projection-a1'
+     and receipt.final_revision_id=(select id from public.weekly_source_final_revisions
+       where source_cycle_id='a1000000-0000-4000-8000-000000000001' and state='CURRENT')),
   'ADD must bind the positive source expense authority to ordinary TSFIN once'
 );
 
@@ -625,8 +684,16 @@ select pg_temp.assert_true(
     where source_cycle_id='a1000000-0000-4000-8000-000000000001' and state='CURRENT'),
   'invoice seed has exactly one genuine current Final');
 select pg_temp.assert_true(
-  not exists(select 1 from public.weekly_source_root_authorisations)
-  and not exists(select 1 from public.timesheets where authorised_at_server is not null)
-  and not exists(select 1 from public.weekly_exceptional_pay_target_families)
-  and (select count(*)=1 from public.timesheets_financials where is_current),
+  not exists(select 1 from public.weekly_source_root_authorisations authorisation
+    join public.timesheets root on root.timesheet_id=authorisation.root_timesheet_id
+    where root.contract_id='a0000000-0000-4000-8000-000000000004')
+  and not exists(select 1 from public.timesheets
+    where contract_id='a0000000-0000-4000-8000-000000000004' and authorised_at_server is not null)
+  and not exists(select 1 from public.weekly_exceptional_pay_target_families
+    where agency_id='a0000000-0000-4000-8000-000000000006'
+      and candidate_id='a0000000-0000-4000-8000-000000000003'
+      and contract_id='a0000000-0000-4000-8000-000000000004')
+  and (select count(*)=1 from public.timesheets_financials financial
+    join public.timesheets root on root.timesheet_id=financial.timesheet_id
+    where root.contract_id='a0000000-0000-4000-8000-000000000004' and financial.is_current),
   'invoice seed is first preparation, not Authorise, paid state or TARGET ownership');
