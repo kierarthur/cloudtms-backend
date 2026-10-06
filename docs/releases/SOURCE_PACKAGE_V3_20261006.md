@@ -11,7 +11,7 @@ This release adopts the independently qualified pre-channel Source package agree
 - Frozen complete-input inventory raw SHA256: `3d3967ac478e59406542b68b11e0727f165d891188295de80eeb171330e79a18`.
 - Qualification checks all 1,279 sealed inputs, not a moving Banking worktree. Both channel additions dated `06102026_0236` remain excluded. The original installed-writer census remains unchanged.
 
-The only dependency-lock successor is the separately human-approved `source-map-js` 1.2.1 to 1.2.2 security correction in predecessor commit `72476632ebbb53ebc15b5eefbed12cf5675c9816`. All other frozen dependency entries and package metadata are unchanged.
+The dependency-lock successors are the separately human-approved `source-map-js` 1.2.1 to 1.2.2 security correction in predecessor commit `72476632ebbb53ebc15b5eefbed12cf5675c9816`, and the subsequently human-approved `sharp` 0.35.4 to 0.35.5 correction for `GHSA-wq5f-xc86-pv6w`, with its required matching native binaries. The latter approval was given directly by the user in HANDOVER 2 and independently verified in this chat. Wrangler, Miniflare, the toolchain, and unrelated dependencies remain unchanged. No security finding is excluded or bypassed.
 
 ## Source runtime boundary
 

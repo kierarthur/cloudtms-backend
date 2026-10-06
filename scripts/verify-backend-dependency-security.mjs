@@ -11,6 +11,7 @@ assert.equal(packageJson.engines?.npm, '>=11.0.0 <12.0.0');
 assert.equal(packageJson.dependencies?.['@cloudflare/puppeteer'], '1.4.0');
 assert.equal(packageJson.devDependencies?.wrangler, '4.125.0');
 assert.equal(packageJson.overrides?.['@puppeteer/browsers'], '3.2.1');
+assert.equal(packageJson.overrides?.sharp, '0.35.5');
 assert.equal(
   packageJson.dependencies?.xlsx,
   'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz'
@@ -41,4 +42,12 @@ for (const blocked of ['basic-ftp', 'extract-zip', 'ip-address']) {
 }
 
 assert.equal(lock.packages?.['node_modules/wrangler']?.version, '4.125.0');
+assert.equal(lock.packages?.['node_modules/sharp']?.version, '0.35.5');
+for (const [path, entry] of Object.entries(lock.packages || {})) {
+  if (/\/node_modules\/@img\/sharp-libvips-/.test(`/${path}`)) {
+    assert.equal(entry.version, '1.3.4', `${path} must match the patched sharp build`);
+  } else if (/\/node_modules\/@img\/sharp-/.test(`/${path}`)) {
+    assert.equal(entry.version, '0.35.5', `${path} must match the patched sharp build`);
+  }
+}
 console.log('Backend dependency provenance and patched graph: PASS');
