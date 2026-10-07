@@ -339,8 +339,8 @@ test('uncertain Google delivery becomes UNKNOWN and is never blindly retried', a
     assert.equal(networkCalls, 1);
     assert.deepEqual(outcomes, ['UNKNOWN']);
     assert.equal(result.result.status, 'UNKNOWN');
-    assert.match(result.result.safe_message, /Do not submit it again/);
-    assert.match(result.result.safe_message, /Contact the agency directly/);
+    assert.match(result.result.safe_message, /It will not be sent again/);
+    assert.doesNotMatch(result.result.safe_message, /Contact the agency/);
     assert.doesNotMatch(result.result.safe_message, /CloudTMS will check/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -365,7 +365,7 @@ test('terminal effect replays do not fetch a roster or repeat any provider reque
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => { throw Error('no network on replay'); };
   try {
-    for (const state of ['COMPLETED','UNKNOWN','FAILED_FINAL']) {
+    for (const state of ['COMPLETED','FAILED_FINAL']) {
       const calls = [];
       const safe = { effect_key: effectKey, status: state };
       const specialist = createCandidateDailySpecialist(environment(), async (name,args) => {
@@ -377,6 +377,59 @@ test('terminal effect replays do not fetch a roster or repeat any provider reque
       assert.deepEqual(calls,['EFFECT_REPLAY']);
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('an uncertain send resolves from saved Google completion without claiming, publishing or sending again',async()=>{
+  const originalFetch=globalThis.fetch;
+  const created=new Date(Date.now()-20_000).toISOString();
+  const receipt={effect_key:effectKey,operation:'RUNNING_LATE_SEND',status:'UNKNOWN',created_at:created,updated_at:created,safe_message:'Contact the agency directly'};
+  const order=[];
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(options.body);order.push(body.operation);
+    assert.equal(body.operation,'EFFECT_STATUS_READ');
+    assert.equal(body.effect_key,effectKey);
+    assert.deepEqual(body.payload,{effect_key:effectKey,operation:'RUNNING_LATE_SEND'});
+    return new Response(JSON.stringify({ok:true,request_id:body.request_id,result:{...body.payload,status:'COMPLETED',updated_at:new Date().toISOString()}}));
+  };
+  try {
+    const specialist=createCandidateDailySpecialist(environment(),async(name,args)=>{
+      order.push(name);
+      if (name==='candidate_daily_specialist_read_v1') {assert.equal(args.p_operation,'EFFECT_REPLAY');return {state:'UNKNOWN',safe_result:receipt};}
+      assert.equal(name,'candidate_daily_effect_status_candidate_v1');
+      assert.deepEqual(args.p_internal_context,candidateContext);return receipt;
+    });
+    const read=await specialist({...effectRequest('getCandidateDailyEffectStatus'),input:{effect_key:effectKey}});
+    assert.equal(read.result.status,'COMPLETED');
+    assert.doesNotMatch(read.result.safe_message,/Contact/);
+    const replay=await specialist(effectRequest());
+    assert.equal(replay.result.status,'COMPLETED');assert.equal(replay.idempotent_replay,true);
+    assert.equal(receipt.status,'UNKNOWN'); // The original attempt journal is immutable.
+    assert.deepEqual(order,['candidate_daily_effect_status_candidate_v1','EFFECT_STATUS_READ','candidate_daily_specialist_read_v1','candidate_daily_effect_status_candidate_v1','EFFECT_STATUS_READ']);
+  } finally {globalThis.fetch=originalFetch;}
+});
+
+test('failed ownership never contacts Google; absent, crossed, stale or unavailable completion never becomes success',async()=>{
+  const originalFetch=globalThis.fetch;
+  const receipt={effect_key:effectKey,operation:'DNA',status:'UNKNOWN',created_at:new Date(Date.now()-10_000).toISOString()};
+  try {
+    let network=0;
+    globalThis.fetch=async()=>{network++;throw Error('must not call');};
+    const denied=createCandidateDailySpecialist(environment(),async()=>{throw Error('NOT_FOUND');});
+    await assert.rejects(denied({...effectRequest('getCandidateDailyEffectStatus'),input:{effect_key:effectKey}}),/NOT_FOUND/);
+    assert.equal(network,0);
+    for(const variation of ['absent','key','operation','stale','future','unavailable']) {
+      globalThis.fetch=async(_url,options)=>{
+        const body=JSON.parse(options.body); assert.equal(body.operation,'EFFECT_STATUS_READ');
+        if(variation==='unavailable') throw Error('timeout');
+        return new Response(JSON.stringify({ok:true,request_id:body.request_id,result:{effect_key:variation==='key'?'b'.repeat(64):effectKey,
+          operation:variation==='operation'?'LEAVE_EARLY':'DNA',status:variation==='absent'?'UNKNOWN':'COMPLETED',
+          updated_at:variation==='stale'?'2026-01-01T00:00:00Z':new Date(Date.now()+(variation==='future'?60_000:0)).toISOString()}}));
+      };
+      const specialist=createCandidateDailySpecialist(environment(),async(name)=>{assert.equal(name,'candidate_daily_effect_status_candidate_v1');return receipt;});
+      const result=await specialist({...effectRequest('getCandidateDailyEffectStatus'),input:{effect_key:effectKey}});
+      assert.equal(result.result.status,'UNKNOWN');assert.doesNotMatch(result.result.safe_message,/Contact/);
+    }
+  } finally {globalThis.fetch=originalFetch;}
 });
 
 test('a missing, oversized or failed Master response never claims an effect or falls back to enrolled-only peers', async () => {

@@ -99,6 +99,9 @@ async function callGoogleSpecialist(env, operation, payload, correlationId, effe
     } finally { reader.releaseLock(); }
     bytes = new Uint8Array(length); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  } catch {
+    // A transport timeout is uncertain, not an internal application failure.
+    throw new Error('DEPENDENCY_UNAVAILABLE');
   } finally {
     clearTimeout(timeout);
   }
@@ -135,7 +138,33 @@ function safeEffectMessage(operation, outcome) {
         : 'Your attendance update has been sent through the agency service.';
   }
   if (outcome === 'FAILED_FINAL') return 'The agency communication could not be sent. Please contact the agency.';
-  return 'The final delivery result is not yet known. Do not submit it again. Contact the agency directly to check the alert.';
+  return 'Checking confirmation of your alert. It will not be sent again.';
+}
+
+async function effectStatus(env, rpc, request, effectKey) {
+  // The database must prove ownership before Google is consulted. The original
+  // transport receipt remains unchanged; a saved Google completion can resolve
+  // its uncertainty without executing or claiming another effect.
+  const receipt = await invokeRpc(rpc, 'candidate_daily_effect_status_candidate_v1', {
+    p_internal_context: request.candidate_context, p_effect_key: effectKey,
+    p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
+  });
+  if (!['UNKNOWN','IN_PROGRESS'].includes(receipt.status)) return receipt;
+  if (receipt.effect_key !== effectKey || !/^[a-f0-9]{64}$/.test(effectKey) || !EFFECT_OPERATIONS.has(receipt.operation)) throw new Error('DEPENDENCY_UNAVAILABLE');
+  const pending = { ...receipt, safe_message: safeEffectMessage(receipt.operation,'UNKNOWN') };
+  try {
+    const response = await callGoogleSpecialist(env,'EFFECT_STATUS_READ',
+      { effect_key:effectKey, operation:receipt.operation },request.correlation_id,effectKey);
+    const status = response.result;
+    const updated = Date.parse(status.updated_at);
+    const created = Date.parse(receipt.created_at);
+    if (status.effect_key !== effectKey || status.operation !== receipt.operation || status.status !== 'COMPLETED'
+        || !Number.isFinite(updated) || !Number.isFinite(created) || updated < created || updated > Date.now()+30_000) return pending;
+    return { ...receipt, status:'COMPLETED', updated_at:new Date(updated).toISOString(),
+      safe_message:safeEffectMessage(receipt.operation,'COMPLETED') };
+  } catch {
+    return pending; // Read failure never becomes success or a new send.
+  }
 }
 
 async function executeEffect(env, rpc, request, operation) {
@@ -147,7 +176,8 @@ async function executeEffect(env, rpc, request, operation) {
   });
   if (replay.state !== 'ABSENT') {
     if (!exactObject(replay.safe_result)) throw new Error('DEPENDENCY_UNAVAILABLE');
-    return { result: replay.safe_result, idempotent_replay: true };
+    return { result: ['UNKNOWN','IN_PROGRESS'].includes(replay.safe_result.status)
+      ? await effectStatus(env,rpc,request,replay.safe_result.effect_key) : replay.safe_result, idempotent_replay: true };
   }
   if (operation !== 'MESSAGE_SEEN') {
     await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
@@ -165,7 +195,8 @@ async function executeEffect(env, rpc, request, operation) {
   });
   if (claim.state !== 'CLAIMED') {
     if (!exactObject(claim.safe_result)) throw new Error('DEPENDENCY_UNAVAILABLE');
-    return { result: claim.safe_result, idempotent_replay: true };
+    return { result: ['UNKNOWN','IN_PROGRESS'].includes(claim.safe_result.status)
+      ? await effectStatus(env,rpc,request,claim.safe_result.effect_key) : claim.safe_result, idempotent_replay: true };
   }
   let outcome = 'UNKNOWN';
   let providerHash = null;
@@ -278,10 +309,7 @@ export function createCandidateDailySpecialist(env, rpc) {
       case 'markCandidateDailyMessageSeen':
         return executeEffect(env, rpc, request, 'MESSAGE_SEEN');
       case 'getCandidateDailyEffectStatus':
-        return { result: await invokeRpc(rpc, 'candidate_daily_effect_status_candidate_v1', {
-          p_internal_context: request.candidate_context, p_effect_key: request.input.effect_key,
-          p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
-        }) };
+        return { result: await effectStatus(env,rpc,request,request.input.effect_key) };
       default:
         throw new Error('VALIDATION_FAILED');
     }
