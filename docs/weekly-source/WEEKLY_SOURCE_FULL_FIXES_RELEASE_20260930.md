@@ -460,3 +460,33 @@ reviewed MyTMS source worktree rather than a missing default sibling directory.
 Two clean PostgreSQL 17 NEW installations passed, including the fresh replay
 against the reviewed contract seal. The contract delta is exactly the two
 intended routine definition hashes, with no permissions or other schema change.
+
+### Hosted installation and original-request acceptance
+
+Backend commit `1860952f620aa503440e179bc15e67de9f908899` passed protected
+TEST release run `37691061087`, including all 150 required verifiers. Installed
+and approved contract hashes both equal
+`2b63b62b76640d38472152229148c4bedaaf88bb2e77a037d9db8a979eb182bc`.
+The coordinator then published the normal backend, private, synthetic and public
+Candidate Workers in order; API read-back proves all four serving that exact
+successful build at 100%. Office commit `d35c40c57f5edb8a8e7fd205fd05ed85583f95f5`
+was built by Pages and its three recovery asset versions were read back.
+
+The original Office actor retried the exact previously saved request once in
+the real TEST browser at 22:39:37 UTC. The replacement became CURRENT at
+generation 6, Queries stayed open and both Office checks remained visible.
+The active candidate choice is now linked; its remaining CLIENT_NOT_FOUND is a
+genuine absence of eligible client membership, not another candidate failure.
+The established other row retains its original work-event identity and complete
+row fingerprint, with its provisional charge warning still visible. No final
+source snapshot or billing movement was created, and no client eligibility or
+charge decision was changed. Fresh read-only database assertions confirmed this.
+
+Actual before/after browser captures and exact deployment/acceptance receipts
+are retained in ignored task evidence. The hosted Candidate/Client browser
+regression also passed. Its accompanying Office unit job exposed cache-version
+expectations already stale in the predecessor release. The final maintenance
+amendment updates only those exact test expectations and records acceptance;
+all 235 Office/UI tests pass locally, without changing deployed runtime assets,
+SQL, security or financial behaviour. Its managed publication and hosted CI
+result are recorded separately in the task receipt.
