@@ -1344,6 +1344,12 @@ $$;
 
 insert into public.settings_defaults(id) values (1);
 
+-- This isolated Candidate matrix exercises the existing LEGACY Banking route.
+-- Match the real control table's disabled-first default; NEXT economics and
+-- locking are proved by the separate integrated Banking/release verifiers.
+create view private.bpay_next_module_control as
+select 1::smallint id, 'LEGACY'::text active_owner;
+
 -- This fixture proves the protected ordinary-Candidate route without installing
 -- the separate Weekly Source schema.  The real Weekly Source runtime replaces
 -- this test-only answer with its full family guard before deployment.

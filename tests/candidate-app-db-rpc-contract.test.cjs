@@ -73,6 +73,9 @@ const invoiceExpenseSeparation = read(
 );
 
 test('Candidate runtime gate finishes with every current authority', () => {
+  assert.ok(candidateRuntimeFixture.includes(
+    "create view private.bpay_next_module_control as\nselect 1::smallint id, 'LEGACY'::text active_owner;"
+  ), 'Candidate-only runtime must retain the real disabled-first LEGACY owner default');
   for (const [relation, column] of [
     ['weekly_source_row_timesheet_lineages', 'family_booking_id'],
     ['weekly_exceptional_pay_target_families', 'root_family_booking_id'],
