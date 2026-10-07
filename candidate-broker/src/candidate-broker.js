@@ -2847,7 +2847,33 @@ async function handleControlPlaneRefresh(request, body, refresh, env, correlatio
     exp: Math.floor(Date.parse(result.issued_at_utc) / 1000) + GLOBAL_ACCESS_TTL_SECONDS
   };
   let route = null;
-  if (result.selected_membership_id) route = await resolveControlPlaneRoute(access, env, correlationId);
+  if (result.selected_membership_id) {
+    try {
+      route = await resolveControlPlaneRoute(access, env, correlationId);
+    } catch (error) {
+      if (!(error instanceof CandidateBrokerError) || error.code !== 'AGENCY_CONTEXT_STALE') throw error;
+      // The route RPC combines global identity and agency readiness predicates.
+      // Check only the returned renewal's identity before labelling this an
+      // agency outage. Never admit the rejected route, retry rotation here, or
+      // run this diagnostic for ordinary reads carrying an older access token.
+      try {
+        const metadata = await candidateControlPlaneRpc(
+          env, 'identity', 'global_session_metadata_v1', {
+            p_global_session_context: globalSessionContext(access, env),
+            p_correlation_id: correlationId
+          }
+        );
+        const metadataError = controlPlaneResultError(metadata, 'CONTROL_PLANE_RESPONSE_INVALID');
+        if (metadataError) throw metadataError;
+      } catch (identityError) {
+        if (identityError instanceof CandidateBrokerError && identityError.code === 'GLOBAL_SESSION_INVALID') {
+          throw new CandidateBrokerError(401, 'GLOBAL_SESSION_INVALID');
+        }
+        throw identityError;
+      }
+      throw error;
+    }
+  }
   return wrapGlobalSession(result, env, newRefreshToken, route);
 }
 
