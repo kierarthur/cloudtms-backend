@@ -15,6 +15,26 @@ const candidateContext = {
 };
 const effectKey = 'a'.repeat(64);
 const receiptId = '00000000-0000-4000-8000-000000000201';
+const anchor = {
+  emergency_shift_token: 'b'.repeat(64),
+  candidate: { display_name: 'Reporter', callable_mobile: '07123456789' },
+  shift: { date: '2026-10-07', starts_at: '2026-10-07T06:30:00Z', ends_at: '2026-10-07T19:00:00Z',
+    hospital: 'St Richards', ward: 'Bluefin', job_title: 'RMN', booking_reference: null,
+    shift_type: null, shift_info: 'Long Day 0730-2000hrs' }
+};
+function rosterResponse(body) {
+  return new Response(JSON.stringify({ ok: true, request_id: body.request_id, provider_reference: null,
+    result: { emergency_shift_token: anchor.emergency_shift_token, captured_at: new Date().toISOString(),
+      groups: { current: [{ display_name: 'Unenrolled Colleague', role: 'RMN', callable_mobile: '447111111111' }], previous: [], next: [] } }
+  }), { status: 200 });
+}
+function preflightResult(name, args) {
+  if (name !== 'candidate_daily_specialist_read_v1') return null;
+  if (args.p_operation === 'EFFECT_REPLAY') return { state: 'ABSENT' };
+  if (args.p_operation === 'EMERGENCY_ROSTER_CONTEXT') return { anchors: [anchor] };
+  if (args.p_operation === 'EMERGENCY_ROSTER_PUBLISH') return { accepted: true };
+  return null;
+}
 
 function environment(overrides = {}) {
   return {
@@ -40,7 +60,7 @@ function effectRequest(operationId = 'sendCandidateDailyRunningLate') {
   };
 }
 
-test('DAILY specialist reads Past Shifts and emergency contacts only from the agency database', async () => {
+test('an empty authorised emergency window does not call Google or create an effect', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
   let networkCalls = 0;
@@ -48,6 +68,7 @@ test('DAILY specialist reads Past Shifts and emergency contacts only from the ag
   try {
     const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
       calls.push({ name, args });
+      if (args.p_operation === 'EMERGENCY_ROSTER_CONTEXT') return { anchors: [] };
       return { eligible: false, grace_minutes_after_start: 600, shifts: [] };
     });
     const result = await specialist({
@@ -56,9 +77,10 @@ test('DAILY specialist reads Past Shifts and emergency contacts only from the ag
     });
     assert.deepEqual(result.result, { eligible: false, grace_minutes_after_start: 600, shifts: [] });
     assert.equal(networkCalls, 0);
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     assert.equal(calls[0].name, 'candidate_daily_specialist_read_v1');
-    assert.equal(calls[0].args.p_operation, 'EMERGENCY_WINDOW');
+    assert.equal(calls[0].args.p_operation, 'EMERGENCY_ROSTER_CONTEXT');
+    assert.equal(calls[1].args.p_operation, 'EMERGENCY_WINDOW');
     assert.deepEqual(calls[0].args.p_internal_context, candidateContext);
   } finally {
     globalThis.fetch = originalFetch;
@@ -152,6 +174,7 @@ test('DAILY external effect claims one durable database receipt before the narro
   globalThis.fetch = async (_url, options) => {
     order.push('GOOGLE');
     const body = JSON.parse(options.body);
+    if (body.operation === 'EMERGENCY_ROSTER_READ') return rosterResponse(body);
     assert.equal(body.schema_version, 'CLOUDTMS_CANDIDATE_SPECIALIST_V1');
     assert.equal(body.operation, 'RUNNING_LATE_SEND');
     assert.equal(body.effect_key, effectKey);
@@ -169,6 +192,7 @@ test('DAILY external effect claims one durable database receipt before the narro
     const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
       order.push(name);
       rpcCalls.push({ name, args });
+      const preflight = preflightResult(name,args); if (preflight) return preflight;
       if (name === 'candidate_daily_effect_claim_candidate_v1') return {
         state: 'CLAIMED', effect_receipt_id: receiptId, effect_key: effectKey,
         lease_token: 'lease-token-000000000000000000000000',
@@ -189,12 +213,16 @@ test('DAILY external effect claims one durable database receipt before the narro
     });
     const result = await specialist(effectRequest());
     assert.deepEqual(order, [
+      'candidate_daily_specialist_read_v1',
+      'candidate_daily_specialist_read_v1',
+      'GOOGLE',
+      'candidate_daily_specialist_read_v1',
       'candidate_daily_effect_claim_candidate_v1',
       'GOOGLE',
       'candidate_daily_effect_complete_candidate_v1'
     ]);
     assert.equal(result.result.status, 'COMPLETED');
-    assert.equal(rpcCalls[0].args.p_idempotency_key, 'candidate-daily-effect-key-0001');
+    assert.equal(rpcCalls.find(call => call.name === 'candidate_daily_effect_claim_candidate_v1').args.p_idempotency_key, 'candidate-daily-effect-key-0001');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -204,9 +232,14 @@ test('uncertain Google delivery becomes UNKNOWN and is never blindly retried', a
   let networkCalls = 0;
   const outcomes = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { networkCalls += 1; throw new Error('connection lost after submit'); };
+  globalThis.fetch = async (_url,options) => {
+    const body = JSON.parse(options.body);
+    if (body.operation === 'EMERGENCY_ROSTER_READ') return rosterResponse(body);
+    networkCalls += 1; throw new Error('connection lost after submit');
+  };
   try {
     const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
+      const preflight = preflightResult(name,args); if (preflight) return preflight;
       if (name === 'candidate_daily_effect_claim_candidate_v1') return {
         state: 'CLAIMED', effect_receipt_id: receiptId, effect_key: effectKey,
         lease_token: 'lease-token-000000000000000000000000', effect_payload: {
@@ -226,6 +259,8 @@ test('uncertain Google delivery becomes UNKNOWN and is never blindly retried', a
     assert.deepEqual(outcomes, ['UNKNOWN']);
     assert.equal(result.result.status, 'UNKNOWN');
     assert.match(result.result.safe_message, /Do not submit it again/);
+    assert.match(result.result.safe_message, /Contact the agency directly/);
+    assert.doesNotMatch(result.result.safe_message, /CloudTMS will check/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -243,4 +278,74 @@ test('specialist canonical signing and source preserve the no-generic-tunnel, no
   assert.match(sql, /DNA'[\s\S]*v_groups->'current'/);
   assert.match(sql, /'current_contacts'[\s\S]*'previous_contacts'/);
   assert.doesNotMatch(sql, /https?:\/\/|urlfetch|script\.google|CANDIDATE_DAILY_SPECIALIST_GOOGLE_/i);
+});
+
+test('terminal effect replays do not fetch a roster or repeat any provider request', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw Error('no network on replay'); };
+  try {
+    for (const state of ['COMPLETED','UNKNOWN','FAILED_FINAL']) {
+      const calls = [];
+      const safe = { effect_key: effectKey, status: state };
+      const specialist = createCandidateDailySpecialist(environment(), async (name,args) => {
+        calls.push(args.p_operation); assert.equal(name,'candidate_daily_specialist_read_v1');
+        return { state, safe_result: safe };
+      });
+      const result = await specialist(effectRequest());
+      assert.equal(result.idempotent_replay,true); assert.deepEqual(result.result,safe);
+      assert.deepEqual(calls,['EFFECT_REPLAY']);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('a missing, oversized or failed Master response never claims an effect or falls back to enrolled-only peers', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const failure of ['missing','oversized','crossed-anchor','too-many-anchors','invalid-anchor']) {
+      let claimed = false; let reads = 0;
+      globalThis.fetch = async () => {
+        reads++;
+        if (failure === 'oversized') return new Response('x'.repeat(65537));
+        throw Error('Master unavailable');
+      };
+      const specialist = createCandidateDailySpecialist(environment(), async (name,args) => {
+        if (name === 'candidate_daily_effect_claim_candidate_v1') { claimed = true; throw Error('must not claim'); }
+        if (args.p_operation === 'EFFECT_REPLAY') return { state: 'ABSENT' };
+        if (args.p_operation === 'EMERGENCY_ROSTER_CONTEXT') return { anchors:
+          failure === 'crossed-anchor' ? [{...anchor,emergency_shift_token:'d'.repeat(64)}]
+            : failure === 'too-many-anchors' ? Array(6).fill(anchor)
+              : failure === 'invalid-anchor' ? [{}] : [anchor] };
+        throw Error('must not publish');
+      });
+      await assert.rejects(specialist(effectRequest()));
+      assert.equal(claimed,false);
+      assert.equal(reads, ['missing','oversized'].includes(failure) ? 1 : 0);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('each non-running-late emergency uses the freshly validated roster and its own durable receipt', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const type of ['CANNOT_ATTEND','LEAVE_EARLY','DNA']) {
+      const sent = []; const order = [];
+      globalThis.fetch = async (_url,options) => {
+        const body = JSON.parse(options.body); order.push(body.operation);
+        if (body.operation === 'EMERGENCY_ROSTER_READ') return rosterResponse(body);
+        sent.push(body.operation); assert.equal(body.effect_key,effectKey);
+        return new Response(JSON.stringify({ok:true,request_id:correlationId,result:{accepted:true}}));
+      };
+      const specialist = createCandidateDailySpecialist(environment(),async (name,args) => {
+        const preflight=preflightResult(name,args); if (preflight) return preflight;
+        if (name === 'candidate_daily_effect_claim_candidate_v1') {
+          assert.equal(args.p_operation,type); order.push('CLAIM');
+          return {state:'CLAIMED',effect_receipt_id:receiptId,effect_key:effectKey,lease_token:'fixture',effect_payload:{effect_key:effectKey,operation:type}};
+        }
+        assert.equal(args.p_outcome,'COMPLETED'); return {status:args.p_outcome};
+      });
+      const request=effectRequest('raiseCandidateDailyEmergency'); request.input={emergency_shift_token:anchor.emergency_shift_token,type};
+      await specialist(request);
+      assert.deepEqual(order,['EMERGENCY_ROSTER_READ','CLAIM',type]); assert.deepEqual(sent,[type]);
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });

@@ -77,6 +77,7 @@ async function callGoogleSpecialist(env, operation, payload, correlationId, effe
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   let response;
+  let bytes;
   try {
     response = await fetch(config.url, {
       method: 'POST',
@@ -84,11 +85,23 @@ async function callGoogleSpecialist(env, operation, payload, correlationId, effe
       body: JSON.stringify(body),
       signal: controller.signal
     });
+    if (!response.body) throw new Error('DEPENDENCY_UNAVAILABLE');
+    const reader = response.body.getReader();
+    const chunks = []; let length = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > 64 * 1024) { await reader.cancel(); throw new Error('DEPENDENCY_UNAVAILABLE'); }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    bytes = new Uint8Array(length); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
   } finally {
     clearTimeout(timeout);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > 64 * 1024) throw new Error('DEPENDENCY_UNAVAILABLE');
   let result;
   try {
     result = bytes.byteLength ? JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) : null;
@@ -122,11 +135,23 @@ function safeEffectMessage(operation, outcome) {
         : 'Your attendance update has been sent through the agency service.';
   }
   if (outcome === 'FAILED_FINAL') return 'The agency communication could not be sent. Please contact the agency.';
-  return 'The final delivery result is not yet known. Do not submit it again; CloudTMS will check the existing request.';
+  return 'The final delivery result is not yet known. Do not submit it again. Contact the agency directly to check the alert.';
 }
 
 async function executeEffect(env, rpc, request, operation) {
   if (!EFFECT_OPERATIONS.has(operation) || !request.idempotency_key) throw new Error('VALIDATION_FAILED');
+  // Resolve an existing receipt before any source fetch. A timed-out/completed
+  // effect must not be sent again merely because a roster has since changed.
+  const replay = await specialistRead(rpc, request, 'EFFECT_REPLAY', {
+    operation, input: request.input, idempotency_key: request.idempotency_key
+  });
+  if (replay.state !== 'ABSENT') {
+    if (!exactObject(replay.safe_result)) throw new Error('DEPENDENCY_UNAVAILABLE');
+    return { result: replay.safe_result, idempotent_replay: true };
+  }
+  if (operation !== 'MESSAGE_SEEN') {
+    await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
+  }
   const now = new Date().toISOString();
   const claim = await invokeRpc(rpc, 'candidate_daily_effect_claim_candidate_v1', {
     p_internal_context: request.candidate_context,
@@ -165,6 +190,32 @@ async function executeEffect(env, rpc, request, operation) {
   return { result: completed, idempotent_replay: false };
 }
 
+async function specialistRead(rpc, request, operation, input) {
+  return invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
+    p_internal_context: request.candidate_context, p_operation: operation, p_input: input,
+    p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
+  });
+}
+
+async function refreshEmergencyRoster(env, rpc, request, shiftToken = null) {
+  const context = await specialistRead(rpc, request, 'EMERGENCY_ROSTER_CONTEXT',
+    shiftToken ? { emergency_shift_token: shiftToken } : {});
+  if (!Array.isArray(context.anchors) || context.anchors.length > 5
+      || (shiftToken && context.anchors.length !== 1)) throw new Error('DEPENDENCY_UNAVAILABLE');
+  // These are independent, read-only Google requests. Publication revalidates
+  // each exact current database booking; no caller supplies contacts or scope.
+  await Promise.all(context.anchors.map(async (anchor) => {
+    if (!exactObject(anchor) || !exactObject(anchor.candidate) || !exactObject(anchor.shift)
+        || !/^[a-f0-9]{64}$/.test(anchor.emergency_shift_token)
+        || (shiftToken && anchor.emergency_shift_token !== shiftToken)) throw new Error('DEPENDENCY_UNAVAILABLE');
+    const roster = await callGoogleSpecialist(env, 'EMERGENCY_ROSTER_READ', anchor, request.correlation_id);
+    const published = await specialistRead(rpc, request, 'EMERGENCY_ROSTER_PUBLISH', {
+      emergency_shift_token: anchor.emergency_shift_token, roster: roster.result
+    });
+    if (published.accepted !== true) throw new Error('DEPENDENCY_UNAVAILABLE');
+  }));
+}
+
 export function createCandidateDailySpecialist(env, rpc) {
   return async function candidateDailySpecialist(request) {
     switch (request.operation_id) {
@@ -199,16 +250,19 @@ export function createCandidateDailySpecialist(env, rpc) {
         return { result: google.result };
       }
       case 'getCandidateDailyEmergencyWindow':
+        await refreshEmergencyRoster(env, rpc, request);
         return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
           p_internal_context: request.candidate_context, p_operation: 'EMERGENCY_WINDOW', p_input: {},
           p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
         }) };
       case 'getCandidateDailyRunningLateOptions':
+        await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
         return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
           p_internal_context: request.candidate_context, p_operation: 'RUNNING_LATE_OPTIONS', p_input: request.input,
           p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
         }) };
       case 'previewCandidateDailyRunningLate':
+        await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
         return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
           p_internal_context: request.candidate_context, p_operation: 'RUNNING_LATE_PREVIEW', p_input: request.input,
           p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id

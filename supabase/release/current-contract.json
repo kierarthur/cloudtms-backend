@@ -4506,7 +4506,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "2a739b47582166da2b2ec95178a12f2036b9ae999f2f8ba0e8e3ba65bd7eac2d"
+      "definition_sha256": "d6e7a11c2b220a5932eb9d66d1e7b074426ef0c91aa94eddbe900f9bf7e2b1ec"
     },
     {
       "acl": [
@@ -29797,9 +29797,9 @@
       "schema": "public",
       "identity": "candidate_daily_specialist_read_v1(p_internal_context jsonb, p_operation text, p_input jsonb, p_now_utc timestamp with time zone, p_correlation_id text)",
       "parallel": "u",
-      "volatility": "s",
+      "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7c698226f76463bc3f922bfa2d8bea6d584605c2bc6b3e369f904bc03970e366"
+      "definition_sha256": "4e765de0398ff76a1352f8e216421e047bad197fa317ce9358a8eb0926beeed4"
     },
     {
       "acl": [
@@ -95553,6 +95553,180 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (state = 'IN_PROGRESS'::text AND terminal_response_body IS NULL AND terminal_response_sha256 IS NULL AND completed_at_utc IS NULL OR (state = ANY (ARRAY['COMPLETED'::text, 'FAILED_FINAL'::text])) AND terminal_response_body IS NOT NULL AND terminal_response_sha256 ~ '^[a-f0-9]{64}$'::text AND completed_at_utc IS NOT NULL)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "candidate_daily_emergency_roster_snapshots",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "emergency_shift_token",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "environment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "groups_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "observed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_daily_emergency_roster_snapshots_pkey ON private.candidate_daily_emergency_roster_snapshots USING btree (environment, candidate_id, emergency_shift_token)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "candidate_daily_emergency_roster_sn_emergency_shift_token_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (emergency_shift_token ~ '^[a-f0-9]{64}$'::text)"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expires_at_utc = (observed_at_utc + '00:05:00'::interval))"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_environment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (environment = ANY (ARRAY['TEST'::text, 'LIVE'::text]))"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_groups_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(groups_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (environment, candidate_id, emergency_shift_token)"
+        },
+        {
+          "name": "candidate_daily_emergency_roster_snapshots_source_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_sha256 ~ '^[a-f0-9]{64}$'::text)"
         }
       ],
       "view_definition_sha256": null

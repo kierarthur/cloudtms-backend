@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "releaseId": "20261006-source-banking-compatible-package-v3",
+  "releaseId": "20261007-candidate-emergency-complete-roster-v1",
   "contractPath": "supabase/release/current-contract.json",
   "baselineRepeatableLock": "supabase/release/baseline-repeatable-lock.json",
   "controlPlaneMigration": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
@@ -37,6 +37,7 @@
     "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql"
   ],
   "verificationFiles": [
+    "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
     "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
     "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -188,6 +189,7 @@
     "supabase/verification/28092026_0100_banking_pay_stage2_orphan_item_reference_verification.sql"
   ],
   "newVerificationFiles": [
+    "supabase/verification/07102026_1204_candidate_emergency_roster_snapshot_verification.sql",
     "supabase/verification/04102026_2206_weekly_source_accepted_publication_evidence_v1.sql",
     "supabase/verification/04102026_1257_weekly_source_local_protected_decision_v1.sql",
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",

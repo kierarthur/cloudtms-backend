@@ -1167,6 +1167,10 @@
       "sha256": "99f580841a8445ad687a916d2ea91c78f1ff5178b2af858fa226ea710bbcb7d8"
     },
     {
+      "path": "supabase/migrations/07102026_1151_candidate_emergency_roster_snapshot.sql",
+      "sha256": "6246f4453a079a63167004863a465d1b553ac54db41e2d009163b0ad5ab5fa59"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
