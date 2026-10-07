@@ -1760,6 +1760,12 @@ select pg_temp.assert_true(
 
 -- A structurally valid £0 final NHSP row is a warning, not a malformed shift.
 -- Drive the real projection, opaque Office acceptance and finalisation owners.
+-- Earlier finalisations can have opened this week automatically as the real
+-- calendar advances. Remove only that verified empty fixture-group successor,
+-- using the same fail-closed helper as the preceding September fixtures.
+select pg_temp.remove_empty_successor(
+  'b0000000-0000-4000-8000-000000000005','2026-10-11'
+);
 insert into public.weekly_source_cycles(
   id,source_group_id,finalisation_week_ending,cutoff_at_utc,state,version,projection_state
 ) values (

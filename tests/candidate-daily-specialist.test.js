@@ -8,6 +8,12 @@ import {
 } from '../broker/src/candidate-daily-specialist.js';
 
 const correlationId = '01K2ABCDEF0123456789ABCDEF';
+test('real private candidate entry supplies the execution context to the specialist', () => {
+  const privateEntry=readFileSync(new URL('../broker/src/candidate-private-worker.js',import.meta.url),'utf8');
+  const dependencies=readFileSync(new URL('../broker/src/index.js',import.meta.url),'utf8');
+  assert.match(privateEntry,/handleCandidateAppRequest\([\s\S]*?createCandidatePrivateDependencies\(env, 'PRIVATE', ctx\)/);
+  assert.match(dependencies,/candidateDailySpecialist: createCandidateDailySpecialist\(env, candidateRpc, ctx\)/);
+});
 const candidateContext = {
   policy: 'CANDIDATE_SURFACE',
   environment: 'TEST',
@@ -482,4 +488,49 @@ test('each non-running-late emergency uses the freshly validated roster and its 
       assert.deepEqual(order,['EMERGENCY_ROSTER_READ','CLAIM',type]); assert.deepEqual(sent,[type]);
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('an in-progress exact-key replay reads saved completion without a roster refresh, claim or send', async () => {
+  const originalFetch=globalThis.fetch; const calls=[];
+  const pending={effect_key:effectKey,operation:'DNA',status:'IN_PROGRESS',created_at:new Date(Date.now()-1000).toISOString()};
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(options.body); assert.equal(body.operation,'EFFECT_STATUS_READ');
+    return new Response(JSON.stringify({ok:true,request_id:correlationId,result:{effect_key:effectKey,operation:'DNA',status:'COMPLETED',updated_at:new Date().toISOString()}}));
+  };
+  try {
+    const specialist=createCandidateDailySpecialist(environment(),async(name,args)=>{
+      calls.push(name);
+      if(name==='candidate_daily_specialist_read_v1') { assert.equal(args.p_operation,'EFFECT_REPLAY'); return {state:'IN_PROGRESS',safe_result:pending}; }
+      assert.equal(name,'candidate_daily_effect_status_candidate_v1'); return pending;
+    });
+    const request=effectRequest('raiseCandidateDailyEmergency'); request.input={type:'DNA'};
+    const result=await specialist(request);
+    assert.equal(result.result.status,'COMPLETED'); assert.equal(result.idempotent_replay,true);
+    assert.deepEqual(calls,['candidate_daily_specialist_read_v1','candidate_daily_effect_status_candidate_v1']);
+  } finally {globalThis.fetch=originalFetch;}
+});
+
+test('the Worker lifetime retains the same single effect through slow delivery and saves its outcome', async () => {
+  const originalFetch=globalThis.fetch; const retained=[]; let releaseDelivery; let sends=0; let completes=0;
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(options.body);
+    if(body.operation==='EMERGENCY_ROSTER_READ') return rosterResponse(body);
+    sends++;
+    await new Promise(resolve=>{releaseDelivery=resolve;});
+    return new Response(JSON.stringify({ok:true,request_id:correlationId,result:{accepted:true}}));
+  };
+  try {
+    const specialist=createCandidateDailySpecialist(environment(),async(name,args)=>{
+      const preflight=preflightResult(name,args); if(preflight) return preflight;
+      if(name==='candidate_daily_effect_claim_candidate_v1') return {state:'CLAIMED',effect_receipt_id:receiptId,effect_key:effectKey,lease_token:'fixture',effect_payload:{effect_key:effectKey,operation:'DNA'}};
+      assert.equal(name,'candidate_daily_effect_complete_candidate_v1'); completes++; return {status:args.p_outcome};
+    },{waitUntil:work=>retained.push(work)});
+    const request=effectRequest('raiseCandidateDailyEmergency'); request.input={type:'DNA',emergency_shift_token:anchor.emergency_shift_token};
+    const response=specialist(request);
+    assert.equal(retained.length,1);
+    while(!releaseDelivery) await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(completes,0); releaseDelivery();
+    await retained[0];
+    assert.equal((await response).result.status,'COMPLETED'); assert.equal(sends,1); assert.equal(completes,1);
+  } finally {globalThis.fetch=originalFetch;}
 });

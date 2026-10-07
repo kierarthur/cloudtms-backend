@@ -199769,7 +199769,7 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
   return {
     routeAudience,
     rpc: candidateRpc,
-    candidateDailySpecialist: createCandidateDailySpecialist(env, candidateRpc),
+    candidateDailySpecialist: createCandidateDailySpecialist(env, candidateRpc, ctx),
     controlPlaneRpc: (schema, functionName, args) =>
       managerControlPlaneRpc(env, schema, functionName, args),
     requireOfficeUser: (request, roles) => requireUser(env, request, roles),

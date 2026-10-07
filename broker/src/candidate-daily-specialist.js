@@ -263,7 +263,16 @@ async function emergencyRead(env, rpc, request, operation) {
   return specialistRead(rpc, request, operation, request.input);
 }
 
-export function createCandidateDailySpecialist(env, rpc) {
+export function createCandidateDailySpecialist(env, rpc, executionContext = null) {
+  function retainedEffect(request, operation) {
+    const work = executeEffect(env,rpc,request,operation);
+    // Keep this one claimed attempt alive if the public HTTP deadline closes.
+    // The caller still receives the original success/error; no retry is started.
+    if (typeof executionContext?.waitUntil === 'function') {
+      executionContext.waitUntil(work.then(() => undefined,() => undefined));
+    }
+    return work;
+  }
   return async function candidateDailySpecialist(request) {
     switch (request.operation_id) {
       case 'getCandidateDailyPastShifts':
@@ -303,11 +312,11 @@ export function createCandidateDailySpecialist(env, rpc) {
       case 'previewCandidateDailyRunningLate':
         return { result: await emergencyRead(env, rpc, request, 'RUNNING_LATE_PREVIEW') };
       case 'sendCandidateDailyRunningLate':
-        return executeEffect(env, rpc, request, 'RUNNING_LATE_SEND');
+        return retainedEffect(request, 'RUNNING_LATE_SEND');
       case 'raiseCandidateDailyEmergency':
-        return executeEffect(env, rpc, request, request.input.type);
+        return retainedEffect(request, request.input.type);
       case 'markCandidateDailyMessageSeen':
-        return executeEffect(env, rpc, request, 'MESSAGE_SEEN');
+        return retainedEffect(request, 'MESSAGE_SEEN');
       case 'getCandidateDailyEffectStatus':
         return { result: await effectStatus(env,rpc,request,request.input.effect_key) };
       default:

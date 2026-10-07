@@ -186,8 +186,13 @@ begin
         and idempotency_key=p_input->>'idempotency_key';
     if v_receipt.effect_receipt_id is null then return jsonb_build_object('state','ABSENT'); end if;
     if v_receipt.request_hash is distinct from v_request_hash then raise exception using errcode='23505',message='SOURCE_EVENT_CONFLICT'; end if;
-    if v_receipt.state='IN_PROGRESS' then raise exception using errcode='55000',message=case
-      when v_receipt.lease_expires_at_utc<=p_now_utc then 'EFFECT_STATUS_UNKNOWN' else 'EFFECT_IN_PROGRESS' end; end if;
+    -- Exact candidate, request hash and idempotency ownership were checked above.
+    -- A delayed executor is a status read, never authority to claim/send again.
+    if v_receipt.state='IN_PROGRESS' then
+      return jsonb_build_object('state','IN_PROGRESS','safe_result',
+        public.candidate_daily_effect_status_candidate_v1(p_internal_context,
+          v_receipt.effect_key,p_now_utc,p_correlation_id));
+    end if;
     return jsonb_build_object('state',v_receipt.state,'safe_result',v_receipt.terminal_result_json);
   end if;
 

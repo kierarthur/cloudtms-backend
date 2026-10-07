@@ -986,6 +986,13 @@ test('Bible preserves Policy X and protected security boundary', () => {
   assert.match(read('AGENTS.md'), /Mandatory database release process/);
 });
 
+test('zero-charge finalisation fixture guards its calendar-created empty successor', () => {
+  const fixture = read('supabase/verification/15092026_1534_weekly_source_finalisation_v1.sql');
+  const zeroCharge = fixture.slice(fixture.indexOf('-- A structurally valid £0 final NHSP row'));
+  assert.match(zeroCharge, /^-- A structurally valid[\s\S]*?select pg_temp\.remove_empty_successor\(\s*'b0000000-0000-4000-8000-000000000005','2026-10-11'\s*\);\s*insert into public\.weekly_source_cycles\(/);
+  assert.match(fixture, /the successor cycle was not an empty server-created OPEN cycle/);
+});
+
 test('one-time TEST Workbench cleanup retires only the exact observed old state', () => {
   const cleanup = read(
     'supabase/migrations/09092026_2142_banking_pay_test_clean_workbench_baseline_v1.sql',

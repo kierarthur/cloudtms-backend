@@ -206,6 +206,24 @@ begin
     or v_claim#>>'{effect_payload,dna_subject,display_name}' is distinct from 'Unenrolled colleague' then
     raise exception 'DNA exact callable identity not preserved';
   end if;
+  -- A lost HTTP response must recover its exact key while the original executor
+  -- is still running or its lease has expired, without another claim or send.
+  v_result:=public.candidate_daily_specialist_read_v1(v_context,'EFFECT_REPLAY',
+    jsonb_build_object('operation','DNA','input',v_input,'idempotency_key','emergency-dna-'||v_candidate_id::text),
+    v_shift_start+interval '1 second','01M18D00000000000000000000');
+  if v_result->>'state' is distinct from 'IN_PROGRESS'
+    or v_result#>>'{safe_result,effect_key}' is distinct from v_claim->>'effect_key'
+    or v_result#>>'{safe_result,status}' is distinct from 'IN_PROGRESS' then
+    raise exception 'In-progress replay did not recover the original safe status';
+  end if;
+  v_result:=public.candidate_daily_specialist_read_v1(v_context,'EFFECT_REPLAY',
+    jsonb_build_object('operation','DNA','input',v_input,'idempotency_key','emergency-dna-'||v_candidate_id::text),
+    v_shift_start+interval '121 seconds','01M18D00000000000000000000');
+  if v_result#>>'{safe_result,effect_key}' is distinct from v_claim->>'effect_key'
+    or (select attempt_count from private.candidate_daily_external_effect_receipts
+      where effect_receipt_id=(v_claim->>'effect_receipt_id')::uuid)<>1 then
+    raise exception 'Expired pending replay replaced/reclaimed the original attempt';
+  end if;
   -- No external executor is invoked. Complete the test-only receipt UNKNOWN.
   perform public.candidate_daily_effect_complete_candidate_v1(v_context,
     (v_claim->>'effect_receipt_id')::uuid,v_claim->>'lease_token','UNKNOWN',null,
