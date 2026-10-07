@@ -1392,6 +1392,15 @@ $function$;
 -- These deliberately empty read shapes let the Candidate admission reader
 -- prove its fallback without fabricating a request or installing the separate
 -- Weekly Source schema. The integrated release verifiers use the real tables.
+-- The ordinary Timesheet signature also checks both Source-family lookups.
+-- Keep their exact read-column types present and empty in this isolated matrix;
+-- this is not a replacement for the real Source tables or category authority.
+create view public.weekly_source_row_timesheet_lineages as
+select null::text family_booking_id where false;
+
+create view public.weekly_exceptional_pay_target_families as
+select null::text root_family_booking_id where false;
+
 create view public.weekly_timesheet_submission_requests as
 select null::uuid id, null::uuid candidate_cohort_id, null::uuid source_cycle_id,
   null::uuid candidate_id, null::integer request_generation, null::text state,

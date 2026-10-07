@@ -73,6 +73,14 @@ const invoiceExpenseSeparation = read(
 );
 
 test('Candidate runtime gate finishes with every current authority', () => {
+  for (const [relation, column] of [
+    ['weekly_source_row_timesheet_lineages', 'family_booking_id'],
+    ['weekly_exceptional_pay_target_families', 'root_family_booking_id'],
+  ]) {
+    assert.ok(candidateRuntimeFixture.includes(
+      `create view public.${relation} as\nselect null::text ${column} where false;`
+    ), 'ordinary Candidate-only fixture must expose an empty typed Source-family lookup');
+  }
   const fixturePath = 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql';
   assert.ok(
     candidateRuntimeWorkflow.indexOf(`apply_sql ${fixturePath}`) < candidateRuntimeWorkflow.indexOf('install_files=('),
