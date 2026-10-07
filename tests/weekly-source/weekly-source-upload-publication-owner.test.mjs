@@ -173,6 +173,37 @@ test('completed Office recheck replay does not rebuild or repeat follow-up work'
   assert.deepEqual(calls, ['weekly_source_office_recheck_begin_v1']);
 });
 
+test('failure after a committed recheck begin reports a saved choice, never failed linking', async () => {
+  for (const failedAt of ['weekly_source_upload_context_v1',
+    'weekly_source_projection_rows_apply_atomic_v1', 'weekly_source_projection_publish_atomic_v1']) {
+    const request = { request_id: ID.group, candidate_id: ID.actor };
+    const owner = createWeeklySourceUploadPublicationOwner({ rpc: async name => {
+      if (name === failedAt) throw new Error('WEEKLY_SOURCE_DURABLE_LINEAGE_UNPROVEN');
+      if (name === 'weekly_source_office_recheck_begin_v1') return {
+        ok: true, status: 'BUILDING', upload_id: ID.upload, publication_id: ID.publication };
+      if (name === 'weekly_source_upload_context_v1') return { ok: true, ...context,
+        profile_id: WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1, rows: [] };
+      return { ok: true, status: 'CURRENT' };
+    } });
+    await assert.rejects(owner.recheckUpload({ actor: { id: ID.actor }, request }), error => {
+      assert.equal(error.code, 'WEEKLY_SOURCE_RECHECK_INCOMPLETE');
+      assert.equal(error.details.selection_saved, true);
+      assert.equal(error.details.request_id, request.request_id);
+      assert.equal(error.details.publication_id, ID.publication);
+      assert.match(error.message, /selection was saved/);
+      return true;
+    });
+  }
+});
+
+test('a refused recheck begin does not claim that a selection was saved', async () => {
+  const owner = createWeeklySourceUploadPublicationOwner({ rpc: async () => {
+    throw new Error('WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING');
+  } });
+  await assert.rejects(owner.recheckUpload({ actor: { id: ID.actor }, request: {} }),
+    /WEEKLY_SOURCE_CANDIDATE_INACTIVE_OR_MISSING/);
+});
+
 async function parseCase(profileId) {
   if (profileId === WEEKLY_SOURCE_PROFILE_IDS.NHSP_PREFINAL_RELEASED_V1) {
     return parseWeeklySourceFile(workbookBytes(nhspRows(false)), { profileId });

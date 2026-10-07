@@ -895,21 +895,31 @@ export function createWeeklySourceUploadPublicationOwner(dependencies = {}) {
         fail('WEEKLY_SOURCE_RECHECK_BEGIN_FAILED', 'The source comparison could not be rechecked.');
       }
       if (begun.status === 'CURRENT') return begun;
-      const context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
-        ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
-      }));
-      await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
-        p_actor_user_id: request.actor_user_id,
-        p_publication_id: begun.publication_id,
-        p_rows: buildWeeklySourceProjectionRows(context),
-      }, { request: false });
-      const result = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
-        actor_user_id: request.actor_user_id, publication_id: begun.publication_id,
-      });
-      if (!result?.ok || result.status !== 'CURRENT') {
-        fail(result?.reason_code ?? 'WEEKLY_SOURCE_RECHECK_FAILED', 'The saved source comparison is still incomplete. Retry this recheck.', 409);
+      try {
+        const context = validateContext(await rpc(dependencies, 'weekly_source_upload_context_v1', {
+          ...scopeRequest({}, request.actor_user_id, 'BUILD_PROJECTION', begun.upload_id),
+        }));
+        await rpc(dependencies, 'weekly_source_projection_rows_apply_atomic_v1', {
+          p_actor_user_id: request.actor_user_id,
+          p_publication_id: begun.publication_id,
+          p_rows: buildWeeklySourceProjectionRows(context),
+        }, { request: false });
+        const result = await rpc(dependencies, 'weekly_source_projection_publish_atomic_v1', {
+          actor_user_id: request.actor_user_id, publication_id: begun.publication_id,
+        });
+        if (!result?.ok || result.status !== 'CURRENT') {
+          fail(result?.reason_code ?? 'WEEKLY_SOURCE_RECHECK_FAILED', 'The saved source comparison is still incomplete. Retry this recheck.', 409);
+        }
+        return result;
+      } catch {
+        // Begin is a separate committed transaction. A later failure must not
+        // tell Office that its saved choice was rejected or invite a new key.
+        fail('WEEKLY_SOURCE_RECHECK_INCOMPLETE',
+          'Your selection was saved, but the source recheck did not finish. Retry the saved recheck in Office Checks.',
+          409, { selection_saved: true, recheck_incomplete: true,
+            request_id: request.request_id, upload_id: begun.upload_id,
+            publication_id: begun.publication_id });
       }
-      return result;
     },
 
     async rebuildReplacementProjection(input = {}) {

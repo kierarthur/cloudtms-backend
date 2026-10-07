@@ -419,3 +419,44 @@ its rollback transaction, retaining all scenarios and assertions so the exact
 planning regression is continuously exercised. All 149 hosted verifiers still
 have to pass in the canonical managed release. Actual Kier Save and ordered
 runtime/Office acceptance remain required before publication is claimed complete.
+
+## Same-file Office recheck recovery, 7 October
+
+An Office candidate choice was committed before the replacement source comparison
+failed. The row builder correctly retained an established work event, but the SQL
+lineage guard rejected an older published resolution of the *same immutable row*.
+The recheck had already invalidated the previous publication, so the combined
+workspace incorrectly displayed zero Office checks. No successful candidate
+recheck or resolved charge warning can be inferred from that empty display.
+
+The corrected guard admits same-row lineage only from an older published
+generation of the same upload with its unchanged source fingerprint. All existing
+candidate, client, group, contract and current-generation authority fences remain.
+A chronological successor repeats exactly the two changed public definitions,
+preserving their service-only execution and owner/security configuration.
+
+While a saved recheck remains incomplete, the permitted previous source rows stay
+visible in Office checks, explicitly labelled as incomplete. Their stale ordinary
+actions are replaced by an exact saved-request retry for the original Office
+actor. The attention panel cannot falsely say that no decisions remain. Later
+failures report that the selection was saved but the comparison did not finish;
+a refusal before saving does not make that claim. Retrying does not close Queries
+or manufacture a new choice, request identity or work event.
+
+The exact affected two-row TEST upload passed a server-owned rollback rehearsal:
+both rows visible before recovery, the established charge warning preserved
+afterwards, and the candidate-linked row progressing to its remaining client
+eligibility check. Fresh-connection rollback verification restored the original
+unpublished state. Client membership, pay, invoices and the original raw source
+are not altered by the repair. Hosted installation and exact saved-request
+recovery remain pending until the managed release passes.
+
+Local verification: 1,476 general backend tests; 393 weekly-source tests passed
+(13 independent opt-in harness tests skipped); 215 Office unit tests; all 61
+Office import browser tests passed. Desktop and 390px warning/recovery captures
+were visually inspected. The cross-repository delivery test used the existing
+reviewed MyTMS source worktree rather than a missing default sibling directory.
+
+Two clean PostgreSQL 17 NEW installations passed, including the fresh replay
+against the reviewed contract seal. The contract delta is exactly the two
+intended routine definition hashes, with no permissions or other schema change.

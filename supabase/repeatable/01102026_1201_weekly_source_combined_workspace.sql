@@ -867,6 +867,7 @@ declare
   v_version text; v_cursor jsonb; v_client uuid; v_seen text[]:='{}'; v_key text; v_owner_key text;
   v_attention jsonb; v_attention_first boolean:=coalesce((p_request->>'attention_first')::boolean,false);
   v_attention_kind text:=coalesce(p_request->>'attention_kind','');
+  v_pending record; v_pending_checks jsonb:='[]'::jsonb;
 begin
   perform private.weekly_source_query_require_service_v1();
   perform private._weekly_source_settings_assert_request_v1(p_request,
@@ -1046,6 +1047,63 @@ begin
         'status',jsonb_build_object('text',v_follow_up->>'title'),
         'problem',v_follow_up->>'body','follow_up_scope',v_follow_workspace->'selected','actions','[]'::jsonb));
     end loop;
+  end if;
+  -- Rechecks invalidate the old authority before the replacement is ready.
+  -- Retain old unresolved rows as explicitly non-actionable history, with only
+  -- the exact saved recheck available. Never treat a missing CURRENT pointer
+  -- as proof that Office has no work remaining.
+  if v_tab='queries' then
+    for v_pending in
+      select recheck.request_id,recheck.actor_user_id,recheck.request_json,
+        recheck.upload_id,recheck.publication_id,source_row.id as upload_row_id,
+        source_row.work_date,source_row.source_client_identity,source_row.source_candidate_identity,
+        source_row.external_source_key,source_row.start_at_local,source_row.end_at_local,source_row.break_minutes,
+        coalesce(candidate.display_name,source_row.bounded_raw_columns_json->>'worker_name',
+          source_row.bounded_raw_columns_json->>'candidate',source_row.source_candidate_identity) as candidate_name,
+        resolution.mapping_state,charge.phase_severity,cycle.source_group_id,cycle.finalisation_week_ending,
+        (select item->>'source' from jsonb_array_elements(v_scopes) item
+          where item->>'source_cycle_id'=cycle.id::text limit 1) as source_name
+      from private.weekly_source_office_rechecks recheck
+      join public.weekly_source_projection_publications publication on publication.id=recheck.publication_id
+      join public.weekly_source_projection_publications prior_publication on prior_publication.id=recheck.prior_publication_id
+      join public.weekly_source_uploads upload on upload.id=recheck.upload_id
+      join public.weekly_source_cycles cycle on cycle.id=upload.source_cycle_id
+      left join public.weekly_source_report_scopes scope on scope.id=upload.report_scope_id
+      join public.weekly_source_upload_rows source_row on source_row.upload_id=upload.id
+      join public.weekly_source_row_resolutions resolution on resolution.upload_row_id=source_row.id
+        and resolution.generation=coalesce(prior_publication.projection_generation,prior_publication.authority_scope_version)
+      left join public.weekly_source_charge_checks charge on charge.upload_row_id=source_row.id
+        and charge.generation=resolution.generation
+      left join public.candidates candidate on candidate.id=coalesce(
+        (select choice.candidate_id from private.weekly_source_office_row_choices choice
+          where choice.upload_row_id=source_row.id order by choice.id desc limit 1),resolution.candidate_id)
+      where publication.state='BUILDING' and upload.state='CURRENT'
+        and publication.authority_scope_version=case when upload.report_scope_id is null then cycle.version else scope.version end
+        and upload.id=case when upload.report_scope_id is null then cycle.current_complete_upload_id else scope.current_complete_upload_id end
+        and exists(select 1 from jsonb_array_elements(v_scopes) item where item->>'source_cycle_id'=cycle.id::text)
+        and (v_client is null or resolution.client_id=v_client or scope.client_id=v_client)
+      order by recheck.request_id,source_row.source_row_ordinal
+    loop
+      v_key:='recheck:'||v_pending.request_id::text||':'||v_pending.upload_row_id::text;
+      v_pending_checks:=v_pending_checks||jsonb_build_array(jsonb_build_object(
+        'combined_key',v_key,'row_key',v_key,'section','checks','recheck_pending',true,
+        'client',v_pending.source_client_identity,'candidate',v_pending.candidate_name,
+        'source_reference',v_pending.source_candidate_identity,'booking_reference',v_pending.external_source_key,
+        'source',v_pending.source_name,'period',to_char(v_pending.finalisation_week_ending,'FMDD Mon YYYY'),
+        'work_date',v_pending.work_date,'day_date',to_char(v_pending.work_date,'FMDD Mon YYYY'),
+        'system_hours',to_char(v_pending.start_at_local,'HH24:MI')||'–'||to_char(v_pending.end_at_local,'HH24:MI')
+          ||' · '||v_pending.break_minutes::text||' min break',
+        'pay_blocking',v_pending.mapping_state<>'RESOLVED',
+        'status',jsonb_build_object('text','Recheck incomplete'),
+        'problem',case when v_pending.mapping_state<>'RESOLVED' then 'Previous linking check — selection saved; replacement check incomplete.'
+          when v_pending.phase_severity in ('PROVISIONAL_WARNING','FINALISATION_BLOCKER') then 'Previous contract charge warning — replacement check incomplete.'
+          else 'Previous check — replacement check incomplete.' end,
+        'actions',jsonb_build_array(jsonb_build_object('label','Retry recheck',
+          'enabled',v_pending.actor_user_id=(p_request->>'actor_user_id')::uuid,
+          'command','RECHECK_SOURCE','payload',v_pending.request_json-'actor_user_id'))));
+    end loop;
+    v_rows:=v_rows||v_pending_checks;
+    v_summary:=v_summary||jsonb_build_object('recheck_pending_count',jsonb_array_length(v_pending_checks));
   end if;
   -- Classify the complete permitted collection before counting or paging.
   -- A waiting signature alone is informational; red unresolved work and green

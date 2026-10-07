@@ -344,6 +344,7 @@ begin
 end;
 $lineage_verify$;
 
+
 select jsonb_build_object(
   'ok',true,'verification','weekly_source_projection_build_v1',
   'resolution_count',pg_temp.ws_verify_count('public.weekly_source_row_resolutions'::regclass),
@@ -1013,6 +1014,57 @@ begin
   end;
 end;
 $penny_rederivation_proof$;
+
+-- A recheck of the same immutable row is prior lineage, not a new row.
+do $same_file_recheck_proof$
+declare
+  v_event uuid; v_result jsonb; v_payload jsonb;
+begin
+  select work_event_id into strict v_event from public.weekly_source_row_resolutions
+    where upload_row_id='71000000-0000-4000-8000-00000000000c' and generation=1;
+  update public.weekly_source_projection_publications set state='STALE'
+    where id='71000000-0000-4000-8000-00000000000d';
+  update public.weekly_source_cycles set version=2
+    where id='71000000-0000-4000-8000-00000000000a';
+  insert into public.weekly_source_projection_publications(id,source_cycle_id,authority_scope_kind,
+    upload_id,authority_scope_version,projection_generation,comparison_manifest_hash,issue_set_hash,state)
+    values('71000000-0000-4000-8000-00000000000e','71000000-0000-4000-8000-00000000000a','CYCLE',
+      '71000000-0000-4000-8000-00000000000b',2,2,decode(repeat('16',32),'hex'),decode(repeat('17',32),'hex'),'BUILDING');
+  v_payload:=jsonb_build_array(jsonb_build_object(
+    'upload_row_id','71000000-0000-4000-8000-00000000000c','mapping_state','RESOLVED',
+    'candidate_id','71000000-0000-4000-8000-000000000003','client_id','71000000-0000-4000-8000-000000000002',
+    'contract_id','71000000-0000-4000-8000-000000000005','prior_work_event_id',v_event,
+    'contract_selection_method','DURABLE_LINEAGE','qualifying_contract_ids',
+      jsonb_build_array('71000000-0000-4000-8000-000000000004','71000000-0000-4000-8000-000000000005'),
+    'identity_kind','PROFILE_EXTERNAL_KEY','profile_external_key','mode-a-line-1','link_kind','TIMESHEET_EVIDENCE'));
+  begin
+    perform public.weekly_source_projection_rows_apply_atomic_v1(
+      '70000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-00000000000e',v_payload);
+    raise exception 'UNPUBLISHED_SAME_ROW_LINEAGE_WAS_ACCEPTED';
+  exception when sqlstate '22023' then
+    if sqlerrm is distinct from 'WEEKLY_SOURCE_DURABLE_LINEAGE_UNPROVEN' then raise; end if;
+  end;
+  update public.weekly_source_projection_publications set published_at_utc=clock_timestamp()
+    where id='71000000-0000-4000-8000-00000000000d';
+  begin
+    update public.weekly_source_row_resolutions set source_row_fingerprint=decode(repeat('ff',32),'hex')
+      where upload_row_id='71000000-0000-4000-8000-00000000000c' and generation=1;
+    raise exception 'IMMUTABLE_LINEAGE_FINGERPRINT_WAS_CHANGED';
+  exception when others then
+    if sqlerrm is distinct from 'WEEKLY_SOURCE_IMMUTABLE_RECORD' then raise; end if;
+  end;
+  v_result:=public.weekly_source_projection_rows_apply_atomic_v1(
+    '70000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-00000000000e',v_payload);
+  if v_result->>'applied_row_count' is distinct from '1' or not exists(
+    select 1 from public.weekly_source_row_resolutions where upload_row_id='71000000-0000-4000-8000-00000000000c'
+      and generation=2 and work_event_id=v_event and mapping_state='RESOLVED') then
+    raise exception 'SAME_FILE_RECHECK_LOST_ESTABLISHED_WORK_EVENT';
+  end if;
+  v_result:=public.weekly_source_projection_rows_apply_atomic_v1(
+    '70000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-00000000000e',v_payload);
+  if v_result->'idempotent' is distinct from 'true'::jsonb then raise exception 'SAME_FILE_RECHECK_REPLAY_NOT_IDEMPOTENT'; end if;
+end;
+$same_file_recheck_proof$;
 
 select jsonb_build_object(
   'ok',true,'verification','weekly_source_projection_build_v1_plan62',
