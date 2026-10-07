@@ -216,6 +216,22 @@ async function refreshEmergencyRoster(env, rpc, request, shiftToken = null) {
   }));
 }
 
+async function emergencyRead(env, rpc, request, operation) {
+  // The RPC validates the current booking/generation and the private roster's
+  // five-minute lease on every read. Reuse only that database-owned authority;
+  // fetching Google again for each choice/preview can exceed the public read
+  // deadline. New effects still take the fresh-roster path above.
+  try {
+    return await specialistRead(rpc, request, operation, request.input);
+  } catch (error) {
+    const missingRoster = [error?.json?.message, error?.message].some(value =>
+      typeof value === 'string' && /(?:^|[^A-Z0-9_])DEPENDENCY_UNAVAILABLE(?:$|[^A-Z0-9_])/.test(value));
+    if (!missingRoster) throw error;
+  }
+  await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
+  return specialistRead(rpc, request, operation, request.input);
+}
+
 export function createCandidateDailySpecialist(env, rpc) {
   return async function candidateDailySpecialist(request) {
     switch (request.operation_id) {
@@ -250,23 +266,11 @@ export function createCandidateDailySpecialist(env, rpc) {
         return { result: google.result };
       }
       case 'getCandidateDailyEmergencyWindow':
-        await refreshEmergencyRoster(env, rpc, request);
-        return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
-          p_internal_context: request.candidate_context, p_operation: 'EMERGENCY_WINDOW', p_input: {},
-          p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
-        }) };
+        return { result: await emergencyRead(env, rpc, request, 'EMERGENCY_WINDOW') };
       case 'getCandidateDailyRunningLateOptions':
-        await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
-        return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
-          p_internal_context: request.candidate_context, p_operation: 'RUNNING_LATE_OPTIONS', p_input: request.input,
-          p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
-        }) };
+        return { result: await emergencyRead(env, rpc, request, 'RUNNING_LATE_OPTIONS') };
       case 'previewCandidateDailyRunningLate':
-        await refreshEmergencyRoster(env, rpc, request, request.input.emergency_shift_token);
-        return { result: await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {
-          p_internal_context: request.candidate_context, p_operation: 'RUNNING_LATE_PREVIEW', p_input: request.input,
-          p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
-        }) };
+        return { result: await emergencyRead(env, rpc, request, 'RUNNING_LATE_PREVIEW') };
       case 'sendCandidateDailyRunningLate':
         return executeEffect(env, rpc, request, 'RUNNING_LATE_SEND');
       case 'raiseCandidateDailyEmergency':

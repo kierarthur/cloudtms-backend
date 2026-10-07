@@ -77,14 +77,95 @@ test('an empty authorised emergency window does not call Google or create an eff
     });
     assert.deepEqual(result.result, { eligible: false, grace_minutes_after_start: 600, shifts: [] });
     assert.equal(networkCalls, 0);
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 1);
     assert.equal(calls[0].name, 'candidate_daily_specialist_read_v1');
-    assert.equal(calls[0].args.p_operation, 'EMERGENCY_ROSTER_CONTEXT');
-    assert.equal(calls[1].args.p_operation, 'EMERGENCY_WINDOW');
+    assert.equal(calls[0].args.p_operation, 'EMERGENCY_WINDOW');
     assert.deepEqual(calls[0].args.p_internal_context, candidateContext);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+const emergencyReads = [
+  ['getCandidateDailyEmergencyWindow', 'EMERGENCY_WINDOW'],
+  ['getCandidateDailyRunningLateOptions', 'RUNNING_LATE_OPTIONS'],
+  ['previewCandidateDailyRunningLate', 'RUNNING_LATE_PREVIEW']
+];
+
+test('emergency reads reuse only the roster that the database validates for this current booking', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw Error('A validated read must not fetch Google again'); };
+  try {
+    for (const [operation_id, operation] of emergencyReads) {
+      const calls = [];
+      const input = operation === 'EMERGENCY_WINDOW' ? {} : { emergency_shift_token: anchor.emergency_shift_token };
+      const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
+        calls.push(args.p_operation);
+        assert.equal(name, 'candidate_daily_specialist_read_v1');
+        assert.equal(args.p_operation, operation);
+        assert.deepEqual(args.p_internal_context, candidateContext);
+        assert.deepEqual(args.p_input, input);
+        return { validated: true };
+      });
+      assert.deepEqual(await specialist({ operation_id, input, candidate_context: candidateContext, correlation_id: correlationId }), { result: { validated: true } });
+      assert.deepEqual(calls, [operation]);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('missing or expired emergency roster refreshes before repeating the database-validated read', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const [operation_id, operation] of emergencyReads) {
+      const order = []; let reads = 0;
+      globalThis.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body); order.push(body.operation);
+        assert.equal(body.operation, 'EMERGENCY_ROSTER_READ');
+        return rosterResponse(body);
+      };
+      const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
+        assert.equal(name, 'candidate_daily_specialist_read_v1'); order.push(args.p_operation);
+        if (args.p_operation === operation && reads++ === 0) {
+          const error = new Error('RPC failed'); error.json = { message: 'DEPENDENCY_UNAVAILABLE' }; throw error;
+        }
+        const preflight = preflightResult(name, args); if (preflight) return preflight;
+        return { validated: true };
+      });
+      const input = operation === 'EMERGENCY_WINDOW' ? {} : { emergency_shift_token: anchor.emergency_shift_token };
+      assert.deepEqual(await specialist({ operation_id, input, candidate_context: candidateContext, correlation_id: correlationId }), { result: { validated: true } });
+      assert.deepEqual(order, [operation, 'EMERGENCY_ROSTER_CONTEXT', 'EMERGENCY_ROSTER_READ', 'EMERGENCY_ROSTER_PUBLISH', operation]);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('non-roster read failures retain their exact error and never refresh or claim an effect', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw Error('Must not call Google'); };
+  try {
+    for (const code of ['AUTH_FAILED', 'NOT_FOUND', 'SEMANTIC_REJECTION', 'NOT_READY']) {
+      const error = new Error(code); const calls = [];
+      const specialist = createCandidateDailySpecialist(environment(), async (_name, args) => {
+        calls.push(args.p_operation); throw error;
+      });
+      await assert.rejects(specialist({ ...effectRequest('previewCandidateDailyRunningLate') }), (failure) => failure === error);
+      assert.deepEqual(calls, ['RUNNING_LATE_PREVIEW']);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('an expired roster and failed Google refresh never return stale data or claim an effect', async () => {
+  const originalFetch = globalThis.fetch; const calls = [];
+  globalThis.fetch = async () => { throw Error('Google unavailable'); };
+  try {
+    const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
+      calls.push(args.p_operation ?? name);
+      if (args.p_operation === 'RUNNING_LATE_PREVIEW') throw Error('DEPENDENCY_UNAVAILABLE');
+      if (args.p_operation === 'EMERGENCY_ROSTER_CONTEXT') return { anchors: [anchor] };
+      throw Error('Must not publish or claim');
+    });
+    await assert.rejects(specialist(effectRequest('previewCandidateDailyRunningLate')));
+    assert.deepEqual(calls, ['RUNNING_LATE_PREVIEW', 'EMERGENCY_ROSTER_CONTEXT']);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('DAILY retained candidate messages resolve identity in the agency database before the signed Google read', async () => {
