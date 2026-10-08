@@ -304,4 +304,225 @@ begin
 end;
 $build_projection_runtime$;
 
+-- Released NHSP files are row-wise: only NHSP-enabled clients may cross groups.
+-- Reuse only the rollback-contained fixtures above; no historical TEST rows.
+do $released_client_runtime$
+declare
+  v_base_upload uuid;
+  v_base_row uuid;
+  v_upload uuid:=pg_catalog.gen_random_uuid();
+  v_row uuid:=pg_catalog.gen_random_uuid();
+  v_second_row uuid:=pg_catalog.gen_random_uuid();
+  v_pinned_upload uuid:=pg_catalog.gen_random_uuid();
+  v_context jsonb;
+  v_pub jsonb;
+  v_rows jsonb;
+  v_request jsonb;
+  v_result jsonb;
+begin
+  insert into public.clients(id,cli_ref,name) values
+    ('91000000-0000-4000-8000-000000000070','CLI-99992','Outside Group NHSP Trust'),
+    ('91000000-0000-4000-8000-000000000071','CLI-99991','Missing Settings Trust');
+  insert into public.client_settings(client_id,vat_rate_pct,effective_from,is_nhsp) values
+    ('91000000-0000-4000-8000-000000000040',20,'2026-01-01',true),
+    ('91000000-0000-4000-8000-000000000070',20,'2026-01-01',true);
+  select id into strict v_base_upload from public.weekly_source_uploads
+    where original_filename='context-build-verification.xlsx'
+      and uploaded_by_user_id='91000000-0000-4000-8000-000000000001';
+  select id into strict v_base_row from public.weekly_source_upload_rows where upload_id=v_base_upload;
+  insert into public.weekly_source_uploads
+    select (pg_catalog.jsonb_populate_record(null::public.weekly_source_uploads,
+      pg_catalog.to_jsonb(upload)||pg_catalog.jsonb_build_object(
+        'id',v_upload,'source_cycle_id','91000000-0000-4000-8000-000000000031',
+        'source_format_profile_id','31111111-1111-4111-8111-111111111111',
+        'declared_scope_fingerprint',private.weekly_source_scope_fingerprint_v1(
+          'TEST','91000000-0000-4000-8000-000000000002',
+          '91000000-0000-4000-8000-000000000030','91000000-0000-4000-8000-000000000031',null,null),
+        'file_metadata_json',upload.file_metadata_json-'client_id',
+        'original_filename','released-multi-client-verification.xlsx',
+        'accepted_count',2,'physical_row_count',3
+      ))).* from public.weekly_source_uploads upload where id=v_base_upload;
+  insert into public.weekly_source_upload_rows
+    select (pg_catalog.jsonb_populate_record(null::public.weekly_source_upload_rows,
+      pg_catalog.to_jsonb(source_row)||pg_catalog.jsonb_build_object(
+        'id',v_row,'upload_id',v_upload,'source_client_identity','NHSP Context Trust',
+        'bounded_raw_columns_json',source_row.bounded_raw_columns_json||
+          '{"trust":"NHSP Context Trust"}'::jsonb
+      ))).* from public.weekly_source_upload_rows source_row where id=v_base_row;
+  insert into public.weekly_source_upload_rows
+    select (pg_catalog.jsonb_populate_record(null::public.weekly_source_upload_rows,
+      pg_catalog.to_jsonb(source_row)||pg_catalog.jsonb_build_object(
+        'id',v_second_row,'upload_id',v_upload,'source_row_ordinal',3,'external_source_key','RELEASED-SECOND-CLIENT',
+        'source_client_identity','Outside Group NHSP Trust',
+        'normalised_row_hash',decode(repeat('ab',32),'hex'),
+        'bounded_raw_columns_json',source_row.bounded_raw_columns_json||
+          '{"trust":"Outside Group NHSP Trust"}'::jsonb
+      ))).*
+    from public.weekly_source_upload_rows source_row where id=v_base_row;
+  update public.weekly_source_cycles
+    set current_complete_upload_id=v_upload,current_projection_publication_id=null,
+      projection_state='REBUILDING',version=1
+    where id='91000000-0000-4000-8000-000000000031';
+
+  perform pg_temp.assert_true(
+    private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000070','2026-09-14'),
+    'released file rejected a real client outside its group');
+  perform pg_temp.assert_true(
+    not private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000099','2026-09-14'),
+    'released file accepted a missing client');
+  perform pg_temp.assert_true(
+    not private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000020','2026-09-14')
+    and not private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000071','2026-09-14'),
+    'released file accepted a non-NHSP client or missing settings');
+  -- A saved released profile is not authority to accept a non-NHSP source.
+  update public.weekly_source_uploads set source_cycle_id='91000000-0000-4000-8000-000000000011'
+    where id=v_upload;
+  perform pg_temp.assert_true(not private.weekly_source_upload_client_eligible_v1(
+    v_upload,'91000000-0000-4000-8000-000000000070','2026-09-14'),
+    'released profile accepted a non-NHSP source');
+  update public.weekly_source_uploads set source_cycle_id='91000000-0000-4000-8000-000000000031'
+    where id=v_upload;
+  v_context:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001',
+    'upload_id',v_upload));
+  perform pg_temp.assert_true(
+    v_context#>>'{rows,0,client_id}'='91000000-0000-4000-8000-000000000040'
+    and v_context#>>'{rows,1,client_id}'='91000000-0000-4000-8000-000000000070',
+    'released multi-client rows were not independently matched');
+
+  -- Old true, applicable false, future true: the work-date setting wins.
+  insert into public.client_settings(client_id,vat_rate_pct,effective_from,is_nhsp) values
+    ('91000000-0000-4000-8000-000000000070',20,'2026-09-01',false),
+    ('91000000-0000-4000-8000-000000000070',20,'2026-10-01',true);
+  v_result:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload));
+  perform pg_temp.assert_true(v_result#>>'{rows,1,client_id}' is null,
+    'released automatic match ignored applicable non-NHSP settings');
+  insert into public.client_settings(client_id,vat_rate_pct,effective_from,is_nhsp) values
+    ('91000000-0000-4000-8000-000000000070',20,'2026-09-10',true);
+  -- Two eligible exact names must not silently choose one client.
+  insert into public.clients(id,cli_ref,name) values
+    ('91000000-0000-4000-8000-000000000072','CLI-99990','NHSP Context Trust');
+  insert into public.client_settings(client_id,vat_rate_pct,effective_from,is_nhsp) values
+    ('91000000-0000-4000-8000-000000000072',20,'2026-01-01',true);
+  v_result:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload));
+  perform pg_temp.assert_true(v_result#>>'{rows,0,client_id}' is null,
+    'released automatic match silently selected an ambiguous NHSP client');
+  update public.client_settings set is_nhsp=false
+    where client_id='91000000-0000-4000-8000-000000000072';
+  v_result:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload));
+  perform pg_temp.assert_true(v_result#>>'{rows,0,client_id}'='91000000-0000-4000-8000-000000000040',
+    'non-NHSP namesake blocked a unique eligible NHSP match');
+
+  -- A saved upload-level hint must not turn a multi-client checking file into
+  -- a one-client report. Construct new evidence instead of editing source rows.
+  insert into public.weekly_source_uploads
+    select (pg_catalog.jsonb_populate_record(null::public.weekly_source_uploads,
+      pg_catalog.to_jsonb(upload)||pg_catalog.jsonb_build_object(
+        'id',v_pinned_upload,'original_filename','released-client-hint-verification.xlsx',
+        'file_metadata_json',upload.file_metadata_json||jsonb_build_object(
+          'client_id','91000000-0000-4000-8000-000000000040'),
+        'declared_scope_fingerprint',private.weekly_source_scope_fingerprint_v1(
+          'TEST','91000000-0000-4000-8000-000000000002',
+          '91000000-0000-4000-8000-000000000030','91000000-0000-4000-8000-000000000031',
+          null,'91000000-0000-4000-8000-000000000040')
+      ))).* from public.weekly_source_uploads upload where id=v_upload;
+  insert into public.weekly_source_upload_rows
+    select (pg_catalog.jsonb_populate_record(null::public.weekly_source_upload_rows,
+      pg_catalog.to_jsonb(source_row)||jsonb_build_object(
+        'id',gen_random_uuid(),'upload_id',v_pinned_upload
+      ))).* from public.weekly_source_upload_rows source_row where upload_id=v_upload;
+  v_result:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001',
+    'upload_id',v_pinned_upload));
+  perform pg_temp.assert_true(
+    v_result#>>'{rows,0,client_id}'='91000000-0000-4000-8000-000000000040'
+    and v_result#>>'{rows,1,client_id}'='91000000-0000-4000-8000-000000000070',
+    'released upload client hint overrode row clients');
+
+  v_pub:=public.weekly_source_projection_begin_atomic_v1(jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload,
+    'expected_authority_scope_version',1));
+  select jsonb_agg(jsonb_build_object('upload_row_id',id,
+    'mapping_state','SOURCE_ROW_BLOCKED','blocker_code','VERIFICATION_MAPPING_NOT_IN_SCOPE',
+    'qualifying_contract_ids','[]'::jsonb)) into v_rows
+    from public.weekly_source_upload_rows where upload_id=v_upload;
+  perform public.weekly_source_projection_rows_apply_atomic_v1(
+    '91000000-0000-4000-8000-000000000001',(v_pub->>'publication_id')::uuid,v_rows);
+  perform public.weekly_source_projection_publish_atomic_v1(jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','publication_id',v_pub->>'publication_id'));
+  v_request:=jsonb_build_object(
+    'actor_user_id','91000000-0000-4000-8000-000000000001','request_id',gen_random_uuid(),
+    'upload_id',v_upload,'projection_publication_id',v_pub->>'publication_id',
+    'expected_authority_scope_version',1,
+    'expected_row_manifest_hash',v_context->>'row_manifest_hash',
+    'upload_row_id',v_second_row,'client_id','91000000-0000-4000-8000-000000000070');
+  begin
+    perform public.weekly_source_office_recheck_begin_v1(v_request||jsonb_build_object(
+      'client_id','91000000-0000-4000-8000-000000000020'));
+    raise exception 'VERIFY_FAILED: released manual link accepted a non-NHSP client';
+  exception when sqlstate '22023' then
+    if sqlerrm<>'WEEKLY_SOURCE_CLIENT_NOT_ELIGIBLE' then raise; end if;
+  end;
+  perform pg_temp.assert_true(not exists(select 1 from private.weekly_source_office_row_choices
+    where upload_row_id=v_second_row),'rejected non-NHSP link saved a choice');
+
+  -- Even another group member must not replace a backing report's saved Trust.
+  insert into public.clients(id,cli_ref,name) values(
+    '91000000-0000-4000-8000-000000000099','CLI-99993','Another Backing Trust');
+  insert into public.weekly_source_group_clients(source_group_id,client_id,valid_from,created_by_user_id)
+    values('91000000-0000-4000-8000-000000000030','91000000-0000-4000-8000-000000000099',
+      '2026-01-01','91000000-0000-4000-8000-000000000001');
+  update public.weekly_source_uploads
+    set source_format_profile_id='32222222-2222-4222-8222-222222222222',
+      report_scope_id='91000000-0000-4000-8000-000000000050' where id=v_upload;
+  update public.weekly_source_report_scopes
+    set current_complete_upload_id=v_upload,current_projection_publication_id=(v_pub->>'publication_id')::uuid,
+      version=1 where id='91000000-0000-4000-8000-000000000050';
+  perform pg_temp.assert_true(
+    private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000040','2026-09-14')
+    and not private.weekly_source_upload_client_eligible_v1(v_upload,'91000000-0000-4000-8000-000000000099','2026-09-14'),
+    'backing report lost its exact client boundary');
+  begin
+    perform public.weekly_source_office_recheck_begin_v1(v_request||jsonb_build_object(
+      'client_id','91000000-0000-4000-8000-000000000099'));
+    raise exception 'VERIFY_FAILED: backing report accepted a different client';
+  exception when sqlstate '22023' then
+    if sqlerrm<>'WEEKLY_SOURCE_CLIENT_NOT_ELIGIBLE' then raise; end if;
+  end;
+  perform pg_temp.assert_true(not exists(select 1 from private.weekly_source_office_row_choices
+    where upload_row_id=v_second_row),'rejected backing link saved a choice');
+  -- A released profile attached to a report scope is malformed, not a bypass.
+  update public.weekly_source_uploads set source_format_profile_id='31111111-1111-4111-8111-111111111111'
+    where id=v_upload;
+  perform pg_temp.assert_true(not private.weekly_source_upload_client_eligible_v1(
+    v_upload,'91000000-0000-4000-8000-000000000070','2026-09-14'),
+    'malformed released report scope bypassed client checks');
+  update public.weekly_source_uploads set report_scope_id=null where id=v_upload;
+  -- The eligible NHSP client has no membership of this selected source group.
+  v_result:=public.weekly_source_office_recheck_begin_v1(v_request);
+  perform pg_temp.assert_true(v_result->>'status'='BUILDING','released manual client link did not start recheck');
+  perform pg_temp.assert_true((public.weekly_source_office_recheck_begin_v1(v_request)->>'idempotent')::boolean,
+    'released manual client retry was not idempotent');
+  v_context:=public.weekly_source_upload_context_v1(jsonb_build_object(
+    'operation','BUILD_PROJECTION','actor_user_id','91000000-0000-4000-8000-000000000001','upload_id',v_upload));
+  perform pg_temp.assert_true(v_context#>>'{rows,1,client_id}'='91000000-0000-4000-8000-000000000070',
+    'released saved manual client choice was lost');
+  begin
+    perform public.weekly_source_office_recheck_begin_v1(v_request||jsonb_build_object('request_id',gen_random_uuid()));
+    raise exception 'VERIFY_FAILED: released stale recheck accepted';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'WEEKLY_SOURCE_PREVIEW_STALE' then raise; end if;
+  end;
+end;
+$released_client_runtime$;
+
+select pg_temp.assert_true(
+  not pg_catalog.has_function_privilege('anon','private.weekly_source_upload_client_eligible_v1(uuid,uuid,date)','EXECUTE')
+  and not pg_catalog.has_function_privilege('authenticated','private.weekly_source_upload_client_eligible_v1(uuid,uuid,date)','EXECUTE')
+  and not pg_catalog.has_function_privilege('service_role','private.weekly_source_upload_client_eligible_v1(uuid,uuid,date)','EXECUTE'),
+  'row client helper must be private to definer owners');
+
 rollback;

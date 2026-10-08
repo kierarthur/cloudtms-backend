@@ -23329,6 +23329,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_upload_client_eligible_v1(p_upload_id uuid, p_client_id uuid, p_work_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f65913d1d9498b15f23ff4ca3390150c92f2356e1ac87e91f249bcd842ead1ab"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=private, pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -48565,7 +48584,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a20c885d626b375efda2d72f1cfbedcca43aa63a7c84671a223201a28855ab98"
+      "definition_sha256": "67d1fd8eb983120c96d010762a315682c654426e6d390b7649b60b8c32151c58"
     },
     {
       "acl": [
@@ -49285,7 +49304,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "1ed144fc77e840df89d15140d5f0fd4b0ab6594b0037eabd3eb52db540a5cd3d"
+      "definition_sha256": "cb59ccfa3b1dccc4e2294f282f3d9635e99b514eafa8302cbc03a2dd7b0de8a0"
     },
     {
       "acl": [
