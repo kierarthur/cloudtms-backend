@@ -67,6 +67,25 @@ begin
     if sqlerrm<>'WEEKLY_SOURCE_SETTINGS_STALE' then raise; end if;
   end;
   req:=req||jsonb_build_object('expected_settings_version',saved->>'settings_version','settings',saved->'settings');
+  -- The client flag must never rescue an inconsistent existing source contract.
+  begin
+    insert into public.contracts(id,client_id,start_date,end_date,pay_method_snapshot,rates_json,
+      self_bill,weekly_timesheet_source,no_timesheet_required,requires_hr,autoprocess_hr,overrideclientsettings)
+      values('e9100000-0000-4000-8000-000000000041',client,current_date-1,current_date+30,'PAYE','{}',
+        false,'NHSP',false,false,false,true);
+    perform public.weekly_source_client_settings_save_atomic_v1(req);
+    raise exception 'NHSP flag rescued inconsistent existing contract';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'WEEKLY_SOURCE_CLIENT_CONTRACT_POLICY_INCONSISTENT' then raise; end if;
+  end;
+  update public.clients set ts_queries_email=null where id=client;
+  begin
+    perform public.weekly_source_client_settings_save_atomic_v1(jsonb_set(req,'{settings,manager_query_recipient}','null'));
+    raise exception 'Enabled manager queries accepted without recipient';
+  exception when invalid_parameter_value then
+    if sqlerrm<>'WEEKLY_SOURCE_MANAGER_QUERY_RECIPIENT_REQUIRED' then raise; end if;
+  end;
+  update public.clients set ts_queries_email='manager@example.invalid' where id=client;
   saved:=public.weekly_source_client_settings_save_atomic_v1(req);
   if saved->>'configured'<>'true'
     or (select count(*) from public.weekly_source_group_clients m where m.client_id=client)<>1
@@ -106,4 +125,3 @@ begin
   end if;
 end $verify$;
 rollback;
-

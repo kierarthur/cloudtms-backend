@@ -10,7 +10,7 @@ begin isolation level repeatable read;
 -- Acquire the shared change-notification counter lock before any snapshot.
 -- All normal triggers still run; a concurrent Office save cannot invalidate
 -- this rollback fixture's snapshot midway through its synthetic inserts.
--- Bound both acquisition and fixture duration; no runtime isolation changes.
+-- Bound acquisition and each statement; no runtime isolation changes.
 set local lock_timeout='5s';
 set local statement_timeout='45s';
 lock table public.app_change_counters in share row exclusive mode;

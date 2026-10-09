@@ -1,5 +1,46 @@
 # Weekly Source full fixes — release evidence
 
+## Released NHSP visibility and pre-contract Client setup — 9 October 2026
+
+Deployment is pending full protected verification; this section must not be
+read as a completed installation receipt.
+
+- Baljit's saved candidate/client link is present, but there is no eligible
+  Berkshire contract for the imported 21 September shift. The combined Queries
+  reader previously omitted released checking-file clients outside the source
+  group's configured membership. The bounded review-only scope correction
+  retains the missing-contract Office check; it creates no financial authority
+  or final-report obligation. Synthetic SQL proof follows contract resolution
+  through missing candidate hours and independent charge warnings.
+- Berkshire's effective saved Client settings already mark it as dedicated
+  NHSP. Client source-settings read/save derived applicability only from
+  non-expired source contracts, so setup failed before a first contract existed.
+  The new complete reader/save definitions use the effective dedicated NHSP
+  Client mode only when there are zero qualifying source contracts. Existing
+  source-contract consistency, service/admin ACLs, agency/environment bounds,
+  effective dates, optimistic versions and recipient validation remain intact.
+- The relevant Office sections are Client settings / Timesheets / Weekly source
+  queries, and Client settings / Shift times / Weekly rate calculation. The
+  shared NHSP group is configured under Settings / Defaults / Weekly source.
+- The Arthur account's TEST rollback lab passed first save, later save, stale
+  version rejection, ordinary-client rejection, read-only authority rejection,
+  latest-disabled NHSP rejection, inconsistent-existing-contract rejection and
+  missing manager-recipient rejection. Fresh-connection read-back proved the
+  original function hashes restored and the synthetic Client absent. No real
+  Berkshire policy/contract, candidate hours, invoice or message was changed.
+- Protected run `37919721756` installed the review reader but failed verification
+  on a shared change-counter serialization conflict. This is not VERIFIED.
+  A deterministic two-connection local PostgreSQL test reproduces that exact
+  conflict without the lock and passes with a bounded pre-snapshot counter lock.
+  Normal counter triggers and all full-row safety assertions remain enabled;
+  application transaction isolation is unchanged.
+- Backend tests: 1,476 passed; release routing: seven passed. A clean local
+  PostgreSQL 17 package replay passed all 152 portable verifiers and its only
+  catalogue differences from the prior approved contract were the two intended
+  Client-settings definition hashes. The generated contract hash is
+  `8b698c1c15c26bce2da64fbdb3308859dd22dce6055157999da95ad00f4ad5f8`.
+  A final sealed clean replay and protected TEST deployment are still required.
+
 ## Latest TEST release and read-only acceptance — 3 October 2026
 
 This section supersedes the historical "acceptance pending" and "stop for model

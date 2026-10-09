@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 
 const root='09102026_1130_weekly_source_released_review_visibility_v1.sql';
 const sql=readFileSync('supabase/repeatable/'+root,'utf8');
@@ -56,4 +56,33 @@ test('real PostgreSQL contract, missing-hours and charge visibility stages',{
     '-v','ON_ERROR_STOP=1','-f','supabase/verification/'+root],
     {encoding:'utf8',windowsHide:true,env:{...process.env,PGOPTIONS:'-c jit=off'}});
   assert.equal(result.status,0,result.stderr||result.error?.message);
+});
+
+test('shared counter conflict is reproduced and the pre-snapshot lock prevents it',{
+  skip:!process.env.CLOUDTMS_PROTECTED_EDITOR_LOCAL_PORT,
+},async()=>{
+  const bin=process.env.CLOUDTMS_TEST_PSQL||'psql';
+  const args=['-X','-h','127.0.0.1','-p',process.env.CLOUDTMS_PROTECTED_EDITOR_LOCAL_PORT,
+    '-U',process.env.CLOUDTMS_TEST_PG_USER||'postgres','-d','banking_modal_v2_test','-v','ON_ERROR_STOP=1'];
+  const run=sql=>spawnSync(bin,[...args,'-c',sql],{encoding:'utf8',windowsHide:true});
+  assert.equal(run("insert into public.app_change_counters(entity_key,seq) values('clients',0) on conflict do nothing").status,0);
+  for(const locked of [false,true]){
+    const child=spawn(bin,[...args,'-At','-c',`begin isolation level repeatable read;
+      set local lock_timeout='3s';
+      ${locked?'lock table public.app_change_counters in share row exclusive mode;':''}
+      select 'SNAPSHOT_READY';`,'-c',`select pg_sleep(0.8);
+      insert into public.clients(id,name) values('e9200000-0000-4000-8000-000000000001','Counter race proof');
+      rollback;`],{windowsHide:true});
+    let out='',err='';child.stdout.on('data',b=>{out+=b;});child.stderr.on('data',b=>{err+=b;});
+    const exited=new Promise(resolve=>child.on('close',resolve));
+    await new Promise((resolve,reject)=>{
+      child.stdout.on('data',()=>{if(out.includes('SNAPSHOT_READY'))resolve();});
+      child.on('error',reject);child.on('close',()=>{if(!out.includes('SNAPSHOT_READY'))reject(Error(err));});
+    });
+    const writer=run("update public.app_change_counters set seq=seq+1 where entity_key='clients'");
+    assert.equal(writer.status,0,writer.stderr);
+    const status=await exited;
+    if(locked)assert.equal(status,0,err);
+    else {assert.notEqual(status,0);assert.match(err,/could not serialize access due to concurrent update/);}
+  }
 });
