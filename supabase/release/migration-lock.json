@@ -1171,6 +1171,22 @@
       "sha256": "6246f4453a079a63167004863a465d1b553ac54db41e2d009163b0ad5ab5fa59"
     },
     {
+      "path": "supabase/migrations/09102026_2010_banking_pay_next_source_book_binding.sql",
+      "sha256": "d2641717de3967aa30e200d75f9e4fde801b31c7eeef9cc8db84efb36d9266ea"
+    },
+    {
+      "path": "supabase/migrations/09102026_2011_banking_pay_next_initial_tsfin_umbrella_work_shape_v1.sql",
+      "sha256": "8dd6232ccda068022e9ab8faef163d89eeaa883720a0e95e441db56177a7aeef"
+    },
+    {
+      "path": "supabase/migrations/09102026_2012_banking_pay_next_channel_page_index_v1.sql",
+      "sha256": "8ef5cbba409b8d2830e9bb59431690d9fdd2e6867287c7e52d1270d8fbe65a40"
+    },
+    {
+      "path": "supabase/migrations/09102026_2013_banking_pay_payment_history_scope_indexes_v1.sql",
+      "sha256": "cb08a6b28d8a2eeace2e0f4ed3561c84dcda33022bb0fe54d7f46ee5e43eacc2"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

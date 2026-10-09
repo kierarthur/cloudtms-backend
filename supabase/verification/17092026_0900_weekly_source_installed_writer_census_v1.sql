@@ -1138,7 +1138,7 @@ create temporary table wp18_dynamic_sql_acknowledged (
 insert into wp18_dynamic_sql_acknowledged
   (schema_name, routine_name, identity_arguments, definition_sha256) values
 -- BEGIN EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
--- Twelve fixed-query readers: reviewed saved bodies equal the actual RELEASE8
+-- Thirteen fixed-query readers: reviewed saved bodies equal the actual RELEASE8
 -- catalogue. These are exact installed-definition hashes, not source-file hashes.
 -- No prefix exemption or arbitrary-SQL permission; acknowledgement is NOT proof
 -- that dynamic SQL cannot write evidence. Existing scanner/refusal stays intact.
@@ -1154,6 +1154,7 @@ insert into wp18_dynamic_sql_acknowledged
   ('public','bpay_next_frozen_detail_page_v1','p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','4de2038c498221730a7198238380c99c55b35d72d1e19dda4d1d9060c7edc82a'),
   ('public','bpay_next_original_csv_advice_page_v1','p_actor_user_id uuid, p_instruction_id uuid, p_kind text, p_run_work_id uuid, p_run_line_id uuid, p_shift_detail_id uuid, p_after_work_id uuid, p_after_member_no bigint, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer','ee1586e2b496f5ea44b2654064c5816c001d48fbf1d24e1e2af168b030630329'),
   ('public','bpay_next_source_paid_evidence_page_v1','p_request jsonb','be406d7689b0c10d08538797125488265eaaf32b6c13d7d0bee851ace6f41ca1'),
+  ('private','bpay_next_channel_worker_page_v1','p_run_id uuid, p_pay_channel text, p_after_candidate_id uuid, p_limit integer','9266c9d46ebf05d5b4684794991c53ab38c5f262bcc0bbd12765c6274a0e59e3'),
 -- END EXACT NEXT DYNAMIC READER ACKNOWLEDGEMENTS
   ('private','_invoice_candidate_revision_trigger_v2','','bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9'),
   ('private','_invoice_candidate_triggers_install_v2','','c9d4486ef51f8e8e42813a34bcaf378438c77dc620c95457d1e2559bae6fb16a'),

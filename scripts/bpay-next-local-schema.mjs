@@ -15,6 +15,7 @@ import {
 } from './cloudtms-managed-release.mjs';
 import { literal } from './cloudtms-managed-release-sql.mjs';
 import { readerActivationSql, readerReleasePhases } from './weekly-source-reader-release.mjs';
+import { closeFinalDefinerSelection, verifyFinalDefiners } from './bpay-next-final-definers.mjs';
 
 const [mode, ...unexpected] = process.argv.slice(2);
 if (!['NEW', 'CHANGED'].includes(mode) || unexpected.length) {
@@ -79,8 +80,10 @@ try {
     const anchor = assertBootstrapPrefix(current, release);
     const baseline = new Map(readJson(release.baselineRepeatableLock).repeatables.map(row => [row.path, row.sha256]));
     // Classify every selected closure before the first application DDL.
-    for (const row of current.migrations.slice(anchor + 1)) compileManagedUnit(row, 'migration', options);
-    for (const row of current.repeatables.filter(row => baseline.get(row.path) !== row.sha256)) {
+    let envelope = { migrations: current.migrations.slice(anchor + 1), repeatables: current.repeatables.filter(row => baseline.get(row.path) !== row.sha256) };
+    if (fs.existsSync(path.join(repoRoot, 'docs/bpay-next/final-definer-closures.json'))) envelope = closeFinalDefinerSelection(envelope, current);
+    for (const row of envelope.migrations) compileManagedUnit(row, 'migration', options);
+    for (const row of envelope.repeatables) {
       compileManagedUnit(row, 'repeatable', options);
     }
     const bootstrap = compileBootstrap({ root: repoRoot, current, release, context, mapSource: mapExecutableSqlSource });
@@ -114,7 +117,8 @@ try {
   for (const row of installed.repeatables) {
     if (!currentRoots.has(row.path)) throw Error(`BPAY_NEXT_LOCAL_INSTALLED_REPEATABLE_DELETED: ${row.path}`);
   }
-  const pending = pendingInventory(current, installed);
+  let pending = pendingInventory(current, installed);
+  if (fs.existsSync(path.join(repoRoot, 'docs/bpay-next/final-definer-closures.json'))) pending = closeFinalDefinerSelection(pending, current);
   // Deleted repeatable authority cannot silently disappear from a checkpoint.
   if (previous?.inventory) {
     const roots = new Set(current.repeatables.map(row => row.path));
@@ -127,14 +131,18 @@ try {
   if (fs.existsSync(closureMapPath)) {
     const chains = JSON.parse(fs.readFileSync(closureMapPath, 'utf8')).chains;
     if (!Array.isArray(chains)) throw Error('BPAY_NEXT_LOCAL_FINAL_DEFINER_MAP_INVALID');
-    for (const chain of chains) {
-      if (!chain.predecessors?.some(file => selected.has(file))) continue;
-      for (const file of chain.finalClosures) {
-        const row = current.repeatables.find(item => item.path === file);
-        if (!row) throw Error(`BPAY_NEXT_LOCAL_FINAL_CLOSURE_MISSING: ${file}`);
-        selected.set(file, row);
+    let changed;
+    do {
+      changed = false;
+      for (const chain of chains) {
+        if (!chain.predecessors?.some(file => selected.has(file))) continue;
+        for (const file of chain.finalClosures) {
+          const row = current.repeatables.find(item => item.path === file);
+          if (!row) throw Error(`BPAY_NEXT_LOCAL_FINAL_CLOSURE_MISSING: ${file}`);
+          if (!selected.has(file)) { selected.set(file, row); changed = true; }
+        }
       }
-    }
+    } while (changed);
   }
   if (pending.migrations.length || selected.size) {
     for (const file of [
@@ -148,6 +156,7 @@ try {
     }
   }
   const chosen = current.repeatables.filter(row => selected.has(row.path));
+  if (fs.existsSync(closureMapPath)) verifyFinalDefiners({ selectedRoots: chosen.map(row => row.path), selectedMigrations: pending.migrations.map(row => row.path), changed: new Set() });
   const phases = readerReleasePhases(chosen, current.repeatables);
   const migrationUnits = pending.migrations.map(row => compileManagedUnit(row, 'migration', options));
   const ordinaryUnits = phases.ordinary.map(row => compileManagedUnit(row, 'repeatable', options));

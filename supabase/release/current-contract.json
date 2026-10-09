@@ -454,6 +454,30 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "bpay_next_source_binding_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_source_component_binding",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "bpay_next_source_binding_version_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_source_component_binding_version",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_protected_reference_events_v1_owner",
       "check": "true",
       "roles": [
@@ -10299,7 +10323,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "80973e0a6d7ca0972ca04fff211953eb81ed5da3acb8e0b06ed2c4964e556dfd"
+      "definition_sha256": "80dc92f9095eacb8e4642f8c364ca848a594562dc4e0fcf3fe22e386062962b4"
     },
     {
       "acl": [
@@ -10318,7 +10342,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a5026b3c37d0b6febeb5c36420a3fdae29b655ecc6658ada677f228ee903b8af"
+      "definition_sha256": "ae13cda26d8e7cc089d39b38c31c38d290ee326d61c0fab2f937383b40d19fac"
     },
     {
       "acl": [
@@ -10432,7 +10456,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "53ee081dcfd3ae47aa0b44c5857718497f553a18879c311d343676afde76de38"
+      "definition_sha256": "aab56353ef42d3ad73a6efe801d99f8a21e3766aa628a600a75b44febc1b3d85"
     },
     {
       "acl": [
@@ -10451,7 +10475,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d6db3eadd48e745ffe085a761193c1ff333cfcd272f66e8cede2dc73ed1fc165"
+      "definition_sha256": "7ec9faafab136ecad264bac3d55f7289be815058db72543960f5cedf888cfb0f"
     },
     {
       "acl": [
@@ -10471,6 +10495,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "04198cf56a11a3c0ecf61b12df3337d5ef92be588f6d652251c349a318a3d8c4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid, p_expected_book_revision bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "94565b662bebade5edc32dd3c4245adad1b1303b3303eea5a5d11555ad07a435"
     },
     {
       "acl": [
@@ -10546,7 +10589,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8febd839ea752828a87d416119f3c0c840584fd6ed8588cee44ba6d162ca0abf"
+      "definition_sha256": "322af2c31c3a08a9898bc5450a4ac98379169f6023c325e513b4f0684e489b8a"
     },
     {
       "acl": [
@@ -10660,7 +10703,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "70524c0294454cd73a53f00048c52ace681fabecb57aa829841ad39857589ced"
+      "definition_sha256": "77fee70a6cdf66ccf1453e252dee3a47ba93f59473cddd108dfcc6835672dad4"
     },
     {
       "acl": [
@@ -10941,6 +10984,63 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_channel_drafts_page_v1(p_run_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "088ee23ad2c276a2920e9fd3fc40e1363fc2b056b5ee5199c0b88eb85c2679bd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_channel_status_page_v1(p_run_id uuid, p_pay_channel text, p_worker_id uuid, p_after_transfer_no integer, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "dab8cdd60cba8a9cc29e6322ce1a80752260874681993b8e7cd7bbc8170d739f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_channel_worker_page_v1(p_run_id uuid, p_pay_channel text, p_after_candidate_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "9266c9d46ebf05d5b4684794991c53ab38c5f262bcc0bbd12765c6274a0e59e3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_check_destination_cancel_page_v1(p_job_id uuid, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
@@ -11021,7 +11121,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c6f72f76ea105d74b8e805a61435ef8abd56ece6ab3c9de78c77013e235702c7"
+      "definition_sha256": "33ea621306cbe9619207a217b13d5905f480277c7b175ac33cf12506c3801f23"
     },
     {
       "acl": [
@@ -11211,7 +11311,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "de2a8e2f86f6ad087e417a17cb722e4e403bd9f2175bea75004c576024e59875"
+      "definition_sha256": "cb45c686389e56e03ce39846463467fa81e142a7af131f5f84dbd303a18eb56f"
     },
     {
       "acl": [
@@ -11364,6 +11464,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "b4ed30958ceda2b5f985bbc988392bd78bc9402d25d4a8ef38ce3e631ba7502d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_daily_approval_evidence_v1(p_financial_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "9a1b554a3f5c10dfd03421aaf6fc04fbd7037ee13f8f068f310597782833ca1e"
     },
     {
       "acl": [
@@ -11724,7 +11843,64 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5592d760c9fb65d53f73cd4a0aa64cc154f2ce140ef0312435a372c397b19ee3"
+      "definition_sha256": "b52471cf638e1d92a9c36221512e0387e657e08deb9192b51adfd77752b138da"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_initial_tsfin_bind_v1(p_root_authorisation_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "fbc53f0f57baeda260939e4ec87ff108f6d437703bdcd22037c830652074c407"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_initial_tsfin_bound_assert_v1(p_binding_version_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f852c52c3780c9120f1c94088eb8ef82fa5169d4fe712cb14f1489bca3bbb8f3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_initial_tsfin_certificate_v1(p_root_authorisation_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "309124462fee3e73b23676e938324915ded93e065ed407605b7ece6eb4466e39"
     },
     {
       "acl": [
@@ -11781,7 +11957,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5fc19c8345ccc4e888e491dbed9f6b35c2294efc098252d6760a6e7b64ac8049"
+      "definition_sha256": "5fcfec24c554933b6b3558cdddc815b02609d1f50b07d901291e2a4ff4eeaa4c"
     },
     {
       "acl": [
@@ -11981,7 +12157,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c3fef527c4c6766c656da00bfd6288f90d44cdbac46b2314f8ec2209479eaa7d"
+      "definition_sha256": "10657ddfe30a30bc4c05952ddfef6c9fcc7a6196905a1637d0475802bde0675e"
     },
     {
       "acl": [
@@ -12019,7 +12195,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5cdfde0babf02d48320c960285fee86706b2115947e1a93b7594ed855ce7d191"
+      "definition_sha256": "29e6f8c0bba83e98a0814a4b2dfb41925185308f5b27e2dab775c04e64ea82e3"
     },
     {
       "acl": [
@@ -12095,7 +12271,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5ae80fd4261b69ea30a68285422d49d2dee5c1038b85a64323c60fd6f70a6b82"
+      "definition_sha256": "cfe939648270c5e69fc83f383a660104b67f69ba798d2facf1ae7753ab0ff782"
     },
     {
       "acl": [
@@ -12285,7 +12461,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "140f97efe4cfc3f35b8ae057e723a9ece4c71c5e1217670a2719cd6731663faf"
+      "definition_sha256": "3338b912c0a0852ffccc7dca1e819c248a6117f77344f2d67864c479a89e78bc"
     },
     {
       "acl": [
@@ -12399,7 +12575,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b2a90b76fe0bd09435eb379f74fed9f579c48d970a81f70ccdf1e8f9391d2182"
+      "definition_sha256": "f56000f34050f30b67e45af1ad3a098cc2edc92ce0911f3afc8f70d55cd5d391"
     },
     {
       "acl": [
@@ -12418,7 +12594,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "afe55eb63e8bc1dc23353e64b8c0b0f4b641cba37d815ccc23d0783474d3a71d"
+      "definition_sha256": "948c5aab83226bbfda3aa264663df1f67ee3de80109da45ba8349e6bcae47558"
     },
     {
       "acl": [
@@ -12475,7 +12651,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "7806435eecb6eecf734bad4b6f3e287e8b096a90c3dde290b0e9fec608c8cda1"
+      "definition_sha256": "a24aa60b5d5d51f67917482214bf439dc640b817396a0f17e8afc2e32e8de915"
     },
     {
       "acl": [
@@ -12741,7 +12917,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5cf05ece095cc3bd6d973188447b7d87d82cf424467bd54c17fcb83925c39e35"
+      "definition_sha256": "2772f9f3af51cd7cb5257826e2f84496118a5707b7b0e0715715b1bc30d2c6fc"
     },
     {
       "acl": [
@@ -12905,6 +13081,120 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_binding_components_v1(p_receipt_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "162f8a433fe607704e37a2e356c4a47ed2bebe7148575dcf5052505a424edf31"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_binding_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "3deac7c3ab5dfe367ec2d1d4f0161b8180c2b54dcaf568fa7d0702f4100ee06c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_binding_lockset_v1(p_receipt_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a073d1e9219fc2a7f9e5efd7f886faf5fa28c1d5be9c44b721096622b6415103"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_binding_members_v1(p_receipt_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5006623916d2707d742796061bcf87dd369644ca8c1588baee818d92e3ea0363"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_book_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "966644847728a8df24b03f860b5a26f756b1e0963ebf32433cab836606b10c0b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_book_seed_proof_v1(p_work_id uuid, p_component_key text, p_expected_applied_revision uuid, p_seed_effect_id uuid, p_seed_hold_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c5a69b41e6e9ea886501541a2450ef9fc47eda24458c28d6d43f23591b3bd858"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog"
       ],
       "schema": "private",
@@ -12913,6 +13203,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "e44ade05658283ef478593e668b6f6cee9a2eb42de9721c3dfc750c3135b2c09"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_component_bind_v1(p_receipt_id uuid, p_component_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "acdceead27719ed7aac3066ed4ab14a53704d5cfda6726362dc13ce98eec8d61"
     },
     {
       "acl": [
@@ -13285,6 +13594,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_source_disposition_seed_v1(p_work_id uuid, p_component_key text, p_expected_applied_revision uuid, p_seed_effect_id uuid, p_seed_hold_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2f24d3c1ada6faaf5110ddbf3f61bad75515f25cb2f5da1f83fac6d40f93f3f5"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, pg_temp"
       ],
       "schema": "private",
@@ -13425,7 +13753,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "564f7dd29c63df6aa4b6fbb9aae0164c8908e48ded6e133ff699f743d4d1c3f1"
+      "definition_sha256": "92675377093569f348a7ec77709008d94826ad17837c837fd9f2dbb2ab78d838"
     },
     {
       "acl": [
@@ -13577,7 +13905,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "16e70beb8235376eaeb665460c3601a08969f6257bc0d6d1d1cd2a64d12f879b"
+      "definition_sha256": "651a7c262119ee9a3b6b88f54bd7647adb4951559093009c8c199d568c99f46e"
     },
     {
       "acl": [
@@ -14441,6 +14769,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "1369e6ab35519f9ce3ff92005a7bb20a9808eb739ebb328efbb5fefc15040d3e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "pay_finance_selected_quote_v1(p_resolution_mode pay_finance_component_resolution_mode_enum, p_source_ex_vat numeric, p_source_pay_method text, p_target_pay_method text, p_target_units numeric, p_manual_replacement_rate numeric, p_manual_amount_ex_vat numeric, p_relevant_erni_pct numeric, p_vat_rate_pct numeric, p_umbrella_vat_chargeable boolean)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "88126fe3ff7bfd89b27c29b10e53075f4646e7f5c2d5df3d8f36349d3cc0388b"
     },
     {
       "acl": [
@@ -28541,7 +28888,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4fba8d26a88dac1992cb987567c21ac8bab6aa617e9dd69136397eff51c29040"
+      "definition_sha256": "487cc5a91dc4e206469184b490df8dd048def7a267557518ec700d5db718d5ce"
     },
     {
       "acl": [
@@ -28638,7 +28985,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ee1586e2b496f5ea44b2654064c5816c001d48fbf1d24e1e2af168b030630329"
+      "definition_sha256": "f55cdfde35be860bef42d6814fe69b47088c3717898661eb84705981004c4865"
     },
     {
       "acl": [
@@ -28663,6 +29010,31 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "1735d5ebbd33956dacbe1bc258b9c7a72d3afceae8162baf01a672c74a9c19c6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "TimeZone=UTC",
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_payment_history_page_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "1993d7beaf4e0249a84dcf3af3dc56d22b2012062eaab385b50d1e0a034fbec3"
     },
     {
       "acl": [
@@ -28734,7 +29106,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "44dfaff6d7a6bafdaa76656bb9407803ab76ded75d6cc849d3a42cc5d17a8c10"
+      "definition_sha256": "28b0f9159dc8f0a82d3fa740484d3a5ddb799c43031120c13208ba20932dbba2"
     },
     {
       "acl": [
@@ -28758,7 +29130,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "aead14a3d5e4a5c96206de1850f9b8d0ec390c71a88db2bb91fbd86cd546ca64"
+      "definition_sha256": "ead7d77d1b34c7251ef35881c8ac78e284ca6a0849357bb07a0cd26aed03caa5"
     },
     {
       "acl": [
@@ -37596,7 +37968,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "41bc06e3da97684e4888041e3f4c1046838bc625b9f089aa8c10246200ebdb40"
+      "definition_sha256": "fd3e564d90688f7b6156e6b740b25de95b4eabd633f79452f95eb8371a57d77f"
     },
     {
       "acl": [
@@ -47696,7 +48068,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4618d021bc23aef7a8cddcb2c3428b933ef73fcd019d917e871aada2a3b745f5"
+      "definition_sha256": "76b9c3035f6085869c3ed596c14e9ed0cf6b781094bc3f2bfd9661f355f483ea"
     },
     {
       "acl": [
@@ -49765,6 +50137,13 @@
       "definition": "CREATE TRIGGER bpay_next_net_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_paye_net_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
+      "name": "bpay_next_source_book_guard_v1",
+      "table": "bpay_next_position",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_source_book_guard_v1 BEFORE INSERT OR UPDATE ON private.bpay_next_position FOR EACH ROW EXECUTE FUNCTION private.bpay_next_source_book_guard_v1()"
+    },
+    {
       "name": "bpay_next_preparation_expiry_guard_v1",
       "table": "bpay_next_preparation_expiry_request",
       "schema": "private",
@@ -49828,11 +50207,39 @@
       "definition": "CREATE TRIGGER bpay_next_work_collection_instruction_guard_v1 BEFORE INSERT ON private.bpay_next_run_case_instruction FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_collection_capture_guard_v1()"
     },
     {
+      "name": "bpay_next_run_line_frozen_immutable_v1",
+      "table": "bpay_next_run_line",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_line_frozen_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_run_line FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_run_line_frozen_no_truncate_v1",
+      "table": "bpay_next_run_line",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_line_frozen_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_run_line FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
       "name": "bpay_next_work_collection_capture_guard_v1",
       "table": "bpay_next_run_position",
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_work_collection_capture_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_position FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_collection_capture_guard_v1()"
+    },
+    {
+      "name": "bpay_next_run_work_frozen_immutable_v1",
+      "table": "bpay_next_run_work",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_work_frozen_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_run_work FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_run_work_frozen_no_truncate_v1",
+      "table": "bpay_next_run_work",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_work_frozen_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_run_work FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
       "name": "bpay_next_run_work_query_pin_guard_v2",
@@ -49861,6 +50268,34 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_detail_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_shift_detail FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
+    },
+    {
+      "name": "bpay_next_source_binding_guard_v1",
+      "table": "bpay_next_source_component_binding",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_source_binding_guard_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_source_component_binding FOR EACH ROW EXECUTE FUNCTION private.bpay_next_source_binding_guard_v1()"
+    },
+    {
+      "name": "bpay_next_source_binding_truncate_v1",
+      "table": "bpay_next_source_component_binding",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_source_binding_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_source_component_binding FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_source_binding_guard_v1()"
+    },
+    {
+      "name": "bpay_next_source_binding_version_guard_v1",
+      "table": "bpay_next_source_component_binding_version",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_source_binding_version_guard_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_source_component_binding_version FOR EACH ROW EXECUTE FUNCTION private.bpay_next_source_binding_guard_v1()"
+    },
+    {
+      "name": "bpay_next_source_binding_version_truncate_v1",
+      "table": "bpay_next_source_component_binding_version",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_source_binding_version_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_source_component_binding_version FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_source_binding_guard_v1()"
     },
     {
       "name": "bp_next_source_lock_operation_cleanup",
@@ -67794,6 +68229,10 @@
         {
           "name": "bpay_next_line_revision_idx",
           "definition": "CREATE INDEX bpay_next_line_revision_idx ON private.bpay_next_approved_line USING btree (revision_id, line_no, id)"
+        },
+        {
+          "name": "bpay_next_line_source_component_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_line_source_component_uq ON private.bpay_next_approved_line USING btree (revision_id, id, component_key, source_component_id)"
         }
       ],
       "options": [],
@@ -67886,6 +68325,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (revision_id, line_no)"
+        },
+        {
+          "name": "bpay_next_line_source_component_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (revision_id, id, component_key, source_component_id)"
         }
       ],
       "view_definition_sha256": null
@@ -68230,6 +68677,10 @@
         {
           "name": "bpay_next_cancel_request_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_cancel_request_pkey ON private.bpay_next_cancel_request USING btree (command_id)"
+        },
+        {
+          "name": "bpay_next_cancel_request_worker_history_idx",
+          "definition": "CREATE INDEX bpay_next_cancel_request_worker_history_idx ON private.bpay_next_cancel_request USING btree (run_worker_id, command_id)"
         }
       ],
       "options": [],
@@ -71932,6 +72383,10 @@
           "definition": "CREATE INDEX bpay_next_case_event_component_idx ON private.bpay_next_case_event USING btree (case_component_id, pay_week_start, id)"
         },
         {
+          "name": "bpay_next_case_event_history_idx",
+          "definition": "CREATE INDEX bpay_next_case_event_history_idx ON private.bpay_next_case_event USING btree (case_id, occurred_at_utc, id)"
+        },
+        {
           "name": "bpay_next_case_event_operation_id_operation_item_id_event_k_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_case_event_operation_id_operation_item_id_event_k_key ON private.bpay_next_case_event USING btree (operation_id, operation_item_id, event_kind)"
         },
@@ -71946,6 +72401,10 @@
         {
           "name": "bpay_next_case_event_result_idx",
           "definition": "CREATE INDEX bpay_next_case_event_result_idx ON private.bpay_next_case_event USING btree (allocation_result_id, id)"
+        },
+        {
+          "name": "bpay_next_case_event_source_book_identity_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_event_source_book_identity_uq ON private.bpay_next_case_event USING btree (id, case_id)"
         },
         {
           "name": "bpay_next_case_event_typed_key",
@@ -72042,6 +72501,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (source_amount_ex_vat::numeric >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_event_source_book_identity_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, case_id)"
         },
         {
           "name": "bpay_next_case_event_target_amount_ex_vat_check",
@@ -75054,6 +75521,10 @@
           "definition": "CREATE UNIQUE INDEX bpay_next_command_member_command_id_member_no_key ON private.bpay_next_command_member USING btree (command_id, member_no)"
         },
         {
+          "name": "bpay_next_command_member_history_idx",
+          "definition": "CREATE INDEX bpay_next_command_member_history_idx ON private.bpay_next_command_member USING btree (candidate_id, command_id)"
+        },
+        {
           "name": "bpay_next_command_member_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_command_member_pkey ON private.bpay_next_command_member USING btree (command_id, candidate_id)"
         }
@@ -77564,6 +78035,22 @@
           "generated": ""
         },
         {
+          "name": "canonical_source_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "canonical_source_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "case_id",
           "type": "uuid",
           "default": null,
@@ -77593,6 +78080,14 @@
           "default": "gen_random_uuid()",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "native_source_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -77636,11 +78131,35 @@
           "generated": ""
         },
         {
+          "name": "source_binding_version_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_case_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "source_disposition_ex_vat",
           "type": "numeric(18,2)",
           "default": "0",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_run_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -77678,6 +78197,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_effect_source_book_identity_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_effect_source_book_identity_uq ON private.bpay_next_financial_effect USING btree (id, work_id, component_key)"
+        },
+        {
           "name": "bpay_next_effect_work_history_idx",
           "definition": "CREATE INDEX bpay_next_effect_work_history_idx ON private.bpay_next_financial_effect USING btree (work_id, component_key, occurred_at_utc, id)"
         },
@@ -77693,6 +78216,38 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_effect_bound_line_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_run_line_id, source_binding_version_id, canonical_source_work_id, canonical_source_component_key, native_source_channel) REFERENCES private.bpay_next_run_line(id, source_binding_version_id, canonical_source_work_id, canonical_source_component_key, source_pay_channel) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_effect_bound_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_run_line_id IS NULL AND source_binding_version_id IS NULL AND canonical_source_work_id IS NULL AND canonical_source_component_key IS NULL AND native_source_channel IS NULL AND source_case_event_id IS NULL OR source_run_line_id IS NOT NULL AND source_binding_version_id IS NOT NULL AND canonical_source_work_id IS NOT NULL AND canonical_source_component_key IS NOT NULL AND native_source_channel IS NOT NULL AND (native_source_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])) AND (source_case_event_id IS NULL OR case_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_effect_source_book_identity_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_effect_source_case_event_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_case_event_id, case_id) REFERENCES private.bpay_next_case_event(id, case_id) ON DELETE RESTRICT"
+        },
         {
           "name": "bpay_next_financial_effect_candidate_id_fkey",
           "type": "f",
@@ -77930,6 +78485,10 @@
         {
           "name": "bpay_next_hold_run_line_id_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_hold_run_line_id_key ON private.bpay_next_hold USING btree (run_line_id)"
+        },
+        {
+          "name": "bpay_next_hold_source_book_identity_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_hold_source_book_identity_uq ON private.bpay_next_hold USING btree (id, work_id, component_key)"
         }
       ],
       "options": [],
@@ -77974,6 +78533,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (run_line_id, work_id, component_key) REFERENCES private.bpay_next_run_line(id, work_id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_hold_source_book_identity_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, work_id, component_key)"
         },
         {
           "name": "bpay_next_hold_source_reserved_ex_vat_check",
@@ -79806,6 +80373,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (request_command_id) REFERENCES private.bpay_next_paye_net_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_projection_umbrella_work_cash_bridge_v1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (input_kind <> 'UMBRELLA'::text OR gross_ex_vat >= 0::numeric AND gross_vat >= 0::numeric AND gross_inc_vat = (gross_ex_vat + gross_vat) AND entered_paye_net IS NULL AND request_command_id IS NULL AND accepted_gross_additions::numeric = 0::numeric AND accepted_gross_deductions::numeric = 0::numeric AND accepted_net_additions::numeric = 0::numeric AND accepted_recoveries = 0::numeric AND cash_amount = gross_inc_vat)"
         }
       ],
       "view_definition_sha256": null
@@ -80774,6 +81349,38 @@
           "generated": ""
         },
         {
+          "name": "native_held_paye",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "native_held_umbrella",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "native_realised_paye",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "native_realised_umbrella",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "realised_source_ex_vat",
           "type": "numeric(18,2)",
           "default": "0",
@@ -80811,6 +81418,86 @@
           "default": null,
           "identity": "",
           "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_revision",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_applied_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_effect_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_seed_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_state",
+          "type": "text",
+          "default": "'UNBOUND'::text",
+          "identity": "",
+          "not_null": true,
           "generated": ""
         },
         {
@@ -80912,12 +81599,60 @@
           "definition": "PRIMARY KEY (work_id, component_key)"
         },
         {
+          "name": "bpay_next_position_seed_applied_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, source_book_seed_applied_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_position_seed_effect_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_book_seed_effect_id, work_id, component_key) REFERENCES private.bpay_next_financial_effect(id, work_id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_position_seed_hold_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_book_seed_hold_id, work_id, component_key) REFERENCES private.bpay_next_hold(id, work_id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_position_seed_line_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_book_seed_revision_id, source_book_seed_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_position_seed_revision_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, source_book_seed_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
           "name": "bpay_next_position_source_basis_channel_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (source_basis_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_position_source_book_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_book_state = 'UNBOUND'::text AND source_book_revision = 0 AND native_realised_paye IS NULL AND native_realised_umbrella IS NULL AND native_held_paye IS NULL AND native_held_umbrella IS NULL AND source_book_seed_kind IS NULL AND source_book_seed_applied_revision_id IS NULL AND source_book_seed_revision_id IS NULL AND source_book_seed_line_id IS NULL AND source_book_seed_effect_id IS NULL AND source_book_seed_hold_id IS NULL AND source_book_seed_channel IS NULL AND source_book_seed_digest IS NULL OR source_book_state = 'READY'::text AND source_book_revision >= 1 AND native_realised_paye IS NOT NULL AND native_realised_umbrella IS NOT NULL AND native_held_paye IS NOT NULL AND native_held_umbrella IS NOT NULL AND abs(native_realised_paye::numeric) < '10000000000000000'::bigint::numeric AND abs(native_realised_umbrella::numeric) < '10000000000000000'::bigint::numeric AND native_held_paye::numeric >= 0::numeric AND native_held_paye::numeric <= 9999999999999999.99 AND native_held_umbrella::numeric >= 0::numeric AND native_held_umbrella::numeric <= 9999999999999999.99 AND source_book_seed_kind IS NOT NULL AND (source_book_seed_kind = ANY (ARRAY['ZERO'::text, 'ORIGINAL_POSITION'::text])) AND source_book_seed_applied_revision_id IS NOT NULL AND source_book_seed_revision_id IS NOT NULL AND source_book_seed_channel IS NOT NULL AND (source_book_seed_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text])) AND source_book_seed_digest IS NOT NULL AND octet_length(source_book_seed_digest) = 32 AND (source_book_seed_kind <> 'ZERO'::text OR source_book_seed_effect_id IS NULL AND source_book_seed_hold_id IS NULL))"
         },
         {
           "name": "bpay_next_position_work_id_applied_revision_id_fkey",
@@ -82534,6 +83269,10 @@
           "definition": "CREATE UNIQUE INDEX bpay_next_publication_pkey ON private.bpay_next_publication USING btree (command_id)"
         },
         {
+          "name": "bpay_next_publication_source_binding_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_publication_source_binding_uq ON private.bpay_next_publication USING btree (command_id, work_id, revision_id, candidate_id)"
+        },
+        {
           "name": "bpay_next_publication_work_id_revision_id_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_publication_work_id_revision_id_key ON private.bpay_next_publication USING btree (work_id, revision_id)"
         },
@@ -82596,6 +83335,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (revision_no > 0)"
+        },
+        {
+          "name": "bpay_next_publication_source_binding_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (command_id, work_id, revision_id, candidate_id)"
         },
         {
           "name": "bpay_next_publication_status_check",
@@ -84930,6 +85677,22 @@
           "generated": ""
         },
         {
+          "name": "canonical_source_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "canonical_source_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "captured_revision_id",
           "type": "uuid",
           "default": null,
@@ -85010,6 +85773,22 @@
           "generated": ""
         },
         {
+          "name": "source_binding_version_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "source_consumed_ex_vat",
           "type": "numeric(18,2)",
           "default": null,
@@ -85034,6 +85813,14 @@
           "generated": ""
         },
         {
+          "name": "updates_original_source_scalar",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "valuation_policy_id",
           "type": "uuid",
           "default": null,
@@ -85051,6 +85838,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_run_line_effect_binding_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_line_effect_binding_uq ON private.bpay_next_run_line USING btree (id, source_binding_version_id, canonical_source_work_id, canonical_source_component_key, source_pay_channel)"
+        },
         {
           "name": "bpay_next_run_line_id_run_worker_id_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_run_line_id_run_worker_id_key ON private.bpay_next_run_line USING btree (id, run_worker_id)"
@@ -85092,6 +85883,38 @@
           "definition": "FOREIGN KEY (approved_line_id) REFERENCES private.bpay_next_approved_line(id) ON DELETE RESTRICT"
         },
         {
+          "name": "bpay_next_run_line_binding_approval_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_binding_version_id, work_id, captured_revision_id, component_key) REFERENCES private.bpay_next_source_component_binding_version(id, approval_work_id, approval_revision_id, approval_component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_run_line_binding_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_binding_version_id, canonical_source_work_id, canonical_source_component_key) REFERENCES private.bpay_next_source_component_binding_version(id, canonical_work_id, canonical_component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_run_line_bound_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_binding_version_id IS NULL AND canonical_source_work_id IS NULL AND canonical_source_component_key IS NULL AND source_book_revision IS NULL AND updates_original_source_scalar IS NULL OR source_binding_version_id IS NOT NULL AND canonical_source_work_id IS NOT NULL AND canonical_source_component_key IS NOT NULL AND source_book_revision IS NOT NULL AND source_book_revision > 0 AND updates_original_source_scalar IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_run_line_canonical_position_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (canonical_source_work_id, canonical_source_component_key) REFERENCES private.bpay_next_position(work_id, component_key) ON DELETE RESTRICT"
+        },
+        {
           "name": "bpay_next_run_line_captured_revision_id_approved_line_id_c_fkey",
           "type": "f",
           "deferred": false,
@@ -85114,6 +85937,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (frozen_inc_vat = (frozen_ex_vat + frozen_vat))"
+        },
+        {
+          "name": "bpay_next_run_line_effect_binding_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, source_binding_version_id, canonical_source_work_id, canonical_source_component_key, source_pay_channel)"
         },
         {
           "name": "bpay_next_run_line_id_run_worker_id_key",
@@ -85288,6 +86119,22 @@
           "generated": ""
         },
         {
+          "name": "canonical_source_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "canonical_source_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "captured_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
@@ -85426,6 +86273,22 @@
         {
           "name": "source_basis_channel",
           "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_binding_version_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "source_book_revision",
+          "type": "bigint",
           "default": null,
           "identity": "",
           "not_null": false,
@@ -85586,6 +86449,14 @@
           "definition": "FOREIGN KEY (run_work_id, run_worker_id, work_id, captured_revision_id) REFERENCES private.bpay_next_run_work(id, run_worker_id, work_id, captured_revision_id) ON DELETE RESTRICT"
         },
         {
+          "name": "bpay_next_run_position_source_approval_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_binding_version_id, work_id, captured_revision_id, component_key) REFERENCES private.bpay_next_source_component_binding_version(id, approval_work_id, approval_revision_id, approval_component_key) ON DELETE RESTRICT"
+        },
+        {
           "name": "bpay_next_run_position_source_basis_channel_check",
           "type": "c",
           "deferred": false,
@@ -85594,12 +86465,36 @@
           "definition": "CHECK (source_basis_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
         },
         {
+          "name": "bpay_next_run_position_source_binding_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_binding_version_id, canonical_source_work_id, canonical_source_component_key) REFERENCES private.bpay_next_source_component_binding_version(id, canonical_work_id, canonical_component_key) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_run_position_source_bound_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_binding_version_id IS NULL AND canonical_source_work_id IS NULL AND canonical_source_component_key IS NULL AND source_book_revision IS NULL OR source_binding_version_id IS NOT NULL AND canonical_source_work_id IS NOT NULL AND canonical_source_component_key IS NOT NULL AND source_book_revision IS NOT NULL AND source_book_revision > 0)"
+        },
+        {
           "name": "bpay_next_run_position_source_pay_channel_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (source_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_run_position_source_position_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (canonical_source_work_id, canonical_source_component_key) REFERENCES private.bpay_next_position(work_id, component_key) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null
@@ -86449,6 +87344,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_run_worker_channel_page_idx",
+          "definition": "CREATE INDEX bpay_next_run_worker_channel_page_idx ON private.bpay_next_run_worker USING btree (run_id, target_pay_channel, candidate_id, id)"
+        },
         {
           "name": "bpay_next_run_worker_id_candidate_id_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_run_worker_id_candidate_id_key ON private.bpay_next_run_worker USING btree (id, candidate_id)"
@@ -87746,6 +88645,906 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (head_id, component_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_source_component_binding",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "binding_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "current_binding_version_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_source_component_bi_candidate_id_source_component_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_candidate_id_source_component_key ON private.bpay_next_source_component_binding USING btree (candidate_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_canonical_c_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_canonical_work_id_canonical_c_key ON private.bpay_next_source_component_binding USING btree (canonical_work_id, canonical_component_key, candidate_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_binding_pkey ON private.bpay_next_source_component_binding USING btree (canonical_work_id, canonical_component_key)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_binding_current_version_fk",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (current_binding_version_id, canonical_work_id, canonical_component_key, candidate_id, binding_revision) REFERENCES private.bpay_next_source_component_binding_version(id, canonical_work_id, canonical_component_key, candidate_id, binding_revision) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_source_component_bi_candidate_id_source_component_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (candidate_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_revision_id_canoni_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (canonical_revision_id, canonical_line_id, canonical_component_key, source_component_id) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key, source_component_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_candidate__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (canonical_work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_canonical__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (canonical_work_id, canonical_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_canonical_c_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (canonical_work_id, canonical_component_key, candidate_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_binding_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (binding_revision > 0)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (canonical_component_key = ('SOURCE:'::text || source_component_id::text))"
+        },
+        {
+          "name": "bpay_next_source_component_binding_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (canonical_work_id, canonical_component_key)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_source_component_binding_version",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approval_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_source_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approval_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "binding_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "binding_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bundle_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "canonical_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "chosen_detail_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "classification_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "component_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "component_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "decision_bundle_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "head_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "initial_authorisation_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_authorised_row_signature",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_certificate_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_detail_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_entitlement_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_financial_snapshot_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_financial_snapshot_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_inventory_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_policy_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_root_authorisation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_root_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initial_root_version",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "default": "'COMMON_HEAD_RECEIPT_V1'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_command_id_1",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_command_id_2",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "publication_revision_id_1",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_revision_id_2",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "publication_work_id_1",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_work_id_2",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "request_digest",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "selection_state",
+          "type": "text",
+          "default": "'UNBOUND'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_receipt_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "tax_treatment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_binding_initial_component_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_binding_initial_component_uq ON private.bpay_next_source_component_binding_version USING btree (initial_root_authorisation_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_binding_version_approval_idx",
+          "definition": "CREATE INDEX bpay_next_binding_version_approval_idx ON private.bpay_next_source_component_binding_version USING btree (approval_work_id, approval_revision_id, id)"
+        },
+        {
+          "name": "bpay_next_binding_version_receipt_idx",
+          "definition": "CREATE INDEX bpay_next_binding_version_receipt_idx ON private.bpay_next_source_component_binding_version USING btree (source_receipt_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_canonical__key1",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_canonical_work_id_canonical__key1 ON private.bpay_next_source_component_binding_version USING btree (canonical_work_id, canonical_component_key, binding_revision)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_approval_work_id_approval__key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_id_approval_work_id_approval__key ON private.bpay_next_source_component_binding_version USING btree (id, approval_work_id, approval_revision_id, approval_component_key)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_canonical_work_id_canonic_key1",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_id_canonical_work_id_canonic_key1 ON private.bpay_next_source_component_binding_version USING btree (id, canonical_work_id, canonical_component_key)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_canonical_work_id_canonica_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_id_canonical_work_id_canonica_key ON private.bpay_next_source_component_binding_version USING btree (id, canonical_work_id, canonical_component_key, candidate_id, binding_revision)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_source_receipt_id_source_comp_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_bi_source_receipt_id_source_comp_key ON private.bpay_next_source_component_binding_version USING btree (source_receipt_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_source_component_binding_version_pkey ON private.bpay_next_source_component_binding_version USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_binding_initial_component_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (initial_root_authorisation_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_binding_origin_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (origin_kind = 'COMMON_HEAD_RECEIPT_V1'::text AND source_receipt_id IS NOT NULL AND decision_bundle_id IS NOT NULL AND bundle_revision IS NOT NULL AND request_digest IS NOT NULL AND head_id IS NOT NULL AND initial_root_authorisation_id IS NULL AND initial_financial_snapshot_id IS NULL AND initial_root_timesheet_id IS NULL AND initial_root_version IS NULL AND initial_authorisation_generation IS NULL AND initial_authorised_row_signature IS NULL AND initial_financial_snapshot_digest IS NULL AND initial_inventory_digest IS NULL AND initial_entitlement_digest IS NULL AND initial_detail_digest IS NULL AND initial_policy_digest IS NULL AND initial_certificate_digest IS NULL OR origin_kind = 'INITIAL_AUTHORISED_TSFIN_V1'::text AND source_receipt_id IS NULL AND decision_bundle_id IS NULL AND bundle_revision IS NULL AND request_digest IS NULL AND head_id IS NULL AND initial_root_authorisation_id IS NOT NULL AND initial_financial_snapshot_id IS NOT NULL AND initial_root_timesheet_id IS NOT NULL AND initial_root_version IS NOT NULL AND initial_root_version > 0 AND initial_authorisation_generation IS NOT NULL AND initial_authorisation_generation > 0 AND initial_authorised_row_signature IS NOT NULL AND char_length(initial_authorised_row_signature) >= 1 AND char_length(initial_authorised_row_signature) <= 512 AND initial_financial_snapshot_digest IS NOT NULL AND octet_length(initial_financial_snapshot_digest) = 32 AND initial_inventory_digest IS NOT NULL AND octet_length(initial_inventory_digest) = 32 AND initial_entitlement_digest IS NOT NULL AND octet_length(initial_entitlement_digest) = 32 AND initial_detail_digest IS NOT NULL AND octet_length(initial_detail_digest) = 32 AND initial_policy_digest IS NOT NULL AND octet_length(initial_policy_digest) = 32 AND initial_certificate_digest IS NOT NULL AND octet_length(initial_certificate_digest) = 32 AND component_state = 'PRESENT'::text AND approved_line_id IS NOT NULL AND component_sha256 IS NOT NULL AND classification_line_id IS NOT NULL AND classification_line_id = approved_line_id AND chosen_detail_sha256 IS NULL AND canonical_work_id = approval_work_id AND canonical_component_key = approval_component_key AND publication_command_id_2 IS NULL AND publication_work_id_2 IS NULL AND publication_revision_id_2 IS NULL AND publication_work_id_1 = approval_work_id AND publication_revision_id_1 = approval_revision_id)"
+        },
+        {
+          "name": "bpay_next_source_component_b_canonical_work_id_canonical__fkey1",
+          "type": "f",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "FOREIGN KEY (canonical_work_id, canonical_component_key, candidate_id, source_component_id) REFERENCES private.bpay_next_source_component_binding(canonical_work_id, canonical_component_key, candidate_id, source_component_id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_source_component_bi_approval_revision_id_approve_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_revision_id, approved_line_id, approval_component_key, source_component_id) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key, source_component_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_approval_work_id_approval_re_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_work_id, approval_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_approval_work_id_candidate_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_canonical_work_id_canonical__key1",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (canonical_work_id, canonical_component_key, binding_revision)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_head_id_decision_bundle_id_b_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (head_id, decision_bundle_id, bundle_revision) REFERENCES weekly_source_entitlement_heads(id, decision_bundle_id, bundle_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_approval_work_id_approval__key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, approval_work_id, approval_revision_id, approval_component_key)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_canonical_work_id_canonic_key1",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, canonical_work_id, canonical_component_key)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_id_canonical_work_id_canonica_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, canonical_work_id, canonical_component_key, candidate_id, binding_revision)"
+        },
+        {
+          "name": "bpay_next_source_component_bi_initial_financial_snapshot_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (initial_financial_snapshot_id) REFERENCES timesheets_financials(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_initial_root_authorisation_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (initial_root_authorisation_id) REFERENCES weekly_source_root_authorisations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_publication_command_id_1_pub_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (publication_command_id_1, publication_work_id_1, publication_revision_id_1, candidate_id) REFERENCES private.bpay_next_publication(command_id, work_id, revision_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_publication_command_id_2_pub_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (publication_command_id_2, publication_work_id_2, publication_revision_id_2, candidate_id) REFERENCES private.bpay_next_publication(command_id, work_id, revision_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_source_receipt_id_candidate__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_receipt_id, candidate_id, decision_bundle_id, bundle_revision, request_digest) REFERENCES private.weekly_source_entitlement_publication_receipts(id, candidate_id, decision_bundle_id, bundle_revision, request_digest) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bi_source_receipt_id_source_comp_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (source_receipt_id, source_component_id)"
+        },
+        {
+          "name": "bpay_next_source_component_bindi_initial_root_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (initial_root_timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_bindin_approval_source_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (approval_source_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_source_component_binding__classification_line_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (classification_line_id) REFERENCES private.bpay_next_approved_line(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_source_component_binding_v_chosen_detail_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (chosen_detail_sha256 IS NULL OR octet_length(chosen_detail_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_versi_binding_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (binding_revision > 0)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_versi_component_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_sha256 IS NULL OR octet_length(component_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_versio_component_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (component_state = ANY (ARRAY['PRESENT'::text, 'REMOVED'::text]))"
+        },
+        {
+          "name": "bpay_next_source_component_binding_versio_selection_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_state = 'UNBOUND'::text)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_binding_digest_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(binding_digest) = 32)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (approval_component_key = canonical_component_key)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((component_state = 'PRESENT'::text) = (approved_line_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((component_state = 'PRESENT'::text) = (component_sha256 IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (publication_command_id_2 IS NULL AND publication_work_id_2 IS NULL AND publication_revision_id_2 IS NULL OR publication_command_id_2 IS NOT NULL AND publication_work_id_2 IS NOT NULL AND publication_revision_id_2 IS NOT NULL AND publication_command_id_2 <> publication_command_id_1 AND publication_work_id_2 <> publication_work_id_1)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_request_digest_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(request_digest) = 32)"
+        },
+        {
+          "name": "bpay_next_source_component_binding_version_tax_treatment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (tax_treatment = ANY (ARRAY['TAXABLE'::text, 'NON_TAXABLE'::text, 'NOT_APPLICABLE'::text]))"
         }
       ],
       "view_definition_sha256": null
@@ -98426,6 +100225,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_receipt_source_binding_uq",
+          "definition": "CREATE UNIQUE INDEX bpay_next_receipt_source_binding_uq ON private.weekly_source_entitlement_publication_receipts USING btree (id, candidate_id, decision_bundle_id, bundle_revision, request_digest)"
+        },
+        {
           "name": "weekly_source_entitlement_pub_decision_bundle_id_bundle_rev_key",
           "definition": "CREATE UNIQUE INDEX weekly_source_entitlement_pub_decision_bundle_id_bundle_rev_key ON private.weekly_source_entitlement_publication_receipts USING btree (decision_bundle_id, bundle_revision, request_digest)"
         },
@@ -98449,6 +100252,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_next_receipt_source_binding_uq",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, candidate_id, decision_bundle_id, bundle_revision, request_digest)"
+        },
         {
           "name": "weekly_source_entitlement_pub_decision_bundle_id_bundle_rev_key",
           "type": "u",

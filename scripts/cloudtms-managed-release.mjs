@@ -5,6 +5,7 @@ import { canonical, digest, exactAtomicBody, literal, MANAGED_RELEASE_LOCK,
 import { BOOTSTRAP_PIN, BASELINE_MIGRATION_PREFIX, MANAGED_EXCEPTIONS, executionPolicy } from './cloudtms-managed-execution-policy.mjs';
 import { READER_PREPARATION, readerReleasePhases, readerActivationSql } from './weekly-source-reader-release.mjs';
 import { logicalPostgresExecutablePolicy } from './cloudtms-db-release-lib.mjs';
+import { closeFinalDefinerSelection } from './bpay-next-final-definers.mjs';
 
 const json = value => `${literal(JSON.stringify(value))}::jsonb`;
 const readJson = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -370,8 +371,10 @@ export async function applyManagedRelease({ root, current, release, context: inp
       // Classify the whole selected envelope BEFORE the first DDL.
       const anchor=assertBootstrapPrefix(current,release,baselinePrefix);
       const baseline=new Map(readJson(root,release.baselineRepeatableLock).repeatables.map(row=>[row.path,row.sha256]));
-      for(const item of current.migrations.slice(anchor+1))compileManagedUnit(item,'migration',options);
-      for(const item of current.repeatables.filter(row=>baseline.get(row.path)!==row.sha256))compileManagedUnit(item,'repeatable',options);
+      let envelope={migrations:current.migrations.slice(anchor+1),repeatables:current.repeatables.filter(row=>baseline.get(row.path)!==row.sha256)};
+      if(fs.existsSync(path.join(root,'docs/bpay-next/final-definer-closures.json')))envelope=closeFinalDefinerSelection(envelope,current);
+      for(const item of envelope.migrations)compileManagedUnit(item,'migration',options);
+      for(const item of envelope.repeatables)compileManagedUnit(item,'repeatable',options);
       const bootstrap = compileBootstrap({root,release,current,context,mapSource,baselinePrefix});
       await reset(); await execute(bootstrap); admitted=true;
     } else {
@@ -379,7 +382,13 @@ export async function applyManagedRelease({ root, current, release, context: inp
       await execute(identitySql(context));
       if (context.mode === 'NEW' && (await execute(resumeCheckSql(context))).trim() !== 'true') throw Error('CLOUDTMS_NEW_MANAGED_BOOTSTRAP_RECEIPT_REQUIRED');
     }
-    const pending=pendingInventory(current,JSON.parse(await execute(ledgerReadSql)));
+    let pending=pendingInventory(current,JSON.parse(await execute(ledgerReadSql)));
+    // F-04: a changed old/root-included definition must not silently win an
+    // UPGRADE while its selected final controlling closure is unchanged.
+    // This is static source/selection validation; it runs no fixture or RPC.
+    if(fs.existsSync(path.join(root,'docs/bpay-next/final-definer-closures.json'))){
+      pending=closeFinalDefinerSelection(pending,current);
+    }
     const migrationUnits=pending.migrations.map(item=>compileManagedUnit(item,'migration',options));
     const phases=readerReleasePhases(pending.repeatables,current.repeatables);
     const ordinaryUnits=phases.ordinary.map(item=>compileManagedUnit(item,'repeatable',options));

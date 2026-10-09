@@ -1,0 +1,204 @@
+diff --git a/broker/src/weekly-source/upload-publication-owner.mjs b/broker/src/weekly-source/upload-publication-owner.mjs
+--- a/broker/src/weekly-source/upload-publication-owner.mjs
++++ b/broker/src/weekly-source/upload-publication-owner.mjs
+@@ -302,1 +302,1 @@
+-function calculationFor(row, contract) {
++export function calculateWeeklySourceContractRowForServer(row, contract) {
+@@ -348,1 +348,3 @@
+-function selectionFor(body, ordinal) {
++const calculationFor = calculateWeeklySourceContractRowForServer;
++
++function selectionFor(body, ordinal) {
+diff --git a/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql b/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
+--- a/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
++++ b/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
+@@ -631,1 +631,3 @@
+-      array['root_ordinal','contract_id','week_ending_date','selection_method'],
++      array['root_ordinal','contract_id','week_ending_date','selection_method']
++        ||case when v_index=2 and v_member_count=2 and v_entry ? 'destination_reprice'
++          then array['destination_reprice'] else array[]::text[] end,
+@@ -643,1 +645,7 @@
+-    v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(
++    if v_entry ? 'destination_reprice' then
++      perform private.weekly_source_publication_require_keys_v1(v_entry->'destination_reprice',
++        array['schema_version','witness_id','review_sha256'],'contract_choice.destination_reprice');
++      if v_entry#>>'{destination_reprice,schema_version}' is distinct from 'WEEKLY_SOURCE_DESTINATION_REPRICE_V1' then
++        raise exception 'WEEKLY_SOURCE_DESTINATION_REPRICE_SCHEMA_INVALID' using errcode='22023'; end if;
++    end if;
++    v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(
+@@ -648,1 +656,6 @@
+-        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT')));
++        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT'))
++      ||case when v_entry ? 'destination_reprice' then pg_catalog.jsonb_build_object('destination_reprice',
++        pg_catalog.jsonb_build_object('schema_version','WEEKLY_SOURCE_DESTINATION_REPRICE_V1',
++          'witness_id',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,witness_id}','destination_reprice.witness_id','UUID'),
++          'review_sha256',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,review_sha256}','destination_reprice.review_sha256','HEX32')))
++        else '{}'::jsonb end);
+diff --git a/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql b/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
+--- a/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
++++ b/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
+@@ -132,1 +132,2 @@
+-  v_source_component_hashes jsonb:='{}'::jsonb;
++  v_source_component_hashes jsonb:='{}'::jsonb;
++  v_destination_reprice jsonb;
+@@ -1372,4 +1373,5 @@
+-    v_offending:=(
+-      select pg_catalog.jsonb_build_object(
+-               'component_id',component_element.value->'component_id',
+-               'source_authority',v_before_source[1],
++    v_destination_reprice:=private.weekly_source_destination_reprice_verify_v1(v_canonical,v_control);
++    v_offending:=(
++      select pg_catalog.jsonb_build_object(
++               'component_id',component_element.value->'component_id',
++               'source_authority',v_before_source[1],
+@@ -1388,6 +1390,14 @@
+-                   component_element.value)),'hex')
+-       limit 1);
+-    if v_offending is not null then
+-      return pg_catalog.jsonb_build_object(
+-        'ok',false,'published',false,'replayed',false,
+-        'code','WEEKLY_SOURCE_PUBLICATION_MOVED_COMPONENT_CHANGED','retryable',false,
++                   component_element.value)),'hex')
++         and not exists (select 1 from pg_catalog.jsonb_array_elements(
++           coalesce(v_destination_reprice->'components','[]'::jsonb)) witness(value)
++           where witness.value->>'component_id'=component_element.value->>'component_id'
++             and pg_catalog.encode(private.weekly_source_publication_request_digest_v1(
++               private.weekly_source_publication_component_content_v1(witness.value->'before_component')),'hex')
++                 is not distinct from v_source_component_hashes->>(component_element.value->>'component_id')
++             and witness.value->'after_content' is not distinct from
++               private.weekly_source_publication_component_content_v1(component_element.value))
++       limit 1);
++    if v_offending is not null then
++      return pg_catalog.jsonb_build_object(
++        'ok',false,'published',false,'replayed',false,
++        'code','WEEKLY_SOURCE_PUBLICATION_MOVED_COMPONENT_CHANGED','retryable',false,
+diff --git a/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql b/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
+--- a/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
++++ b/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
+@@ -258,2 +258,3 @@
+-  v_blank jsonb;
+-begin
++  v_blank jsonb;
++  v_reprice_detail jsonb;
++begin
+@@ -527,2 +528,6 @@
+-    v_i:=v_origin;
+-    if v_before_heads[v_i] is not null then
++    v_i:=v_origin;
++    v_reprice_detail:=private.weekly_source_destination_reprice_detail_v1(
++      p_decision_bundle_id,p_bundle_revision,v_canonical,v_i);
++    if v_reprice_detail is not null then
++      v_detail:=v_reprice_detail;
++    elsif v_before_heads[v_i] is not null then
+diff --git a/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql b/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
+--- a/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
++++ b/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
+@@ -78,2 +78,7 @@
+-  v_source_rate numeric;
+-begin
++  v_source_rate numeric;
++  v_destination_stage_snapshot jsonb;
++  v_stage_financial_id uuid;
++  v_job_title text;
++  v_band_label text;
++  v_timesheet_reference text;
++begin
+@@ -124,3 +129,12 @@
+-  v_source_pay_method:=upper(coalesce(
+-    case when v_first_snapshot then v_tf.pay_method end,
+-    v_contract.pay_method_snapshot,''));
++  v_destination_stage_snapshot:=private.weekly_source_destination_reprice_stage_snapshot_v1(
++    p_root_timesheet_id,p_expected_head_id);
++  if v_destination_stage_snapshot is not null then
++    if v_first_snapshot or (v_destination_stage_snapshot->>'client_id')::uuid is distinct from v_contract.client_id then
++      raise exception using errcode='23514', message='BPAY_NEXT_SOURCE_STAGE_CERTIFICATE_IDENTITY_MISMATCH';
++    end if;
++    v_source_pay_method:=v_destination_stage_snapshot->>'destination_pay_channel';
++  else
++  v_source_pay_method:=upper(coalesce(
++    case when v_first_snapshot then v_tf.pay_method end,
++    v_contract.pay_method_snapshot,''));
++  end if;
+@@ -341,16 +355,29 @@
+-  select coalesce(nullif(btrim(c.display_name),''),
+-                  nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),
+-                  c.id::text),c.tms_ref,c.mileage_pay_rate
+-    into strict v_candidate_name,v_candidate_ref,v_candidate_mileage_rate
+-    from public.candidates c where c.id=v_contract.candidate_id;
+-  select cl.name,cl.mileage_charge_rate
+-    into strict v_client_name,v_client_mileage_rate
+-    from public.clients cl where cl.id=v_contract.client_id;
+-  select count(*) into v_schedule_count
+-    from private.bpay_next_contract_rate_rows_v1(
+-      v_contract.rates_json,v_contract.bucket_labels_json,
+-      v_contract.additional_rates_json,
+-      coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,
+-               v_candidate_mileage_rate),
+-      coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
+-               v_client_mileage_rate));
++  if v_destination_stage_snapshot is not null then
++    v_candidate_name:=v_destination_stage_snapshot#>>'{metadata,candidate_display_name}';
++    v_candidate_ref:=v_destination_stage_snapshot#>>'{metadata,candidate_reference}';
++    v_client_name:=v_destination_stage_snapshot#>>'{metadata,client_display_name}';
++    v_job_title:=v_destination_stage_snapshot#>>'{metadata,job_title}';
++    v_band_label:=v_destination_stage_snapshot#>>'{metadata,band_label}';
++    v_timesheet_reference:=v_destination_stage_snapshot#>>'{metadata,timesheet_reference}';
++    v_stage_financial_id:=(v_destination_stage_snapshot->>'financial_snapshot_id')::uuid;
++    v_schedule_count:=pg_catalog.jsonb_array_length(v_destination_stage_snapshot->'rate_schedule');
++  else
++  select coalesce(nullif(btrim(c.display_name),''),
++                  nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),
++                  c.id::text),c.tms_ref,c.mileage_pay_rate
++    into strict v_candidate_name,v_candidate_ref,v_candidate_mileage_rate
++    from public.candidates c where c.id=v_contract.candidate_id;
++  select cl.name,cl.mileage_charge_rate
++    into strict v_client_name,v_client_mileage_rate
++    from public.clients cl where cl.id=v_contract.client_id;
++  select count(*) into v_schedule_count
++    from private.bpay_next_contract_rate_rows_v1(
++      v_contract.rates_json,v_contract.bucket_labels_json,
++      v_contract.additional_rates_json,
++      coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,
++               v_candidate_mileage_rate),
++      coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
++               v_client_mileage_rate));
++    v_stage_financial_id:=v_tf.id;
++    v_job_title:=v_contract.role; v_band_label:=v_contract.band; v_timesheet_reference:=v_ts.reference_number;
++  end if;
+@@ -387,1 +414,1 @@
+-      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_tf.id,v_ts.version,
++      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_stage_financial_id,v_ts.version,
+@@ -392,1 +419,1 @@
+-      v_contract.role,v_contract.band,v_ts.reference_number,v_inventory_digest)
++      v_job_title,v_band_label,v_timesheet_reference,v_inventory_digest)
+@@ -394,11 +421,19 @@
+-  insert into private.bpay_next_rate_schedule
+-    (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)
+-    select v_revision_id,r.rate_family,r.rate_code,r.unit_label,
+-           r.paye_rate,r.umbrella_rate,r.charge_rate
+-      from private.bpay_next_contract_rate_rows_v1(
+-        v_contract.rates_json,v_contract.bucket_labels_json,
+-        v_contract.additional_rates_json,
+-        coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,
+-                 v_candidate_mileage_rate),
+-        coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
+-                 v_client_mileage_rate)) r;
++  if v_destination_stage_snapshot is not null then
++    insert into private.bpay_next_rate_schedule
++      (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)
++      select v_revision_id,r.rate_family,r.rate_code,r.unit_label,r.paye_rate,r.umbrella_rate,r.charge_rate
++        from pg_catalog.jsonb_to_recordset(v_destination_stage_snapshot->'rate_schedule')
++          as r(rate_family text,rate_code text,unit_label text,paye_rate numeric,umbrella_rate numeric,charge_rate numeric);
++  else
++  insert into private.bpay_next_rate_schedule
++    (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)
++    select v_revision_id,r.rate_family,r.rate_code,r.unit_label,
++           r.paye_rate,r.umbrella_rate,r.charge_rate
++      from private.bpay_next_contract_rate_rows_v1(
++        v_contract.rates_json,v_contract.bucket_labels_json,
++        v_contract.additional_rates_json,
++        coalesce(v_tf.mileage_pay_rate,v_contract.mileage_pay_rate,
++                 v_candidate_mileage_rate),
++        coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
++                 v_client_mileage_rate)) r;
++  end if;

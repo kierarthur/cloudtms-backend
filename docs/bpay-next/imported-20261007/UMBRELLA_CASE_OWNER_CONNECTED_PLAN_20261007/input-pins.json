@@ -1,0 +1,97 @@
+[
+  {
+    "name": "week_lifecycle",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+    "sha256": "59BFF08B9E651DAAD96E0C686BF322E180F3B038467D3BD12DB17002E57E73DF"
+  },
+  {
+    "name": "prepare",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+    "sha256": "6C74EC9DE660EE878572055F644ACF2CC7220CE448284AF641F4B256B532317B"
+  },
+  {
+    "name": "paye_net",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+    "sha256": "9622C5B9259F80E69A4FB661425C0016A4F3EE69EE8B02FCB3A7BAA7BA389FBB"
+  },
+  {
+    "name": "transfer_post",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+    "sha256": "F56898DC7E992FC271D2A90C0C7FDB85D77DDE4BAC5E8B852E008C0DA90793D8"
+  },
+  {
+    "name": "allocation",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+    "sha256": "400E854BFD5619F7BD004E9E922D4681A673216EE001DD1A7CBD81ECF6D20AC6"
+  },
+  {
+    "name": "case_guards",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0310_banking_pay_next_case_guards_v1.sql",
+    "sha256": "7DD5085D3307A0194B3745487CC19A952EE3B8CB11D03F096D275D23632500FE"
+  },
+  {
+    "name": "case_schema",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/migrations/04102026_0300_banking_pay_next_case_instruction_core.sql",
+    "sha256": "04B44425D288E714037012C3B4EB4D27679137905E1C380682812CC8273AD40E"
+  },
+  {
+    "name": "build_schema",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/migrations/04102026_0400_banking_pay_next_case_transfer_binding.sql",
+    "sha256": "1A7CA4F86ECA7E96775AD4CFC47A8165768D1C41AD87F6F81752555D2648C987"
+  },
+  {
+    "name": "selected_quote",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+    "sha256": "2870041DA540F108671F9DF9C0952DB05430E8CCBF8EB076428FDB03920B8343"
+  },
+  {
+    "name": "saved_selection",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04092026_0910_banking_pay_finance_saved_resolution_evidence_v1.sql",
+    "sha256": "5CBF6B5C6EADB20C0058279F161982939422D6EC0DC1795E47BD6C518F0B26A6"
+  },
+  {
+    "name": "source_due_owner",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/03102026_0700_stage2_finance_baseline_after_h1h2_retry.sql",
+    "sha256": "7ECA7DF2E624C67512B0018AD4BCAF7F9A348A143FF768174E4868C7827A2338"
+  },
+  {
+    "name": "recovery_order_owner",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/26092026_0207_banking_pay_stage2_recovery_order_floor_v1.sql",
+    "sha256": "267200A251B973FC7BE5F5F047C3A29C15CAD5EC303D671290E681E8D005094F"
+  },
+  {
+    "name": "zero_owner",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0490_banking_pay_next_internal_zero_settlement_v1.sql",
+    "sha256": "88A5679E4DAEB440C36402F11C866394030AF43509FE3520D71BB5399E5EF47C"
+  },
+  {
+    "name": "cancel_owner",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/banking-pay-reset-implementation-20261003/supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
+    "sha256": "4417B25F96D6CAEFB627EAE013C0C956268356104BE15E2411DEAD56CC60BCF5"
+  },
+  {
+    "name": "work_post_candidate",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/SOURCE_COMPARISON_ACTUAL_WORK_CONSUMERS_V1_20261007/candidate/supabase/repeatable/04102026_0200_banking_pay_next_simple_csv_settlement_v1.sql",
+    "sha256": "D97D7549F0EEB606EEBF9CBA92C094EFF85B10F2E8032CB2AE8D6621989C37C0"
+  },
+  {
+    "name": "collection_candidate",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/SOURCE_COMPARISON_CASE_OWNER_V1_20261007/candidate/supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+    "sha256": "231D1B86F36118378C2FE463934EAFE40DE0FEBD597218A108664798F304AF0D"
+  },
+  {
+    "name": "comparison_core",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/SOURCE_DISPOSITION_COMPARISON_V2_20261007/supabase/repeatable/07102026_0157_bpay_next_source_comparison_full_v2.sql",
+    "sha256": "604BA1141C30BAEC99E7B8F5F65374675FA17EEC5612348D793D94A86CEA1DEA"
+  },
+  {
+    "name": "planner",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/BANKING_MOVE_JOINT_PRECOMMIT_V4_20261007/07102026_0140_banking_move_joint_precommit_v4.sql",
+    "sha256": "D70B5E3DAE52CDF7DC59855E1DA116A8DBD974F5FDCC203DE319DEFEAC6AB1C0"
+  },
+  {
+    "name": "policy",
+    "path": "C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/codex-review-20260929/fresh-requirements-20261003/CONTRACT_MOVE_RESIDUAL_AND_CANDIDATE_OFFSET_ACCEPTANCE_20261006.md",
+    "sha256": "A2B1C9F635953DBF046D041FCA889BA92B7FDCFEB49A819C6916F45490658D38"
+  }
+]

@@ -1,0 +1,31 @@
+diff --git a/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql b/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
+--- a/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
++++ b/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
+@@ -22,2 +22,3 @@
+-  v_binding record;
+-begin
++  v_binding record;
++  v_joined_witness private.weekly_source_destination_reprice_witness_v1%rowtype;
++begin
+@@ -35,1 +36,5 @@
+-  -- Every Source owner reaches this insertion after its source locks.  Sort
++  -- The real receipt is now inserted; this is not a guessed publication ID.
++  select w.* into v_joined_witness from private.weekly_source_destination_reprice_witness_v1 w
++    where w.decision_bundle_id=new.decision_bundle_id and w.bundle_revision=new.bundle_revision
++      and w.context_json->>'joined_review_schema'='SOURCE_DESTINATION_PAY_FINANCIAL_REVIEW_V2';
++  -- Every Source owner reaches this insertion after its source locks.  Sort
+@@ -82,3 +87,11 @@
+-        message='BPAY_NEXT_SOURCE_RECEIPT_BINDING_NOT_REGISTERED';
+-    end if;
+-  end loop;
++        message='BPAY_NEXT_SOURCE_RECEIPT_BINDING_NOT_REGISTERED';
++    end if;
++    -- Only after real REGISTERED binding. The financial owner promotes the
++    -- same accepted pending basis/current snapshot; no APPLIED status is made up.
++    if v_joined_witness.id is not null and exists(select 1
++      from pg_catalog.jsonb_array_elements(v_joined_witness.context_json#>'{financial_plan,components}') c
++      where c->>'source_component_id'=v_component.source_component_id::text) then
++      perform private.bpay_next_source_comparison_register_review_v2(
++        new.id,v_component.source_component_id,v_joined_witness.id);
++    end if;
++  end loop;

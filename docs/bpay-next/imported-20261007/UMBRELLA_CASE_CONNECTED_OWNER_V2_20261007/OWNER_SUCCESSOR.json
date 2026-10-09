@@ -1,0 +1,192 @@
+{
+  "schema": "UMBRELLA_CASE_CONNECTED_OWNER_V2",
+  "rows": [
+    {
+      "path": "supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\supabase\\repeatable\\04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
+      "pin": "7C05D7ACFAC887843B4828B2420546D274366D2E096C9594B7526011C7C116DF",
+      "candidate": "candidate/supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
+      "candidateSha256": "F085061AF35CD3CF5A9F6D4C659799E3EDD958EA3F9D41EB88D40D787F961F4E",
+      "spans": [
+        {
+          "id": "UMC01_02_TYPED_CSV",
+          "before": "    if v_leg.transfer_id is not null or v_worker.case_selection_revision<>0\n",
+          "after": "    if v_leg.transfer_id is not null or (v_worker.case_selection_revision<>0\n       and not private.bpay_next_umbrella_case_csv_transfer_valid_v2(v_worker,v_transfer))\n",
+          "sourceLine": 84,
+          "beforeSha256": "D0703DE76B0343E0C67AE116B6FAC07FC108044A3551AD459592E6DD7FC5CA9B",
+          "afterSha256": "E89A8C1F9E7A62237CB7F6AAF82D2C9F049D74BE5DD749623194A763F7FBFFB6"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\supabase\\repeatable\\04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
+      "pin": "4BFFDF2142B28CA2F717992E8CF164B1137EACA1C64790C0D6300DA680BFCF2A",
+      "candidate": "candidate/supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
+      "candidateSha256": "A11CC1637C7726EFCCF66F6D8C978658387128C1FF36709DBCCBC04849D6CF0A",
+      "spans": [
+        {
+          "id": "UMC01_02_TYPED_CSV",
+          "before": "    if v_leg.transfer_id is not null or v_worker.case_selection_revision<>0\n",
+          "after": "    if v_leg.transfer_id is not null or (v_worker.case_selection_revision<>0\n       and not private.bpay_next_umbrella_case_csv_transfer_valid_v2(v_worker,v_transfer))\n",
+          "sourceLine": 119,
+          "beforeSha256": "D0703DE76B0343E0C67AE116B6FAC07FC108044A3551AD459592E6DD7FC5CA9B",
+          "afterSha256": "E89A8C1F9E7A62237CB7F6AAF82D2C9F049D74BE5DD749623194A763F7FBFFB6"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\codex-review-20260929\\fresh-requirements-20261003\\UMBRELLA_CASE_CONNECTED_OWNER_V1_20261007\\candidate\\supabase\\repeatable\\04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+      "pin": "48991F883D0FAD8387C3C5A1FF156CA984DE1A30AF1CBBF038484D61F831DA84",
+      "candidate": "candidate/supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
+      "candidateSha256": "7D0B0D08BE8BC2C9FCA5A94A981A5BC9E18075F8AC5911476863BA55ECBEE3CE",
+      "spans": [
+        {
+          "id": "UMC06_CANCELLED_WEEK_CERTIFICATE",
+          "before": "       or new.original_payroll_net is not null or not private.bpay_next_umbrella_case_projection_valid_v2(\r\n         (select w from private.bpay_next_run_worker w where w.id=new.original_run_worker_id),v_projection)))",
+          "after": "       or new.original_payroll_net is not null or (not private.bpay_next_umbrella_case_projection_valid_v2(\r\n         (select w from private.bpay_next_run_worker w where w.id=new.original_run_worker_id),v_projection)\r\n         and not (new.payment_state='CANCELLED' and new.eligibility_state='EXCLUDED'\r\n           and new.eligible_arranged_amount=0 and new.original_transfer_id is null\r\n           and new.returned_cash_id is null and new.reissue_transfer_id is null\r\n           and private.bpay_next_umbrella_case_cancelled_projection_valid_v2(\r\n             (select w from private.bpay_next_run_worker w where w.id=new.original_run_worker_id),v_projection)))))",
+          "sourceLine": 151,
+          "beforeSha256": "FE0464B550B11A714216171BF1BC80A5910E6613552131644EE0B7863CA28110",
+          "afterSha256": "08657913692FBE58F8C8FAEE23C0070DECD3190B94AB8F23F04D7A750CF74589"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\codex-review-20260929\\fresh-requirements-20261003\\UMBRELLA_CASE_CONNECTED_OWNER_V1_20261007\\candidate\\supabase\\repeatable\\04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+      "pin": "9FA2BF39DBEFF46999A1941520E7A1E39D0E9A3A6DE5F0025E918D24B4BAF0A4",
+      "candidate": "candidate/supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+      "candidateSha256": "0A1B33D51DAEB75CB40F0A06F5FA307F13D2F8B645E2E248CCC148A4E7E04FBA",
+      "spans": [
+        {
+          "id": "UMC05_GENUINE_UM_WEEK_OUTCOME",
+          "before": "  if v_worker.target_pay_channel<>'PAYE' then return;end if;",
+          "after": "  if v_worker.target_pay_channel<>'PAYE' and not (v_worker.target_pay_channel='UMBRELLA'\r\n    and v_worker.case_selection_revision>0\r\n    and private.bpay_next_umbrella_case_completed_transfer_valid_v2(v_worker,v_original)) then return;end if;",
+          "sourceLine": 114,
+          "beforeSha256": "A71972BE27D189759FD979FC1450E690C8EC7F4B2F9DE5E99A6B4A49877DA367",
+          "afterSha256": "6890AAA0DB49432382ED614B332E14BD1E0496DA0B1AA4BDC6A1E2F6FE782EEB"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\codex-review-20260929\\fresh-requirements-20261003\\UMBRELLA_CASE_CONNECTED_OWNER_V1_20261007\\candidate\\supabase\\repeatable\\04102026_0460_banking_pay_next_case_cancel_v1.sql",
+      "pin": "F41E830C8D4DDE8FA4B5A1E90BCA4BD6F9AE2AA134507003D7576538162529DA",
+      "candidate": "candidate/supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
+      "candidateSha256": "D73743012A22D4DB55BF336E0567450AB188C039F9F346552C09B0202EACE60F",
+      "spans": [
+        {
+          "id": "UMC04_GUARD_TYPED_DECLARATIONS",
+          "before": "declare v_request private.bpay_next_cancel_request%rowtype;v_draft private.bpay_next_case_allocation_state%rowtype;",
+          "after": "declare v_request private.bpay_next_cancel_request%rowtype;v_draft private.bpay_next_case_allocation_state%rowtype;\r\n  v_worker private.bpay_next_run_worker%rowtype;v_projection private.bpay_next_net_projection%rowtype;",
+          "sourceLine": 128,
+          "beforeSha256": "75CF239218F7C823FC92CD538B247335CCFE37711317B7912F35A59F3438CEEF",
+          "afterSha256": "22BCB965A91D97C90D9EF53779103B60A3F22D06EB4319C1BDBED6BB4DDA3CBA"
+        },
+        {
+          "id": "UMC04_TYPED_OWNER_FROZEN_FIELDS",
+          "before": "     or (old.status='CANCELLING' and (new.expected_case_hold_count,new.accepted_projection_revision,new.projection_id,new.net_state_id,new.transfer_id,new.started_at_utc)\r\n       is distinct from (old.expected_case_hold_count,old.accepted_projection_revision,old.projection_id,old.net_state_id,old.transfer_id,old.started_at_utc)) then",
+          "after": "     or (old.status='CANCELLING' and (new.expected_case_hold_count,new.accepted_projection_revision,new.projection_id,new.net_state_id,new.umbrella_draft_state_id,new.transfer_id,new.started_at_utc)\r\n       is distinct from (old.expected_case_hold_count,old.accepted_projection_revision,old.projection_id,old.net_state_id,old.umbrella_draft_state_id,old.transfer_id,old.started_at_utc)) then",
+          "sourceLine": 157,
+          "beforeSha256": "7E99DC6A3148A177DE446648FFC1B44FCC0E69C19BED0B447D5C59A69F10430D",
+          "afterSha256": "C0DBE965E7357A3C3B29D9F253420528EC062180FA1A32255B17A8FBD0E1B624"
+        },
+        {
+          "id": "UMC04_GENUINE_DRAFT_FK_GUARD",
+          "before": "    raise exception using errcode='23514',message='BPAY_NEXT_CASE_CANCEL_BINDING_TRANSITION_INVALID';end if;\r\n  return new;",
+          "after": "    raise exception using errcode='23514',message='BPAY_NEXT_CASE_CANCEL_BINDING_TRANSITION_INVALID';end if;\r\n  if new.accepted_projection_revision>0 then\r\n    select * into strict v_worker from private.bpay_next_run_worker where id=new.run_worker_id;\r\n    select * into strict v_projection from private.bpay_next_net_projection where id=new.projection_id;\r\n    if v_worker.target_pay_channel='UMBRELLA' then\r\n      if new.net_state_id is not null or new.umbrella_draft_state_id is distinct from new.draft_state_id\r\n        or v_projection.umbrella_case_draft_state_id is distinct from new.umbrella_draft_state_id\r\n        or v_projection.projection_no<>new.accepted_projection_revision\r\n        or v_worker.net_projection_revision<>new.accepted_projection_revision or v_worker.status<>new.status\r\n        or not private.bpay_next_umbrella_case_projection_snapshot_valid_v2(v_worker,v_projection)\r\n        or not ((new.status='CANCELLING' and v_projection.retired_at_utc is null)\r\n          or (new.status='CANCELLED' and v_projection.retired_at_utc is not null\r\n            and v_projection.retired_at_utc is not distinct from new.finished_at_utc)) then\r\n        raise exception 'BPAY_NEXT_UM_CASE_CANCEL_TYPED_PROJECTION_INVALID' using errcode='23514';end if;\r\n    elsif v_worker.target_pay_channel<>'PAYE' or new.umbrella_draft_state_id is not null or new.net_state_id is null then\r\n      raise exception 'BPAY_NEXT_CASE_CANCEL_CHANNEL_OWNER_INVALID' using errcode='23514';\r\n    end if;\r\n  end if;\r\n  return new;",
+          "sourceLine": 159,
+          "beforeSha256": "1AC916C9B8031E5067C350A18B03CE944AE3558B215F3EC1894493C97268918D",
+          "afterSha256": "EFA7B1C38C9CA8552E13BE3F3315CDC00EED34DCD964BCF890513C2A479F79CE"
+        },
+        {
+          "id": "UMC03_REAL_UM_INTENT_NO_NET",
+          "before": "      select * into strict v_net from private.bpay_next_case_allocation_state where projection_id=v_projection.id and run_worker_id=v_worker.id\r\n        and pass_kind='NET' and status='COMPLETE' and net_stage='COMPLETE';\r\n      if v_net.preparation_revision<>v_binding.preparation_revision or v_net.selection_revision<>v_binding.selection_revision\r\n         or (v_projection.input_kind not in ('PAYE_MANUAL','CASE_PAYOUT')\r\n           and not private.bpay_next_umbrella_case_projection_valid_v2(v_worker,v_projection)) then raise exception using errcode='23514',message='BPAY_NEXT_CASE_CANCEL_NET_BINDING_INVALID';end if;\r\n      v_binding.projection_id:=v_projection.id;v_binding.net_state_id:=v_net.id;",
+          "after": "      if v_worker.target_pay_channel='UMBRELLA' then\r\n        if not private.bpay_next_umbrella_case_projection_valid_v2(v_worker,v_projection)\r\n          or v_projection.umbrella_case_draft_state_id is distinct from v_binding.draft_state_id then\r\n          raise exception 'BPAY_NEXT_UM_CASE_CANCEL_DRAFT_BINDING_INVALID' using errcode='23514';end if;\r\n        v_binding.umbrella_draft_state_id:=v_binding.draft_state_id;v_binding.net_state_id:=null;\r\n      else\r\n        select * into strict v_net from private.bpay_next_case_allocation_state where projection_id=v_projection.id and run_worker_id=v_worker.id\r\n          and pass_kind='NET' and status='COMPLETE' and net_stage='COMPLETE';\r\n        if v_net.preparation_revision<>v_binding.preparation_revision or v_net.selection_revision<>v_binding.selection_revision\r\n          or v_projection.input_kind not in ('PAYE_MANUAL','CASE_PAYOUT') then\r\n          raise exception using errcode='23514',message='BPAY_NEXT_CASE_CANCEL_NET_BINDING_INVALID';end if;\r\n        v_binding.net_state_id:=v_net.id;\r\n      end if;\r\n      v_binding.projection_id:=v_projection.id;",
+          "sourceLine": 268,
+          "beforeSha256": "985CB872EA9EC687AB0C119A0892AA8686E049A9DD6E1D31D806F131103BDA27",
+          "afterSha256": "10638D3CE9434FA940D7E19B8C4681696F857B44E27D70BF129F777B528ECB28"
+        },
+        {
+          "id": "UMC03_DRAFT_HOLD_STATE",
+          "before": "         or v_result.state_id is distinct from (case when v_instruction.payroll_stage='NET_DEDUCT' and v_binding.accepted_projection_revision>0\r\n           then v_binding.net_state_id else v_binding.draft_state_id end)",
+          "after": "         or v_result.state_id is distinct from (case when v_worker.target_pay_channel='PAYE'\r\n           and v_instruction.payroll_stage='NET_DEDUCT' and v_binding.accepted_projection_revision>0\r\n           then v_binding.net_state_id else v_binding.draft_state_id end)",
+          "sourceLine": 343,
+          "beforeSha256": "9777FD269F272CA6078195C1AD2FE8808A08ED6059C17314EAC1112AB6E16FAD",
+          "afterSha256": "85C4B8E00E8311C9F2F5C185875A49B0FA1658D6A10055E1642EFB38BC57AE9E"
+        },
+        {
+          "id": "UMC07_SINGLE_ACTUAL_WORK_RELEASE",
+          "before": "        update private.bpay_next_position set held_source_ex_vat=held_source_ex_vat-v_work_hold.source_reserved_ex_vat,\r\n          held_target_ex_vat=held_target_ex_vat-v_work_hold.target_amount_ex_vat,held_target_vat=held_target_vat-v_work_hold.target_amount_vat,\r\n          held_target_inc_vat=held_target_inc_vat-v_work_hold.target_amount_inc_vat,updated_at_utc=v_now\r\n          where work_id=v_work_hold.work_id and component_key=v_work_hold.component_key and held_source_ex_vat>=v_work_hold.source_reserved_ex_vat\r\n            and held_target_ex_vat>=v_work_hold.target_amount_ex_vat and held_target_vat>=v_work_hold.target_amount_vat and held_target_inc_vat>=v_work_hold.target_amount_inc_vat;\r\n        if not found then raise exception using errcode='23514',message='BPAY_NEXT_CANCEL_POSITION_HOLD_MISMATCH';end if;\r\n        update private.bpay_next_hold set status='RELEASED',finished_at_utc=v_now where id=v_work_hold.id;v_holds:=v_holds+1;",
+          "after": "        update private.bpay_next_hold set status='RELEASED',finished_at_utc=v_now where id=v_work_hold.id;\r\n        if not private.bpay_next_source_comparison_carry_known_work_v2(p_job_id,v_line.id,'RELEASE',v_work_hold.id) then\r\n          update private.bpay_next_position set held_source_ex_vat=held_source_ex_vat-v_work_hold.source_reserved_ex_vat,\r\n            held_target_ex_vat=held_target_ex_vat-v_work_hold.target_amount_ex_vat,held_target_vat=held_target_vat-v_work_hold.target_amount_vat,\r\n            held_target_inc_vat=held_target_inc_vat-v_work_hold.target_amount_inc_vat,updated_at_utc=v_now\r\n            where work_id=v_work_hold.work_id and component_key=v_work_hold.component_key and held_source_ex_vat>=v_work_hold.source_reserved_ex_vat\r\n              and held_target_ex_vat>=v_work_hold.target_amount_ex_vat and held_target_vat>=v_work_hold.target_amount_vat and held_target_inc_vat>=v_work_hold.target_amount_inc_vat;\r\n          if not found then raise exception using errcode='23514',message='BPAY_NEXT_CANCEL_POSITION_HOLD_MISMATCH';end if;\r\n        end if;\r\n        v_holds:=v_holds+1;",
+          "sourceLine": 315,
+          "beforeSha256": "330A775C9407513CE560124F7637530E9F7B454D113DFCD8933C2F72EFAD3B9C",
+          "afterSha256": "9F2DC3102113375C34FB5F07662E4A42959339B84DE6E52D4A7810EB57B6382B"
+        },
+        {
+          "id": "UMC04_SAVE_TYPED_DRAFT_BINDING",
+          "before": "    accepted_projection_revision=v_binding.accepted_projection_revision,projection_id=v_binding.projection_id,net_state_id=v_binding.net_state_id,",
+          "after": "    accepted_projection_revision=v_binding.accepted_projection_revision,projection_id=v_binding.projection_id,net_state_id=v_binding.net_state_id,\r\n    umbrella_draft_state_id=v_binding.umbrella_draft_state_id,",
+          "sourceLine": 414,
+          "beforeSha256": "77CDBFBC9112FC1873192F71E2BF921346A8FDC34012396BC40B32564DD05155",
+          "afterSha256": "18B7F953072A8B6BA1AF0DC1D23C59592F79D13F06CDBE908476C0BFE49988F2"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/07102026_0252_bpay_next_umbrella_case_projection_v2.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\codex-review-20260929\\fresh-requirements-20261003\\UMBRELLA_CASE_CONNECTED_OWNER_V1_20261007\\supabase\\repeatable\\07102026_0252_bpay_next_umbrella_case_projection_v2.sql",
+      "pin": "8B2238870A2350D1D22962478ADE1360260C625D953C17FF03B468A4CD83371C",
+      "candidate": "candidate/supabase/repeatable/07102026_0252_bpay_next_umbrella_case_projection_v2.sql",
+      "candidateSha256": "486735EEE48FE330A47538DB0081F76163365D9CFDDC1FCCA41631058D34F486",
+      "spans": [
+        {
+          "id": "UMC06_SEPARATE_SNAPSHOT_KEEP_LIVE_STRICT",
+          "before": "create or replace function private.bpay_next_umbrella_case_projection_valid_v2(\n  p_worker private.bpay_next_run_worker,p_projection private.bpay_next_net_projection)\nreturns boolean language plpgsql stable security invoker set search_path=pg_catalog,private\nas $function$\ndeclare d private.bpay_next_case_allocation_state%rowtype;\nbegin\n  if p_worker.target_pay_channel<>'UMBRELLA' or p_worker.target_umbrella_id is null\n    or p_worker.target_umbrella_vat_chargeable is null or p_worker.case_selection_revision<1\n    or p_worker.entered_paye_net is not null or p_worker.net_request_revision<>0\n    or p_projection.input_kind<>'UMBRELLA' or p_projection.entered_paye_net is not null\n    or p_projection.request_command_id is not null or p_projection.retired_at_utc is not null\n    or p_projection.run_worker_id<>p_worker.id or p_projection.umbrella_case_draft_state_id is null\n    or p_projection.projection_no<>1 then return false;end if;\n  select * into strict d from private.bpay_next_case_allocation_state where id=p_projection.umbrella_case_draft_state_id;\n  return d.run_worker_id=p_worker.id and d.candidate_id=p_worker.candidate_id\n    and d.preparation_revision=p_worker.preparation_revision and d.selection_revision=p_worker.case_selection_revision\n    and d.pass_kind='DRAFT' and d.projection_no=0 and d.status='COMPLETE' and d.prepare_stage='COMPLETE'\n    and d.expected_instruction_count=p_worker.case_instruction_count and d.processed_instruction_count=d.expected_instruction_count\n    and (p_projection.gross_ex_vat,p_projection.gross_vat,p_projection.gross_inc_vat)\n      is not distinct from (d.captured_work_gross+d.allocated_gross_additions-d.allocated_gross_deductions,\n        d.captured_work_vat+d.allocated_gross_additions_vat-d.allocated_gross_deductions_vat,\n        p_worker.gross_inc_vat)\n    and (p_projection.gross_ex_vat,p_projection.gross_vat) is not distinct from (p_worker.gross_ex_vat,p_worker.gross_vat)\n    and (p_projection.accepted_gross_additions,p_projection.accepted_gross_deductions,\n      p_projection.accepted_net_additions,p_projection.accepted_recoveries)\n      is not distinct from (d.allocated_gross_additions+d.allocated_gross_additions_vat,\n        d.allocated_gross_deductions+d.allocated_gross_deductions_vat,\n        d.allocated_net_additions+d.allocated_net_additions_vat,\n        d.allocated_net_recoveries+d.allocated_net_recoveries_vat)\n    and p_projection.cash_amount=p_projection.gross_inc_vat+p_projection.accepted_net_additions-p_projection.accepted_recoveries;\nend $function$;",
+          "after": "create or replace function private.bpay_next_umbrella_case_projection_snapshot_valid_v2(\n  p_worker private.bpay_next_run_worker,p_projection private.bpay_next_net_projection)\nreturns boolean language plpgsql stable security invoker set search_path=pg_catalog,private\nas $function$\ndeclare d private.bpay_next_case_allocation_state%rowtype;\nbegin\n  if p_worker.target_pay_channel<>'UMBRELLA' or p_worker.target_umbrella_id is null\n    or p_worker.target_umbrella_vat_chargeable is null or p_worker.case_selection_revision<1\n    or p_worker.entered_paye_net is not null or p_worker.net_request_revision<>0\n    or p_projection.input_kind<>'UMBRELLA' or p_projection.entered_paye_net is not null\n    or p_projection.request_command_id is not null\n    or p_projection.run_worker_id<>p_worker.id or p_projection.umbrella_case_draft_state_id is null\n    or p_projection.projection_no<>1 then return false;end if;\n  select * into strict d from private.bpay_next_case_allocation_state where id=p_projection.umbrella_case_draft_state_id;\n  return d.run_worker_id=p_worker.id and d.candidate_id=p_worker.candidate_id\n    and d.preparation_revision=p_worker.preparation_revision and d.selection_revision=p_worker.case_selection_revision\n    and d.pass_kind='DRAFT' and d.projection_no=0 and d.status='COMPLETE' and d.prepare_stage='COMPLETE'\n    and d.expected_instruction_count=p_worker.case_instruction_count and d.processed_instruction_count=d.expected_instruction_count\n    and (p_projection.gross_ex_vat,p_projection.gross_vat,p_projection.gross_inc_vat)\n      is not distinct from (d.captured_work_gross+d.allocated_gross_additions-d.allocated_gross_deductions,\n        d.captured_work_vat+d.allocated_gross_additions_vat-d.allocated_gross_deductions_vat,\n        p_worker.gross_inc_vat)\n    and (p_projection.gross_ex_vat,p_projection.gross_vat) is not distinct from (p_worker.gross_ex_vat,p_worker.gross_vat)\n    and (p_projection.accepted_gross_additions,p_projection.accepted_gross_deductions,\n      p_projection.accepted_net_additions,p_projection.accepted_recoveries)\n      is not distinct from (d.allocated_gross_additions+d.allocated_gross_additions_vat,\n        d.allocated_gross_deductions+d.allocated_gross_deductions_vat,\n        d.allocated_net_additions+d.allocated_net_additions_vat,\n        d.allocated_net_recoveries+d.allocated_net_recoveries_vat)\n    and p_projection.cash_amount=p_projection.gross_inc_vat+p_projection.accepted_net_additions-p_projection.accepted_recoveries;\nend $function$;\n\ncreate or replace function private.bpay_next_umbrella_case_projection_valid_v2(\n  p_worker private.bpay_next_run_worker,p_projection private.bpay_next_net_projection)\nreturns boolean language plpgsql stable security invoker set search_path=pg_catalog,private\nas $function$\nbegin\n  if p_projection.retired_at_utc is not null then return false;end if;\n  return private.bpay_next_umbrella_case_projection_snapshot_valid_v2(p_worker,p_projection);\nend $function$;",
+          "sourceLine": 5,
+          "beforeSha256": "3E8D09BCE088392D334F8FD424F1BB7D5F1E21C4AF25972CA70FE926242692EE",
+          "afterSha256": "9C1FAE8767C8F451E363F73814FC69E03C4FB16623598D4C6C3B2C6A2B71B0F1"
+        },
+        {
+          "id": "UMC06_PRIVATE_SNAPSHOT_OWNER",
+          "before": "alter function private.bpay_next_umbrella_case_projection_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection) owner to postgres;",
+          "after": "alter function private.bpay_next_umbrella_case_projection_snapshot_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection) owner to postgres;\nalter function private.bpay_next_umbrella_case_projection_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection) owner to postgres;",
+          "sourceLine": 114,
+          "beforeSha256": "5310F3CA174438C1F893401DED4DA76023D6102D026998604FB6F39D15C73A9B",
+          "afterSha256": "81A05027FCCB421377B199241A802BA80A901B34E36BA92779B8745FB54173F8"
+        },
+        {
+          "id": "UMC06_PRIVATE_SNAPSHOT_ACL",
+          "before": "revoke all on function private.bpay_next_umbrella_case_projection_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection),",
+          "after": "revoke all on function private.bpay_next_umbrella_case_projection_snapshot_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection),\n  private.bpay_next_umbrella_case_projection_valid_v2(private.bpay_next_run_worker,private.bpay_next_net_projection),",
+          "sourceLine": 118,
+          "beforeSha256": "C18B1BBE642E1D2490B0FFC1A0DA75D4821E7614546CEF63364814F223BC4933",
+          "afterSha256": "B6514EC5A4B3D888C3233C4665BF853EE17821A0BBA3ED24FF1A23C86EE8F1CE"
+        }
+      ]
+    },
+    {
+      "path": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\cloudtms-backend\\codex_outputs\\claude-stage2-continuation-20260925\\codex-review-20260929\\fresh-requirements-20261003\\SOURCE_MOVE_ALL_OWNER_SYNTAX_V1_20261007\\candidate\\umbrella13\\supabase\\repeatable\\04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "pin": "D756D4A26474A4F89AFFB1E1C5502994B7353A646CFF7111145A5AFA717E9E31",
+      "scope": "EXPLICIT_SYNTAX_DEPENDENCY_NO_ADDITIONAL_CHANGE",
+      "candidate": "candidate/supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "candidateSha256": "D756D4A26474A4F89AFFB1E1C5502994B7353A646CFF7111145A5AFA717E9E31",
+      "spans": []
+    }
+  ],
+  "newRoots": [
+    {
+      "path": "supabase/migrations/07102026_0253_bpay_next_umbrella_case_cancel_binding_v2.sql",
+      "sha256": "26A74823E2BC04DB1D12EB4BD2B6B931E33DFFCDAA3626392638C38DC68691A9"
+    },
+    {
+      "path": "supabase/repeatable/07102026_0254_bpay_next_umbrella_case_caller_proofs_v2.sql",
+      "sha256": "BD591432BE4100A03AA53E58FFB5877E2ABBF015BBACF33930A4212F9C373208"
+    }
+  ],
+  "sqlCompilation": false,
+  "native": false
+}

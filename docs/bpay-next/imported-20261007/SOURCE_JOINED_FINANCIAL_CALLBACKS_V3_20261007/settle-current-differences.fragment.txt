@@ -1,0 +1,143 @@
+ const settle=async(pair,{negativeCapacity='CURRENT_ONLY'}={})=>{
+  assert(['CURRENT_ONLY','GENUINE_FUTURE_SOURCE'].includes(negativeCapacity),'JMF_CLOSED_CAPACITY_SCOPE');
+  const state=base.actualState(pair),before=await current(pair),a=before.SOURCE,b=before.OWN_B,channel=state.spec.to;
+  // Minor units project ACTUAL penny amounts for assertions; they do not price,
+  // convert channels, allocate capacity, infer units or round an economic input.
+  const minor=value=>{const text=String(value);assert.match(text,/^-?\d+(?:\.\d{1,2})?$/,'JMF_EXACT_ACTUAL_PENNY_AMOUNT');
+   const negative=text.startsWith('-'),parts=(negative?text.slice(1):text).split('.');
+   const n=Number(parts[0])*100+Number((parts[1]??'').padEnd(2,'0'));assert(Number.isSafeInteger(n));return negative?-n:n;};
+  const decimal=n=>{assert(Number.isSafeInteger(n));return (n<0?'-':'')+Math.floor(Math.abs(n)/100)+'.'+String(Math.abs(n)%100).padStart(2,'0');};
+  await preserve(pair);for(const p of [a,b]){assert.equal(p.receipt_qualification_state,'READY');assert.equal(p.target_pay_channel,channel);
+   for(const k of ['comparable_held_ex_vat','native_held_paye','native_held_umbrella'])assert.equal(minor(p[k]),0,'JMF_EXACT_NO_HELD_PREFIX_SCOPE');}
+  const debts=[];
+  for(const kind of ['SOURCE','OWN_B'])if(minor(before[kind].selected_residual_ex_vat)<0){
+   const point=before[kind],debt=await c.query(casePointExpression(point));assert(debt,'JMF_EACH_NEGATIVE_COMPONENT_REAL_CASE');
+   assert.equal(debt.case_kind,'OVERPAYMENT');assert.equal(debt.tax_treatment,'TAXABLE');assert.equal(debt.payroll_stage,'GROSS_DEDUCT');
+   assert.equal(debt.instruction_kind,'RECOVERY');assert.equal(debt.source_pay_channel,channel);assert.equal(minor(debt.active_hold_amount),0);
+   assert.equal(minor(debt.outstanding),-minor(point.selected_residual_ex_vat),'JMF_REAL_CURRENT_AUTOMATIC_COMPARISON_DEBT');
+   assert.match(debt.collection_id,UUID);assert.match(debt.case_component_id,UUID);assert.match(debt.case_id,UUID);
+   debts.push({kind,point,debt});
+  }
+  assert.equal(new Set(debts.map(x=>x.debt.case_component_id)).size,debts.length,'JMF_DISJOINT_A_B_CASE_COMPONENTS');
+  if(debts.length&&channel==='UMBRELLA')await requireUMCase();
+  let future=null;if(debts.length&&negativeCapacity==='GENUINE_FUTURE_SOURCE')future=await createFuture(pair);
+  const positive=[a,b].filter(p=>minor(p.selected_residual_ex_vat)>0),earningsMinor=positive.reduce((n,p)=>n+minor(p.selected_residual_ex_vat),0)
+   +(future?minor(future.point.approved_source_ex_vat):0);
+  const exposure=(kind,point,debt)=>({kind,source_component_id:point.source_component_id,case_id:debt.case_id,
+   case_component_id:debt.case_component_id,source_pay_channel:debt.source_pay_channel,target_pay_channel:channel,
+   sourceCaseOutstandingExVat:Number(debt.outstanding),remainingTargetDebtExVat:Math.max(-minor(point.selected_residual_ex_vat),0)/100});
+  if(earningsMinor===0){await preserve(pair);return {
+   kind:debts.length?'UNFUNDED_NEGATIVE_EXPOSURES':'ZERO_DIFFERENCE_NO_NEW_TRANSFER',spec:state.spec.key,
+   sourceResidual:Number(a.selected_residual_ex_vat),ownBResidual:Number(b.selected_residual_ex_vat),
+   allCases:debts.map(x=>exposure(x.kind,x.point,x.debt)),openExposures:debts.map(x=>exposure(x.kind,x.point,x.debt)),
+   paid:0,recoveredSourceExVat:0,deductedTargetExVat:0,bankCash:0,
+   allocationResults:[],originalPaymentsUnchanged:true,actualFinancialExecution:false,exactReplay:null,
+   execution:'NO_REAL_EARNINGS',providerCalls:0,fullFinancialMatrix:false};}
+  const api=state.api,run=randomUUID(),command=randomUUID();await api.preparation('CREATE',{run_id:run,pay_date:'2026-10-09'});
+  const works=[{work_id:b.approval_work_id,expected_revision_id:b.approval_revision_id,mode:'ALL'}];
+  assert.equal(a.approval_work_id,b.approval_work_id,'JMF_REAL_COMPLETE_DESTINATION_WORK');
+  if(future)works.push({work_id:future.point.approval_work_id,expected_revision_id:future.point.approval_revision_id,mode:'ALL'});
+  const workPage={run_id:run,page_no:'1',choices:works};await api.preparation('WORK_PAGE',workPage);
+  assert.equal((await api.preparation('WORK_PAGE',workPage)).replay,true);
+  if(debts.length){const ids=debts.map(x=>x.debt.case_component_id),page={run_id:run,candidate_id:pair.candidate,
+    selection_revision:'1',page_no:'1',request_id:randomUUID(),component_ids:ids,selected:ids.map(()=>true)};
+   await api.preparation('CASE_PAGE',page);assert.equal((await api.preparation('CASE_PAGE',page)).replay,true);
+   const sealed=await api.preparation('CASE_SEAL',{run_id:run,candidate_id:pair.candidate,selection_revision:'1',expected_pages:'1',expected_items:String(ids.length)});
+   assert.equal(sealed.selected_count,String(ids.length));}
+  await api.preparation('SEAL_ENQUEUE',{run_id:run,command_id:command,expected_pages:'1',expected_count:String(works.length)});
+  await api.enrollCommand(command,'PREPARE');const review=await api.preparation('REVIEW',{run_id:run});assert.equal(review.all_ready,true);
+  assert.deepEqual((await api.preparation('CONFIRM',{run_id:run,review_revision:review.review_revision})).drafts,[{run_id:run,pay_channel:channel}]);
+  const page=await api.page('CHANNEL_WORKERS',{run_id:run,pay_channel:channel,limit:'100'});assert.equal(page.complete,true);assert.equal(page.rows.length,1);
+  const worker=page.rows[0].run_worker_id;assert.equal(page.rows[0].candidate_id,pair.candidate);
+  // Actual saved DRAFT results own ordering, thresholds, floors and per-Case
+  // source/target allocation. Do not replace them with min(), FIFO or a quote.
+  let allocations=[];
+  if(debts.length)allocations=await c.query(`(select coalesce(jsonb_agg(jsonb_build_object(
+    'instruction_id',i.id,'result_id',r.id,'case_id',i.case_id,'case_component_id',i.case_component_id,
+    'source',r.allocated_source_ex_vat,'target',r.allocated_target_ex_vat,'vat',r.allocated_target_vat,'inclusive',r.allocated_target_inc_vat,
+    'comparison_receipt_id',i.source_comparison_receipt_id,'collection_id',i.work_collection_id,
+    'stage',i.payroll_stage,'pass',r.pass_kind,'source_channel',i.source_pay_channel,'target_channel',i.target_pay_channel)
+    order by i.case_component_id),'[]'::jsonb)
+    from private.bpay_next_run_case_instruction i join private.bpay_next_case_allocation_result r on r.instruction_id=i.id
+    where i.run_worker_id=${lit(worker)}::uuid and i.case_component_id in (${debts.map(x=>lit(x.debt.case_component_id)+'::uuid').join(',')}) and r.pass_kind='DRAFT')`);
+  assert(Array.isArray(allocations));assert.equal(allocations.length,debts.length,'JMF_EXACT_SELECTED_DRAFT_RESULT_SET');
+  assert.deepEqual(allocations.map(x=>x.case_component_id).sort(),debts.map(x=>x.debt.case_component_id).sort());
+  for(const allocation of allocations){const d=debts.find(x=>x.debt.case_component_id===allocation.case_component_id);
+   assert.match(allocation.instruction_id,UUID);assert.match(allocation.result_id,UUID);
+   assert.match(allocation.comparison_receipt_id??'',UUID,'JMF_REAL_FROZEN_COMPARISON_INSTRUCTION');
+   assert.equal(allocation.collection_id,d.debt.collection_id);assert.equal(allocation.case_id,d.debt.case_id);
+   assert.equal(allocation.stage,'GROSS_DEDUCT');assert.equal(allocation.pass,'DRAFT');
+   assert.equal(allocation.source_channel,d.debt.source_pay_channel);assert.equal(allocation.target_channel,channel);
+   assert(minor(allocation.source)>=0&&minor(allocation.source)<=minor(d.debt.outstanding));assert(minor(allocation.target)>=0);
+   assert.equal(minor(allocation.vat),0,'JMF_EXACT_NO_VAT_FIXTURE');assert.equal(minor(allocation.inclusive),minor(allocation.target));}
+  const recoveredSourceMinor=allocations.reduce((n,x)=>n+minor(x.source),0),deductedTargetMinor=allocations.reduce((n,x)=>n+minor(x.target),0),
+   deductedInclusiveMinor=allocations.reduce((n,x)=>n+minor(x.inclusive),0),cashMinor=earningsMinor-deductedInclusiveMinor;
+  assert(cashMinor>=0,'JMF_ACTUAL_ALLOCATION_WITHIN_GENUINE_EARNINGS');
+  assert.equal(minor(page.rows[0].frozen_ex_vat),earningsMinor-deductedTargetMinor);assert.equal(minor(page.rows[0].frozen_vat),0);
+  let net=null;if(channel==='PAYE'){
+   net={command_id:randomUUID(),run_worker_id:worker,entered_paye_net:decimal(cashMinor)};
+   if(debts.length){const status=await api.page('STATUS',{run_id:run,run_worker_id:worker,limit:'100'});
+    net.expected_projection_revision=status.header.net_projection_revision;
+    assert.match(String(net.expected_projection_revision??''),/^[1-9]\d*$/,'JMF_REAL_SELECTED_CASE_NET_PROJECTION');}
+   await api.financial('PAYE_NET',net);await api.enrollCommand(net.command_id,'PAYE_NET_ENTRY');
+  }else assert.equal(channel,'UMBRELLA'); // Never invent a UM NET request.
+  const build={command_id:randomUUID(),run_worker_id:worker},transfer=await api.financial('TRANSFER_BEGIN',build);
+  await api.enrollCommand(build.command_id,'TRANSFER_BUILD');
+  const actualTransfer=await c.query(`(select jsonb_build_object('cash',cash_amount,'kind',execution_kind,'status',status)
+   from private.bpay_next_transfer where id=${lit(transfer.transfer_id)}::uuid)`);
+  assert.equal(minor(actualTransfer.cash),cashMinor);assert.equal(actualTransfer.status,'MEMBERS_READY');
+  let issue=null,outcome;
+  if(cashMinor===0){assert.equal(actualTransfer.kind,'INTERNAL_ZERO');outcome={command_id:randomUUID(),transfer_id:transfer.transfer_id};
+   await api.financial('INTERNAL_SETTLE',outcome);await api.enrollCommand(outcome.command_id,'INTERNAL_SETTLEMENT');}
+  else{issue={instruction_id:randomUUID(),transfer_id:transfer.transfer_id};const csv=await api.financial('CSV_ISSUE',issue);
+   assert.equal(csv.phase,'ISSUED_CSV');assert.equal(csv.payment_recorded,false);
+   outcome={command_id:randomUUID(),transfer_id:transfer.transfer_id,receipt_id:'JMF-LOCAL-'+randomUUID(),amount:decimal(cashMinor),occurred_at:'2026-10-09T12:00:00Z'};
+   await api.financial('CSV_SETTLEMENT',outcome);await api.enrollCommand(outcome.command_id,'CSV_SETTLEMENT');}
+  const after=await current(pair),caseAfter=[];
+  for(const kind of ['SOURCE','OWN_B']){const prior=before[kind],now=after[kind],d=debts.find(x=>x.kind===kind),allocation=d?allocations.find(x=>x.case_component_id===d.debt.case_component_id):null,
+    targetRecoveryMinor=allocation?minor(allocation.target):0,delta=Math.max(minor(prior.selected_residual_ex_vat),0)-targetRecoveryMinor;
+   assert.equal(now.canonical_work_id,prior.canonical_work_id);assert.equal(now.source_component_id,prior.source_component_id);
+   assert.equal(minor(now.comparable_paid_ex_vat),minor(prior.comparable_paid_ex_vat)+delta);
+   assert.equal(minor(now.comparable_held_ex_vat),0);assert.equal(minor(now.selected_residual_ex_vat),minor(prior.selected_residual_ex_vat)-delta);
+   const target=channel==='PAYE'?'native_realised_paye':'native_realised_umbrella',other=channel==='PAYE'?'native_realised_umbrella':'native_realised_paye';
+   assert.equal(minor(now[target]),minor(prior[target])+delta);assert.equal(minor(now[other]),minor(prior[other]));
+   assert.equal(now.receipt_qualification_state,'READY');
+   if(d){const actual=await c.query(casePointExpression(prior));
+    assert.equal(minor(actual.principal_recovered),minor(d.debt.principal_recovered)+minor(allocation.source));
+    assert.equal(minor(actual.outstanding),minor(d.debt.outstanding)-minor(allocation.source));assert.equal(minor(actual.active_hold_amount),0);
+    caseAfter.push({kind,debt:actual});}}
+  let futureAfter=null,futureOriginal=null;
+  if(future){futureAfter=await c.query(pointExpression(future.root));
+   assert.equal(futureAfter.canonical_work_id,future.point.canonical_work_id);assert.equal(futureAfter.source_component_id,future.point.source_component_id);
+   assert.equal(futureAfter.approval_work_id,future.point.approval_work_id);assert.equal(futureAfter.approval_revision_id,future.point.approval_revision_id);
+   assert.equal(futureAfter.source_book_state,'READY');assert.equal(futureAfter.binding_control_state,'APPLIED');assert.equal(futureAfter.binding_worker_state,'DONE');
+   assert.equal(minor(futureAfter.approved_source_ex_vat),minor(future.point.approved_source_ex_vat));
+   const target=channel==='PAYE'?'native_realised_paye':'native_realised_umbrella',other=channel==='PAYE'?'native_realised_umbrella':'native_realised_paye';
+   assert.equal(minor(futureAfter[target]),minor(future.point.approved_source_ex_vat),'JMF_REAL_FUTURE_FULL_TARGET_POST');assert.equal(minor(futureAfter[other]),0);
+   assert.equal(minor(futureAfter.native_held_paye),0);assert.equal(minor(futureAfter.native_held_umbrella),0);
+   assert.equal(futureAfter.original_paid_basis_qualified,true);assert.equal(minor(futureAfter.original_effect_source_ex_vat),minor(future.point.approved_source_ex_vat));
+   assert.equal(minor(futureAfter.original_line_source_ex_vat),minor(future.point.approved_source_ex_vat));assert.equal(Number(futureAfter.original_bucket_units),1);
+   futureOriginal=await c.query(originalSnapshotExpression(futureAfter));assert.match(futureOriginal?.origin?.effect_id??'',UUID);
+   assert.equal(futureOriginal.origin.transfer_id,transfer.transfer_id);
+  }
+  await preserve(pair);if(net)assert.equal((await api.financial('PAYE_NET',net)).replay,true);
+  assert.equal((await api.financial('TRANSFER_BEGIN',build)).replay,true);if(issue)assert.equal((await api.financial('CSV_ISSUE',issue)).replay,true);
+  assert.equal((await api.financial(cashMinor===0?'INTERNAL_SETTLE':'CSV_SETTLEMENT',outcome)).replay,true);
+  assert.deepEqual(await current(pair),after);for(const x of caseAfter)assert.deepEqual(await c.query(casePointExpression(before[x.kind])),x.debt);
+  if(future){assert.deepEqual(await c.query(pointExpression(future.root)),futureAfter,'JMF_REAL_FUTURE_POST_REPLAY_POINT');
+   assert.deepEqual(await c.query(originalSnapshotExpression(futureAfter)),futureOriginal,'JMF_REAL_FUTURE_ORIGINAL_REPLAY');}
+  await preserve(pair);
+  return {kind:debts.length?'ACTUAL_GROSS_CASE_RECOVERY':'ACTUAL_POSITIVE_DIFFERENCE_SETTLEMENT',spec:state.spec.key,
+   run_id:run,run_worker_id:worker,transfer_id:transfer.transfer_id,outcome_command_id:outcome.command_id,
+   originalPaymentsUnchanged:true,actualFinancialExecution:true,sourceResidual:Number(after.SOURCE.selected_residual_ex_vat),ownBResidual:Number(after.OWN_B.selected_residual_ex_vat),
+   paid:earningsMinor/100,recoveredSourceExVat:recoveredSourceMinor/100,deductedTargetExVat:deductedTargetMinor/100,bankCash:cashMinor/100,
+   allocationResults:allocations,allCases:caseAfter.map(x=>exposure(x.kind,after[x.kind],x.debt)),
+   openExposures:caseAfter.filter(x=>minor(x.debt.outstanding)>0||minor(after[x.kind].selected_residual_ex_vat)<0)
+    .map(x=>exposure(x.kind,after[x.kind],x.debt)),
+   execution:actualTransfer.kind,futureGenuineSource:!!future,
+   futurePayment:future?{root_timesheet_id:future.root,canonical_work_id:futureAfter.canonical_work_id,
+    source_component_id:futureAfter.source_component_id,original_effect_id:futureAfter.original_effect_id,
+    original_transfer_id:futureOriginal.origin.transfer_id,fullActualSourceExVat:Number(futureAfter.original_effect_source_ex_vat),
+    actualFullTargetPost:true,exactPointAndOriginalReplay:true}:null,
+   exactReplay:true,providerCalls:0,fullFinancialMatrix:false};
+ };

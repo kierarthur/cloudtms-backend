@@ -1,0 +1,409 @@
+diff --git a/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql b/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql
+--- a/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql
++++ b/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql
+@@ -469,199 +469,212 @@
+ as $function$
+ declare v_proof record;
+ begin
+-  if tg_op='INSERT' then
+-    if new.source_book_state is distinct from 'UNBOUND' then
+-      raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BOOK_DIRECT_READY_INSERT_FORBIDDEN';end if;
+-    return new;
+-  end if;
+-  if old.source_book_state='READY' then
+-    if (pg_catalog.to_jsonb(new)-array['applied_revision_id','source_basis_channel','approved_source_ex_vat',
+-      'realised_source_ex_vat','held_source_ex_vat','realised_target_ex_vat','realised_target_vat',
+-      'realised_target_inc_vat','held_target_ex_vat','held_target_vat','held_target_inc_vat','updated_at_utc',
+-      'source_book_revision','native_realised_paye','native_realised_umbrella','native_held_paye','native_held_umbrella'])
+-      is distinct from
+-      (pg_catalog.to_jsonb(old)-array['applied_revision_id','source_basis_channel','approved_source_ex_vat',
+-      'realised_source_ex_vat','held_source_ex_vat','realised_target_ex_vat','realised_target_vat',
+-      'realised_target_inc_vat','held_target_ex_vat','held_target_vat','held_target_inc_vat','updated_at_utc',
+-      'source_book_revision','native_realised_paye','native_realised_umbrella','native_held_paye','native_held_umbrella']) then
+-      raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONNECTED_POSTING_REQUIRED';end if;
+-    -- The actual owner changes the scalar once. Derive both native buckets
+-    -- in this BEFORE trigger; never issue a recursive UPDATE or count H->R twice.
+-    if new.source_book_revision is distinct from old.source_book_revision
+-       or (new.native_realised_paye,new.native_realised_umbrella,new.native_held_paye,new.native_held_umbrella)
+-         is distinct from (old.native_realised_paye,old.native_realised_umbrella,old.native_held_paye,old.native_held_umbrella) then
+-      raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CALLER_CACHE_WRITE_FORBIDDEN';
+-    end if;
+-    if (new.realised_source_ex_vat,new.held_source_ex_vat) is distinct from
+-       (old.realised_source_ex_vat,old.held_source_ex_vat) then
+-      if old.source_book_seed_channel not in ('PAYE','UMBRELLA')
+-         or old.source_basis_channel is distinct from old.source_book_seed_channel
+-         or new.source_basis_channel is distinct from old.source_book_seed_channel
+-         or (old.source_book_seed_channel='PAYE' and
+-           (old.native_realised_paye,old.native_held_paye,old.native_realised_umbrella,old.native_held_umbrella)
+-             is distinct from (old.realised_source_ex_vat,old.held_source_ex_vat,0::numeric,0::numeric))
+-         or (old.source_book_seed_channel='UMBRELLA' and
+-           (old.native_realised_umbrella,old.native_held_umbrella,old.native_realised_paye,old.native_held_paye)
+-             is distinct from (old.realised_source_ex_vat,old.held_source_ex_vat,0::numeric,0::numeric))
+-         or new.realised_source_ex_vat<0 or new.held_source_ex_vat<0 then
+-        raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_POSTING_BASIS_UNQUALIFIED';
+-      end if;
+-      if old.source_book_seed_channel='PAYE' then
+-        new.native_realised_paye:=old.native_realised_paye+new.realised_source_ex_vat-old.realised_source_ex_vat;
+-        new.native_held_paye:=old.native_held_paye+new.held_source_ex_vat-old.held_source_ex_vat;
+-      else
+-        new.native_realised_umbrella:=old.native_realised_umbrella+new.realised_source_ex_vat-old.realised_source_ex_vat;
+-        new.native_held_umbrella:=old.native_held_umbrella+new.held_source_ex_vat-old.held_source_ex_vat;
+-      end if;
+-      new.source_book_revision:=old.source_book_revision+1;
+-    end if;
+-    return new;
+-  end if;
+-  if new.source_book_state='READY' then
+-    select p.* into strict v_proof from private.bpay_next_source_book_seed_proof_v1(
+-      new.work_id,new.component_key,new.source_book_seed_applied_revision_id,
+-      new.source_book_seed_effect_id,new.source_book_seed_hold_id) p;
+-    if new.source_book_revision is distinct from 1
+-       or new.source_book_seed_kind is distinct from v_proof.seed_kind
+-       or new.source_book_seed_revision_id is distinct from v_proof.basis_revision_id
+-       or new.source_book_seed_line_id is distinct from v_proof.basis_line_id
+-       or new.source_book_seed_channel is distinct from v_proof.source_channel
+-       or new.source_book_seed_digest is distinct from v_proof.seed_digest
+-       or new.native_realised_paye is distinct from (case when v_proof.source_channel='PAYE' then v_proof.realised_source else 0 end)
+-       or new.native_realised_umbrella is distinct from (case when v_proof.source_channel='UMBRELLA' then v_proof.realised_source else 0 end)
+-       or new.native_held_paye is distinct from (case when v_proof.source_channel='PAYE' then v_proof.held_source else 0 end)
+-       or new.native_held_umbrella is distinct from (case when v_proof.source_channel='UMBRELLA' then v_proof.held_source else 0 end)
+-       or (pg_catalog.to_jsonb(new)-array['source_book_state','source_book_revision','native_realised_paye',
+-        'native_realised_umbrella','native_held_paye','native_held_umbrella','source_book_seed_kind',
+-        'source_book_seed_applied_revision_id','source_book_seed_revision_id','source_book_seed_line_id',
+-        'source_book_seed_effect_id','source_book_seed_hold_id','source_book_seed_channel','source_book_seed_digest'])
+-         is distinct from (pg_catalog.to_jsonb(old)-array['source_book_state','source_book_revision','native_realised_paye',
+-        'native_realised_umbrella','native_held_paye','native_held_umbrella','source_book_seed_kind',
+-        'source_book_seed_applied_revision_id','source_book_seed_revision_id','source_book_seed_line_id',
+-        'source_book_seed_effect_id','source_book_seed_hold_id','source_book_seed_channel','source_book_seed_digest']) then
+-      raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BOOK_SEED_CONFLICT';end if;
+-  end if;
+-  return new;
+-end
+-$function$;
+-drop trigger if exists bpay_next_source_book_guard_v1 on private.bpay_next_position;
+-create trigger bpay_next_source_book_guard_v1 before insert or update on private.bpay_next_position
+-  for each row execute function private.bpay_next_source_book_guard_v1();
+-
+-create or replace function private.bpay_next_source_binding_guard_v1()
+-returns trigger language plpgsql security definer
+-set search_path=pg_catalog,private,public
+-as $function$
+-begin
+-  if tg_op in ('DELETE','TRUNCATE') or tg_table_name='bpay_next_source_component_binding_version' then
+-    raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BINDING_IMMUTABLE';end if;
+-  if (pg_catalog.to_jsonb(new)-array['current_binding_version_id','binding_revision']) is distinct from
+-     (pg_catalog.to_jsonb(old)-array['current_binding_version_id','binding_revision'])
+-     or new.binding_revision is distinct from old.binding_revision+1
+-     or new.current_binding_version_id=old.current_binding_version_id
+-     or not exists(select 1 from private.bpay_next_source_component_binding_version v
+-       where v.id=new.current_binding_version_id and v.canonical_work_id=new.canonical_work_id
+-         and v.canonical_component_key=new.canonical_component_key and v.candidate_id=new.candidate_id
+-         and v.binding_revision=new.binding_revision) then
+-    raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BINDING_ADVANCE_CONFLICT';end if;
+-  return new;
+-end
+-$function$;
+-drop trigger if exists bpay_next_source_binding_guard_v1 on private.bpay_next_source_component_binding;
+-create trigger bpay_next_source_binding_guard_v1 before update or delete on private.bpay_next_source_component_binding
+-  for each row execute function private.bpay_next_source_binding_guard_v1();
+-drop trigger if exists bpay_next_source_binding_truncate_v1 on private.bpay_next_source_component_binding;
+-create trigger bpay_next_source_binding_truncate_v1 before truncate on private.bpay_next_source_component_binding
+-  for each statement execute function private.bpay_next_source_binding_guard_v1();
+-drop trigger if exists bpay_next_source_binding_version_guard_v1 on private.bpay_next_source_component_binding_version;
+-create trigger bpay_next_source_binding_version_guard_v1 before update or delete on private.bpay_next_source_component_binding_version
+-  for each row execute function private.bpay_next_source_binding_guard_v1();
+-drop trigger if exists bpay_next_source_binding_version_truncate_v1 on private.bpay_next_source_component_binding_version;
+-create trigger bpay_next_source_binding_version_truncate_v1 before truncate on private.bpay_next_source_component_binding_version
+-  for each statement execute function private.bpay_next_source_binding_guard_v1();
+-
+--- This typed snapshot admits identity and native book data only. It is NOT
+--- permission to use AUTO or a manual selection; selection_state stays UNBOUND.
+-create or replace function private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint)
+-returns table(qualification_state text,selection_state text,candidate_id uuid,
+-  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
+-  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
+-  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
+-  approved_source_ex_vat private.bpay_next_penny_amount,
+-  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
+-  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
+-language plpgsql security definer
+-set search_path=pg_catalog,private,public
+-as $function$
+-declare v_version private.bpay_next_source_component_binding_version%rowtype;
+-  v_binding private.bpay_next_source_component_binding%rowtype;
+-  v_position private.bpay_next_position%rowtype;v_line private.bpay_next_approved_line%rowtype;
+-  v_revision private.bpay_next_work_revision%rowtype;v_count integer;
+-begin
+-  if p_binding_version_id is null or p_expected_book_revision is null or p_expected_book_revision<1 then
+-    raise exception using errcode='22023',message='BPAY_NEXT_BOUND_SNAPSHOT_ID_REQUIRED';end if;
+-  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;
+-  if not found then raise exception using errcode='55000',message='BPAY_NEXT_BINDING_NEXT_REQUIRED';end if;
+-  select v.* into strict v_version from private.bpay_next_source_component_binding_version v where v.id=p_binding_version_id;
+-  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;
+-  if not found then raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONTROL_REQUIRED';end if;
+-  select b.* into strict v_binding from private.bpay_next_source_component_binding b
+-    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;
+-  if v_binding.current_binding_version_id is distinct from p_binding_version_id then
+-    qualification_state:='SUPERSEDED';return next;return;end if;
+-  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+-    perform private.bpay_next_initial_tsfin_bound_assert_v1(v_version.id);
+-  else
+-  if not exists(select 1 from public.weekly_source_entitlement_decision_bundles b
+-    where b.decision_bundle_id=v_version.decision_bundle_id and b.bundle_revision=v_version.bundle_revision
+-      and b.state='COMMITTED') then
+-    qualification_state:='BUNDLE_PENDING';return next;return;end if;
+-  end if;
+-  select p.* into v_position from private.bpay_next_position p
+-    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;
+-  if not found then qualification_state:='POSITION_PENDING';return next;return;end if;
+-  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
+-    select pg_catalog.count(*) into v_count from private.bpay_next_publication p
+-      join private.bpay_next_work w on w.id=p.work_id
+-      join private.bpay_next_command c on c.id=p.command_id
+-      join private.bpay_next_command_member m on m.command_id=c.id and m.candidate_id=w.candidate_id
+-      join private.bpay_next_job j on j.command_id=c.id and j.candidate_id=w.candidate_id and j.job_kind='POSITION_APPLY'
+-      join private.bpay_next_worker_control ctl on ctl.candidate_id=w.candidate_id
+-      join private.bpay_next_module_control module on module.id=1 and module.active_owner='NEXT'
+-      where p.command_id=v_version.publication_command_id_1 and p.work_id=v_version.approval_work_id
+-        and p.revision_id=v_version.approval_revision_id and p.candidate_id=v_version.candidate_id
+-        and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+-        and w.current_revision_id=p.revision_id and w.applied_revision_id=p.revision_id
+-        and c.id=private.bpay_next_source_command_id_v1(v_version.initial_root_authorisation_id)
+-        and c.command_kind='POSITION_APPLY' and c.status='COMPLETE' and c.module_epoch=module.owner_epoch
+-        and c.expected_member_count=1 and c.enrolled_member_count=1 and c.sealed_at_utc is not null
+-        and j.status='DONE' and j.phase='DONE' and j.module_epoch=c.module_epoch
+-        and j.command_sequence=c.agency_sequence and j.owner_epoch>0 and j.owner_epoch<=ctl.active_owner_epoch
+-        and j.lease_nonce is null and j.lease_until_utc is null
+-        and v_position.applied_revision_id=p.revision_id;
+-  else
+-  select pg_catalog.count(*) into v_count from private.bpay_next_source_binding_members_v1(v_version.source_receipt_id) m
+-    join private.bpay_next_publication p on p.command_id=m.publication_command_id
+-    join private.bpay_next_work w on w.id=m.work_id
+-    where p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
+-      and w.current_revision_id=m.revision_id and w.applied_revision_id=m.revision_id
+-      and ((m.publication_command_id=v_version.publication_command_id_1
+-            and m.work_id=v_version.publication_work_id_1 and m.revision_id=v_version.publication_revision_id_1)
+-        or (m.publication_command_id=v_version.publication_command_id_2
+-            and m.work_id=v_version.publication_work_id_2 and m.revision_id=v_version.publication_revision_id_2));
+-  end if;
+-  if v_count is distinct from (case when v_version.publication_command_id_2 is null then 1 else 2 end) then
+-    qualification_state:='PUBLICATION_PENDING';return next;return;end if;
+-  if v_position.source_book_state is distinct from 'READY' then qualification_state:='BOOK_UNBOUND';return next;return;end if;
+-  if v_position.source_book_revision is distinct from p_expected_book_revision then
+-    qualification_state:='BOOK_REVISION_STALE';return next;return;end if;
+-  if v_position.source_basis_channel is distinct from v_position.source_book_seed_channel
+-     or (v_position.source_book_seed_channel='PAYE' and
+-       (v_position.native_realised_paye is distinct from v_position.realised_source_ex_vat
+-        or v_position.native_held_paye is distinct from v_position.held_source_ex_vat))
+-     or (v_position.source_book_seed_channel='UMBRELLA' and
+-       (v_position.native_realised_umbrella is distinct from v_position.realised_source_ex_vat
+-        or v_position.native_held_umbrella is distinct from v_position.held_source_ex_vat)) then
++
++  if tg_op='UPDATE' and old.source_book_state='READY'
++    and new.source_comparison_receipt_id is distinct from old.source_comparison_receipt_id then
++    perform private.bpay_next_source_comparison_assert_book_update_v2(old,new);
++    return new; -- Exact certificate already accounts for native and legitimate scalar changes once.
++  end if;
++  if tg_op='UPDATE' and old.source_comparison_receipt_id is not null
++    and (private.bpay_next_source_comparison_scalar_v2(new) is distinct from private.bpay_next_source_comparison_scalar_v2(old)
++      or new.source_book_revision is distinct from old.source_book_revision
++      or (new.native_realised_paye,new.native_realised_umbrella,new.native_held_paye,new.native_held_umbrella)
++        is distinct from (old.native_realised_paye,old.native_realised_umbrella,old.native_held_paye,old.native_held_umbrella)) then
++    raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_COMPARISON_EXACT_CARRY_REQUIRED';
++  end if;
++  if tg_op='INSERT' then
++    if new.source_book_state is distinct from 'UNBOUND' then
++      raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BOOK_DIRECT_READY_INSERT_FORBIDDEN';end if;
++    return new;
++  end if;
++  if old.source_book_state='READY' then
++    if (pg_catalog.to_jsonb(new)-array['applied_revision_id','source_basis_channel','approved_source_ex_vat',
++      'realised_source_ex_vat','held_source_ex_vat','realised_target_ex_vat','realised_target_vat',
++      'realised_target_inc_vat','held_target_ex_vat','held_target_vat','held_target_inc_vat','updated_at_utc',
++      'source_book_revision','native_realised_paye','native_realised_umbrella','native_held_paye','native_held_umbrella'])
++      is distinct from
++      (pg_catalog.to_jsonb(old)-array['applied_revision_id','source_basis_channel','approved_source_ex_vat',
++      'realised_source_ex_vat','held_source_ex_vat','realised_target_ex_vat','realised_target_vat',
++      'realised_target_inc_vat','held_target_ex_vat','held_target_vat','held_target_inc_vat','updated_at_utc',
++      'source_book_revision','native_realised_paye','native_realised_umbrella','native_held_paye','native_held_umbrella']) then
++      raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONNECTED_POSTING_REQUIRED';end if;
++    -- The actual owner changes the scalar once. Derive both native buckets
++    -- in this BEFORE trigger; never issue a recursive UPDATE or count H->R twice.
++    if new.source_book_revision is distinct from old.source_book_revision
++       or (new.native_realised_paye,new.native_realised_umbrella,new.native_held_paye,new.native_held_umbrella)
++         is distinct from (old.native_realised_paye,old.native_realised_umbrella,old.native_held_paye,old.native_held_umbrella) then
++      raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CALLER_CACHE_WRITE_FORBIDDEN';
++    end if;
++    if (new.realised_source_ex_vat,new.held_source_ex_vat) is distinct from
++       (old.realised_source_ex_vat,old.held_source_ex_vat) then
++      if old.source_book_seed_channel not in ('PAYE','UMBRELLA')
++         or old.source_basis_channel is distinct from old.source_book_seed_channel
++         or new.source_basis_channel is distinct from old.source_book_seed_channel
++         or (old.source_book_seed_channel='PAYE' and
++           (old.native_realised_paye,old.native_held_paye,old.native_realised_umbrella,old.native_held_umbrella)
++             is distinct from (old.realised_source_ex_vat,old.held_source_ex_vat,0::numeric,0::numeric))
++         or (old.source_book_seed_channel='UMBRELLA' and
++           (old.native_realised_umbrella,old.native_held_umbrella,old.native_realised_paye,old.native_held_paye)
++             is distinct from (old.realised_source_ex_vat,old.held_source_ex_vat,0::numeric,0::numeric))
++         or new.realised_source_ex_vat<0 or new.held_source_ex_vat<0 then
++        raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_POSTING_BASIS_UNQUALIFIED';
++      end if;
++      if old.source_book_seed_channel='PAYE' then
++        new.native_realised_paye:=old.native_realised_paye+new.realised_source_ex_vat-old.realised_source_ex_vat;
++        new.native_held_paye:=old.native_held_paye+new.held_source_ex_vat-old.held_source_ex_vat;
++      else
++        new.native_realised_umbrella:=old.native_realised_umbrella+new.realised_source_ex_vat-old.realised_source_ex_vat;
++        new.native_held_umbrella:=old.native_held_umbrella+new.held_source_ex_vat-old.held_source_ex_vat;
++      end if;
++      new.source_book_revision:=old.source_book_revision+1;
++    end if;
++    return new;
++  end if;
++  if new.source_book_state='READY' then
++    select p.* into strict v_proof from private.bpay_next_source_book_seed_proof_v1(
++      new.work_id,new.component_key,new.source_book_seed_applied_revision_id,
++      new.source_book_seed_effect_id,new.source_book_seed_hold_id) p;
++    if new.source_book_revision is distinct from 1
++       or new.source_book_seed_kind is distinct from v_proof.seed_kind
++       or new.source_book_seed_revision_id is distinct from v_proof.basis_revision_id
++       or new.source_book_seed_line_id is distinct from v_proof.basis_line_id
++       or new.source_book_seed_channel is distinct from v_proof.source_channel
++       or new.source_book_seed_digest is distinct from v_proof.seed_digest
++       or new.native_realised_paye is distinct from (case when v_proof.source_channel='PAYE' then v_proof.realised_source else 0 end)
++       or new.native_realised_umbrella is distinct from (case when v_proof.source_channel='UMBRELLA' then v_proof.realised_source else 0 end)
++       or new.native_held_paye is distinct from (case when v_proof.source_channel='PAYE' then v_proof.held_source else 0 end)
++       or new.native_held_umbrella is distinct from (case when v_proof.source_channel='UMBRELLA' then v_proof.held_source else 0 end)
++       or (pg_catalog.to_jsonb(new)-array['source_book_state','source_book_revision','native_realised_paye',
++        'native_realised_umbrella','native_held_paye','native_held_umbrella','source_book_seed_kind',
++        'source_book_seed_applied_revision_id','source_book_seed_revision_id','source_book_seed_line_id',
++        'source_book_seed_effect_id','source_book_seed_hold_id','source_book_seed_channel','source_book_seed_digest'])
++         is distinct from (pg_catalog.to_jsonb(old)-array['source_book_state','source_book_revision','native_realised_paye',
++        'native_realised_umbrella','native_held_paye','native_held_umbrella','source_book_seed_kind',
++        'source_book_seed_applied_revision_id','source_book_seed_revision_id','source_book_seed_line_id',
++        'source_book_seed_effect_id','source_book_seed_hold_id','source_book_seed_channel','source_book_seed_digest']) then
++      raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BOOK_SEED_CONFLICT';end if;
++  end if;
++  return new;
++end
++$function$;
++drop trigger if exists bpay_next_source_book_guard_v1 on private.bpay_next_position;
++create trigger bpay_next_source_book_guard_v1 before insert or update on private.bpay_next_position
++  for each row execute function private.bpay_next_source_book_guard_v1();
++
++create or replace function private.bpay_next_source_binding_guard_v1()
++returns trigger language plpgsql security definer
++set search_path=pg_catalog,private,public
++as $function$
++begin
++  if tg_op in ('DELETE','TRUNCATE') or tg_table_name='bpay_next_source_component_binding_version' then
++    raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BINDING_IMMUTABLE';end if;
++  if (pg_catalog.to_jsonb(new)-array['current_binding_version_id','binding_revision']) is distinct from
++     (pg_catalog.to_jsonb(old)-array['current_binding_version_id','binding_revision'])
++     or new.binding_revision is distinct from old.binding_revision+1
++     or new.current_binding_version_id=old.current_binding_version_id
++     or not exists(select 1 from private.bpay_next_source_component_binding_version v
++       where v.id=new.current_binding_version_id and v.canonical_work_id=new.canonical_work_id
++         and v.canonical_component_key=new.canonical_component_key and v.candidate_id=new.candidate_id
++         and v.binding_revision=new.binding_revision) then
++    raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BINDING_ADVANCE_CONFLICT';end if;
++  return new;
++end
++$function$;
++drop trigger if exists bpay_next_source_binding_guard_v1 on private.bpay_next_source_component_binding;
++create trigger bpay_next_source_binding_guard_v1 before update or delete on private.bpay_next_source_component_binding
++  for each row execute function private.bpay_next_source_binding_guard_v1();
++drop trigger if exists bpay_next_source_binding_truncate_v1 on private.bpay_next_source_component_binding;
++create trigger bpay_next_source_binding_truncate_v1 before truncate on private.bpay_next_source_component_binding
++  for each statement execute function private.bpay_next_source_binding_guard_v1();
++drop trigger if exists bpay_next_source_binding_version_guard_v1 on private.bpay_next_source_component_binding_version;
++create trigger bpay_next_source_binding_version_guard_v1 before update or delete on private.bpay_next_source_component_binding_version
++  for each row execute function private.bpay_next_source_binding_guard_v1();
++drop trigger if exists bpay_next_source_binding_version_truncate_v1 on private.bpay_next_source_component_binding_version;
++create trigger bpay_next_source_binding_version_truncate_v1 before truncate on private.bpay_next_source_component_binding_version
++  for each statement execute function private.bpay_next_source_binding_guard_v1();
++
++-- This typed snapshot admits identity and native book data only. It is NOT
++-- permission to use AUTO or a manual selection; selection_state stays UNBOUND.
++create or replace function private.bpay_next_bound_source_snapshot_v1(p_binding_version_id uuid,p_expected_book_revision bigint)
++returns table(qualification_state text,selection_state text,candidate_id uuid,
++  canonical_work_id uuid,canonical_component_key text,binding_version_id uuid,source_book_revision bigint,
++  approval_work_id uuid,approval_revision_id uuid,approved_line_id uuid,head_id uuid,source_receipt_id uuid,
++  source_channel text,tax_treatment text,classification_line_id uuid,valuation_policy_id uuid,
++  approved_source_ex_vat private.bpay_next_penny_amount,
++  native_realised_paye private.bpay_next_penny_amount,native_realised_umbrella private.bpay_next_penny_amount,
++  native_held_paye private.bpay_next_penny_amount,native_held_umbrella private.bpay_next_penny_amount)
++language plpgsql security definer
++set search_path=pg_catalog,private,public
++as $function$
++declare v_version private.bpay_next_source_component_binding_version%rowtype;
++  v_binding private.bpay_next_source_component_binding%rowtype;
++  v_position private.bpay_next_position%rowtype;v_line private.bpay_next_approved_line%rowtype;
++  v_revision private.bpay_next_work_revision%rowtype;v_count integer;
++begin
++  if p_binding_version_id is null or p_expected_book_revision is null or p_expected_book_revision<1 then
++    raise exception using errcode='22023',message='BPAY_NEXT_BOUND_SNAPSHOT_ID_REQUIRED';end if;
++  perform 1 from private.bpay_next_module_control c where c.id=1 and c.active_owner='NEXT' for share;
++  if not found then raise exception using errcode='55000',message='BPAY_NEXT_BINDING_NEXT_REQUIRED';end if;
++  select v.* into strict v_version from private.bpay_next_source_component_binding_version v where v.id=p_binding_version_id;
++  perform 1 from private.bpay_next_worker_control c where c.candidate_id=v_version.candidate_id for share;
++  if not found then raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CONTROL_REQUIRED';end if;
++  select b.* into strict v_binding from private.bpay_next_source_component_binding b
++    where b.canonical_work_id=v_version.canonical_work_id and b.canonical_component_key=v_version.canonical_component_key for share;
++  if v_binding.current_binding_version_id is distinct from p_binding_version_id then
++    qualification_state:='SUPERSEDED';return next;return;end if;
++  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
++    perform private.bpay_next_initial_tsfin_bound_assert_v1(v_version.id);
++  else
++  if not exists(select 1 from public.weekly_source_entitlement_decision_bundles b
++    where b.decision_bundle_id=v_version.decision_bundle_id and b.bundle_revision=v_version.bundle_revision
++      and b.state='COMMITTED') then
++    qualification_state:='BUNDLE_PENDING';return next;return;end if;
++  end if;
++  select p.* into v_position from private.bpay_next_position p
++    where p.work_id=v_version.canonical_work_id and p.component_key=v_version.canonical_component_key for share;
++  if not found then qualification_state:='POSITION_PENDING';return next;return;end if;
++  if v_version.origin_kind='INITIAL_AUTHORISED_TSFIN_V1' then
++    select pg_catalog.count(*) into v_count from private.bpay_next_publication p
++      join private.bpay_next_work w on w.id=p.work_id
++      join private.bpay_next_command c on c.id=p.command_id
++      join private.bpay_next_command_member m on m.command_id=c.id and m.candidate_id=w.candidate_id
++      join private.bpay_next_job j on j.command_id=c.id and j.candidate_id=w.candidate_id and j.job_kind='POSITION_APPLY'
++      join private.bpay_next_worker_control ctl on ctl.candidate_id=w.candidate_id
++      join private.bpay_next_module_control module on module.id=1 and module.active_owner='NEXT'
++      where p.command_id=v_version.publication_command_id_1 and p.work_id=v_version.approval_work_id
++        and p.revision_id=v_version.approval_revision_id and p.candidate_id=v_version.candidate_id
++        and p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
++        and w.current_revision_id=p.revision_id and w.applied_revision_id=p.revision_id
++        and c.id=private.bpay_next_source_command_id_v1(v_version.initial_root_authorisation_id)
++        and c.command_kind='POSITION_APPLY' and c.status='COMPLETE' and c.module_epoch=module.owner_epoch
++        and c.expected_member_count=1 and c.enrolled_member_count=1 and c.sealed_at_utc is not null
++        and j.status='DONE' and j.phase='DONE' and j.module_epoch=c.module_epoch
++        and j.command_sequence=c.agency_sequence and j.owner_epoch>0 and j.owner_epoch<=ctl.active_owner_epoch
++        and j.lease_nonce is null and j.lease_until_utc is null
++        and v_position.applied_revision_id=p.revision_id;
++  else
++  select pg_catalog.count(*) into v_count from private.bpay_next_source_binding_members_v1(v_version.source_receipt_id) m
++    join private.bpay_next_publication p on p.command_id=m.publication_command_id
++    join private.bpay_next_work w on w.id=m.work_id
++    where p.status='APPLIED' and p.phase='DONE' and p.applied_at_utc is not null
++      and w.current_revision_id=m.revision_id and w.applied_revision_id=m.revision_id
++      and ((m.publication_command_id=v_version.publication_command_id_1
++            and m.work_id=v_version.publication_work_id_1 and m.revision_id=v_version.publication_revision_id_1)
++        or (m.publication_command_id=v_version.publication_command_id_2
++            and m.work_id=v_version.publication_work_id_2 and m.revision_id=v_version.publication_revision_id_2));
++  end if;
++  if v_count is distinct from (case when v_version.publication_command_id_2 is null then 1 else 2 end) then
++    qualification_state:='PUBLICATION_PENDING';return next;return;end if;
++  if v_position.source_book_state is distinct from 'READY' then qualification_state:='BOOK_UNBOUND';return next;return;end if;
++  if v_position.source_book_revision is distinct from p_expected_book_revision then
++    qualification_state:='BOOK_REVISION_STALE';return next;return;end if;
++  if not private.bpay_next_source_comparison_book_certified_v2(v_position) and (v_position.source_basis_channel is distinct from v_position.source_book_seed_channel
++     or (v_position.source_book_seed_channel='PAYE' and
++       (v_position.native_realised_paye is distinct from v_position.realised_source_ex_vat
++        or v_position.native_held_paye is distinct from v_position.held_source_ex_vat))
++     or (v_position.source_book_seed_channel='UMBRELLA' and
++       (v_position.native_realised_umbrella is distinct from v_position.realised_source_ex_vat
++        or v_position.native_held_umbrella is distinct from v_position.held_source_ex_vat)) ) then
+     qualification_state:='BOOK_POSTING_REQUIRED';return next;return;end if;
+   if v_version.tax_treatment is null or v_version.classification_line_id is null then
+     qualification_state:='CLASSIFICATION_UNBOUND';return next;return;end if;

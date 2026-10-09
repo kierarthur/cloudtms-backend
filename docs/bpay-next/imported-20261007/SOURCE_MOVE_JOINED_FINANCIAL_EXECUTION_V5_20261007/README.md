@@ -1,0 +1,7 @@
+# Selected NET revision executor successor V5
+
+SOURCE ONLY, held at a NULL root review gate. This immediate V4 successor binds the one-span callback V5 correction to the unchanged finite twelve-vector CURRENT_ONLY financial executor. The updated independent review scope is SELECTED_NET_REVISION_FINANCIAL_CURRENT_ONLY_DELTA. All callback closure hashes, immediate parent raw hashes, and diagnostic paths are explicit; every changed source file has a complete immediate V4 inverse.
+
+The 53-unit / 186-routine / 199-declaration material, capture guard 35067DC1, effective overlay B2A9A141, financial scope, wrapper, execution, final readbacks, cleanup and fresh restoration are byte-identical. Prior V4 STOP evidence remains preserved with acknowledged rollback and fresh full Target plus Source equality; its unretained revision is not claimed to be zero. V5 contains no root review, admission helper or ACTUAL evidence. Root alone performs review admission and genuine native execution after independent review.
+
+Run only the pure build/test modules for source controls. Two executor checks and three callback validation checks produce no synthetic financial outcomes and call no database, runtime, provider, Docker or network. A green source test is not twelve-vector financial proof. Policy X and all money, immutable origin, payroll, Case, replay and no-provider assertions are unchanged. Full matrix, held/repeated tails and fact-delta qualification remain open.

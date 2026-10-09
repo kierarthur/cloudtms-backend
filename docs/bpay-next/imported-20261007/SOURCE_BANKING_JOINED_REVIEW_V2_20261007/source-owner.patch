@@ -1,0 +1,270 @@
+diff --git a/broker/src/weekly-source/upload-publication-owner.mjs b/broker/src/weekly-source/upload-publication-owner.mjs
+index 9cc469f..ead6f59 100644
+--- a/broker/src/weekly-source/upload-publication-owner.mjs
++++ b/broker/src/weekly-source/upload-publication-owner.mjs
+@@ -299,7 +299,7 @@ function ratePortions(row, contract, startInstant, endInstant) {
+   return portions;
+ }
+ 
+-function calculationFor(row, contract) {
++export function calculateWeeklySourceContractRowForServer(row, contract) {
+   const policy = contract.effective_policy ?? {};
+   const values = contract.settings_authority?.values ?? {};
+   const { payRates, chargeRates, valid } = ratesFor(contract);
+@@ -345,6 +345,8 @@ function calculationFor(row, contract) {
+   }
+ }
+ 
++const calculationFor = calculateWeeklySourceContractRowForServer;
++
+ function selectionFor(body, ordinal) {
+   const selections = body.contract_selections;
+   if (!selections || typeof selections !== 'object' || Array.isArray(selections)) return null;
+diff --git a/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql b/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
+index d6b233a..6e4fa2d 100644
+--- a/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
++++ b/supabase/repeatable/17092026_0300_weekly_source_entitlement_publication_v1.sql
+@@ -628,7 +628,9 @@ begin
+     end if;
+     perform private.weekly_source_publication_require_keys_v1(
+       v_entry,
+-      array['root_ordinal','contract_id','week_ending_date','selection_method'],
++      array['root_ordinal','contract_id','week_ending_date','selection_method']
++        ||case when v_index=2 and v_member_count=2 and v_entry ? 'destination_reprice'
++          then array['destination_reprice'] else array[]::text[] end,
+       'financial_request.contract_choices['||v_index::text||']');
+     if (v_entry->>'selection_method') not in
+        ('AUTO_UNIQUE','OFFICE_SELECTED','DURABLE_LINEAGE','UNCHANGED') then
+@@ -640,12 +642,23 @@ begin
+                 'reason','UNKNOWN_SELECTION_METHOD',
+                 'selection_method',v_entry->'selection_method')::text;
+     end if;
++    if v_entry ? 'destination_reprice' then
++      perform private.weekly_source_publication_require_keys_v1(v_entry->'destination_reprice',
++        array['schema_version','witness_id','review_sha256'],'contract_choice.destination_reprice');
++      if v_entry#>>'{destination_reprice,schema_version}' is distinct from 'WEEKLY_SOURCE_DESTINATION_REPRICE_V1' then
++        raise exception 'WEEKLY_SOURCE_DESTINATION_REPRICE_SCHEMA_INVALID' using errcode='22023'; end if;
++    end if;
+     v_contract_choices:=v_contract_choices||pg_catalog.jsonb_build_array(
+       pg_catalog.jsonb_build_object(
+         'root_ordinal',private.weekly_source_publication_scalar_v1(v_entry->'root_ordinal','financial_request.contract_choices.root_ordinal','INT'),
+         'contract_id',private.weekly_source_publication_scalar_v1(v_entry->'contract_id','financial_request.contract_choices.contract_id','UUID'),
+         'week_ending_date',private.weekly_source_publication_scalar_v1(v_entry->'week_ending_date','financial_request.contract_choices.week_ending_date','DATE'),
+-        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT')));
++        'selection_method',private.weekly_source_publication_scalar_v1(v_entry->'selection_method','financial_request.contract_choices.selection_method','TEXT'))
++      ||case when v_entry ? 'destination_reprice' then pg_catalog.jsonb_build_object('destination_reprice',
++        pg_catalog.jsonb_build_object('schema_version','WEEKLY_SOURCE_DESTINATION_REPRICE_V1',
++          'witness_id',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,witness_id}','destination_reprice.witness_id','UUID'),
++          'review_sha256',private.weekly_source_publication_scalar_v1(v_entry#>'{destination_reprice,review_sha256}','destination_reprice.review_sha256','HEX32')))
++        else '{}'::jsonb end);
+     v_entry:=null;
+   end loop;
+ 
+diff --git a/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql b/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
+index a6ef06a..e500bc2 100644
+--- a/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
++++ b/supabase/repeatable/04102026_0556_banking_pay_next_source_factual_legacy_boundary_v1.sql
+@@ -130,6 +130,7 @@ declare
+   -- component of member 1's before-position, keyed by component_id.  It is what
+   -- a MOVED component must still equal on the destination side.
+   v_source_component_hashes jsonb:='{}'::jsonb;
++  v_destination_reprice jsonb;
+   v_moved_found integer;
+   v_inventory_pairs jsonb;
+   v_component_hashes jsonb;
+@@ -844,6 +845,8 @@ begin
+        limit 1);
+   end loop;
+ 
++  -- Same saved0105 certificate, before retained own-B content admission.
++  v_destination_reprice:=private.weekly_source_destination_reprice_verify_v1(v_canonical,v_control);
+   -- ---- 5. the complete post-decision head proofs (H2-024) -----------------
+   -- Bind both exact before positions while the existing Candidate/family
+   -- locks still protect them. The later detail helper never follows a mutable
+@@ -996,6 +999,15 @@ begin
+          where committed_row.component_sha256
+                is distinct from private.weekly_source_publication_request_digest_v1(
+                      private.weekly_source_publication_component_content_v1(component_element.value))
++           and not (v_n=2 and v_i=2 and exists(select 1
++             from pg_catalog.jsonb_array_elements(coalesce(v_destination_reprice->'components','[]'::jsonb)) witness(value)
++             where witness.value->>'component_id'=component_element.value->>'component_id'
++               and witness.value->>'before_root_ordinal'='2'
++               and witness.value->>'before_root_timesheet_id'=v_member_root_ids[2]::text
++               and witness.value->>'before_head_id'=committed_row.head_id::text
++               and witness.value->>'before_component_sha256'=pg_catalog.encode(committed_row.component_sha256,'hex')
++               and witness.value->'after_content' is not distinct from
++                 private.weekly_source_publication_component_content_v1(component_element.value)))
+          limit 1);
+       v_accepted_app:=null;
+       if v_offending is not null and v_mode='IMMEDIATE' and v_n=1 and v_i=1
+@@ -1386,6 +1398,14 @@ begin
+                private.weekly_source_publication_request_digest_v1(
+                  private.weekly_source_publication_component_content_v1(
+                    component_element.value)),'hex')
++         and not exists (select 1 from pg_catalog.jsonb_array_elements(
++           coalesce(v_destination_reprice->'components','[]'::jsonb)) witness(value)
++           where witness.value->>'component_id'=component_element.value->>'component_id'
++             and pg_catalog.encode(private.weekly_source_publication_request_digest_v1(
++               private.weekly_source_publication_component_content_v1(witness.value->'before_component')),'hex')
++                 is not distinct from v_source_component_hashes->>(component_element.value->>'component_id')
++             and witness.value->'after_content' is not distinct from
++               private.weekly_source_publication_component_content_v1(component_element.value))
+        limit 1);
+     if v_offending is not null then
+       return pg_catalog.jsonb_build_object(
+diff --git a/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql b/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
+index c2e4bb4..e04f90c 100644
+--- a/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
++++ b/supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql
+@@ -256,6 +256,7 @@ declare
+   v_start_utc timestamptz;
+   v_end_utc timestamptz;
+   v_blank jsonb;
++  v_reprice_detail jsonb;
+ begin
+   if p_decision_bundle_id is null or p_bundle_revision is null or p_bundle_revision<1
+      or p_before_source_event_ids is null or p_before_financial_snapshot_ids is null
+@@ -525,7 +526,11 @@ begin
+       raise exception using errcode='23514',message='BPAY_NEXT_PAIR_DETAIL_COMPONENT_ORIGIN_NOT_EXACT';
+     end if;
+     v_i:=v_origin;
+-    if v_before_heads[v_i] is not null then
++    v_reprice_detail:=private.weekly_source_destination_reprice_detail_v1(
++      p_decision_bundle_id,p_bundle_revision,v_canonical,v_i);
++    if v_reprice_detail is not null then
++      v_detail:=v_reprice_detail;
++    elsif v_before_heads[v_i] is not null then
+       select * into strict v_before_component from public.weekly_source_entitlement_head_components c
+         where c.head_id=v_before_heads[v_i] and c.component_id=v_component.component_id;
+       v_before_canonical:=private.weekly_source_publication_component_canonical_v1(
+diff --git a/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql b/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
+index ddd18a4..a5095ab 100644
+--- a/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
++++ b/supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql
+@@ -76,6 +76,11 @@ declare
+   v_source_pay_method text;
+   v_bucket record;
+   v_source_rate numeric;
++  v_destination_stage_snapshot jsonb;
++  v_stage_financial_id uuid;
++  v_job_title text;
++  v_band_label text;
++  v_timesheet_reference text;
+ begin
+   if p_root_timesheet_id is null or p_source_event_id is null then
+     raise exception using errcode='22023', message='BPAY_NEXT_SOURCE_STAGE_INPUT_INVALID';
+@@ -121,9 +126,18 @@ begin
+     where timesheet_id=p_root_timesheet_id and is_current=true for share;
+   -- The saved contract channel is available even when the first-authorisation
+   -- owner leaves TSFIN.pay_method NULL, or a head has no TSFIN at all.
++  v_destination_stage_snapshot:=private.weekly_source_destination_reprice_stage_snapshot_v1(
++    p_root_timesheet_id,p_expected_head_id);
++  if v_destination_stage_snapshot is not null then
++    if v_first_snapshot or (v_destination_stage_snapshot->>'client_id')::uuid is distinct from v_contract.client_id then
++      raise exception using errcode='23514', message='BPAY_NEXT_SOURCE_STAGE_CERTIFICATE_IDENTITY_MISMATCH';
++    end if;
++    v_source_pay_method:=v_destination_stage_snapshot->>'destination_pay_channel';
++  else
+   v_source_pay_method:=upper(coalesce(
+     case when v_first_snapshot then v_tf.pay_method end,
+     v_contract.pay_method_snapshot,''));
++  end if;
+   if v_ts.is_current is distinct from true
+      or (v_first_snapshot and (
+        v_tf.id is null or v_ts.authorised_at_server is null
+@@ -338,6 +352,16 @@ begin
+   end if;
+   v_detail_kind:=case when v_work_count>0 and not v_missing_work_date
+     then 'SHIFT' when v_work_count>0 then 'AGGREGATE' else 'FIXED' end;
++  if v_destination_stage_snapshot is not null then
++    v_candidate_name:=v_destination_stage_snapshot#>>'{metadata,candidate_display_name}';
++    v_candidate_ref:=v_destination_stage_snapshot#>>'{metadata,candidate_reference}';
++    v_client_name:=v_destination_stage_snapshot#>>'{metadata,client_display_name}';
++    v_job_title:=v_destination_stage_snapshot#>>'{metadata,job_title}';
++    v_band_label:=v_destination_stage_snapshot#>>'{metadata,band_label}';
++    v_timesheet_reference:=v_destination_stage_snapshot#>>'{metadata,timesheet_reference}';
++    v_stage_financial_id:=(v_destination_stage_snapshot->>'financial_snapshot_id')::uuid;
++    v_schedule_count:=pg_catalog.jsonb_array_length(v_destination_stage_snapshot->'rate_schedule');
++  else
+   select coalesce(nullif(btrim(c.display_name),''),
+                   nullif(btrim(concat_ws(' ',c.first_name,c.last_name)),''),
+                   c.id::text),c.tms_ref,c.mileage_pay_rate
+@@ -354,6 +378,9 @@ begin
+                v_candidate_mileage_rate),
+       coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
+                v_client_mileage_rate));
++    v_stage_financial_id:=v_tf.id;
++    v_job_title:=v_contract.role; v_band_label:=v_contract.band; v_timesheet_reference:=v_ts.reference_number;
++  end if;
+   -- Source head publication can cover two roots. The worker-control lock is
+   -- taken before either work lock, matching the pair publisher and worker.
+   insert into private.bpay_next_worker_control(candidate_id)
+@@ -384,13 +411,20 @@ begin
+      job_title,band_label,timesheet_reference,source_inventory_digest)
+     values(v_work.id,v_work.current_revision_no+1,
+       case when v_head_authority='PROTECTED' then 'PROTECTED' else 'SOURCE' end,
+-      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_tf.id,v_ts.version,
++      p_expected_head_id,p_source_event_id,v_ts.timesheet_id,v_stage_financial_id,v_ts.version,
+       v_source_pay_method,v_ts.week_ending_date,v_detail_kind,v_head_count,
+       v_schedule_count,case when v_first_snapshot then v_head_count=0
+         else v_head_certified_zero end,v_total,
+       v_candidate_name,v_candidate_ref,v_client_name,
+-      v_contract.role,v_contract.band,v_ts.reference_number,v_inventory_digest)
++      v_job_title,v_band_label,v_timesheet_reference,v_inventory_digest)
+     returning id into v_revision_id;
++  if v_destination_stage_snapshot is not null then
++    insert into private.bpay_next_rate_schedule
++      (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)
++      select v_revision_id,r.rate_family,r.rate_code,r.unit_label,r.paye_rate,r.umbrella_rate,r.charge_rate
++        from pg_catalog.jsonb_to_recordset(v_destination_stage_snapshot->'rate_schedule')
++          as r(rate_family text,rate_code text,unit_label text,paye_rate numeric,umbrella_rate numeric,charge_rate numeric);
++  else
+   insert into private.bpay_next_rate_schedule
+     (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)
+     select v_revision_id,r.rate_family,r.rate_code,r.unit_label,
+@@ -402,6 +436,7 @@ begin
+                  v_candidate_mileage_rate),
+         coalesce(v_tf.mileage_charge_rate,v_contract.mileage_charge_rate,
+                  v_client_mileage_rate)) r;
++  end if;
+ 
+   for v_component in select value from pg_catalog.jsonb_array_elements(
+     v_inventory->'components') order by (value->>'component_ordinal')::integer
+diff --git a/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql b/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
+index 0b39115..cfc1ffd 100644
+--- a/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
++++ b/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql
+@@ -20,6 +20,7 @@ declare
+   v_event_ids uuid[]:=array[]::uuid[];
+   v_component record;
+   v_binding record;
++  v_joined_witness private.weekly_source_destination_reprice_witness_v1%rowtype;
+ begin
+   if (select active_owner from private.bpay_next_module_control
+       where id=1 for share)<>'NEXT' then
+@@ -32,6 +33,10 @@ begin
+     raise exception using errcode='23514',
+       message='BPAY_NEXT_SOURCE_RECEIPT_SCOPE_INVALID';
+   end if;
++  -- The real receipt is now inserted; this is not a guessed publication ID.
++  select w.* into v_joined_witness from private.weekly_source_destination_reprice_witness_v1 w
++    where w.decision_bundle_id=new.decision_bundle_id and w.bundle_revision=new.bundle_revision
++      and w.context_json->>'joined_review_schema'='SOURCE_DESTINATION_PAY_FINANCIAL_REVIEW_V2';
+   -- Every Source owner reaches this insertion after its source locks.  Sort
+   -- the exact receipt members before touching any Banking Pay work row so
+   -- opposite request-array order cannot reverse the two-root lock order.
+@@ -81,6 +86,14 @@ begin
+       raise exception using errcode='55000',
+         message='BPAY_NEXT_SOURCE_RECEIPT_BINDING_NOT_REGISTERED';
+     end if;
++    -- Only after real REGISTERED binding. The financial owner promotes the
++    -- same accepted pending basis/current snapshot; no APPLIED status is made up.
++    if v_joined_witness.id is not null and exists(select 1
++      from pg_catalog.jsonb_array_elements(v_joined_witness.context_json#>'{financial_plan,components}') c
++      where c->>'source_component_id'=v_component.source_component_id::text) then
++      perform private.bpay_next_source_comparison_register_review_v2(
++        new.id,v_component.source_component_id,v_joined_witness.id);
++    end if;
+   end loop;
+   -- REGISTERED does not mean POSITION_APPLY has finished, the book has been
+   -- seeded, a quote has been accepted, or candidate pay is ready to capture.

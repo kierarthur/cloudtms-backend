@@ -1,0 +1,1987 @@
+{
+  "formatVersion": 1,
+  "successor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+  "changedFunctionCount": 22,
+  "rows": [
+    {
+      "deliverable": "F-05-D02",
+      "originalRoot": "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "6525DC1A4465CB35B8DE2DF05393663F8582B236BE445222623BDF260BC169B8",
+      "upstreamRawSha256": "DF943ACAA6DDC4FA5BEA877621762E96C93360D4030383F29B5BFFCA2D3AA301",
+      "signatures": [
+        "private.bpay_next_publish_ordinary_from_financial_v1(uuid)"
+      ],
+      "remainingChange": "Add resolved Daily flag/evidence/rate-row declarations; count and write captured daily evidence rates for ORDINARY_HOURS/DAILY_HOURS DAILY sheets; retain existing approvals/identity/admission.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            40,
+            39
+          ],
+          "resetLines": [
+            40,
+            42
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_resolved_daily_rates boolean;",
+            "  v_available_daily_evidence jsonb;",
+            "  v_available_daily_rows jsonb;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            183,
+            187
+          ],
+          "resetLines": [
+            186,
+            202
+          ],
+          "buildLinesText": [
+            "  select count(*) into v_schedule_count",
+            "    from private.bpay_next_contract_rate_rows_v1(",
+            "      v_contract.rates_json,v_contract.bucket_labels_json,",
+            "      v_contract.additional_rates_json,",
+            "      v_mileage_pay_rate,v_mileage_charge_rate);"
+          ],
+          "resetLinesText": [
+            "  v_resolved_daily_rates:=v_route in ('ORDINARY_HOURS','DAILY_HOURS')",
+            "    and v_ts.sheet_scope='DAILY'::public.timesheet_scope_enum;",
+            "  if v_resolved_daily_rates then",
+            "    v_available_daily_evidence:=private.bpay_next_daily_approval_evidence_v1(v_tf.id);",
+            "    select (v_available_daily_evidence->'rates')",
+            "      ||coalesce(jsonb_agg(to_jsonb(r) order by r.rate_family,r.rate_code),'[]'::jsonb)",
+            "      into v_available_daily_rows",
+            "      from private.bpay_next_contract_rate_rows_v1(",
+            "        '{}'::jsonb,v_contract.bucket_labels_json,v_contract.additional_rates_json,",
+            "        v_mileage_pay_rate,v_mileage_charge_rate) r;",
+            "    v_schedule_count:=jsonb_array_length(v_available_daily_rows);",
+            "  else",
+            "    select count(*) into v_schedule_count",
+            "      from private.bpay_next_contract_rate_rows_v1(",
+            "        v_contract.rates_json,v_contract.bucket_labels_json,v_contract.additional_rates_json,",
+            "        v_mileage_pay_rate,v_mileage_charge_rate);",
+            "  end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            224,
+            232
+          ],
+          "resetLines": [
+            239,
+            252
+          ],
+          "buildLinesText": [
+            "  insert into private.bpay_next_rate_schedule",
+            "    (revision_id,rate_family,rate_code,unit_label,",
+            "     paye_rate,umbrella_rate,charge_rate)",
+            "    select v_revision_id,r.rate_family,r.rate_code,r.unit_label,",
+            "           r.paye_rate,r.umbrella_rate,r.charge_rate",
+            "    from private.bpay_next_contract_rate_rows_v1(",
+            "      v_contract.rates_json,v_contract.bucket_labels_json,",
+            "      v_contract.additional_rates_json,",
+            "      v_mileage_pay_rate,v_mileage_charge_rate) r;"
+          ],
+          "resetLinesText": [
+            "  if v_resolved_daily_rates then",
+            "    insert into private.bpay_next_rate_schedule",
+            "      (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)",
+            "      select v_revision_id,r.rate_family,r.rate_code,r.unit_label,r.paye_rate,r.umbrella_rate,r.charge_rate",
+            "      from jsonb_to_recordset(v_available_daily_rows)",
+            "        r(rate_family text,rate_code text,unit_label text,paye_rate numeric,umbrella_rate numeric,charge_rate numeric);",
+            "  else",
+            "    insert into private.bpay_next_rate_schedule",
+            "      (revision_id,rate_family,rate_code,unit_label,paye_rate,umbrella_rate,charge_rate)",
+            "      select v_revision_id,r.rate_family,r.rate_code,r.unit_label,r.paye_rate,r.umbrella_rate,r.charge_rate",
+            "      from private.bpay_next_contract_rate_rows_v1(",
+            "        v_contract.rates_json,v_contract.bucket_labels_json,v_contract.additional_rates_json,",
+            "        v_mileage_pay_rate,v_mileage_charge_rate) r;",
+            "  end if;"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D01",
+      "originalRoot": "supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "C7FB59C2D7F4954C1A105022CD8AE9A49CFD1F82EE1728B8AC3D3C95654DED58",
+      "upstreamRawSha256": "94CD02FA3FFEB152B0281A840C08249AD9C3E0D26E2525D5FC3D769DA4DD4DE5",
+      "signatures": [
+        "private.bpay_next_claim_prepare_job_v1(uuid,integer)"
+      ],
+      "remainingChange": "Add exact PREPARE command job identity/agency sequence/epoch, SEALED+sealed_at, selected/enrolled/expected count check; retain CLAIM/PIN and Candidate command barrier.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            50,
+            49
+          ],
+          "resetLines": [
+            50,
+            55
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "     or not exists(select 1 from private.bpay_next_command command",
+            "       where command.id=v_job.command_id and command.agency_sequence=v_job.command_sequence",
+            "         and command.module_epoch=v_module_epoch and command.command_kind='PREPARE'",
+            "         and command.status='SEALED' and command.sealed_at_utc is not null",
+            "         and command.expected_member_count=v_run.selected_candidate_count",
+            "         and command.enrolled_member_count=command.expected_member_count)"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D06",
+      "originalRoot": "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "C0773EAD1F9020F6D18860C9868BD7A4D5843320A4F22E49E4AA97F433FFBB39",
+      "upstreamRawSha256": "52BA3CEB4E352B57DDA3D4AFDDA6D9225A411BCB9A155673DC019965EAFFED1D",
+      "signatures": [
+        "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)"
+      ],
+      "remainingChange": "Add exact selected-WORK lock, source-binding/version and initial I1 arm, bounded real hold/effect seed and bound snapshot comparison; freeze four binding/canonical/book columns. Same-channel TAXABLE WORK only for UMB.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            36,
+            35
+          ],
+          "resetLines": [
+            36,
+            37
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_binding private.bpay_next_source_component_binding_version%rowtype;v_book record;",
+            "  v_seed_effect uuid;v_seed_hold uuid;v_seed_holds uuid[];v_seed record;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            129,
+            128
+          ],
+          "resetLines": [
+            131,
+            135
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    -- The Candidate control is already exclusively held. Lock this exact",
+            "    -- selected WORK before its position, matching the reentrant seed order.",
+            "    perform 1 from private.bpay_next_work w where w.id=v_member.work_id",
+            "      and w.candidate_id=v_worker.candidate_id for update;",
+            "    if not found then raise exception using errcode='23514',message='BPAY_NEXT_CAPTURE_POSITION_WORK_SCOPE_INVALID';end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            145,
+            145
+          ],
+          "resetLines": [
+            152,
+            153
+          ],
+          "buildLinesText": [
+            "           l.source_pay_ex_vat as approved_line_source_ex_vat"
+          ],
+          "resetLinesText": [
+            "           l.source_pay_ex_vat as approved_line_source_ex_vat,l.tax_treatment,",
+            "           p.source_book_state,p.source_book_revision"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            155,
+            155
+          ],
+          "resetLines": [
+            163,
+            163
+          ],
+          "buildLinesText": [
+            "      for share of p;"
+          ],
+          "resetLinesText": [
+            "      for update of p;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            168,
+            167
+          ],
+          "resetLines": [
+            176,
+            182
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    if v_worker.target_pay_channel='UMBRELLA' and v_issue is null and",
+            "       (v_row.source_pay_channel is distinct from 'UMBRELLA'",
+            "        or v_row.work_kind not in ('ORDINARY','SOURCE')",
+            "        or v_row.component_kind is distinct from 'WORK'",
+            "        or v_row.tax_treatment is distinct from 'TAXABLE') then",
+            "      v_issue:='UMBRELLA_WORK_EXECUTION_UNSUPPORTED';",
+            "    end if;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            179,
+            178
+          ],
+          "resetLines": [
+            194,
+            269
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    end if;",
+            "    -- Typed initial I-1 is the ONLY new no-HEAD binding arm. Initial and",
+            "    -- common-HEAD captures require self-canonical same-channel TAXABLE WORK.",
+            "    v_binding:=null;v_book:=null;",
+            "    if v_row.work_kind='SOURCE' and (v_row.source_head_id is not null",
+            "      or (v_row.source_kind='SOURCE' and v_row.source_event_id is not null",
+            "        and v_row.financial_snapshot_id is not null)) then",
+            "      select v.* into v_binding from private.bpay_next_source_component_binding b",
+            "        join private.bpay_next_source_component_binding_version v on v.id=b.current_binding_version_id",
+            "        where b.canonical_work_id=v_row.work_id and b.canonical_component_key=v_row.component_key",
+            "          and v.approval_work_id=v_row.work_id and v.approval_revision_id=v_row.captured_revision_id",
+            "          and v.approval_component_key=v_row.component_key",
+            "          and ((v_row.source_head_id is not null and v.origin_kind='COMMON_HEAD_RECEIPT_V1'",
+            "              and v.head_id=v_row.source_head_id)",
+            "            or (v_row.source_head_id is null and v.origin_kind='INITIAL_AUTHORISED_TSFIN_V1'",
+            "              and v.initial_root_authorisation_id=v_row.source_event_id",
+            "              and v.initial_financial_snapshot_id=v_row.financial_snapshot_id",
+            "              and v.initial_root_timesheet_id=v_row.physical_timesheet_id",
+            "              and v.initial_root_version=v_row.physical_timesheet_version));",
+            "      if v_binding.id is null or v_binding.publication_command_id_2 is not null",
+            "         or v_row.source_pay_channel not in ('PAYE','UMBRELLA')",
+            "         or v_worker.target_pay_channel is distinct from v_row.source_pay_channel",
+            "         or v_row.component_kind is distinct from 'WORK' or v_row.tax_treatment is distinct from 'TAXABLE' then",
+            "        v_issue:='SOURCE_BOOK_APPROVAL_UNBOUND';",
+            "      else",
+            "        if v_row.source_book_state='UNBOUND' then",
+            "          -- Capture is already a bounded selected point with real APPLIED/DONE",
+            "          -- authority. Adoption never borrows a queued writer's lease here.",
+            "          v_seed_effect:=null;v_seed_hold:=null;v_seed_holds:=null;",
+            "          if v_row.realised_source_ex_vat>0 then",
+            "            select b.original_effect_id into v_seed_effect from private.bpay_next_work_collection b",
+            "              where b.work_id=v_row.work_id and b.component_key=v_row.component_key",
+            "                and b.candidate_id=v_worker.candidate_id and b.paid_basis_qualified;",
+            "          end if;",
+            "          if v_row.held_source_ex_vat>0 then",
+            "            select pg_catalog.array_agg(h.id order by h.id) into v_seed_holds from (",
+            "              select id from private.bpay_next_hold where work_id=v_row.work_id",
+            "                and component_key=v_row.component_key and status='ACTIVE' order by id limit 2) h;",
+            "            if pg_catalog.cardinality(v_seed_holds) is distinct from 1 then",
+            "              raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_ACTIVE_HOLD_WITNESS_AMBIGUOUS';",
+            "            end if;",
+            "            v_seed_hold:=v_seed_holds[1];",
+            "          end if;",
+            "          select seed.* into strict v_seed from private.bpay_next_source_disposition_seed_v1(",
+            "            v_row.work_id,v_row.component_key,v_row.captured_revision_id,v_seed_effect,v_seed_hold) seed;",
+            "          if v_seed.qualification_state is distinct from 'READY' then",
+            "            raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_SELECTED_SEED_NOT_READY';",
+            "          end if;",
+            "          select p.source_book_state,p.source_book_revision into v_row.source_book_state,v_row.source_book_revision",
+            "            from private.bpay_next_position p where p.work_id=v_row.work_id and p.component_key=v_row.component_key;",
+            "        end if;",
+            "        select s.* into strict v_book from private.bpay_next_bound_source_snapshot_v1(",
+            "          v_binding.id,v_row.source_book_revision) s;",
+            "        if v_book.qualification_state is distinct from 'READY'",
+            "           or (v_book.candidate_id,v_book.canonical_work_id,v_book.canonical_component_key,",
+            "               v_book.approval_work_id,v_book.approval_revision_id,v_book.approved_line_id,",
+            "               v_book.source_channel,v_book.tax_treatment,v_book.approved_source_ex_vat,",
+            "               v_book.native_realised_paye,v_book.native_held_paye,v_book.native_realised_umbrella,v_book.native_held_umbrella)",
+            "             is distinct from (v_worker.candidate_id,v_row.work_id,v_row.component_key,",
+            "               v_row.work_id,v_row.captured_revision_id,v_row.approved_line_id,",
+            "               v_row.source_pay_channel,'TAXABLE'::text,v_row.approved_source_ex_vat,",
+            "               case when v_row.source_pay_channel='PAYE' then v_row.realised_source_ex_vat else 0::numeric end,",
+            "               case when v_row.source_pay_channel='PAYE' then v_row.held_source_ex_vat else 0::numeric end,",
+            "               case when v_row.source_pay_channel='UMBRELLA' then v_row.realised_source_ex_vat else 0::numeric end,",
+            "               case when v_row.source_pay_channel='UMBRELLA' then v_row.held_source_ex_vat else 0::numeric end) then",
+            "          v_issue:='SOURCE_BOOK_APPROVAL_UNBOUND';",
+            "        end if;",
+            "      end if;",
+            "      if v_issue is not null then",
+            "        update private.bpay_next_run_worker set status='REVIEW',review_issue_code=v_issue,",
+            "          review_issue_work_id=v_row.work_id where id=v_worker.id;",
+            "        update private.bpay_next_job set status='DONE',phase='DONE',cursor_key=null,",
+            "          lease_nonce=null,lease_until_utc=null where id=p_job_id;",
+            "        return pg_catalog.jsonb_build_object('done',true,'phase','REVIEW','issue_code',v_issue,",
+            "          'work_id',v_row.work_id,'rows_visited',v_seen,'replay',false);",
+            "      end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            259,
+            259
+          ],
+          "resetLines": [
+            350,
+            351
+          ],
+          "buildLinesText": [
+            "       held_target_inc_vat,needs_financial_resolution,work_collection_id,work_collection_revision)"
+          ],
+          "resetLinesText": [
+            "       held_target_inc_vat,needs_financial_resolution,work_collection_id,work_collection_revision,",
+            "       source_binding_version_id,canonical_source_work_id,canonical_source_component_key,source_book_revision)"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            270,
+            270
+          ],
+          "resetLines": [
+            362,
+            364
+          ],
+          "buildLinesText": [
+            "       v_needs_resolution,v_collection.id,v_collection.reconcile_revision);"
+          ],
+          "resetLinesText": [
+            "       v_needs_resolution,v_collection.id,v_collection.reconcile_revision,",
+            "       v_binding.id,v_binding.canonical_work_id,v_binding.canonical_component_key,",
+            "       case when v_binding.id is null then null else v_row.source_book_revision end);"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D05",
+      "originalRoot": "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "F387618D651C9563F789667BD2E752EE12E61002D2E95038AD4E15E0B3CA8B49",
+      "upstreamRawSha256": "CCE67468966CECE5B787B13C5436F7D0A4B9D597C7307092BACBEC9D48C5A139",
+      "signatures": [
+        "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)"
+      ],
+      "remainingChange": "Add bound source snapshot recheck and exact frozen native scalar/identity comparison; freeze binding version, canonical identity, book revision and updates_original_source_scalar. Use RESET hash, not CM03 correction AA312905.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            27,
+            27
+          ],
+          "resetLines": [
+            27,
+            27
+          ],
+          "buildLinesText": [
+            "  v_value record;"
+          ],
+          "resetLinesText": [
+            "  v_value record;v_book record;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            177,
+            176
+          ],
+          "resetLines": [
+            177,
+            198
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    if v_row.source_binding_version_id is not null then",
+            "      select s.* into strict v_book from private.bpay_next_bound_source_snapshot_v1(",
+            "        v_row.source_binding_version_id,v_row.source_book_revision) s;",
+            "      if v_book.qualification_state is distinct from 'READY'",
+            "         or (v_book.canonical_work_id,v_book.canonical_component_key,v_book.approval_work_id,",
+            "             v_book.approval_revision_id,v_book.approved_line_id,v_book.source_channel,v_book.tax_treatment,",
+            "             v_book.approved_source_ex_vat,v_book.native_realised_paye,v_book.native_held_paye,",
+            "             v_book.native_realised_umbrella,v_book.native_held_umbrella)",
+            "           is distinct from (v_row.work_id,v_row.component_key,v_row.work_id,",
+            "             v_row.captured_revision_id,v_row.approved_line_id,v_row.source_pay_channel,'TAXABLE'::text,",
+            "             v_row.approved_source_ex_vat,",
+            "             case when v_row.source_pay_channel='PAYE' then v_row.realised_source_ex_vat else 0::numeric end,",
+            "             case when v_row.source_pay_channel='PAYE' then v_row.held_source_ex_vat else 0::numeric end,",
+            "             case when v_row.source_pay_channel='UMBRELLA' then v_row.realised_source_ex_vat else 0::numeric end,",
+            "             case when v_row.source_pay_channel='UMBRELLA' then v_row.held_source_ex_vat else 0::numeric end)",
+            "         or v_row.source_pay_channel not in ('PAYE','UMBRELLA')",
+            "         or v_worker.target_pay_channel is distinct from v_row.source_pay_channel",
+            "         or v_row.canonical_source_work_id is distinct from v_row.work_id",
+            "         or v_row.canonical_source_component_key is distinct from v_row.component_key then",
+            "        raise exception using errcode='55000',message='BPAY_NEXT_SOURCE_BOOK_CAPTURE_CHANGED';",
+            "      end if;",
+            "    end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            197,
+            197
+          ],
+          "resetLines": [
+            219,
+            220
+          ],
+          "buildLinesText": [
+            "       policy_window_id,frozen_ex_vat,frozen_vat,frozen_inc_vat)"
+          ],
+          "resetLinesText": [
+            "       policy_window_id,frozen_ex_vat,frozen_vat,frozen_inc_vat,source_binding_version_id,",
+            "       canonical_source_work_id,canonical_source_component_key,source_book_revision,updates_original_source_scalar)"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            203,
+            203
+          ],
+          "resetLines": [
+            226,
+            228
+          ],
+          "buildLinesText": [
+            "       v_value.target_ex_vat,v_value.target_vat,v_value.target_inc_vat)"
+          ],
+          "resetLinesText": [
+            "       v_value.target_ex_vat,v_value.target_vat,v_value.target_inc_vat,",
+            "       v_row.source_binding_version_id,v_row.canonical_source_work_id,v_row.canonical_source_component_key,",
+            "       v_row.source_book_revision,case when v_row.source_binding_version_id is null then null else true end)"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D04",
+      "originalRoot": "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "FFD9FCDA7884D0989526049B0F2BCCC3CED71954B822B7D94F178BE9E5846F06",
+      "upstreamRawSha256": "E69026EF2315B9DD4D6905B8A63FDDE07D17152B56E1B7D99674E10E05ADE561",
+      "signatures": [
+        "private.bpay_next_confirm_simple_run_v1(uuid,bigint)"
+      ],
+      "remainingChange": "Only confirm_simple_run changes: add channel drafts rows to replay and fresh CONFIRM returns. REVIEW body has no RESET SQL delta; intake0575 forwards drafts for both actions.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            116,
+            116
+          ],
+          "resetLines": [
+            116,
+            117
+          ],
+          "buildLinesText": [
+            "      'review_revision',v_run.review_revision);"
+          ],
+          "resetLinesText": [
+            "      'review_revision',v_run.review_revision,",
+            "      'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows');"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            158,
+            158
+          ],
+          "resetLines": [
+            159,
+            160
+          ],
+          "buildLinesText": [
+            "    'review_revision',p_review_revision);"
+          ],
+          "resetLinesText": [
+            "    'review_revision',p_review_revision,",
+            "    'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows');"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D07",
+      "originalRoot": "supabase/repeatable/04102026_0120_banking_pay_next_simple_transfer_begin_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "BD09CD7BD704D620E72D390859C59680ABE0D34F5D879E61803509E0763D8EF3",
+      "upstreamRawSha256": "4413B03F975A69C3B46248A80DB246362600AC29F5097302C549EB8AF74382E1",
+      "signatures": [
+        "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)"
+      ],
+      "remainingChange": "Admit no-case UMB WORK with zero payroll NET state; create typed UMB projection using frozen gross-inc cash; validate exact projection; choose recorded UMB beneficiary. No CASE promotion.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            1,
+            2
+          ],
+          "resetLines": [
+            1,
+            2
+          ],
+          "buildLinesText": [
+            "-- Owner-only handoff from frozen PAYE projection to a non-executable",
+            "-- Candidate transfer being built in pages. Bank details bind later."
+          ],
+          "resetLinesText": [
+            "-- Owner-only handoff from a frozen PAYE projection or same-channel TAXABLE",
+            "-- Umbrella WORK to a per-Candidate transfer. Bank details bind later."
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            60,
+            62
+          ],
+          "resetLines": [
+            60,
+            69
+          ],
+          "buildLinesText": [
+            "     or v_worker.target_pay_channel<>'PAYE'",
+            "     or v_worker.net_projection_revision<>1",
+            "     or v_worker.net_request_revision<>1"
+          ],
+          "resetLinesText": [
+            "     or v_worker.target_pay_channel not in ('PAYE','UMBRELLA')",
+            "     or (v_worker.target_pay_channel='PAYE' and",
+            "         (v_worker.net_projection_revision<>1 or v_worker.net_request_revision<>1))",
+            "     or (v_worker.target_pay_channel='UMBRELLA' and",
+            "         (v_worker.net_projection_revision<>0 or v_worker.net_request_revision<>0",
+            "          or v_worker.entered_paye_net is not null",
+            "          or v_worker.target_umbrella_id is null or v_worker.target_umbrella_vat_chargeable is null",
+            "          or v_worker.gross_inc_vat<=0 or v_worker.captured_line_count<1",
+            "          or v_worker.financial_resolution_count<>0 or v_worker.expected_managed_position_count<>0",
+            "          or exists(select 1 from private.bpay_next_paye_net_request where run_worker_id=v_worker.id)))"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            69,
+            68
+          ],
+          "resetLines": [
+            76,
+            86
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  if v_worker.target_pay_channel='UMBRELLA' then",
+            "    -- No payroll NET request/value, CASE adjustment or live financial lookup.",
+            "    -- Bounded member pages must certify every included line as same-channel",
+            "    -- TAXABLE WORK before the transfer can become issuable.",
+            "    insert into private.bpay_next_net_projection",
+            "      (run_worker_id,request_command_id,projection_no,input_kind,",
+            "       gross_ex_vat,gross_vat,gross_inc_vat,entered_paye_net,accepted_recoveries,cash_amount)",
+            "      values(v_worker.id,null,1,'UMBRELLA',v_worker.gross_ex_vat,v_worker.gross_vat,",
+            "        v_worker.gross_inc_vat,null,0,v_worker.gross_inc_vat);",
+            "    update private.bpay_next_run_worker set net_projection_revision=1 where id=v_worker.id;",
+            "  end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            71,
+            71
+          ],
+          "resetLines": [
+            89,
+            89
+          ],
+          "buildLinesText": [
+            "  if v_projection.input_kind<>'PAYE_MANUAL'"
+          ],
+          "resetLinesText": [
+            "  if v_worker.target_pay_channel='PAYE' and (v_projection.input_kind<>'PAYE_MANUAL'"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            80,
+            80
+          ],
+          "resetLines": [
+            98,
+            98
+          ],
+          "buildLinesText": [
+            "     or v_projection.request_command_id is null then"
+          ],
+          "resetLinesText": [
+            "     or v_projection.request_command_id is null) then"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            83,
+            82
+          ],
+          "resetLines": [
+            101,
+            109
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  end if;",
+            "  if v_worker.target_pay_channel='UMBRELLA' and",
+            "     ((v_projection.input_kind,v_projection.gross_ex_vat,v_projection.gross_vat,",
+            "       v_projection.gross_inc_vat,v_projection.cash_amount,v_projection.accepted_recoveries,",
+            "       v_projection.accepted_gross_additions,v_projection.accepted_gross_deductions,v_projection.accepted_net_additions)",
+            "       is distinct from ('UMBRELLA'::text,v_worker.gross_ex_vat,v_worker.gross_vat,",
+            "         v_worker.gross_inc_vat,v_worker.gross_inc_vat,0::numeric,0::numeric,0::numeric,0::numeric)",
+            "      or v_projection.entered_paye_net is not null or v_projection.request_command_id is not null) then",
+            "    raise exception using errcode='23514',message='BPAY_NEXT_SIMPLE_TRANSFER_PROJECTION_INVALID';"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            93,
+            93
+          ],
+          "resetLines": [
+            120,
+            122
+          ],
+          "buildLinesText": [
+            "      1,'CANDIDATE',v_worker.candidate_id,v_projection.cash_amount,'BUILDING',"
+          ],
+          "resetLinesText": [
+            "      1,case when v_worker.target_pay_channel='UMBRELLA' then 'UMBRELLA' else 'CANDIDATE' end,",
+            "      case when v_worker.target_pay_channel='UMBRELLA' then v_worker.target_umbrella_id else v_worker.candidate_id end,",
+            "      v_projection.cash_amount,'BUILDING',"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D16",
+      "originalRoot": "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "391ECC42EAFA0A99028342F7693586CBEF2060ECF767A2B1010B18FE20E067FB",
+      "upstreamRawSha256": "763176B54482954ADF8C07E7415A86E005BAAE71848D03BBA3245EE8C385907A",
+      "signatures": [
+        "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)"
+      ],
+      "remainingChange": "Bind UMB beneficiary and exact approved line/revision; require same-channel TAXABLE WORK and frozen source scalar equality; create NET_ADJUSTMENT only for PAYE.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            135,
+            136
+          ],
+          "resetLines": [
+            135,
+            138
+          ],
+          "buildLinesText": [
+            "     or v_transfer.beneficiary_kind<>'CANDIDATE'",
+            "     or v_transfer.beneficiary_id<>v_worker.candidate_id"
+          ],
+          "resetLinesText": [
+            "     or not ((v_worker.target_pay_channel='PAYE' and",
+            "          v_transfer.beneficiary_kind='CANDIDATE' and v_transfer.beneficiary_id=v_worker.candidate_id)",
+            "       or (v_worker.target_pay_channel='UMBRELLA' and v_worker.target_umbrella_id is not null and",
+            "          v_transfer.beneficiary_kind='UMBRELLA' and v_transfer.beneficiary_id=v_worker.target_umbrella_id))"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            174,
+            174
+          ],
+          "resetLines": [
+            176,
+            179
+          ],
+          "buildLinesText": [
+            "    select l.id,l.line_no,l.frozen_inc_vat"
+          ],
+          "resetLinesText": [
+            "    select l.id,l.line_no,l.frozen_inc_vat,l.frozen_ex_vat,l.source_consumed_ex_vat,",
+            "      l.source_pay_channel,l.target_pay_channel,l.component_key,l.work_id,",
+            "      a.id as qualified_line_id,a.component_kind,a.tax_treatment,",
+            "      r.id as qualified_revision_id"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            176,
+            175
+          ],
+          "resetLines": [
+            181,
+            183
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    left join private.bpay_next_approved_line a on a.id=l.approved_line_id",
+            "      and a.revision_id=l.captured_revision_id and a.component_key=l.component_key",
+            "    left join private.bpay_next_work_revision r on r.id=l.captured_revision_id and r.work_id=l.work_id"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            180,
+            179
+          ],
+          "resetLines": [
+            188,
+            200
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    if v_worker.target_pay_channel='UMBRELLA' and",
+            "       (v_projection.input_kind is distinct from 'UMBRELLA'",
+            "        or v_worker.case_selection_revision<>0 or v_worker.net_request_revision<>0",
+            "        or v_projection.entered_paye_net is not null or v_projection.request_command_id is not null",
+            "        or v_projection.cash_amount is distinct from v_worker.gross_inc_vat",
+            "        or v_line.qualified_line_id is null or v_line.qualified_revision_id is null",
+            "        or v_line.component_kind is distinct from 'WORK' or v_line.tax_treatment is distinct from 'TAXABLE'",
+            "        or v_line.source_pay_channel is distinct from 'UMBRELLA'",
+            "        or v_line.target_pay_channel is distinct from 'UMBRELLA'",
+            "        or v_line.source_consumed_ex_vat<0",
+            "        or v_line.frozen_ex_vat is distinct from v_line.source_consumed_ex_vat) then",
+            "      raise exception using errcode='55000',message='BPAY_NEXT_UMBRELLA_WORK_EXECUTION_UNSUPPORTED';",
+            "    end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            202,
+            209
+          ],
+          "resetLines": [
+            223,
+            232
+          ],
+          "buildLinesText": [
+            "    v_adjustment:=v_projection.cash_amount-v_worker.gross_inc_vat;",
+            "    insert into private.bpay_next_transfer_member",
+            "      (transfer_id,run_worker_id,member_no,subject_kind,",
+            "       signed_cash_contribution)",
+            "      values(v_transfer.id,v_worker.id,v_member_count+1,",
+            "             'NET_ADJUSTMENT',v_adjustment);",
+            "    v_member_count:=v_member_count+1;",
+            "    v_cash_sum:=v_cash_sum+v_adjustment;"
+          ],
+          "resetLinesText": [
+            "    if v_worker.target_pay_channel='PAYE' then",
+            "      v_adjustment:=v_projection.cash_amount-v_worker.gross_inc_vat;",
+            "      insert into private.bpay_next_transfer_member",
+            "        (transfer_id,run_worker_id,member_no,subject_kind,",
+            "         signed_cash_contribution)",
+            "        values(v_transfer.id,v_worker.id,v_member_count+1,",
+            "               'NET_ADJUSTMENT',v_adjustment);",
+            "      v_member_count:=v_member_count+1;",
+            "      v_cash_sum:=v_cash_sum+v_adjustment;",
+            "    end if;"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D15",
+      "originalRoot": "supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "7C05D7ACFAC887843B4828B2420546D274366D2E096C9594B7526011C7C116DF",
+      "upstreamRawSha256": "1AD42B60E902FA468D1B29506BF1E1520D7C406FE4FD685886DFBB956CFBAECE",
+      "signatures": [
+        "private.bpay_next_bind_simple_csv_destination_v1(uuid)"
+      ],
+      "remainingChange": "Add UMB row variable and recorded destination; validate active Candidate/recorded umbrella/enabled/hash details; retain PAYE/ONEOFF logic and frozen cash; no issuing/execution.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            1,
+            4
+          ],
+          "resetLines": [
+            1,
+            4
+          ],
+          "buildLinesText": [
+            "-- Owner-only execution preparation for a no-case PAYE Candidate transfer.",
+            "-- This copies current bank details, but deliberately does not issue a file,",
+            "-- approve execution or change any frozen financial figure. CSV issue must",
+            "-- check the current Candidate account again against this snapshot."
+          ],
+          "resetLinesText": [
+            "-- Owner-only execution preparation for no-CASE PAYE or Umbrella WORK cash.",
+            "-- Copies the exact current beneficiary bank details without issuing a file,",
+            "-- approving execution or changing frozen money. CSV issue rechecks the",
+            "-- Candidate/recorded Umbrella destination against this snapshot."
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            21,
+            20
+          ],
+          "resetLines": [
+            21,
+            21
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_umbrella public.umbrellas%rowtype;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            54,
+            54
+          ],
+          "resetLines": [
+            55,
+            55
+          ],
+          "buildLinesText": [
+            "     or v_worker.target_pay_channel<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "     or v_worker.target_pay_channel not in ('PAYE','UMBRELLA')"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            57,
+            58
+          ],
+          "resetLines": [
+            58,
+            61
+          ],
+          "buildLinesText": [
+            "     or v_transfer.beneficiary_kind<>'CANDIDATE'",
+            "     or v_transfer.beneficiary_id<>v_worker.candidate_id"
+          ],
+          "resetLinesText": [
+            "     or not ((v_worker.target_pay_channel='PAYE' and",
+            "          v_transfer.beneficiary_kind='CANDIDATE' and v_transfer.beneficiary_id=v_worker.candidate_id)",
+            "       or (v_worker.target_pay_channel='UMBRELLA' and v_worker.target_umbrella_id is not null and",
+            "          v_transfer.beneficiary_kind='UMBRELLA' and v_transfer.beneficiary_id=v_worker.target_umbrella_id))"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            80,
+            79
+          ],
+          "resetLines": [
+            83,
+            98
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  if v_worker.target_pay_channel='UMBRELLA' then",
+            "    if v_leg.transfer_id is not null or v_worker.case_selection_revision<>0",
+            "       or v_candidate.active is not true",
+            "       or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>'UMBRELLA'",
+            "       or v_candidate.umbrella_id is distinct from v_worker.target_umbrella_id then",
+            "      raise exception using errcode='55000',message='BPAY_NEXT_CSV_UMBRELLA_DESTINATION_NOT_READY';",
+            "    end if;",
+            "    select * into strict v_umbrella from public.umbrellas where id=v_worker.target_umbrella_id for share;",
+            "    v_name:=nullif(pg_catalog.btrim(v_umbrella.name),'');",
+            "    v_sort:=pg_catalog.regexp_replace(coalesce(v_umbrella.sort_code,''),'[^0-9]','','g');",
+            "    v_account:=pg_catalog.regexp_replace(coalesce(v_umbrella.account_number,''),'[^0-9]','','g');",
+            "    v_hash:=public._bank_hash(v_umbrella.sort_code,v_umbrella.account_number,v_umbrella.name);",
+            "    if v_umbrella.enabled is not true or v_hash is distinct from v_umbrella.bank_details_hash then",
+            "      raise exception using errcode='55000',message='BPAY_NEXT_CSV_UMBRELLA_DESTINATION_NOT_READY';",
+            "    end if;",
+            "  end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            88,
+            88
+          ],
+          "resetLines": [
+            107,
+            107
+          ],
+          "buildLinesText": [
+            "     or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "     or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>v_worker.target_pay_channel"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            93,
+            93
+          ],
+          "resetLines": [
+            112,
+            113
+          ],
+          "buildLinesText": [
+            "     or (v_leg.leg_kind is distinct from 'ONEOFF' and v_hash is distinct from v_candidate.bank_details_hash) then"
+          ],
+          "resetLinesText": [
+            "     or (v_worker.target_pay_channel='PAYE' and",
+            "         v_leg.leg_kind is distinct from 'ONEOFF' and v_hash is distinct from v_candidate.bank_details_hash) then"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D14",
+      "originalRoot": "supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "4BFFDF2142B28CA2F717992E8CF164B1137EACA1C64790C0D6300DA680BFCF2A",
+      "upstreamRawSha256": "208733994999AC22B5B6A71E78A4BB5A36B4E895B52AB38ECE921497D4812791",
+      "signatures": [
+        "private.bpay_next_issue_simple_csv_v1(uuid,uuid,uuid)"
+      ],
+      "remainingChange": "Mirror recorded UMB destination scope/current hash recheck before issuing; retain all owner/epoch/idempotency/frozen transfer protections and PAYE ONEOFF behavior.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            21,
+            20
+          ],
+          "resetLines": [
+            21,
+            21
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_umbrella public.umbrellas%rowtype;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            91,
+            91
+          ],
+          "resetLines": [
+            92,
+            92
+          ],
+          "buildLinesText": [
+            "     or v_worker.target_pay_channel<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "     or v_worker.target_pay_channel not in ('PAYE','UMBRELLA')"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            94,
+            95
+          ],
+          "resetLines": [
+            95,
+            98
+          ],
+          "buildLinesText": [
+            "     or v_transfer.beneficiary_kind<>'CANDIDATE'",
+            "     or v_transfer.beneficiary_id<>v_worker.candidate_id"
+          ],
+          "resetLinesText": [
+            "     or not ((v_worker.target_pay_channel='PAYE' and",
+            "          v_transfer.beneficiary_kind='CANDIDATE' and v_transfer.beneficiary_id=v_worker.candidate_id)",
+            "       or (v_worker.target_pay_channel='UMBRELLA' and v_worker.target_umbrella_id is not null and",
+            "          v_transfer.beneficiary_kind='UMBRELLA' and v_transfer.beneficiary_id=v_worker.target_umbrella_id))"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            115,
+            114
+          ],
+          "resetLines": [
+            118,
+            133
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  if v_worker.target_pay_channel='UMBRELLA' then",
+            "    if v_leg.transfer_id is not null or v_worker.case_selection_revision<>0",
+            "       or v_candidate.active is not true",
+            "       or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>'UMBRELLA'",
+            "       or v_candidate.umbrella_id is distinct from v_worker.target_umbrella_id then",
+            "      raise exception using errcode='55000',message='BPAY_NEXT_CSV_UMBRELLA_DESTINATION_NOT_READY';",
+            "    end if;",
+            "    select * into strict v_umbrella from public.umbrellas where id=v_worker.target_umbrella_id for share;",
+            "    v_name:=nullif(pg_catalog.btrim(v_umbrella.name),'');",
+            "    v_sort:=pg_catalog.regexp_replace(coalesce(v_umbrella.sort_code,''),'[^0-9]','','g');",
+            "    v_account:=pg_catalog.regexp_replace(coalesce(v_umbrella.account_number,''),'[^0-9]','','g');",
+            "    v_hash:=public._bank_hash(v_umbrella.sort_code,v_umbrella.account_number,v_umbrella.name);",
+            "    if v_umbrella.enabled is not true or v_hash is distinct from v_umbrella.bank_details_hash then",
+            "      raise exception using errcode='55000',message='BPAY_NEXT_CSV_UMBRELLA_DESTINATION_NOT_READY';",
+            "    end if;",
+            "  end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            123,
+            123
+          ],
+          "resetLines": [
+            142,
+            142
+          ],
+          "buildLinesText": [
+            "     or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "     or pg_catalog.upper(coalesce(v_candidate.pay_method,''))<>v_worker.target_pay_channel"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            131,
+            131
+          ],
+          "resetLines": [
+            150,
+            151
+          ],
+          "buildLinesText": [
+            "     or (v_leg.leg_kind is distinct from 'ONEOFF' and v_hash is distinct from v_candidate.bank_details_hash)"
+          ],
+          "resetLinesText": [
+            "     or (v_worker.target_pay_channel='PAYE' and",
+            "         v_leg.leg_kind is distinct from 'ONEOFF' and v_hash is distinct from v_candidate.bank_details_hash)"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D13",
+      "originalRoot": "supabase/repeatable/04102026_0200_banking_pay_next_simple_csv_settlement_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "064611CF5D96C65525AD1F6ABBDDB34EE65D82882E42B4A72DD911A626D637C5",
+      "upstreamRawSha256": "FA6BAC8C799387F91717375219AF885F65B334274BDB139A048F46E90E3A98FC",
+      "signatures": [
+        "private.bpay_next_receive_simple_csv_settlement_v1(uuid,uuid,text,numeric,timestamp with time zone,uuid)",
+        "private.bpay_next_post_simple_outcome_page_v1(uuid,uuid,bigint,bigint,integer)"
+      ],
+      "remainingChange": "Two bodies: settlement receiver admits exact no-case typed UMB projection; posting admits same-channel TAXABLE UMB WORK, seeds only real retained old ACTIVE-hold/current APPLIED witnesses, freezes source-book financial-effect identity.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            76,
+            76
+          ],
+          "resetLines": [
+            76,
+            86
+          ],
+          "buildLinesText": [
+            "     or v_worker.target_pay_channel<>'PAYE' then"
+          ],
+          "resetLinesText": [
+            "     or not (v_worker.target_pay_channel='PAYE' or",
+            "       (v_worker.target_pay_channel='UMBRELLA' and v_worker.case_selection_revision=0",
+            "        and v_worker.target_umbrella_id is not null",
+            "        and v_transfer.beneficiary_kind='UMBRELLA'",
+            "        and v_transfer.beneficiary_id=v_worker.target_umbrella_id",
+            "        and exists(select 1 from private.bpay_next_net_projection p",
+            "          where p.id=coalesce(v_transfer.projection_id,",
+            "            (select projection_id from private.bpay_next_transfer where id=v_transfer.original_transfer_id))",
+            "            and p.run_worker_id=v_worker.id and p.input_kind='UMBRELLA'",
+            "            and p.entered_paye_net is null and p.request_command_id is null",
+            "            and p.cash_amount=v_worker.gross_inc_vat))) then"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            165,
+            165
+          ],
+          "resetLines": [
+            175,
+            175
+          ],
+          "buildLinesText": [
+            "  v_effect uuid;"
+          ],
+          "resetLinesText": [
+            "  v_effect uuid;v_seed_effect uuid;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            260,
+            260
+          ],
+          "resetLines": [
+            270,
+            270
+          ],
+          "buildLinesText": [
+            "         or v_line.target_pay_channel<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "         or v_line.target_pay_channel not in ('PAYE','UMBRELLA')"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            263,
+            262
+          ],
+          "resetLines": [
+            273,
+            280
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "      end if;",
+            "      if v_line.target_pay_channel='UMBRELLA' and",
+            "         (v_line.source_pay_channel is distinct from 'UMBRELLA'",
+            "          or v_line.frozen_ex_vat is distinct from v_line.source_consumed_ex_vat",
+            "          or not exists(select 1 from private.bpay_next_approved_line a",
+            "            where a.id=v_line.approved_line_id and a.revision_id=v_line.captured_revision_id",
+            "              and a.component_key=v_line.component_key and a.component_kind='WORK' and a.tax_treatment='TAXABLE')) then",
+            "        raise exception using errcode='55000',message='BPAY_NEXT_UMBRELLA_WORK_EXECUTION_UNSUPPORTED';"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            274,
+            273
+          ],
+          "resetLines": [
+            292,
+            310
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "        -- A retained unbound frozen child may settle after common-HEAD adoption.",
+            "        -- Seed from the real ACTIVE hold/current APPLIED position only; never",
+            "        -- require its old capture to point at a newly-created binding version.",
+            "        if exists(select 1 from private.bpay_next_position p",
+            "          join private.bpay_next_source_component_binding b on b.canonical_work_id=p.work_id",
+            "            and b.canonical_component_key=p.component_key",
+            "          join private.bpay_next_source_component_binding_version v on v.id=b.current_binding_version_id",
+            "          where p.work_id=v_line.work_id and p.component_key=v_line.component_key",
+            "            and p.source_book_state='UNBOUND' and v.approval_work_id=p.work_id",
+            "            and v.approval_revision_id=p.applied_revision_id and v.publication_command_id_2 is null",
+            "            and v.approval_source_channel=v_line.source_pay_channel",
+            "            and v.approval_source_channel in ('PAYE','UMBRELLA') and v.tax_treatment='TAXABLE') then",
+            "          select b.original_effect_id into v_seed_effect from private.bpay_next_work_collection b",
+            "            join private.bpay_next_position p on p.work_id=b.work_id and p.component_key=b.component_key",
+            "            where b.work_id=v_line.work_id and b.component_key=v_line.component_key and p.realised_source_ex_vat>0;",
+            "          perform * from private.bpay_next_source_disposition_seed_v1(v_line.work_id,v_line.component_key,",
+            "            (select applied_revision_id from private.bpay_next_position where work_id=v_line.work_id",
+            "              and component_key=v_line.component_key),v_seed_effect,v_hold.id);",
+            "        end if;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            278,
+            278
+          ],
+          "resetLines": [
+            315,
+            316
+          ],
+          "buildLinesText": [
+            "           target_amount_ex_vat,target_amount_vat,target_amount_inc_vat)"
+          ],
+          "resetLinesText": [
+            "           target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,source_run_line_id,",
+            "           source_binding_version_id,canonical_source_work_id,canonical_source_component_key,native_source_channel)"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            282,
+            282
+          ],
+          "resetLines": [
+            320,
+            323
+          ],
+          "buildLinesText": [
+            "            v_hold.target_amount_vat,v_hold.target_amount_inc_vat)"
+          ],
+          "resetLinesText": [
+            "            v_hold.target_amount_vat,v_hold.target_amount_inc_vat,",
+            "            case when v_line.source_binding_version_id is null then null else v_line.id end,",
+            "            v_line.source_binding_version_id,v_line.canonical_source_work_id,v_line.canonical_source_component_key,",
+            "            case when v_line.source_binding_version_id is null then null else v_line.source_pay_channel end)"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D12",
+      "originalRoot": "supabase/repeatable/04102026_0240_banking_pay_next_simple_cash_reissue_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "87C36ADF6060673101CD2AEA9D00C8B763BD6AE29D0CBABC9905C6FF945E8352",
+      "upstreamRawSha256": "5F8365702DAF773FAE696A4C0861892F5FD19BE701C517A00BBBBEE07E50E714",
+      "signatures": [
+        "private.bpay_next_receive_simple_reissue_v1(uuid,uuid,uuid)"
+      ],
+      "remainingChange": "Lock original run worker; admit recorded UMB returned obligation with no-case revision0 and exact beneficiary. Preserve original cash obligation; no new payment basis.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            1,
+            1
+          ],
+          "resetLines": [
+            1,
+            1
+          ],
+          "buildLinesText": [
+            "-- Owner-only, one PAYE Candidate's exact returned-cash obligation."
+          ],
+          "resetLinesText": [
+            "-- Owner-only, one Candidate's exact PAYE or Umbrella returned-cash obligation."
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            14,
+            13
+          ],
+          "resetLines": [
+            14,
+            14
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_worker private.bpay_next_run_worker%rowtype;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            31,
+            31
+          ],
+          "resetLines": [
+            32,
+            32
+          ],
+          "buildLinesText": [
+            "  perform 1 from private.bpay_next_run_worker where id=v_original.run_worker_id for update;"
+          ],
+          "resetLinesText": [
+            "  select * into strict v_worker from private.bpay_next_run_worker where id=v_original.run_worker_id for update;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            44,
+            45
+          ],
+          "resetLines": [
+            45,
+            49
+          ],
+          "buildLinesText": [
+            "  if v_original.status<>'RETURNED' or v_original.beneficiary_kind<>'CANDIDATE'",
+            "     or v_original.beneficiary_id<>v_original.candidate_id"
+          ],
+          "resetLinesText": [
+            "  if v_original.status<>'RETURNED'",
+            "     or not ((v_original.beneficiary_kind='CANDIDATE' and v_original.beneficiary_id=v_original.candidate_id)",
+            "       or (v_worker.target_pay_channel='UMBRELLA' and v_worker.case_selection_revision=0",
+            "         and v_worker.target_umbrella_id is not null and v_original.beneficiary_kind='UMBRELLA'",
+            "         and v_original.beneficiary_id=v_worker.target_umbrella_id))"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D11",
+      "originalRoot": "supabase/repeatable/04102026_0255_banking_pay_next_original_csv_advice_page_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "48B176E1F4C567B58754EF8FFFEE49F56FA2CC540E4DE76433165BA4FB5655FA",
+      "upstreamRawSha256": "61C5C3BFF102D34F2173EB8E1FF34339C606D915A676D7877CE1142D4BB179CC",
+      "signatures": [
+        "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)"
+      ],
+      "remainingChange": "Read-only original CSV advice accepts UMB recorded beneficiary+typed projection with no-case selection0; require NULL payroll NET/request and cash=gross-inc. Preserve historical advice origin.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            104,
+            104
+          ],
+          "resetLines": [
+            104,
+            107
+          ],
+          "buildLinesText": [
+            "    or v_transfer.beneficiary_kind<>'CANDIDATE' or v_worker.target_pay_channel<>'PAYE'"
+          ],
+          "resetLinesText": [
+            "    or not ((v_worker.target_pay_channel='PAYE' and v_transfer.beneficiary_kind='CANDIDATE')",
+            "      or (v_worker.target_pay_channel='UMBRELLA' and v_transfer.beneficiary_kind='UMBRELLA'",
+            "        and v_worker.target_umbrella_id is not null and v_projection.input_kind='UMBRELLA'",
+            "        and v_worker.case_selection_revision=0))"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            107,
+            107
+          ],
+          "resetLines": [
+            110,
+            112
+          ],
+          "buildLinesText": [
+            "    or v_transfer.beneficiary_id<>v_worker.candidate_id or v_transfer.return_cash_id is not null"
+          ],
+          "resetLinesText": [
+            "    or v_transfer.beneficiary_id is distinct from",
+            "      (case when v_worker.target_pay_channel='UMBRELLA' then v_worker.target_umbrella_id else v_worker.candidate_id end)",
+            "    or v_transfer.return_cash_id is not null"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            111,
+            111
+          ],
+          "resetLines": [
+            116,
+            119
+          ],
+          "buildLinesText": [
+            "    or v_projection.input_kind not in ('PAYE_MANUAL','PAYE_IMPORT','CASE_PAYOUT') then"
+          ],
+          "resetLinesText": [
+            "    or (v_worker.target_pay_channel='PAYE' and v_projection.input_kind not in ('PAYE_MANUAL','PAYE_IMPORT','CASE_PAYOUT'))",
+            "    or (v_worker.target_pay_channel='UMBRELLA' and",
+            "      (v_projection.entered_paye_net is not null or v_projection.request_command_id is not null",
+            "       or v_projection.cash_amount is distinct from v_projection.gross_inc_vat)) then"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D10",
+      "originalRoot": "supabase/repeatable/04102026_0260_banking_pay_next_simple_cancel_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "6A44CE675CC0350E4B645BD05DA94DCE06EDA5EC002D755C35FBA48EB001D40D",
+      "upstreamRawSha256": "D10F3468E3FA6F39BC20B9E792F1D228259E5D234D433397CF5F552B9588135F",
+      "signatures": [
+        "private.bpay_next_simple_cancel_block_v1(uuid,boolean)"
+      ],
+      "remainingChange": "Add bounded no-case never-executed UMB SIMPLE_CANCEL guard; exact frozen projection and at most one original transfer; forbid cases/reissue/paid outcomes/CSV instructions/account approval. Existing cancellation execution body unchanged.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            22,
+            21
+          ],
+          "resetLines": [
+            22,
+            22
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_projection private.bpay_next_net_projection%rowtype;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            26,
+            25
+          ],
+          "resetLines": [
+            27,
+            114
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  -- Only a no-case, never-executed frozen UMB worker may use SIMPLE_CANCEL.",
+            "  -- No current Candidate/rate/Source lookup and no UMB NET/CSV admission.",
+            "  if v_worker.target_pay_channel='UMBRELLA' then",
+            "    if v_worker.status<>'READY' or v_worker.target_umbrella_id is null",
+            "       or v_worker.target_umbrella_vat_chargeable is null",
+            "       or v_worker.gross_ex_vat<0 or v_worker.gross_vat<0 or v_worker.gross_inc_vat<0",
+            "       or v_worker.gross_inc_vat<>v_worker.gross_ex_vat+v_worker.gross_vat",
+            "       or (v_worker.target_umbrella_vat_chargeable is false and v_worker.gross_vat<>0) then",
+            "      return 'BPAY_NEXT_CANCEL_GROUP_NOT_SIMPLE_DRAFT';",
+            "    end if;",
+            "    if v_worker.realised_effect_count<>0 or v_worker.financial_resolution_count<>0",
+            "       or not exists(select 1 from private.bpay_next_worker_control c",
+            "         where c.candidate_id=v_worker.candidate_id and c.pending_outcome_count=0) then",
+            "      return 'BPAY_NEXT_CANCEL_REALISED_OR_PENDING';",
+            "    end if;",
+            "    if v_worker.case_selection_revision<>0 or v_worker.active_case_hold_count<>0",
+            "       or v_worker.case_instruction_count<>0 or v_worker.case_allocated_count<>0",
+            "       or v_worker.case_pending_binding_count<>0",
+            "       or exists(select 1 from private.bpay_next_case_hold h where h.run_worker_id=v_worker.id) then",
+            "      return 'BPAY_NEXT_CANCEL_CASE_GROUP_UNSUPPORTED';",
+            "    end if;",
+            "    -- UMB uses frozen gross-inc cash, never a payroll NET request/value.",
+            "    if v_worker.net_request_revision is distinct from 0",
+            "       or v_worker.net_projection_revision not in (0,1)",
+            "       or v_worker.net_projection_revision is null",
+            "       or v_worker.entered_paye_net is not null",
+            "       or exists(select 1 from private.bpay_next_paye_net_request n where n.run_worker_id=v_worker.id) then",
+            "      return 'BPAY_NEXT_CANCEL_PROJECTION_UNSUPPORTED';",
+            "    end if;",
+            "    select count(*) into v_count from",
+            "      (select 1 from private.bpay_next_net_projection p",
+            "       where p.run_worker_id=v_worker.id order by p.projection_no limit 2) p;",
+            "    if v_count>1 or v_count is distinct from v_worker.net_projection_revision then",
+            "      return 'BPAY_NEXT_CANCEL_PROJECTION_UNSUPPORTED';",
+            "    end if;",
+            "    if v_count=1 then",
+            "      select p.* into strict v_projection from private.bpay_next_net_projection p",
+            "        where p.run_worker_id=v_worker.id;",
+            "      if (v_projection.run_worker_id,v_projection.projection_no,v_projection.input_kind,",
+            "          v_projection.gross_ex_vat,v_projection.gross_vat,v_projection.gross_inc_vat,",
+            "          v_projection.cash_amount,v_projection.accepted_recoveries,",
+            "          v_projection.accepted_gross_additions,v_projection.accepted_gross_deductions,",
+            "          v_projection.accepted_net_additions)",
+            "         is distinct from",
+            "         (v_worker.id,1::bigint,'UMBRELLA'::text,",
+            "          v_worker.gross_ex_vat,v_worker.gross_vat,v_worker.gross_inc_vat,",
+            "          v_worker.gross_inc_vat,0::numeric,0::numeric,0::numeric,0::numeric)",
+            "         or v_projection.entered_paye_net is not null",
+            "         or v_projection.request_command_id is not null",
+            "         or v_projection.retired_at_utc is not null then",
+            "        return 'BPAY_NEXT_CANCEL_PROJECTION_UNSUPPORTED';",
+            "      end if;",
+            "    end if;",
+            "    -- One original transfer only. Intake may precede its earlier builder;",
+            "    -- the unchanged claimant waits, and first ordered page disallows BUILDING.",
+            "    select count(*) into v_count from",
+            "      (select 1 from private.bpay_next_transfer t",
+            "       where t.run_worker_id=v_worker.id order by t.transfer_no limit 2) t;",
+            "    if v_count>1 then return 'BPAY_NEXT_CANCEL_MULTI_TRANSFER_UNSUPPORTED';end if;",
+            "    if v_count=1 then",
+            "      select t.* into strict v_transfer from private.bpay_next_transfer t",
+            "        where t.run_worker_id=v_worker.id;",
+            "      if v_projection.id is null",
+            "         or (v_transfer.run_worker_id,v_transfer.candidate_id,v_transfer.transfer_no,",
+            "             v_transfer.beneficiary_kind,v_transfer.beneficiary_id,",
+            "             v_transfer.projection_id,v_transfer.cash_amount,v_transfer.execution_kind)",
+            "            is distinct from",
+            "            (v_worker.id,v_worker.candidate_id,1::bigint,",
+            "             'UMBRELLA'::text,v_worker.target_umbrella_id,",
+            "             v_projection.id,v_projection.cash_amount,'BANK'::text)",
+            "         or v_transfer.cash_amount<=0",
+            "         or v_transfer.original_transfer_id is not null",
+            "         or v_transfer.return_cash_id is not null then",
+            "        return 'BPAY_NEXT_CANCEL_REISSUE_OR_NON_CANDIDATE_UNSUPPORTED';",
+            "      end if;",
+            "      if v_transfer.status not in ('MEMBERS_READY','DRAFT','SCHEDULED')",
+            "         and not (p_allow_building is true and v_transfer.status='BUILDING') then",
+            "        return 'BPAY_NEXT_CANCEL_TRANSFER_PROTECTED';",
+            "      end if;",
+            "      if v_transfer.account_approval_ref is not null",
+            "         or exists(select 1 from private.bpay_next_csv_instruction i where i.transfer_id=v_transfer.id)",
+            "         or exists(select 1 from private.bpay_next_transfer_outcome o where o.transfer_id=v_transfer.id)",
+            "         or exists(select 1 from private.bpay_next_internal_receipt r where r.transfer_id=v_transfer.id) then",
+            "        return 'BPAY_NEXT_CANCEL_INSTRUCTION_OR_OUTCOME_PROTECTED';",
+            "      end if;",
+            "    end if;",
+            "    return null;",
+            "  end if;"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D09",
+      "originalRoot": "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "7248434EC67D795788301B9BF998B06820A6C95EC0CF25202C1023802AECCB4F",
+      "upstreamRawSha256": "1B92F69A272E84DB514230A1BD1522EC6D2467B760879551581F285F20BF00A4",
+      "signatures": [
+        "public.bpay_next_financial_intake_v1(uuid,text,jsonb)"
+      ],
+      "remainingChange": "CANCEL_REQUEST optional run_id/pay_channel keys admitted only as a pair; validate pay_channel enumeration; independently bind run+worker+target channel before intent.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            61,
+            60
+          ],
+          "resetLines": [
+            61,
+            62
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "      || case when p_args ? 'run_id' or p_args ? 'pay_channel'",
+            "        then array['run_id','pay_channel'] else array[]::text[] end"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            78,
+            77
+          ],
+          "resetLines": [
+            80,
+            82
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';",
+            "    end if;",
+            "    if v_key='pay_channel' and (p_args->>v_key) not in ('PAYE','UMBRELLA') then"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            194,
+            193
+          ],
+          "resetLines": [
+            199,
+            204
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "      -- Optional address is strictly paired and independently bound before accepting intent.",
+            "      if p_args ? 'run_id' and not exists(select 1 from private.bpay_next_run_worker w",
+            "        where w.id=v_worker_id and w.run_id=(p_args->>'run_id')::uuid",
+            "          and w.target_pay_channel=p_args->>'pay_channel') then",
+            "        raise exception using errcode='23514',message='BPAY_NEXT_CANCEL_CHANNEL_SCOPE_INVALID';",
+            "      end if;"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D08",
+      "originalRoot": "supabase/repeatable/04102026_0430_banking_pay_next_week_lifecycle_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "59BFF08B9E651DAAD96E0C686BF322E180F3B038467D3BD12DB17002E57E73DF",
+      "upstreamRawSha256": "FA496325A5DF42973D25EB7B467C3751847DF49786442F7540106E48E2F82987",
+      "signatures": [
+        "private.bpay_next_apply_week_outcome_v1(uuid,uuid)"
+      ],
+      "remainingChange": "Week outcome admits recorded no-case UMB beneficiary; preserve original-vs-current beneficiary kind+id equality. No CASE/CM lifecycle expansion.",
+      "deltaSpans": [
+        {
+          "tag": "replace",
+          "buildLines": [
+            74,
+            74
+          ],
+          "resetLines": [
+            74,
+            78
+          ],
+          "buildLinesText": [
+            "     or v_transfer.beneficiary_kind<>'CANDIDATE' or v_transfer.beneficiary_id<>v_candidate"
+          ],
+          "resetLinesText": [
+            "     or not ((v_worker.target_pay_channel='PAYE' and v_transfer.beneficiary_kind='CANDIDATE'",
+            "         and v_transfer.beneficiary_id=v_candidate)",
+            "       or (v_worker.target_pay_channel='UMBRELLA' and v_worker.case_selection_revision=0",
+            "         and v_worker.target_umbrella_id is not null and v_transfer.beneficiary_kind='UMBRELLA'",
+            "         and v_transfer.beneficiary_id=v_worker.target_umbrella_id))"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            84,
+            84
+          ],
+          "resetLines": [
+            88,
+            89
+          ],
+          "buildLinesText": [
+            "     or v_original.beneficiary_kind<>'CANDIDATE' or v_original.beneficiary_id<>v_candidate then"
+          ],
+          "resetLinesText": [
+            "     or v_original.beneficiary_kind is distinct from v_transfer.beneficiary_kind",
+            "     or v_original.beneficiary_id is distinct from v_transfer.beneficiary_id then"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D19",
+      "originalRoot": "supabase/repeatable/04102026_0557_banking_pay_next_source_owner_completion_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "74F493181E47FEEC91B4909EC81559C4CE4275287765C2BF3353AEC7123F3E0F",
+      "upstreamRawSha256": "81E031231480D67AC68C993984737F5F3342FD279629416BA670C8A95BED4276",
+      "signatures": [
+        "public.weekly_source_first_authorise_v1(uuid,uuid,text,uuid)"
+      ],
+      "remainingChange": "Add metadata-only initial_tsfin_bind after real outer stage/publication. Keep whole current first-authorise and lock-inventory final source guard; do not seed during incomplete queued POSITION_APPLY.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            172,
+            171
+          ],
+          "resetLines": [
+            172,
+            174
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    -- Metadata only, after the real outer stage/publication; no position or",
+            "    -- financial seed while the queued POSITION_APPLY is still incomplete.",
+            "    perform * from private.bpay_next_initial_tsfin_bind_v1(v_event);"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D18",
+      "originalRoot": "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "726635D7C06CB504E66023C8D90FC27146636754398916B39EA667347AAF4565",
+      "upstreamRawSha256": "4C651558F56B85C29CF10F21A1D3168CE259F75A66001A24A7F53DBC76216A87",
+      "signatures": [
+        "private.bpay_next_preparation_args_v1(jsonb,text[])",
+        "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+        "public.bpay_next_preparation_page_v1(uuid,text,jsonb)"
+      ],
+      "remainingChange": "Three bodies: validate pay_channel; forward drafts in REVIEW/CONFIRM intake; add CHANNEL_DRAFTS/WORKERS/STATUS argument sets/readers with bounded after_transfer_no; preserve all prior15 page kinds, yielding18.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            58,
+            57
+          ],
+          "resetLines": [
+            58,
+            61
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "        raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';",
+            "      end if;",
+            "    elsif v_key='pay_channel' then",
+            "      if v_text not in ('PAYE','UMBRELLA') then"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            158,
+            158
+          ],
+          "resetLines": [
+            162,
+            162
+          ],
+          "buildLinesText": [
+            "      'review_revision',v_result->>'review_revision','replay',v_result->'replay');"
+          ],
+          "resetLinesText": [
+            "      'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts');"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            180,
+            179
+          ],
+          "resetLines": [
+            184,
+            186
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    when 'CHANNEL_DRAFTS' then array['run_id']",
+            "    when 'CHANNEL_WORKERS' then array['run_id','pay_channel','after_candidate_id','limit']",
+            "    when 'CHANNEL_STATUS' then array['run_id','pay_channel','run_worker_id','after_transfer_no','limit']"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            196,
+            195
+          ],
+          "resetLines": [
+            203,
+            215
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  if p_kind='CHANNEL_DRAFTS' then",
+            "    return private.bpay_next_channel_drafts_page_v1((p_args->>'run_id')::uuid);",
+            "  elsif p_kind='CHANNEL_WORKERS' then",
+            "    return private.bpay_next_channel_worker_page_v1((p_args->>'run_id')::uuid,",
+            "      p_args->>'pay_channel',(p_args->>'after_candidate_id')::uuid,v_limit);",
+            "  elsif p_kind='CHANNEL_STATUS' then",
+            "    if p_args->'after_transfer_no'<>'null'::jsonb and ((p_args->>'after_transfer_no')::numeric<1",
+            "      or (p_args->>'after_transfer_no')::numeric>2147483647) then",
+            "      raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';",
+            "    end if;",
+            "    return private.bpay_next_channel_status_page_v1((p_args->>'run_id')::uuid,p_args->>'pay_channel',",
+            "      (p_args->>'run_worker_id')::uuid,(p_args->>'after_transfer_no')::integer,v_limit);",
+            "  end if;"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    },
+    {
+      "deliverable": "F-05-D17",
+      "originalRoot": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+      "successorRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "resetRawSha256": "D7411A1C601C9D0B69F0C1696B656C3172E03F8B6C96A906F88F9F41850B2165",
+      "upstreamRawSha256": "5DDA125E81EE4DAC9E78BD87F1618B4C59635F0125536FB856CC060DC381E988",
+      "signatures": [
+        "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+        "private.bpay_next_apply_work_collection_recovery_v1(uuid,uuid)"
+      ],
+      "remainingChange": "Two bodies: exact committed-current Source/publication receipt binding gate for PAYE collection; recovery effect source run line/binding/canonical/native/case-event frozen identity plus replay-conflict check. Preserve all other collection/immutable guards.",
+      "deltaSpans": [
+        {
+          "tag": "insert",
+          "buildLines": [
+            534,
+            533
+          ],
+          "resetLines": [
+            534,
+            558
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  if v_work.work_kind='SOURCE' and v_revision.source_head_id is not null and not exists (",
+            "    select 1 from private.bpay_next_source_component_binding b",
+            "      join private.bpay_next_source_component_binding_version v on v.id=b.current_binding_version_id",
+            "      join private.weekly_source_entitlement_publication_receipts receipt on receipt.id=v.source_receipt_id",
+            "      join public.weekly_source_entitlement_decision_bundles bundle on bundle.decision_bundle_id=v.decision_bundle_id",
+            "        and bundle.bundle_revision=v.bundle_revision and bundle.state='COMMITTED'",
+            "      join public.weekly_source_entitlement_heads head on head.id=v.head_id and head.state='COMMITTED_CURRENT'",
+            "      join public.weekly_source_root_authorisations auth on auth.current_entitlement_head_id=head.id",
+            "        and auth.root_timesheet_id=head.root_timesheet_id and auth.withdrawn_at_utc is null",
+            "      join private.bpay_next_publication publication on publication.command_id=v.publication_command_id_1",
+            "        and publication.work_id=v.approval_work_id and publication.revision_id=v.approval_revision_id",
+            "        and publication.candidate_id=v_candidate",
+            "      where b.canonical_work_id=p_work_id and b.canonical_component_key=p_component_key",
+            "        and v.approval_work_id=p_work_id and v.approval_component_key=p_component_key",
+            "        and v.approval_revision_id=v_position.applied_revision_id",
+            "        and v.head_id=v_revision.source_head_id and v_revision.source_event_id=v.head_id",
+            "        and v.publication_command_id_2 is null and v.candidate_id=v_candidate",
+            "        and v.approval_source_channel='PAYE' and v.tax_treatment='TAXABLE'",
+            "        and receipt.decision_bundle_id=v.decision_bundle_id and receipt.bundle_revision=v.bundle_revision",
+            "        and receipt.request_digest=v.request_digest and pg_catalog.cardinality(receipt.head_ids)=1",
+            "        and receipt.head_ids[1]=v.head_id and v_work.current_revision_id=v.approval_revision_id",
+            "        and ((v_job.job_kind='POSITION_APPLY' and publication.command_id=v_job.command_id",
+            "              and publication.status in ('QUEUED','APPLYING'))",
+            "          or (v_job.job_kind<>'POSITION_APPLY' and publication.status='APPLIED' and publication.phase='DONE'))",
+            "  ) then v_state:='CURRENT_SOURCE_UNBOUND';end if;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            613,
+            612
+          ],
+          "resetLines": [
+            638,
+            638
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  v_source_line private.bpay_next_run_line%rowtype;"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            638,
+            637
+          ],
+          "resetLines": [
+            664,
+            664
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "  select * into strict v_source_line from private.bpay_next_run_line where id=v_basis.original_run_line_id;"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            640,
+            640
+          ],
+          "resetLines": [
+            667,
+            668
+          ],
+          "buildLinesText": [
+            "    target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,occurred_at_utc)"
+          ],
+          "resetLinesText": [
+            "    target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,occurred_at_utc,source_run_line_id,",
+            "    source_binding_version_id,canonical_source_work_id,canonical_source_component_key,native_source_channel,source_case_event_id)"
+          ]
+        },
+        {
+          "tag": "replace",
+          "buildLines": [
+            643,
+            643
+          ],
+          "resetLines": [
+            671,
+            675
+          ],
+          "buildLinesText": [
+            "      -v_event.source_amount_ex_vat,-v_event.target_amount_ex_vat,-v_event.target_amount_vat,-v_event.target_amount_inc_vat,v_event.occurred_at_utc"
+          ],
+          "resetLinesText": [
+            "      -v_event.source_amount_ex_vat,-v_event.target_amount_ex_vat,-v_event.target_amount_vat,-v_event.target_amount_inc_vat,v_event.occurred_at_utc,",
+            "      case when v_source_line.source_binding_version_id is null then null else v_source_line.id end,",
+            "      v_source_line.source_binding_version_id,v_source_line.canonical_source_work_id,v_source_line.canonical_source_component_key,",
+            "      case when v_source_line.source_binding_version_id is null then null else v_source_line.source_pay_channel end,",
+            "      case when v_source_line.source_binding_version_id is null then null else v_event.id end"
+          ]
+        },
+        {
+          "tag": "insert",
+          "buildLines": [
+            654,
+            653
+          ],
+          "resetLines": [
+            686,
+            693
+          ],
+          "buildLinesText": [],
+          "resetLinesText": [
+            "    end if;",
+            "    if (v_effect.source_run_line_id,v_effect.source_binding_version_id,v_effect.canonical_source_work_id,",
+            "        v_effect.canonical_source_component_key,v_effect.native_source_channel,v_effect.source_case_event_id)",
+            "      is distinct from (case when v_source_line.source_binding_version_id is null then null else v_source_line.id end,",
+            "        v_source_line.source_binding_version_id,v_source_line.canonical_source_work_id,v_source_line.canonical_source_component_key,",
+            "        case when v_source_line.source_binding_version_id is null then null else v_source_line.source_pay_channel end,",
+            "        case when v_source_line.source_binding_version_id is null then null else v_event.id end) then",
+            "      raise exception using errcode='23514',message='BPAY_NEXT_SOURCE_BOOK_EFFECT_REPLAY_CONFLICT';"
+          ]
+        }
+      ],
+      "acceptance": "NOT_RUN",
+      "installed": "NOT_INSTALLED"
+    }
+  ],
+  "excludedValuer": {
+    "deliverable": "F-05-D03",
+    "final": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
+    "disposition": "F-04 sole shared-quote target valuer; no re-added1500 body"
+  },
+  "unreviewedCorrectionAdopted": false
+}

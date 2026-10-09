@@ -1,0 +1,11 @@
+# Planner V4 — existing WORK-credit reuse after Case-only writeoff review
+
+E-only candidate. Not installed, PostgreSQL-compiled, independently accepted or natively proved.
+
+Two exact inverse substitutions preserve reviewed V3 and add one narrowly scoped connection: the actual planner obtains a private, point-proved current credit snapshot when the overall comparison is REVIEW solely for `CASE_WRITEOFF_COMPARISON_REVIEW_REQUIRED`. The existing paid and WORK-held credit may be reused only when the snapshot independently qualifies those credits, keeps the same saved policy and retains known signed realised amounts and nonnegative held amounts. Existing exact-penny and range checks remain. This is not overall READY, a forgiveness conversion, historical reconstruction or a preparation bypass.
+
+The fresh Case choice and Case-hold mappings still pass the unchanged shared Case quote, conservation, saved witness verification and genuine registration. Any changed policy or unproved credit requires explicit existing review. Ordinary READY behavior and genuine initial ZERO-seed paid-origin/complete A+B scope remain unchanged.
+
+Required dependency: `private.bpay_next_source_comparison_review_credit_snapshot_v2(uuid,bigint)` must independently prove the real current pointer/book/native tuple, immutable receipt and known operation provenance; return the existing planner current-comparison fields plus honest `qualification_state`, exact `review_issue_code` and separate `credit_qualification_state`. The E-only dependency is now sealed in `SOURCE_COMPARISON_REVIEW_CREDIT_CARRY_V1_20261007`: manifest `BE8EE66EA54ACB28BACF10206DCD2C0711E7A5BA1310649146641E380DAD353C`, owner0240 `A6E5E312F19C25F91C521BB47ED332CC80EFD49DDB1C0857A55E2486DDE4F616`, carry0241 `E4EA8B96BA0CD570279DA0732F9841749B1A98641B67A993A23788559FCCA7F3`. Independent review of this exact pair with planner `D70B5E3DAE52CDF7DC59855E1DA116A8DBD974F5FDCC203DE319DEFEAC6AB1C0` is pending. This candidate must not execute before that paired qualification; sealing and source/model checks are not PostgreSQL/native proof.
+
+Five source checks cover the two substitutions and unchanged owner boundaries, not native financial correctness. No task or full-family acceptance is claimed.

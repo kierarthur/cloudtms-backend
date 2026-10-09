@@ -1,0 +1,48 @@
+{
+  "schema_version": "SOURCE_UNPAID_ZERO_PUBLIC_REPRO_HELD_SEAL_V1",
+  "status": "HELD_SOURCE_ONLY_NOT_NATIVE",
+  "rootGate": null,
+  "native": "NOT_RUN",
+  "database": false,
+  "scope": "S2-MOV-CAPTURE-GENERATED01_DIAGNOSTIC_ONLY",
+  "ownerMaterial": {
+    "sha256": "B2A9A14155A537F8B1D8C99E718285A8A2F5CB320F798799B0836B750D8CFD66",
+    "units": 53,
+    "finalFunctions": 186,
+    "creates": 199
+  },
+  "artifacts": [
+    {
+      "file": "adapter.mjs",
+      "sha256": "4A9170570E4BC59E91F699F0380A9AE19E57F10B4364DC58AF4762346016CF45",
+      "bytes": 28338
+    },
+    {
+      "file": "README.md",
+      "sha256": "4975728379C5155D91277C746DBC58921A5FEC1800DE2FBBF1EAD79AF0438ACA",
+      "bytes": 7917
+    },
+    {
+      "file": "test.mjs",
+      "sha256": "1538170F5150904B9B7F97ADC2C6E3AE0306E4FDBF0CAE7C828A66C0EC5A52AC",
+      "bytes": 3037
+    },
+    {
+      "file": "SOURCE_CONTROLS.json",
+      "sha256": "2AC7E177EF4BFB4A8E766AEC7C3C06EA6523BB20BC492EA5DF75D9EBDCCC53BD",
+      "bytes": 5695
+    }
+  ],
+  "sourceControls": "SOURCE_CONTROLS_PASS",
+  "syntax": "NODE_CHECK_PASS",
+  "fixtureSqlSha256": "AA4BCD068ACD82F6F397F687E25F610130C89C1FD15C00F934CB2E174AADD468",
+  "integration": "ROOT_EXISTING_CONNECTION_SERIAL_BRIDGE_UNCHANGED_C2_CALLERS_ONLY",
+  "freshProof": "ROOT_OUTER_ROLLBACK_CLOSE_FRESH_EQUALITY_REQUIRED",
+  "awards": {
+    "generated01": false,
+    "removedComparison": false,
+    "adversaries": false,
+    "payment": false,
+    "hosted": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": "SOURCE_MOVE_V11_PREVIEW_NULL_SOURCE_CHECKS",
+  "declared_row": "S2-MOV-BANK01",
+  "status": "PASS",
+  "completion": "9b1a1f",
+  "exit_code": 0,
+  "tests": 3,
+  "old_suites_rerun": false,
+  "database": false,
+  "native": false,
+  "root_gate": null,
+  "commands": [
+    "node --test driver/test.mjs",
+    "node build.mjs --check",
+    "node --check driver/build-root-review.mjs"
+  ],
+  "checks": [
+    "GATED_V10_WHOLE_INVERSES_NORMALIZED_DRIVER_AND_COPIES",
+    "EXACT_SAME_C_PREVIEW_SQL_NULL_NON_NULL_NESTED_NULL_AND_ACCEPTANCE_SQL_CAPTURE",
+    "INERT_NULL_GATE_CURRENT_SOURCE_BINDING_FAILED_V10_PRESERVATION"
+  ],
+  "limitations": [
+    "SOURCE_TRANSPORT_ONLY",
+    "INDEPENDENT_REVIEW_REQUIRED",
+    "ROOT_NATIVE_COMPLETE_PREFIX_REQUIRED",
+    "NO_CODE_ONLY_FINANCIAL_AWARD"
+  ]
+}
