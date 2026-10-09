@@ -38,12 +38,12 @@ begin
   req:=jsonb_build_object('actor_user_id',actor,'agency_id',agency,'environment','TEST',
     'client_id',client,'effective_date',current_date);
   shape:=public.weekly_source_client_settings_get_v1(req);
-  if shape->>'eligible'<>'true' or shape->>'configured'<>'false'
-    or shape#>>'{capabilities,source_family}'<>'NHSP'
-    or shape#>>'{capabilities,authority_mode}'<>'SOURCE_AUTHORITY'
-    or shape#>>'{capabilities,document_mode}'<>'CHECK_ONLY'
-    or shape#>>'{capabilities,show_query_settings}'<>'true'
-    or shape#>>'{capabilities,show_rate_settings}'<>'true' then
+  if shape->>'eligible' is distinct from 'true' or shape->>'configured' is distinct from 'false'
+    or shape#>>'{capabilities,source_family}' is distinct from 'NHSP'
+    or shape#>>'{capabilities,authority_mode}' is distinct from 'SOURCE_AUTHORITY'
+    or shape#>>'{capabilities,document_mode}' is distinct from 'CHECK_ONLY'
+    or shape#>>'{capabilities,show_query_settings}' is distinct from 'true'
+    or shape#>>'{capabilities,show_rate_settings}' is distinct from 'true' then
     raise exception 'NHSP before-contract settings not visible';
   end if;
   original_version:=shape->>'settings_version';
@@ -55,7 +55,7 @@ begin
     if sqlerrm<>'WEEKLY_SOURCE_CLIENT_READ_ONLY_POLICY_MISMATCH' then raise; end if;
   end;
   saved:=public.weekly_source_client_settings_save_atomic_v1(req);
-  if saved->>'configured'<>'true' or saved#>>'{settings,manager_query_recipient}'<>'manager@example.invalid'
+  if saved->>'configured' is distinct from 'true' or saved#>>'{settings,manager_query_recipient}' is distinct from 'manager@example.invalid'
     or not exists(select 1 from public.weekly_source_group_clients m where m.client_id=client and m.valid_from=date '1900-01-01')
     or not exists(select 1 from public.weekly_source_client_policies p where p.client_id=client and p.effective_from=date '1900-01-01') then
     raise exception 'NHSP first save or historical baseline failed';
@@ -87,7 +87,7 @@ begin
   end;
   update public.clients set ts_queries_email='manager@example.invalid' where id=client;
   saved:=public.weekly_source_client_settings_save_atomic_v1(req);
-  if saved->>'configured'<>'true'
+  if saved->>'configured' is distinct from 'true'
     or (select count(*) from public.weekly_source_group_clients m where m.client_id=client)<>1
     or (select count(*) from public.weekly_source_client_policies p where p.client_id=client and current_date between p.effective_from and coalesce(p.effective_to,'infinity'::date))<>1 then
     raise exception 'NHSP subsequent save without contracts failed';
@@ -104,7 +104,7 @@ begin
   end;
   shape:=public.weekly_source_client_settings_get_v1(jsonb_build_object('actor_user_id',actor,'agency_id',agency,
     'environment','TEST','client_id',ordinary,'effective_date',current_date));
-  if shape->>'eligible'<>'false' then raise exception 'Ordinary client acquired NHSP eligibility'; end if;
+  if shape->>'eligible' is distinct from 'false' then raise exception 'Ordinary client acquired NHSP eligibility'; end if;
   begin
     perform public.weekly_source_client_settings_save_atomic_v1(jsonb_build_object('actor_user_id',actor,'agency_id',agency,
       'environment','TEST','client_id',ordinary,'expected_settings_version',shape->>'settings_version',
