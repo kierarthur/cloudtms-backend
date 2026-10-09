@@ -12505,16 +12505,25 @@ async function handleContractsDuplicate(env, req, contractId) {
     return withCORS(env, req, conflict('The source Contract changed while this window was open. Reopen it before duplicating.'));
   }
 
+  const duplicatePayMethod = String(src.pay_method_snapshot || 'PAYE').trim().toUpperCase();
+  if (!['PAYE', 'UMBRELLA'].includes(duplicatePayMethod)) {
+    return withCORS(env, req, conflict('The source Contract pay method is unavailable. Reopen the Contract before duplicating.'));
+  }
   const assignedCandidateIds = [...new Set(candidateAssignments.filter(Boolean))];
   if (assignedCandidateIds.length) {
     const filter = assignedCandidateIds.map(id => `id.eq.${enc(id)}`).join(',');
     const { rows: candidates } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/candidates?or=(${filter})&select=id`
+      `${env.SUPABASE_URL}/rest/v1/candidates?or=(${filter})&select=id,pay_method`
     );
     const found = new Set((candidates || []).map(row => String(row?.id || '')));
     if (assignedCandidateIds.some(id => !found.has(id))) {
       return withCORS(env, req, badRequest('One or more selected Candidates no longer exist'));
+    }
+    // Validate every assignment before the first copy is written. A stale or
+    // forged picker selection must not book an incompatible Candidate.
+    if ((candidates || []).some(row => String(row?.pay_method || '').trim().toUpperCase() !== duplicatePayMethod)) {
+      return withCORS(env, req, conflict(`Only ${duplicatePayMethod === 'PAYE' ? 'PAYE' : 'Umbrella'} Candidates can be assigned to these Contract copies. Create an unassigned copy to use a different pay method.`));
     }
   }
 
@@ -12584,7 +12593,7 @@ async function handleContractsDuplicate(env, req, contractId) {
       // ✅ NEW: copy contract.is_ad_hoc
       is_ad_hoc: !!src.is_ad_hoc,
 
-      pay_method_snapshot: String(src.pay_method_snapshot || 'PAYE').toUpperCase() === 'PAYE' ? 'PAYE' : 'UMBRELLA',
+      pay_method_snapshot: duplicatePayMethod,
       rates_json: src.rates_json || {},
 
       std_schedule_json: src.std_schedule_json || null,
