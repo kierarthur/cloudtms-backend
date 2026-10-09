@@ -7901,7 +7901,7 @@ async function handleContractsCreate(env, req) {
   // accept std_schedule_json and derive std_hours_json
   let std_schedule_json = null;
   let derived_hours = null;
-  if (body.std_schedule_json) {
+  if (!is_ad_hoc && body.std_schedule_json) {
     try {
       std_schedule_json = body.std_schedule_json;
       derived_hours = deriveStdHoursFromSchedule(std_schedule_json);
@@ -7909,7 +7909,7 @@ async function handleContractsCreate(env, req) {
       return withCORS(env, req, badRequest(e.message || 'Invalid std_schedule_json'));
     }
   }
-  const std_hours_json = (derived_hours || body.std_hours_json || null);
+  const std_hours_json = is_ad_hoc ? null : (derived_hours || body.std_hours_json || null);
 
   // Resolve the Client canvas for the Contract start date through the single
   // authority. The unsaved Contract has no id yet, so explicit override values
@@ -8188,7 +8188,7 @@ async function handleContractsCreate(env, req) {
 
   // ── NEW: server-side safety net to generate weeks after create (non-fatal on failure)
   try {
-    const shouldGenerate = !!row?.id && (!!row.std_schedule_json || !!row.std_hours_json);
+    const shouldGenerate = !!row?.id && (row.is_ad_hoc === true || !!row.std_schedule_json || !!row.std_hours_json);
     console.log('[CONTRACTS][CREATE] post-insert', {
       id: row?.id,
       start: row?.start_date,
@@ -12669,7 +12669,7 @@ async function handleContractsDuplicate(env, req, contractId) {
     // Week generation is part of a successful duplicate. A half-created
     // Contract without its planned weeks is not a valid result.
     try {
-      const shouldGenerate = !!row.std_schedule_json || !!row.std_hours_json;
+      const shouldGenerate = row.is_ad_hoc === true || !!row.std_schedule_json || !!row.std_hours_json;
       if (shouldGenerate) {
         await generateContractWeeksInternal(env, row.id);
         console.log('[CONTRACTS][DUPLICATE] generate-weeks ok', { id: row.id });
@@ -12738,6 +12738,7 @@ async function generateContractWeeksInternal(env, contractId, opts = {}) {
         'end_date',
         'week_ending_weekday_snapshot',
         'std_schedule_json',
+        'is_ad_hoc',
         'default_submission_mode',
         'overrideclientsettings'
       ].join(',')
@@ -12782,7 +12783,7 @@ async function generateContractWeeksInternal(env, contractId, opts = {}) {
   const rowsToInsert = missingWE.map(we => {
     let planned_schedule_json = null;
     try {
-      const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
+      const raw = buildPlannedScheduleFromTemplate(c.is_ad_hoc === true ? null : (c.std_schedule_json || null), we);
       planned_schedule_json = clampPlannedToWindow(raw, we, wew, c.start_date, endWE, c.end_date);
       if (isEmptyPlanned(planned_schedule_json)) planned_schedule_json = null;
     } catch {
@@ -13124,6 +13125,7 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
         'end_date',
         'week_ending_weekday_snapshot',
         'std_schedule_json',
+        'is_ad_hoc',
         'default_submission_mode',
         'overrideclientsettings'
       ].join(',')
@@ -13166,7 +13168,7 @@ async function handleContractsGenerateWeeks(env, req, contractId) {
   const rowsToInsert = missingWE.map(we => {
     let planned_schedule_json = null;
     try {
-      const raw = buildPlannedScheduleFromTemplate(c.std_schedule_json || null, we);
+      const raw = buildPlannedScheduleFromTemplate(c.is_ad_hoc === true ? null : (c.std_schedule_json || null), we);
       planned_schedule_json = clampPlannedToWindow(raw, we, wew, c.start_date, endWE, c.end_date);
       if (isEmptyPlanned(planned_schedule_json)) planned_schedule_json = null;
     } catch {
