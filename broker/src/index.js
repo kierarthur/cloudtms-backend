@@ -37,6 +37,17 @@ import {
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
 import { dispatchBankingPayModalV2Request } from './banking-pay-modal-v2.js';
+import { handleBpayNextFrozenRead } from './bpay-next-frozen-read.js';
+import { handleBpayNextHistoryRead, createBpayNextHistoryRpc } from './bpay-next-history.js';
+import { createBpayNextFrozenPageRpc } from './bpay-next-frozen-rpc.js';
+import { renderBpayNextFrozenAdvice } from './bpay-next-frozen-advice.js';
+import { createBpayNextFrozenAdvicePageRpc } from './bpay-next-frozen-advice-rpc.js';
+import { handleBpayNextCommand } from './bpay-next-command.js';
+import { createBpayNextFinancialCommandRpc } from './bpay-next-command-rpc.js';
+import { handleBpayNextPreparationCommand, handleBpayNextPreparationPage } from './bpay-next-preparation.js';
+import { createBpayNextPreparationRpc, createBpayNextPreparationPageRpc } from './bpay-next-preparation-rpc.js';
+import { createBpayNextOwnerStatusRpc, createBpayNextLegacyFence, isBpayNextLegacyFinancialRoute } from './bpay-next-legacy-fence.js';
+import { isBpayNextLegacyFinancialEmail } from './bpay-next-legacy-email.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
@@ -66,6 +77,7 @@ import {
 import { adaptWeeklyCorrectFinalServiceSnapshot } from './weekly-source/correct-final-source-snapshot-adapter.mjs';
 import { orchestrateWeeklyProtectedAction } from './weekly-source/protected-action-orchestrator.mjs';
 import { projectWeeklyProtectedComponentIdentity } from './weekly-source/protected-component-identity.mjs';
+import { retainWeeklyProtectedPreviewFacts } from './weekly-source/protected-next-preview.mjs';
 import { applyNextPaidEvidence } from './weekly-source/next-paid-evidence.mjs';
 import {
   orchestrateWeeklySourceFinalisation,
@@ -3052,7 +3064,8 @@ async function calculateWeeklyProtectedSnapshot(env, input = {}) {
     {
       write_now: false,
       policy_override: context.policy,
-      ignore_locked_segments_for_preview: true
+      ignore_locked_segments_for_preview: true,
+      retain_protected_next_preview_facts: input.retainNextPreviewFacts === true
     }
   );
   // The generic calculator remains unchanged for ordinary/non-import flows.
@@ -42447,6 +42460,25 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
   return { ok: workerResult && workerResult.ok !== false, operation: current, worker_result: workerResult, successor };
 }
 
+// Fresh database authority at every entry. An unavailable owner is not LEGACY.
+function bpayNextOwnerStatusRpc(env) {
+  return createBpayNextOwnerStatusRpc({ baseUrl: env.SUPABASE_URL, headers: sbHeaders(env) });
+}
+
+async function bpayNextLegacyRefusalResponse(env, req) {
+  try {
+    await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
+    return null;
+  } catch (error) {
+    const code = ['BPAY_NEXT_LEGACY_WRITER_RETIRED', 'BPAY_NEXT_LEGACY_WRITER_DISABLED']
+      .includes(error?.code) ? error.code : 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE';
+    return withCORS(env, req, new Response(JSON.stringify({
+      ok: false, error_code: code, retryable: code !== 'BPAY_NEXT_LEGACY_WRITER_RETIRED'
+    }), { status: code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED' ? 410 : 503,
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+  }
+}
+
 async function handleBankingPayContinuationQueue(batch, env, ctx) {
   const messages = batch && Array.isArray(batch.messages) ? batch.messages : [];
   if (messages.length !== 1) {
@@ -42626,6 +42658,7 @@ async function recoverStrandedBankingPayContinuations(env, options = {}) {
 }
 
 async function bankingPayOperationsCronTick(env, opts = {}) {
+  await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
     for (let i = 0; i < arguments.length; i += 1) {
@@ -131807,6 +131840,14 @@ async function handleMailshotEnqueue(env, req) {
 
 async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const enc = encodeURIComponent;
+  // This is a shared factual-email drain, not an old Banking Pay owner. An
+  // unavailable owner holds financial mail only; ordinary mail still proceeds.
+  const legacyMailAllowed = async () => {
+    try {
+      return (await bpayNextOwnerStatusRpc(env)()).active_owner === 'LEGACY';
+    } catch { return false; }
+  };
+  const legacyMailAtClaim = await legacyMailAllowed();
   const safeObject = (value) => (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
 
   const toPositiveInt = (value) => {
@@ -131846,6 +131887,11 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   // per email or delaying the cancellation request itself.
   const finishDrainReport = async (report) => {
     let cancellationNoticeRecovery;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) {
+      return { ...report, payment_cancellation_notice_recovery: {
+        ok: true, skipped: true, code: 'BPAY_NEXT_LEGACY_MAIL_HELD', calls: 0
+      } };
+    }
     try {
       cancellationNoticeRecovery = await reconcilePaymentCancellationNoticesBounded(env);
     } catch {
@@ -131935,6 +131981,17 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
       }
     );
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+  };
+
+  const holdLegacyFinancialMail = async (rowId) => {
+    try {
+      await clearClaimedLease(rowId, attemptLeaseToken);
+    } catch {
+      // A failed lease-only release is not a failed email. Leave the original
+      // lease to expire; do not stamp delivery, move its date or audit a send.
+      errors.push({ id: rowId, error: 'BPAY_NEXT_LEGACY_MAIL_HOLD_RELEASE_UNCERTAIN',
+        financial_mail_held: true });
+    }
   };
 
   const patchClaimedRowFailed = async (
@@ -132033,6 +132090,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   const fetchSentRemittanceRowsForStateRetry = async () => {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return [];
     const retryLimitRaw =
       toPositiveInt(env.EMAIL_SENT_REMITTANCE_STATE_RETRY_LIMIT) ||
       toPositiveInt(env.EMAIL_SENT_REMITTANCE_MARK_RETRY_LIMIT) ||
@@ -132119,6 +132177,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     } catch {}
   }
 
+  // Defence in depth for an older installed claim RPC during ordered rollout.
+  // Release only OUR lease; do not mark held mail failed or reschedule it.
+  if (!legacyMailAtClaim) {
+    for (let i = picked.length - 1; i >= 0; i--) {
+      if (!isBpayNextLegacyFinancialEmail(picked[i])) continue;
+      await holdLegacyFinancialMail(picked[i].id);
+      picked.splice(i, 1);
+    }
+  }
+
   const noPickedRows = picked.length === 0;
 
   const claimedRowsById = new Map();
@@ -132181,6 +132249,7 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   const markRemittanceDrainResult = async (rowId, updatedRow, outcome, details = {}) => {
     const row = claimedRowsById.get(String(rowId || '').trim()) || updatedRow || null;
     if (!isRemittancePayBatchRow(row)) return;
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) return;
 
     const payBatchId = String((updatedRow && updatedRow.context_id) || row.context_id || '').trim();
     if (!payBatchId) return;
@@ -132266,25 +132335,28 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
           });
         } catch {}
       }
+      return true;
     } catch (e) {
       errors.push({
         id: rowId,
         error: String(e?.message || e || 'pay_remittance_mark_sent failed'),
         remittance_state_update_failed: true
       });
+      return false;
     }
   };
 
   let sentStateRetryCount = 0;
   const sentRowsForRetry = await fetchSentRemittanceRowsForStateRetry().catch(() => []);
   for (const sentRow of sentRowsForRetry) {
+    if (!legacyMailAtClaim || !(await legacyMailAllowed())) break;
     try {
       if (await sentRemittanceRowNeedsStateRetry(sentRow)) {
-        await markRemittanceDrainResult(sentRow.id, sentRow, 'SUCCESS', {
+        const recorded = await markRemittanceDrainResult(sentRow.id, sentRow, 'SUCCESS', {
           provider_message_id: sentRow.provider_message_id || null,
           provider_status: sentRow.provider_status || 'ACCEPTED'
         });
-        sentStateRetryCount += 1;
+        if (recorded === true) sentStateRetryCount += 1;
       }
     } catch (e) {
       errors.push({
@@ -132473,6 +132545,10 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
   };
 
   for (const row of picked) {
+    if (isBpayNextLegacyFinancialEmail(row) && !(await legacyMailAllowed())) {
+      await holdLegacyFinancialMail(row.id);
+      continue;
+    }
     try {
       if (isRemittancePayBatchRow(row) && String(row.status || '').trim().toUpperCase() === 'SENT') {
         await markRemittanceDrainResult(row.id, row, 'SUCCESS', { provider_message_id: row.provider_message_id || null, provider_status: row.provider_status || 'ACCEPTED' });
@@ -132556,9 +132632,16 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
       const batchJobs = [];
       const batchRowIds = [];
+      const financialMailInBatch = candidateRowIds.some((id) =>
+        isBpayNextLegacyFinancialEmail(claimedRowsById.get(String(id || '').trim())));
+      const legacyMailAtSend = financialMailInBatch ? await legacyMailAllowed() : false;
       for (let itemIndex = 0; itemIndex < candidateJobs.length; itemIndex += 1) {
         const rowId = candidateRowIds[itemIndex];
         const claimedRow = claimedRowsById.get(String(rowId || '').trim()) || null;
+        if (isBpayNextLegacyFinancialEmail(claimedRow) && !legacyMailAtSend) {
+          await holdLegacyFinancialMail(rowId);
+          continue;
+        }
         let authority = null;
         try {
           authority = await candidatePaperProviderAuthorityCurrent({
@@ -135852,6 +135935,12 @@ async function handleEmailSend(env, req) {
 
   const err = validateEmailPayload({ ...normalized, importance });
   if (err) return withCORS(env, req, badRequest(err));
+
+  if (isBpayNextLegacyFinancialEmail({ type: body?.type || 'BROADCAST',
+    reference: body?.reference ?? null, context_kind: body?.context_kind ?? null })) {
+    const refusal = await bpayNextLegacyRefusalResponse(env, req);
+    if (refusal) return refusal;
+  }
 
   const normalizeDeliveryTimingJson = async (raw) => {
     const timingRaw = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : { mode: 'NOW' };
@@ -140467,7 +140556,7 @@ async function sbGet2faChallengeById(env, challengeId) {
   const url =
     `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
     `?id=eq.${enc(challengeId)}` +
-    `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,resend_count,last_sent_at_utc`;
+    `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,resend_count,last_sent_at_utc,purpose`;
   const res = await fetch(url, { headers: sbAuthHeaders(env) });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
@@ -140735,6 +140824,14 @@ async function handleAuth2faResend(env, req) {
   }
 
   if (ch.used_at_utc) return badRequest('invalid_challenge');
+
+  // Login resend is shared with retained payment challenges. Gate only those
+  // exact stored payment purposes before changing a code or sending anything.
+  if (['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL'].includes(
+    String(ch.purpose || '').trim().toUpperCase())) {
+    const refusal = await bpayNextLegacyRefusalResponse(env, req);
+    if (refusal) return refusal;
+  }
 
   const resendCount = Number(ch.resend_count ?? 0) || 0;
   if (resendCount >= maxResends) return badRequest('max_resends_exceeded');
@@ -172367,11 +172464,16 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     // Server-only protected-hours preview: calculate a complete candidate-pay
     // target without copying invoice-locked source segments into that target.
     // It is never permitted on a writing TSFIN call.
-    ignore_locked_segments_for_preview = false
+    ignore_locked_segments_for_preview = false,
+    retain_protected_next_preview_facts = false
   } = (options && typeof options === 'object') ? options : {};
 
   if (ignore_locked_segments_for_preview === true && write_now === true) {
     throw new Error('PROTECTED_TARGET_PREVIEW_MUST_NOT_WRITE_TSFINS');
+  }
+  if (retain_protected_next_preview_facts === true
+      && (write_now !== false || ignore_locked_segments_for_preview !== true)) {
+    throw new Error('PROTECTED_NEXT_FACTS_REQUIRE_NONWRITING_PREVIEW');
   }
 
   if (!pay || !chg) {
@@ -173176,6 +173278,9 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
 
     segments.push({
       segment_id: sid,
+      ...(retain_protected_next_preview_facts === true
+        ? retainWeeklyProtectedPreviewFacts({ scheduleSegment: seg,
+          financialSegment: shiftFinancials, payRates: pay, chargeRates: chg }) : {}),
 
       date: seg.date || null,
 
@@ -187721,6 +187826,11 @@ async function csvAdapter_confirmManual() {
 }
 
 async function bankingCronTick(env, opts = {}) {
+  const financialOwner = await bpayNextOwnerStatusRpc(env)();
+  if (financialOwner.active_owner !== 'LEGACY') {
+    return { ok: financialOwner.active_owner === 'NEXT', skipped: true,
+      code: financialOwner.active_owner === 'NEXT' ? 'BPAY_NEXT_LEGACY_CRON_RETIRED' : 'BPAY_NEXT_MODULE_DISABLED' };
+  }
   const trimText = (value) => String(value == null ? '' : value).trim();
   const firstText = function () {
     for (let i = 0; i < arguments.length; i += 1) {
@@ -199956,6 +200066,26 @@ export default {
     }
 
     try {
+      if (isBpayNextLegacyFinancialRoute(req.method, p)) {
+        // Provider webhooks retain their own signature authentication. Every
+        // Office route authenticates BEFORE the service-only owner lookup.
+        const providerWebhook = matchPath(p, '/api/banking/pay/provider-webhook/:provider/:webhook_public_id');
+        if (!(providerWebhook && req.method === 'POST')) {
+          const paymentReauth = p === '/auth/reauth/start' || p === '/auth/reauth/verify';
+          const legacyUser = paymentReauth ? await requireUser(env, req) : await requireUser(env, req, ['admin']);
+          if (!legacyUser) return withCORS(env, req, unauthorized());
+        }
+        try {
+          await createBpayNextLegacyFence({ ownerStatusRpc: bpayNextOwnerStatusRpc(env) }).assertLegacyWriter();
+        } catch (error) {
+          const code = ['BPAY_NEXT_LEGACY_WRITER_RETIRED', 'BPAY_NEXT_LEGACY_WRITER_DISABLED']
+            .includes(error?.code) ? error.code : 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE';
+          return withCORS(env, req, new Response(JSON.stringify({
+            ok: false, error_code: code, retryable: code !== 'BPAY_NEXT_LEGACY_WRITER_RETIRED'
+          }), { status: code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED' ? 410 : 503,
+            headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+        }
+      }
       // ====================== AUTH ======================
       if (req.method === 'POST' && p === '/auth/login')   return withCORS(env, req, await handleAuthLogin(env, req));
       if (req.method === 'POST' && p === '/auth/refresh') return withCORS(env, req, await handleAuthRefresh(env, req));
@@ -200120,6 +200250,122 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
 
 
       // ====================== BANKING (rail-generic) ======================
+  // Exact NEXT contracts authenticate before constructing any service RPC.
+  const nextPath = p.replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
+  const nextAdviceMatch = /^\/api\/banking\/pay\/next\/advice\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(nextPath);
+  const nextOfficeRoute = (req.method === 'POST' && [
+    '/api/banking/pay/next/history-page', '/api/banking/pay/next/frozen-detail',
+    '/api/banking/pay/next/preparation', '/api/banking/pay/next/command'
+  ].includes(nextPath)) || (req.method === 'GET' && (nextPath === '/api/banking/pay/next/preparation-page' || nextPath === '/api/banking/pay/next/owner-status' || nextAdviceMatch));
+  if (nextOfficeRoute) {
+    const user = await requireUser(env, req);
+    if (!user) return withCORS(env, req, unauthorized());
+    if (user.role !== 'admin') return withCORS(env, req, new Response(JSON.stringify({
+      ok: false, error_code: 'BPAY_NEXT_OFFICE_FORBIDDEN', retryable: false
+    }), { status: 403, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/owner-status') {
+    try {
+      const status = await bpayNextOwnerStatusRpc(env)();
+      return withCORS(env, req, new Response(JSON.stringify(status), {
+        status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
+      }));
+    } catch {
+      return withCORS(env, req, new Response(JSON.stringify({
+        ok: false, error_code: 'BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', retryable: true
+      }), { status: 503, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+    }
+  }
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/history-page') {
+    return withCORS(env, req, await handleBpayNextHistoryRead(req, {
+      requireOfficeUser: async () => user,
+      historyRpc: createBpayNextHistoryRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/frozen-detail') {
+    return withCORS(env, req, await handleBpayNextFrozenRead(req, {
+      requireOfficeUser: async () => user,
+      frozenPageRpc: createBpayNextFrozenPageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/preparation-page') {
+    return withCORS(env, req, await handleBpayNextPreparationPage(req, {
+      requireOfficeUser: async () => user,
+      preparationPageRpc: createBpayNextPreparationPageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'GET' && nextAdviceMatch) {
+    return withCORS(env, req, await renderBpayNextFrozenAdvice(req, {
+      instruction_id: nextAdviceMatch[1]
+    }, {
+      requireOfficeUser: async () => user,
+      advicePageRpc: createBpayNextFrozenAdvicePageRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    }));
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/preparation') {
+    const preparationResponse = await handleBpayNextPreparationCommand(req, {
+      requireOfficeUser: async () => user,
+      preparationRpc: createBpayNextPreparationRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    });
+    if (preparationResponse.ok
+        && preparationResponse.headers.get('x-bpay-next-preparation-wake') === 'ENROLL') {
+      // Only the closed handler's accepted SEAL_ENQUEUE result requests this
+      // hint. Selection pages and reads do not drain or rebuild anything.
+      const wake = Promise.resolve().then(() => {
+        if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+          throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+        }
+        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ version: 1, runtime_action: 'ENROLL' });
+      }).catch(() => console.warn('[banking-pay-next] accepted preparation awaits recovery', {
+        error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+      }));
+      if (typeof ctx?.waitUntil === 'function') {
+        try { ctx.waitUntil(wake); } catch { await wake; }
+      } else await wake;
+    }
+    return withCORS(env, req, preparationResponse);
+  }
+
+  if (req.method === 'POST' && nextPath === '/api/banking/pay/next/command') {
+    const commandResponse = await handleBpayNextCommand(req, {
+      requireOfficeUser: async () => user,
+      financialCommandRpc: createBpayNextFinancialCommandRpc({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })
+    });
+    if (commandResponse.ok) {
+      // The command is already durable. Failed transport must not turn its
+      // accepted receipt into a false rejection; the minute job scan recovers.
+      const wake = Promise.resolve().then(() => {
+        if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
+          throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
+        }
+        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ version: 1, runtime_action: 'ENROLL' });
+      }).catch(() => console.warn('[banking-pay-next] accepted command awaits recovery', {
+        error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
+      }));
+      if (typeof ctx?.waitUntil === 'function') {
+        try { ctx.waitUntil(wake); } catch { await wake; }
+      } else await wake;
+    }
+    return withCORS(env, req, commandResponse);
+  }
+
+  }
+
 if (p.startsWith('/api/banking/')) {
 
 

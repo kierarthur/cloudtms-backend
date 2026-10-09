@@ -46,7 +46,7 @@ A fresh read-only multiline source search across **all** saved repeatable `.sql`
 | `private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date)` | `06102026_1157_banking_pay_shared_selected_quote_v1.sql` |
 | `private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)` | `09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql` |
 | `private.bpay_next_source_receipt_publish_v1()` | `06102026_1301_banking_pay_next_source_receipt_binding_v1.sql` |
-| `public.weekly_source_first_authorise_v1(uuid,uuid,text,uuid)` | `04102026_0557_banking_pay_next_source_owner_completion_v1.sql` |
+| `public.weekly_source_first_authorise_v1(uuid,uuid,text,uuid)` | `09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql` (advanced by the subsequent F-05 batch) |
 
 The source census now finds exactly one target-valuer physical definition, in 1157. Historical 1500 remains an executable relocation-only root with no DROP FUNCTION. Its actual callers are PL/pgSQL runtime calls in 1620, historical 0360 and ordinary 1958; no migration/top-level/SQL-language/intermediate apply caller was found that needs the obsolete inline calculator. The removal is documented explicitly and changes no Source-owned historical definition. Existing 1570, first-authorisation predecessors and 0360 remain preserved under their final-closure rules.
 
@@ -57,3 +57,7 @@ Raw 0549 and its comparison capacity helper remain outside release inventory. 19
 ## Completion boundary
 
 The current registry contains 704 entries; its four designated finals and all imported routine identities are coherent. Its still-false `foundationComplete` marker is conservative until the root records the combined F-04/F-06 completion. The F-05 caller/successor batch is still required as part of the eventual ordered release unit before business first use. This review does not mark any Installed/App tested row, claim protected verification, or authorise hosted installation or testing.
+
+## Later F-05 metadata update
+
+The subsequent saved F-05 batch advances the first-authorisation designated final to `09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql`; a fresh read of the registry confirms that final root and physical file for the exact four-argument signature. Historical 0557 and its predecessors remain retained. The preceding 704-entry count, pending F-05 statement and 0557 closure discussion describe the original F-06 review checkpoint, rather than the later combined build state. This note updates source metadata only and does not add runtime acceptance.

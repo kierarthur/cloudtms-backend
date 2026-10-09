@@ -1,0 +1,258 @@
+{
+  "date": "2026-10-09",
+  "sourceGateScope": "Syntax/import/static source checks only; no fixture/queue/provider/business runtime.",
+  "workersTypesVersion": "5.20261009.1",
+  "workersReferences": [
+    "https://developers.cloudflare.com/workers/best-practices/workers-best-practices/",
+    "https://developers.cloudflare.com/queues/configuration/javascript-apis/"
+  ],
+  "modules": [
+    {
+      "deliverable": "F-09-D01",
+      "path": "broker/src/bpay-next-background.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-background.js",
+      "rawSha256": "77FAA6D64335F9C54A5508F09DF30FA02763861C9B89B3959B8F43349AD0EDF8",
+      "action": "COPY_ABSENT_C6",
+      "imports": [
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-financial-queue.js",
+          "line": 12,
+          "targetRelativePath": "broker/src/bpay-next-financial-queue.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": false,
+          "targetRESETExists": true
+        },
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-preparation-expiry-rpc.js",
+          "line": 11,
+          "targetRelativePath": "broker/src/bpay-next-preparation-expiry-rpc.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": false,
+          "targetRESETExists": true
+        },
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-runtime-rpc.js",
+          "line": 10,
+          "targetRelativePath": "broker/src/bpay-next-runtime-rpc.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": false,
+          "targetRESETExists": true
+        }
+      ],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D02",
+      "path": "broker/src/bpay-next-command.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-command.js",
+      "rawSha256": "95F082F6FEF61932B0498EA007D47966692EC15094D954FC9CBBF4BD1D7ED059",
+      "action": "REPLACE_DEAD_C5",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D03",
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-command-rpc.js",
+      "rawSha256": "060CE9BDAB50576AEC731D0B9B3C6499A608E3CD71C17A3C9BDF54483DB1B68E",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D04",
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-financial-queue.js",
+      "rawSha256": "DE92B5604E8BDDD24EFEDD1DFEAB3A09D052613484E457785412A4E9E72B9C19",
+      "action": "COPY_ABSENT_C6",
+      "imports": [
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-job-step.js",
+          "line": 28,
+          "targetRelativePath": "broker/src/bpay-next-job-step.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": false,
+          "targetRESETExists": true
+        }
+      ],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D05",
+      "path": "broker/src/bpay-next-frozen-advice.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-frozen-advice.js",
+      "rawSha256": "368483F19A7B0523E31AE022DA69A334C22ED4DB83E706F438AF85B3BAD63C1C",
+      "action": "COPY_ABSENT_C6",
+      "imports": [
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-frozen-read.js",
+          "line": 15,
+          "targetRelativePath": "broker/src/bpay-next-frozen-read.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": false,
+          "targetRESETExists": true
+        }
+      ],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D06",
+      "path": "broker/src/bpay-next-frozen-advice-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-frozen-advice-rpc.js",
+      "rawSha256": "ACF94F66927911C3252F2F59D5E4BC4AB2EC4AE3D7E550E4D4D0100B8BF80549",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D07",
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-frozen-read.js",
+      "rawSha256": "3C7D75B485DB6824A38000D580EB96C37864C01A61FDAF114D5551637E10C3B2",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D08",
+      "path": "broker/src/bpay-next-frozen-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-frozen-rpc.js",
+      "rawSha256": "6DDBC1ECB64873714E9A9C9A05BC4FCB2DAE5D7FCA95236A4F75976594A4E83C",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D09",
+      "path": "broker/src/bpay-next-history.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-history.js",
+      "rawSha256": "81D4CA2FB90B1BBEC7DEA3A41698933F70B306833079484D45A89E4E77738451",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D10",
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-job-rpc.js",
+      "rawSha256": "D00D086D44BAAEE414CA8509FBE9C30B91015E55982D84C2035E32A3DFBA7FB7",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D11",
+      "path": "broker/src/bpay-next-job-step.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-job-step.js",
+      "rawSha256": "A103B8E4D6551EBE879392C3FBE2087EA2B8AEEA41B47C8A0E1C0CEFABCFA0C5",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D12",
+      "path": "broker/src/bpay-next-legacy-email.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-legacy-email.js",
+      "rawSha256": "3A3684860794FAF2A59DD4A3F7667E5ECB95696D82C48DCCA7784A01DFAFED65",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D13",
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-legacy-fence.js",
+      "rawSha256": "DF2F676CC9ADE226D8D5DD120696BB15F3B53D8E4B6894E511D7F78424469FEA",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D14",
+      "path": "broker/src/bpay-next-preparation.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-preparation.js",
+      "rawSha256": "DEFD708E500EA645EE272D326A7B0ED15F03C8B07DC280D3C9590933548C8ED6",
+      "action": "REPLACE_DEAD_C5",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D15",
+      "path": "broker/src/bpay-next-preparation-expiry-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-preparation-expiry-rpc.js",
+      "rawSha256": "190AED494B72C87AC9B3579C3CC752D2620E585C2DE24A8BAD20C2DD86D3EA9C",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D16",
+      "path": "broker/src/bpay-next-preparation-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-preparation-rpc.js",
+      "rawSha256": "642A7D989F526C821B36EB58B1BB00F32439DA953BC260C35AC290601FD37C34",
+      "action": "COPY_ABSENT_C6",
+      "imports": [
+        {
+          "kind": "STATIC",
+          "specifier": "./bpay-next-preparation.js",
+          "line": 2,
+          "targetRelativePath": "broker/src/bpay-next-preparation.js",
+          "targetIn17Set": true,
+          "targetSavedBuildExists": true,
+          "targetRESETExists": true
+        }
+      ],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    },
+    {
+      "deliverable": "F-09-D17",
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "source": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\banking-pay-reset-implementation-20261003\\broker\\src\\bpay-next-runtime-rpc.js",
+      "rawSha256": "9C8C94E9BB1A3A42C126C815D6F896F59DE20BF75ED34D776C089C5628E55A91",
+      "action": "COPY_ABSENT_C6",
+      "imports": [],
+      "syntax": "PASS",
+      "byteParity": "PASS",
+      "importResolution": "PASS"
+    }
+  ],
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN"
+}

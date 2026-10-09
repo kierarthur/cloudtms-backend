@@ -22,6 +22,9 @@ export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
   COMPONENTS:{work_id:'uuid',expected_revision_id:'uuid',after_line_no:'integer?',limit:'limit'},
   WORK_CHOICES:{run_id:'uuid',after_work_id:'uuid?',limit:'limit'},
   SELECTED_COMPONENTS:{run_id:'uuid',work_id:'uuid',after_selection_no:'integer?',limit:'limit'},
+  CHANNEL_DRAFTS:{run_id:'uuid'},
+  CHANNEL_WORKERS:{run_id:'uuid',pay_channel:'channel',after_candidate_id:'uuid?',limit:'limit'},
+  CHANNEL_STATUS:{run_id:'uuid',pay_channel:'channel',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'},
   WORKERS:{run_id:'uuid',after_candidate_id:'uuid?',limit:'limit'},
   REVISION_COMPARISON:{run_worker_id:'uuid',after_work_id:'uuid?',limit:'limit'},
   LINES:{run_worker_id:'uuid',after_line_no:'integer?',limit:'limit'},
@@ -44,9 +47,10 @@ const OUTPUTS={
   CASE_SEAL:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',sealed:'true',selected_count:'integer',excluded_count:'integer',replay:'boolean'},
   SEAL_ENQUEUE:{run_id:'uuid',command_id:'uuid',agency_sequence:'positive',replay:'boolean'},
   REVIEW:{run_id:'uuid',phase:'reviewPhase',reason:'reviewReason?',review_revision:'integer',all_ready:'boolean?',replay:'boolean'},
-  CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean'}
+  CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean',drafts:'drafts'}
 };
 const ROWS={
+  CHANNEL_WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',pay_channel:'channel',worker_status:'workerStatus',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',review_issue_code:'issue?'},
   COMPONENTS:{approved_line_id:'uuid',line_no:'positive',component_key:'key',component_kind:'componentKind',work_date:'date?',source_pay_channel:'channel',
     approved_source_ex_vat:'money',realised_source_ex_vat:'money?',held_source_ex_vat:'money?',residual_source_ex_vat:'money?',position_ready:'boolean'},
   WORK_CHOICES:{work_id:'uuid',expected_revision_id:'uuid?',selection_mode:'mode',selection_state:'selectionState',page_count:'integer',component_count:'integer'},
@@ -83,7 +87,7 @@ const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selec
   projection_input_kind:'projectionKind?',entered_paye_net:'money?',accepted_recoveries:'money?',accepted_net_additions:'money?',cash_amount:'money?'};
 const RETURN_CASH_HEADER={run_id:'uuid',run_worker_id:'uuid',candidate_id:'uuid',financial_view_revision:'integer'};
 const CURSORS={COMPONENTS:['line_no','after_line_no'],WORK_CHOICES:['work_id','after_work_id'],SELECTED_COMPONENTS:['selection_no','after_selection_no'],
-  WORKERS:['candidate_id','after_candidate_id'],REVISION_COMPARISON:['work_id','after_work_id'],LINES:['line_no','after_line_no'],
+  CHANNEL_WORKERS:['candidate_id','after_candidate_id'],WORKERS:['candidate_id','after_candidate_id'],REVISION_COMPARISON:['work_id','after_work_id'],LINES:['line_no','after_line_no'],
   SHIFTS:['detail_no','after_detail_no'],BREAKS:['break_no','after_break_no'],RATES:['bucket','after_bucket'],STATUS:['transfer_no','after_transfer_no'],
   CURRENT_CASES:['case_id','after_case_id'],CURRENT_STORED_CREDITS:['legacy_case_id','after_legacy_case_id'],CASE_COMPONENTS:['component_ordinal','after_component_ordinal']};
 class PreparationError extends Error {
@@ -115,6 +119,9 @@ function field(v,t){
   if(t==='selectionState')return ['OPEN','SEALED'].includes(v);
   if(t==='bucket')return ['DAY','NIGHT','SAT','SUN','BH'].includes(v);
   if(t==='channel')return ['PAYE','UMBRELLA'].includes(v);
+  if(t==='drafts')return Array.isArray(v)&&v.length>=1&&v.length<=2
+    &&v.every(x=>exact(x,{run_id:'uuid',pay_channel:'channel'}))
+    &&(v.length<2||(v[0].pay_channel==='PAYE'&&v[1].pay_channel==='UMBRELLA'));
   if(t==='componentKind')return ['WORK','PROTECTED_WORK','EXPENSE','MILEAGE','ADDITIONAL','ADJUSTMENT'].includes(v);
   if(t==='workKind')return ['ORDINARY','SOURCE','EXPENSE','ADJUSTMENT'].includes(v);
   if(t==='caseKind')return ['LOAN','ADVANCE','OVERPAYMENT','CREDIT','MANUAL_DEBT'].includes(v);
@@ -197,12 +204,20 @@ function result(payload,call,mutation){
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
     if(call.action==='REVIEW'&&((payload.phase==='PREPARING')!==(payload.reason!==null)))bad();
     if(call.action==='COMPONENT_SEAL'&&payload.component_count!==call.args.expected_count)bad();
-    if(call.action==='CONFIRM'&&payload.review_revision!==call.args.review_revision)bad();
+    if(call.action==='CONFIRM'&&(payload.review_revision!==call.args.review_revision||payload.drafts.some(d=>d.run_id!==call.args.run_id)))bad();
     if(['WORK_PAGE','COMPONENT_PAGE','CASE_PAGE'].includes(call.action)){
       const n=call.args.choices?.length??call.args.approved_line_ids?.length??call.args.component_ids?.length;
       if(payload.item_count!==String(n))bad();
     }
     return payload;
+  }
+  if(call.kind==='CHANNEL_DRAFTS'){
+    if(!exact(payload,{rows:'drafts',complete:'true'})||payload.rows.some(d=>d.run_id!==call.args.run_id))bad();
+    return {rows:payload.rows,complete:true,next_cursor:null};
+  }
+  if(call.kind==='CHANNEL_STATUS'){
+    if(payload?.header?.target_pay_channel!==call.args.pay_channel)bad();
+    return result(payload,{...call,kind:'STATUS'},false);
   }
   const storedCreditPage=call.kind==='CURRENT_STORED_CREDITS',returnCashPage=call.kind==='RETURN_CASH';
   if(!record(payload)||Object.keys(payload).length!==(returnCashPage?4:(call.kind==='STATUS'||storedCreditPage)?3:2)||!Array.isArray(payload.rows)||typeof payload.complete!=='boolean'
@@ -264,6 +279,7 @@ function result(payload,call,mutation){
   const [key,inputKey]=CURSORS[call.kind];let previous=call.args[inputKey];const caseIds=new Set();
   for(const row of payload.rows){
     if(!exact(row,ROWS[call.kind]))bad();
+    if(call.kind==='CHANNEL_WORKERS'&&row.pay_channel!==call.args.pay_channel)bad();
     const value=row[key];
     if(previous!==null){const ordered=key.endsWith('_no')||key==='component_ordinal'?BigInt(value)>BigInt(previous):value>previous;if(!ordered)bad();}
     previous=value;

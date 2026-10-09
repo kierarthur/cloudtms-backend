@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-09",
+  "currentBeforeRawSha256": "20140bde1ad315d633bf50f5ea407cb716af33c767c64af9b46abd426b91f51c",
+  "currentAfterRawSha256": "8e3b8c8384241e55dde39a02dfcad3bb760f5469967b1c1405ef046c22c68834",
+  "changes": [
+    {
+      "label": "F12 imports",
+      "beforeSha256": "143c7741aa145662c00657c3448c1f130da241b24ebe900cc92f8db217d322ab",
+      "afterSha256": "c261425f44c28e9a9aa8c3b8933d52ca25ea34899d8df8552f2613321cf47974"
+    },
+    {
+      "label": "Fresh bounded owner and refusal helpers",
+      "beforeSha256": "c93dc3ef3414cf8c6b0c5d4bbbdf9d711cc254b81c4747db1fc3ec91c2c59dae",
+      "afterSha256": "1d53a248a27b2fe58e04d0a8100861a53f92a6019bfc18c0ae9d164f1d13a7a8"
+    },
+    {
+      "label": "Operation cron admission",
+      "beforeSha256": "f7ec12a63a4b97684f9d86bad648e3d381139b842295f6fbacacab3df0366206",
+      "afterSha256": "2733a1fba652afe3890ba1f713736696646161fd11e0cf4a70d7a2e0a38d34d4"
+    },
+    {
+      "label": "Financial cron retirement",
+      "beforeSha256": "64c18ab3d70f6841a0d396f381dffb9fe8eb30ecd06bf7dddc4f28194985be30",
+      "afterSha256": "c39e5f64ac7ec94c13b143ca8ec3e13c94a23dce0f4bfbc670e307f887d60868"
+    },
+    {
+      "label": "Authenticated normalized financial route fence",
+      "beforeSha256": "b26a9ff9a7547222d751dc7faea7eaebaec776167f6040357dcf2628e363791e",
+      "afterSha256": "0c7a6004ba4863a72d6c8b9be4679cd13b9c0ed162027df9951c88384f56edc6"
+    },
+    {
+      "label": "Shared mail claim owner gate",
+      "beforeSha256": "0d00f569441fcb3f9a492cb1426e8bdb57fd9e20969bfffd47d34aebacfe7024",
+      "afterSha256": "45d041bba23baee4459d611833756ba27cb26dc55384a3646e4b569e16d04bbc"
+    },
+    {
+      "label": "Cancellation notice recovery containment",
+      "beforeSha256": "160fbb62ac6ad6a3951202c156047393049869e8f3d55b493bf615eb6c59155b",
+      "afterSha256": "afa6c37809eb8ed0f1dd5a90f03f62e1e0f246b41e34b6caa8404a0416925721"
+    },
+    {
+      "label": "Own lease-only hold release",
+      "beforeSha256": "5d5c56f282b8c9a73ddea96aa5d157fd274e943e6b782b133f49a65df52b9ad9",
+      "afterSha256": "65116c73787ae2bbcb8102baf6980a9220f35170045d1d0c58712296b36f0c19"
+    },
+    {
+      "label": "Claimed financial mail hold",
+      "beforeSha256": "c2748598b48790c23e6a73c5d492ef83b3ad46bd81dac4bfb60f0438c9f0d46e",
+      "afterSha256": "680e5a2f7c0d57ead5b17a801153642586052bf4f256ff8ade870a9f9d04c51e"
+    },
+    {
+      "label": "Per-row financial render admission",
+      "beforeSha256": "8a10dcc1361d45b2ea4cc49adb0612e2071989f36efccde71054a2291ebc5406",
+      "afterSha256": "3bf93c1248577521e0352105691d988dabde353694c2e2ffb89310831f7b652d"
+    },
+    {
+      "label": "Per-send financial mail admission; retain current Candidate checks",
+      "beforeSha256": "bdfb644a8463cbc1d8966b3199485d75f2754e2991fb4523780937ef7e0391cd",
+      "afterSha256": "88bbc2111cd7976f65ef27bfd976e38a1306ffd3b0d98da0e508d00112605904"
+    },
+    {
+      "label": "Generic financial email sender admission",
+      "beforeSha256": "9e759abcf1f4406fb0394037a9a4096a970ac7112233a6a807c0fd1869a255e8",
+      "afterSha256": "4fa8215f41cd701c78a78b8568eaf30b703a40ed26d99bb1e4043c414aee64d9"
+    },
+    {
+      "label": "Stored payment-purpose 2FA resend admission",
+      "afterSha256": "8dfa4125ce6e11c742d09534e426cf9075d5bfa8529169cc5d542f8de0271d57"
+    },
+    {
+      "label": "Sent remittance state retry claim containment",
+      "beforeSha256": "88824376b567e27712ce7c60e468b71acc81aaaa800a6cd57e96a903efe6acfb",
+      "afterSha256": "a13abd281c745bb8fc8651be49e4607ff98f9b35e320987a5595ebdb0da62c57"
+    },
+    {
+      "label": "Fresh financial outcome recheck",
+      "beforeSha256": "06f9c50af66fa22d412681ba23b35fc258ffd618f00fc8edb9118cac8e34ea3d",
+      "afterSha256": "e3397dcaf7a09f5d7c6f27e292bf78857e419046094639b6e111c501d4fb1744"
+    },
+    {
+      "label": "Stored payment-purpose fetch",
+      "beforeSha256": "d1daed51ecb701ce84826fd7067482d632dbb6ed6a153e36ac1d7681c376e5c4",
+      "afterSha256": "951ade28c80faeee4bdf1c9a44551d5a2d748eeb240e23ede9426addb9e5d71b"
+    },
+    {
+      "label": "Fresh sent-state retry admission",
+      "beforeSha256": "1faf764e81fd5f30c662ce012494c7e89c8cfa019c28443fe324c1f40eb4104c",
+      "afterSha256": "3c678bcb314036c2f2b132726311539894ecee7897cefa02ea5a8aa250283a9d"
+    },
+    {
+      "label": "Per-receipt sent-state retry admission",
+      "beforeSha256": "179ba91ca8df9cd1092b62941e8b1241a6563f760856a1ec3a6dc0dc0203a6fe",
+      "afterSha256": "bd052a5a6544756f57235bf2f0bc5646805ba08fe82dd45552e8fdfc06fca07c"
+    },
+    {
+      "label": "Count only genuine recorded sent-state completion",
+      "beforeSha256": "758a03f30199ca8ee407a31a272f4ee6562a68640ed551788f1300532cb1c49a",
+      "afterSha256": "df98e25591b970858746c2e2ec2d1cb3348d7c3c3a826d1c55c1fd6030591d1d"
+    },
+    {
+      "label": "Outcome helper reports actual successful database receipt",
+      "beforeSha256": "1353ab45810a18e19041d4ba5a4fa3b2c8754fb24df2ed96a178cc8c42e827ae",
+      "afterSha256": "f06af0cb1fe395f561245367b7cf1196ee1f4211a8d5a61397aa07087b4bf21f"
+    }
+  ],
+  "externalQuietWindow": "Pending distinct F17/F18/F19 admission and genuine obligation reconciliation; no claim of provider/email lock.",
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN",
+  "independentReviewFix": "Fresh sent-state retry gates and counter only after recorded=true; no RPC or false completion at NEXT/DISABLED/unknown."
+}

@@ -199,23 +199,23 @@ Dependencies: F-02; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-09-D01 | WORKER ROUTE: broker/src/bpay-next-background.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D02 | WORKER ROUTE: broker/src/bpay-next-command.js | COMMITTED_NOT_INSTALLED | Review replacement of existing older unimported BE copy; port current module and source-unit checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D03 | WORKER ROUTE: broker/src/bpay-next-command-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D04 | WORKER ROUTE: broker/src/bpay-next-financial-queue.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D05 | WORKER ROUTE: broker/src/bpay-next-frozen-advice.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D06 | WORKER ROUTE: broker/src/bpay-next-frozen-advice-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D07 | WORKER ROUTE: broker/src/bpay-next-frozen-read.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D08 | WORKER ROUTE: broker/src/bpay-next-frozen-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D09 | WORKER ROUTE: broker/src/bpay-next-history.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D10 | WORKER ROUTE: broker/src/bpay-next-job-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D11 | WORKER ROUTE: broker/src/bpay-next-job-step.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D12 | WORKER ROUTE: broker/src/bpay-next-legacy-email.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D13 | WORKER ROUTE: broker/src/bpay-next-legacy-fence.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D14 | WORKER ROUTE: broker/src/bpay-next-preparation.js | COMMITTED_NOT_INSTALLED | Review replacement of existing older unimported BE copy; port current module and source-unit checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D15 | WORKER ROUTE: broker/src/bpay-next-preparation-expiry-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D16 | WORKER ROUTE: broker/src/bpay-next-preparation-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-09-D17 | WORKER ROUTE: broker/src/bpay-next-runtime-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D01 | WORKER ROUTE: broker/src/bpay-next-background.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D02 | WORKER ROUTE: broker/src/bpay-next-command.js | COMMITTED_NOT_INSTALLED | Review replacement of existing older unimported BE copy; port current module and source-unit checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D03 | WORKER ROUTE: broker/src/bpay-next-command-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D04 | WORKER ROUTE: broker/src/bpay-next-financial-queue.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D05 | WORKER ROUTE: broker/src/bpay-next-frozen-advice.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D06 | WORKER ROUTE: broker/src/bpay-next-frozen-advice-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D07 | WORKER ROUTE: broker/src/bpay-next-frozen-read.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D08 | WORKER ROUTE: broker/src/bpay-next-frozen-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D09 | WORKER ROUTE: broker/src/bpay-next-history.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D10 | WORKER ROUTE: broker/src/bpay-next-job-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D11 | WORKER ROUTE: broker/src/bpay-next-job-step.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D12 | WORKER ROUTE: broker/src/bpay-next-legacy-email.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D13 | WORKER ROUTE: broker/src/bpay-next-legacy-fence.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D14 | WORKER ROUTE: broker/src/bpay-next-preparation.js | COMMITTED_NOT_INSTALLED | Review replacement of existing older unimported BE copy; port current module and source-unit checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D15 | WORKER ROUTE: broker/src/bpay-next-preparation-expiry-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D16 | WORKER ROUTE: broker/src/bpay-next-preparation-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-09-D17 | WORKER ROUTE: broker/src/bpay-next-runtime-rpc.js | LOCAL_ONLY | Port missing module and verify static imports/closed typed contracts; do not claim deployed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-09-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -255,12 +255,12 @@ Dependencies: F-03, F-09, F-12; successor positions: none. Design note: not requ
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-10-D01 | WORKER ROUTE: POST /api/banking/pay/next/history-page | LOCAL_ONLY | Port authenticated admin scoped reader; do not add a NEXT-activation refusal contrary to history contract. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-10-D02 | WORKER ROUTE: POST /api/banking/pay/next/frozen-detail | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-10-D03 | WORKER ROUTE: GET /api/banking/pay/next/preparation-page | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-10-D04 | WORKER ROUTE: GET /api/banking/pay/next/advice/:instruction_id | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-10-D05 | WORKER ROUTE: POST /api/banking/pay/next/preparation | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-10-D06 | WORKER ROUTE: POST /api/banking/pay/next/command | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D01 | WORKER ROUTE: POST /api/banking/pay/next/history-page | LOCAL_ONLY | Port authenticated admin scoped reader; do not add a NEXT-activation refusal contrary to history contract. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D02 | WORKER ROUTE: POST /api/banking/pay/next/frozen-detail | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D03 | WORKER ROUTE: GET /api/banking/pay/next/preparation-page | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D04 | WORKER ROUTE: GET /api/banking/pay/next/advice/:instruction_id | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D05 | WORKER ROUTE: POST /api/banking/pay/next/preparation | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-10-D06 | WORKER ROUTE: POST /api/banking/pay/next/command | LOCAL_ONLY | Port exact auth-before-RPC handler/exemption onto current BE; preserve wrong-method/unknown-route fence. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-10-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -278,8 +278,8 @@ Dependencies: F-02, F-03, F-10; successor positions: none. Design note: not requ
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-14-D01 | WORKER ROUTE: broker/src/weekly-source/protected-next-preview.mjs | LOCAL_ONLY | Review and merge the saved local delta onto the current BE source; preserve dependencies, owner gates, ACL and selected cutoff. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-14-D02 | WORKER ROUTE: broker/src/weekly-source/protected-action-orchestrator.mjs | LOCAL_ONLY | Port NEXT branch only on current Source authority after semantic frozen-boundary approval check. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-14-D01 | WORKER ROUTE: broker/src/weekly-source/protected-next-preview.mjs | LOCAL_ONLY | Review and merge the saved local delta onto the current BE source; preserve dependencies, owner gates, ACL and selected cutoff. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-14-D02 | WORKER ROUTE: broker/src/weekly-source/protected-action-orchestrator.mjs | LOCAL_ONLY | Port NEXT branch only on current Source authority after semantic frozen-boundary approval check. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-14-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -297,8 +297,8 @@ Dependencies: F-10, F-12; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-15-D01 | REPEATABLE: supabase/repeatable/04102026_0550_banking_pay_next_legacy_writer_fence_v1.sql | INSTALLED_ON_TEST | Owner-status function66–100 already exists, service-only/browser-denied; retain. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-15-D02 | WORKER ROUTE: GET /api/banking/pay/next/owner-status | MISSING | Build exact admin GET route and fence exemption returning closed owner/epoch shape. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-15-D01 | REPEATABLE: supabase/repeatable/04102026_0550_banking_pay_next_legacy_writer_fence_v1.sql | INSTALLED_ON_TEST | Owner-status function66–100 already exists, service-only/browser-denied; retain. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-15-D02 | WORKER ROUTE: GET /api/banking/pay/next/owner-status | MISSING | Build exact admin GET route and fence exemption returning closed owner/epoch shape. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-15-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 

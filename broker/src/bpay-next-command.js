@@ -109,6 +109,7 @@ function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
   switch (type) {
     case 'uuid': return typeof value === 'string' && UUID.test(value);
+    case 'payChannel': return ['PAYE','UMBRELLA'].includes(value);
     case 'money': return typeof value === 'string' && MONEY.test(value);
     case 'positiveMoney': return field(value, 'money') && /[1-9]/.test(value);
     case 'caseMoney': return typeof value === 'string' && CASE_MONEY.test(value);
@@ -194,7 +195,9 @@ async function limitedJson(input, maximum, request = false, signal = null) {
 function commandCall(body) {
   const invalid = () => { throw fault('BPAY_NEXT_COMMAND_REQUEST_INVALID', 400); };
   if (!record(body) || !Object.hasOwn(INPUTS, body.action)) invalid();
-  const schema = body.action === 'PAYE_NET' && Object.hasOwn(body, 'expected_projection_revision')
+  const schema = body.action === 'CANCEL_REQUEST' && (Object.hasOwn(body, 'run_id') || Object.hasOwn(body, 'pay_channel'))
+    ? { ...INPUTS.CANCEL_REQUEST, run_id: 'uuid', pay_channel: 'payChannel' }
+    : body.action === 'PAYE_NET' && Object.hasOwn(body, 'expected_projection_revision')
     ? { ...INPUTS.PAYE_NET, expected_projection_revision: 'projectionRevision' }
     : body.action === 'WRITE_OFF' && body.scope === 'AMOUNT'
       ? { ...INPUTS.WRITE_OFF, amount: 'positiveCaseMoney' } : INPUTS[body.action];
@@ -213,7 +216,8 @@ function commandResult(payload, call) {
   if (!record(payload) || Object.keys(payload).length !== keys.length
     || keys.some((key) => !Object.hasOwn(payload, key) || !field(payload[key], schema[key]))) invalid();
   for (const key of ['run_id', 'run_worker_id', 'return_cash_id', 'transfer_id', 'instruction_id', 'case_component_id']) {
-    if (call.args[key] && payload[key]?.toLowerCase() !== call.args[key].toLowerCase()) invalid();
+    if (call.args[key] && !(call.action === 'CANCEL_REQUEST' && key === 'run_id')
+      && payload[key]?.toLowerCase() !== call.args[key].toLowerCase()) invalid();
   }
   if (call.args.command_id && payload.command_id.toLowerCase() !== call.args.command_id.toLowerCase()) {
     // Existing evidence owners replay the original receipt's command identity,

@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-09",
+  "indexBefore": "69ec514a58d0992d2abf5587f40af8e0a03c5b4aaa518ee0555a59cc28296b9f",
+  "indexAfter": "4d4dc33df4d4f0b0cd2b85dfe96de13967587d127c2e6cd4d8b9c4629916c7bf",
+  "fenceBefore": "df2f676cc9ade226d8d5dd120696bb15f3b53d8e4b6894e511d7f78424469fea",
+  "fenceAfter": "afdbdda4ac440ada0a6267523a4a60398ae47feec85fcf8772f0fb2a2c6dfef8",
+  "sqlReused": "04102026_0550",
+  "response": [
+    "active_owner",
+    "owner_epoch"
+  ],
+  "auth": "401 missing session;403 nonadmin before RPC",
+  "readOnly": true,
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN"
+}
