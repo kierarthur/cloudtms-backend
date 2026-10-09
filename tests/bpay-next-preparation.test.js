@@ -143,7 +143,7 @@ test('wrong scope/count, JS numeric bigint, free result fields and invalid revie
 test('definite owner refusals stay known; transport/invalid receipt retry exact original body with unknown outcome',async()=>{
   for(const[db,code,status]of [[{code:'42501'},'FORBIDDEN',403],[{code:'P0002'},'SCOPE_NOT_FOUND',404],
     [{code:'23514'},'CONFLICT',409],[{code:'55000',message:'BPAY_NEXT_CHOICE_REVISION_NOT_CURRENT'},'NOT_ELIGIBLE',409],
-    [{code:'55000',message:'BPAY_NEXT_MODULE_NOT_ACTIVE'},'MODULE_NOT_ACTIVE',503],[{code:'PGRST202'},'DEPENDENCY_UNAVAILABLE',503]]){
+    [{code:'55000',message:'BPAY_NEXT_MODULE_NOT_ACTIVE'},'MODULE_NOT_ACTIVE',503],[{code:'PGRST202'},'SCHEMA_UNAVAILABLE',503]]){
     const d=deps(null,Response.json(db,{status:400}));await failed(command(),d,code,status);assert.equal(d.calls.length,1);
   }
   const d=deps();d.preparationRpc=async(name,args)=>{d.calls.push({name,args});throw new Error('synthetic secret not exposed');};

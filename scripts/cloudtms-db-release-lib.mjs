@@ -330,12 +330,17 @@ export function executableSqlSource(file, canonical = false) {
   return mapExecutableSqlSource(text,file);
 }
 
-// These two immutable/current authority files use audited, fixed-object DO
+// These immutable/current authority files use audited, fixed-object DO
 // loops for ownership. The general mapper deliberately leaves quoted SQL
 // opaque. Bind this exceptional executable-only rewrite to BOTH its exact
 // repository path and complete LF-canonical source bytes; never rewrite an
 // arbitrary function body or alter the canonical migration/closure locks.
 const DYNAMIC_LOGICAL_OWNER_SOURCES = new Map([
+  ['supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql', {
+    sha256: '0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+  }],
   ['supabase/migrations/04102026_1827_banking_pay_next_candidate_destination_group.sql', {
     sha256: 'af9849f6e83784b0064ee58179aabc740d396764c3639ef7132967f394c9512d',
     literal: "'alter table private.%I owner to postgres'",

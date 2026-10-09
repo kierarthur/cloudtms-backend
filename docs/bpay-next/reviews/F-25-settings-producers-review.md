@@ -1,0 +1,41 @@
+# F-25 typed settings producers and terminal clock source review
+
+9 October 2026. Independent read-only review of the locked 2244 transaction/ordinal migration, all five 2245 settings producer/guard functions and both 2247 receiver/capture successors. Compared with the F-25 card/checklist, version-receipt/lock protocol, locked accepted schema, original 1324 finance-policy/window callbacks, 1404 receiver, 2236 metadata enrollment and 1958 selected-case exclusions. Root alone edits product. No SQL, runtime, tests, fixtures, hosted reads or product edits were performed. **CHANGES REQUIRED — SP01 below. Full F-25 remains incomplete.**
+
+Fresh saved SHA-256 values:
+
+- `09102026_2244_banking_pay_next_input_transaction_v1.sql`: `4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191`, matching migration-lock.
+- `09102026_2245_banking_pay_next_input_version_producers_v1.sql`: `fa93cbd588cdd22a60aade8bc38b89b73c9dba3de5f87324c3024838267d2433`.
+- `09102026_2247_banking_pay_next_input_order_tail_v1.sql`: `fcbbd3c4e6a5f9fe41aa4762317beedadcf5f5a67ee03dfb43f59141c326b85a`.
+
+## Concrete finding
+
+### F25-SP01 — P1: fresh acceptance can still take business locks after a prior clock in the same transaction
+
+2247:35–58 retains a terminal CLOCK_SEALED latch after an ordinary financial command. Its receiver deliberately still permits other normal financial commands when this latch is already CLOCK_SEALED. However the successor `stage_acceptance_v1` at 105–119 checks only run-command existence, current-transaction version events and remaining acceptance-stage rows. It never checks this latch before entering admission/module/run/control/WORK/position locks. After an earlier financial receiver, or a completed enqueue for a different run in the same transaction, there can be no version events and no remaining stage rows. A fresh second run therefore passes this check, acquires new business/FK locks while already holding the agency clock, and receives another PREPARE.
+
+The typed settings BEFORE STATEMENT fence closes **settings writes** after that clock; it does not close this fresh acceptance path. The original protocol expressly requires the clock to be the final business/FK lock tail. Refuse a fresh SEAL_ENQUEUE when its current transaction latch is FINALISING/CLOCK_SEALED before the true outer public probe takes its locked authority/run-seal work, and enforce the same refusal at fresh private enqueue/capture entry. Preserve recorded exact run/command replay before this freshness fence. Do not blanket-reject legitimate already-prelocked paired publication receiver calls; the missing guard belongs to fresh acceptance that will acquire new locks. This is a concrete source-order path, not an observed deadlock or executed SQL scenario.
+
+## Sound producer/schema behavior
+
+2244 is additive and fails installation when historical version rows exist instead of inventing ordinals/backfilled origin. The operational transaction key and bounded ordinal are explicitly not business order. NEXT events require the exact transaction parent and unique same-transaction ordinal; every committed event still receives the original agency_sequence through the existing clock. The latch is private, RLS-enabled and directly revoked from browser/service roles. Installed producer guards refuse DELETE/TRUNCATE, changed transaction/epoch/creation identity, ordinal regression and mutation of a terminal latch.
+
+Candidate/Umbrella BEFORE STATEMENT entries precede those target row mutations, call the existing Source admission key and establish stable NEXT module ownership before staging. Row hooks record only actual raw pay method/company/floor, VAT/enabled or immutable policy ID/number changes; unrelated contact/bank/password columns are absent. INSERT retains explicit absent OLD state; unchanged tuples do not emit events. Multiple genuine changes retain distinct UUIDs and ordinals rather than coalescing away intermediate values. More than 1000 events is a typed refusal.
+
+The latch's deferred finalizer is queued by its first INSERT before any version event queues the reverse committed-receipt FK. Under its authored deferred mode, actual immediate statement/row callbacks finish before commit finalization; the receipt rows exist before those deferred version FK checks. The tail locks the transaction, confirms module/epoch, refuses the stated mixed pending legacy owner, prelocks actual event/typed targets, then enters FINALISING. Each typed event in stage order gets its own exact UTF8 evidence hash and one same-ID INPUT_VERSION command/receipt. New command FK targets are owned by this transaction; no Candidate fanout/job, second clock or early enrollment is added. The tail seals zero-member commands and the private latch, and later settings statements refuse before row mutation. 2236 supplies the explicit bounded zero-job enrollment branch.
+
+Original finance-window INSERT/UPDATE/DELETE/TRUNCATE AFTER STATEMENT callbacks remain unchanged. The new BEFORE STATEMENT entry prelocks policy control; the existing callback still creates the immutable policy/windows and updates control, and the row hook records that actual completed transition. Rates/windows are not copied into a new calculator. All new helpers keep fixed search paths, logical postgres ownership and revoked PUBLIC/anon/authenticated/service_role EXECUTE. The original receiver's module/clock/sequence/kind/epoch identity checks remain; the metadata extension requires its exact current-transaction typed event while FINALISING.
+
+## Capture C03 and scope limits
+
+2247:360–378 closes C03: selected collection rows alone undergo Source comparison refusal and genuine ordinary qualification. Excluded rows retain their exact collection/component and original policy references with is_selected=false, preserving a real sealed exclusion without promoting financial eligibility. C01 selected-origin qualification and C02 typed FK prelocks remain closed. SP01 is the outstanding fresh-acceptance clock fence at this checkpoint.
+
+This subset does not prove the pending Source/query publisher lifetime or every arbitrary mixed callback/caller. The weekly stage helper is still missing, and accepted CASE/WEEK consumers, Source seed/book/hold/outcome successors, nonqueued query producers and complete transport/verification remain required. No installed/executed/application-tested state, actual row counts or full F-25 completion is asserted.
+
+## SP01 fresh fence correction — source verdict
+
+Fresh 2247 SHA-256 `d8b27fc254df323871eb0734812f499ccdc9c327a41cfa81018066d1aee2d911`; new 2254 acceptance-fence successor SHA-256 `e26f1d705341d4942103ac55caad3f51a7ca84673de270ec2697d6e5eaf869ab`. Locked 2244 and producer 2245 hashes remain the checkpoint values above. **PASS — this settings/clock-fence source subset. SP01 is closed.** No concrete open defect remains in this reviewed subset; full F-25 remains incomplete.
+
+2247 stage entry at 109–112 now refuses a current-transaction phase other than OPEN before Source admission, module/run/control/WORK/position locks. 2254 private enqueue preserves the exact immutable run/command replay first, then applies the same phase fence at 25–28 before admission/module/run locks. Its post-wait exact replay recheck and immutable typed capture/tail remain. The true public SEAL_ENQUEUE probe verifies the original service/admin authority without locks, recognizes a plausible fresh run without a recorded command, then applies the phase fence at 120–123 before Source admission and the original locked authority/run-seal path. This closes the second fresh-enqueue-after-clock path without prohibiting an exact retained command response or legitimate already-prelocked publication receipt use.
+
+The public locked authority/closed arguments/action/response body is text-identical to 2236 after newline normalization, and its original service-only grant is preserved. Selected/excluded collection semantics and explicit typed FK prelocks remain as previously reviewed. The unchanged original 2233/2236 sources are retained as predecessors rather than rewritten. No SQL/runtime/tests or product edits were performed by this reviewer; the missing weekly helper and remaining Source/case/book/producer/consumer dependencies are still separate unfinished work.

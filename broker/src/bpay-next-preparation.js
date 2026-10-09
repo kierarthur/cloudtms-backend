@@ -19,6 +19,9 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  ACCEPTED_CANDIDATES:{run_id:'uuid',after_candidate_id:'uuid?',limit:'limit'},
+  ACCEPTED_WORK:{run_id:'uuid',candidate_id:'uuid',after_work_id:'uuid?',limit:'limit'},
+
   COMPONENTS:{work_id:'uuid',expected_revision_id:'uuid',after_line_no:'integer?',limit:'limit'},
   WORK_CHOICES:{run_id:'uuid',after_work_id:'uuid?',limit:'limit'},
   SELECTED_COMPONENTS:{run_id:'uuid',work_id:'uuid',after_selection_no:'integer?',limit:'limit'},
@@ -50,6 +53,8 @@ const OUTPUTS={
   CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean',drafts:'drafts'}
 };
 const ROWS={
+  ACCEPTED_CANDIDATES:{candidate_id:'uuid',accepted_input_id:'uuid',module_epoch:'positive',target_pay_channel:'channel',target_umbrella_id:'uuid?',pay_week_start:'date',case_scope:'acceptedCaseScope',case_selection_revision:'positive?',settings_witness_kind:'settingsWitness',input_evidence_sha256:'sha',prepare_job_id:'uuid?',prepare_job_status:'prepareJobStatus?',prepare_job_phase:'prepareJobPhase?',run_worker_id:'uuid?',worker_status:'workerStatus?',has_unsealed_work:'boolean',waiting_command_id:'uuid?',waiting_command_sequence:'positive?',progress_state:'acceptedProgress',progress_code:'acceptedProgressCode?',review_issue_code:'issue?'},
+  ACCEPTED_WORK:{candidate_id:'uuid',accepted_input_id:'uuid',accepted_work_input_id:'uuid',work_id:'uuid',original_revision_id:'uuid',effective_revision_id:'uuid',selection_mode:'mode',selected_line_count:'integer',publication_command_id:'uuid',predecessor_sequence:'positive',source_kind:'acceptedSourceKind',query_disposition:'acceptedQuery?',query_state_sha256:'sha?',input_evidence_sha256:'sha',effective_cut_id:'uuid?',cut_state:'acceptedCutState'},
   CHANNEL_WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',pay_channel:'channel',worker_status:'workerStatus',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',review_issue_code:'issue?'},
   COMPONENTS:{approved_line_id:'uuid',line_no:'positive',component_key:'key',component_kind:'componentKind',work_date:'date?',source_pay_channel:'channel',
     approved_source_ex_vat:'money',realised_source_ex_vat:'money?',held_source_ex_vat:'money?',residual_source_ex_vat:'money?',position_ready:'boolean'},
@@ -81,6 +86,7 @@ const ROWS={
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
     recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money'}
 };
+const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
   target_pay_channel:'channel',umbrella_id:'uuid?',preparation_revision:'positive',case_selection_revision:'integer',net_request_revision:'integer',net_projection_revision:'integer',net_pending:'boolean',
   review_issue_code:'issue?',review_issue_work_id:'uuid?',frozen_gross_ex_vat:'money',frozen_gross_vat:'money',frozen_gross_inc_vat:'money',projection_id:'uuid?',
@@ -91,13 +97,21 @@ const CURSORS={COMPONENTS:['line_no','after_line_no'],WORK_CHOICES:['work_id','a
   SHIFTS:['detail_no','after_detail_no'],BREAKS:['break_no','after_break_no'],RATES:['bucket','after_bucket'],STATUS:['transfer_no','after_transfer_no'],
   CURRENT_CASES:['case_id','after_case_id'],CURRENT_STORED_CREDITS:['legacy_case_id','after_legacy_case_id'],CASE_COMPONENTS:['component_ordinal','after_component_ordinal']};
 class PreparationError extends Error {
-  constructor(code,status=503,retryable=false,outcomeUnknown=false){super(code);Object.assign(this,{code,status,retryable,outcomeUnknown});}
+  constructor(code,status=503,retryable=false,outcomeUnknown=false,refusal=null){super(code);Object.assign(this,{code,status,retryable,outcomeUnknown,refusal});}
 }
 const fault=(suffix,status=503,retryable=false,unknown=false)=>new PreparationError(`BPAY_NEXT_PREPARATION_${suffix}`,status,retryable,unknown);
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function exact(v,schema){return record(v)&&Object.keys(v).length===Object.keys(schema).length&&Object.entries(schema).every(([k,t])=>Object.hasOwn(v,k)&&field(v[k],t));}
 function field(v,t){
   if(t.endsWith('?'))return v===null||field(v,t.slice(0,-1));
+  if(t==='sha')return typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
+  const acceptedEnums={acceptedCaseScope:['NO_CASE','SEALED_SELECTION'],settingsWitness:['BASELINE_AT_ACCEPTANCE','ORDERED_VERSION'],
+    prepareJobStatus:['READY','LEASED','BLOCKED','DONE','FAILED'],prepareJobPhase:['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','READY','DONE','EXPIRED'],
+    acceptedProgress:['WAITING_ENROLLMENT','WAITING_EARLIER_COMMAND','PREPARING','READY','REVIEW','CANCELLING','CANCELLED','FAILED','EPOCH_PAUSED'],
+    acceptedProgressCode:['ENROLLMENT_PENDING','EARLIER_COMMAND_PENDING','CUT_PENDING','PREPARATION_RUNNING','REVIEW_REQUIRED','CANCELLATION_PENDING','PREPARATION_EXPIRED','OWNER_EPOCH_STALE','JOB_FAILED'],
+    acceptedSourceKind:['ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT'],acceptedQuery:['CLEAR'],acceptedCutState:['WAITING_PREDECESSOR','WAITING_PIN','SEALED'],
+    prepareCommandStatus:['RECEIVED','ENROLLING','SEALED','COMPLETE','FAILED']};
+  if(Object.hasOwn(acceptedEnums,t))return acceptedEnums[t].includes(v);
   if(t==='integer'||t==='positive')return typeof v==='string'&&INT.test(v)&&BigInt(v)<=9223372036854775807n&&(t!=='positive'||v!=='0');
   if(t==='transferNo')return field(v,'positive')&&BigInt(v)<=2147483647n;
   if(t==='uuid')return typeof v==='string'&&UUID.test(v);
@@ -211,6 +225,44 @@ function result(payload,call,mutation){
     }
     return payload;
   }
+  if(['ACCEPTED_CANDIDATES','ACCEPTED_WORK'].includes(call.kind)){
+    payload=normalized(payload);
+    if(!record(payload)||Object.keys(payload).length!==3||!Object.hasOwn(payload,'header')||!Object.hasOwn(payload,'rows')||!Object.hasOwn(payload,'complete')
+      ||!exact(payload.header,ACCEPTED_HEADER)||payload.header.run_id!==call.args.run_id
+      ||BigInt(payload.header.enrolled_candidate_count)>BigInt(payload.header.expected_candidate_count)
+      ||!Array.isArray(payload.rows)||payload.rows.length>call.args.limit||typeof payload.complete!=='boolean'
+      ||(!payload.complete&&payload.rows.length===0))bad();
+    const h=payload.header,candidates=call.kind==='ACCEPTED_CANDIDATES',key=candidates?'candidate_id':'work_id',inputKey=candidates?'after_candidate_id':'after_work_id';
+    let previous=call.args[inputKey],workInput=null;const acceptedIds=new Set();
+    for(const row of payload.rows){
+      if(!exact(row,ROWS[call.kind])||(previous!==null&&row[key]<=previous)||acceptedIds.has(candidates?row.accepted_input_id:row.accepted_work_input_id))bad();
+      previous=row[key];acceptedIds.add(candidates?row.accepted_input_id:row.accepted_work_input_id);
+      if(candidates){
+        if(row.module_epoch!==h.accepted_module_epoch||(row.target_pay_channel==='UMBRELLA')!==(row.target_umbrella_id!==null)
+          ||(row.case_scope==='NO_CASE')!==(row.case_selection_revision===null)
+          ||(row.prepare_job_id===null)!==(row.prepare_job_status===null)||(row.prepare_job_id===null)!==(row.prepare_job_phase===null)
+          ||(row.run_worker_id===null)!==(row.worker_status===null)||(row.waiting_command_id===null)!==(row.waiting_command_sequence===null)
+          ||(row.waiting_command_sequence!==null&&BigInt(row.waiting_command_sequence)>=BigInt(h.accepted_sequence)))bad();
+        const codes={WAITING_ENROLLMENT:['ENROLLMENT_PENDING'],WAITING_EARLIER_COMMAND:['EARLIER_COMMAND_PENDING'],PREPARING:['CUT_PENDING','PREPARATION_RUNNING'],READY:[null],REVIEW:['REVIEW_REQUIRED'],CANCELLING:['CANCELLATION_PENDING'],CANCELLED:[null,'PREPARATION_EXPIRED'],FAILED:['JOB_FAILED'],EPOCH_PAUSED:['OWNER_EPOCH_STALE']};
+        if(!codes[row.progress_state].includes(row.progress_code)
+          ||(row.progress_state==='WAITING_ENROLLMENT'&&(row.prepare_job_id!==null||row.run_worker_id!==null||!['RECEIVED','ENROLLING'].includes(h.command_status)))
+          ||(row.progress_state==='WAITING_EARLIER_COMMAND'&&(row.waiting_command_id===null||!['READY','LEASED','BLOCKED'].includes(row.prepare_job_status)))
+          ||(row.progress_state==='READY'&&(row.prepare_job_status!=='DONE'||row.prepare_job_phase!=='READY'||!['READY','DRAFT','ISSUED','COMPLETE'].includes(row.worker_status)||h.run_status==='CANCELLING'||row.has_unsealed_work||!['SEALED','COMPLETE'].includes(h.command_status)||h.expected_candidate_count!==h.enrolled_candidate_count))
+          ||(row.progress_state==='REVIEW'&&row.worker_status!=='REVIEW')
+          ||(row.progress_state==='CANCELLED'&&!(row.worker_status==='CANCELLED'||(row.prepare_job_status==='DONE'&&row.prepare_job_phase==='EXPIRED')))
+          ||(row.progress_state==='CANCELLING'&&row.worker_status!=='CANCELLING'&&h.run_status!=='CANCELLING')
+          ||(row.progress_state==='FAILED'&&row.prepare_job_status!=='FAILED'&&h.command_status!=='FAILED')
+          ||(row.progress_state==='PREPARING'&&(row.waiting_command_id!==null||!['READY','LEASED','BLOCKED'].includes(row.prepare_job_status)||!['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE'].includes(row.prepare_job_phase)||(row.worker_status!==null&&row.worker_status!=='PREPARING')||((row.progress_code==='CUT_PENDING')!==row.has_unsealed_work))))bad();
+      }else {
+        if(workInput!==null&&workInput!==row.accepted_input_id)bad();workInput=row.accepted_input_id;
+        if(row.candidate_id!==call.args.candidate_id||BigInt(row.predecessor_sequence)>=BigInt(h.accepted_sequence)
+        ||(['SOURCE','PROTECTED'].includes(row.source_kind)!==(row.query_disposition==='CLEAR'&&row.query_state_sha256!==null))
+        ||(!['SOURCE','PROTECTED'].includes(row.source_kind)&&(row.query_disposition!==null||row.query_state_sha256!==null))
+        ||(row.cut_state==='SEALED')!==(row.effective_cut_id!==null))bad();
+      }
+    }
+    return {header:h,rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{[inputKey]:previous}};
+  }
   if(call.kind==='CHANNEL_DRAFTS'){
     if(!exact(payload,{rows:'drafts',complete:'true'})||payload.rows.some(d=>d.run_id!==call.args.run_id))bad();
     return {rows:payload.rows,complete:true,next_cursor:null};
@@ -295,10 +347,24 @@ function result(payload,call,mutation){
   }
   return {...(call.kind==='STATUS'?{header:payload.header}:{}),rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{[inputKey]:storedCreditPage?payload.scan_cursor:previous}};
 }
-function safeError(e,attempted,mutation){
+function safeError(e,attempted,mutation,action=null,args=null){
   if(e instanceof PreparationError)return e;
   const db=e?.json??e;
-  if(db?.code==='PGRST202')return fault('DEPENDENCY_UNAVAILABLE',503,true);
+  if(mutation&&action==='SEAL_ENQUEUE'&&typeof db?.details==='string'&&ENCODER.encode(db.details).byteLength<=1024){
+    let refusal;try{refusal=JSON.parse(db.details);}catch{}
+    const reasons={EARLIER_ECONOMIC_PENDING:true,QUERY_UNAVAILABLE:true,QUERY_BLOCKED:false,QUERY_BUSY:true,INPUT_UNAVAILABLE:false,SELECTION_INCOMPLETE:false,ORIGIN_UNAVAILABLE:false,TRANSACTION_NOT_FRESH:false};
+    if(db.code==='55000'&&db.message==='BPAY_NEXT_PREPARATION_BEFORE_ACCEPTANCE'&&record(refusal)
+      &&Object.keys(refusal).length===4&&['phase','reason','candidate_id','work_id'].every(k=>Object.hasOwn(refusal,k))
+      &&refusal.phase==='BEFORE_ACCEPTANCE'&&Object.hasOwn(reasons,refusal.reason)
+      &&field(refusal.candidate_id,'uuid?')&&field(refusal.work_id,'uuid?')&&(refusal.work_id===null||refusal.candidate_id!==null))
+      return new PreparationError('BPAY_NEXT_PREPARATION_'+refusal.reason,409,reasons[refusal.reason],false,normalized(refusal));
+    if(db.code==='23514'&&db.message==='BPAY_NEXT_PREPARATION_ACCEPTED_IDENTITY'&&record(refusal)
+      &&Object.keys(refusal).length===5&&['phase','reason','run_id','command_id','agency_sequence'].every(k=>Object.hasOwn(refusal,k))
+      &&refusal.phase==='ACCEPTED_IDENTITY'&&refusal.reason==='COMMAND_CONFLICT'
+      &&field(refusal.run_id,'uuid')&&refusal.run_id.toLowerCase()===args?.run_id&&field(refusal.command_id,'uuid')&&field(refusal.agency_sequence,'positive'))
+      return new PreparationError('BPAY_NEXT_PREPARATION_COMMAND_CONFLICT',409,false,false,normalized(refusal));
+  }
+  if(['PGRST202','42883','42P01','42703'].includes(db?.code))return fault('SCHEMA_UNAVAILABLE',503,false);
   if(db?.code==='42501'||[401,403].includes(e?.status))return fault('FORBIDDEN',403);
   if(db?.code==='P0002')return fault('SCOPE_NOT_FOUND',404);
   if(['22023','22003','22007','22008','22P02'].includes(db?.code))return fault('REQUEST_INVALID',400);
@@ -331,13 +397,13 @@ async function handle(request,dependencies,mutation){
         timeoutMs:BPAY_NEXT_PREPARATION_LIMITS.timeoutMs,maxResponseBytes:BPAY_NEXT_PREPARATION_LIMITS.responseBytes,routeClass:mutation?'OPERATION_NUDGE':'READ'});
       if(!(response instanceof Response))throw fault('RESPONSE_INVALID',503,true,mutation);
       const payload=await limitedJson(response,BPAY_NEXT_PREPARATION_LIMITS.responseBytes,false,controller.signal,mutation);
-      if(!response.ok)throw safeError({status:response.status,json:payload},true,mutation);
+      if(!response.ok)throw safeError({status:response.status,json:payload},true,mutation,call.action,call.args);
       const body=mutation?{ok:true,action:call.action,result:result(payload,call,true)}:{ok:true,kind:call.kind,...result(payload,call,false)};
       if(ENCODER.encode(JSON.stringify(body)).byteLength>BPAY_NEXT_PREPARATION_LIMITS.responseBytes)throw fault('RESPONSE_TOO_LARGE',503,true,mutation);
       return json(200,body,mutation&&call.action==='SEAL_ENQUEUE');
     };
     return await Promise.race([send(),timeout]);
-  }catch(e){const safe=safeError(e,attempted,mutation);return json(safe.status,{ok:false,error_code:safe.code,retryable:safe.retryable,outcome_unknown:safe.outcomeUnknown});}
+  }catch(e){const safe=safeError(e,attempted,mutation);return json(safe.status,{ok:false,error_code:safe.code,retryable:safe.retryable,outcome_unknown:safe.outcomeUnknown,...(safe.refusal?{refusal:safe.refusal}:{})});}
   finally{if(timer!==undefined)clearTimeout(timer);}
 }
 /** @param {Request} request @param {Partial<PreparationDependencies>} [dependencies] */

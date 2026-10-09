@@ -1,0 +1,42 @@
+# F-25 accepted preparation Worker — independent source review
+
+9 October2026. **PASS — fresh saved-source Worker review.** All requested finite decoder fixes are closed. Root alone writes product. This lane executed no tests, JavaScript/module runtime, SQL, browser, fixtures, hosted services or product edits. Full saved broker/src/bpay-next-preparation.js, accepted transport design, source-PASS2336 progress SQL, fixed preparation RPC adapter and the narrow2339 refusal producer changes are the evidence. Source PASS is not installation/runtime/Office PASS.
+
+## Final reviewed closure
+
+| Requested item | Current exact source proof |
+|---|---|
+| New UUID scope/order/uniqueness canonicalization | New accepted-result branch229 calls existing recursive normalized(payload) before header scope, raw-keyset and Set checks. It lowercases UUID strings/freeze results and preserves scalar types. Fixed-width lowercase canonical UUID lexical order agrees with PostgreSQL UUID byte order. Case-variant duplicate Candidate/WORK or accepted row IDs cannot evade monotone/order/Set checks. New outgoing header/rows/cursor are canonical; existing mutation and unrelated page decode behavior stays unchanged. |
+| Typed accepted-conflict request scope | safeError350 receives validated normalized request args from400. Detail run UUID is validated then compared lowercase to args.run_id364, before normalized typed return. Wrong request run cannot be promoted as ACCEPTED_IDENTITY. Original accepted command/sequence remains information, never replacement of pending command/receipt. |
+| Real running/earlier PREPARE tuple | PREPARING255 requires nonterminal READY/LEASED/BLOCKED and finite NEW/PINNING/RESERVE/ALLOCATE/FINANCE_ALLOCATE phase; worker absent/PREPARING; exact cut-code coupling and **no earlier waiting ID**. Null or terminal job cannot masquerade as running. WAITING_EARLIER249 requires actual nonterminal job+waiting identity; null couplings and strict earlier sequence244–245 close scope. |
+| Cancellation/failure mirrors | CANCELLED252 has real CANCELLED worker or DONE/EXPIRED PREPARE; CANCELLING253 has actual CANCELLING worker/root; FAILED254 has job/header command FAILED. Original exact state/code allowlist remains. REVIEW251 retains actual worker REVIEW without forcing original PREPARE DONE/DONE: later PAYE_NET0390:540 may put an already prepared worker into REVIEW while its original PREPARE remains DONE/READY. |
+| Full prepared readiness proof | READY250 requires PREPARE DONE/READY, actual READY/DRAFT/ISSUED/COMPLETE worker, no unsealed accepted WORK, root not CANCELLING, original command SEALED/COMPLETE and enrolled=expected. The progress read does not create all_ready/Confirm permission. |
+| Shared accepted WORK scope | WORK rows257 require one accepted_input_id, unique accepted_work_input_id238–239, strict WORK keyset, requested Candidate258, predecessor<header accepted sequence, exact SOURCE/PROTECTED query CLEAR/hash-versus-ordinary-null and SEALED iff cut ID259–261. |
+
+## Full transport review
+
+Exact new page input maps and fixed preparation RPC adapter use only original public endpoint/body, positive existing Office admin authentication before parse/RPC and SQL service/admin/current NEXT authority. No new binding/route/dynamic owner/client-supplied economic field/retry. READ route classification and redirect:error remain. Closed SQL raw `{header,rows,complete}` becomes exact Worker success `{ok,kind,header,rows,complete,next_cursor}` under header key/enums/int64 scope/count validation, requested run/row limit, enrolled<=expected, boolean completeness and nonempty nonterminal page. Last actual key supplies only nonterminal cursor; source-complete page has null cursor.
+
+Candidate original module equals immutable accepted header, channel/Umbrella and case-scope/revision nullable coupling remains, job/status/phase and worker/status IDs are coupled, waiting command/sequence nulls and strict earlier sequence agree. Case-only accepted Candidate with zero WORK remains valid; progress does not infer finish from a loaded page/command count. Actual captured channel/week/case/input evidence are projected without live Candidate/Umbrella/policy/Source terms, money counters, origin/query JSON, lease/control nonce, contacts or credentials. EPOCH_PAUSED remains a trusted explicit SQL state with original accepted epoch; current/execution epoch is absent from closed output, so decoder makes no invented F26 bridge/current-owner inference or live diagnosis.
+
+WORK accepted original/effective revision difference, certified original selected-line count, original publication command/predecessor and captured query CLEAR/null distinction remain. No current revision/Source/policy recapture, repricing, claim/cut sealing, new command clock or financial action occurs. Genuine Source-backed immutable cut identity/evidence/PREPARE linkage is checked by2336; Worker enforces its closed presentation fields rather than rebuilding query/history facts.
+
+Accepted SEAL_ENQUEUE success stays exactly run_id,command_id,agency_sequence,replay. Existing exact request echoes, component/page counts and Confirm/Review guards remain. Wake remains only successful SEAL_ENQUEUE, including harmless exact accepted replay; no READ/error/refusal emits it and original queue envelope is unchanged. A read cannot clear uncertain request bytes or derive all_ready; Office owns exact journal and explicit REVIEW/Confirm separately.
+
+Typed refusal is emitted only for mutation+SEAL_ENQUEUE, exact trusted SQLSTATE/message pair, bounded1024byte DETAIL, exact4/5 phase/reason/detail keys, valid UUID/int64 and work→Candidate coupling. Reasons/retryability are finite; raw SQL fields discarded. BEFORE_ACCEPTANCE is distinct from accepted COMMAND_CONFLICT. Unknown/malformed details stay generic bounded errors, no invented acceptance-phase assertion. Schema unavailable uses only finite existing wrapper/relation/function/column error codes, and MODULE_NOT_ACTIVE exact message retains mandatory owner invalidation. Auth-before-RPC,8-second deadline/abort,32768byte request and128KiB complete response cap remain. Post-dispatch malformed/oversized successful mutation/timeout/network retains unknown outcome. No automatic retry, new UUID or direct Worker drain.
+
+## QUERY_BUSY producer checkpoint
+
+Root also saved bounded exact55P03+WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY catches at current2339:56–58/:463–465/:567–569. The public fresh SEAL_ENQUEUE path performs pure service/admin authority and no-existing-run-command probe before fresh Source admission; actual original locked authority follows. Known original acceptance skips fresh admission. Private bounded refusal helper still proves no run_command and valid original run/selected Candidate/WORK scope. Worker therefore consumes a genuine QUERY_BUSY certificate rather than classifying arbitrary55P03, message suffix or a post-error diagnostic as before-acceptance. This closes the earlier missing-emission integration note. Full2339 SQL successor body/lock closure is a separate root review; this confirms only the finite producer seam relevant to Worker refusal decoding.
+
+## Verification limit
+
+Independent source PASS for the exact checkpoint below. Root owns required compile/source-unit execution and final registry integration; none were run here. Existing normal gates should retain case-variant duplicate/cursor/run echo, null/terminal PREPARING, PREPARING with earlier waiting job, shared WORK accepted input, typed refusal scope/unknown-outcome and accepted four-field/no-wake behaviors. Separate Office review must confirm literal uncertain journal bytes, original accepted identity, no read-derived Confirm, paused owner/late response closure and bounded polling.
+
+## Saved-byte checkpoint
+
+- `broker/src/bpay-next-preparation.js`: 39356 bytes; SHA-256 `9271ec0086bffdd9779707bf44407eba0923b1392317eb142e46c8f8e0338749`.
+- `broker/src/bpay-next-preparation-rpc.js`: 1424 bytes; SHA-256 `642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34`.
+- `supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql`: 29176 bytes; SHA-256 `e019512a0efde50be464513bd60a231d221a3a403f12a80c212ce4e90bc1c2dd`.
+- `supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql`: 49848 bytes; SHA-256 `0f8fc74e43eccbdf09b430c6cbcaaf21e06c8df45e7e3fe86d5b96747f681714`.
+- Review saved 2026-10-09T22:50:35.328431+00:00.

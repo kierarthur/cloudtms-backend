@@ -1187,6 +1187,26 @@
       "sha256": "cb08a6b28d8a2eeace2e0f4ed3561c84dcda33022bb0fe54d7f46ee5e43eacc2"
     },
     {
+      "path": "supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+      "sha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182"
+    },
+    {
+      "path": "supabase/migrations/09102026_2225_banking_pay_next_accepted_input_provenance_v1.sql",
+      "sha256": "c7d79426059729a7f85c787120fdc371ef312f9b832ba6576a13d33139a086c3"
+    },
+    {
+      "path": "supabase/migrations/09102026_2244_banking_pay_next_input_transaction_v1.sql",
+      "sha256": "4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191"
+    },
+    {
+      "path": "supabase/migrations/09102026_2300_banking_pay_next_accepted_case_week_terms_v1.sql",
+      "sha256": "ad70ce3e0a7531d52209f0566412628f0c5c59a03fa63a534fab2535b3b950ef"
+    },
+    {
+      "path": "supabase/migrations/09102026_2352_banking_pay_next_query_producer_protocol_v1.sql",
+      "sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
