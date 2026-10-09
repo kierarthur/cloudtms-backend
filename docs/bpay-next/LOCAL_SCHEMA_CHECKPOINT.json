@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "5dd4d20ea9e75818863582c65e7369478696dcbd",
-  "compiledAtUtc": "2026-10-09T19:19:52.088Z",
+  "sourceCommit": "f2ce70d67ff5a9f0f12879ad140072e0db55a554",
+  "compiledAtUtc": "2026-10-09T20:50:22.055Z",
   "inventory": {
     "migrations": [
       {
@@ -7240,6 +7240,13 @@
         "sha256": "153aefe76367b27563d3ed4fb9c6e2dcd9da8e2f921263a727e3df748ec5bb62"
       },
       {
+        "path": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+        "paths": [
+          "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+        ],
+        "sha256": "7271bb2d277105522e034ca9e4cde4da9c2c7a55040f4934361ab8956161d695"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7273,18 +7280,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "path": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
         "paths": [
-          "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql"
+          "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
         ],
-        "sha256": "e3d7ccd11132395ccf560330a4904ea9be01437ee9562956a4e58f4b58370c9a"
-      },
-      {
-        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "paths": [
-          "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
-        ],
-        "sha256": "153aefe76367b27563d3ed4fb9c6e2dcd9da8e2f921263a727e3df748ec5bb62"
+        "sha256": "7271bb2d277105522e034ca9e4cde4da9c2c7a55040f4934361ab8956161d695"
       }
     ]
   },

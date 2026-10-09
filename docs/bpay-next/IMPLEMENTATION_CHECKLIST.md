@@ -316,13 +316,13 @@ Dependencies: F-01, F-02, F-15; successor positions: none. Design note: not requ
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-16-D01 | SCREEN: js/bpay-next-office.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D02 | SCREEN: js/bpay-next-payment-history.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D03 | SCREEN: css/bpay-next-office.css | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D04 | SCREEN: js/main.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D05 | SCREEN: index.html | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D06 | DOC: BANKING_PAY_BIBLE.md | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-16-D07 | SCREEN: js/bpay-next-owner.js and static include | MISSING | Build exact one-open owner/epoch helper; UNKNOWN disables money controls; logout clear and stale refusal invalidation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D01 | SCREEN: js/bpay-next-office.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D02 | SCREEN: js/bpay-next-payment-history.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D03 | SCREEN: css/bpay-next-office.css | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D04 | SCREEN: js/main.js | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D05 | SCREEN: index.html | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D06 | DOC: BANKING_PAY_BIBLE.md | LOCAL_ONLY | Three-way merge onto current FE, preserve newer shared Source code/journals/includes; no deployment claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-16-D07 | SCREEN: js/bpay-next-owner.js and static include | MISSING | Build exact one-open owner/epoch helper; UNKNOWN disables money controls; logout clear and stale refusal invalidation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-16-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -337,6 +337,8 @@ Opening Banking makes exactly one owner-status call and presents the deliberate 
   - The layout works with mouse, keyboard, at phone width and in dark mode.
   - Dates show as DD/MM/YYYY hh:mm:ss.
 
+Implementation: frontend local commit 20aa3894d202538699e69136faa41481d4c4406d; F-16-office-provenance.json. Independent review PASS: reviews/F-16-office-port-review.md. 60/60 permitted source units and four syntax checks passed. Installed/app NOT_RUN.
+
 ## F-18 — Pre-switch readiness census of in-flight legacy work (read-only)
 
 Seq 14; Switch-over/Infrastructure · F4; reviewer R1; current requested-feature status MISSING.
@@ -347,9 +349,9 @@ Dependencies: F-02, F-06; successor positions: none. Design note: required; exac
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-18-D01 | REPEATABLE: public.bpay_next_cutover_readiness_page_v1 | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-18-D02 | CHECK: Legacy category/status census | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-18-D03 | CHECK: NEXT category/status census | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-18-D01 | REPEATABLE: public.bpay_next_cutover_readiness_page_v1 | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-18-D02 | CHECK: Legacy category/status census | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-18-D03 | CHECK: NEXT category/status census | MISSING | Implement bounded real-category/status census; nonzero undecided blocks until OD-F5; include external obligations and observed NEXT counts, never assumed zero. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-18-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 

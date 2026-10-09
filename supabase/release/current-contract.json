@@ -12514,6 +12514,120 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_readiness_event_open_v1(p_event_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "15c0c0ffdf48d4c631ec426d584ab93d7a32bf912cb37c8e98a54d6d868e69d8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_readiness_event_terminal_v1(p_event_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "bb392dfacc79cf33f197ac6395e9d2791a241a03ba776410f7904153e6a46479"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_readiness_marker_v1(p_type text, p_context text, p_reference text, p_key text)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "620f34f16bd48a082f1e8d3ae00c7458060ad065580771a782617e0fa6bc395e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_readiness_rows_v1(p_category text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "0827cc65b4e1fdbdeb8779c8458dbf8b025fb5436bbf204a1d40c8f86f3c3389"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_readiness_scope_terminal_v1(p_scope_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a4d6fce6ba7c01c013a6ac751d379578fcc6f3049479c5dadb111881f042f2c9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_readiness_unused_batch_v1(p_batch_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e3eb4ad7c5202d69d6abebc11f0f4d4b09047966ed43c5fb6cf01a89cf1e39cb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_receive_command_v1(p_command_id uuid, p_command_kind text)",
       "parallel": "u",
       "volatility": "v",
@@ -28817,6 +28931,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "4dc72788bb2f41384e0ff1055642fc695742b8657f265c5d57725147d49e581b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_cutover_readiness_page_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "625151792fb1b84e5c6fec144b97193f8fcc1aaa80c902a5a9efa1c2b8fba6af"
     },
     {
       "acl": [

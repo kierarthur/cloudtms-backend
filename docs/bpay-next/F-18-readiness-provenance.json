@@ -1,0 +1,23 @@
+{
+  "item": "F-18",
+  "source": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+  "sha256": "980a79151e8cc49f3db8c5c4e1f8cd99aac6039600405e25ec1803d3b7c91add",
+  "categories": 36,
+  "routines": 7,
+  "privateRoutines": 6,
+  "publicRoutines": 1,
+  "contract": "e0f98d8d32da37d71ffbe3a58b35ca66ac31dd8d4b88f37bc4f002466383bac1",
+  "localChecks": "298 migrations/805 repeatables; canonical source gate PASS; zero migrations/four closures changed-only compile; catalogue seal; coupling required before commit",
+  "review": "reviews/F-18-readiness-review.md PASS",
+  "design": [
+    "design/F-15-owner-status-and-F-18-census.md",
+    "design/F-18-readiness-query-map.md",
+    "design/F-18-advice-target-proof.md"
+  ],
+  "decision": "BD007: real retained advice scope distinguished from inferred current-policy integrity proof; conditional OD-F5 only positive unresolved finance",
+  "externalQuietWindow": "UNPROVEN",
+  "activationReady": false,
+  "hostedCounts": "NOT_OBSERVED",
+  "installed": "NOT_RUN",
+  "app": "NOT_RUN"
+}

@@ -11945,6 +11945,102 @@
       ],
       "owner": "F-06 reviewed carried foundation source",
       "baselineSourceHash": "77e6c0d5996902dc886a479f84448e8dd89bcb76d9be566328ab11af4d242fea"
+    },
+    {
+      "signature": "private.bpay_next_readiness_event_open_v1(uuid)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 read-only readiness census",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_readiness_event_terminal_v1(uuid)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 exact persisted terminal result proof"
+    },
+    {
+      "signature": "private.bpay_next_readiness_marker_v1(text,text,text,text)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 read-only readiness census",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_readiness_rows_v1(text)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 read-only readiness census",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_readiness_scope_terminal_v1(uuid)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 read-only readiness census",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_readiness_unused_batch_v1(uuid)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 positively unused Draft-only shell proof"
+    },
+    {
+      "signature": "public.bpay_next_cutover_readiness_page_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "finalPhysical": "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/09102026_2109_banking_pay_next_cutover_readiness_page_v1.sql"
+      ],
+      "owner": "F-18 read-only readiness census",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [
