@@ -297,3 +297,12 @@ PF04 committed locally bb0e8d85; whole counts20/288. Exact three PF09 objects li
 ### PF-09 complete — 10/10/2026 London
 
 Whole ITEM BUILT21/288 REVIEWED21/288. Three exact objects complete underBD027; required targeted gate extends existing sourcechecks and reuses correct command/runtime. Independent D01/D02/D03 source PASS; PT01–04 extra/composite field, text-to-numeric, staticDO floatDDL and literal-case findings corrected. Source90/90+7/7, syntax/dbcheck310/812, unchanged solePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/coupling PASS. No changed SQL/business/fixtures/rehearsal/hosted/app/timing/external action. ContinuePF11sequence24.
+
+### PF-11 scope checkpoint — 10/10/2026 London
+
+PF09 localcommita8089ee7 complete; exactthreeobjects listed beforebuild in design/PF-11-SCOPE.md. BUILDER DECISION BD028: one shared Office presentation formatter, date-only legacyhelper reuse and exact printable advice routing; preserve wire/cursor/TS_DAY and frozen bank CSVbytes. No DB/Worker/economicowner change. Joinedapp/timing NOT_RUN.
+
+### PF-11 complete — 10/10/2026 London
+
+Whole ITEM BUILT22/288 REVIEWED22/288. Exactthreeobjects complete underBD028: shared London/dateonlypresentation, finite actualconsumer/sourcecheck, futurejoinedNOT_RUN. IndependentreviewsPASS; fourhistoryexceptions closed. Source63/63 syntax/diff/dbcheck310/812 unchangedsolePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. No SQL/Worker/business/fixtures/hosted/timing/externalaction. BUILD-FE reviewed localcommit recorded below; proceedPF12sequence25.
+BUILD-FE PF11 reviewed localcommit236fc42; BUILD-BE PF11 evidence checkpoint follows.

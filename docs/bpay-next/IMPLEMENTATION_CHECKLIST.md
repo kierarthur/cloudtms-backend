@@ -595,9 +595,9 @@ Dependencies: F-16; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PF-11-D01 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: London timestamp routing in Office/history/exports | MISSING | Implement the exact screen target after its existing dependencies. Reuse UK date-only formatting and one London 24-hour timestamp formatter across screens/exports. Store UTC, do not shift date-only TS_DAY; source existence alone not all-consumer closure. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-11-D02 | CHECK: raw ISO and TS_DAY consumer formatting check | MISSING | Implement the exact check target after its existing dependencies. Reuse UK date-only formatting and one London 24-hour timestamp formatter across screens/exports. Store UTC, do not shift date-only TS_DAY; source existence alone not all-consumer closure. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-11-D03 | CHECK: PF-11 future joined in-app TEST checklist | MISSING | Future winter/BST/DST display DD/MM/YYYY hh:mm:ss; date-only identity unchanged; CSV/print same facts. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PF-11-D01 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: London timestamp routing in Office/history/exports | MISSING | Implement the exact screen target after its existing dependencies. Reuse UK date-only formatting and one London 24-hour timestamp formatter across screens/exports. Store UTC, do not shift date-only TS_DAY; source existence alone not all-consumer closure. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-11-D02 | CHECK: raw ISO and TS_DAY consumer formatting check | MISSING | Implement the exact check target after its existing dependencies. Reuse UK date-only formatting and one London 24-hour timestamp formatter across screens/exports. Store UTC, do not shift date-only TS_DAY; source existence alone not all-consumer closure. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-11-D03 | CHECK: PF-11 future joined in-app TEST checklist | MISSING | Future winter/BST/DST display DD/MM/YYYY hh:mm:ss; date-only identity unchanged; CSV/print same facts. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF-11-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -605,6 +605,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF
 
 A settlement at 23:30 UTC on 30 June shows 01/07/2026 00:30:00. A date-only field shows DD/MM/YYYY; `TS_DAY` values stay YYYY-MM-DD in requests (B1.3). (RQ-252)
   - Joined future check: Future winter/BST/DST display DD/MM/YYYY hh:mm:ss; date-only identity unchanged; CSV/print same facts. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Whole PF-11 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. PF-11-COMPLETION.md; shared Londonh23/datehelper Office/history/print; four temporal exceptions closed; source63/63 syntax/dbcheck310/812 seal552e0947 couplingPASS; joinedNOT_RUN Review: reviews/PF-11-format-review.md D01/D02PASS; reviews/PF-11-source-review.md D02/D03PASS; PF-11-date-census.md.
 
 ## PF-12 — Mouse, keyboard, phone width and dark mode for NEXT screens
 
