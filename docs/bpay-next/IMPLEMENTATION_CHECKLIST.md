@@ -1872,10 +1872,10 @@ Dependencies: WB-15, WB-21, F-16; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-17-D02 | REPEATABLE: public.bpay_next_frozen_detail_page_v1(p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer) | INSTALLED_ON_TEST | Preserve frozen-only exact run/physical-detail authority; current Timesheet navigation/info never substitutes later facts. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-17-D02 | REPEATABLE: public.bpay_next_frozen_detail_page_v1(p_actor_user_id uuid, p_kind text, p_run_line_id uuid, p_run_work_id uuid, p_shift_detail_id uuid, p_after_detail_no integer, p_after_break_no integer, p_after_bucket text, p_after_rate_family text, p_after_rate_code text, p_limit integer) | INSTALLED_ON_TEST | Preserve frozen-only exact run/physical-detail authority; current Timesheet navigation/info never substitutes later facts. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-17-D04 | SCREEN: Exact physical Timesheet opener/parent-window state in main.js and NEXT module | MISSING | Frozen captured original/version stays exact after Create; newer current link informational, no fallback, parent scroll/page/unticks preserved. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-17-D06 | WORKER ROUTE: createBpayNextFrozenPageRpc in broker/src/bpay-next-frozen-rpc.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-17-D07 | WORKER ROUTE: handleBpayNextFrozenRead in broker/src/bpay-next-frozen-read.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-17-D06 | WORKER ROUTE: createBpayNextFrozenPageRpc in broker/src/bpay-next-frozen-rpc.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-17-D07 | WORKER ROUTE: handleBpayNextFrozenRead in broker/src/bpay-next-frozen-read.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1888,6 +1888,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 From page 2 of a Candidate's groups with two days unticked, opening a Timesheet and closing it returns to page 2 with the same two days unticked (RQ-011, J2a); opening a Source work opens its Source week evidence (J2a). For a Timesheet that was amended into a new Timesheet record, the button opens the current one, not the original.
+
+WB17 available-slice receipt: D02/D06/D07 reused factual frozen reader/transports BUILT/REVIEWED at BE385d220435938a6f0150e2897b4c2ec1cc24017b, FEc4f4647ba080546da5657c27c32593324fb39832. Native navigation/actualSCR13 approved37PASS/0FAIL/5NA; D04/ITEM/SCR14 PARTLY_BUILT pending complete selected-membership WB23/24/25 and actual Draft DR02/DR06. Joined app NOT_RUN; whole51/288 unchanged.
 
 ## WB-18 — Export CSV from the header and the Candidate window
 
