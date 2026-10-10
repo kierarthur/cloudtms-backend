@@ -1311,6 +1311,10 @@
       "sha256": "138a37566038c22645ffb98b94d7ffa57437daa47e419046343f0cf1bf2b1412"
     },
     {
+      "path": "supabase/migrations/10102026_2150_banking_pay_next_workbench_retry_receipts.sql",
+      "sha256": "fba527a2a935213329c321c7713c97394e7f75a86216772978ea497b3b6cae0e"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

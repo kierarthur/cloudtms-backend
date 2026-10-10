@@ -170,6 +170,7 @@ export function isBpayNextLegacyFinancialRoute(method, pathname) {
       || (method === 'GET' && pathname === '/api/banking/pay/next/preparation-page')
       || (method === 'GET' && pathname === '/api/banking/pay/next/workbench-page')
       || (method === 'POST' && pathname === '/api/banking/pay/next/workbench-export')
+      || (method === 'POST' && pathname === '/api/banking/pay/next/workbench-command')
       || (method === 'GET' && /^\/api\/banking\/pay\/next\/advice\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(pathname))
       || (method === 'POST' && pathname === '/api/banking/pay/next/history-page')
       || (method === 'POST' && pathname === '/api/banking/pay/next/frozen-detail')

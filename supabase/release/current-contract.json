@@ -742,6 +742,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_workbench_command_receipt",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -13619,6 +13631,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_retry_work_job_v1(p_actor_user_id uuid, p_args jsonb, p_readback boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "7192f919d36dd3fa05f4909033ae3ae5d4d2b3ddf5fb95a8e21c50ff37220c67"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -15850,6 +15881,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_job_progress_v1(p_context jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "51357d998cc86e1ac68f8dbce4fb8c08d2d846b73b4f0140864b69415ed6a65f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public",
         "statement_timeout=5s"
       ],
@@ -15956,6 +16006,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "dbf980a2bcb171f11c9e92c431192587b41aec1a5093233fd48166e6fc9b573c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_receipt_immutable_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4d6ccb3e579e8c39286e23f8cd8ad9f3d5c3f3987ffefe481f86859abe6c064f"
     },
     {
       "acl": [
@@ -31057,7 +31126,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "487cc5a91dc4e206469184b490df8dd048def7a267557518ec700d5db718d5ce"
+      "definition_sha256": "fbcc3f6546cf2771e94d40d252947708e3416e04e7f68cc903d8d18622173180"
     },
     {
       "acl": [
@@ -31412,6 +31481,54 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_work_job_failure_service_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_phase text, p_expected_cursor text, p_error_code text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5984412d90b7ac838076815b4714dd6f9acd8eb8cecc8946923c30efa1443701"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_workbench_command_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a7f5eb7a04be4976dce96e58635d7dd9c68a031dea681f1df27715b837bc50e3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public",
         "statement_timeout=5s"
       ],
@@ -31420,7 +31537,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "bfb7bd71c587ca17f21106e3f17f9992a3ca8ff36ff4803d117ff9021d547fd2"
+      "definition_sha256": "b8b252f315a823d54b231302d5aba845d66ca343163208e0f3401c41a655e57d"
     },
     {
       "acl": [
@@ -53587,6 +53704,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_negative_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_write_off_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_workbench_receipt_immutable",
+      "table": "bpay_next_workbench_command_receipt",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_workbench_receipt_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_workbench_command_receipt FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_receipt_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_workbench_receipt_no_truncate",
+      "table": "bpay_next_workbench_command_receipt",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_workbench_receipt_no_truncate BEFORE TRUNCATE ON private.bpay_next_workbench_command_receipt FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_workbench_receipt_immutable_v1()"
     },
     {
       "name": "bpay_next_week_projection_guard_v1",
@@ -88655,8 +88786,32 @@
           "generated": ""
         },
         {
+          "name": "failed_lease_nonce",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "finished_at_utc",
           "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "first_recorded_error_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "first_recorded_error_code",
+          "type": "text",
           "default": null,
           "identity": "",
           "not_null": false,
@@ -88676,6 +88831,14 @@
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_error_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -88801,6 +88964,18 @@
           "definition": "CREATE INDEX bpay_next_job_worker_order_idx ON private.bpay_next_job USING btree (candidate_id, command_sequence, id) WHERE (status <> 'DONE'::text)"
         },
         {
+          "name": "bpay_next_position_job_candidate_seek_idx",
+          "definition": "CREATE INDEX bpay_next_position_job_candidate_seek_idx ON private.bpay_next_job USING btree (candidate_id, module_epoch, command_sequence, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+        },
+        {
+          "name": "bpay_next_position_job_pending_age_idx",
+          "definition": "CREATE INDEX bpay_next_position_job_pending_age_idx ON private.bpay_next_job USING btree (module_epoch, created_at_utc NULLS FIRST, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+        },
+        {
+          "name": "bpay_next_position_job_pending_seek_idx",
+          "definition": "CREATE INDEX bpay_next_position_job_pending_seek_idx ON private.bpay_next_job USING btree (module_epoch, command_sequence, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+        },
+        {
           "name": "bpay_next_prepare_job_open_command_idx",
           "definition": "CREATE INDEX bpay_next_prepare_job_open_command_idx ON private.bpay_next_job USING btree (command_id, id) WHERE ((job_kind = 'PREPARE'::text) AND (status <> 'DONE'::text))"
         },
@@ -88891,6 +89066,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (command_sequence > 0)"
+        },
+        {
+          "name": "bpay_next_job_first_recorded_error_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(first_recorded_error_code) <= 256)"
         },
         {
           "name": "bpay_next_job_module_epoch_check",
@@ -113843,6 +114026,196 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (octet_length(tms_ref) <= 8192)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_workbench_command_receipt",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_workbench_command_receipt_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_command_receipt_pkey ON private.bpay_next_workbench_command_receipt USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_workbench_command_receipt_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id)"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_request_body_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text AND octet_length(request_body::text) <= 4096)"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_result_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(result) = 'object'::text AND octet_length(result::text) <= 8192)"
+        },
+        {
+          "name": "bpay_next_workbench_command_receipt_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

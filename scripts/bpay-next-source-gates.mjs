@@ -20,6 +20,13 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB19 administrative receipt/resume and native status only.
+
+  // WB19 administrative receipt/resume and native status only.
+  "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+  "public.bpay_next_workbench_command_v1(jsonb)",
+  "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)",
+  "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)",
   'private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)',
   'private.bpay_next_claim_prepare_job_v1(uuid,integer)',
   'private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint)',
@@ -103,7 +110,12 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
-  "public.bpay_next_workbench_page_v1(jsonb)": ["public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
+  "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
+  "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys"],
+  "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
+  "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
+
+  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
@@ -468,6 +480,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('header',v_header,'rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
   "public.bpay_next_financial_intake_v1(uuid,text,jsonb)": [
+    "jsonb_build_object('action',p_action,'result', private.bpay_next_retry_work_job_v1(p_actor_user_id,p_args,false))",
     "pg_catalog.jsonb_build_object('command_id',v_result->>'command_id', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase','requested_scope',v_result->>'requested_scope', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id', 'issue_code',v_result->>'issue_code','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','run_id',v_result->>'run_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'expected_candidates',v_result->>'expected_candidates', 'completed_candidates',v_result->>'completed_candidates', 'replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','request_no',v_result->>'request_no', 'phase',v_result->>'phase','replay',v_result->'replay')",

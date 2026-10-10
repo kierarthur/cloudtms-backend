@@ -7243,19 +7243,21 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13854,9 +13856,18 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
         "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
@@ -13864,17 +13875,10 @@
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
         "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
-        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql"
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
       ],
-      "owner": "WB-18 own EXPORT_ROWS native list ordering/bounded exact factual seed; merge common2105/public1946, other kinds unchanged"
+      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner"
     },
     {
       "signature": "private.bpay_next_accepted_choice_guard_v1()",
@@ -13953,6 +13957,61 @@
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
       "owner": "WB-15 own-reader display-sort support; no monetary or producer authority"
+    },
+    {
+      "signature": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+      "finalRoot": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql"
+      ],
+      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner"
+    },
+    {
+      "signature": "public.bpay_next_workbench_command_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "owner": "WB-19 exact retry/status support; later W2 action owners merge this final definition"
+    },
+    {
+      "signature": "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)",
+      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "owner": "WB-19 exact retry/status support; later W2 action owners merge this final definition"
+    },
+    {
+      "signature": "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)",
+      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+      ],
+      "owner": "WB-19 exact retry/status support; later W2 action owners merge this final definition"
     }
   ],
   "editorChains": [

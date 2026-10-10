@@ -1,0 +1,80 @@
+{
+  "item": "WB-19",
+  "sequence": 67,
+  "state": "PARTLY_BUILT; named WB34 full affected-completion adoption and WB36 Snooze journey remain open",
+  "builderDecision": "BD075",
+  "exactDeliverables": [
+    "WB-19-D06",
+    "WB-19-D11",
+    "WB-19-D12",
+    "WB-19-D13",
+    "WB-19-D15"
+  ],
+  "successors": [
+    {
+      "object": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+      "chain": [
+        "2018",
+        "2150"
+      ],
+      "change": "Only RETRY_WORK_JOB early delegate; original twelve actions retained"
+    },
+    {
+      "object": "public.bpay_next_workbench_page_v1(jsonb)",
+      "chain": [
+        "2128",
+        "2150"
+      ],
+      "change": "HEADER bounded native status/age; separate typed progress cursor; financial noncurrent guard retained"
+    },
+    {
+      "object": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+      "chain": [
+        "2150",
+        "2207"
+      ],
+      "change": "Fresh successor null-safe one-member enrollment guard; installed2150 unchanged"
+    }
+  ],
+  "sourceFiles": {
+    "supabase/migrations/10102026_2150_banking_pay_next_workbench_retry_receipts.sql": "fba527a2a935213329c321c7713c97394e7f75a86216772978ea497b3b6cae0e",
+    "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql": "34b1354dbf7e3a142ed597fd25283a6076254c6b28718239edf0bc8ba38ba293",
+    "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql": "13701d48b6f64780be2546597a21a11d56e5221a2a82f36ca3059e763272487f"
+  },
+  "checks": {
+    "dbCheck": "330 migrations/858 repeatables PASS",
+    "localPg17": "CHANGED 1 migration/4 final closures, then0 migrations/4 final closures; sole PG17 compile only",
+    "sourceGates": "9/9 PASS",
+    "changedJsSyntax": "8 changed JS files PASS",
+    "diffCheck": "PASS",
+    "contractSeal": "2f77758cbda817e641e380bedb8ee1f70da1a53d32b51398db8bb5dcc6b74f27",
+    "coupling": "PASS"
+  },
+  "publicCatalogue": {
+    "count": 833,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "hash": "01ac3d90c572327934daabf869623c85",
+    "delta": "Two new service-only public SECDEF routines; verifier updated in same product commit"
+  },
+  "reviews": [
+    "reviews/WB-19-sql-review.md",
+    "reviews/WB-19-worker-review.md",
+    "reviews/WB-19-ui-review.md"
+  ],
+  "screens": {
+    "id": "SCR-16",
+    "screenshots": 21,
+    "review": "screen-designs/SCR-16/review.md",
+    "method": "Actual native local Office; minimal fixed responses; all external requests blocked; no DB rows",
+    "policyReview": "38 PASS /0 FAIL /4 N/A"
+  },
+  "pendingJoins": [
+    "WB34 named bounded own pending/completed adoption preserving page/scroll/selection",
+    "WB36 Snooze action on retained Action-required page; no premature command or join"
+  ],
+  "joinedAppAcceptance": "NOT_RUN; no failure/money fixtures or actual queue/timing programme",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED",
+  "frontendCommit": "3a8abd174a34f76bae9a7042f1f942455616c461"
+}

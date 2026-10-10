@@ -92,7 +92,11 @@ async function failure(message, call, result, dependencies) {
   if (result.retryable || result.outcome_unknown) return retry(message, result);
   if (typeof dependencies.onFailure !== 'function') return retry(message, result);
   try {
-    if (await dependencies.onFailure(failureSummary(message, call, result)) === 'ACK_RECORDED') {
+    const evidence = call?.action === 'STEP' && call.job_kind === 'POSITION_APPLY'
+      && typeof result.definite_position_cause === 'string'
+      ? Object.freeze({job_id:call.job_id,lease_nonce:call.lease_nonce,owner_epoch:call.owner_epoch,
+        expected_phase:call.expected_phase,expected_cursor:call.expected_cursor,error_code:result.definite_position_cause}) : null;
+    if (await dependencies.onFailure(failureSummary(message, call, result), evidence) === 'ACK_RECORDED') {
       message.ack();
       return { disposition: 'ACK', reason: 'FAILURE_RECORDED', error_code: result.error_code };
     }

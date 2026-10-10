@@ -5,7 +5,7 @@ const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{1
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
 const EXPORT_SORT_FIELDS={"C_NAME":["text","boolean","text","uuid","uuid"],"C_AMOUNT":["boolean","decimal","uuid","uuid"],"C_DEDUCTIONS":["boolean","text","boolean","text","uuid","uuid"],"C_STATUS":["boolean","boolean","text","text","uuid","uuid"],"G_PAYMENT":["boolean","date","text","uuid","uuid"],"G_CLIENT":["boolean","text","text","uuid","uuid"],"G_CHANNEL":["boolean","text","text","uuid","uuid"],"G_AMOUNT":["boolean","decimal","text","uuid","uuid"],"G_DEDUCTIONS":["boolean","text","uuid","uuid"],"G_REASON":["small","text","text","uuid","uuid"]};
 const EXPORT_SORTS=Object.keys(EXPORT_SORT_FIELDS).flatMap(k=>[k+'_ASC',k+'_DESC']);
-const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',count_selection:'countSelection?',after:'cursor?',limit:'limit'};
+const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',count_selection:'countSelection?',progress_after:'progressCursor?',after:'cursor?',limit:'limit'};
 export const BPAY_NEXT_WORKBENCH_PAGE_INPUTS=Object.freeze(Object.fromEntries(KINDS.map(k=>[k,Object.freeze({...COMMON})])));
 // Generated once from the explicit SQL projections; reviewed source is durable.
 export const ROWS=Object.freeze({
@@ -396,7 +396,7 @@ export const ROWS=Object.freeze({
     "reason_priority": "small"
   ,"physical_revision_id":"uuid?","physical_timesheet_version":"positive?","source_kind":"sourceKind?","source_head_id":"uuid?","source_root_timesheet_id":"uuid?","source_root_timesheet_version":"positive?","source_week_ending_date":"date?"}
 });
-const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','limit'].includes(k))));
+const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','limit','progress_after'].includes(k))));
 const CONTEXT={kind:'kind',agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',official_pay_date:'date',workbench_revision:'integer',adoption_revision:'integer',scope:'scope'};
 const REFUSAL={ok:'false',error_code:'refusal',retryable:'boolean',reload_required:'boolean',workbench_revision:'integer?',complete:'false',projection_state:'adoption?',dirty_candidate_count:'integer?',dirty_group_count:'integer?',pending_task_count:'integer?'};
 const FAILURE_CODES=['BPAY_NEXT_MODULE_NOT_ACTIVE','BPAY_NEXT_WORKBENCH_FORBIDDEN','BPAY_NEXT_WORKBENCH_UNAUTHORIZED','BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED','BPAY_NEXT_WORKBENCH_REQUEST_INVALID','BPAY_NEXT_WORKBENCH_RESPONSE_INVALID','BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE','BPAY_NEXT_WORKBENCH_CURSOR_STALE','BPAY_NEXT_WORKBENCH_PROJECTION_NOT_CURRENT','BPAY_NEXT_WORKBENCH_DATE_UNAVAILABLE','BPAY_NEXT_WORKBENCH_UNAVAILABLE'];
@@ -405,6 +405,14 @@ function exact(v,keys){return record(v)&&Reflect.ownKeys(v).length===keys.length
 const same=(a,b)=>a===b||(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,n)=>same(v,b[n])))||(record(a)&&record(b)&&exact(a,Object.keys(b))&&Object.keys(a).every(k=>same(a[k],b[k])));
 const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:[...EXPORT_SORTS,'NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC','CLIENT_ASC','CLIENT_DESC','CHANNEL_ASC','CHANNEL_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE','ROW'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
 function field(v,type){
+  if(type==='workJobProgressKind')return v==='WORK_JOB_PROGRESS';
+  if(type==='workJobStatus')return ['READY','LEASED','BLOCKED','FAILED'].includes(v);
+  if(type==='jobPhase')return typeof v==='string'&&ENCODER.encode(v).byteLength>=1&&ENCODER.encode(v).byteLength<=64;
+  if(type==='jobCheckpoint')return typeof v==='string'&&ENCODER.encode(v).byteLength<=512;
+  if(type==='jobError')return typeof v==='string'&&/^BPAY_NEXT_[A-Z0-9_]{1,240}$/.test(v);
+  if(type==='jobTime')return typeof v==='string'&&v.length<=40&&Number.isFinite(Date.parse(v));
+  if(type==='progressScope')return shape(v,{candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel'});
+  if(type==='progressCursor')return progressCursor(v);
   if(type.endsWith('?'))return v===null||field(v,type.slice(0,-1));
   if(Object.hasOwn(enums,type))return enums[type].includes(v);
   if(type==='uuid')return typeof v==='string'&&UUID.test(v);
@@ -466,9 +474,10 @@ function keyCompare(a,b,kind,sort){for(let n=0;n<a.length;n++){const value=typeo
 function fail(code,status=503,retryable=false,reload=false){return Object.assign(new Error(code),{code,status,retryable,reload});}
 export function normalizeWorkbenchInput(kind,input={}){
   if(!KINDS.includes(kind)||!record(input)||Reflect.ownKeys(input).some(k=>typeof k!=='string'||!Object.hasOwn(COMMON,k)))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-  const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
+  const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,progress_after:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
   for(const k of ['candidate_id','client_id','item_id'])if(typeof args[k]==='string')args[k]=args[k].toLowerCase();
   if(args.count_selection!==null&&(kind!=='HEADER'||args.section!=='READY')||kind!=='CANDIDATES'&&String(args.sort).startsWith('STATUS_'))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  if(args.progress_after!==null&&kind!=='HEADER')throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   if(!shape(args,COMMON)||(kind==='CANDIDATE_GROUPS'&&args.limit>10)||(kind==='EXPORT_ROWS'?!EXPORT_SORTS.includes(args.sort):EXPORT_SORTS.includes(args.sort)||!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort!=='NAME_ASC')||(!['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort.startsWith('REASON_'))||(kind==='CANDIDATES'&&args.sort.startsWith('PAYMENT_'))||(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('DEDUCTIONS_'))
     ||(['CANDIDATE_GROUPS','GROUP_LINES'].includes(kind)&&args.candidate_id===null)||(['GROUP_LINES','ISSUE_DETAIL'].includes(kind)&&args.group_key===null)||(kind==='ISSUE_DETAIL'&&args.reason_code===null)
     ||(!['GROUP_LINES','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&[args.group_key,args.item_id,args.reason_code].some(v=>v!==null)||kind==='CANDIDATE_GROUPS'&&[args.item_id,args.reason_code].some(v=>v!==null))
@@ -481,15 +490,49 @@ export function normalizeWorkbenchInput(kind,input={}){
   return args;
 }
 function parseUniqueJson(text){const stack=[];for(let n=0;n<text.length;n++){const c=text[n];if(c==='{'||c==='['){stack.push(c==='{'?new Set():null);if(stack.length>8)throw new Error();}else if(c==='}'||c===']')stack.pop();else if(c==='"'){const start=n;n++;for(;n<text.length;n++){if(text[n]==='\\')n++;else if(text[n]==='"')break;}const token=JSON.parse(text.slice(start,n+1));let after=n+1;while(after<text.length&&/\s/.test(text[after]))after++;if(text[after]===':'){const keys=stack.at(-1);if(!(keys instanceof Set)||keys.has(token))throw new Error();keys.add(token);}}}return JSON.parse(text);}
-export async function readWorkbenchJson(response,signal){
+export async function readWorkbenchJson(response,signal,maximum=BPAY_NEXT_WORKBENCH_LIMITS.responseBytes){
   const reader=response.body?.getReader();if(!reader)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
   const cancel=()=>{void reader.cancel().catch(()=>{});};signal?.addEventListener('abort',cancel,{once:true});
-  const chunks=[];let length=0;try{while(true){if(signal?.aborted)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);const {done,value}=await reader.read();if(signal?.aborted)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);if(done)break;length+=value.byteLength;if(length>BPAY_NEXT_WORKBENCH_LIMITS.responseBytes)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');chunks.push(value);}
+  const chunks=[];let length=0;try{while(true){if(signal?.aborted)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);const {done,value}=await reader.read();if(signal?.aborted)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);if(done)break;length+=value.byteLength;if(length>maximum)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');chunks.push(value);}
     const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return parseUniqueJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
   }catch(e){void reader.cancel().catch(()=>{});throw e?.code?e:fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}finally{signal?.removeEventListener('abort',cancel);reader.releaseLock();}
 }
+
+const JOB_PROGRESS_CONTEXT={kind:'workJobProgressKind',agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',official_pay_date:'date',workbench_revision:'integer',adoption_revision:'integer',scope:'progressScope'};
+const JOB_PROGRESS_ROW={job_id:'uuid',work_id:'uuid',candidate_id:'uuid',revision_id:'uuid',command_id:'uuid',command_sequence:'positive',module_epoch:'positive',owner_epoch:'positive',status:'workJobStatus',phase:'jobPhase',cursor:'jobCheckpoint?',attempt_count:'integer',processing:'boolean',failed_job_code:'jobError?',first_error_code:'jobError?',last_error_code:'jobError?',first_error_at_utc:'jobTime?',last_error_at_utc:'jobTime?',created_at_utc:'jobTime?',started_at_utc:'jobTime?',finished_at_utc:'jobTime?',candidate_display_name:'text?',timesheet_reference:'text?',client_display_name:'text?',physical_timesheet_id:'uuid?',evidence_available:'boolean'};
+function progressKey(v){return Array.isArray(v)&&v.length===2&&field(v[0],'positive')&&field(v[1],'uuid');}
+function progressCursor(v){return exact(v,['context','key'])&&shape(v.context,JOB_PROGRESS_CONTEXT)&&progressKey(v.key);}
+function validateJobProgress(progress,args,actorId,revision){
+ const invalid=()=>{throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');};
+ if(!exact(progress,['context','rows','complete','next_cursor','oldest_pending_age_seconds'])||!shape(progress.context,JOB_PROGRESS_CONTEXT)
+  ||!Array.isArray(progress.rows)||progress.rows.length>args.limit||typeof progress.complete!=='boolean'||!field(progress.oldest_pending_age_seconds,'integer?')
+  ||progress.context.workbench_revision!==revision||actorId!==null&&progress.context.actor_user_id!==actorId
+  ||!same(progress.context.scope,{candidate_id:args.candidate_id,client_id:args.client_id,channel:args.channel})
+  ||args.progress_after!==null&&!same(args.progress_after.context,progress.context))invalid();
+ let prior=args.progress_after?.key??null,last=null;
+ for(const row of progress.rows){const key=[row.command_sequence,row.job_id];
+  if(!shape(row,JOB_PROGRESS_ROW)||row.module_epoch!==progress.context.owner_epoch||args.candidate_id!==null&&row.candidate_id!==args.candidate_id
+   ||row.processing!==(row.status!=='FAILED')||row.status==='FAILED'&&row.failed_job_code!==row.last_error_code||row.status!=='FAILED'&&row.failed_job_code!==null
+   ||prior!==null&&(BigInt(prior[0])>BigInt(key[0])||prior[0]===key[0]&&prior[1]>=key[1]))invalid();
+  prior=key;last=key;
+ }
+ if(!progress.complete&&last===null||!same(progress.next_cursor,progress.complete?null:{context:progress.context,key:last}))invalid();
+ return progress;
+}
+
 export function validateWorkbenchResponse(payload,kind,args,actorId=null){
-  if(payload?.ok===false){if(!shape(payload,REFUSAL)||payload.reload_required!==(payload.error_code==='BPAY_NEXT_WORKBENCH_CURSOR_STALE'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');return payload;}
+  const original=payload;
+  if(Object.hasOwn(payload??{},'job_progress')){
+    if(kind!=='HEADER')throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    validateJobProgress(payload.job_progress,args,actorId,payload.workbench_revision);
+    payload={...payload};delete payload.job_progress;
+    if(payload.ok===true){if(!Array.isArray(payload.rows)||payload.rows.length!==1||!Object.hasOwn(payload.rows[0],'oldest_pending_age_seconds')
+      ||payload.rows[0].oldest_pending_age_seconds!==original.job_progress.oldest_pending_age_seconds)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+      if(!['agency_id','owner_epoch','official_pay_date','adoption_revision'].every(k=>payload.context?.[k]===original.job_progress.context[k]))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+      const row={...payload.rows[0]};delete row.oldest_pending_age_seconds;payload.rows=[row];}
+  }
+
+  if(payload?.ok===false){if(!shape(payload,REFUSAL)||payload.reload_required!==(payload.error_code==='BPAY_NEXT_WORKBENCH_CURSOR_STALE'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');return original;}
   if(!exact(payload,['ok','kind','workbench_revision','complete','context','rows','next_cursor','page_receipt','affected_candidate_count'])||payload.ok!==true||payload.kind!==kind||!field(payload.workbench_revision,'integer')||typeof payload.complete!=='boolean'||!shape(payload.context,CONTEXT)||payload.context.kind!==kind||payload.context.workbench_revision!==payload.workbench_revision||!Array.isArray(payload.rows)||payload.rows.length>args.limit||(kind==='HEADER'&&payload.rows.length!==1)||(!payload.complete&&payload.rows.length===0)||(kind==='ISSUE_DETAIL'?!field(payload.affected_candidate_count,'integer'):payload.affected_candidate_count!==null))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
   const scope=Object.fromEntries(Object.keys(SCOPE).map(k=>[k,args[k]])),context=payload.context;
   if(!same(context.scope,scope)||(actorId!==null&&context.actor_user_id!==actorId)||args.after!==null&&!same(args.after.context,context))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
@@ -524,7 +567,7 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     if(['HEADER','CANDIDATES'].includes(kind)){const unknown=row.unknown_amount_count!=='0';for(const k of ['amount','waiting_amount','ready_net_add_amount','waiting_net_add_amount','gross_deduction_balance','net_deduction_balance','approved_amount','paid_credit_amount','reserved_amount','excluded_amount','recovery_amount'])if((row[k]===null)!==unknown)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');if((row.selected_amount===null)!==(row.unknown_selected_amount_count!=='0')||row.has_deduction!==(row.deduction_item_count!=='0'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}
   }
   const expected=payload.complete?null:{context,key:last};if(!same(payload.next_cursor,expected)||!exact(payload.page_receipt,['context','start_key','end_key','row_count'])||!same(payload.page_receipt.context,context)||!same(payload.page_receipt.start_key,args.after?.key??null)||!same(payload.page_receipt.end_key,last)||payload.page_receipt.row_count!==String(payload.rows.length))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
-  return payload;
+  return original;
 }
 export function createBpayNextWorkbenchRpc({baseUrl,headers,fetchImpl=fetch}){
   const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_workbench_page_v1`);
@@ -546,7 +589,7 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
     if(request.method!=='GET')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
     const user=await dependencies.requireOfficeUser?.(request,['admin']);if(!user||typeof user.id!=='string'||!UUID.test(user.id.toLowerCase()))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
     const actor=user.id.toLowerCase(),url=new URL(request.url);if(ENCODER.encode(url.search).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-    const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'||key==='count_selection'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
+    const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'||key==='count_selection'||key==='progress_after'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
     const args=normalizeWorkbenchInput(kind,input);readKind=kind;if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
     if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
     controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},BPAY_NEXT_WORKBENCH_LIMITS.timeoutMs);});
@@ -666,4 +709,81 @@ export async function handleBpayNextWorkbenchExport(request,dependencies={}){
     },cancel(){stop();}},{highWaterMark:0});
     return new Response(stream,{headers:{'content-type':'text/csv; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
   }catch(e){closed=true;controller?.abort();clearTimeout(timer);clearTimeout(pageTimer);const safe=typeof e?.code==='string'&&FAILURE_CODES.includes(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null});}
+}
+
+
+// WB19 W2: administrative resume only. Original job inputs never expand.
+const WORK_RETRY_ARGS={request_id:'uuid',candidate_id:'uuid',work_id:'uuid',job_id:'uuid',
+ module_epoch:'positive',expected_owner_epoch:'positive',expected_phase:'phase',expected_cursor:'checkpoint?'};
+const RETRY_REFUSALS=['BPAY_NEXT_WORKBENCH_COMMAND_INPUT_INVALID','BPAY_NEXT_WORKBENCH_COMMAND_REPLAY_CONFLICT',
+ 'BPAY_NEXT_WORKBENCH_COMMAND_EPOCH_STALE','BPAY_NEXT_WORK_JOB_REPAIR_REQUIRED',
+ 'BPAY_NEXT_WORK_JOB_STATE_CHANGED','BPAY_NEXT_WORK_JOB_NOT_DEFINITELY_FAILED',
+ 'BPAY_NEXT_COMMAND_FORBIDDEN','BPAY_NEXT_MODULE_NOT_ACTIVE'];
+function retryField(v,type){return type==='phase'?typeof v==='string'&&ENCODER.encode(v).byteLength>=1&&ENCODER.encode(v).byteLength<=64
+ :type==='checkpoint?'?v===null||typeof v==='string'&&ENCODER.encode(v).byteLength<=512
+ :type==='jobStatus'?['READY','DONE'].includes(v):type==='error?'?v===null||typeof v==='string'&&/^BPAY_NEXT_[A-Z0-9_]{1,240}$/.test(v)
+ :type==='timestamp'?typeof v==='string'&&v.length<=40&&Number.isFinite(Date.parse(v)):field(v,type);}
+export function validateWorkbenchCommandReceipt(r,args){
+ const absent={request_id:'uuid',candidate_id:'uuid',work_id:'uuid',job_id:'uuid',received:'boolean',replay:'boolean'};
+ const schema=r?.received===false?absent:{...absent,command_id:'uuid',command_sequence:'positive',module_epoch:'positive',
+  owner_epoch:'positive',status:'jobStatus',phase:'phase',cursor:'checkpoint?',first_recorded_error_code:'error?',
+  last_error_code:'error?',workbench_revision:'integer',adoption_revision:'integer',repaired:'boolean',captured_at_utc:'timestamp'};
+ if(!exact(r,Object.keys(schema))||Object.entries(schema).some(([k,t])=>!retryField(r[k],t))
+  ||['request_id','candidate_id','work_id','job_id'].some(k=>r[k]!==args[k])
+  ||r.received&&(r.module_epoch!==args.module_epoch||r.owner_epoch!==args.expected_owner_epoch
+    ||r.status==='DONE'&&(r.phase!=='DONE'||r.cursor!==null)
+    ||r.status==='READY'&&(!['NEW','REMOVED'].includes(r.phase)||!r.repaired&&(r.phase!==args.expected_phase||r.cursor!==args.expected_cursor)))
+  ||!r.received&&r.replay)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+ return r;
+}
+export function createBpayNextWorkbenchCommandRpc({baseUrl,headers,fetchImpl=fetch}){
+ const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_workbench_command_v1`);
+ if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+ return (args,readback,options)=>{if(!field(options?.actorUserId,'uuid')||!options.signal||typeof readback!=='boolean')throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+  const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');h.set('X-CloudTMS-Banking-Pay-Route-Class',readback?'READ':'OPERATION_NUDGE');
+  return fetchImpl(endpoint.href,{method:'POST',headers:h,signal:options.signal,redirect:'error',
+   body:JSON.stringify({p_request:{actor_user_id:options.actorUserId,action:'RETRY_WORK_JOB',args,readback}})});};
+}
+export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
+ let timer,controller,attempted=false;const abort=()=>controller?.abort();
+ try{
+  if(request.method!=='POST')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
+  const user=await dependencies.requireOfficeUser?.(request,['admin']);
+  if(!user||!field(user.id?.toLowerCase(),'uuid'))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);
+  if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
+  controller=new AbortController();request.signal?.addEventListener('abort',abort,{once:true});if(request.signal?.aborted)abort();
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},8000);});
+  const send=async()=>{
+   const body=await readWorkbenchJson(request,controller.signal,2048);
+   if(!exact(body,['action','readback',...Object.keys(WORK_RETRY_ARGS)])||body.action!=='RETRY_WORK_JOB'
+    ||typeof body.readback!=='boolean'||Object.entries(WORK_RETRY_ARGS).some(([k,t])=>!retryField(body[k],t)))throw fail('BPAY_NEXT_WORKBENCH_COMMAND_INPUT_INVALID',400);
+   const args=Object.freeze(Object.fromEntries(Object.keys(WORK_RETRY_ARGS).map(k=>[k,body[k]])));
+   if(typeof dependencies.workbenchCommandRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+   attempted=!body.readback;
+   const response=await dependencies.workbenchCommandRpc(args,body.readback,{actorUserId:user.id.toLowerCase(),signal:controller.signal});
+   if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+   const r=await readWorkbenchJson(response,controller.signal,16384);
+   if(!response.ok){if(record(r)&&RETRY_REFUSALS.includes(r.message)&&['22023','23514','55000','42501'].includes(r.code)){
+     attempted=false;throw fail(r.message,r.code==='42501'?403:r.code==='22023'?400:409);}
+    throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+   const receipt=validateWorkbenchCommandReceipt(r,args);if(!body.readback&&!receipt.received)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+   return json(200,{ok:true,action:'RETRY_WORK_JOB',receipt});
+  };
+  return await Promise.race([send(),timeout]);
+ }catch(e){return json(e?.status??503,{ok:false,error_code:e?.code??'BPAY_NEXT_WORKBENCH_UNAVAILABLE',retryable:e?.retryable===true,outcome_unknown:attempted});}
+ finally{clearTimeout(timer);abort();request.signal?.removeEventListener('abort',abort);}
+}
+export function createBpayNextWorkJobFailureRpc({baseUrl,headers,fetchImpl=fetch}){
+ const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_work_job_failure_service_v1`);
+ if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+ return async evidence=>{
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);
+  try{const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');
+   h.set('X-CloudTMS-Banking-Pay-Route-Class','OPERATION_NUDGE');
+   const r=await fetchImpl(endpoint.href,{method:'POST',headers:h,signal:controller.signal,redirect:'error',body:JSON.stringify({
+    p_job_id:evidence.job_id,p_lease_nonce:evidence.lease_nonce,p_owner_epoch:evidence.owner_epoch,
+    p_expected_phase:evidence.expected_phase,p_expected_cursor:evidence.expected_cursor,p_error_code:evidence.error_code})});
+   const value=await readWorkbenchJson(r,controller.signal,1024);return r.ok&&value===true;
+  }finally{clearTimeout(timer);controller.abort();}
+ };
 }

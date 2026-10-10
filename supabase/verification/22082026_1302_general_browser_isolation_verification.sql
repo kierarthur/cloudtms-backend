@@ -482,8 +482,13 @@ begin
   -- WB-09 adds only service-only STABLE public.bpay_next_workbench_page_v1(jsonb).
   -- Fresh sole PG17 catalogue:831/76/0/ffcd8688816814f70392fd43a6c91c83.
   -- Excluding only this identity reproduces830/76/0/9ca786a0b905925c3b6c7e5d52bccb4f.
-  if v_count<>831 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'ffcd8688816814f70392fd43a6c91c83' then
+  -- WB-19 adds two service-only SECURITY DEFINER entry points: exact
+  -- workbench_command_v1(jsonb) and work_job_failure_service_v1(uuid,uuid,
+  -- bigint,text,text,text). Fresh sole local PG17 catalogue:
+  -- 833/76/0/01ac3d90c572327934daabf869623c85. Browser execution stays zero;
+  -- the pre-existing 76 service omissions remain unchanged.
+  if v_count<>833 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'01ac3d90c572327934daabf869623c85' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

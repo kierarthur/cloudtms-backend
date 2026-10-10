@@ -363,7 +363,7 @@ function dependencyError(error, attempted, action) {
 export async function stepBpayNextFinancialJob(input, dependencies = {}) {
   let call, controller, timer;
   let attempted = false;
-  let started, payQueryBusy = false;
+  let started, payQueryBusy = false, definitePositionCause = null;
   const measurement = { rows: null, bytes: null };
   const observeBusy = (error) => {
     const db = error?.json ?? error;
@@ -392,6 +392,19 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
       const payload = await limitedJson(response, controller.signal, unknown, measurement);
       if (!response.ok) {
         observeBusy(payload);
+        // Internal provenance only, never arbitrary DB text or lease logs.
+        // A parsed SQL rejection of this exact STEP proves rollback; normal
+        // claim/predecessor/lease and uncertain transport recovery stay native.
+        if (call.action === 'STEP' && call.jobKind === 'POSITION_APPLY'
+          && ['23514','23503','55000'].includes(payload?.code)
+          && typeof payload.message === 'string' && /^BPAY_NEXT_[A-Z0-9_]{1,240}$/.test(payload.message)
+          && !['BPAY_NEXT_POSITION_LEASE_STALE','BPAY_NEXT_POSITION_PREDECESSOR_MISMATCH',
+            'BPAY_NEXT_MODULE_NOT_ACTIVE','BPAY_NEXT_EARLIER_WORKER_COMMAND_PENDING',
+            'BPAY_NEXT_JOB_LEASE_BUSY','BPAY_NEXT_JOB_WAIT_FOR_PREDECESSOR','BPAY_NEXT_JOB_CLAIM_RETRY',
+            'BPAY_NEXT_JOB_TERMINAL','BPAY_NEXT_JOB_KIND_MISMATCH'].includes(payload.message)) {
+          definitePositionCause = payload.message;
+        }
+        if (definitePositionCause && payload.code === '23503') throw fault('BPAY_NEXT_JOB_CONFLICT');
         throw dependencyError({ status: response.status, json: payload }, true, call.action);
       }
       const result = resultInput(payload, call, unknown);
@@ -405,7 +418,8 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
     observeBusy(error);
     const safe = dependencyError(error, attempted, call?.action);
     return { ok: false, error_code: safe.code, retryable: safe.retryable,
-      outcome_unknown: safe.unknown, recovery: safe.recovery };
+      outcome_unknown: safe.unknown, recovery: safe.recovery,
+      ...(definitePositionCause && !safe.retryable && !safe.unknown ? { definite_position_cause: definitePositionCause } : {}) };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (attempted && typeof dependencies.onStepMeasurement === 'function') {
