@@ -22489,6 +22489,25 @@
         "search_path=pg_catalog, pg_temp"
       ],
       "schema": "private",
+      "identity": "weekly_source_pay_query_open_display_v1(p_root_timesheet_id uuid, p_limit integer, p_after_query_kind text, p_after_query_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e16afaec3f15df3da072bdfa5593722605d4b08d4e7defcaf156b0670afb1dfa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
       "identity": "weekly_source_pay_query_scope_v1(p_root_timesheet_id uuid)",
       "parallel": "u",
       "volatility": "s",

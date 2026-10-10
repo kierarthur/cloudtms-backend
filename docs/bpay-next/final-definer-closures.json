@@ -12667,6 +12667,17 @@
       ],
       "finalClosures": [],
       "owner": "SP-12 actual first locking entry; NEXT admission only, original owner retained"
+    },
+    {
+      "signature": "private.weekly_source_pay_query_open_display_v1(uuid,integer,text,uuid)",
+      "finalRoot": "supabase/repeatable/10102026_0956_weekly_source_pay_query_open_display_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0956_weekly_source_pay_query_open_display_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0956_weekly_source_pay_query_open_display_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [],
+      "owner": "SP-13 Source-owned bounded display reader; future WB-07/WB-14 read-only consumer"
     }
   ],
   "editorChains": [
