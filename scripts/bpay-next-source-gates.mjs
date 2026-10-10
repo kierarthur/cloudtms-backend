@@ -117,6 +117,7 @@ export function assertSqlWriteBoundaries(source,file){
     if(/\b(?:insert\s+into|update|delete\s+from|merge\s+into|truncate(?:\s+table)?)\s+(?:only\s+)?private\s*\.\s*bpay_next_test_database_marker\b/i.test(text))throw Error(`BPAY_NEXT_TEST_MARKER_WRITER_FORBIDDEN: ${file}`);
     if(/'SIMULATED_TEST'/i.test(text))throw Error(`BPAY_NEXT_SIMULATION_VOCABULARY_FORBIDDEN: ${file}`);
     assertProviderDefault(text,file);
+    if(/^(?:private|public)\.bpay_next_/.test(part.signature)||/\bbpay_next_/i.test(part.text))assertNoProcessingAdmission(text,file,true);
   }
 }
 
@@ -149,12 +150,51 @@ export function assertExecutableSourceBoundaries(source,file){
   // Only permanent Worker/config/release-script inputs are admitted here.
   // Examples, source tests and this gate's own forbidden tokens are excluded.
   const code=source.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+  if(file==='broker/src/index.js'||/\/bpay-next-[^/]+\.[cm]?js$/.test(file))assertNoProcessingAdmission(source,file);
   if(/['"]SIMULATED_TEST['"]/.test(code))throw Error(`BPAY_NEXT_SIMULATION_VOCABULARY_FORBIDDEN: ${file}`);
   for(const name of ['bpay_next_module_control','bpay_next_test_database_marker']){
     if(new RegExp(`(?:update|insert\\s+into|delete\\s+from|merge\\s+into|truncate(?:\\s+table)?)\\s+(?:private\\s*\\.\\s*)?${name}\\b`,'i').test(code)
       ||new RegExp(`\\.from\\(\\s*['"](?:private\\.)?${name}['"]\\s*\\)[\\s\\S]{0,160}?\\.(?:insert|update|upsert|delete)\\s*\\(`,'i').test(code))throw Error(`BPAY_NEXT_EXECUTABLE_CONTROL_WRITER_FORBIDDEN: ${file}`);
   }
   if(/bpay_next_rail_capability/.test(code)&&/(?:enabled\s*[:=]\s*true|\.\s*(?:update|upsert|insert)\s*\()/i.test(code))throw Error(`BPAY_NEXT_EXECUTABLE_PROVIDER_DEFAULT_UNCLASSIFIED: ${file}`);
+}
+// PF05: mechanisms are identified at executable declarations/calls/fields,
+// never by free prose, ordinary money rates, Source C1 or bounded scheduling.
+export function assertNoProcessingAdmission(source,file,sql=false){
+  const code=sql?sqlWithoutComments(source):source.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+  const mechanism=/(?:^|_)(?:admission_(?:tariff|allowance|budget|price|pricing|cost|credits?)|(?:processing|step)_(?:tariff|allowance|budget|price|pricing|cost|fee)|(?:price|quote|charge)_processing|processing_(?:credit_)?allowance|processing_(?:fee_)?(?:ancestor|payer|graph)|fee_payer_(?:ancestor|graph)|(?:g01|c1)_(?:admission|tariff|allowance|budget|price|pricing|fee|ancestor|graph))(?:_|$)/;
+  const classify=value=>{
+    const name=value.replace(/([a-z0-9])([A-Z])/g,'$1_$2').toLowerCase();
+    // Explicit physical bounds do not price or grant processing admission.
+    if(/(?:^|_)(?:processing|step)_budget_(?:ms|bytes|rows|pages|seconds)$/.test(name))return;
+    if(/^bpay_next_(?:g01|c1)(?:_v\d+)?$/.test(name)||mechanism.test(name))throw Error('BPAY_NEXT_PROCESSING_ADMISSION_FORBIDDEN: '+file+' ('+value+')');
+  };
+  // Identifier tokens express declared objects, callees and request fields.
+  // Quoted literals count only in actual field/access or RPC roles and only
+  // when the whole value is an identifier. Diagnostic text stays permitted.
+  const masked=code.replace(/'((?:[^']|'')*)'|"((?:[^"\\]|\\.)*)"/g,(_whole,single,double,offset)=>{
+    const value=single??double,before=code.slice(Math.max(0,offset-2048),offset),after=code.slice(offset+_whole.length);
+    const bracket=before.match(/(?:([A-Za-z_$][\w$]*)|[)\]]|\?\.)\s*\[\s*$/);
+    const access=bracket&&!['return','throw','yield','await','case','new','else','in','of'].includes(bracket[1]?.toLowerCase())&&!(sql&&bracket[1]?.toLowerCase()==='array');
+    const field=/(?:->>|->|\.)\s*$/.test(before)||(sql&&/\?\s*$/.test(before))||access||(/[{,]\s*$/.test(before)&&/^\s*:/.test(after))
+      ||/\b(?:get|has|hasOwn|hasOwnProperty)\s*\([^;\n]*$/.test(before);
+    const rpc=/\b(?:rpc|sqlJson|callRpc)\s*\([^;\n]*$/.test(before)
+      ||/\b(?:RPCS|ENDPOINTS)\s*=\s*(?:Object\.freeze\s*\(\s*)?\{[^}]*$/i.test(before);
+    if((field||rpc)&&/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value))classify(value);
+    return ' ';
+  });
+  const roles=[
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g, // declared/called routine or constructor
+    /(?:\.|\?\.)\s*([A-Za-z_][A-Za-z0-9_]*)/g, // actual field/RPC access
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g, // request property or local assignment
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s+(?:text|jsonb|numeric|integer|bigint|boolean)\b/gi,
+    /\b(?:table|view|function|procedure|from|join|into)\s+(?:if\s+not\s+exists\s+)?(?:[A-Za-z_]\w*\s*\.\s*)?([A-Za-z_]\w*)/gi
+  ];
+  for(const role of roles)for(const match of masked.matchAll(role))classify(match[1]);
+  for(const match of code.matchAll(/\/rest\/v1\/rpc\/([A-Za-z_][A-Za-z0-9_]*)/g))classify(match[1]);
+  // Exact NEXT abandoned owner invocation is refused; real Source C1 routines have
+  // their own qualified names and are not this standalone processing owner.
+  if(/\bbpay_next_(?:g01|c1)(?:_v\d+)?\s*\(/i.test(masked))throw Error('BPAY_NEXT_ABANDONED_PROCESSING_OWNER: '+file);
 }
 function operatorTokens(tokens){
   const out=[];

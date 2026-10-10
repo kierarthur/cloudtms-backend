@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
+import { assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
 
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
@@ -86,4 +86,39 @@ test('F23 source gates reject actual forbidden writes/constructs and missing tai
   const before="create function private.example(j jsonb) returns void language plpgsql as $$begin if 'prefix:'||j->>'old'='x' then select 1;end if;end$$;";
   const prior=new Map(specialConstructViolations(before,'old.sql').map(row=>[row.key,1]));
   assert.throws(()=>assertSpecialConstructs(before.replace("'old'","'new'"),'successor.sql',prior));
+});
+
+// Rejected vocabulary describes executable processing-admission mechanisms:
+// admission tariff/allowance/budget (R/C/Q/W/B/E or renamed), processing/step
+// price/quote/cost/fee, processing payer/ancestor graphs and G01/C1 owners.
+test('PF05 rejects processing admission prices/allowances/fee ancestry but preserves money and bounds',()=>{
+  for(const source of [
+    'await rpc.bpay_next_price_processing_step_v1({command_id});',
+    "perform private.bpay_next_admission_allowance_v1(p_request->'R');",
+    'select step_price from private.bpay_next_processing_fee_payer_graph;',
+    'const renamed = request.processingAllowance;',
+    'rpc.bpay_next_g01(request);','perform private.bpay_next_c1(p_request);',
+    "const endpoint='/rest/v1/rpc/bpay_next_g01';",
+    'const renamed=request.processingCreditAllowance;',
+    'const theoretical=request.admissionBudgetBytes;',
+    "rpc('bpay_next_processing_fee_quote_v1',args);",
+    "const field=request['processing_allowance'];",
+    'perform private."bpay_next_processing_fee_quote_v1"(p_request);'
+  ])assert.throws(()=>assertNoProcessingAdmission(source,'broker/src/bpay-next-example.js'));
+  assert.doesNotThrow(()=>assertNoProcessingAdmission("return ARRAY['processing_fee'];",'source.sql',true));
+  for(const dimension of ['R','C','Q','W','B','E'])assert.throws(()=>assertNoProcessingAdmission('const granted=request.admissionBudget.'+dimension+';','broker/src/bpay-next-example.js'));
+  for(const source of [
+    "perform public.weekly_source_c1_publish_v1(p_work); select pay_rate,price from public.rates;",
+    'const budgetProfile={pageRows:100,requestBytes:1024,timeoutMs:8000};',
+    'const processingBudgetMs=8000;',
+    "const marker='G01'; const section='C1';",
+    "console.info('processing_budget'); const diagnosticLabel='processing_fee';",
+    "const diagnosticLabels=['processing_fee'];",
+    "function diagnostic(){return ['processing_fee'];}",
+    "const diagnosticLabel=ready?'processing_fee':'other';",
+    "perform public.banking_pay_hot_path_budget_apply('NEXT');",
+    "// G01(request); request.admissionBudget.R;\nconst price=earningsRate;",
+    "const message='processing budget and fees are not admission requirements';",
+    'perform private.bpay_next_assert_financial_scope_v1();'
+  ])assert.doesNotThrow(()=>assertNoProcessingAdmission(source,'broker/src/bpay-next-example.js'));
 });

@@ -500,8 +500,8 @@ Dependencies: F-09; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PF-05-D01 | CHECK: proposed forbidden tariff/per-step pricing source check | MISSING | Implement the exact check target after its existing dependencies. Target forbidden admission tariffs/per-step prices/G01/C1 architecture semantically, not broad vocabulary matching that rejects unrelated identifiers or legitimate bounds. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-05-D02 | CHECK: PF-05 future joined in-app TEST checklist | MISSING | No admission budget/fee graph; legitimate bounds and existing money helpers remain permitted. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PF-05-D01 | CHECK: proposed forbidden tariff/per-step pricing source check | MISSING | Implement the exact check target after its existing dependencies. Target forbidden admission tariffs/per-step prices/G01/C1 architecture semantically, not broad vocabulary matching that rejects unrelated identifiers or legitimate bounds. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-05-D02 | CHECK: PF-05 future joined in-app TEST checklist | MISSING | No admission budget/fee graph; legitimate bounds and existing money helpers remain permitted. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF-05-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -509,6 +509,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF
 
 The source gate passes on the build commit; no NEXT request path performs a pre-pricing call. The gate lists the rejected vocabulary in its test file (RQ-317). (RQ-300)
   - Joined future check: No admission budget/fee graph; legitimate bounds and existing money helpers remain permitted. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Whole PF-05 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. docs/bpay-next/PF-05-COMPLETION.md Review: docs/bpay-next/reviews/PF-05-source-guard-review.md.
 
 ## PF-06 — Measurement hooks (step identities only)
 
