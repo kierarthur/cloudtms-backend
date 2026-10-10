@@ -1223,6 +1223,10 @@
       "sha256": "76d1e2909770819fe2b8e872f9fb958a8144404bbc98a07b3dc60db7010fc1b3"
     },
     {
+      "path": "supabase/migrations/10102026_0151_banking_pay_next_rule_b_selection_snapshot_v1.sql",
+      "sha256": "7e270d8bdeed7f2c5f52432b13273a107d2b91ca3f3d8ee6dbc2e1adcd0c9645"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

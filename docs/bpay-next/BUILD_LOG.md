@@ -181,3 +181,58 @@ BUILDER DECISION BD017: original historical resolved-match returns before valida
 ### F-25 QuerySync / Candidate schema local checkpoint — IN PROGRESS 10/10/2026 London
 
 Whole ITEM counts remain BUILT12/288 REVIEWED12/288. All currently authored response/System/QuerySync owners, finite helpers/guards and five-table Candidate foundation independently source reviewed PASS. Sole local PostgreSQL17 now COMPILED307migrations/837repeatables; latest CHANGED3migrations14repeatable closures completed with final isolation. Fresh seal b05d6b9c15b5ed01d32260557bb6ee582e3ccb7097b6458d5ae1eaface157a5a; db:check307/837 and exact final-definer source gate PASS. No business invocation/fixture/hosted operation/timing/activation/payment/provider/bank/email/drain. Candidate actual owner/child closures and Source owners remain pending; schema alone does not certify them. QuerySync final owner review binds actual SHA b1153c54fa7e3b2815414e2291dcfb5f90a1f87dbd092b9b21538ab108bfd2b8 and pre-install optional expected-fingerprint/module-lock corrections. Installed/app NOT_RUN. Explicit combined source/contract stage is checked for coupling before local commit; no push.
+
+BUILDER DECISION BD018: original APP locked-race receipt replay can finish an already-entered zero-work transaction. Its real earlier immutable receipt does not imply this new transaction ran the former Materialise/comparison/response children. Additive0128 permits only the explicit APP_EXACT_REPLY adjunct with actual receipt, no Materialise child/response request, zero response/comparison counts and zero actual stages. Fresh WHOLE_WEEK_REVISION still requires its actual same-producer Materialise certificate. Returned replay JSON remains original idempotent_replay=true; the immutable original receipt is unchanged. Pure pre-entry replay still returns without a producer. No historical work is fabricated or backdated.
+
+Materialise EXACT_LAST_REPLAY scope semantics: request key/hash and actual returned reply certify the real locked last-cache branch; current workflow Contract/week scalars, when retained, are contextual terms for that replay, never assertions of the former fresh materialisation's business terms or financial origin. Only FRESH certificates certify original current owner terms/comparison work. Historical retained assertions do not require today's workflow/generation/Timesheet/publication state. This explicit variant carries zero stages and no comparison certificate.
+
+### F-25 owner rule B — 10/10/2026 London
+
+BUILDER DECISION BD019: owner rule B adopted: the Draft contains exactly the Workbench rows and expected_revision_id/amounts selected at Create Draft. Later arrivals and changes belong to the next Draft. The R2 section 4 producer-version-evidence sentence and previous F-25 protocol design are superseded. D07 resolver is not required under rule B. Preserve the original post-click revision-change REVIEW and case balances live under money locks. No producer, 1610,1620,0280,enroller,pin guard or Worker-route change is part of the replacement.
+
+The authorised new0151 migration and four-function consumer successor capture Candidate channel/Umbrella/VAT/floor and raw Source-owned gates for the exact selected expected revisions. SEALED replay returns before capture. Office ACCEPTED_* calls are dormant; Worker refusal parsing, unknown-result/exact-request journal and existing ordinary progress remain. Nine committed locked additive migrations and2153/2256 repeatables remain unchanged and unused; the uncommitted0128 SQL and only its uncommitted lock append are explicitly discarded. All design/review evidence is retained. Exact pre-delete file hashes are in F-25-PARKED-FILES.json. Tracked deletions will be recorded by a new forward local commit, without reset/amend or push.
+
+The sole task-local PG17 database was positively observed to contain zero Work, pay runs, Candidates and incidents, then rebuilt cleanly in the same task container/volume/database. This removes previously compiled producer hooks and replaced weekly_source bodies; no shared/real data or ledger repair. Empty provider prerequisites retain the non-superuser/non-bypass owner and no authenticator. Clean NEW schema compilation, independent final source review, seal and coupling are underway; no final tick yet. No fixtures, business invocation, hosted operation, timing run, agency activation or payment/provider/bank/email/drain action.
+
+Parked names (all under supabase/repeatable; recovery of committed bytes is history-only):
+- 09102026_2233_banking_pay_next_acceptance_capture_v1.sql
+- 09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql
+- 09102026_2245_banking_pay_next_input_version_producers_v1.sql
+- 09102026_2247_banking_pay_next_input_order_tail_v1.sql
+- 09102026_2254_banking_pay_next_acceptance_transaction_fence_v1.sql
+- 09102026_2258_banking_pay_next_week_origin_capture_v1.sql
+- 09102026_2303_banking_pay_next_accepted_case_terms_capture_v1.sql
+- 09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql
+- 09102026_2308_banking_pay_next_accepted_case_prepare_v1.sql
+- 09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql
+- 09102026_2324_banking_pay_next_week_origin_json_operand_v1.sql
+- 09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql
+- 09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql
+- 09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql
+- 09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql
+- 09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql
+- 10102026_0002_banking_pay_next_query_metadata_owner_v1.sql
+- 10102026_0009_banking_pay_next_query_manual_owners_v1.sql
+- 10102026_0017_banking_pay_next_query_response_owners_v1.sql
+- 10102026_0030_banking_pay_next_query_completion_evidence_v1.sql
+- 10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql
+- 10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql
+- 10102026_0039_banking_pay_next_query_sync_original_decisions_v1.sql
+- 10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql
+- 10102026_0044_banking_pay_next_query_comparison_stage_v1.sql
+- 10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql
+- 10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql
+- 10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql
+- 10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql
+- 10102026_0101_banking_pay_next_query_sync_owner_v1.sql
+- 10102026_0121_banking_pay_next_candidate_completion_digests_v1.sql
+- 10102026_0122_banking_pay_next_candidate_compare_evidence_v1.sql
+- 10102026_0125_banking_pay_next_candidate_compare_completion_v1.sql
+- 10102026_0129_banking_pay_next_candidate_materialise_completion_v1.sql
+- 10102026_0135_banking_pay_next_candidate_compare_owner_v1.sql
+- 10102026_0143_banking_pay_next_candidate_app_response_evidence_v1.sql
+- 10102026_0146_banking_pay_next_candidate_root_completion_v1.sql
+
+### F-25 rule B completion — 10/10/2026 London
+
+Whole ITEM counts BUILT13/288 REVIEWED13/288. D01,D02,D03,D05,D06,D08 complete under BD019; D07 SUPERSEDED (owner rule B requires no resolver). Four latest-owner consumer edits and snapshot migration independently reviewed PASS; Office calls dormant and exact refusal/pending journal preserved. Clean sole local PG17 COMPILED,308 locked migrations/808 repeatables,2040 source signatures/726 registered chains, final-definer source gate PASS; seal a0177a8200237bc983e8eb8cc303b97243299903ef18829a296746fc1af2753a and contract coupling PASS. Nine prior migrations empty/unused; original producer source restored through removal of parked successors. No hosted install/app acceptance/timing/activation or external effects. Proceed to F-11 sequence16; parked files are not revisited absent later acceptance failure.

@@ -1,0 +1,2407 @@
+{
+  "formatVersion": 2,
+  "scope": "READ_ONLY_RULE_B_PARKING_INVENTORY_CORRECTED_AFTER_CONCURRENT_REMOVAL",
+  "captured_at_utc": "2026-10-10T00:55:21.062326+00:00",
+  "build_worktree": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+  "HEAD": "8eadb2e204ae33ca43f0cbb95bf2a734d727e130",
+  "parent_parking_manifest": {
+    "path": "docs/bpay-next/F-25-PARKED-FILES.json",
+    "status": "??",
+    "tracked": false,
+    "bytes": 7144,
+    "raw_sha256": "653d85743e850f639506d24740adeea52686ce8cf4ad4519b75ac35cfdc1cca0",
+    "lf_sha256": "64267ba86da88a6258aeb081e4eb24239812f291c23d50df108a04c8d7d569d9"
+  },
+  "parked_former_repeatables": [
+    {
+      "path": "supabase/repeatable/09102026_2233_banking_pay_next_acceptance_capture_v1.sql",
+      "parent_predelete_sha256": "7270db42561fc96504a547ffaed49267313aab604de3c81bdc5825bbed0de25c",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 30936,
+      "HEAD_raw_sha256": "7270db42561fc96504a547ffaed49267313aab604de3c81bdc5825bbed0de25c",
+      "HEAD_lf_sha256": "7270db42561fc96504a547ffaed49267313aab604de3c81bdc5825bbed0de25c"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "parent_predelete_sha256": "2881978637f38c72a6db81ed982f11a0e684bae6bac54a24bfbbb76979c3203c",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 39549,
+      "HEAD_raw_sha256": "b422b5e2b74cec3953c2c437dcd5d2ba1e61d8a8d4dbd7d33947ce1761803180",
+      "HEAD_lf_sha256": "b422b5e2b74cec3953c2c437dcd5d2ba1e61d8a8d4dbd7d33947ce1761803180"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "parent_predelete_sha256": "fa93cbd588cdd22a60aade8bc38b89b73c9dba3de5f87324c3024838267d2433",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 15222,
+      "HEAD_raw_sha256": "fa93cbd588cdd22a60aade8bc38b89b73c9dba3de5f87324c3024838267d2433",
+      "HEAD_lf_sha256": "fa93cbd588cdd22a60aade8bc38b89b73c9dba3de5f87324c3024838267d2433"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2247_banking_pay_next_input_order_tail_v1.sql",
+      "parent_predelete_sha256": "d8b27fc254df323871eb0734812f499ccdc9c327a41cfa81018066d1aee2d911",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 28064,
+      "HEAD_raw_sha256": "c01da6d3d681c04c06a2dc985e9c423ef84b7f99675d7ce5e4006cf1f85de608",
+      "HEAD_lf_sha256": "c01da6d3d681c04c06a2dc985e9c423ef84b7f99675d7ce5e4006cf1f85de608"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2254_banking_pay_next_acceptance_transaction_fence_v1.sql",
+      "parent_predelete_sha256": "e26f1d705341d4942103ac55caad3f51a7ca84673de270ec2697d6e5eaf869ab",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 15017,
+      "HEAD_raw_sha256": "cf82545936465eb85e4df441d8c5d5f82162fbab9314ee2ed20369bc5a83fca1",
+      "HEAD_lf_sha256": "cf82545936465eb85e4df441d8c5d5f82162fbab9314ee2ed20369bc5a83fca1"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+      "parent_predelete_sha256": "004031d9c041d30c113f54253b8d689ebcbc5d03841c5d3f38d30084e3492885",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 52389,
+      "HEAD_raw_sha256": "004031d9c041d30c113f54253b8d689ebcbc5d03841c5d3f38d30084e3492885",
+      "HEAD_lf_sha256": "004031d9c041d30c113f54253b8d689ebcbc5d03841c5d3f38d30084e3492885"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2303_banking_pay_next_accepted_case_terms_capture_v1.sql",
+      "parent_predelete_sha256": "db987eb3eba2ba945e48bbc7ac76b5e68f2ac6ffa8122d8360c67f80a1327f7b",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 27795,
+      "HEAD_raw_sha256": "08b119020dc052e30c643583473e4fe817b9df8079362956ee5ff50020141b08",
+      "HEAD_lf_sha256": "08b119020dc052e30c643583473e4fe817b9df8079362956ee5ff50020141b08"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql",
+      "parent_predelete_sha256": "f5d9bfb70e86ebf6cbd4ffae7fad377af27c972b0a54783bcd5d91d91e8813b7",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 11847,
+      "HEAD_raw_sha256": "f5d9bfb70e86ebf6cbd4ffae7fad377af27c972b0a54783bcd5d91d91e8813b7",
+      "HEAD_lf_sha256": "f5d9bfb70e86ebf6cbd4ffae7fad377af27c972b0a54783bcd5d91d91e8813b7"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2308_banking_pay_next_accepted_case_prepare_v1.sql",
+      "parent_predelete_sha256": "a6e84241e6622386b2645e9373cd714d64fc661ba244bcde5fdb248f094f82f2",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 51817,
+      "HEAD_raw_sha256": "a6e84241e6622386b2645e9373cd714d64fc661ba244bcde5fdb248f094f82f2",
+      "HEAD_lf_sha256": "a6e84241e6622386b2645e9373cd714d64fc661ba244bcde5fdb248f094f82f2"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql",
+      "parent_predelete_sha256": "8fa44b6075008486114ed8d95e4befac9905790c491dc8a1c4300129a784ead3",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 18153,
+      "HEAD_raw_sha256": "8fa44b6075008486114ed8d95e4befac9905790c491dc8a1c4300129a784ead3",
+      "HEAD_lf_sha256": "8fa44b6075008486114ed8d95e4befac9905790c491dc8a1c4300129a784ead3"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2324_banking_pay_next_week_origin_json_operand_v1.sql",
+      "parent_predelete_sha256": "a17b8bb2916509dca3cbac267f0c78c1442389482226747f358b93b5de685508",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 17892,
+      "HEAD_raw_sha256": "a17b8bb2916509dca3cbac267f0c78c1442389482226747f358b93b5de685508",
+      "HEAD_lf_sha256": "a17b8bb2916509dca3cbac267f0c78c1442389482226747f358b93b5de685508"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "parent_predelete_sha256": "565c540af29f010d812bfe972645deae4c72c5e4647230e7540495df3d7fa216",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 41650,
+      "HEAD_raw_sha256": "565c540af29f010d812bfe972645deae4c72c5e4647230e7540495df3d7fa216",
+      "HEAD_lf_sha256": "565c540af29f010d812bfe972645deae4c72c5e4647230e7540495df3d7fa216"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "parent_predelete_sha256": "2ff8e3e630668b59a7493e8ef23fbc44017533bf994fb6aa377ffefd5a7a1e2f",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 77638,
+      "HEAD_raw_sha256": "2ff8e3e630668b59a7493e8ef23fbc44017533bf994fb6aa377ffefd5a7a1e2f",
+      "HEAD_lf_sha256": "2ff8e3e630668b59a7493e8ef23fbc44017533bf994fb6aa377ffefd5a7a1e2f"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "parent_predelete_sha256": "e019512a0efde50be464513bd60a231d221a3a403f12a80c212ce4e90bc1c2dd",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 29176,
+      "HEAD_raw_sha256": "e019512a0efde50be464513bd60a231d221a3a403f12a80c212ce4e90bc1c2dd",
+      "HEAD_lf_sha256": "e019512a0efde50be464513bd60a231d221a3a403f12a80c212ce4e90bc1c2dd"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "parent_predelete_sha256": "0f8fc74e43eccbdf09b430c6cbcaaf21e06c8df45e7e3fe86d5b96747f681714",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 49743,
+      "HEAD_raw_sha256": "6d01bbd361f7b68de3175d8c4a1b01ff3527adf29e14c8e08ad22c2081b65ff3",
+      "HEAD_lf_sha256": "6d01bbd361f7b68de3175d8c4a1b01ff3527adf29e14c8e08ad22c2081b65ff3"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "parent_predelete_sha256": "996ccbb22641cd41ced5f0d4ff15d88633e2f768c4b1f7def6a4c1b3885792bf",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 15973,
+      "HEAD_raw_sha256": "996ccbb22641cd41ced5f0d4ff15d88633e2f768c4b1f7def6a4c1b3885792bf",
+      "HEAD_lf_sha256": "996ccbb22641cd41ced5f0d4ff15d88633e2f768c4b1f7def6a4c1b3885792bf"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "parent_predelete_sha256": "a253e956f0f55ed3fc0e03dafbe97c690d800a05bf532f402c51c8e81641b759",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 46450,
+      "HEAD_raw_sha256": "6634116ff56e57a1a45c55554ccadc00eb5dff230ace3226384523b2424cf8c4",
+      "HEAD_lf_sha256": "6634116ff56e57a1a45c55554ccadc00eb5dff230ace3226384523b2424cf8c4"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "parent_predelete_sha256": "871353cca6b4a9c24eb93a0c122dd0efbadaced2b20e6b681c354ab80a7674f7",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 35114,
+      "HEAD_raw_sha256": "871353cca6b4a9c24eb93a0c122dd0efbadaced2b20e6b681c354ab80a7674f7",
+      "HEAD_lf_sha256": "871353cca6b4a9c24eb93a0c122dd0efbadaced2b20e6b681c354ab80a7674f7"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "parent_predelete_sha256": "08c95f0067da9f7d9d9ef3277584102011f75d73d6761bd9d6a8a0fb2ed2e270",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 67423,
+      "HEAD_raw_sha256": "08c95f0067da9f7d9d9ef3277584102011f75d73d6761bd9d6a8a0fb2ed2e270",
+      "HEAD_lf_sha256": "08c95f0067da9f7d9d9ef3277584102011f75d73d6761bd9d6a8a0fb2ed2e270"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+      "parent_predelete_sha256": "4be599c83fe18bb3b8761fecebb3e0a9785d2d69a716b83225787f8cc431dd54",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 6900,
+      "HEAD_raw_sha256": "844e114817d7b3efa0fef5f755b358eeeb9309cd9f72ff9b81eb0a60c137ea1e",
+      "HEAD_lf_sha256": "844e114817d7b3efa0fef5f755b358eeeb9309cd9f72ff9b81eb0a60c137ea1e"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "parent_predelete_sha256": "ab774f951ba157ad7705f31e461db145d4a9ff2ca4d6155e58a87853814a44f1",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 61537,
+      "HEAD_raw_sha256": "ab774f951ba157ad7705f31e461db145d4a9ff2ca4d6155e58a87853814a44f1",
+      "HEAD_lf_sha256": "ab774f951ba157ad7705f31e461db145d4a9ff2ca4d6155e58a87853814a44f1"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "parent_predelete_sha256": "fb440b310de58356450e05e34de306a7e6bd3573bd5dfe46e9d5382303f4020e",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 5747,
+      "HEAD_raw_sha256": "cab25d78ac9e04daaa72272569e32f612a780f8892d64b7acc22e4164ff05ecd",
+      "HEAD_lf_sha256": "cab25d78ac9e04daaa72272569e32f612a780f8892d64b7acc22e4164ff05ecd"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0039_banking_pay_next_query_sync_original_decisions_v1.sql",
+      "parent_predelete_sha256": "f5847e3e3fb28a8745d3ee8c29d0dd7dc09740d7c23627b380f358f762c985af",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 6452,
+      "HEAD_raw_sha256": "9bd7724cf839243cb72914517f69120574b2c7a28ee1f31fa5e3a40a512a0cf9",
+      "HEAD_lf_sha256": "9bd7724cf839243cb72914517f69120574b2c7a28ee1f31fa5e3a40a512a0cf9"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "parent_predelete_sha256": "79e3787728d2550a423f9552cd3b4e3b670c292e4715607b0a792ee9ff9f77eb",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 5347,
+      "HEAD_raw_sha256": "79e3787728d2550a423f9552cd3b4e3b670c292e4715607b0a792ee9ff9f77eb",
+      "HEAD_lf_sha256": "79e3787728d2550a423f9552cd3b4e3b670c292e4715607b0a792ee9ff9f77eb"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0044_banking_pay_next_query_comparison_stage_v1.sql",
+      "parent_predelete_sha256": "b04ba86aeee9cf21900d02eb71f71bf1afc8864306f354ef32deddfbf8f4c989",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 2669,
+      "HEAD_raw_sha256": "9a5a41f3407358a798b47ad694f4f549d9bd0a0c7c759333754924d214c5a5da",
+      "HEAD_lf_sha256": "9a5a41f3407358a798b47ad694f4f549d9bd0a0c7c759333754924d214c5a5da"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "parent_predelete_sha256": "d8f0e2f689eeb22ba480f039318a01b90187dbec5fbe098190f12428155b059e",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 11694,
+      "HEAD_raw_sha256": "58f53c4aec4e97823912cce9f73502e067f43415c4dfbbdbdf2e00e3756c5bdd",
+      "HEAD_lf_sha256": "58f53c4aec4e97823912cce9f73502e067f43415c4dfbbdbdf2e00e3756c5bdd"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql",
+      "parent_predelete_sha256": "bd9920f0440406a7710f713391db25646ebc475fa906d7faac6fad03aa133768",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 9388,
+      "HEAD_raw_sha256": "8b91c278f22cabc85b63e58519a7720988122cc4b20ed0a6ac054443295e97fb",
+      "HEAD_lf_sha256": "8b91c278f22cabc85b63e58519a7720988122cc4b20ed0a6ac054443295e97fb"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "parent_predelete_sha256": "8027ed7810e0345b4370a897551ddca3fae0868119728253ab9fa4abe5b09ce8",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 16977,
+      "HEAD_raw_sha256": "8027ed7810e0345b4370a897551ddca3fae0868119728253ab9fa4abe5b09ce8",
+      "HEAD_lf_sha256": "8027ed7810e0345b4370a897551ddca3fae0868119728253ab9fa4abe5b09ce8"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "parent_predelete_sha256": "08d6e2310e383644a15beb78fd890c378a02957e0cbefa13faf2b1190fdb2136",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 11614,
+      "HEAD_raw_sha256": "133dfdc712bb4624cdb898a4697c65405683d8dc52edec3cc47e3d10822200c3",
+      "HEAD_lf_sha256": "133dfdc712bb4624cdb898a4697c65405683d8dc52edec3cc47e3d10822200c3"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0101_banking_pay_next_query_sync_owner_v1.sql",
+      "parent_predelete_sha256": "b1153c54fa7e3b2815414e2291dcfb5f90a1f87dbd092b9b21538ab108bfd2b8",
+      "current_exists": false,
+      "current_git_status": "D ",
+      "HEAD_exists": true,
+      "HEAD_bytes": 30613,
+      "HEAD_raw_sha256": "b1153c54fa7e3b2815414e2291dcfb5f90a1f87dbd092b9b21538ab108bfd2b8",
+      "HEAD_lf_sha256": "b1153c54fa7e3b2815414e2291dcfb5f90a1f87dbd092b9b21538ab108bfd2b8"
+    },
+    {
+      "path": "supabase/repeatable/10102026_0121_banking_pay_next_candidate_completion_digests_v1.sql",
+      "parent_predelete_sha256": "ed7afd09a2ef94717dc403e4686d764c35d152fc9f83c540bd7a5eda5177d5b7",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0122_banking_pay_next_candidate_compare_evidence_v1.sql",
+      "parent_predelete_sha256": "9ec7a01ea541e69f4d81f9d22dd4b21b50e96b6cfe45fa8f8e293efd90b0ae51",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0125_banking_pay_next_candidate_compare_completion_v1.sql",
+      "parent_predelete_sha256": "5f8b6839c72d470706982c2f5531f266c6161ff980cb6c55057b4b91941feaec",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0129_banking_pay_next_candidate_materialise_completion_v1.sql",
+      "parent_predelete_sha256": "2ae3bbd068bc9f5e68eab42963d6f8ad1354477a25041ee327085f446db91edd",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0135_banking_pay_next_candidate_compare_owner_v1.sql",
+      "parent_predelete_sha256": "8c5075829c93201478255d6b73ca977f0fa1c65fa17202b2475477d68aff237b",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0143_banking_pay_next_candidate_app_response_evidence_v1.sql",
+      "parent_predelete_sha256": "1aeb51fc5e6baa7433dcac081a2783e8a99c1761c516f039cd38d02564126743",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    },
+    {
+      "path": "supabase/repeatable/10102026_0146_banking_pay_next_candidate_root_completion_v1.sql",
+      "parent_predelete_sha256": "e3429dccd95dda61e95fd4b3e9611e16ec6ba79ed06ecaffd2b2d5c25f345441",
+      "current_exists": false,
+      "current_git_status": "absent; former untracked",
+      "HEAD_exists": false
+    }
+  ],
+  "keep_repeatables": [
+    {
+      "path": "supabase/repeatable/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 39253,
+      "raw_sha256": "4462d4e9a45909ba5e428b1916f74a7eeacf99b73add469b64eae8f185e28810",
+      "lf_sha256": "4462d4e9a45909ba5e428b1916f74a7eeacf99b73add469b64eae8f185e28810"
+    },
+    {
+      "path": "supabase/repeatable/09102026_2256_banking_pay_next_accepted_case_week_guards_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 3762,
+      "raw_sha256": "5226a8c39e53f7900a1dfd6a466b8991b51cdff2c8095c52c300825d759dfd6f",
+      "lf_sha256": "5226a8c39e53f7900a1dfd6a466b8991b51cdff2c8095c52c300825d759dfd6f"
+    }
+  ],
+  "preserve_nine_committed_migrations": [
+    {
+      "path": "supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 32537,
+      "raw_sha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182",
+      "lf_sha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182",
+      "HEAD_lock_sha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182",
+      "current_lock_sha256": "0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/09102026_2225_banking_pay_next_accepted_input_provenance_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 2891,
+      "raw_sha256": "c7d79426059729a7f85c787120fdc371ef312f9b832ba6576a13d33139a086c3",
+      "lf_sha256": "c7d79426059729a7f85c787120fdc371ef312f9b832ba6576a13d33139a086c3",
+      "HEAD_lock_sha256": "c7d79426059729a7f85c787120fdc371ef312f9b832ba6576a13d33139a086c3",
+      "current_lock_sha256": "c7d79426059729a7f85c787120fdc371ef312f9b832ba6576a13d33139a086c3",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/09102026_2244_banking_pay_next_input_transaction_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 1968,
+      "raw_sha256": "4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191",
+      "lf_sha256": "4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191",
+      "HEAD_lock_sha256": "4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191",
+      "current_lock_sha256": "4fe014fe836d3474c18d77670788814754384a6fab7b889b557a6af55e0e2191",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/09102026_2300_banking_pay_next_accepted_case_week_terms_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 1089,
+      "raw_sha256": "ad70ce3e0a7531d52209f0566412628f0c5c59a03fa63a534fab2535b3b950ef",
+      "lf_sha256": "ad70ce3e0a7531d52209f0566412628f0c5c59a03fa63a534fab2535b3b950ef",
+      "HEAD_lock_sha256": "ad70ce3e0a7531d52209f0566412628f0c5c59a03fa63a534fab2535b3b950ef",
+      "current_lock_sha256": "ad70ce3e0a7531d52209f0566412628f0c5c59a03fa63a534fab2535b3b950ef",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/09102026_2352_banking_pay_next_query_producer_protocol_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 19936,
+      "raw_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1",
+      "lf_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1",
+      "HEAD_lock_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1",
+      "current_lock_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/10102026_0020_banking_pay_next_query_root_completion_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6899,
+      "raw_sha256": "bf36da5429faebb2d02995ab24f1dc8538e83e8587a7273ab8acb62aaa6c60bf",
+      "lf_sha256": "bf36da5429faebb2d02995ab24f1dc8538e83e8587a7273ab8acb62aaa6c60bf",
+      "HEAD_lock_sha256": "bf36da5429faebb2d02995ab24f1dc8538e83e8587a7273ab8acb62aaa6c60bf",
+      "current_lock_sha256": "bf36da5429faebb2d02995ab24f1dc8538e83e8587a7273ab8acb62aaa6c60bf",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/10102026_0036_banking_pay_next_query_sync_branch_evidence_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 5163,
+      "raw_sha256": "9bf794bcb6ac1964922403bbdf4eab91a088a6248af5188b1c7b50ede31477fb",
+      "lf_sha256": "9acb438e59f38cd2cca753f03a8dd10b8ef1ba0f63c0e4d435a2badd9a440a36",
+      "HEAD_lock_sha256": "9acb438e59f38cd2cca753f03a8dd10b8ef1ba0f63c0e4d435a2badd9a440a36",
+      "current_lock_sha256": "9acb438e59f38cd2cca753f03a8dd10b8ef1ba0f63c0e4d435a2badd9a440a36",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/10102026_0057_banking_pay_next_query_witness_envelope_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 873,
+      "raw_sha256": "121eafa88611f7bd79c24ee5d2325f1077b6afa43d7e4ceec57a92323695b958",
+      "lf_sha256": "784c3cb5b26b9fe447e4d5e2983c3fe9b6d4c3e1e833a950d46d96c8bc1e1cbc",
+      "HEAD_lock_sha256": "784c3cb5b26b9fe447e4d5e2983c3fe9b6d4c3e1e833a950d46d96c8bc1e1cbc",
+      "current_lock_sha256": "784c3cb5b26b9fe447e4d5e2983c3fe9b6d4c3e1e833a950d46d96c8bc1e1cbc",
+      "canonical_matches_HEAD_and_current_lock": true
+    },
+    {
+      "path": "supabase/migrations/10102026_0111_banking_pay_next_candidate_query_completion_v1.sql",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 19298,
+      "raw_sha256": "2f6c039ad7ac175e0d6aa486baa888dbe9d18f0292b80d577ac4a4925ad5df8a",
+      "lf_sha256": "76d1e2909770819fe2b8e872f9fb958a8144404bbc98a07b3dc60db7010fc1b3",
+      "HEAD_lock_sha256": "76d1e2909770819fe2b8e872f9fb958a8144404bbc98a07b3dc60db7010fc1b3",
+      "current_lock_sha256": "76d1e2909770819fe2b8e872f9fb958a8144404bbc98a07b3dc60db7010fc1b3",
+      "canonical_matches_HEAD_and_current_lock": true
+    }
+  ],
+  "0128_current_absent": true,
+  "0128_current_lock_absent": true,
+  "excluded_new_rule_B_sources": [
+    "supabase/migrations/10102026_0151_banking_pay_next_rule_b_selection_snapshot_v1.sql",
+    "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
+  ],
+  "original_restoration_targets": [
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "declaration_line": 739
+    },
+    {
+      "signature": "private.bpay_next_claim_prepare_job_v1(uuid,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "declaration_line": 633
+    },
+    {
+      "signature": "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)",
+      "former_final_root": "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 4391,
+        "raw_sha256": "3816b38a9b0776e033abbc55fa010cf62523294070c09a9c8508e36ac2d63d9c",
+        "lf_sha256": "3816b38a9b0776e033abbc55fa010cf62523294070c09a9c8508e36ac2d63d9c"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "declaration_line": 7
+    },
+    {
+      "signature": "private.bpay_next_enqueue_preparation_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2233_banking_pay_next_acceptance_capture_v1.sql",
+        "supabase/repeatable/09102026_2254_banking_pay_next_acceptance_transaction_fence_v1.sql",
+        "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 10638,
+        "raw_sha256": "47a0df6a06bd7816b0102c1aa5fca0bddd97ebc08a0a04d786254db3179967b3",
+        "lf_sha256": "47a0df6a06bd7816b0102c1aa5fca0bddd97ebc08a0a04d786254db3179967b3"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+      "declaration_line": 133
+    },
+    {
+      "signature": "private.bpay_next_enroll_one_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 32996,
+        "raw_sha256": "395ead5cf46a1399ef4859f056d89508b0862f9b0fda8dde92454107f17602fa",
+        "lf_sha256": "395ead5cf46a1399ef4859f056d89508b0862f9b0fda8dde92454107f17602fa"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "declaration_line": 106
+    },
+    {
+      "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "declaration_line": 1161
+    },
+    {
+      "signature": "private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint)",
+      "former_final_root": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 26650,
+        "raw_sha256": "94cd02fa3ffeb152b0281a840c08249ad9c3e0d26e2525d5fc3d769da4dd4de5",
+        "lf_sha256": "94cd02fa3ffeb152b0281a840c08249ad9c3e0d26e2525d5fc3d769da4dd4de5"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "declaration_line": 103
+    },
+    {
+      "signature": "private.bpay_next_post_simple_outcome_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "declaration_line": 2298
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2308_banking_pay_next_accepted_case_prepare_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2308_banking_pay_next_accepted_case_prepare_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2308_banking_pay_next_accepted_case_prepare_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 50734,
+        "raw_sha256": "c6f7d426fa60d3c6cf5db4d5c386aeb8111f974e455bd475a10dcfecf0e5851b",
+        "lf_sha256": "c6f7d426fa60d3c6cf5db4d5c386aeb8111f974e455bd475a10dcfecf0e5851b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "declaration_line": 10
+    },
+    {
+      "signature": "private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2306_banking_pay_next_accepted_no_case_consumers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 6797,
+        "raw_sha256": "335f80467b7eb434034c3aa67295355aa8af04cc9c0834e313a67b056d10766b",
+        "lf_sha256": "335f80467b7eb434034c3aa67295355aa8af04cc9c0834e313a67b056d10766b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "declaration_line": 6
+    },
+    {
+      "signature": "private.bpay_next_receive_command_v1(uuid,text)",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2247_banking_pay_next_input_order_tail_v1.sql",
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 2447,
+        "raw_sha256": "be3c7dd17ecea6cbff631ed0b39c9b09947e6284b93db04ecdf517e320fed3e1",
+        "lf_sha256": "be3c7dd17ecea6cbff631ed0b39c9b09947e6284b93db04ecdf517e320fed3e1"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/03102026_1404_banking_pay_next_command_intake_v1.sql",
+      "declaration_line": 11
+    },
+    {
+      "signature": "private.bpay_next_run_work_query_pin_guard_v2()",
+      "former_final_root": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 6830,
+        "raw_sha256": "01405bc854fb7b2e23cd740154f0302a8956cdd144b44c1f3e4eda67db80dcdd",
+        "lf_sha256": "01405bc854fb7b2e23cd740154f0302a8956cdd144b44c1f3e4eda67db80dcdd"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/05102026_0044_bpay_next_source_pay_query_admission_v2.sql",
+      "declaration_line": 27
+    },
+    {
+      "signature": "private.bpay_next_work_collection_capture_guard_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql",
+        "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 54411,
+        "raw_sha256": "5dda125e81ee4dac9e78bd87f1618b4c59635f0125536fb856cc060dc381e988",
+        "lf_sha256": "5dda125e81ee4dac9e78bd87f1618b4c59635f0125536fb856cc060dc381e988"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+      "declaration_line": 66
+    },
+    {
+      "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+      "former_final_root": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2236_banking_pay_next_accepted_prepare_consumers_v1.sql",
+        "supabase/repeatable/09102026_2254_banking_pay_next_acceptance_transaction_fence_v1.sql",
+        "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "declaration_line": 3678
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "former_final_root": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 256434,
+        "raw_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+        "lf_sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "declaration_line": 3776
+    },
+    {
+      "signature": "public.weekly_source_manual_review_open_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 38249,
+        "raw_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+        "lf_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "declaration_line": 143
+    },
+    {
+      "signature": "public.weekly_source_manual_review_resolve_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 38249,
+        "raw_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+        "lf_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "declaration_line": 324
+    },
+    {
+      "signature": "private.bpay_next_source_book_guard_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 52467,
+        "raw_sha256": "2e9a297ff362e41dbfbadc869b211b37176cf76d06edd3e78808a2e4c2a57340",
+        "lf_sha256": "2e9a297ff362e41dbfbadc869b211b37176cf76d06edd3e78808a2e4c2a57340"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql",
+      "declaration_line": 466
+    },
+    {
+      "signature": "private.bpay_next_query_producer_operational_guard_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/migrations/09102026_2352_banking_pay_next_query_producer_protocol_v1.sql",
+      "retained_source": {
+        "path": "supabase/migrations/09102026_2352_banking_pay_next_query_producer_protocol_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 19936,
+        "raw_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1",
+        "lf_sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": null,
+      "declaration_line": 119
+    },
+    {
+      "signature": "private.weekly_source_manual_reviews_finalised_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 38249,
+        "raw_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6",
+        "lf_sha256": "1e9f16241ffa5e9249a7e8bf796693b81b633c2268cd1864147223451628e8d6"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/05102026_0428_weekly_source_manual_review_commands_v2.sql",
+      "declaration_line": 249
+    },
+    {
+      "signature": "public.weekly_source_manager_review_respond_atomic_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 268078,
+        "raw_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+        "lf_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "declaration_line": 987
+    },
+    {
+      "signature": "public.weekly_source_candidate_response_submit_atomic_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 268078,
+        "raw_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+        "lf_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "declaration_line": 2472
+    },
+    {
+      "signature": "public.weekly_source_candidate_app_submit_atomic_v1(uuid,text,uuid,jsonb,timestamp with time zone)",
+      "former_final_root": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 149249,
+        "raw_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6",
+        "lf_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "declaration_line": 2754
+    },
+    {
+      "signature": "public.weekly_source_query_accept_system_hours_atomic_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 268078,
+        "raw_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+        "lf_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "declaration_line": 641
+    },
+    {
+      "signature": "public.weekly_source_office_bulk_query_action_atomic_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 344888,
+        "raw_sha256": "dace15a8df0b37decf261beb3cd99ac5c59ea362f22114b382c1c0148d4bf0e4",
+        "lf_sha256": "dace15a8df0b37decf261beb3cd99ac5c59ea362f22114b382c1c0148d4bf0e4"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_1534_weekly_source_read_projections_v1.sql",
+      "declaration_line": 4948
+    },
+    {
+      "signature": "public.weekly_source_query_sync_atomic_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0101_banking_pay_next_query_sync_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0101_banking_pay_next_query_sync_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0101_banking_pay_next_query_sync_owner_v1.sql"
+      ],
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 268078,
+        "raw_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d",
+        "lf_sha256": "dcfa67862e75cff20e06d0694910ea603d329f3f0dc20fd351fca07cf598332d"
+      },
+      "physical_declaration_found": true,
+      "current_rule_B_final": "supabase/repeatable/15092026_1534_weekly_source_query_delivery_v1.sql",
+      "declaration_line": 4690
+    },
+    {
+      "signature": "private.weekly_source_candidate_submission_compare_sync_v1(uuid,uuid,uuid,uuid,bytea,timestamp with time zone)",
+      "former_final_root": "supabase/repeatable/10102026_0135_banking_pay_next_candidate_compare_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0135_banking_pay_next_candidate_compare_owner_v1.sql",
+      "provenance": "Earlier saved-disk read/registry census in this same task;0135 not in HEAD",
+      "retained_pre_rule_B_physical": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+      "retained_source": {
+        "path": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql",
+        "status": "clean tracked",
+        "tracked": true,
+        "bytes": 149249,
+        "raw_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6",
+        "lf_sha256": "2f28f6b60ef929617e2a2e5075e0b63875e21d0eea096d9ab63bcc501e3840d6"
+      },
+      "physical_declaration_found": true,
+      "declaration_line": 1223,
+      "current_rule_B_final": "supabase/repeatable/15092026_2203_weekly_source_candidate_app_contract_v1.sql"
+    }
+  ],
+  "former_HEAD_protocol_only_chains": [
+    {
+      "signature": "private.bpay_next_acceptance_refuse_v1(uuid,text,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_candidate_page_v1(uuid,uuid,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_collection_origin_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2314_banking_pay_next_accepted_collection_capture_guard_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_preparation_header_v1(uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_source_origin_assert_v1(uuid,text,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_source_snapshot_v1(uuid,uuid,bigint)",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_work_collection_origin_v1(uuid,text)",
+      "former_final_root": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2332_banking_pay_next_accepted_work_money_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_accepted_work_page_v1(uuid,uuid,uuid,integer)",
+      "former_final_root": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2336_banking_pay_next_accepted_preparation_progress_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_initial_tsfin_accepted_assert_v1(uuid,uuid,text)",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_input_transaction_guard_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_completion_witness_assert_v1(uuid,uuid,bytea)",
+      "former_final_root": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+        "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_event_digest_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_event_owner_insert_guard_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_manual_review_row_stage_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_producer_enter_v1(text,text,text,bytea,text)",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_producer_finish_standalone_v1(uuid,text,uuid,bytea)",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_producer_finished_assert_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_producer_leave_v1(uuid,text)",
+      "former_final_root": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_version_command_assert_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_version_stage_v1(text,uuid,uuid,uuid,boolean,boolean,jsonb,jsonb)",
+      "former_final_root": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2357_banking_pay_next_query_producer_lifetime_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_settings_finalize_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_settings_flush_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_settings_input_stage_v1()",
+      "former_final_root": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_settings_statement_enter_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+        "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_source_book_seed_proof_accepted_v1(uuid,text,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_source_disposition_seed_accepted_v1(uuid,text,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2325_banking_pay_next_accepted_source_helpers_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_stage_acceptance_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2233_banking_pay_next_acceptance_capture_v1.sql",
+        "supabase/repeatable/09102026_2247_banking_pay_next_input_order_tail_v1.sql",
+        "supabase/repeatable/09102026_2303_banking_pay_next_accepted_case_terms_capture_v1.sql",
+        "supabase/repeatable/09102026_2339_banking_pay_next_preparation_refusal_transport_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_stage_accepted_week_v1(uuid,uuid,uuid,uuid,uuid[])",
+      "former_final_root": "supabase/repeatable/09102026_2324_banking_pay_next_week_origin_json_operand_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2324_banking_pay_next_week_origin_json_operand_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+        "supabase/repeatable/09102026_2324_banking_pay_next_week_origin_json_operand_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_week_eligibility_receipts_v1(uuid,uuid,bigint,bigint,uuid,uuid,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_week_origin_select_v1(uuid,date,uuid,bigint)",
+      "former_final_root": "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+      "former_final_physical": "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/09102026_2258_banking_pay_next_week_origin_capture_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_response_completion_digest_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_incident_row_stage_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_raw_stages_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_original_evidence_digest_v1(text,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_root_completion_digest_v1(private.bpay_next_query_root_completion)",
+      "former_final_root": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0030_banking_pay_next_query_completion_evidence_v1.sql",
+        "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_system_action_digest_v1(uuid,uuid,uuid,uuid[])",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_system_witnesses_v1(uuid,uuid,uuid,uuid,uuid[])",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_root_completion_assert_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+        "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_completion_insert_guard_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_system_complete_v1(uuid,text,uuid,uuid,uuid,uuid[],bytea)",
+      "former_final_root": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_matched_facts_digest_v1(uuid,text,text,timestamp without time zone,timestamp without time zone,integer,timestamp without time zone,timestamp without time zone,integer)",
+      "former_final_root": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_issue_digest_v1(jsonb)",
+      "former_final_root": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_request_digest_v1(uuid,uuid,uuid,uuid[],bytea[])",
+      "former_final_root": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0038_banking_pay_next_query_sync_input_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_resolved_evidence_assert_v1(uuid,uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0039_banking_pay_next_query_sync_original_decisions_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0039_banking_pay_next_query_sync_original_decisions_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0039_banking_pay_next_query_sync_original_decisions_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_input_completion_digest_v1(private.bpay_next_query_sync_input_completion)",
+      "former_final_root": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_omission_completion_digest_v1(private.bpay_next_query_sync_omission_completion)",
+      "former_final_root": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_children_digests_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0043_banking_pay_next_query_sync_completion_digests_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_comparison_row_stage_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0044_banking_pay_next_query_comparison_stage_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0044_banking_pay_next_query_comparison_stage_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0044_banking_pay_next_query_comparison_stage_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_expected_stages_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_stage_matches_v1(uuid,text,uuid,uuid,uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_stages_assert_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0047_banking_pay_next_query_sync_stage_closure_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_certificate_evidence_assert_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_expected_witnesses_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0051_banking_pay_next_query_sync_certificate_evidence_v1.sql",
+        "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_certificate_insert_guard_v1()",
+      "former_final_root": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_root_completion_assert_v1(uuid)",
+      "former_final_root": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_supplied_witnesses_v1(private.bpay_next_query_sync_input_completion[],private.bpay_next_query_sync_omission_completion[])",
+      "former_final_root": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql"
+      ]
+    },
+    {
+      "signature": "private.bpay_next_query_sync_complete_v1(uuid,uuid,uuid,uuid,uuid[],bytea[],uuid[],uuid[],bigint,bigint,bigint,bigint,private.bpay_next_query_sync_input_completion[],private.bpay_next_query_sync_omission_completion[])",
+      "former_final_root": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_final_physical": "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql",
+      "former_chain_paths": [
+        "supabase/repeatable/10102026_0059_banking_pay_next_query_sync_true_completion_v1.sql"
+      ]
+    }
+  ],
+  "former_trigger_attachments": [
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 176,
+      "statement": "create trigger bpay_next_input_transaction_guard_v1 before insert or update or delete on private.bpay_next_input_transaction for each row execute function private.bpay_next_input_transaction_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 179,
+      "statement": "create trigger bpay_next_input_transaction_no_truncate_v1 before truncate on private.bpay_next_input_transaction for each statement execute function private.bpay_next_input_transaction_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 185,
+      "statement": "create constraint trigger bpay_next_settings_finalize_v1 after insert on private.bpay_next_input_transaction deferrable initially deferred for each row execute function private.bpay_next_settings_finalize_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 189,
+      "statement": "create trigger bpay_next_candidate_input_entry_v1 before insert or update of pay_method,umbrella_id,min_take_home_wtd on public.candidates for each statement execute function private.bpay_next_settings_statement_enter_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 192,
+      "statement": "create trigger bpay_next_candidate_input_stage_v1 after insert or update of pay_method,umbrella_id,min_take_home_wtd on public.candidates for each row execute function private.bpay_next_settings_input_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 195,
+      "statement": "create trigger bpay_next_umbrella_input_entry_v1 before insert or update of vat_chargeable,enabled on public.umbrellas for each statement execute function private.bpay_next_settings_statement_enter_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 198,
+      "statement": "create trigger bpay_next_umbrella_input_stage_v1 after insert or update of vat_chargeable,enabled on public.umbrellas for each row execute function private.bpay_next_settings_input_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 201,
+      "statement": "create trigger bpay_next_policy_input_entry_v1 before insert or update or delete or truncate on public.settings_finance_windows for each statement execute function private.bpay_next_settings_statement_enter_v1();"
+    },
+    {
+      "source": "supabase/repeatable/09102026_2245_banking_pay_next_input_version_producers_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 204,
+      "statement": "create trigger bpay_next_policy_input_stage_v1 after update of current_policy_id,current_policy_no on private.bpay_next_valuation_policy_control for each row execute function private.bpay_next_settings_input_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 623,
+      "statement": "create trigger bpay_next_query_event_owner_insert_guard_v1 before insert on private.bpay_next_query_event_owner for each row execute function private.bpay_next_query_event_owner_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0002_banking_pay_next_query_metadata_owner_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 654,
+      "statement": "create constraint trigger bpay_next_query_producer_finished_assert_v1 after insert on private.bpay_next_query_producer deferrable initially deferred for each row execute function private.bpay_next_query_producer_finished_assert_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0009_banking_pay_next_query_manual_owners_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 455,
+      "statement": "create trigger bpay_next_query_manual_review_row_stage_v1 after insert or update or delete on private.weekly_source_manual_reviews for each row execute function private.bpay_next_query_manual_review_row_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0017_banking_pay_next_query_response_owners_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 876,
+      "statement": "create trigger bpay_next_query_incident_row_stage_v1 after insert or update or delete on public.weekly_discrepancy_incidents for each row execute function private.bpay_next_query_incident_row_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 903,
+      "statement": "create trigger bpay_next_query_completion_insert_guard_v1 before insert on private.bpay_next_query_root_completion for each row execute function private.bpay_next_query_completion_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0032_banking_pay_next_query_system_hours_owners_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 905,
+      "statement": "create trigger bpay_next_query_completion_insert_guard_v1 before insert on private.bpay_next_query_root_completion_witness for each row execute function private.bpay_next_query_completion_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0044_banking_pay_next_query_comparison_stage_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 35,
+      "statement": "create trigger bpay_next_query_comparison_row_stage_v1 after insert on public.weekly_issue_comparison_revisions for each row execute function private.bpay_next_query_comparison_row_stage_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 182,
+      "statement": "create trigger bpay_next_query_sync_input_completion_insert_guard before insert on private.bpay_next_query_sync_input_completion for each row execute function private.bpay_next_query_sync_certificate_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0058_banking_pay_next_query_sync_completion_guards_v1.sql",
+      "provenance": "HEAD Git object; historical, not disk-current",
+      "line": 185,
+      "statement": "create trigger bpay_next_query_sync_omission_completion_insert_guard before insert on private.bpay_next_query_sync_omission_completion for each row execute function private.bpay_next_query_sync_certificate_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0125_banking_pay_next_candidate_compare_completion_v1.sql",
+      "provenance": "Earlier same-task saved-disk attachment census; former untracked source now absent",
+      "statement": "create trigger bpay_next_candidate_compare_completion_insert_guard before insert on private.bpay_next_candidate_compare_completion for each row execute function private.bpay_next_candidate_compare_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0125_banking_pay_next_candidate_compare_completion_v1.sql",
+      "provenance": "Earlier same-task saved-disk attachment census; former untracked source now absent",
+      "statement": "create trigger bpay_next_candidate_compare_input_insert_guard before insert on private.bpay_next_candidate_compare_input_completion for each row execute function private.bpay_next_candidate_compare_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0125_banking_pay_next_candidate_compare_completion_v1.sql",
+      "provenance": "Earlier same-task saved-disk attachment census; former untracked source now absent",
+      "statement": "create trigger bpay_next_candidate_compare_omission_insert_guard before insert on private.bpay_next_candidate_compare_omission_completion for each row execute function private.bpay_next_candidate_compare_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0129_banking_pay_next_candidate_materialise_completion_v1.sql",
+      "provenance": "Earlier same-task saved-disk attachment census; former untracked source now absent",
+      "statement": "create trigger bpay_next_candidate_materialise_insert_guard before insert on private.bpay_next_candidate_materialise_completion for each row execute function private.bpay_next_candidate_materialise_insert_guard_v1();"
+    },
+    {
+      "source": "supabase/repeatable/10102026_0146_banking_pay_next_candidate_root_completion_v1.sql",
+      "provenance": "Earlier same-task saved-disk attachment census; former untracked source now absent",
+      "statement": "create trigger bpay_next_candidate_root_insert_guard before insert on private.bpay_next_candidate_root_completion for each row execute function private.bpay_next_candidate_root_insert_guard_v1();"
+    }
+  ],
+  "preserve_design_review_documents": [
+    {
+      "path": "docs/bpay-next/design/F-25-accepted-cutoff.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 19753,
+      "raw_sha256": "bb3d63577c8caac1def5b3808af21f654f14e38be71379772af88ba8a28b6033",
+      "lf_sha256": "bb3d63577c8caac1def5b3808af21f654f14e38be71379772af88ba8a28b6033"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-accepted-transport-map.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 38094,
+      "raw_sha256": "c465a2074fc4fc38af007621c71934ecbc253acb3dad170af476b4a93adf1fbd",
+      "lf_sha256": "c465a2074fc4fc38af007621c71934ecbc253acb3dad170af476b4a93adf1fbd"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-app-response-helper-fields.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 15880,
+      "raw_sha256": "dc1fbe1bf40c786e2df373c2482900bba67848e537188db73aeb5cd7de5f908d",
+      "lf_sha256": "dc1fbe1bf40c786e2df373c2482900bba67848e537188db73aeb5cd7de5f908d"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-app-response-union-build.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 16569,
+      "raw_sha256": "383c80bf7623854ceed7bd768558993ea2eeabdb2d20c372500b3208ad278c0c",
+      "lf_sha256": "383c80bf7623854ceed7bd768558993ea2eeabdb2d20c372500b3208ad278c0c"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-certificate-guard-build.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 18930,
+      "raw_sha256": "e16c33679a1aeafc03950d8b12d4b1eae8c10ba9f6d9ed42c5378e42e3853cb8",
+      "lf_sha256": "e16c33679a1aeafc03950d8b12d4b1eae8c10ba9f6d9ed42c5378e42e3853cb8"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-materialise-completion-build.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 25510,
+      "raw_sha256": "b896c4af1c8c55a822b2d6ef07ca28a6684dd494c47d8600364fb71a187eb7cf",
+      "lf_sha256": "b896c4af1c8c55a822b2d6ef07ca28a6684dd494c47d8600364fb71a187eb7cf"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-protocol-schema-build.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 23517,
+      "raw_sha256": "2b6279e1a8d057fbd175d27e68e0967d866ecf46c95144a38cc4d195ef011473",
+      "lf_sha256": "2b6279e1a8d057fbd175d27e68e0967d866ecf46c95144a38cc4d195ef011473"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-candidate-submission-complete-tail.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 8763,
+      "raw_sha256": "680be802bb5c456fcc74d3f3d3873573e5c6c28de5ede95987070083d2f1703d",
+      "lf_sha256": "680be802bb5c456fcc74d3f3d3873573e5c6c28de5ede95987070083d2f1703d"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-case-cut-closure.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 27083,
+      "raw_sha256": "a15f9cae4b57f14efeb9122dd01ddacb092bfe5d918fe424af0acca687a2e0f0",
+      "lf_sha256": "a15f9cae4b57f14efeb9122dd01ddacb092bfe5d918fe424af0acca687a2e0f0"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-core-query-writer-census.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 23646,
+      "raw_sha256": "487897c5341efa1e700cf013ec8e968249b85724dc48ddc50ce37d3af726f9e4",
+      "lf_sha256": "487897c5341efa1e700cf013ec8e968249b85724dc48ddc50ce37d3af726f9e4"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-delayed-consumer-closure.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 34247,
+      "raw_sha256": "f9a5ab4c2fd5f9896ddc274cccd78c5cff87ba3f139dddba49ba2b8002d796c3",
+      "lf_sha256": "f9a5ab4c2fd5f9896ddc274cccd78c5cff87ba3f139dddba49ba2b8002d796c3"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-nonqueued-producers.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 21565,
+      "raw_sha256": "f863150f648ecdccef7b5708d2c33a421a2ac266fb01a5b473870470abda0d23",
+      "lf_sha256": "f863150f648ecdccef7b5708d2c33a421a2ac266fb01a5b473870470abda0d23"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-ordinary-capture-guard-map.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 16322,
+      "raw_sha256": "e6d35cdd0d0236f90dde87a00af9a3322ffa26564f92cafe627adbe17f84ec0f",
+      "lf_sha256": "e6d35cdd0d0236f90dde87a00af9a3322ffa26564f92cafe627adbe17f84ec0f"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-qualification-writer-census.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 66675,
+      "raw_sha256": "28f6815761bd5ff27a02eec1c060a347ffef9b797e3cef8c3d24b4b007887a32",
+      "lf_sha256": "28f6815761bd5ff27a02eec1c060a347ffef9b797e3cef8c3d24b4b007887a32"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-qualification-writer-census.raw.json",
+      "status": "??",
+      "tracked": false,
+      "bytes": 350560,
+      "raw_sha256": "7dfbae81d9e0103955b75f79fd42f5cd9585f921a2d26cf77b8f439403ce3abe",
+      "lf_sha256": "bcdbad8e5ad391ed8bcc99b4ddf662da202f29f65e737647a39c06ea93699c90"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-delivery-completion-witnesses.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 17994,
+      "raw_sha256": "92fdff767cd7f24896946516102093d387dbf31a6c16020c1811735a4f45a83e",
+      "lf_sha256": "92fdff767cd7f24896946516102093d387dbf31a6c16020c1811735a4f45a83e"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-outer-producer-map.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 40568,
+      "raw_sha256": "736e7f0debe9a766a199e3e78cb01414159e37b9cf81f214dc5ae18bc328230b",
+      "lf_sha256": "736e7f0debe9a766a199e3e78cb01414159e37b9cf81f214dc5ae18bc328230b"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-producer-build-chunks.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 15434,
+      "raw_sha256": "93e9dcc671da57df4715a2c2a2fac57b901a8e84b9c48ebc929a392818626886",
+      "lf_sha256": "93e9dcc671da57df4715a2c2a2fac57b901a8e84b9c48ebc929a392818626886"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-producer-lock-closure.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 21765,
+      "raw_sha256": "fbc0b19d2abe125645bae6e9e9c63d17f9a8c3ce1ed3b2897b8c1200295983cf",
+      "lf_sha256": "fbc0b19d2abe125645bae6e9e9c63d17f9a8c3ce1ed3b2897b8c1200295983cf"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-sync-completion-build.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 47563,
+      "raw_sha256": "214506ee3e3a01f9aaf69f3beb9bf046f1eda19e3934f64a42969c555d84ed65",
+      "lf_sha256": "d911918181ebfa08eb54a8bb49325bd06f0f1617c57bc604a667c38115ce9ae5"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-query-transaction-protocol.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 57512,
+      "raw_sha256": "d9fa8ad09c724082fcd9071587d9262a39f762982e6551a03e5735c74e1d6d20",
+      "lf_sha256": "d9fa8ad09c724082fcd9071587d9262a39f762982e6551a03e5735c74e1d6d20"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-rule-B-owner-design.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 2653,
+      "raw_sha256": "235da8b0baa473c198a0c33d430881b030db920040f23b407a1bdb98f1805b99",
+      "lf_sha256": "235da8b0baa473c198a0c33d430881b030db920040f23b407a1bdb98f1805b99"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-rule-B-selection-snapshot.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 11340,
+      "raw_sha256": "458648101cd85e77374e07f6a09241c914aba0709fa536a1997516b54c80245a",
+      "lf_sha256": "458648101cd85e77374e07f6a09241c914aba0709fa536a1997516b54c80245a"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-settings-producer-protocol.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 18376,
+      "raw_sha256": "2d88d7a07b25990ffe8a9712372cd1377bfe79ab62939a5dedefb61800f0cc22",
+      "lf_sha256": "2d88d7a07b25990ffe8a9712372cd1377bfe79ab62939a5dedefb61800f0cc22"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-simple-source-tail-build.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 25579,
+      "raw_sha256": "75331c2bae7b4922238b73f0e3aad2d535ca3327739d8d7d2c98dba3024daece",
+      "lf_sha256": "75331c2bae7b4922238b73f0e3aad2d535ca3327739d8d7d2c98dba3024daece"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-source-accepted-helper-supplement.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 25739,
+      "raw_sha256": "f2b3e69b067ee19d2868b799954410d3f702a4451551aefce49d0aa28ef91e69",
+      "lf_sha256": "f2b3e69b067ee19d2868b799954410d3f702a4451551aefce49d0aa28ef91e69"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-source-book-closure.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 16802,
+      "raw_sha256": "36e66006201e6b1680fa09781641622ea0d3f98b9263e553a51047bd407a4e52",
+      "lf_sha256": "36e66006201e6b1680fa09781641622ea0d3f98b9263e553a51047bd407a4e52"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-system-hours-completion-build.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 13836,
+      "raw_sha256": "8c98bd484760db6604810efc1021d089d9f73d1e53b90cf8268c928c647bb4e6",
+      "lf_sha256": "8c98bd484760db6604810efc1021d089d9f73d1e53b90cf8268c928c647bb4e6"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-version-receipt-protocol.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 35777,
+      "raw_sha256": "c8093e1fc788c8224880e9e6258c4c47fb24d0984d211354c020be4ea08d482f",
+      "lf_sha256": "c8093e1fc788c8224880e9e6258c4c47fb24d0984d211354c020be4ea08d482f"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-week-origin-proof.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 30557,
+      "raw_sha256": "c962012f66d71b6ea7a26ee555b4ec107e7870625452ae900155e4fc5c1c896f",
+      "lf_sha256": "c962012f66d71b6ea7a26ee555b4ec107e7870625452ae900155e4fc5c1c896f"
+    },
+    {
+      "path": "docs/bpay-next/design/F-25-week-origin-selector.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 50100,
+      "raw_sha256": "73d0680de86d22455dc13787c946932c5c147e948a149a401612b7576fcb3380",
+      "lf_sha256": "73d0680de86d22455dc13787c946932c5c147e948a149a401612b7576fcb3380"
+    },
+    {
+      "path": "docs/bpay-next/F-25-PARKED-FILES.json",
+      "status": "??",
+      "tracked": false,
+      "bytes": 7144,
+      "raw_sha256": "653d85743e850f639506d24740adeea52686ce8cf4ad4519b75ac35cfdc1cca0",
+      "lf_sha256": "64267ba86da88a6258aeb081e4eb24239812f291c23d50df108a04c8d7d569d9"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-accepted-preparation-office-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9172,
+      "raw_sha256": "004cd125abc705bde92dc83e487bd62d6f645c1782144fb71089f2b5bf7114bd",
+      "lf_sha256": "004cd125abc705bde92dc83e487bd62d6f645c1782144fb71089f2b5bf7114bd"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-accepted-preparation-progress-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9106,
+      "raw_sha256": "61e9d0b42e790a5c1e403b23fe873305de4bf159a8ba135bfa135a0871c30eed",
+      "lf_sha256": "61e9d0b42e790a5c1e403b23fe873305de4bf159a8ba135bfa135a0871c30eed"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-accepted-preparation-worker-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8477,
+      "raw_sha256": "3cf296c26992323197b381c6bb41705577aeef3231d7e8b066915b0a7633286a",
+      "lf_sha256": "3cf296c26992323197b381c6bb41705577aeef3231d7e8b066915b0a7633286a"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-accepted-source-helpers-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 10352,
+      "raw_sha256": "28655148db3086f97957bbce2785a0e7ee38a9642120d458434a652c36d31360",
+      "lf_sha256": "28655148db3086f97957bbce2785a0e7ee38a9642120d458434a652c36d31360"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-accepted-work-money-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8085,
+      "raw_sha256": "49ea96daab88840f081327aab3659a8aff5cf99d0b9781379391bafeb11b54d8",
+      "lf_sha256": "49ea96daab88840f081327aab3659a8aff5cf99d0b9781379391bafeb11b54d8"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-compare-completion-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 12618,
+      "raw_sha256": "78c4d793282ef8de602ad298d0bab543567c6acafd2c78a8ad9cfbbce05930fa",
+      "lf_sha256": "78c4d793282ef8de602ad298d0bab543567c6acafd2c78a8ad9cfbbce05930fa"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-compare-evidence-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 8355,
+      "raw_sha256": "ddb50e59f68d57a231ea6c35b646eec1dfa433736631c925c2e9c26f6785a6de",
+      "lf_sha256": "ddb50e59f68d57a231ea6c35b646eec1dfa433736631c925c2e9c26f6785a6de"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-compare-owner-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 8868,
+      "raw_sha256": "18d14133d963b8ed1067464881a3a81285b7884a4f09d8a77e982864490d0dbf",
+      "lf_sha256": "18d14133d963b8ed1067464881a3a81285b7884a4f09d8a77e982864490d0dbf"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-completion-digests-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 11503,
+      "raw_sha256": "738507c514c9d5b2398466da3225af675a47e2d7fa4aea15d987be7f63e6317a",
+      "lf_sha256": "738507c514c9d5b2398466da3225af675a47e2d7fa4aea15d987be7f63e6317a"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-exact-app-reply-schema-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 6108,
+      "raw_sha256": "2d9db72f95749f42e63a2cbf693db7d6fe3b2bee0220147d9cd48b516223aef7",
+      "lf_sha256": "2d9db72f95749f42e63a2cbf693db7d6fe3b2bee0220147d9cd48b516223aef7"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-materialise-completion-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 12354,
+      "raw_sha256": "dc0734470cb7f7af30f9e835ef3869f39e5b47030af442ba535ffafa43acc4a1",
+      "lf_sha256": "dc0734470cb7f7af30f9e835ef3869f39e5b47030af442ba535ffafa43acc4a1"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-candidate-query-completion-schema-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6651,
+      "raw_sha256": "c1302a96683549a3379dfbc80c566abd449c58f3768e2ffd84826de45d297efc",
+      "lf_sha256": "c1302a96683549a3379dfbc80c566abd449c58f3768e2ffd84826de45d297efc"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-capture-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 10741,
+      "raw_sha256": "67006e358e5d834c4c5f886a22ab70f52ff8f560383ed1ab9c29863ef09f3e67",
+      "lf_sha256": "67006e358e5d834c4c5f886a22ab70f52ff8f560383ed1ab9c29863ef09f3e67"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-case-prepare-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 7403,
+      "raw_sha256": "bec875ff5aa6892ff584c30d24b6212165b8f46c57f7b91e8e0c064f34fcbd90",
+      "lf_sha256": "bec875ff5aa6892ff584c30d24b6212165b8f46c57f7b91e8e0c064f34fcbd90"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-case-week-guard-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 2071,
+      "raw_sha256": "eb777476cf1116d25c1506ae4e9ed6ae117754693305a07cea775f4ce2b84fc1",
+      "lf_sha256": "eb777476cf1116d25c1506ae4e9ed6ae117754693305a07cea775f4ce2b84fc1"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-collection-capture-guard-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 5947,
+      "raw_sha256": "02fd994a2c7db33fe97409b575ad308dc480781b8aaf0427122c71fde9f8424b",
+      "lf_sha256": "02fd994a2c7db33fe97409b575ad308dc480781b8aaf0427122c71fde9f8424b"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-consumers-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 4818,
+      "raw_sha256": "087a7fb71fbd188d10f88fc78eef17d26ee09b6b7984c71d284c2a2eab8ea07d",
+      "lf_sha256": "087a7fb71fbd188d10f88fc78eef17d26ee09b6b7984c71d284c2a2eab8ea07d"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-no-case-consumers-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 2362,
+      "raw_sha256": "20294b616b1d6944fb3a949d8b2ef2698bf206b67d8c887ea933c43bcfe5eaf2",
+      "lf_sha256": "20294b616b1d6944fb3a949d8b2ef2698bf206b67d8c887ea933c43bcfe5eaf2"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-preparation-refusal-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9838,
+      "raw_sha256": "dec12bbd8cf46284f1b9e885bbc4573004c618bea33f4876d27eae3052a59eea",
+      "lf_sha256": "dec12bbd8cf46284f1b9e885bbc4573004c618bea33f4876d27eae3052a59eea"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-comparison-stage-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9359,
+      "raw_sha256": "915e4385e23460a05596be92a47d9b68b1fe783fcc59bddc02f9831b215be5ea",
+      "lf_sha256": "915e4385e23460a05596be92a47d9b68b1fe783fcc59bddc02f9831b215be5ea"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-completion-evidence-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 4801,
+      "raw_sha256": "96aa31fc0265f74285b719b24c2c640ed3900ce29c599c972a9ce39f0c5e4ffa",
+      "lf_sha256": "96aa31fc0265f74285b719b24c2c640ed3900ce29c599c972a9ce39f0c5e4ffa"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-lifetime-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6943,
+      "raw_sha256": "0de28d5e36bfe55ab8b0e361a529459596a8ac8cc18fc9515df97ee7745dbc3f",
+      "lf_sha256": "0de28d5e36bfe55ab8b0e361a529459596a8ac8cc18fc9515df97ee7745dbc3f"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-manual-owners-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 13034,
+      "raw_sha256": "91d32a3145c057684ba1fe423a8703aa2dd25edad37b90c387f95c4ec154c85e",
+      "lf_sha256": "91d32a3145c057684ba1fe423a8703aa2dd25edad37b90c387f95c4ec154c85e"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-metadata-owner-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8641,
+      "raw_sha256": "31cff37a480a38edecccf9fb2ff8e2b98df990183463b7c2bb6545f5754fc8e0",
+      "lf_sha256": "31cff37a480a38edecccf9fb2ff8e2b98df990183463b7c2bb6545f5754fc8e0"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-protocol-schema-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9635,
+      "raw_sha256": "1b47cbd1959308a8ad4faf4a21b3cca8fcca246bdc5be353914977ccd955043a",
+      "lf_sha256": "1b47cbd1959308a8ad4faf4a21b3cca8fcca246bdc5be353914977ccd955043a"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-response-owners-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8200,
+      "raw_sha256": "e0cef30085b910e886e20e10f85638a05712db0e8ed6b022c364a1950b6e3325",
+      "lf_sha256": "e0cef30085b910e886e20e10f85638a05712db0e8ed6b022c364a1950b6e3325"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-root-completion-schema-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 5541,
+      "raw_sha256": "cc65f8bd841e8609eefe2ebb8623707b3740b2c825d2dfcac2361e84979999af",
+      "lf_sha256": "cc65f8bd841e8609eefe2ebb8623707b3740b2c825d2dfcac2361e84979999af"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-branch-schema-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6209,
+      "raw_sha256": "9dbbfdb7a59d87a00595fd24f182010cd771e452abb9856ea1ddc62bda1fd062",
+      "lf_sha256": "9dbbfdb7a59d87a00595fd24f182010cd771e452abb9856ea1ddc62bda1fd062"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-certificate-evidence-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8210,
+      "raw_sha256": "6ed038c7a0a2e0908aa6e2a8f0b48fc6b8e16b1b36889c3697bab203b392b806",
+      "lf_sha256": "6ed038c7a0a2e0908aa6e2a8f0b48fc6b8e16b1b36889c3697bab203b392b806"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-completion-digests-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 5383,
+      "raw_sha256": "29c6994f2e90aaf538ae27340b6b4db98aed6f910da022bd9f4d80821ff51f28",
+      "lf_sha256": "29c6994f2e90aaf538ae27340b6b4db98aed6f910da022bd9f4d80821ff51f28"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-completion-guards-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 14331,
+      "raw_sha256": "43e76e7d6109541cc77588f273eb25f2095bb76162a4f35c9320d8d1e048023f",
+      "lf_sha256": "43e76e7d6109541cc77588f273eb25f2095bb76162a4f35c9320d8d1e048023f"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-input-digests-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6141,
+      "raw_sha256": "d113c079a0a17122fe6e14fafe1f780b5936572826cb64f3c5d86a63efb8c83e",
+      "lf_sha256": "d113c079a0a17122fe6e14fafe1f780b5936572826cb64f3c5d86a63efb8c83e"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-original-decisions-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 10518,
+      "raw_sha256": "72c199ca734380f31c929515af3f20400efec0fd0a7c7b2c14ea3bf7f66324c5",
+      "lf_sha256": "72c199ca734380f31c929515af3f20400efec0fd0a7c7b2c14ea3bf7f66324c5"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-owner-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 13593,
+      "raw_sha256": "c7eb0aaf6690dd1d382cc555dc4846bd12796473fee0d14e43eac626adee679d",
+      "lf_sha256": "c7eb0aaf6690dd1d382cc555dc4846bd12796473fee0d14e43eac626adee679d"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-stage-closure-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 11805,
+      "raw_sha256": "ec13d2baad221eded745f1c468926cf7a122f7b54396a50a658907a5348e5368",
+      "lf_sha256": "ec13d2baad221eded745f1c468926cf7a122f7b54396a50a658907a5348e5368"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-sync-true-completion-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9201,
+      "raw_sha256": "b9f9a8410f017615865215594ca92e635569c2ecd9ed58a6516484d20b0e39ac",
+      "lf_sha256": "b9f9a8410f017615865215594ca92e635569c2ecd9ed58a6516484d20b0e39ac"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-system-hours-owners-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6613,
+      "raw_sha256": "bc7bcfcbc79a1626b274c426155db871da5eab54569f8f12fb1a0cc83f83b4c3",
+      "lf_sha256": "bc7bcfcbc79a1626b274c426155db871da5eab54569f8f12fb1a0cc83f83b4c3"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-query-witness-envelope-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 4790,
+      "raw_sha256": "a55d3fa71ce3a90dc058a3e7f0ce4a09f5af2fc245df9b5193958889d806b9d8",
+      "lf_sha256": "a55d3fa71ce3a90dc058a3e7f0ce4a09f5af2fc245df9b5193958889d806b9d8"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-resolver-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 12844,
+      "raw_sha256": "12f3e2be0c4bd304240eb4b08bd26d4b0c831c823f8f6d224f229b6e7ab8ad25",
+      "lf_sha256": "12f3e2be0c4bd304240eb4b08bd26d4b0c831c823f8f6d224f229b6e7ab8ad25"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-rule-B-office-and-next-item.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 8791,
+      "raw_sha256": "f51ebc9c981a912e35b89dc6a57992db3cd79e62f1571bb31b23ee45f6aa2da8",
+      "lf_sha256": "f51ebc9c981a912e35b89dc6a57992db3cd79e62f1571bb31b23ee45f6aa2da8"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-rule-B-office-review.md",
+      "status": "??",
+      "tracked": false,
+      "bytes": 3856,
+      "raw_sha256": "f9244d66b208a1948396caba0e21783e35ede3895f17337522798336d7b4b720",
+      "lf_sha256": "f9244d66b208a1948396caba0e21783e35ede3895f17337522798336d7b4b720"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-schema-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 13937,
+      "raw_sha256": "c399394f9681cbbdc5fbc61cf0ef42320d78c32492a42d044c9877a757d3e974",
+      "lf_sha256": "c399394f9681cbbdc5fbc61cf0ef42320d78c32492a42d044c9877a757d3e974"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-settings-producers-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 8317,
+      "raw_sha256": "774e6b5af33401e1af9b1c33151f012e8e34157f17d66900b591f270dda50a03",
+      "lf_sha256": "774e6b5af33401e1af9b1c33151f012e8e34157f17d66900b591f270dda50a03"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-week-capture-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 14483,
+      "raw_sha256": "01abf3acc9107d226e6eaab245a5bb949541673402ba91edf6ca4dad2b4b5814",
+      "lf_sha256": "01abf3acc9107d226e6eaab245a5bb949541673402ba91edf6ca4dad2b4b5814"
+    },
+    {
+      "path": "docs/bpay-next/reviews/F-25-week-selector-design-review.md",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 4076,
+      "raw_sha256": "659c01de06769f198e877ec1bb9108e94876f6be81cf7d9b4cbb7d3b30c65f66",
+      "lf_sha256": "659c01de06769f198e877ec1bb9108e94876f6be81cf7d9b4cbb7d3b30c65f66"
+    }
+  ],
+  "preserve_worker_js": [
+    {
+      "path": "broker/src/bpay-next-background.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 6633,
+      "raw_sha256": "77faa6d64335f9c54a5508f09df30fa02763861c9b89b3959b8f43349ad0edf8",
+      "lf_sha256": "77faa6d64335f9c54a5508f09df30fa02763861c9b89b3959b8f43349ad0edf8"
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 2234,
+      "raw_sha256": "060ce9bdab50576aec731d0b9b3c6499a608e3cd71c17a3c9bdf54483db1b68e",
+      "lf_sha256": "060ce9bdab50576aec731d0b9b3c6499a608e3cd71c17a3c9bdf54483db1b68e"
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 21192,
+      "raw_sha256": "95f082f6fef61932b0498ea007d47966692ec15094d954fc9cbbf4bd1d7ed059",
+      "lf_sha256": "95f082f6fef61932b0498ea007d47966692ec15094d954fc9cbbf4bd1d7ed059"
+    },
+    {
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 13078,
+      "raw_sha256": "de92b5604e8bddd24efedd1dfeab3a09d052613484e457785412a4e9e72b9c19",
+      "lf_sha256": "de92b5604e8bddd24efedd1dfeab3a09d052613484e457785412a4e9e72b9c19"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 3441,
+      "raw_sha256": "acf94f66927911c3252f2f59d5e4bc4ab2ec4ae3d7e550e4d4d0100b8bf80549",
+      "lf_sha256": "acf94f66927911c3252f2f59d5e4bc4ab2ec4ae3d7e550e4d4d0100b8bf80549"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 29820,
+      "raw_sha256": "010d06386af89983e48c63a3eafcc2796eba929f0aa74def33202157b55c00c4",
+      "lf_sha256": "010d06386af89983e48c63a3eafcc2796eba929f0aa74def33202157b55c00c4"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 18278,
+      "raw_sha256": "3c7d75b485db6824a38000d580eb96c37864c01a61fdaf114d5551637e10c3b2",
+      "lf_sha256": "3c7d75b485db6824a38000d580eb96c37864c01a61fdaf114d5551637e10c3b2"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 1287,
+      "raw_sha256": "6ddbc1ecb64873714e9a9c9a05bc4fcb2dae5d7fca95236a4f75976594a4e83c",
+      "lf_sha256": "6ddbc1ecb64873714e9a9c9a05bc4fcb2dae5d7fca95236a4f75976594a4e83c"
+    },
+    {
+      "path": "broker/src/bpay-next-history.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 33602,
+      "raw_sha256": "81d4ca2fb90b1bbec7dea3a41698933f70b306833079484d45a89e4e77738451",
+      "lf_sha256": "81d4ca2fb90b1bbec7dea3a41698933f70b306833079484d45a89e4e77738451"
+    },
+    {
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 1431,
+      "raw_sha256": "d00d086d44baaee414ca8509fbe9c30b91015e55982d84c2035e32a3dfba7fb7",
+      "lf_sha256": "d00d086d44baaee414ca8509fbe9c30b91015e55982d84c2035e32a3dfba7fb7"
+    },
+    {
+      "path": "broker/src/bpay-next-job-step.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 28715,
+      "raw_sha256": "a103b8e4d6551ebe879392c3fbe2087ea2b8aeea41b47c8a0e1c0cefabcfa0c5",
+      "lf_sha256": "a103b8e4d6551ebe879392c3fbe2087ea2b8aeea41b47c8a0e1c0cefabcfa0c5"
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-email.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 3504,
+      "raw_sha256": "3a3684860794faf2a59dd4a3f7667e5ecb95696d82c48dcca7784a01dfafed65",
+      "lf_sha256": "3a3684860794faf2a59dd4a3f7667e5ecb95696d82c48dcca7784a01dfafed65"
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 9706,
+      "raw_sha256": "afdbdda4ac440ada0a6267523a4a60398ae47feec85fcf8772f0fb2a2c6dfef8",
+      "lf_sha256": "afdbdda4ac440ada0a6267523a4a60398ae47feec85fcf8772f0fb2a2c6dfef8"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-expiry-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 16639,
+      "raw_sha256": "190aed494b72c87ac9b3579c3cc752d2620e585c2de24a8bad20c2dd86d3ea9c",
+      "lf_sha256": "190aed494b72c87ac9b3579c3cc752d2620e585c2de24a8bad20c2dd86d3ea9c"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 1424,
+      "raw_sha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34",
+      "lf_sha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 39356,
+      "raw_sha256": "9271ec0086bffdd9779707bf44407eba0923b1392317eb142e46c8f8e0338749",
+      "lf_sha256": "9271ec0086bffdd9779707bf44407eba0923b1392317eb142e46c8f8e0338749"
+    },
+    {
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "status": "clean tracked",
+      "tracked": true,
+      "bytes": 17582,
+      "raw_sha256": "9c8c94e9bb1a3a42c126c815d6f896f59de20bf75ed34d776c089c5628e55a91",
+      "lf_sha256": "9c8c94e9bb1a3a42c126c815d6f896f59de20bf75ed34d776c089c5628e55a91"
+    }
+  ],
+  "current_registry_parked_references": [],
+  "limitations": [
+    "No product edits, tests, runtime, SQL or hosted operations.",
+    "Parent-authored parking manifest supplies exact predelete hashes, not now-existing disk source.",
+    "Former committed definitions/attachments read from HEAD objects explicitly labelled historical.",
+    "Untracked former sources lack HEAD objects; their manifest hashes and earlier source review evidence are retained.",
+    "New Rule B replacement sources are explicitly excluded."
+  ]
+}

@@ -1,0 +1,13 @@
+# F-25 owner rule B
+
+10 October 2026. Binding owner direction supersedes R2 section 4 producer evidence and the prior F-25 protocol design. Policy X: no drift.
+
+Create Draft retains precisely the existing sealed Workbench choices and their expected revision IDs. Later arrivals are not added. The existing PIN revision-change REVIEW remains; amounts still come from the selected immutable approved revision. Actual case balances stay live under existing money locks.
+
+One additive migration creates the private run/work raw query snapshot, with the real run-selection and work-revision foreign keys, and adds four nullable OPEN-selection Candidate fields. No customer rows are seeded or rewritten. Snapshot rows are immutable through the existing effect guard and have no browser/service direct access.
+
+The latest surviving seal owner from1590 gains one admission after its exact replay return, one UPDATE from Candidate/Umbrella settings, and a native selected-work loop over the genuine expected revision to save the Source-owned raw gate JSON before SEALED. It never selects a newer revision. Sealed replay returns before this capture. The latest surviving CLAIM from2018 retains the F-05 command-seal/count barrier and earlier-Candidate-command order, replacing only its three live channel values with the selection Candidate row. PIN from1600 replaces only its raw gate call with the exact snapshot lookup plus missing-row23514; the original gate validation and money/current-revision checks remain. The latest surviving case page1958 replaces only its Candidate floor read. No1610/1620/0280/enroller/pin guard/producer/Worker route change is admitted.
+
+All prior F-25 repeatables except2153/2256 are removed from the active release inventory; nine already committed additive migrations remain unchanged, empty and unused. The uninstalled0128 SQL and its uncommitted lock append are removed by exact owner instruction. Prior design/review documents remain historical evidence. ACCEPTED_* Worker parsing remains dormant; Office uses its original WORKERS/STATUS progress. BD019 records the supersession and exact parked file manifest.
+
+The sole disposable local database will be rebuilt from clean NEW source because its deletion guard correctly refuses to pretend removed applied repeatables disappeared. This avoids retained local producer triggers or replaced weekly_source bodies. No shared/hosted data, migration ledger repair, fixture or runtime rehearsal is involved. Normal source integrity, PG17 compilation, syntax, contract seal/coupling and independent source review establish build completion; installed/app acceptance remains NOT_RUN.

@@ -10069,25 +10069,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_acceptance_refuse_v1(p_run_id uuid, p_reason text, p_candidate_id uuid, p_work_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "25b6a0cdbd24757c1ad6762a924767b9b9a66a4227854db9535ddc13b0e4b090"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -10129,49 +10110,11 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
-      "identity": "bpay_next_accepted_candidate_page_v1(p_run_id uuid, p_after uuid, p_limit integer)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "45ba6b999467753d7ed4ed1aa56cea167901f2223153962b1c4dd20cdd993a67"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
       "identity": "bpay_next_accepted_case_week_guard_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "c78636aaf468e696ddcb80793376150255d9f6b26f4d60e027116f8264249a1d"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_collection_origin_v1(p_accepted_input_id uuid, p_case_component_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "f1ee8b705e319ebe280ab2b7eb067a9554260ce495488cd7a4f2ee3626a044dc"
     },
     {
       "acl": [
@@ -10221,82 +10164,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_preparation_header_v1(p_run_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "00f850958d42a94b15a86bb9e973b9989ef3e805a539e8391e66f14ae29e4259"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_source_origin_assert_v1(p_effective_work_cut_id uuid, p_component_key text, p_binding_version_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "459f8a1d2295144144fb41cc00ce5c31507aeb2fb1804082abd074430f7e1a14"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_source_snapshot_v1(p_effective_work_cut_id uuid, p_binding_version_id uuid, p_expected_book_revision bigint)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "d20e72d46b82ce1f46a323979b78f4684f5d200f335f44f671962bccbb62742b"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_work_collection_origin_v1(p_effective_work_cut_id uuid, p_component_key text)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "390fa5e9745345a0f5a3325aa44f55a32484ef3e46736dd6ce1a9a0fb56d42cb"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -10324,25 +10191,6 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "744f22fb3a2a47965febf177a072ef9bd5e280c67844fbbe1d6f718d3532a751"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_accepted_work_page_v1(p_run_id uuid, p_candidate_id uuid, p_after uuid, p_limit integer)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "815d8bdb4e498868459ba7458ddf110cfb45efe8b877097b05afb82d16cefc31"
     },
     {
       "acl": [
@@ -10988,7 +10836,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "02eb073e031dd7d57fd37587e8fe73a5186e5fc774e2148d5e66a7c4474846d5"
+      "definition_sha256": "77fee70a6cdf66ccf1453e252dee3a47ba93f59473cddd108dfcc6835672dad4"
     },
     {
       "acl": [
@@ -11406,7 +11254,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8940625c4a593fca99a44f112f280c5fc68a03987e1b1598de14bb0e009a30eb"
+      "definition_sha256": "544fc95898673cf67eca33e368affb9a5ee292c96231fbdcd859d5821de77eb2"
     },
     {
       "acl": [
@@ -11577,7 +11425,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "005045eb7e6c0ccdeba0f4284811381fc897eedca8549db7b82b0124749cd57d"
+      "definition_sha256": "740836037afcdd7bae9e04de12d798543390988fb24ddd626dcea16a58d6cd73"
     },
     {
       "acl": [
@@ -11957,7 +11805,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cbd0fc7ba2f6a4ab4155a51812eb6f0b31cd34e24e21f5b60d4f55b06d774456"
+      "definition_sha256": "af8b2d59f22f812428517937e5a45257c4afc8cab52974f507cf038bb33ecc7e"
     },
     {
       "acl": [
@@ -11976,7 +11824,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "25b81eecc6afd73980e0f0935b17086563e154d120ecb9dcb28adbe27e8e01bb"
+      "definition_sha256": "730ff465636463a4e489222fadf6698ca4151abb4668fd2ea6dadfa74bc2f7d3"
     },
     {
       "acl": [
@@ -12128,26 +11976,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a0d382f18294775fdd854bb6fc3ad3bfb5c8b8e10ec44432a50987e766c86094"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_initial_tsfin_accepted_assert_v1(p_effective_work_cut_id uuid, p_binding_version_id uuid, p_component_key text)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "4f6baec4f6528b13536d1a2f771f8b3a971024e7e6b73e22d8f86a01eeaf8f51"
+      "definition_sha256": "b52471cf638e1d92a9c36221512e0387e657e08deb9192b51adfd77752b138da"
     },
     {
       "acl": [
@@ -12205,25 +12034,6 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "309124462fee3e73b23676e938324915ded93e065ed407605b7ece6eb4466e39"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_input_transaction_guard_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "3a4019a9b17b3c0f4de7683b1042872d4fefd7e28bc5414ae7c35e75010a1e43"
     },
     {
       "acl": [
@@ -12423,7 +12233,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "74f580a39167806c9c8ab42f271965b9a210997a93ef3c5439ea6b4ffb772956"
+      "definition_sha256": "387e9ebe9b15ca3bffcc949f1b5364275a8c057f1c63969375f6aee5aa148307"
     },
     {
       "acl": [
@@ -12480,7 +12290,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3177cc3959bb725356e2d64a13dbf2035a6766d6f6336890d822dfe32cfc24e7"
+      "definition_sha256": "10657ddfe30a30bc4c05952ddfef6c9fcc7a6196905a1637d0475802bde0675e"
     },
     {
       "acl": [
@@ -12594,7 +12404,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "42d16d8a9b4f6647961cb3ccf85a1be0616a4495ba73d143d3b1c44d32a92ded"
+      "definition_sha256": "0cc3200a403343ecec2a57c94e805c503d8eee1f9b67d1c293ebe2a27b57a0d4"
     },
     {
       "acl": [
@@ -12765,7 +12575,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7415404ae3b7de17c7c76e0c81a36b2df7372d6a268e037ea1fd43be54efe24f"
+      "definition_sha256": "d3d4d1eae2a98b2b2ca92ae086db262154d1cb6a42bcb1bcf67c153a9e01f876"
     },
     {
       "acl": [
@@ -12834,253 +12644,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_comparison_row_stage_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "49298f7ac24e284c067dae897d49fc84e7908bae3fa365c57ba8fe4ed520d029"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_completion_insert_guard_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "4e601cadecea4a9959b9136bcaa56404312aec6a2bea8481c53ff1ea4ed4befc"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_completion_witness_assert_v1(p_producer_id uuid, p_witness_id uuid, p_witness_sha256 bytea)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "8992d1f37e97a4a3e8ba3a2bccb3d70b186498d65b886109af0d5285a4834b16"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_event_digest_v1(p_producer_id uuid, p_event_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "10f01189d615065540eecb63816bafffaf5a30c3d0dbaebb18c89810502e95e1"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_event_owner_insert_guard_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "edb3010b9388d1ec2e178577aa8ffc3aa903d468b87e8d5be571b8fa663dfa58"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_incident_row_stage_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "0accf2a299b2f3ba0f0a0a8a395e13f4c078501c747d904c22ffc80fb3012ff7"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_manual_review_row_stage_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "ce2e8dd1d5d54a443add7c27940ec71bf76f1325a10b92ee5d353c52a686699d"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_matched_facts_digest_v1(p_contract uuid, p_family text, p_presence text, p_candidate_start timestamp without time zone, p_candidate_end timestamp without time zone, p_candidate_break integer, p_system_start timestamp without time zone, p_system_end timestamp without time zone, p_system_break integer)",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "31c38d816bc3817b2e39026252c08536d5a56a20b359260369fb1023820f21bb"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_original_evidence_digest_v1(p_witness_kind text, p_comparison_revision_id uuid, p_discrepancy_event_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "69eff7b4fe55874fd255e866c95fd3ca8040da6deb0cb598d15de87f94f730fc"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_producer_enter_v1(p_owner_kind text, p_cause_kind text, p_cause_key text, p_request_sha256 bytea, p_mode text)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "d9c424ce8e5bd14157699b7b53e59c4eff8e4909e195842ac6fdece5739fc147"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_producer_finish_standalone_v1(p_producer_id uuid, p_owner_kind text, p_witness_id uuid, p_witness_sha256 bytea)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "e687c7872325feb5d8ba02924028227dfde831ed10481baffa262a221aed160f"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_producer_finished_assert_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "5d81a262cb2d4411b172f079a673aa87234d6931efcc0781730f3cdfb1c025dc"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_producer_leave_v1(p_producer_id uuid, p_owner_kind text)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "376c82fb22b0f8c7b39028ce39ca3b3eedbabace559889cb684cbc9eac24dc5a"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -13089,462 +12652,6 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "4e9aabd10b306929b1a8bb0417bf2143476662dc8c8fd2ecb37dfb2d7129e5c4"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_raw_stages_v1(p_producer_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "5414a8c823293e21ef17347aaae3cafb6f9ffab94ff97d8a125cdbf9003afc8c"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_resolved_evidence_assert_v1(p_comparison_id uuid, p_resolved_event_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "7b07b9a6bc34fb5aebd4ac8dc046703a687a0b5d2a64bbc056a6006060f79e0c"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_response_completion_digest_v1(p_producer_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "3d43b08b167f480c85ed56be7e54e839cb8836c8a8355212176afd748fc93f0d"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_root_completion_assert_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "395f90a6969a74cc23a9218a38f7788a26627ea16d3d0d665349bbd3d59c43ca"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_root_completion_digest_v1(p_header private.bpay_next_query_root_completion)",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "6a24171847167f7ac56854d7e370354f1eef4cfe01c5f6110a3ad07f7e075a74"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_certificate_evidence_assert_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "e8b54c7cffb4bd8d9bcd7705d7ab13422639981bbb347e78b6eb5d5c51797c41"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_certificate_insert_guard_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "7f8652bced58571e2ea202c0c2fc61731f68f40b53df3212cd11dd42fb467935"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_children_digests_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "7fd3338f50808a2b4da8fd2cbddc23179697273388e201b5f72ac1980a4f528b"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_complete_v1(p_producer_id uuid, p_actor uuid, p_cycle uuid, p_publication uuid, p_input_ids uuid[], p_issue_hashes bytea[], p_seen_work_ids uuid[], p_omitted_ids uuid[], p_new_count bigint, p_changed_count bigint, p_unchanged_count bigint, p_resolved_count bigint, p_inputs private.bpay_next_query_sync_input_completion[], p_omissions private.bpay_next_query_sync_omission_completion[])",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "7df2fcc2cc0f6b4c193e7bcf09b40e153cc9b924cedef0fe5b715b414a93d5bb"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_expected_stages_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "dde0bd97671385bb9d6558660c47c7bba14281eab1a088d2860a1d5f485774fd"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_expected_witnesses_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "d05eea7988f237dcc772ab45b667d947ba654aad968438fe54014d5c30764f31"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_input_completion_digest_v1(p_row private.bpay_next_query_sync_input_completion)",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "b50f262bef9ef1178ff51812848bc08e7e505e0613b8f93a84d82b09701fc203"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_issue_digest_v1(p_issue jsonb)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "825ecae6bf6f7a287cd2cf9436d58f0454b9a9983cf9be1ecbda925c3e6d8a76"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_omission_completion_digest_v1(p_row private.bpay_next_query_sync_omission_completion)",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "17276850c3d479d522749e056eb6b22ec09eb7217fb8e06036de953925298ecc"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_request_digest_v1(p_actor uuid, p_cycle uuid, p_publication uuid, p_work_ids uuid[], p_issue_sha256 bytea[])",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "f8cc44c9f087ddae3485e632474ea16e93935ee929429a1be16dd65610413140"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_root_completion_assert_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "d7d6419044fe0c97412edd694541950fdad6a776006ac063acae6595bf0d43bd"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_stage_matches_v1(p_event_id uuid, p_operation text, p_work_event_id uuid, p_comparison_id uuid, p_prior_comparison_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "a0d512589503e29856b56dfd285489b2607025fb729b868e1cf5734a1d296999"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_stages_assert_v1(p_completion_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "ad77c1c59f2b1b4b2478f71dcd9205d4b6dfad151817011f3c3bb94bce415bd3"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_sync_supplied_witnesses_v1(p_inputs private.bpay_next_query_sync_input_completion[], p_omissions private.bpay_next_query_sync_omission_completion[])",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "4e2585437ca4b743664bcecbd172e942b38aae6cd119304e0cf5463bec3e9e04"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_system_action_digest_v1(p_actor uuid, p_cycle uuid, p_publication uuid, p_incidents uuid[])",
-      "parallel": "u",
-      "volatility": "i",
-      "security_definer": false,
-      "definition_sha256": "04533a024940364941acf54d8ac907b560e00556aa9cb3428d41ca2aca728fe2"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_system_complete_v1(p_producer_id uuid, p_variant text, p_cycle uuid, p_publication uuid, p_actor uuid, p_incidents uuid[], p_child_sha256 bytea)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "93bcf14d2d304c3338bf4a363398c9d9c3e48e65ba5fce3d454717c34d9814da"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_system_witnesses_v1(p_producer_id uuid, p_cycle uuid, p_publication uuid, p_actor uuid, p_incidents uuid[])",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "5833a33f01f8193d2851142eb580e5012c53cbcf8cbccbbead286145bf1e7459"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_version_command_assert_v1(p_command_id uuid)",
-      "parallel": "u",
-      "volatility": "s",
-      "security_definer": false,
-      "definition_sha256": "bcba00732aa997bb2773f4cbc3eae07b2b7bea70db42d8525e06f922c65f48f5"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_query_version_stage_v1(p_owner_relation text, p_owner_row_id uuid, p_candidate_id uuid, p_root_timesheet_id uuid, p_old_present boolean, p_new_present boolean, p_old_tuple jsonb, p_new_tuple jsonb)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "51bf18b4506c0646cd8336632d1312d6ae06a626f1f0b0e134c92bdb6f29cb9a"
     },
     {
       "acl": [
@@ -13677,7 +12784,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b0a979341d65de4727ff535c06c4c8eb1f852e1404d442231d5a1c1af3616bd2"
+      "definition_sha256": "2c9df59e37af375cd4f6e6b6ad4278f228dd551706cbe6096d6b2212c8bbb120"
     },
     {
       "acl": [
@@ -13955,14 +13062,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
       "identity": "bpay_next_run_work_query_pin_guard_v2()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c37ab0337fedeec32387d6b13591a1e41e35c35f6ad8fab15efd170e01fe213f"
+      "definition_sha256": "8553f8edeeec30273db4b48877be9b1f7851240676d4a3583184e50af6a26433"
     },
     {
       "acl": [
@@ -14057,83 +13164,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8a8a54e7864f103e82f8c3e0ce3364d45c35392171c084a1887f930b89ea19b2"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_settings_finalize_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "0e434900d746ad64eb7f12b32c47e799897d6a5b5d4518346e9676f07abfd691"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_settings_flush_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "440b6ceb9c1e4148cc36dd468c4541aedf6c7251b15a53268ec6117e436ddd8b"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_settings_input_stage_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "468cff620abe7e27c92b2432dd695e4e5fffb3d5e9aa45fb1ccfa536cdca1cf5"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_settings_statement_enter_v1()",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "50ac86e5a35514fb15432be7f815fd30b0d7562a943f53811403708a28458618"
+      "definition_sha256": "f561fa648822a71db198b043771a8b482181938d5b8708600dc74b4a37308e97"
     },
     {
       "acl": [
@@ -14418,26 +13449,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "776cfdc33bc40229d198801b75a4ef28483b2416a3a826d00d811c9776128e89"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_source_book_seed_proof_accepted_v1(p_effective_work_cut_id uuid, p_component_key text, p_seed_effect_id uuid, p_seed_hold_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "240de36b50d6a668aa7785215c1f0c9d9168a9a68f3b112d6d1aa03516cbbc12"
+      "definition_sha256": "966644847728a8df24b03f860b5a26f756b1e0963ebf32433cab836606b10c0b"
     },
     {
       "acl": [
@@ -14870,25 +13882,6 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
-      "identity": "bpay_next_source_disposition_seed_accepted_v1(p_effective_work_cut_id uuid, p_component_key text, p_seed_effect_id uuid, p_seed_hold_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "14df3faacb8ef70778a3b930a3dbe25aafff0bda061b039c10a5b29acb28a7c2"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
       "identity": "bpay_next_source_disposition_seed_v1(p_work_id uuid, p_component_key text, p_expected_applied_revision uuid, p_seed_effect_id uuid, p_seed_hold_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15098,44 +14091,6 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
-      "identity": "bpay_next_stage_acceptance_v1(p_run_id uuid, p_command_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "1e0d572e72c6642fd1b81aefba8a8fd8d0a476f996d985c3bb9e9cab609e5bbf"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_stage_accepted_week_v1(p_run_id uuid, p_command_id uuid, p_accepted_input_id uuid, p_candidate_id uuid, p_prelocked_run_ids uuid[])",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": true,
-      "definition_sha256": "d80aed9bdc9644c7b0a4ef745282c39f5275f0d0b2bc020710dfba9e8340c324"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private, public"
-      ],
-      "schema": "private",
       "identity": "bpay_next_stage_protected_source_v1(p_approval_id uuid, p_generation_id uuid, p_root_timesheet_id uuid, p_target_components jsonb)",
       "parallel": "u",
       "volatility": "v",
@@ -15250,44 +14205,6 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
-      "identity": "bpay_next_week_eligibility_receipts_v1(p_candidate_id uuid, p_original_worker_id uuid, p_cut bigint, p_basis_sequence bigint, p_projection_id uuid, p_original_prepare_command_id uuid, p_draft_state_id uuid, p_net_state_id uuid)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "435817607d99d6323dd8b0175016361422445b7549435dcbc6581317aff241c2"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
-      "identity": "bpay_next_week_origin_select_v1(p_candidate_id uuid, p_week date, p_original_worker_id uuid, p_cut bigint)",
-      "parallel": "u",
-      "volatility": "v",
-      "security_definer": false,
-      "definition_sha256": "4d6619a9c5b45fe64a87a4559c1f5990aee7d463b56941578c0ee7ee0520529f"
-    },
-    {
-      "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        }
-      ],
-      "owner": "postgres",
-      "config": [
-        "search_path=pg_catalog, private"
-      ],
-      "schema": "private",
       "identity": "bpay_next_week_projection_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -15330,7 +14247,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8a9885562286587133f4c956a1df6e1948831ca0ead71dc1b32446078b83ed18"
+      "definition_sha256": "0721e303c213d2021068e749cb5b400ecffc657d866ba89333fbd23d6fdaa613"
     },
     {
       "acl": [
@@ -22324,7 +21241,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f6c390f443b0ecadb02360c1db8d94c859d8e12514316788bb04b2bd2fcf3e4f"
+      "definition_sha256": "f663fd9077ca4ff7204a429939c640ccccd1f801fce5c4e0ac7d838537f6b8a4"
     },
     {
       "acl": [
@@ -30498,7 +29415,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "99389566863b7ef9fc06b47ba18cb43ecdc09add790c641ecbdc4bfe3f26b753"
+      "definition_sha256": "28b0f9159dc8f0a82d3fa740484d3a5ddb799c43031120c13208ba20932dbba2"
     },
     {
       "acl": [
@@ -30522,7 +29439,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8635c6f8a422701e74fd6deca4197077aa00eb082dd0b759bb03b4677cc78061"
+      "definition_sha256": "ead7d77d1b34c7251ef35881c8ac78e284ca6a0849357bb07a0cd26aed03caa5"
     },
     {
       "acl": [
@@ -48620,7 +47537,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "40ebeb9a3009b4324649f2cdf4d91095139358f00dc4850c41287e4647488f03"
+      "definition_sha256": "5720d54afec37190f2a9f607813c901f85662c6d105246e8f32806c2e505e804"
     },
     {
       "acl": [
@@ -48764,7 +47681,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "482645ce5d7ded839e5195103e0374f93ec798345a8ebe6c60ecc9c042ba0eed"
+      "definition_sha256": "14712e8468bce969c72270506203ad1c876063fb5f195fc05c064ca17fa5b73e"
     },
     {
       "acl": [
@@ -49796,7 +48713,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5610af9a011562166ff275fa643c9879c863c9af860a662ecc701a573000a5d9"
+      "definition_sha256": "b33c954970367494fe6ac310726481aca8c0dba03e41459c33a750cc4b7035ec"
     },
     {
       "acl": [
@@ -49844,7 +48761,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7d08aa33e952c566f4f8d39808bbf6bbb7167184e9366fcfdae9fa64e773585c"
+      "definition_sha256": "0342417b83a6adf40523ed9280c2def0d81d424476583c36abc5b9e2179706fb"
     },
     {
       "acl": [
@@ -49868,7 +48785,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "10b71ca17554073672bbafd5c9f72d84bb6212a5cc8e7142fd57f9d115bcce94"
+      "definition_sha256": "321e69bf8f8e0c3f392e05ada081c28c1b22423a5ce7937872592c75d53f45d4"
     },
     {
       "acl": [
@@ -50276,7 +49193,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f7f109c3bc96424dda026bd55c0306cf13ce4a939fc13ebc74f36c4fcf12ef02"
+      "definition_sha256": "87de49e4416b193a865dc9d5e62cb352ddc82a9412e4c9d51f196e847c7e8365"
     },
     {
       "acl": [
@@ -50684,7 +49601,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9b209c25daf5eaf63e11842b907a9d2c2abe8523900e9a7e2a5505b838812aa2"
+      "definition_sha256": "cdc706df8dfdb46d51b12a872bea3be660faca6e2d09d70ff0324edca2147f78"
     },
     {
       "acl": [
@@ -50780,7 +49697,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b430b4220ee9c452a66d3dc6bc073efd34ff08ede97cd9524b72c0fe7fc70578"
+      "definition_sha256": "77de73a8bcbc177172e8eb15c5d6d6e24f0ff364c92829680bfe528463a3620e"
     },
     {
       "acl": [
@@ -51690,27 +50607,6 @@
       "definition": "CREATE TRIGGER bpay_next_financial_effect_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
-      "name": "bpay_next_input_transaction_guard_v1",
-      "table": "bpay_next_input_transaction",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_input_transaction_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_input_transaction FOR EACH ROW EXECUTE FUNCTION private.bpay_next_input_transaction_guard_v1()"
-    },
-    {
-      "name": "bpay_next_input_transaction_no_truncate_v1",
-      "table": "bpay_next_input_transaction",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_input_transaction_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_input_transaction FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_input_transaction_guard_v1()"
-    },
-    {
-      "name": "bpay_next_settings_finalize_v1",
-      "table": "bpay_next_input_transaction",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_settings_finalize_v1 AFTER INSERT ON private.bpay_next_input_transaction DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_settings_finalize_v1()"
-    },
-    {
       "name": "bpay_next_input_version_event_immutable",
       "table": "bpay_next_input_version_event",
       "schema": "private",
@@ -51858,13 +50754,6 @@
       "definition": "CREATE TRIGGER bpay_next_query_event_owner_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_query_event_owner FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
-      "name": "bpay_next_query_event_owner_insert_guard_v1",
-      "table": "bpay_next_query_event_owner",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_event_owner_insert_guard_v1 BEFORE INSERT ON private.bpay_next_query_event_owner FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_event_owner_insert_guard_v1()"
-    },
-    {
       "name": "bpay_next_query_event_owner_no_truncate_v1",
       "table": "bpay_next_query_event_owner",
       "schema": "private",
@@ -51900,13 +50789,6 @@
       "definition": "CREATE TRIGGER bpay_next_query_input_version_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_input_version FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
-      "name": "bpay_next_query_producer_finished_assert_v1",
-      "table": "bpay_next_query_producer",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_query_producer_finished_assert_v1 AFTER INSERT ON private.bpay_next_query_producer DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_producer_finished_assert_v1()"
-    },
-    {
       "name": "bpay_next_query_producer_no_truncate_v1",
       "table": "bpay_next_query_producer",
       "schema": "private",
@@ -51921,13 +50803,6 @@
       "definition": "CREATE TRIGGER bpay_next_query_producer_operational_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_query_producer FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_producer_operational_guard_v1()"
     },
     {
-      "name": "bpay_next_query_completion_insert_guard_v1",
-      "table": "bpay_next_query_root_completion",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_completion_insert_guard_v1 BEFORE INSERT ON private.bpay_next_query_root_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_completion_insert_guard_v1()"
-    },
-    {
       "name": "bpay_next_query_root_completion_immutable",
       "table": "bpay_next_query_root_completion",
       "schema": "private",
@@ -51940,13 +50815,6 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_query_root_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_root_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
-    },
-    {
-      "name": "bpay_next_query_completion_insert_guard_v1",
-      "table": "bpay_next_query_root_completion_witness",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_completion_insert_guard_v1 BEFORE INSERT ON private.bpay_next_query_root_completion_witness FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_completion_insert_guard_v1()"
     },
     {
       "name": "bpay_next_query_root_completion_witness_immutable",
@@ -51998,13 +50866,6 @@
       "definition": "CREATE TRIGGER bpay_next_query_sync_input_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_sync_input_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
-      "name": "bpay_next_query_sync_input_completion_insert_guard",
-      "table": "bpay_next_query_sync_input_completion",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_sync_input_completion_insert_guard BEFORE INSERT ON private.bpay_next_query_sync_input_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_sync_certificate_insert_guard_v1()"
-    },
-    {
       "name": "bpay_next_query_sync_input_completion_no_truncate",
       "table": "bpay_next_query_sync_input_completion",
       "schema": "private",
@@ -52017,13 +50878,6 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_query_sync_omission_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_sync_omission_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
-    },
-    {
-      "name": "bpay_next_query_sync_omission_completion_insert_guard",
-      "table": "bpay_next_query_sync_omission_completion",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_sync_omission_completion_insert_guard BEFORE INSERT ON private.bpay_next_query_sync_omission_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_sync_certificate_insert_guard_v1()"
     },
     {
       "name": "bpay_next_query_sync_omission_completion_no_truncate",
@@ -52145,6 +50999,20 @@
       "definition": "CREATE TRIGGER bpay_next_run_work_query_pin_no_truncate_v2 BEFORE TRUNCATE ON private.bpay_next_run_work_query_pin_v2 FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_run_work_query_pin_guard_v2()"
     },
     {
+      "name": "bpay_next_run_work_query_snapshot_immutable",
+      "table": "bpay_next_run_work_query_snapshot",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_work_query_snapshot_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_run_work_query_snapshot FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_run_work_query_snapshot_no_truncate",
+      "table": "bpay_next_run_work_query_snapshot",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_run_work_query_snapshot_no_truncate BEFORE TRUNCATE ON private.bpay_next_run_work_query_snapshot FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
       "name": "bpay_next_selected_component_guard",
       "table": "bpay_next_selected_component",
       "schema": "private",
@@ -52262,13 +51130,6 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_policy_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_valuation_policy FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_policy_immutable_v1()"
-    },
-    {
-      "name": "bpay_next_policy_input_stage_v1",
-      "table": "bpay_next_valuation_policy_control",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_policy_input_stage_v1 AFTER UPDATE OF current_policy_id, current_policy_no ON private.bpay_next_valuation_policy_control FOR EACH ROW EXECUTE FUNCTION private.bpay_next_settings_input_stage_v1()"
     },
     {
       "name": "bpay_next_policy_window_immutable_v1",
@@ -52465,13 +51326,6 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_manual_review_command_no_truncate BEFORE TRUNCATE ON private.weekly_source_manual_review_commands FOR EACH STATEMENT EXECUTE FUNCTION private.weekly_source_manual_review_command_immutable_v1()"
-    },
-    {
-      "name": "bpay_next_query_manual_review_row_stage_v1",
-      "table": "weekly_source_manual_reviews",
-      "schema": "private",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_manual_review_row_stage_v1 AFTER INSERT OR DELETE OR UPDATE ON private.weekly_source_manual_reviews FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_manual_review_row_stage_v1()"
     },
     {
       "name": "weekly_source_pending_release_review_item_immutable",
@@ -52780,20 +51634,6 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()"
-    },
-    {
-      "name": "bpay_next_candidate_input_entry_v1",
-      "table": "candidates",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_candidate_input_entry_v1 BEFORE INSERT OR UPDATE OF pay_method, umbrella_id, min_take_home_wtd ON candidates FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_settings_statement_enter_v1()"
-    },
-    {
-      "name": "bpay_next_candidate_input_stage_v1",
-      "table": "candidates",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_candidate_input_stage_v1 AFTER INSERT OR UPDATE OF pay_method, umbrella_id, min_take_home_wtd ON candidates FOR EACH ROW EXECUTE FUNCTION private.bpay_next_settings_input_stage_v1()"
     },
     {
       "name": "candidate_expense_candidate_identity_summary_refresh",
@@ -54518,13 +53358,6 @@
       "definition": "CREATE TRIGGER bpay_next_finance_policy_update_v1 AFTER UPDATE ON settings_finance_windows FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_finance_policy_change_v1()"
     },
     {
-      "name": "bpay_next_policy_input_entry_v1",
-      "table": "settings_finance_windows",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_policy_input_entry_v1 BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON settings_finance_windows FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_settings_statement_enter_v1()"
-    },
-    {
       "name": "contract_settings_authority_after_finance_window_v1",
       "table": "settings_finance_windows",
       "schema": "public",
@@ -55204,20 +54037,6 @@
       "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_adjustments_au AFTER UPDATE ON ts_pay_adjustments REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
     },
     {
-      "name": "bpay_next_umbrella_input_entry_v1",
-      "table": "umbrellas",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_umbrella_input_entry_v1 BEFORE INSERT OR UPDATE OF vat_chargeable, enabled ON umbrellas FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_settings_statement_enter_v1()"
-    },
-    {
-      "name": "bpay_next_umbrella_input_stage_v1",
-      "table": "umbrellas",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_umbrella_input_stage_v1 AFTER INSERT OR UPDATE OF vat_chargeable, enabled ON umbrellas FOR EACH ROW EXECUTE FUNCTION private.bpay_next_settings_input_stage_v1()"
-    },
-    {
       "name": "trg_cc_umbrellas",
       "table": "umbrellas",
       "schema": "public",
@@ -55293,13 +54112,6 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_discrepancy_events FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
-    },
-    {
-      "name": "bpay_next_query_incident_row_stage_v1",
-      "table": "weekly_discrepancy_incidents",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_incident_row_stage_v1 AFTER INSERT OR DELETE OR UPDATE ON weekly_discrepancy_incidents FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_incident_row_stage_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -55468,13 +54280,6 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_final_source_correction_root_impacts FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
-    },
-    {
-      "name": "bpay_next_query_comparison_row_stage_v1",
-      "table": "weekly_issue_comparison_revisions",
-      "schema": "public",
-      "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_query_comparison_row_stage_v1 AFTER INSERT ON weekly_issue_comparison_revisions FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_comparison_row_stage_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -86063,14 +84868,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (preparing_transaction_id)"
-        },
-        {
-          "name": "bpay_next_settings_finalize_v1",
-          "type": "t",
-          "deferred": true,
-          "validated": true,
-          "deferrable": true,
-          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
         }
       ],
       "view_definition_sha256": null
@@ -92289,14 +91086,6 @@
           "definition": "CHECK (octet_length(completion_witness_sha256) = 32)"
         },
         {
-          "name": "bpay_next_query_producer_finished_assert_v1",
-          "type": "t",
-          "deferred": true,
-          "validated": true,
-          "deferrable": true,
-          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
-        },
-        {
           "name": "bpay_next_query_producer_id_module_epoch_key",
           "type": "u",
           "deferred": false,
@@ -98448,6 +97237,140 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_work_query_snapshot",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "gate_result",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_work_query_snapshot_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_query_snapshot_pkey ON private.bpay_next_run_work_query_snapshot USING btree (run_id, work_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_run_work_query_snap_work_id_expected_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, expected_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_run_work_query_snapshot_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_id, work_id)"
+        },
+        {
+          "name": "bpay_next_run_work_query_snapshot_run_id_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id, work_id) REFERENCES private.bpay_next_run_selection(run_id, work_id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_run_worker",
@@ -99267,11 +98190,43 @@
           "generated": ""
         },
         {
+          "name": "min_take_home_wtd",
+          "type": "numeric(12,2)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "run_id",
           "type": "uuid",
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_vat_chargeable",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         }
       ],
@@ -99327,6 +98282,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (run_id, member_no)"
+        },
+        {
+          "name": "bpay_next_selection_candidate_target_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

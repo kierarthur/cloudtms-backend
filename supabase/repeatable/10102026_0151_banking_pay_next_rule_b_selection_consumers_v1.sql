@@ -1,7 +1,551 @@
--- F-25 ordinary case preparation consumes the original accepted terms.
--- Actual principal, periods, capacity, live money holds and shared valuer stay owned.
+-- F-25 owner rule B; four exact three-way surviving owner seams only.
+-- Preserve original PIN REVIEW/validation, F-05 claim order and live money locks.
 \set ON_ERROR_STOP on
 begin;
+
+create or replace function private.bpay_next_seal_selection_v1(
+  p_run_id uuid,p_expected_pages bigint,p_expected_count bigint
+) returns jsonb
+language plpgsql security definer
+set search_path=pg_catalog,private
+as $function$
+declare v_run private.bpay_next_pay_run%rowtype;v_selected record;
+begin
+  if p_run_id is null or p_expected_pages is null or p_expected_count is null
+     or p_expected_pages<0 or p_expected_count<0
+     or (p_expected_pages=0) is distinct from (p_expected_count=0) then
+    raise exception using errcode='22023',
+      message='BPAY_NEXT_SELECTION_SEAL_INPUT_INVALID';
+  end if;
+  select * into strict v_run from private.bpay_next_pay_run
+    where id=p_run_id for update;
+  if v_run.selection_page_count<>p_expected_pages
+     or v_run.selection_count<>p_expected_count then
+    raise exception using errcode='23514',
+      message='BPAY_NEXT_SELECTION_SEAL_COUNT_MISMATCH';
+  end if;
+  if v_run.work_choice_count<>v_run.selection_count
+     or v_run.sealed_work_choice_count<>v_run.selection_count then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_SELECTION_COMPONENT_CHOICES_NOT_SEALED';
+  end if;
+  if v_run.selection_state='SEALED' then
+    return jsonb_build_object('run_id',p_run_id,'sealed',true,
+      'selection_count',v_run.selection_count,'replay',true);
+  end if;
+  -- A case-only run contains genuine selected case components, not fictitious
+  -- WORK rows. The root-locked seal counter is maintained once per Candidate
+  -- by0330; checking it does not scan every Candidate at final confirmation.
+  if p_expected_count=0 and (v_run.selected_candidate_count<1
+     or v_run.sealed_case_candidate_count<>v_run.selected_candidate_count) then
+    raise exception using errcode='55000',message='BPAY_NEXT_SELECTION_CASE_ONLY_NOT_SEALED';
+  end if;
+  if v_run.status<>'PREPARING' then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_SELECTION_SEAL_STATUS_INVALID';
+  end if;
+  -- Owner rule B: capture only the existing ticked expected revisions.
+  -- Exact sealed replay above never refreshes settings or query state.
+  perform private.weekly_source_pay_query_admit_v2();
+  update private.bpay_next_selection_candidate selected
+    set target_pay_channel=upper(candidate.pay_method),
+        target_umbrella_id=candidate.umbrella_id,
+        target_umbrella_vat_chargeable=umbrella.vat_chargeable,
+        min_take_home_wtd=candidate.min_take_home_wtd
+    from public.candidates candidate left join public.umbrellas umbrella on umbrella.id=candidate.umbrella_id
+    where selected.run_id=p_run_id and selected.candidate_id=candidate.id;
+  for v_selected in
+    select choice.work_id,choice.expected_revision_id,revision.physical_timesheet_id
+      from private.bpay_next_run_selection selected
+      join private.bpay_next_work_choice choice on choice.run_id=selected.run_id and choice.work_id=selected.work_id
+      join private.bpay_next_work work on work.id=selected.work_id
+      join private.bpay_next_work_revision revision on revision.work_id=choice.work_id and revision.id=choice.expected_revision_id
+      where selected.run_id=p_run_id and work.work_kind='SOURCE' and revision.source_kind in ('SOURCE','PROTECTED')
+      order by selected.selection_no
+  loop
+    insert into private.bpay_next_run_work_query_snapshot(run_id,work_id,expected_revision_id,physical_timesheet_id,gate_result,captured_at_utc)
+      values(p_run_id,v_selected.work_id,v_selected.expected_revision_id,v_selected.physical_timesheet_id,
+        private.weekly_source_pay_query_gate_v1(v_selected.physical_timesheet_id),pg_catalog.transaction_timestamp());
+  end loop;
+  update private.bpay_next_pay_run
+    set selection_state='SEALED',review_revision=review_revision+1
+    where id=p_run_id;
+  return jsonb_build_object('run_id',p_run_id,'sealed',true,
+    'selection_count',v_run.selection_count,'replay',false);
+end
+$function$;
+
+
+create or replace function private.bpay_next_claim_prepare_job_v1(
+  p_job_id uuid,p_lease_seconds integer default 120
+) returns table(lease_nonce uuid,owner_epoch bigint)
+language plpgsql security definer
+set search_path=pg_catalog,private,public
+as $function$
+declare
+  v_job private.bpay_next_job%rowtype;
+  v_run private.bpay_next_pay_run%rowtype;
+  v_worker private.bpay_next_run_worker%rowtype;
+  v_run_id uuid;
+  v_module_epoch bigint;
+  v_channel text;
+  v_umbrella_id uuid;
+  v_umbrella_vat_chargeable boolean;
+  v_owner_epoch bigint;
+  v_nonce uuid;
+begin
+  if p_job_id is null or p_lease_seconds not between 1 and 120 then
+    raise exception using errcode='22023',
+      message='BPAY_NEXT_PREPARE_LEASE_INPUT_INVALID';
+  end if;
+  select m.owner_epoch into v_module_epoch
+    from private.bpay_next_module_control m
+    where m.id=1 and m.active_owner='NEXT' for share;
+  if v_module_epoch is null then
+    raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';
+  end if;
+  select j.candidate_id,rc.run_id into strict v_job.candidate_id,v_run_id
+    from private.bpay_next_job j
+    join private.bpay_next_run_command rc on rc.command_id=j.command_id
+    where j.id=p_job_id and j.job_kind='PREPARE';
+  select * into strict v_run from private.bpay_next_pay_run
+    where id=v_run_id for share;
+  insert into private.bpay_next_worker_control(candidate_id)
+    values(v_job.candidate_id) on conflict(candidate_id) do nothing;
+  perform 1 from private.bpay_next_worker_control
+    where candidate_id=v_job.candidate_id for update;
+  select * into strict v_job from private.bpay_next_job
+    where id=p_job_id for update;
+  if v_run.status<>'PREPARING' or v_run.selection_state<>'SEALED'
+     or v_job.job_kind<>'PREPARE' or v_job.module_epoch<>v_module_epoch
+     or not exists(select 1 from private.bpay_next_command command
+       where command.id=v_job.command_id and command.agency_sequence=v_job.command_sequence
+         and command.module_epoch=v_module_epoch and command.command_kind='PREPARE'
+         and command.status='SEALED' and command.sealed_at_utc is not null
+         and command.expected_member_count=v_run.selected_candidate_count
+         and command.enrolled_member_count=command.expected_member_count)
+     or v_job.status not in ('READY','LEASED')
+     or (v_job.status='LEASED'
+       and v_job.lease_until_utc>pg_catalog.clock_timestamp()) then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_PREPARE_JOB_NOT_CLAIMABLE';
+  end if;
+  if exists(select 1 from private.bpay_next_job earlier
+      where earlier.candidate_id=v_job.candidate_id
+        and earlier.command_sequence<v_job.command_sequence
+        and earlier.status<>'DONE') then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_EARLIER_WORKER_COMMAND_PENDING';
+  end if;
+  select * into v_worker from private.bpay_next_run_worker
+    where run_id=v_run_id and candidate_id=v_job.candidate_id for update;
+  if not found then
+    select selected.target_pay_channel,selected.target_umbrella_id,selected.target_umbrella_vat_chargeable
+      into strict v_channel,v_umbrella_id,v_umbrella_vat_chargeable
+      from private.bpay_next_selection_candidate selected
+      where selected.run_id=v_run_id and selected.candidate_id=v_job.candidate_id;
+    if v_channel not in ('PAYE','UMBRELLA') then
+      raise exception using errcode='23514',
+        message='BPAY_NEXT_PREPARE_PAY_CHANNEL_UNSUPPORTED';
+    end if;
+    insert into private.bpay_next_run_worker
+      (run_id,candidate_id,target_pay_channel,target_umbrella_id,
+       target_umbrella_vat_chargeable,status)
+      values(v_run_id,v_job.candidate_id,v_channel,
+        case when v_channel='UMBRELLA' then v_umbrella_id else null end,
+        case when v_channel='UMBRELLA' then v_umbrella_vat_chargeable
+          else null end,'PREPARING')
+      returning * into v_worker;
+  elsif v_worker.status<>'PREPARING' then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_PREPARE_WORKER_STATE_CHANGED';
+  end if;
+  update private.bpay_next_worker_control
+    set active_owner_epoch=active_owner_epoch+1,
+        updated_at_utc=pg_catalog.transaction_timestamp()
+    where candidate_id=v_job.candidate_id
+    returning active_owner_epoch into v_owner_epoch;
+  v_nonce:=pg_catalog.gen_random_uuid();
+  update private.bpay_next_job
+    set status='LEASED',owner_epoch=v_owner_epoch,lease_nonce=v_nonce,
+        lease_until_utc=pg_catalog.clock_timestamp()
+          +pg_catalog.make_interval(secs=>p_lease_seconds),
+        attempt_count=attempt_count+1
+    where id=p_job_id;
+  lease_nonce:=v_nonce;owner_epoch:=v_owner_epoch;
+  return next;
+end
+$function$;
+
+
+create or replace function private.bpay_next_pin_selected_work_v1(
+  p_job_id uuid,p_lease_nonce uuid,p_owner_epoch bigint,
+  p_expected_cursor bigint
+) returns jsonb
+language plpgsql security definer
+set search_path=pg_catalog,private
+as $function$
+declare
+  v_job private.bpay_next_job%rowtype;
+  v_run_id uuid;
+  v_run private.bpay_next_pay_run%rowtype;
+  v_worker_id uuid;
+  v_worker private.bpay_next_run_worker%rowtype;
+  v_selection private.bpay_next_run_selection%rowtype;
+  v_choice private.bpay_next_work_choice%rowtype;
+  v_work private.bpay_next_work%rowtype;
+  v_revision private.bpay_next_work_revision%rowtype;
+  v_current_cursor bigint;
+  v_module_epoch bigint;
+  v_query_admitted boolean:=false;
+  v_source_classified boolean;
+  v_source_origin record;
+  v_query_gate jsonb;
+  v_query_scope jsonb;
+  v_query_disposition text;
+  v_query_digest bytea;
+  v_run_work_id uuid;
+begin
+  if p_job_id is null or p_lease_nonce is null or p_owner_epoch is null
+     or (p_expected_cursor is not null and p_expected_cursor<1) then
+    raise exception using errcode='22023',
+      message='BPAY_NEXT_PIN_INPUT_INVALID';
+  end if;
+  -- Authorised direct callers use the same outer entry as 0280. Discover
+  -- without a job/module/run lock; do not newly admit retained replay/stale
+  -- inputs. This read never substitutes for the original locked owner checks.
+  select j.* into strict v_job from private.bpay_next_job j
+    where j.id=p_job_id and j.job_kind='PREPARE';
+  select rc.run_id into strict v_run_id from private.bpay_next_run_command rc
+    where rc.command_id=v_job.command_id;
+  if v_job.status='LEASED' and v_job.phase in ('NEW','PINNING')
+     and v_job.lease_nonce is not distinct from p_lease_nonce
+     and v_job.owner_epoch is not distinct from p_owner_epoch
+     and v_job.lease_until_utc>pg_catalog.clock_timestamp()
+     and v_job.cursor_key::bigint is not distinct from p_expected_cursor then
+    perform private.weekly_source_pay_query_admit_v2();
+    v_query_admitted:=true;
+  end if;
+  select m.owner_epoch into v_module_epoch
+    from private.bpay_next_module_control m
+    where m.id=1 and m.active_owner='NEXT' for share;
+  if v_module_epoch is null then
+    raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';
+  end if;
+  select * into strict v_run from private.bpay_next_pay_run
+    where id=v_run_id for share;
+  select candidate_id into strict v_job.candidate_id
+    from private.bpay_next_job where id=p_job_id;
+  perform 1 from private.bpay_next_worker_control
+    where candidate_id=v_job.candidate_id for update;
+  select * into strict v_job from private.bpay_next_job
+    where id=p_job_id for update;
+  if v_job.status='DONE' and v_job.phase='DONE'
+     and v_job.job_kind='PREPARE' and v_job.owner_epoch=p_owner_epoch then
+    select * into strict v_worker from private.bpay_next_run_worker
+      where run_id=v_run_id and candidate_id=v_job.candidate_id;
+    if v_worker.status='REVIEW' and v_worker.review_issue_code is not null then
+      return pg_catalog.jsonb_build_object('done',true,'phase','REVIEW',
+        'issue_code',v_worker.review_issue_code,
+        'work_id',v_worker.review_issue_work_id,'replay',true);
+    end if;
+  end if;
+  if v_run.status<>'PREPARING' or v_run.selection_state<>'SEALED'
+     or v_job.status<>'LEASED' or v_job.job_kind<>'PREPARE'
+     or v_job.module_epoch<>v_module_epoch
+     or v_job.lease_nonce<>p_lease_nonce
+     or v_job.owner_epoch<>p_owner_epoch
+     or v_job.lease_until_utc<=pg_catalog.clock_timestamp() then
+    raise exception using errcode='55000',message='BPAY_NEXT_PIN_LEASE_STALE';
+  end if;
+  if v_job.phase='RESERVE' then
+    return pg_catalog.jsonb_build_object('done',true,'phase','RESERVE',
+      'replay',true);
+  end if;
+  if v_job.phase not in ('NEW','PINNING') then
+    raise exception using errcode='23514',message='BPAY_NEXT_PIN_PHASE_INVALID';
+  end if;
+  v_current_cursor:=v_job.cursor_key::bigint;
+  if v_current_cursor is distinct from p_expected_cursor then
+    return pg_catalog.jsonb_build_object('done',false,'phase',v_job.phase,
+      'next_cursor',v_current_cursor,'replay',true);
+  end if;
+  if not v_query_admitted then
+    -- A changed discovery cannot become a fresh mutation after Bank locks.
+    -- Roll back and retry the original STEP via the existing 40001 channel;
+    -- never acquire the Source key late, fabricate REVIEW or adopt a nonce.
+    raise exception using errcode='40001',message='BPAY_NEXT_PIN_ADMISSION_CHANGED';
+  end if;
+  select * into strict v_worker from private.bpay_next_run_worker
+    where run_id=v_run_id and candidate_id=v_job.candidate_id for update;
+  v_worker_id:=v_worker.id;
+  select * into v_selection from private.bpay_next_run_selection
+    where run_id=v_run_id and candidate_id=v_job.candidate_id
+      and selection_no>coalesce(v_current_cursor,0)
+    order by selection_no limit 1;
+  if not found then
+    update private.bpay_next_job set phase='RESERVE',cursor_key=null
+      where id=p_job_id;
+    return pg_catalog.jsonb_build_object('done',true,'phase','RESERVE',
+      'replay',false);
+  end if;
+  select * into strict v_work from private.bpay_next_work
+    where id=v_selection.work_id for share;
+  if v_work.candidate_id<>v_job.candidate_id then
+    raise exception using errcode='23514',
+      message='BPAY_NEXT_PIN_CANDIDATE_MISMATCH';
+  end if;
+  select * into strict v_choice from private.bpay_next_work_choice
+    where run_id=v_run_id and work_id=v_work.id;
+  if v_choice.selection_state<>'SEALED' then
+    raise exception using errcode='55000',
+      message='BPAY_NEXT_SELECTION_COMPONENT_CHOICES_NOT_SEALED';
+  end if;
+  if v_work.approval_state<>'APPROVED'
+     or v_work.current_revision_id is null
+     or v_choice.expected_revision_id is null
+     or v_choice.expected_revision_id is distinct from v_work.current_revision_id
+     or v_work.current_revision_id is distinct from v_work.applied_revision_id then
+    -- A newly published revision may be waiting behind this PREPARE command.
+    -- End only this worker's non-executable attempt so its later position job
+    -- can run. Do not silently omit the work or retain an executable offer.
+    update private.bpay_next_run_worker
+      set status='REVIEW',review_issue_code=case
+        when v_work.approval_state<>'APPROVED' or v_work.current_revision_id is null
+          or v_choice.expected_revision_id is null
+          then 'SELECTED_WORK_NOT_APPROVED'
+        when v_choice.expected_revision_id is distinct from v_work.current_revision_id
+          then 'SELECTED_WORK_REVISION_CHANGED'
+        else 'SELECTED_WORK_POSITION_PENDING' end,
+        review_issue_work_id=v_work.id
+      where id=v_worker_id;
+    update private.bpay_next_job
+      set status='DONE',phase='DONE',cursor_key=null,
+          lease_nonce=null,lease_until_utc=null
+      where id=p_job_id;
+    return pg_catalog.jsonb_build_object('done',true,'phase','REVIEW',
+      'issue_code',case
+        when v_work.approval_state<>'APPROVED' or v_work.current_revision_id is null
+          or v_choice.expected_revision_id is null
+          then 'SELECTED_WORK_NOT_APPROVED'
+        when v_choice.expected_revision_id is distinct from v_work.current_revision_id
+          then 'SELECTED_WORK_REVISION_CHANGED'
+        else 'SELECTED_WORK_POSITION_PENDING' end,
+      'work_id',v_work.id,'replay',false);
+  end if;
+  select * into strict v_revision from private.bpay_next_work_revision
+    where id=v_choice.expected_revision_id and work_id=v_work.id for share;
+  if v_revision.sealed_at_utc is null or v_revision.approved_at_utc is null then
+    raise exception using errcode='23514',
+      message='BPAY_NEXT_PIN_APPROVAL_NOT_SEALED';
+  end if;
+  if v_work.work_kind='SOURCE' and v_revision.source_kind in ('SOURCE','PROTECTED') then
+    -- Exact point qualification of the approved captured origin. No I3
+    -- financial-completion reader, inventory/history rebuild or live price.
+    -- Initial authorised TSFIN, committed HEAD and genuine headless direct
+    -- NEXT are distinct lanes; none may manufacture the other's authority.
+    -- Evaluate the actual classifier as its own statement even for self-bill:
+    -- OR/CASE short-circuiting must not hide its permission/integrity errors.
+    -- Current domain facts qualify a returned Scope, not immutable provenance
+    -- when Source explicitly reports that the current scope is unavailable.
+    v_source_classified:=private._candidate_expense_source_family_v1(v_revision.physical_timesheet_id);
+    select t.timesheet_id,t.version,t.booking_id,c.client_id,
+           family.id as family_id,family.bound_version,
+           (t.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+            and t.contract_id=v_work.contract_id and c.candidate_id=v_work.candidate_id
+            and t.week_ending_date=v_work.week_ending_date
+            and t.version=v_revision.physical_timesheet_version
+            and t.booking_id=v_work.booking_id and c.client_id is not null
+            and v_revision.week_ending_date=v_work.week_ending_date) as root_exact,
+           (t.line_type='HOURS'::public.timesheet_line_type_enum and not t.is_adjustment
+            and (c.self_bill is true or v_source_classified is true)
+            and cw.timesheet_id=t.timesheet_id and not cw.is_adjustment
+            and (family.id is null or (family.root_timesheet_id=t.timesheet_id
+              and family.root_family_booking_id=t.booking_id
+              and family.candidate_id=v_work.candidate_id
+              and family.contract_id=v_work.contract_id
+              and family.week_ending_date=v_work.week_ending_date
+              and family.bound_version>0))) as scope_exact,
+           case when v_revision.source_head_id is not null then
+             h.id=v_revision.source_event_id and h.root_timesheet_id=t.timesheet_id
+             and h.root_timesheet_version=t.version and h.root_family_booking_id=t.booking_id
+             and h.candidate_id=v_work.candidate_id and h.contract_id=v_work.contract_id
+             and h.week_ending_date=v_work.week_ending_date and h.state in ('COMMITTED_CURRENT','SUPERSEDED')
+             and h.committed_at_utc is not null and pg_catalog.isfinite(h.committed_at_utc)
+             and h.authority_kind=case when v_revision.source_kind='PROTECTED'
+               then 'PROTECTED' else 'LOCKED_FINAL_SOURCE' end
+           when v_revision.source_kind='SOURCE' then
+             auth.id=v_revision.source_event_id and auth.root_timesheet_id=t.timesheet_id
+             and auth.family_booking_id=t.booking_id and auth.timesheet_version=t.version
+             and auth.authorised_at_utc is not null and pg_catalog.isfinite(auth.authorised_at_utc)
+             and tf.id=v_revision.financial_snapshot_id and tf.timesheet_id=t.timesheet_id
+             and tf.timesheet_version=t.version and tf.candidate_id=v_work.candidate_id
+             and tf.client_id=c.client_id and tf.authorised_at_utc is not null
+             and pg_catalog.isfinite(tf.authorised_at_utc)
+           else
+             v_revision.source_head_id is null and v_revision.financial_snapshot_id is null
+             and receipt.approval_id=v_revision.source_event_id
+             and receipt.work_id=v_work.id and receipt.revision_id=v_revision.id
+             and receipt.command_id=publication.command_id and receipt.family_id=family.id
+             and receipt.agency_sequence=command.agency_sequence
+             and receipt.accepted_family_bound_version<=family.bound_version
+             and approval.creation_orchestration_run_id=receipt.orchestration_run_id
+             and approval.pay_target_family_id=family.id and approval.candidate_id=v_work.candidate_id
+             and approval.client_id=c.client_id and approval.contract_id=v_work.contract_id
+             and approval.week_ending=v_work.week_ending_date
+             and generation.family_id=family.id and generation.lifecycle_state in ('PUBLISHED','SUPERSEDED')
+             and generation.published_at_utc is not null
+             and generation.result_hash=receipt.publication_request_sha256
+             and orchestration.family_id=family.id and orchestration.state='COMPLETE'
+             and orchestration.requested_by_user_id=receipt.actor_user_id
+             and orchestration.request_fingerprint=receipt.prepared_request_sha256
+             and orchestration.after_state_fingerprint=receipt.publication_request_sha256
+             and orchestration.completed_at_utc is not null
+           end as origin_exact,
+           case when v_revision.source_head_id is not null then
+             h.state='COMMITTED_CURRENT' and live_auth.current_entitlement_head_id=h.id
+           when v_revision.source_kind='SOURCE' then
+             live_auth.id=auth.id and live_auth.current_entitlement_head_id is null
+             and not exists(select 1 from public.weekly_source_entitlement_heads current_head
+               where pg_catalog.btrim(current_head.root_family_booking_id)=pg_catalog.btrim(t.booking_id)
+                 and current_head.state='COMMITTED_CURRENT')
+           else approval.withdrawn_at_utc is null end as financial_current,
+           (publication.candidate_id=v_work.candidate_id
+             and publication.revision_no=v_revision.revision_no
+             and publication.status='APPLIED' and publication.phase='DONE'
+             and command.command_kind='POSITION_APPLY' and command.module_epoch=v_module_epoch
+             and command.id=private.bpay_next_source_command_id_v1(v_revision.source_event_id)
+             and command.status='COMPLETE' and command.sealed_at_utc is not null
+             and command.expected_member_count=command.enrolled_member_count
+             and member.member_no is not null) as publication_exact
+      into v_source_origin
+      from public.timesheets t
+      join public.contracts c on c.id=t.contract_id
+      -- uq_contract_week makes this one indexed ordinary configured-week
+      -- point; a same-contract/week row for another physical root is not scope.
+      left join public.contract_weeks cw
+        on cw.contract_id=t.contract_id and cw.week_ending_date=t.week_ending_date
+          and cw.additional_seq=0
+      left join public.weekly_exceptional_pay_target_families family
+        on pg_catalog.btrim(family.root_family_booking_id)=pg_catalog.btrim(t.booking_id)
+      left join public.weekly_source_entitlement_heads h on h.id=v_revision.source_head_id
+      left join public.weekly_source_root_authorisations auth
+        on auth.id=v_revision.source_event_id and v_revision.source_head_id is null
+          and v_revision.source_kind='SOURCE'
+      left join public.weekly_source_root_authorisations live_auth
+        on live_auth.root_timesheet_id=t.timesheet_id and live_auth.withdrawn_at_utc is null
+      left join public.timesheets_financials tf on tf.id=v_revision.financial_snapshot_id
+      left join private.bpay_next_protected_source_receipt receipt
+        on receipt.revision_id=v_revision.id and receipt.work_id=v_work.id
+      left join public.weekly_exceptional_payment_approvals approval on approval.id=receipt.approval_id
+      left join public.weekly_exceptional_pay_generations generation on generation.id=receipt.generation_id
+      left join public.weekly_exceptional_orchestration_runs orchestration on orchestration.id=receipt.orchestration_run_id
+      left join private.bpay_next_publication publication
+        on publication.work_id=v_work.id and publication.revision_id=v_revision.id
+      left join private.bpay_next_command command on command.id=publication.command_id
+      left join private.bpay_next_command_member member
+        on member.command_id=command.id and member.candidate_id=v_work.candidate_id
+      where t.timesheet_id=v_revision.physical_timesheet_id;
+    if not found or v_source_origin.root_exact is not true
+       or v_source_origin.origin_exact is not true or v_source_origin.publication_exact is not true then
+      raise exception using errcode='23514',message='BPAY_NEXT_PIN_SOURCE_ORIGIN_INVALID';
+    end if;
+    -- Consume the raw Source-owned gate captured for this exact ticked revision.
+    select snapshot.gate_result into v_query_gate
+      from private.bpay_next_run_work_query_snapshot snapshot
+      where snapshot.run_id=v_run_id and snapshot.work_id=v_work.id
+        and snapshot.expected_revision_id=v_revision.id
+        and snapshot.physical_timesheet_id=v_revision.physical_timesheet_id;
+    if not found then
+      raise exception using errcode='23514',message='BPAY_NEXT_PIN_QUERY_SNAPSHOT_MISSING';
+    end if;
+    if (pg_catalog.jsonb_typeof(v_query_gate)='object'
+        and v_query_gate ?& array['ok','code','scope','blocked','query_state_sha256']
+        and v_query_gate-array['ok','code','scope','blocked','query_state_sha256']='{}'::jsonb
+        and pg_catalog.jsonb_typeof(v_query_gate->'ok')='boolean'
+        and pg_catalog.jsonb_typeof(v_query_gate->'code')='string') is not true then
+      raise exception using errcode='23514',message='BPAY_NEXT_PIN_QUERY_RESPONSE_INVALID';
+    end if;
+    v_query_scope:=nullif(v_query_gate->'scope','null'::jsonb);
+    if v_query_scope is not null then
+      if (v_source_origin.scope_exact is true
+          and pg_catalog.jsonb_typeof(v_query_scope)='object'
+          and v_query_scope ?& array['root_timesheet_id','family_booking_id','target_family_id',
+            'candidate_id','client_id','contract_id','week_ending_date','root_version','family_bound_version']
+          and v_query_scope-array['root_timesheet_id','family_booking_id','target_family_id',
+            'candidate_id','client_id','contract_id','week_ending_date','root_version','family_bound_version']='{}'::jsonb
+          and pg_catalog.jsonb_typeof(v_query_scope->'root_timesheet_id')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'family_booking_id')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'candidate_id')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'client_id')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'contract_id')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'week_ending_date')='string'
+          and pg_catalog.jsonb_typeof(v_query_scope->'root_version')='string'
+          and v_query_scope->>'root_timesheet_id'=v_revision.physical_timesheet_id::text
+          and v_query_scope->>'root_version'=v_revision.physical_timesheet_version::text
+          and v_query_scope->>'family_booking_id'=v_work.booking_id
+          and v_query_scope->>'candidate_id'=v_work.candidate_id::text
+          and v_query_scope->>'client_id'=v_source_origin.client_id::text
+          and v_query_scope->>'contract_id'=v_work.contract_id::text
+          and v_query_scope->>'week_ending_date'=v_work.week_ending_date::text
+          and v_query_scope->'target_family_id'=coalesce(pg_catalog.to_jsonb(v_source_origin.family_id::text),'null'::jsonb)
+          and v_query_scope->'family_bound_version'=coalesce(pg_catalog.to_jsonb(v_source_origin.bound_version::text),'null'::jsonb)) is not true then
+        raise exception using errcode='23514',message='BPAY_NEXT_PIN_QUERY_SCOPE_MISMATCH';
+      end if;
+    end if;
+    v_query_digest:=null;
+    if v_query_gate->'ok'='true'::jsonb then
+      if (v_query_gate->>'code'='OK' and v_query_scope is not null
+          and pg_catalog.jsonb_typeof(v_query_gate->'blocked')='boolean'
+          and pg_catalog.jsonb_typeof(v_query_gate->'query_state_sha256')='string'
+          and v_query_gate->>'query_state_sha256' ~ '^[0-9a-f]{64}$') is not true then
+        raise exception using errcode='23514',message='BPAY_NEXT_PIN_QUERY_RESPONSE_INVALID';
+      end if;
+      -- The query Scope has no HEAD id. An available/current query root must
+      -- never make a superseded or otherwise unmapped financial origin pay.
+      -- Conversely an actual defined unavailable current scope retains its
+      -- genuine immutable origin and reaches positive-WORK REVIEW below.
+      if v_source_origin.financial_current is not true then
+        raise exception using errcode='23514',message='BPAY_NEXT_PIN_SOURCE_AUTHORITY_CHANGED';
+      end if;
+      v_query_digest:=pg_catalog.decode(v_query_gate->>'query_state_sha256','hex');
+      v_query_disposition:=case when v_query_gate->'blocked'='true'::jsonb then 'BLOCKED' else 'CLEAR' end;
+    elsif ((v_query_gate->>'code'='WEEKLY_SOURCE_PAY_QUERY_SCOPE_UNAVAILABLE' and v_query_scope is null)
+        or (v_query_gate->>'code'='WEEKLY_SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE' and v_query_scope is not null))
+        and v_query_gate->'blocked'='null'::jsonb and v_query_gate->'query_state_sha256'='null'::jsonb then
+      v_query_disposition:='UNAVAILABLE';
+    else
+      raise exception using errcode='23514',message='BPAY_NEXT_PIN_QUERY_RESPONSE_INVALID';
+    end if;
+  else
+    v_query_disposition:=null;
+  end if;
+  insert into private.bpay_next_run_work
+    (run_worker_id,candidate_id,work_id,captured_revision_id)
+    values(v_worker_id,v_job.candidate_id,v_work.id,v_revision.id)
+    returning id into v_run_work_id;
+  if v_query_disposition is not null then
+    insert into private.bpay_next_run_work_query_pin_v2
+      (run_work_id,run_worker_id,candidate_id,work_id,captured_revision_id,
+       prepare_job_id,module_epoch,gate_version,disposition,scope,query_state_sha256)
+      values(v_run_work_id,v_worker_id,v_job.candidate_id,v_work.id,v_revision.id,
+        p_job_id,v_module_epoch,'PAY_QUERY_STATE_V3',v_query_disposition,v_query_scope,v_query_digest);
+  end if;
+  if v_choice.selection_mode='SUBSET' then
+    update private.bpay_next_run_worker
+      set expected_selected_component_count=
+        expected_selected_component_count+v_choice.component_count
+      where id=v_worker_id;
+  end if;
+  update private.bpay_next_job
+    set phase='PINNING',cursor_key=v_selection.selection_no::text
+    where id=p_job_id;
+  return pg_catalog.jsonb_build_object('done',false,'phase','PINNING',
+    'next_cursor',v_selection.selection_no,'work_id',v_work.id,
+    'captured_revision_id',v_revision.id,'replay',false);
+end
+$function$;
+
 
 create or replace function private.bpay_next_prepare_case_page_v1(
   p_job_id uuid,p_lease_nonce uuid,p_owner_epoch bigint,
@@ -12,7 +556,6 @@ set search_path=pg_catalog,private,public
 as $function$
 declare
   v_epoch bigint;v_run_id uuid;v_candidate uuid;v_saved_cursor bigint;
-  v_accepted private.bpay_next_accepted_input%rowtype;v_case_due date;
   v_run private.bpay_next_pay_run%rowtype;
   v_control private.bpay_next_worker_control%rowtype;
   v_job private.bpay_next_job%rowtype;
@@ -79,12 +622,6 @@ begin
      or v_worker.financial_resolution_count<>0 then
     raise exception using errcode='55000',message='BPAY_NEXT_CASE_PREPARE_STATE_INVALID';
   end if;
-  select a.* into strict v_accepted from private.bpay_next_accepted_input a
-    where a.run_id=v_run_id and a.prepare_command_id=v_job.command_id
-      and a.candidate_id=v_candidate and a.module_epoch=v_job.module_epoch;
-  if v_accepted.pay_date<>v_run.pay_date or v_accepted.target_pay_channel<>v_worker.target_pay_channel then
-    raise exception using errcode='23514',message='BPAY_NEXT_CASE_ACCEPTED_SCOPE_MISMATCH';
-  end if;
   if v_worker.captured_position_count<>v_worker.captured_line_count+v_worker.captured_managed_position_count
      or v_worker.expected_managed_position_count<>v_worker.captured_managed_position_count
      or exists(select 1 from private.bpay_next_run_position where run_worker_id=v_worker.id
@@ -105,7 +642,8 @@ begin
     raise exception using errcode='55000',message='BPAY_NEXT_CASE_PREPARE_CURSOR_STALE';
   end if;
   -- Only a positively proved no-case context may retain the old owner path.
-  if v_state.id is null and v_accepted.case_scope='NO_CASE' then
+  if v_state.id is null and not exists(select 1 from private.bpay_next_finance_case c where c.candidate_id=v_candidate)
+     and not exists(select 1 from private.bpay_next_case_selection s where s.run_id=v_run_id and s.candidate_id=v_candidate) then
     return private.bpay_next_complete_no_case_worker_v1(p_job_id,p_lease_nonce,p_owner_epoch);
   end if;
 
@@ -115,49 +653,44 @@ begin
     -- revision. Refuse Source origins before any stage writes, including when
     -- the collection's current qualification reader would return no row.
     if v_state.id is not null and exists(
-      select 1 from private.bpay_next_accepted_case_input si
+      select 1 from private.bpay_next_case_selection_item si
       join private.bpay_next_work_collection c on c.case_id=si.case_id
         and c.case_component_id=si.case_component_id and c.candidate_id=si.candidate_id
       join private.bpay_next_work w on w.id=c.work_id and w.candidate_id=si.candidate_id
-      where si.accepted_input_id=v_accepted.id and si.run_id=v_run_id and si.candidate_id=v_candidate
+      where si.run_id=v_run_id and si.candidate_id=v_candidate
         and si.selection_revision=v_state.selection_revision and si.is_selected
         and w.work_kind='SOURCE') then
       raise exception using errcode='55000',message='BPAY_NEXT_COMPARISON_NOT_INSTALLED';
     end if;
     if v_state.id is null then
       select s.* into v_selection from private.bpay_next_case_selection s
-        where s.run_id=v_run_id and s.candidate_id=v_candidate
-          and s.selection_revision=v_accepted.case_selection_revision;
+        where s.run_id=v_run_id and s.candidate_id=v_candidate order by s.selection_revision desc limit 1;
       if v_selection.run_id is null or v_selection.status<>'SEALED' then
         v_issue:='CASE_SELECTION_REQUIRED';exit prepare_page;
       end if;
       -- Comparison is owned by the later CM chain. Existing immutable Source
       -- origin identity is enough to refuse it; no absent pack column/type or
       -- fabricated financial certificate is consulted or created here.
-      if exists(select 1 from private.bpay_next_accepted_case_input si
+      if exists(select 1 from private.bpay_next_case_selection_item si
         join private.bpay_next_work_collection c on c.case_id=si.case_id
           and c.case_component_id=si.case_component_id and c.candidate_id=si.candidate_id
         join private.bpay_next_work w on w.id=c.work_id and w.candidate_id=si.candidate_id
-        where si.accepted_input_id=v_accepted.id and si.run_id=v_run_id and si.candidate_id=v_candidate
+        where si.run_id=v_run_id and si.candidate_id=v_candidate
           and si.selection_revision=v_selection.selection_revision and si.is_selected
           and w.work_kind='SOURCE') then
         raise exception using errcode='55000',message='BPAY_NEXT_COMPARISON_NOT_INSTALLED';
-      end if;
-      if v_accepted.case_scope<>'SEALED_SELECTION'
-        or v_selection.item_count<>(select count(*) from private.bpay_next_accepted_case_input a where a.accepted_input_id=v_accepted.id)
-        or v_selection.selected_count<>(select count(*) from private.bpay_next_accepted_case_input a where a.accepted_input_id=v_accepted.id and a.is_selected) then
-        raise exception using errcode='23514',message='BPAY_NEXT_CASE_ACCEPTED_MANIFEST_MISMATCH';
       end if;
       if v_worker.target_pay_channel<>'PAYE' or v_worker.gross_vat<>0
          or v_worker.gross_ex_vat<>v_worker.gross_inc_vat then
         v_issue:='CASE_TARGET_UNSUPPORTED';exit prepare_page;
       end if;
-      v_floor:=case when v_accepted.floor_state='BOUND' then v_accepted.candidate_floor else null end;
+      select selected.min_take_home_wtd into strict v_floor from private.bpay_next_selection_candidate selected
+        where selected.run_id=v_run_id and selected.candidate_id=v_candidate;
       if v_floor is null or v_floor::text in ('NaN','Infinity','-Infinity') or v_floor<0
          or v_floor<>pg_catalog.trunc(v_floor,2) then
         v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
       end if;
-      v_week_start:=v_accepted.pay_week_start;
+      v_week_start:=v_run.pay_date-(extract(isodow from v_run.pay_date)::integer-1);
       -- OVERPAYMENT gross recovery does not consume the protected-debt H/floor
       -- operand (0290). Prove the exact nonempty SEALED selected set, not merely
       -- that no protected row happened to be found. Missing identities/counts
@@ -166,25 +699,28 @@ begin
         and coalesce(bool_and((fc.case_kind,cc.case_kind,cc.instruction_kind,cc.payroll_stage)
           is not distinct from ('OVERPAYMENT','OVERPAYMENT','RECOVERY','GROSS_DEDUCT')),false)
         into v_week_not_affected
-        from private.bpay_next_accepted_case_input si
+        from private.bpay_next_case_selection_item si
         left join private.bpay_next_case_component cc
           on cc.id=si.case_component_id and cc.case_id=si.case_id and cc.candidate_id=si.candidate_id
         left join private.bpay_next_finance_case fc on fc.id=si.case_id and fc.candidate_id=si.candidate_id
-        where si.accepted_input_id=v_accepted.id and si.run_id=v_selection.run_id and si.candidate_id=v_selection.candidate_id
+        where si.run_id=v_selection.run_id and si.candidate_id=v_selection.candidate_id
           and si.selection_revision=v_selection.selection_revision and si.is_selected;
-      -- Earlier weekly economics were completely certified before acceptance.
-      -- A later return/status/projection cannot refresh or invalidate this cut.
-      if not v_week_not_affected and exists(select 1 from private.bpay_next_accepted_week_input a
-        where a.accepted_input_id=v_accepted.id and (a.candidate_id<>v_candidate or a.pay_week_start<>v_week_start
-          or a.economic_basis_sequence>=v_accepted.accepted_sequence or a.eligibility_sequence>=v_accepted.accepted_sequence
-          or a.economic_basis_sha256 is distinct from pg_catalog.sha256(pg_catalog.convert_to(a.economic_origin_proof::text,'UTF8')))) then
-        raise exception using errcode='23514',message='BPAY_NEXT_CASE_ACCEPTED_WEEK_MISMATCH';
+      -- Exact indexed metadata absence is required BEFORE establishing a new
+      -- zero week. Missing prior NEW facts are unresolved, not zero/history SUM.
+      if not v_week_not_affected and exists(select 1 from private.bpay_next_run_worker w
+        join private.bpay_next_pay_run r on r.id=w.run_id
+        where w.candidate_id=v_candidate and w.status in ('READY','DRAFT','ISSUED','COMPLETE')
+          and r.pay_date>=v_week_start and r.pay_date<v_week_start+7
+          and (r.pay_date,r.created_at_utc,w.id)<(v_run.pay_date,v_run.created_at_utc,v_worker.id)
+          and not exists(select 1 from private.bpay_next_worker_week_contribution x where x.original_run_worker_id=w.id)) then
+        v_issue:='CASE_WEEK_BASIS_UNBOUND';exit prepare_page;
       end if;
       insert into private.bpay_next_worker_week(candidate_id,pay_week_start,period_revision,
         default_floor,default_floor_revision,resolved_arranged_take_home)
         values(v_candidate,v_week_start,1,v_floor,1,0) on conflict(candidate_id,pay_week_start) do nothing;
       select w.* into strict v_week from private.bpay_next_worker_week w
         where w.candidate_id=v_candidate and w.pay_week_start=v_week_start for update;
+      if not v_week_not_affected and v_week.unresolved_contribution_count<>0 then v_issue:='CASE_WEEK_BASIS_UNBOUND';exit prepare_page;end if;
       if v_week.default_floor<>v_floor then
         update private.bpay_next_worker_week set default_floor=v_floor,default_floor_revision=default_floor_revision+1,
           period_revision=period_revision+1 where candidate_id=v_candidate and pay_week_start=v_week_start returning * into v_week;
@@ -218,8 +754,8 @@ begin
     end if;
 
     if v_state.prepare_stage='WEEK_CAPTURE' then
-      for v_prior in select x.* from private.bpay_next_accepted_week_input x
-        where x.accepted_input_id=v_accepted.id and x.candidate_id=v_candidate and x.pay_week_start=v_state.pay_week_start
+      for v_prior in select x.* from private.bpay_next_worker_week_contribution x
+        where x.candidate_id=v_candidate and x.pay_week_start=v_state.pay_week_start
           and (x.original_pay_date,x.original_created_at_utc,x.original_run_worker_id)
             <(v_run.pay_date,v_run.created_at_utc,v_worker.id)
           and (v_state.prior_worker_cursor is null or
@@ -240,8 +776,8 @@ begin
         v_state.prior_created_at_cursor:=v_prior.original_created_at_utc;
         v_state.prior_worker_cursor:=v_prior.original_run_worker_id;
       end loop;
-      select exists(select 1 from private.bpay_next_accepted_week_input x
-        where x.accepted_input_id=v_accepted.id and x.candidate_id=v_candidate and x.pay_week_start=v_state.pay_week_start
+      select exists(select 1 from private.bpay_next_worker_week_contribution x
+        where x.candidate_id=v_candidate and x.pay_week_start=v_state.pay_week_start
           and (x.original_pay_date,x.original_created_at_utc,x.original_run_worker_id)<(v_run.pay_date,v_run.created_at_utc,v_worker.id)
           and (v_state.prior_worker_cursor is null or (x.original_pay_date,x.original_created_at_utc,x.original_run_worker_id)
             >(v_state.prior_pay_date_cursor,v_state.prior_created_at_cursor,v_state.prior_worker_cursor))) into v_has_more;
@@ -254,18 +790,17 @@ begin
     end if;
 
     if v_state.prepare_stage='INSTRUCTION_CAPTURE' then
-      for v_item in select i.* from private.bpay_next_accepted_case_input i
-        where i.accepted_input_id=v_accepted.id and i.run_id=v_run_id and i.candidate_id=v_candidate and i.selection_revision=v_state.selection_revision
+      for v_item in select i.* from private.bpay_next_case_selection_item i
+        where i.run_id=v_run_id and i.candidate_id=v_candidate and i.selection_revision=v_state.selection_revision
           and i.is_selected and i.selection_no>v_state.instruction_capture_cursor order by i.selection_no limit p_limit
       loop
         v_seen:=v_seen+1;
         select c.* into strict v_case from private.bpay_next_finance_case c where c.id=v_item.case_id and c.candidate_id=v_candidate for update;
         select c.* into strict v_component from private.bpay_next_case_component c
           where c.id=v_item.case_component_id and c.case_id=v_case.id and c.candidate_id=v_candidate for update;
-        select r.* into v_rule from private.bpay_next_case_rule r where r.id=v_item.rule_id
-          and r.case_id=v_case.id and r.candidate_id=v_candidate and r.rule_revision=v_item.rule_revision;
-        select r.* into v_origin from private.bpay_next_case_create_request r where r.command_id=v_item.case_create_command_id
-          and r.case_id=v_case.id and r.candidate_id=v_candidate;
+        select r.* into v_rule from private.bpay_next_case_rule r where r.id=v_case.current_rule_id
+          and r.case_id=v_case.id and r.candidate_id=v_candidate and r.rule_revision=v_case.current_rule_revision;
+        select r.* into v_origin from private.bpay_next_case_create_request r where r.case_id=v_case.id and r.candidate_id=v_candidate;
         -- Refuse the immutable selected identity before qualification: a stale
         -- Source collection must not disappear into an ordinary review path.
         if exists(select 1 from private.bpay_next_work_collection c
@@ -274,19 +809,14 @@ begin
             and c.candidate_id=v_candidate and w.work_kind='SOURCE') then
           raise exception using errcode='55000',message='BPAY_NEXT_COMPARISON_NOT_INSTALLED';
         end if;
-        select c.* into v_collection from private.bpay_next_work_collection c where c.id=v_item.work_collection_id
-          and c.case_id=v_case.id and c.case_component_id=v_component.id and c.candidate_id=v_candidate;
-        v_automatic:=v_item.economic_origin_kind='WORK_COLLECTION';
-        if v_automatic and (v_collection.id is null or v_collection.original_valuation_policy_id is distinct from v_item.valuation_policy_id) then
-          v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
-        end if;
-        v_case_due:=case when v_automatic then null else v_origin.due_date end;
+        v_collection:=private.bpay_next_work_collection_origin_v1(v_case.id,v_component.id,v_candidate);
+        v_automatic:=v_collection.id is not null;
         if v_state.weekly_binding_state='NOT_AFFECTED'
           and (v_case.case_kind,v_component.case_kind,v_component.instruction_kind,v_component.payroll_stage)
             is distinct from ('OVERPAYMENT','OVERPAYMENT','RECOVERY','GROSS_DEDUCT') then
           v_issue:='CASE_WEEK_BASIS_UNBOUND';exit prepare_page;
         end if;
-        if v_rule.id is null or v_case.case_revision<1 then
+        if v_rule.id is null or v_case.case_revision<1 or v_component.rule_id<>v_rule.id then
           v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
         end if;
         if v_automatic then
@@ -296,7 +826,7 @@ begin
           if v_origin.command_id is not null then v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;end if;
           v_policy_id:=v_collection.original_valuation_policy_id;
         elsif v_origin.command_id is null
-           or v_origin.case_kind<>v_case.case_kind
+           or v_component.rule_id<>v_rule.id or v_origin.case_kind<>v_case.case_kind
            or v_origin.source_pay_channel<>v_component.source_pay_channel
            or v_origin.principal_source_ex_vat<>v_component.approved_source_ex_vat
            or (v_component.id<>v_origin.primary_component_id
@@ -312,7 +842,7 @@ begin
         if v_component.source_pay_channel<>'PAYE' or v_worker.target_pay_channel<>'PAYE' then
           v_issue:='CASE_TARGET_UNSUPPORTED';exit prepare_page;
         end if;
-        v_explanation:='Exact approved case; same-channel PAYE accepted basis captured';
+        v_explanation:='Exact approved case; same-channel PAYE current basis captured';
         v_outstanding:=case when v_component.case_kind in ('LOAN','ADVANCE') then v_component.funded_source_ex_vat
           else v_component.approved_source_ex_vat end-v_component.recovered_source_ex_vat-v_component.written_off_source_ex_vat;
         v_case_outstanding:=case when v_case.case_kind in ('LOAN','ADVANCE') then v_case.principal_funded
@@ -326,15 +856,13 @@ begin
             v_explanation:='Exact original ordinary PAYE collection; remaining outstanding, no instalment';
           else
           if v_rule.weekly_due_source_ex_vat is null then v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;end if;
-          if v_case.case_kind in ('LOAN','ADVANCE') and v_item.funded_eligible
-             and (v_rule.original_funding_event_id is null or v_rule.original_funded_at_utc is null
-               or (v_rule.original_funding_event_id,v_rule.original_funded_at_utc)
-                 is distinct from (v_item.original_funding_event_id,v_item.original_funded_at_utc)) then
+          if v_case.case_kind in ('LOAN','ADVANCE') and v_case.principal_funded>0
+             and (v_rule.original_funding_event_id is null or v_rule.original_funded_at_utc is null) then
             v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
           end if;
           v_nominal:=case when v_state.pay_week_start>=v_rule.next_due_monday
             then least(v_rule.weekly_due_source_ex_vat,v_outstanding,v_case_outstanding) else 0 end;
-          if v_case.case_kind in ('LOAN','ADVANCE') and not v_item.funded_eligible then
+          if v_case.case_kind in ('LOAN','ADVANCE') and v_case.principal_funded=0 then
             v_nominal:=0;v_explanation:='Approved loan/advance is unfunded; repayment not eligible';
           elsif v_state.pay_week_start<v_rule.next_due_monday then
             v_explanation:='Repayment schedule is not yet due in the pay-date week';
@@ -352,8 +880,8 @@ begin
         -- eligibility. An early/paused selection must not make the whole
         -- week's legitimate opening due permanently zero for later pay dates.
         v_opening_due:=case when v_component.instruction_kind='RECOVERY' then v_nominal else 0 end;
-        if v_item.case_status<>'OPEN' or (v_case_due is not null and v_case_due>v_accepted.pay_date) then
-          v_nominal:=0;v_explanation:='Accepted selected case is not open/due; no reservation';
+        if v_case.status<>'OPEN' or (v_case.due_date is not null and v_case.due_date>v_run.pay_date) then
+          v_nominal:=0;v_explanation:='Selected case is not currently open/due; no reservation';
         end if;
         if v_outstanding<0 or v_case_outstanding<0 or v_nominal<0 then
           v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
@@ -417,7 +945,7 @@ begin
             greatest(v_case_outstanding-v_case.active_payout_hold_amount,0)) end;
         begin
           select x.* into strict v_value from private.bpay_next_value_source_for_target_v1(
-            v_component.approved_source_ex_vat,'PAYE','PAYE',null,v_policy_id,v_accepted.pay_date) x;
+            v_component.approved_source_ex_vat,'PAYE','PAYE',null,v_policy_id,v_run.pay_date) x;
         exception when check_violation then
           if sqlerrm in ('BPAY_NEXT_TARGET_POLICY_WINDOW_MISSING','BPAY_NEXT_TARGET_POLICY_WINDOW_AMBIGUOUS') then
             v_issue:='CASE_INPUT_UNBOUND';exit prepare_page;
@@ -467,7 +995,7 @@ begin
         if v_component.payroll_stage='NET_ADD' then v_state.payout_instruction_count:=v_state.payout_instruction_count+1;end if;
         update private.bpay_next_run_worker set case_instruction_count=case_instruction_count+1 where id=v_worker.id;
       end loop;
-      select exists(select 1 from private.bpay_next_accepted_case_input i where i.accepted_input_id=v_accepted.id and i.run_id=v_run_id
+      select exists(select 1 from private.bpay_next_case_selection_item i where i.run_id=v_run_id
         and i.candidate_id=v_candidate and i.selection_revision=v_state.selection_revision and i.is_selected
         and i.selection_no>v_state.instruction_capture_cursor) into v_has_more;
       if not v_has_more and v_state.captured_instruction_count<>v_state.expected_instruction_count then
@@ -489,7 +1017,7 @@ begin
           and si.case_id is not null),false)
         into v_week_not_affected
         from private.bpay_next_run_case_instruction i
-        left join private.bpay_next_accepted_case_input si
+        left join private.bpay_next_case_selection_item si
           on si.run_id=i.run_id and si.candidate_id=i.candidate_id and si.selection_revision=i.selection_revision
             and si.case_id=i.case_id and si.case_component_id=i.case_component_id and si.is_selected
         where i.run_worker_id=v_worker.id and i.run_id=v_run_id and i.candidate_id=v_candidate
@@ -659,7 +1187,22 @@ begin
 end
 $function$;
 
+
+alter function private.bpay_next_seal_selection_v1(uuid,bigint,bigint) owner to postgres;
+revoke all on function private.bpay_next_seal_selection_v1(uuid,bigint,bigint) from public,anon,authenticated,service_role;
+alter function private.bpay_next_claim_prepare_job_v1(uuid,integer) owner to postgres;
+revoke all on function private.bpay_next_claim_prepare_job_v1(uuid,integer) from public,anon,authenticated,service_role;
+alter function private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint) owner to postgres;
+revoke all on function private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint) from public,anon,authenticated,service_role;
 alter function private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer) owner to postgres;
-revoke all on function private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)
-  from public,anon,authenticated,service_role;
+revoke all on function private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer) from public,anon,authenticated,service_role;
+-- The existing effect guard is a repeatable authority; attach only after it
+-- exists on clean NEW. These hooks belong solely to the private snapshot.
+drop trigger if exists bpay_next_run_work_query_snapshot_immutable on private.bpay_next_run_work_query_snapshot;
+create trigger bpay_next_run_work_query_snapshot_immutable before update or delete
+ on private.bpay_next_run_work_query_snapshot for each row execute function private.bpay_next_effect_immutable_v1();
+drop trigger if exists bpay_next_run_work_query_snapshot_no_truncate on private.bpay_next_run_work_query_snapshot;
+create trigger bpay_next_run_work_query_snapshot_no_truncate before truncate
+ on private.bpay_next_run_work_query_snapshot for each statement execute function private.bpay_next_effect_immutable_v1();
+notify pgrst,'reload schema';
 commit;
