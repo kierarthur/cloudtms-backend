@@ -15436,6 +15436,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_action_required_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "5398fb70021869f5fca4cf05bbc98df3e3d152994b000d2778cbf40fe7a49922"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_apply_delta_v1(p_before private.bpay_next_workbench_delta[], p_after private.bpay_next_workbench_delta[])",
       "parallel": "u",
       "volatility": "v",
@@ -15455,11 +15474,68 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_blocked_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "44e019c8ec50f95903a51e6418b704b16fa50ea7694de4a161d81916ed46ef16"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_candidate_groups_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "2e657cb2ad68e6ed739790c68c3fd03a8409a2c456213cc19016584c7c2d2f27"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_candidate_name_trigger_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b4de09d2619071791d63c8a800dd4cfb24e643218a210f2d0e45ace1cf9dc9e4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_candidates_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "91ab78bade5a402db15a1eb586a58e92262d41fc1e9c12207e666a152fe90667"
     },
     {
       "acl": [
@@ -15512,6 +15588,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_export_rows_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "065ab9d3e771f7bacc40d98d6da3274dd108ece02056a91833e94186b7120a34"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_finish_task_v1(p_task_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15550,6 +15645,82 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_group_lines_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e03b0df7e4fcabe08d4cf96a8c89bab8802675b27e8d96725e5de9eedf438cdc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_header_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f59574bc95918be792c2087559f78e615cfb36d50113d112386a580723699cc3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_issue_detail_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "b20d1673e0f12be5e65c536650dd24a0912ebb45c2afb03ff44ee4bd1dce4dbf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_kind_page_v1(p_kind text, p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "ddaba983865364519cafdd469716ab4c966ae3816d94bb6420d6bd746f015719"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_mark_processing_v1(p_work_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15574,6 +15745,44 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "9c8a4a44d3f32f8b554fa444c57f39d9ee305eba7649981fbd17e3cec6b2401c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_pick_candidates_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "7f45108cc24950b56dff3deac823a1204b2c280da6ad7af8b81b8509d6524e14"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_pick_clients_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a87213c3fc522819e0438822567a6f612aa196ae355633cfe01269e06e304b56"
     },
     {
       "acl": [
@@ -31014,6 +31223,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "2106db9d2584adf60153455cf5589bd5e76db02b8b0fc978500608fe32f806a8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_workbench_page_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "27c76a0b8b9826869b422b42617dc3c1842b323229cf45ee0085328878e86179"
     },
     {
       "acl": [

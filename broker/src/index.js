@@ -45,6 +45,7 @@ import { createBpayNextFrozenAdvicePageRpc } from './bpay-next-frozen-advice-rpc
 import { handleBpayNextCommand } from './bpay-next-command.js';
 import { createBpayNextFinancialCommandRpc } from './bpay-next-command-rpc.js';
 import { handleBpayNextPreparationCommand, handleBpayNextPreparationPage } from './bpay-next-preparation.js';
+import { handleBpayNextWorkbenchPage, createBpayNextWorkbenchRpc } from './bpay-next-workbench.js';
 import { createBpayNextPreparationRpc, createBpayNextPreparationPageRpc } from './bpay-next-preparation-rpc.js';
 import { createBpayNextOwnerStatusRpc, createBpayNextLegacyFence, isBpayNextLegacyFinancialRoute } from './bpay-next-legacy-fence.js';
 import { isBpayNextLegacyFinancialEmail } from './bpay-next-legacy-email.js';
@@ -198776,7 +198777,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
   const nextOfficeRoute = (req.method === 'POST' && [
     '/api/banking/pay/next/history-page', '/api/banking/pay/next/frozen-detail',
     '/api/banking/pay/next/preparation', '/api/banking/pay/next/command'
-  ].includes(nextPath)) || (req.method === 'GET' && (nextPath === '/api/banking/pay/next/preparation-page' || nextPath === '/api/banking/pay/next/owner-status' || nextAdviceMatch));
+  ].includes(nextPath)) || (req.method === 'GET' && (nextPath === '/api/banking/pay/next/preparation-page' || nextPath === '/api/banking/pay/next/workbench-page' || nextPath === '/api/banking/pay/next/owner-status' || nextAdviceMatch));
   if (nextOfficeRoute) {
     const user = await requireUser(env, req);
     if (!user) return withCORS(env, req, unauthorized());
@@ -198823,6 +198824,13 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
       preparationPageRpc: createBpayNextPreparationPageRpc({
         baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
       })
+    }));
+  }
+
+  if (req.method === 'GET' && nextPath === '/api/banking/pay/next/workbench-page') {
+    return withCORS(env, req, await handleBpayNextWorkbenchPage(req, {
+      requireOfficeUser: async () => user,
+      workbenchRpc: createBpayNextWorkbenchRpc({baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)})
     }));
   }
 

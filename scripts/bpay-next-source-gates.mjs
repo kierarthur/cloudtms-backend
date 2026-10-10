@@ -89,8 +89,30 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_step_task_v1(uuid,uuid,bigint,bigint,bigint,text,text,integer)",
   "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)",
   'private.bpay_next_workbench_snooze_due_trigger_v1()',
+  "public.bpay_next_workbench_page_v1(jsonb)",
+  "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_blocked_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_issue_detail_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_candidate_groups_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_group_lines_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_pick_candidates_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "public.bpay_next_workbench_page_v1(jsonb)": ["public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
+  "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_blocked_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_issue_detail_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_candidate_groups_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_group_lines_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_pick_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
+  "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
   "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
   "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
@@ -347,6 +369,18 @@ export function assertNextExactNumericTypes(source,file){
 }
 
 export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_blocked_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_issue_detail_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_candidate_groups_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_group_lines_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_pick_candidates_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)",
+  "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
+  "public.bpay_next_workbench_page_v1(jsonb)",
   "private.bpay_next_advice_work_v1(uuid)",
   "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
   "private.bpay_next_current_case_page_v1(uuid,uuid,integer)",
@@ -892,15 +926,67 @@ function closedHistoryTemplates(part,file){
   return /select\s+string_agg\(format\('t\.%I desc',value->>0\),',' order by ord\)\s+into v_text\s+from jsonb_array_elements\(v_def->'keys'\) with ordinality as k\(value,ord\);/i.test(part.text)
     &&/for v_key in select value from jsonb_array_elements\(v_def->'keys'\) loop/i.test(part.text);
 }
+// WB09 fixed kind/sort fragments only. Caller scalars may select a literal
+// branch but never enter generated SQL; they are exclusively USING operands.
+function closedWorkbenchTemplates(part,file){
+  if(part.signature!=='private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)')return false;
+  const variables=new Set(['V_SQL','V_WHERE','V_PROJECTION','V_TUPLE','V_SEEK','V_KEY','V_ORDER','V_OP','V_DESC']);
+  const allowed=new Set([...variables,'CASE','WHEN','THEN','ELSE','END','IN','AND','LIKE','P_KIND','V_SORT','V_SECTION','V_DESC','V_OP','REPLACE']);
+  let producers=0;
+  const declaration=part.text.match(/\bdeclare\b([\s\S]*?)\bbegin\b/i);
+  if(!declaration)return false;
+  const declared=new Set();
+  for(const row of scanManagedSql(declaration[1]).statements){
+    const tokens=operatorTokens(row.tokens);
+    if(!variables.has(tokens[0]))continue;
+    if(tokens.length!==2||tokens[1]!==(tokens[0]==='V_DESC'?'BOOLEAN':'TEXT')||declared.has(tokens[0]))return false;
+    declared.add(tokens[0]);
+  }
+  if(declared.size!==variables.size)return false;
+  for(const row of scanManagedSql(part.text).statements){
+    const tokens=operatorTokens(row.tokens);
+    if(tokens.some((token,n)=>token==='INTO'&&variables.has(tokens[n+1+(tokens[n+1]==='STRICT'?1:0)])))return false;
+    for(let n=0;n<tokens.length-2;n++){
+      if(!variables.has(tokens[n])||!((tokens[n+1]===':'&&tokens[n+2]==='=')||tokens[n+1]==='='))continue;
+      producers++;
+      const start=n+(tokens[n+1]===':'?3:2);
+      if(tokens.slice(start).some(token=>/^[A-Z_][A-Z0-9_]*$/.test(token)&&!allowed.has(token)))return false;
+    }
+  }
+  // Both quoted suffixes and every dollar-tag projection are executable SQL
+  // fragments here; no tag or masked string may hide a forbidden construct.
+  for(const match of part.text.matchAll(/(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)([\s\S]*?)\1|'((?:''|[^'])*)'/g)){
+    const fragment=match[2]??match[3].replaceAll("''","'");
+    // One actual maintained TEXT column, bound to its literal relation alias.
+    // Other aggregate arguments still require their own explicit type evidence.
+    const columns=new Map();
+    if(/from private\.bpay_next_workbench_item i where i\.group_key=g\.group_key/i.test(fragment)
+      &&/\bclient_display_name text check\(octet_length\(client_display_name\)<=8192\)/i.test(fs.readFileSync(path.join(repoRoot,'supabase/migrations/10102026_1252_banking_pay_next_workbench_summary.sql'),'utf8')))
+      columns.set('I . CLIENT_DISPLAY_NAME','TEXT');
+    assertSpecialConstructs(fragment,file,new Map(),columns);
+  }
+  return producers>0&&/for v_row in execute v_sql using v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\+1 loop/i.test(part.text)
+    &&/execute 'select exists\(select 1'\|\|v_sql\|\|v_where/i.test(part.text)
+    &&!/[|]{2}\s*(?:p_scope|p_after|p_limit|v_search|v_client|v_candidate|v_group|v_item|v_reason)\b/i.test(part.text);
+}
+function closedWorkbenchExecution(statement){
+  const flat=sqlWithoutComments(statement).replace(/\s+/g,' ').trim();
+  const at=flat.search(/\bexecute\b/i);if(at<0)return false;
+  const execution=flat.slice(at);
+  const values='v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\\+1';
+  if(new RegExp('^execute v_sql using '+values+' loop\\b','i').test(execution))return /for v_row in\s*$/i.test(flat.slice(0,at));
+  return new RegExp("^execute 'select exists\\(select 1'\\|\\|v_sql\\|\\|v_where(?:\\|\\|' and '\\|\\|v_tuple\\|\\|'='\\|\\|v_seek)?\\|\\|'\\)' into v_(?:affected|member) using "+values+'\\s*;?$','i').test(execution);
+}
 // Return exact same-signature/declared-type/statement occurrences. Baseline
 // allowances are consumed, never borrowed from another routine or whole file.
-export function specialConstructViolations(source,file){
+export function specialConstructViolations(source,file,columnTypes=new Map()){
   const result=[];
   for(const part of executableParts(source,file)){
     if(part.unclassified){result.push({hazard:'BODY_UNCLASSIFIED',key:JSON.stringify([part.signature,'BODY_UNCLASSIFIED',part.unclassified])});continue;}
     const rows=scanManagedSql(part.text).statements;
     const fixedQueries=fixedQueryLiterals(part.text,file);
     const historyTemplates=closedHistoryTemplates(part,file);
+    const workbenchTemplates=closedWorkbenchTemplates(part,file);
     const all=rows.flatMap(row=>operatorTokens(row.tokens)),declarations=new Map(),types=new Map();
     const joined=all.join(' ');
     for(const match of joined.matchAll(/\b([A-Z_][A-Z0-9_]*)\s+((?:[A-Z_][A-Z0-9_]*\s*\.\s*)?[A-Z_][A-Z0-9_]*)\s*%\s*ROWTYPE\b/g))declarations.set(match[1],match[2]);
@@ -929,7 +1015,9 @@ export function specialConstructViolations(source,file){
       // A closed catalog predecessor comparison consumes a dollar literal as
       // metadata only; it is not an EXECUTE producer or a SQL body.
       const catalogAssertion=!dynamic&&t.filter(token=>token==='<BODY>').length===1&&/^\s*(?:begin\s+)?if\s+\(select\s+pg_catalog\.pg_get_constraintdef\(c\.oid\)\s+from\s+pg_catalog\.pg_constraint\s+c\s+where\s+c\.conrelid='private\.[a-z_][a-z0-9_]*'::pg_catalog\.regclass\s+and\s+c\.conname='[a-z_][a-z0-9_]*'\)\s+is\s+distinct\s+from\s+\$([a-z_][a-z0-9_]*)\$[\s\S]*?\$\1\$\s+then\s+raise\s+exception\s+using\s+errcode='23514',\s*message='BPAY_NEXT_[A-Z0-9_]+';\s*$/i.test(statement);
-      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
+      const workbenchExecution=workbenchTemplates&&t.filter(token=>token==='EXECUTE').length===1&&closedWorkbenchExecution(statement);
+      const workbenchProjection=workbenchTemplates&&['V_PROJECTION','V_WHERE'].some(token=>t.includes(token))&&t.includes('<BODY>');
+      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution&&!workbenchExecution)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion&&!workbenchProjection))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
       if(/\bPG_CATALOG \. (?:COALESCE|NULLIF|LEAST|GREATEST) \(/.test(text))hazards.add('SPECIAL_QUALIFIER');
       const intoAt=t.indexOf('INTO'),selectAt=intoAt>=0?t.lastIndexOf('SELECT',intoAt):t.indexOf('SELECT');
       if(selectAt>=0&&intoAt>selectAt){
@@ -963,7 +1051,7 @@ export function specialConstructViolations(source,file){
           const cast=argument.indexOf('::'),type=cast>=0?argument.slice(cast+1).join(' ')
             :argument.length===1?(types.get(argument[0])??(/^\d+$/.test(argument[0])?'NUMERIC':null)):null;
           if(type==='UUID')hazards.add('UUID_AGGREGATE');
-          else if(!['TEXT','NUMERIC','BIGINT','INTEGER','SMALLINT','DATE','TIMESTAMPTZ'].includes(type))hazards.add('AGGREGATE_TYPE_UNCLASSIFIED');
+          else if(!['TEXT','NUMERIC','BIGINT','INTEGER','SMALLINT','DATE','TIMESTAMPTZ'].includes(type??columnTypes.get(argument.join(' '))))hazards.add('AGGREGATE_TYPE_UNCLASSIFIED');
           else if(t[end+1]==='::'&&t[end+2]==='UUID')hazards.add('UUID_CARDINALITY_UNCLASSIFIED');
         }
       }
@@ -973,9 +1061,9 @@ export function specialConstructViolations(source,file){
   }
   return result;
 }
-export function assertSpecialConstructs(source,file,baseline=new Map()){
+export function assertSpecialConstructs(source,file,baseline=new Map(),columnTypes=new Map()){
   const remaining=new Map(baseline),failures=[];
-  for(const row of specialConstructViolations(source,file)){
+  for(const row of specialConstructViolations(source,file,columnTypes)){
     const count=remaining.get(row.key)??0;
     if(!count){failures.push(`BPAY_NEXT_SQL_${row.hazard}: ${file} (${JSON.parse(row.key)[0]})`);continue;}
     remaining.set(row.key,count-1);
