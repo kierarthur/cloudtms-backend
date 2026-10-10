@@ -1,0 +1,8 @@
+# PS-11 future joined acceptance
+
+NOT_RUN. No fixture/rehearsal/business/app/Worker/queue/minute execution. After owner-authorised release use one actual joined journey covering:
+
+1. CandidateNET65 across twoTimesheets: originaltransfer referencesoneexactacceptedprojection65, includingretiredprojection afterlaterNETentry; neverlatest/currentreplacement. Completefrozenearning/deduction/recovery/rates children remainaccessible. TwoTimesheet/Clientlinecontexts sayNETunallocated, nevereach65 orproportionalshare, andnotmissingCandidateNET.
+2. Recorded0.00 displaysrealzero; currentPAYE NULL saysNETnotentered. UmbrellaandactualCASE_PAYOUTprojection/requestNULL sayPAYENETnotapplicable. Missingretainedprojectioncache saysopenexactreference, neverNETnotentered. ReissuehasnonewNETentry andretainsoriginal/returncashreferences.
+3. Earning100 recovery30 displaysrealworkings and70earningsbasis beforepayroll deductions; absententeredNETneverturns70intopayablecash. Acceptednet/cashareactualrecorded distinctfields.
+4. Existinghistoryfilters/detail/wholetransferCSV/print retainrawNULLandzero; noTimesheet/Clientallocation/export/newSummarylayoutintroduced. Actualhistoryhasnocsvcalculator; laterAUTH-PS/S1ownersmustpreservethesemantics. Permission/actor/scope/pagingandDraftguardscorrect.

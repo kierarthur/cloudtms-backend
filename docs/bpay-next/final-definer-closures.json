@@ -11778,18 +11778,19 @@
     },
     {
       "signature": "public.bpay_next_payment_history_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_0614_banking_pay_next_ps_c08_history_authority_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0623_banking_pay_next_ps_c12_recorded_net_history_v1.sql",
       "finalPhysical": "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql"
-      ],
-      "finalClosures": [
+        "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql",
         "supabase/repeatable/10102026_0614_banking_pay_next_ps_c08_history_authority_v1.sql"
       ],
-      "owner": "PS-07 first reviewed history successor; EX-41 then CM-18",
+      "finalClosures": [
+        "supabase/repeatable/10102026_0623_banking_pay_next_ps_c12_recorded_net_history_v1.sql"
+      ],
+      "owner": "PS-07 then PS-11 narrow semantic closure; EX-41 then CM-18",
       "baselineSourceHash": "3a9d0080108bfb71a386b99813d158c73b82e51141771155a385e778b11f456d"
     },
     {

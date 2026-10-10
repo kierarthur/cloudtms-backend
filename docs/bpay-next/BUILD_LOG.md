@@ -363,3 +363,7 @@ PS-07 seq31 COMPLETE BD035: correct history/callers retained, first0614controlli
 PS-08 seq32 scope checkpoint: exactD01-D04 in PS-08-SCOPE; BD036 sole0718DDL retained, finite existinggate frozen UPDATE/DELETE census only.
 
 PS-08 seq32 COMPLETE BD036: sole0718DDL retained, exactlocal4triggerreadback, all-sourcefrozenmutationcensus. H01unqualified/H02diagnosticEXECUTEfixed independentPASS. source10/syntax/db314+816/PG17/seal303276/couplingPASS. WholeBUILT30/288REVIEWED30/288. Joined/appNOT_RUN; nextPS11seq33.
+
+PS-11 seq33 scopecheckpoint BD037 exactD01-D05 listed; actual0380CASE_PAYOUT NULL distinguished; preservedSQLgraph plusfiniteWorker/Office semantics, noNETallocation/cashownerchanges.
+
+PS-11 seq33 COMPLETE BD037: scopedcapturedhistoryclosure, recordedNETonce/exactprojection/NULL0unallocatedsemantics;0380scaleH01fixed. Independentserver/callerPASS; BE10FE13source10syntax/db314+817/PG17/seal303276/couplingPASS. WholeBUILT31/288REVIEWED31/288; actualjoinedNOT_RUN. NextPS14seq34.

@@ -150,6 +150,31 @@ export function validateBpayNextHistoryRequest(value) {
   }
   return value;
 }
+export function classifyBpayNextNet(section,data) {
+  if(!record(data))invalidResponse();
+  if(['RUN_LINES','RUN_WORKS','LINES','SHIFTS'].includes(section)) {
+    if(['entered_paye_net','cash_amount','allocated_net','timesheet_net','client_net'].some(key=>Object.hasOwn(data,key)))invalidResponse();
+    return Object.freeze({state:'UNALLOCATED',value:null});
+  }
+  const current=['WORKER','COMMAND_WORKER'].includes(section);
+  if(!current && !['PROJECTIONS','NET_REQUEST'].includes(section))return null;
+  const kind=current?data.target_pay_channel:data.input_kind,value=data.entered_paye_net;
+  if(section==='NET_REQUEST'&&!['PAYE_MANUAL','CASE_PAYOUT'].includes(kind))invalidResponse();
+  const applicable=current?kind==='PAYE':['PAYE_MANUAL','PAYE_IMPORT'].includes(kind);
+  const notApplicable=current?kind==='UMBRELLA':['UMBRELLA','CASE_PAYOUT'].includes(kind);
+  if(!applicable&&!notApplicable)invalidResponse();
+  if(notApplicable) {
+    if(value!==null)invalidResponse();
+    return Object.freeze({state:'NOT_APPLICABLE',value:null});
+  }
+  if(value===null) {
+    if(!current)invalidResponse();
+    return Object.freeze({state:'NOT_ENTERED',value:null});
+  }
+  if(typeof value!=='string'||!/^(?:0|[1-9][0-9]{0,15})(?:\.[0-9]{1,2})?$/.test(value))invalidResponse();
+  return Object.freeze({state:current?'CURRENT_ENTERED':'RECORDED',value});
+}
+
 export function validateBpayNextHistoryResponse(value, request) {
   if (!record(value) || value.version !== VERSION || value.consistency !== CONSISTENCY
     || !uuid(value.candidate_id) || (request.timesheet_id ? !uuid(value.work_id)
@@ -186,6 +211,7 @@ export function validateBpayNextHistoryResponse(value, request) {
         || !definition.keys.every(([field], index) => row.data[field] === row.key[index])
         || seen.has(JSON.stringify(row.key)) || (request.after && same(row.key,request.after.key))) invalidResponse();
       if(request.section==='MEMBERS') {if(row.data.transfer_id!==request.parent_id)invalidResponse();projectBpayNextMemberOrigin(row.data);}
+      classifyBpayNextNet(request.section,row.data);
       seen.add(JSON.stringify(row.key));
     }
     if (value.terminal ? value.next_cursor !== null : value.rows.length === 0

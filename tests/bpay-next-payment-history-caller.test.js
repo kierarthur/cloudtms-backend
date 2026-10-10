@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   BPAY_NEXT_HISTORY_SECTIONS as SECTIONS, handleBpayNextHistoryRead,
-  createBpayNextHistoryRpc, validateBpayNextHistoryRequest, validateBpayNextHistoryResponse, projectBpayNextMemberOrigin
+  createBpayNextHistoryRpc, validateBpayNextHistoryRequest, validateBpayNextHistoryResponse, projectBpayNextMemberOrigin, classifyBpayNextNet
 } from '../broker/src/bpay-next-history.js';
 const actor = 'b8100000-0000-4000-8000-000000000001';
 const candidate = 'b8100000-0000-4000-8000-000000000002';
@@ -146,4 +146,32 @@ test('PS03 typed member projection keeps genuine zero Case and refuses wrong sha
   const own=call({section:'MEMBERS',parent_id:work});
   assert.equal(validateBpayNextHistoryResponse(page(own,[{key:['1'],data}]),own).rows[0].data.signed_cash_contribution,'12.34');
   assert.throws(()=>validateBpayNextHistoryResponse(page(own,[{key:['1'],data:{...data,transfer_id:actor}}]),own));
+});
+
+
+test('PS11 immutable NET decoder preserves zero/missing/not-applicable and refuses line allocations',()=>{
+  for(const value of ['65.00','0.00','65','65.0','0'])assert.deepEqual(classifyBpayNextNet('PROJECTIONS',{input_kind:'PAYE_MANUAL',entered_paye_net:value}),{state:'RECORDED',value});
+  for(const value of ['65','65.0','0'])assert.equal(classifyBpayNextNet('NET_REQUEST',{input_kind:'PAYE_MANUAL',entered_paye_net:value}).value,value);
+  assert.equal(classifyBpayNextNet('WORKER',{target_pay_channel:'PAYE',entered_paye_net:null}).state,'NOT_ENTERED');
+  for(const [section,kind] of [['PROJECTIONS','UMBRELLA'],['PROJECTIONS','CASE_PAYOUT'],['NET_REQUEST','CASE_PAYOUT']])
+    assert.equal(classifyBpayNextNet(section,{input_kind:kind,entered_paye_net:null}).state,'NOT_APPLICABLE');
+  for(const data of [{input_kind:'PAYE_MANUAL',entered_paye_net:null},{input_kind:'PAYE_MANUAL',entered_paye_net:0},
+    {input_kind:'PAYE_MANUAL',entered_paye_net:'-0.01'},{input_kind:'UMBRELLA',entered_paye_net:'0.00'}])
+    assert.throws(()=>classifyBpayNextNet('PROJECTIONS',data));
+  assert.throws(()=>classifyBpayNextNet('NET_REQUEST',{input_kind:'UMBRELLA',entered_paye_net:null}));
+  for(const section of ['RUN_LINES','RUN_WORKS','LINES','SHIFTS']) {
+    assert.equal(classifyBpayNextNet(section,{source_pay_ex_vat:'100.00',recovered_source_ex_vat:'30.00'}).state,'UNALLOCATED');
+    for(const field of ['entered_paye_net','cash_amount','allocated_net','timesheet_net','client_net'])assert.throws(()=>classifyBpayNextNet(section,{[field]:null}));
+  }
+});
+
+test('PS11 current scoped SQL and pure decoder forbid proportional NET/cash allocation',()=>{
+  const noSplit=source=>assert.doesNotMatch(source,/\b(?:entered_paye_net|cash_amount)\s*[*/]|\b(?:allocated_net|timesheet_net|client_net)\s*(?:::|=|as\b)/i);
+  const registry=JSON.parse(fs.readFileSync(new URL('../docs/bpay-next/final-definer-closures.json',import.meta.url),'utf8'));
+  const owner=registry.chains.find(row=>row.signature==='public.bpay_next_payment_history_page_v1(jsonb)');
+  noSplit(fs.readFileSync(new URL('../'+owner.finalPhysical,import.meta.url),'utf8'));
+  const decoder=classifyBpayNextNet.toString();noSplit(decoder);assert.doesNotMatch(decoder,/Number\(|parseFloat|parseInt|\.reduce\(/);
+  for(const bad of ['entered_paye_net / timesheet_count','cash_amount * client_share','timesheet_net = cash_amount'])assert.throws(()=>noSplit(bad));
+  assert.ok(!SECTIONS.RUN_LINES.fields.includes('entered_paye_net')&&!SECTIONS.RUN_LINES.fields.includes('cash_amount'));
+  assert.ok(SECTIONS.TRANSFERS.fields.includes('projection_id')&&SECTIONS.PROJECTIONS.fields.includes('entered_paye_net'));
 });
