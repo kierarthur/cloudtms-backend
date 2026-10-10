@@ -1530,10 +1530,10 @@ Dependencies: WB-08, F-10, F-16, WB-44; successor positions: none. Design note: 
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-09-D01 | REPEATABLE: private.bpay_next_current_work_page_v1(p_candidate_id uuid, p_after_week date, p_after_work_id uuid, p_limit integer) | INSTALLED_ON_TEST | Working bounded factual reader, explicitly not payable summary; reuse exact shape/detail, implement new maintained Workbench read. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-09-D02 | WORKER ROUTE: NEXT legacy fence and exact local route wiring | LOCAL_ONLY | Keep NEXT gate/service actor/admin/closed actions; add only exact workbench-page/command exemptions. Pay-hold/TSFIN/settings/invoice/bell routes not blanket-fenced. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-09-D05 | REPEATABLE: public.bpay_next_workbench_page_v1(jsonb) | MISSING | Closed named kinds/service-only; indexed unique bound cursors/byte limits, typed stale/refusal; current eligibility/group/estimate/resolution context. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-09-D06 | WORKER ROUTE: GET /api/banking/pay/next/workbench-page | MISSING | Implement broker/src/bpay-next-workbench.js exact admin/service transport + explicit fence exemption; no all-/next/* exemption. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-09-D01 | REPEATABLE: private.bpay_next_current_work_page_v1(p_candidate_id uuid, p_after_week date, p_after_work_id uuid, p_limit integer) | INSTALLED_ON_TEST | Working bounded factual reader, explicitly not payable summary; reuse exact shape/detail, implement new maintained Workbench read. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-09-D02 | WORKER ROUTE: NEXT legacy fence and exact local route wiring | LOCAL_ONLY | Keep NEXT gate/service actor/admin/closed actions; add only exact workbench-page/command exemptions. Pay-hold/TSFIN/settings/invoice/bell routes not blanket-fenced. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-09-D05 | REPEATABLE: public.bpay_next_workbench_page_v1(jsonb) | MISSING | Closed named kinds/service-only; indexed unique bound cursors/byte limits, typed stale/refusal; current eligibility/group/estimate/resolution context. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-09-D06 | WORKER ROUTE: GET /api/banking/pay/next/workbench-page | MISSING | Implement broker/src/bpay-next-workbench.js exact admin/service transport + explicit fence exemption; no all-/next/* exemption. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1549,6 +1549,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Under NEXT, `CANDIDATES` walked to the end with limits 1, 17 and 100 returns the same Candidates in the same order, with no hidden "Load more" (RQ-009, RQ-244, NX-021, NX-024, LSV-006).
   - A response over the byte envelope is refused typed, not truncated; a failed read shows an error, never GBP 0 (RQ-006); responses contain only named fields (RQ-308).
   - A non-admin gets 403 before any database call.
+
+Whole WB-09 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. design/WB-09-reader-contract.md; design/WB-09-successor-provenance.json; BUILD_LOG.md; FE 0ac526bc67e2b14183b713de63ca6ef1c6dee7b2; localPG17 compile/source9/seal/coupling/browser PASS Review: reviews/WB-09-sql-source-review.md; reviews/WB-09-worker-source-review.md; reviews/WB-09-client-wiring-review.md.
 
 ## WB-13 — Action Required and Blocked for Pay lists
 
