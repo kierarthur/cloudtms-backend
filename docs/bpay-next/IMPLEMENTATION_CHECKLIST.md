@@ -1997,7 +1997,7 @@ WB23 ITEM [x] Built [x] Reviewed; exact D06 finite selection/control source and 
 
 ## WB-22 — Default ticks, new/changed rows ticked, and untick persistence
 
-Seq 69; Workbench · WB-S; reviewer R2; current requested-feature status MISSING.
+Seq 69; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Actor+agency+epoch+date memory, component/case exclusions, actor baseline not agencyglobal boolean.
 
@@ -2005,9 +2005,9 @@ Dependencies: WB-21, WB-23, F-05, F-16; successor positions: none. Design note: 
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-22-D02 | MIGRATION: private.bpay_next_selection_exclusion_memory | MISSING | Actor/agency/epoch/pay-date typed Candidate/work/component/case intent, exact basis and baseline; not work-only. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-22-D03 | MIGRATION: private.bpay_next_selection_mode_memory | MISSING | Actor/agency/epoch/date/scope ALL_MATCHING/NONE baseline and precise persisted/local reset. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-22-D04 | SCREEN: Actor-scoped default/untick memory integration in js/bpay-next-workbench.js | MISSING | Work/component/case exclusions and own baseline, no agency-global last-Draft flag; precise persisted/local clear reset. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-22-D02 | MIGRATION: private.bpay_next_selection_exclusion_memory | BUILT_REVIEWED | Actor/agency/epoch/pay-date typed Candidate/work/component/case intent, exact basis and baseline; not work-only. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-22-D03 | MIGRATION: private.bpay_next_selection_mode_memory | BUILT_REVIEWED | Actor/agency/epoch/date/scope ALL_MATCHING/NONE baseline and precise persisted/local reset. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-22-D04 | SCREEN: Actor-scoped default/untick memory integration in js/bpay-next-workbench.js | BUILT_REVIEWED | Work/component/case exclusions and own baseline, no agency-global last-Draft flag; precise persisted/local clear reset. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2024,6 +2024,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - User A presses Clear all, ticks 2 rows and creates drafts; reopening the same pay date starts with nothing ticked except rows that are new or changed since.
   - User A unticks 3 rows, closes Banking Pay choosing Keep, and reopens it for the same pay date: the 3 rows are still unticked (LSV-008 behaviour).
   - On the next pay date, everything starts ticked, including repayment rows (RQ-030, RQ-037).
+
+WB22 ITEM [x] Built [x] Reviewed; D02/D03/D04 built and independently reviewed; source9/9, sole PG17 compile, seal/coupling PASS. Implementation BE 019367de264e68732ce77972463d13006609bb98, FE f41d279d1a47ee3a2efab3624e3002a4c678b854. Actual18 SCR04 captures39PASS/0FAIL/3NA. Joined in-app journeys NOT_RUN; installation unchecked. Whole53/288 BUILT53/288 REVIEWED.
 
 ## WB-25 — Timesheet, day and expense/Additional line ticks (component subsets)
 
