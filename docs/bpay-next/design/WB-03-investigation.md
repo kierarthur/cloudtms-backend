@@ -1,0 +1,40 @@
+# WB-03 current named-object investigation
+
+Read-only source investigation, 10 October 2026. No product edits, tests, SQL/database/runtime calls, fixtures, secrets or network actions. Master sequence **45 WB-03**, after WB-01/F-16; the next item is WB-04. This note does not claim app acceptance or a whole WB-01/WB-03 projection implementation.
+
+Read the complete WB-03 card (`02_WORKBENCH.md:153–184`), its R2 KEEP note, all five exact child checklist rows and the master shared-owner table. **No confirmed new expense/Magnit/correction publication branch is needed in the inspected current owners.** The card explicitly calls for checks and a fix only for a confirmed gap, and explicitly leaves reimbursement tax assignment to DR-38. Generic shared checklist wording is not permission to implement later Daily, withdrawal, projection or tax work early.
+
+## Exact current owners and reuse
+
+| Checklist/object | Latest registered source and exact behavior | Minimum WB-03 action |
+|---|---|---|
+| D01 `private.bpay_next_approval_route_v1(p_timesheet_id uuid) returns text` | `03102026_1450_banking_pay_next_producer_route_v1.sql:9`. Reads the real current/nonarchived/nonrevoked Timesheet and Contract. `line_type IN ('EXPENSES','MILEAGE')` returns `EXPENSE_CARRIER` at 47–48. Genuine HOURS correction markers require the exact `_ctms_import_correction_classify_v1` provenance before `FACTUAL_IMPORT_CORRECTION` at 54–77. Self-bill or the genuine `_candidate_expense_source_family_v1` classifier returns `SOURCE_HOURS`; ordinary HOURS returns `ORDINARY_HOURS`. | Preserve the four branches. No new Magnit expense route. Shared editor order is **WB-03 → DY-04**; the inner Contract join has no current contractless Daily route, which belongs to the later named Daily seam. A first WB-03 authority receipt/reassertion must preserve this exact current body rather than manufacture a Daily fallback. |
+| D02 `private.bpay_next_publish_ordinary_from_financial_v1(p_financial_id uuid) returns uuid` | Latest **1009** `10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql`, already merged on F-05 **2018** rather than RESET 1530. Requires its own genuine current financial snapshot and Timesheet authorisation, version, Candidate/Client/channel. Only `ORDINARY_HOURS`/`EXPENSE_CARRIER` are admitted. `EXPENSES_ONLY` is accepted only with the expense route (139), the carrier shape refuses hours/base/Additional (152–159), and work/revision kind is `EXPENSE` (251–270). Each expense/mileage amount remains its actual snapshot component and the complete total is reconciled before the original atomic staged publication (651–688). | Reuse this final full owner; never reassert the older 1530/2018 publisher over WB-01's canonical rate/source evidence. A carrier remains independent of the hours publication because this call is for that carrier's own financial ID and Timesheet approval. No Banking selection action should change its physical approval. |
+| D03 later Daily/approval delta | Registry publisher predecessors are 1530 → 2018 → 1009. The unchanged original financial trigger remains physically in 1530. It invokes the publisher only for `ORDINARY_HOURS` or `EXPENSE_CARRIER`; Source and genuine factual correction branches do not fall into that call (637–644). | Record current final identities and the later shared approval editor chain **WB-01 → WB-36 → WB-02 → DY-04 → DY-06 → DY-10 → DR-38**. No older local source promotion. |
+| D04 Additional/expense/mileage tax assignment | The current 1009 Additional/EXPENSE/MILEAGE approved-line INSERTs still omit `tax_treatment`, while WORK retains TAXABLE. Source stage 1550 also maps fixed expenses to EXPENSE while only WORKED_TIME writes TAXABLE (436–449). | Record the genuine remaining DR-38 obligation: Additional TAXABLE, expenses/mileage NON_TAXABLE under existing OD-03 vocabulary; preserve fixed reimbursement amounts/no channel conversion. WB-03 builds no competing assignment or taxonomy. |
+| D05 reviewed-card output | WB-03 R2 KEEP note requires independent claim authorisation, Magnit once-only pay/charge and factual child boundaries. The actual card has no Worker deliverable and defers “Expenses” screen rendering to WB-15/WB-16. | Save actual owner/source verification and future acceptance scope. Do not treat source presence as installed/app proof or tick later UI/projection work. |
+
+## Magnit and imported child proof
+
+The current registry selects `private.bpay_next_stage_source_current_v1(p_root_timesheet_id uuid,p_source_event_id uuid,p_expected_head_id uuid)` from `03102026_1550_banking_pay_next_source_stage_v1.sql`. It first requires `SOURCE_HOURS` (108), consumes the genuine completed approval/inventory, accepts `SOURCE_FIXED_EXPENSE` directly alongside WORKED_TIME/ADDITIONAL_UNIT/EXPENSE (302–310), and carries each real component identity and pay amount into exactly one approved line (436–452). The pay owner consumes `pay_ex_vat`; it does not rewrite the Source component's Client charge.
+
+The real earlier economic occurrence reader `04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql:489–512` independently shows the original Magnit mapping: one EXPENSE_CODE `EXPENSES` aggregate for SOURCE_FIXED_EXPENSE members, with separate `sum(pay_ex_vat)` and `sum(charge_ex_vat)` and a genuine first component ordinal. Its comment points to the original Source ordinary-projection snapshot columns `expenses_pay_ex_vat`/`expenses_charge_ex_vat`. This is existing authority evidence, not a proposal to call or change the legacy pay reader under NEXT. A second EXPENSE_CARRIER branch would duplicate this Source ownership.
+
+For genuine imported correction children, route 1450 returns `FACTUAL_IMPORT_CORRECTION` only after the native classification check; the unchanged authorisation trigger publishes only ordinary/expense routes, and Source stage accepts only SOURCE_HOURS. Thus these inspected gates provide no correction-child fallback into payable ordinary work. Retain Source complete-base realisation; do not publish the physical reversal/replacement pair.
+
+## Approval-write census and bounded remaining work
+
+The card-requested read-only `git grep` of the saved NEXT repeatable sources found no NEXT assignment to the physical Timesheet/financial approval columns (`authorised_at_server`, `authorised_at_utc`) and no Timesheet UPDATE match. Inspection of the named trigger/publisher/stage confirms reads of genuine approval and writes to NEXT revision/line/work/position state, not claim approval. This source census is not proof of every future WB-25 implementation; that later selection owner must preserve the same boundary. No new approval trigger, permission bypass, protocol, route, screen or Worker adjustment is justified by this check.
+
+The current atomic publication/current-versus-applied APPLY_PENDING barrier is retained. BD050 leaves actual maintained contribution schema/refresh and WB-01 D01/D04/D09 open until WB-36/WB-08/WB-44; WB-03 must not introduce an undefined refresh hook or early projection framework to force those rows closed. Owner rule B remains binding; no parked F25 accepted-cut/resolver/producer/PIN/enroller changes.
+
+Future app checks remain **NOT_RUN**: a separately approved GBP 45 mileage carrier; actual Magnit pay/charge exactly once; untick preserving claim approval; and imported correction pairs producing no payable child. Non-taxable storage is conditional on the later DR-38 build, as the exact card states.
+
+## Source checkpoint
+
+- Route 1450: `a8f9dc118ad75b62b3863820e38bd29cbc4c05aa47facf12c11e45b9013bfc74`.
+- Final ordinary publisher 1009: `34227084b44b53abfb441b2b2826d9ce437fdb20e636e7d3d1d3f54bf324c7d7`.
+- Original 1530 trigger/source: `df943acaa6ddc4fa5bea877621762e96c93360d4030383f29b5bffca2d3aa301`.
+- Source stage 1550: `5388ce61af1cbd27acfdd4eeb69cc9654247d818e18745200bdd9557e83584b2`.
+- Original Magnit occurrence reader 2314: `ad9af3abdac58406d11cddcef287c58a072151b7c4a231f8f363ec134c32216c`.
+- Registry: `2dc51e7f79fb45b97905af6bcdc39bef57d172c57e53c111af2ce2ab7b0fd8e4`.

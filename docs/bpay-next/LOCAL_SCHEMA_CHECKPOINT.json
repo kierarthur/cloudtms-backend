@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "ef4db40823e25b5726edfd078239ac85195a816f",
-  "compiledAtUtc": "2026-10-10T09:21:12.639Z",
+  "sourceCommit": "98f32dcc2077d71ce2ef3b21a4406cfc47a59b2e",
+  "compiledAtUtc": "2026-10-10T09:35:29.772Z",
   "inventory": {
     "migrations": [
       {
@@ -7513,49 +7513,8 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/10102026_1009_banking_pay_next_ordinary_rate_authority_v1.sql",
-        "sha256": "071cf3af4a6ae9ef1c63c93eb32d33b00c9bc93fbc51558d0598d3da5f00b0b4"
-      }
-    ],
-    "repeatables": [
-      {
-        "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
-        "paths": [
-          "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql"
-        ],
-        "sha256": "7b18a47de4bfbcf47b16a468ba852cd87236f947abbb80ca1982b9412d8928a1"
-      },
-      {
-        "path": "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql",
-        "paths": [
-          "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql"
-        ],
-        "sha256": "a02548e2e4ddd4f01fe6c8540df252ecdad7d0479c59320ca8c7a03ce4255c33"
-      },
-      {
-        "path": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
-        "paths": [
-          "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
-        ],
-        "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
-      },
-      {
-        "path": "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql",
-        "paths": [
-          "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql"
-        ],
-        "sha256": "60a66dadb2f71f1e43430191dc0a67e254a23ac98085f315619a7904164caf3d"
-      },
-      {
-        "path": "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
-        "paths": [
-          "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql"
-        ],
-        "sha256": "7ae92db8e49f59430bbdceef50b575ef8e5f56d03afcf8d302b928f9eaaa8dc7"
-      }
-    ]
+    "migrations": [],
+    "repeatables": []
   },
   "fullProtectedVerification": "PENDING"
 }
