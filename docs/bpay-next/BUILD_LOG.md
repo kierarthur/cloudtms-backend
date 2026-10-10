@@ -519,3 +519,5 @@ WB06seq51 beforecode exactscope all23rows/fullcard/R2/master/deps read:1430publi
 - Installed evidence: local PG17 only,0 new migrations+4 final repeatable closures. Hosted installation not performed.
 - Checks run: db:check321/839 PASS; PG17 changed load PASS;10 JS syntax paths PASS; source gates9 PASS; contract seal cdbf21074482c7a2f65e1db1c441031d7a7c2ebb337df990024be33a29669d52 and coupling PASS; fresh829/76/0/55bbf326922f59d683823d40f5f3544a browser catalogue and actual verifier DO PASS; diff PASS.
 - Acceptance: first-use, joined app, hosted queue, failure journeys and timing NOT_RUN. Whole ITEM count43/288 BUILT and43/288 REVIEWED; current source receipt to follow. NextWB05seq52.
+
+WB06 current source receipt 5fb23a1180a4db099f0280dfdae54c3b26d21555:14 named current deliverables ticked with realhash; D02/D07/D08/D12/ITEM OPEN exact later closure. Whole43/288 BUILT/REVIEWED. NextWB05seq52.
