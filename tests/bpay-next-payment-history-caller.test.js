@@ -48,6 +48,20 @@ test('all 52 allowlists, key/parent/state and manifest equal the frozen SQL regi
   const ts=call({candidate_id:null,timesheet_id:timesheet});
   assert.equal(validateBpayNextHistoryResponse(manifest(ts),ts).work_id,work);
 });
+test('PS15 retains historical frozen child ancestry and explicitly refuses unowned report exports',async()=>{
+ const registry=JSON.parse(fs.readFileSync(new URL('../docs/bpay-next/final-definer-closures.json',import.meta.url),'utf8'));
+ const owner=registry.chains.find(row=>row.signature==='public.bpay_next_payment_history_page_v1(jsonb)');
+ const sql=fs.readFileSync(new URL('../'+owner.finalPhysical,import.meta.url),'utf8');
+ assert.doesNotMatch(sql,/active_owner\s*=|status\s*=\s*'READY'/i);
+ for(const name of ['SHIFTS','BREAKS','RATES','SCHEDULE'])assert.equal(SECTIONS[name].amount_scope,'IMMUTABLE_SOURCE');
+ assert.ok(SECTIONS.REVISIONS.fields.includes('client_display_name'));
+ let calls=0;const historyRpc=async()=>{calls++;throw Error('unsupported report must not fetch');};
+ for(const fields of [{section:'CSV_EXPORT'},{section:'PRINT_EXPORT'},{client_filter:[work]},{export_format:'CSV'},{totals:{cash:'300.00'}}]){
+  const response=await handleBpayNextHistoryRead(request(call(fields)),{requireOfficeUser:async()=>({id:actor,role:'admin'}),historyRpc});
+  assert.equal(response.status,400);
+ }
+ assert.equal(calls,0);
+});
 test('actual fixed RPC injects authenticated actor, abort and service headers without browser actor',async()=>{
   let fetched=0;
   const rpc=createBpayNextHistoryRpc({baseUrl:'https://agency-test.invalid/',headers:{Authorization:'Bearer controlled-test-only'},fetchImpl:async(url,init)=>{

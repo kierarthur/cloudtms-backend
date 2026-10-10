@@ -373,3 +373,7 @@ PS11localcommits BE976ba1c9 FE9d9f8a7; FEfollow-up removesone trailing rendering
 PS-14 seq34scopecheckpoint BD038 exactD01/D04/D05/D06objects listed. Correct4destinationmoneyownersreused; boundednativeobligation/legreservationreadsupport/status integration only. Noheader/childdoublecount ornewmoneycounter.
 
 PS-14 seq34 COMPLETE BD038: native original-obligation→paged-original-leg reservation, four2025 bodies unchanged; positive activeholds/receipt/cancel/Case-only/internal0 rules and strictSTATUS callers. H01–H03 fixed independentSQL/callerPASS. BE55FE46sourcecontrols/syntax/db314+818/PG17/seald1b40713/couplingPASS. WholeBUILT32/288REVIEWED32/288. ActualjoinedNOT_RUN; nofixtures/hosted/push/externalactions. NextPS15seq35.
+
+PS14localcommits BE81840f72 FE69e9587. PS-15 seq35 scopecheckpoint BD039 exactD01-D04/D06 in PS-15-SCOPE; R2§7 and owner AUTH-PS preapproval reconcile currenthistory now vs approvedS1seq287 APIs. No missing exact index; retain correct schema/adapter and compose0653closure.
+
+PS-15 seq35 COMPLETE BD039: allnativehistorypathsindexed; sixexistingcapturedrevisiondisplayfields nowprojected in0653+BE/FEclosedmirrors, no duplicatecapture/liveClient/permission/indexchange. Sourcecontrols caughtwrongtestattribution toRUN_WORKS; correctedtoactualREVISIONS. IndependentSQL/callerPASS; BE21FE13/syntax/db314+819/PG17/sealf063d012/couplingPASS. WholeBUILT33/288REVIEWED33/288. ActualjoinedNOT_RUN. NextCM02aseq36.
