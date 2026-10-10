@@ -13,3 +13,5 @@ Checks PASS:db:check315 migrations/828 repeatables; sole localPG17 final0942 loa
 Independent source PASS:reviews/SP-12-backend-review.md, SP-12-identity-admission-review.md, SP-12-outer-admission-review.md, SP-12-census-review.md, SP-12-office-review.md and SP-12-office-retention-review.md. Scope and current roots are in design/SP-12-census.md; review hashes identify each reviewed snapshot.
 
 Office implementation commit daffbd90bdcce410b2dcbd306548fde51f60ce0e. Backend implementation hash is added after the local commit. No hosted install, switch, release, business SQL, fixture, TRUNCATE, external action or push. Both-order OPEN/PIN, contention/replay/unknown/pages1/17/100/eventual-progress and real queue/app timing remain authored NOT_RUN. Next SP-07seq42.
+
+Backend implementation commit 766ebd507e044361b6d616a9829e735a20a2e376. Current source deliverable ticks refer to this exact commit; whole ITEM remains open.
