@@ -239,7 +239,8 @@ function normalized(v){
   return typeof v==='string'&&UUID.test(v)?v.toLowerCase():v;
 }
 function validChoiceDescriptor(v){
-  if(!exact(v,{namespace:'choiceNamespace',intent:'choiceIntent',revision:'localRevision',workbench_revision:'integer',adoption_revision:'integer'})||ENCODER.encode(JSON.stringify(v)).byteLength>32768)return false;
+  const schema={namespace:'choiceNamespace',intent:'choiceIntent',revision:'localRevision',workbench_revision:'integer',adoption_revision:'integer',...(record(v)&&Object.hasOwn(v,'memory_baseline_run_id')?{memory_baseline_run_id:'uuid?'}:{})};
+  if(!exact(v,schema)||ENCODER.encode(JSON.stringify(v)).byteLength>32768)return false;
   return true;
 }
 function commandCall(body){

@@ -20,6 +20,12 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB22 finite read-only memory helper closure; write owners remain separate.
+  'private.bpay_next_selection_memory_intent_valid_v1(jsonb)',
+  'private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)',
+  'private.bpay_next_selection_memory_leaves_v1(jsonb)',
+  'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)',
+  'private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)',
   // WB19 administrative receipt/resume and native status only.
 
   // WB19 administrative receipt/resume and native status only.
@@ -115,7 +121,12 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
   "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
 
-  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
+  'private.bpay_next_selection_memory_intent_valid_v1(jsonb)': ['octet_length'],
+  'private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)': [],
+  'private.bpay_next_selection_memory_leaves_v1(jsonb)': [],
+  'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)': ['private.bpay_next_selection_memory_leaves_v1','bool_or','lateral'],
+  'private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)': ['private.bpay_next_selection_memory_choices_v1','jsonb_set','split_part','max','sum','filter','octet_length'],
+  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
@@ -1012,6 +1023,16 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
   const result=[];
   for(const part of executableParts(source,file)){
     if(part.unclassified){result.push({hazard:'BODY_UNCLASSIFIED',key:JSON.stringify([part.signature,'BODY_UNCLASSIFIED',part.unclassified])});continue;}
+    // WB22: three direct native scalar aggregates in the fixed local-choice
+    // row reader. Verify both actual schema declarations and literal aliases;
+    // this classifies types, without allowing an unclassified SQL construct.
+    const nativeColumns=new Map(columnTypes);
+    if(part.signature==='private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)'){
+      const position=fs.readFileSync(path.join(repoRoot,'supabase/migrations/03102026_1324_banking_pay_next_core.sql'),'utf8').match(/create table private\.bpay_next_position\s*\(([\s\S]*?)\n\);/i)?.[1]??'';
+      const snooze=fs.readFileSync(path.join(repoRoot,'supabase/migrations/10102026_1100_banking_pay_next_snooze.sql'),'utf8').match(/create table private\.bpay_next_snooze\s*\(([\s\S]*?)\n\);/i)?.[1]??'';
+      if(/\bupdated_at_utc timestamptz not null\b/i.test(position)&&/\bfrom private\.bpay_next_position pos where pos\.work_id=w\.id\b/i.test(part.text))nativeColumns.set('POS . UPDATED_AT_UTC','TIMESTAMPTZ');
+      if(/\bcontrol_sequence bigint not null\b/i.test(snooze)&&/\bfrom private\.bpay_next_snooze sn where sn\.(?:work_id=w\.id|case_component_id=cc\.id)\b/i.test(part.text))nativeColumns.set('SN . CONTROL_SEQUENCE','BIGINT');
+    }
     const rows=scanManagedSql(part.text).statements;
     const fixedQueries=fixedQueryLiterals(part.text,file);
     const historyTemplates=closedHistoryTemplates(part,file);
@@ -1080,7 +1101,7 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
           const cast=argument.indexOf('::'),type=cast>=0?argument.slice(cast+1).join(' ')
             :argument.length===1?(types.get(argument[0])??(/^\d+$/.test(argument[0])?'NUMERIC':null)):null;
           if(type==='UUID')hazards.add('UUID_AGGREGATE');
-          else if(!['TEXT','NUMERIC','BIGINT','INTEGER','SMALLINT','DATE','TIMESTAMPTZ'].includes(type??columnTypes.get(argument.join(' '))))hazards.add('AGGREGATE_TYPE_UNCLASSIFIED');
+          else if(!['TEXT','NUMERIC','BIGINT','INTEGER','SMALLINT','DATE','TIMESTAMPTZ'].includes(type??nativeColumns.get(argument.join(' '))))hazards.add('AGGREGATE_TYPE_UNCLASSIFIED');
           else if(t[end+1]==='::'&&t[end+2]==='UUID')hazards.add('UUID_CARDINALITY_UNCLASSIFIED');
         }
       }

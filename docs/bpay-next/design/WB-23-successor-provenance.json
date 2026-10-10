@@ -41,7 +41,7 @@
       "change": "Only actual COMPLETE/CANCELLED run cleanup DELETE allowed under native run lock"
     },
     {
-      "object": "private.bpay_next_selection_choice_inputs_page_v1(uuid,bigint,integer)",
+      "object": "private.bpay_next_choice_inputs_page_v1(uuid,bigint,integer)",
       "chain": [
         "2232",
         "2245"

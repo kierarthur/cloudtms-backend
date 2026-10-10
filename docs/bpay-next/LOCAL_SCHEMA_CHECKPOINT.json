@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "9370d3c136d0d7a3d9aa80ee84780359ad1049b7",
-  "compiledAtUtc": "2026-10-10T21:46:27.561Z",
+  "sourceCommit": "1d52b95e7eaa15b1631370e3d33b4944024978d4",
+  "compiledAtUtc": "2026-10-10T22:46:52.462Z",
   "inventory": {
     "migrations": [
       {
@@ -1332,6 +1332,10 @@
       {
         "path": "supabase/migrations/10102026_2232_banking_pay_next_selection_page_receipts.sql",
         "sha256": "11d2dd2efb3b9e6da25237b2b9c869775b406a3ff57c0d5921b32ab1241ada82"
+      },
+      {
+        "path": "supabase/migrations/10102026_2306_banking_pay_next_actor_selection_memory.sql",
+        "sha256": "de078c858254b41f21b86133abf380114891da6d3425338f24ae3c66cd2ba0a0"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -7774,6 +7778,20 @@
         "sha256": "eb7710dc9a25f0a1017b69ad039de6cf1d8db40f12eee1c2daca9ccaed32bf51"
       },
       {
+        "path": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+        ],
+        "sha256": "7af955ed7ed6e346c6b8e757a15a8fa3207f80be1c46d04574e2a86b92fdc3a2"
+      },
+      {
+        "path": "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql"
+        ],
+        "sha256": "6825ff104eb4e132547d7f792fddd38c96f25c8b71a9c3a70588f64ee324a225"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7807,11 +7825,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+        "path": "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
         "paths": [
-          "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql"
+          "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql"
         ],
-        "sha256": "eb7710dc9a25f0a1017b69ad039de6cf1d8db40f12eee1c2daca9ccaed32bf51"
+        "sha256": "6825ff104eb4e132547d7f792fddd38c96f25c8b71a9c3a70588f64ee324a225"
       }
     ]
   },
