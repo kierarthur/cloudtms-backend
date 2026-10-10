@@ -115,7 +115,15 @@ export const ROWS=Object.freeze({
     "error_code": "text?",
     "financial_view_revision": "integer",
     "projection_revision": "positive",
-    "metadata_version": "positive"
+    "metadata_version": "positive",
+    "direction": "direction",
+    "payroll_stage": "stage?",
+    "approved_source_ex_vat": "decimal?",
+    "active_reserved_source_ex_vat": "decimal?",
+    "deduction_balance_source_ex_vat": "decimal?",
+    "recovery_source_ex_vat": "decimal?",
+    "included_source_ex_vat": "decimal?",
+    "gross_due_source_ex_vat": "decimal?"
   },
   "BLOCKED": {
     "item_id": "uuid",
@@ -155,7 +163,15 @@ export const ROWS=Object.freeze({
     "error_code": "text?",
     "financial_view_revision": "integer",
     "projection_revision": "positive",
-    "metadata_version": "positive"
+    "metadata_version": "positive",
+    "direction": "direction",
+    "payroll_stage": "stage?",
+    "approved_source_ex_vat": "decimal?",
+    "active_reserved_source_ex_vat": "decimal?",
+    "deduction_balance_source_ex_vat": "decimal?",
+    "recovery_source_ex_vat": "decimal?",
+    "included_source_ex_vat": "decimal?",
+    "gross_due_source_ex_vat": "decimal?"
   },
   "ISSUE_DETAIL": {
     "item_id": "uuid",
@@ -195,7 +211,15 @@ export const ROWS=Object.freeze({
     "error_code": "text?",
     "financial_view_revision": "integer",
     "projection_revision": "positive",
-    "metadata_version": "positive"
+    "metadata_version": "positive",
+    "direction": "direction",
+    "payroll_stage": "stage?",
+    "approved_source_ex_vat": "decimal?",
+    "active_reserved_source_ex_vat": "decimal?",
+    "deduction_balance_source_ex_vat": "decimal?",
+    "recovery_source_ex_vat": "decimal?",
+    "included_source_ex_vat": "decimal?",
+    "gross_due_source_ex_vat": "decimal?"
   },
   "GROUP_LINES": {
     "item_id": "uuid",
