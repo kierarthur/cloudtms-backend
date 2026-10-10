@@ -632,6 +632,19 @@ export function assertSqlWriteBoundaries(source,file){
   const parts=executableParts(source,file);
   for(const part of parts){
     const text=part.unclassified??part.text;
+    // PS-08: immutable captured rows have no UPDATE/DELETE producer, even in
+    // unchanged physical owners/includes. Literal diagnostic text is not SQL.
+    const literals=/(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)[\s\S]*?\1|(?:\bE)?'(?:\\.|''|[^'])*'|"(?:""|[^"])*"/g;
+    const literalSpans=[...text.matchAll(literals)].map(match=>[match.index,match.index+match[0].length]);
+    const captureCode=text.replace(literals,token=>token.startsWith('"')?token.slice(1,-1).replaceAll('""','"'):' ');
+    const forbidden=/\b(?:update\s+|delete\s+from\s+)(?:only\s+)?\(?\s*(?:private\s*\.\s*)?bpay_next_run_(?:line|work)\b/i;
+    // Direct EXECUTE literals are executable SQL; diagnostic/catalog literals
+    // remain inert. Computed/unclassified SQL is denied by the existing gate.
+    const executed=[...text.matchAll(/\bexecute\s+(?:(?:pg_catalog\s*\.\s*)?format\s*\(\s*)?((\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)[\s\S]*?\2|'(?:''|[^'])*')/gi)]
+      .filter(match=>!literalSpans.some(([start,end])=>match.index>=start&&match.index<end))
+      .map(match=>match[2]?match[1].slice(match[2].length,-match[2].length):match[1].slice(1,-1).replaceAll("''","'"));
+    if(forbidden.test(captureCode)||executed.some(sql=>forbidden.test(sql.replace(/"([a-z_]+)"/gi,'$1'))))
+      throw Error(`BPAY_NEXT_FROZEN_CAPTURE_MUTATION_FORBIDDEN: ${file}`);
     if(/\b(?:update|insert\s+into|delete\s+from|merge\s+into|truncate(?:\s+table)?)\s+(?:only\s+)?private\s*\.\s*bpay_next_module_control\b/i.test(text)){
       const transition=part.signature==='public.bpay_next_owner_transition_v1(jsonb)';
       const bootstrap=file===FROZEN_FILES[0]&&/^insert\s+into\s+private\.bpay_next_module_control\s*\(id\)\s*values\s*\(1\)\s*;$/i.test(text.trim());

@@ -359,3 +359,7 @@ PS-04 sequence30 COMPLETE: BD034 native recovered-event link/index plus private 
 PS-07 sequence31 scope checkpoint: exact D01-D04 objects listed in PS-07-SCOPE; BD035 correct52-section reuse with first controlling successor, separate Draft guards preserved. No early CM18 expansion.
 
 PS-07 seq31 COMPLETE BD035: correct history/callers retained, first0614controllingclosure, single-envelope packaging fixed. IndependentPASS; caller34/source8/syntax/db314+816/PG17/seal303276/couplingPASS. WholeBUILT29/288REVIEWED29/288; actualjoinedNOT_RUN. NextPS08seq32.
+
+PS-08 seq32 scope checkpoint: exactD01-D04 in PS-08-SCOPE; BD036 sole0718DDL retained, finite existinggate frozen UPDATE/DELETE census only.
+
+PS-08 seq32 COMPLETE BD036: sole0718DDL retained, exactlocal4triggerreadback, all-sourcefrozenmutationcensus. H01unqualified/H02diagnosticEXECUTEfixed independentPASS. source10/syntax/db314+816/PG17/seal303276/couplingPASS. WholeBUILT30/288REVIEWED30/288. Joined/appNOT_RUN; nextPS11seq33.

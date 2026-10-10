@@ -191,3 +191,35 @@ test('PF05 rejects processing admission prices/allowances/fee ancestry but prese
     'perform private.bpay_next_assert_financial_scope_v1();'
   ])assert.doesNotThrow(()=>assertNoProcessingAdmission(source,'broker/src/bpay-next-example.js'));
 });
+
+
+test('PS08 all-source frozen capture census rejects actual UPDATE/DELETE and preserves legal progress',()=>{
+  for(const target of ['private.bpay_next_run_line','private.bpay_next_run_work','"private"."bpay_next_run_line"','bpay_next_run_line','"bpay_next_run_work"']){
+    for(const body of ['update '+target+' set work_id=null;','delete from only '+target+' where true;',
+      'with x as(select 1) delete from '+target+';', 'update only ('+target+') set id=null;']){
+      assert.throws(()=>assertSqlWriteBoundaries(body,'supabase/repeatable/old-owner.sql'),/FROZEN_CAPTURE_MUTATION_FORBIDDEN/);
+      assert.throws(()=>assertSqlWriteBoundaries('create function private.example() returns void language plpgsql as $body$begin '+body+' end$body$;','old-owner.sql'),/FROZEN_CAPTURE_MUTATION_FORBIDDEN/);
+    }
+  }
+  for(const source of [
+    'insert into private.bpay_next_run_line(id) values(null);',
+    'select id from private.bpay_next_run_work for update;',
+    'create trigger frozen before update or delete on private.bpay_next_run_line for each row execute function private.guard();',
+    'update private.bpay_next_run_worker set status=null;',
+    'delete from private.bpay_next_run_line_extension;',
+    '-- update private.bpay_next_run_work set id=null;\nselect 1;',
+    "select 'delete from private.bpay_next_run_line';",
+    'do $body$begin raise exception using message=$msg$update private.bpay_next_run_work$msg$;end$body$;',
+    `do $body$begin raise exception using message=$msg$execute 'update private.bpay_next_run_work set id=null'$msg$;end$body$;`,
+    "select 'execute ''delete from private.bpay_next_run_line''';"])
+    assert.doesNotThrow(()=>assertSqlWriteBoundaries(source,'source.sql'));
+});
+
+
+test('PS08 direct executed SQL is distinct from diagnostic literal metadata',()=>{
+  for(const body of ["execute 'update private.bpay_next_run_line set id=null';",
+    'execute $sql$delete from bpay_next_run_work$sql$;',
+    "execute pg_catalog.format('delete from private.bpay_next_run_line where id=%L',v_id);",
+    "execute format('update \"private\".\"bpay_next_run_work\" set id=null');"])
+    assert.throws(()=>assertSqlWriteBoundaries('do $body$begin '+body+' end$body$;','source.sql'),/FROZEN_CAPTURE_MUTATION_FORBIDDEN/);
+});

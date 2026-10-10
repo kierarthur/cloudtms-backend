@@ -806,9 +806,9 @@ Dependencies: F-06; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PS-08-D01 | MIGRATION: 08102026_0718_banking_pay_next_frozen_run_read_safety_v1.sql — named schema change | LOCAL_ONLY | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. 0718 locally attaches four UPDATE/DELETE/TRUNCATE guards with no exception. One DDL owner follows the release Bible; current installed trigger/readback proof is still missing. No RBC whitelist or histogram proof programme. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PS-08-D02 | CHECK: tests/ proposed frozen run_work/run_line mutation source census | MISSING | Implement the exact check target after its existing dependencies. 0718 locally attaches four UPDATE/DELETE/TRUNCATE guards with no exception. One DDL owner follows the release Bible; current installed trigger/readback proof is still missing. No RBC whitelist or histogram proof programme. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PS-08-D03 | CHECK: PS-08 future joined in-app TEST checklist | MISSING | After authorised installation legal preparation INSERT works; update/delete/truncate each fails immutability. Cancellation/outcome progress only changes worker/holds/requests/outcomes. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PS-08-D01 | MIGRATION: 08102026_0718_banking_pay_next_frozen_run_read_safety_v1.sql — named schema change | LOCAL_ONLY | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. 0718 locally attaches four UPDATE/DELETE/TRUNCATE guards with no exception. One DDL owner follows the release Bible; current installed trigger/readback proof is still missing. No RBC whitelist or histogram proof programme. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PS-08-D02 | CHECK: tests/ proposed frozen run_work/run_line mutation source census | MISSING | Implement the exact check target after its existing dependencies. 0718 locally attaches four UPDATE/DELETE/TRUNCATE guards with no exception. One DDL owner follows the release Bible; current installed trigger/readback proof is still missing. No RBC whitelist or histogram proof programme. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PS-08-D03 | CHECK: PS-08 future joined in-app TEST checklist | MISSING | After authorised installation legal preparation INSERT works; update/delete/truncate each fails immutability. Cancellation/outcome progress only changes worker/holds/requests/outcomes. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -820,6 +820,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PS
 
 Preparation, confirm, cancel and expiry on the NEXT agency all complete; a direct UPDATE of a run line is refused with `BPAY_NEXT_FINANCIAL_EFFECT_IMMUTABLE`. (RQ-285; RQ-329, RQ-246, NX-073)
   - Joined future check: After authorised installation legal preparation INSERT works; update/delete/truncate each fails immutability. Cancellation/outcome progress only changes worker/holds/requests/outcomes. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Whole PS-08 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. PS-08-COMPLETION/readback; source10; sole0718reuse; db314/816/PG17/seal303276; actual NOT_RUN Review: PS-08-source-review fresh PASS H01/H02 closed no findings.
 
 ## PS-11 — NET never fabricated per Timesheet (PS-C12)
 

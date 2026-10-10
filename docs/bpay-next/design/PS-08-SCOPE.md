@@ -1,0 +1,5 @@
+# PS-08 exact scope / BD036
+
+Sequence32; F-06 dependency built/reviewed. D01 exact08102026_0718_frozen_run_read_safety repeatable schema owner retained unchanged (checklist's generic MIGRATION label does not change actual physical kind). D02 finite frozen run_work/run_line UPDATE/DELETE census in existing scripts/bpay-next-source-gates.mjs and its existing test file. D03 future joined acceptance. D04 releaseBible/F24 reference only.
+
+BD036: reuse sole0718 owner and existing1342 unconditional immutable callback; no duplicate migration/DDL, whitelist/depth exception, INSERT guard or CM-03 early rewrite. Extend existing all-inventory source gate, independent of changed-file status, with exact two target UPDATE/DELETE matching including quoted/ONLY forms while ignoring comments/string data/SELECT FOR UPDATE/triggerDDL/other mutable tables. New scenario tools/fixtures unnecessary. Local catalog readback verifies four attachments; hosted installed/business acceptance remains NOT_RUN. Legal progress stays worker/holds/requests/outcomes. F24 retains authoritative release/readback ownership.
