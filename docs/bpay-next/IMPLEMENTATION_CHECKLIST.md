@@ -1690,7 +1690,7 @@ Dependencies: WB-09, WB-11, F-16; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-12-D06 | SCREEN: Workbench Ready candidate table in js/bpay-next-workbench.js | MISSING | Complete current eligible membership, server SOURCE-labelled totals and parent intent; no historical filler or per-click money. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-12-D06 | SCREEN: Workbench Ready candidate table in js/bpay-next-workbench.js | MISSING | Complete current eligible membership, server SOURCE-labelled totals and parent intent; no historical filler or per-click money. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1712,6 +1712,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A Candidate with a selected Payment Advance repayment shows Deductions "Yes" (RQ-014); after unticking that repayment it shows "No".
   - The amount column header reads "before pay-date valuation".
   - The old "Choose Candidate" table no longer appears; each row opens that Candidate's current work (NX-027, J2a).
+
+Whole WB-12 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. WB12 reader ac9b5cffaa743636a7484d3691ce0f28dc86caa1; FE15faf8ec04662e66d682cb062b4169a1d5058a73; actual SCR04 policy37PASS/0FAIL/5NA; db325/849 localPG17 compile, syntax, source9/9, seal/coupling PASS; hosted/joined app NOT_RUN Review: reviews/WB-12-ready-sql-review.md; reviews/WB-12-ready-transport-ui-review.md; reviews/WB-12-ready-design-review.md; screen-designs/SCR-04/review.md.
 
 ## WB-14 — Issue detail window
 
