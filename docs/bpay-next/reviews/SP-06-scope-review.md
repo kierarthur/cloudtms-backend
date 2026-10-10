@@ -1,6 +1,6 @@
 # SP-06 whole-batch scope and source review
 
-Read-only review on 10 October 2026 against the complete SP-06 card (05_SOURCE_AND_PROTECTED_PAY.md:248–276), all D01–D05 checklist rows, B4.4 shared-owner integrity, SRQ-026/028/029/043/157/227, and BD044/SP-06-SCOPE. Current verdict: **D01–D05 source PASS after the final saved guard corrections; one literal BUILD_LOG line-per-piece documentation split remains**. The closed findings concern the actual protected controllers, not another owner or a new protocol. This reviewer executed no tests, SQL, runtime, fixtures, app actions or hosted operations and changed no product source.
+Read-only review on 10 October 2026 against the complete SP-06 card (05_SOURCE_AND_PROTECTED_PAY.md:248–276), all D01–D05 checklist rows, B4.4 shared-owner integrity, SRQ-026/028/029/043/157/227, and BD044/SP-06-SCOPE. Current verdict: **D01–D05 source/scope PASS; all three findings are CLOSED at the final saved sources and documentation**. The closed findings concern the actual protected controllers, not another owner or a new protocol. This reviewer executed no tests, SQL, runtime, fixtures, app actions or hosted operations and changed no product source.
 
 ## Required scope and contracts
 
@@ -27,7 +27,7 @@ Both findings were sent to the builder and corrected. Fresh workspace line1097 r
 
 ## Documentation and limits
 
-BUILD_LOG has a separate line for each of the six actual actions and records every installed piece, including SCX019/020/023/024/025/026/027/078/085/111/116/117/124 and NX010/017, plus permission and nested financial-input rejection. **Finite documentation finding:** card05:270 explicitly requires one line per action and per piece. SCX020/023, SCX024/025/027, SCX078/NX010/NX017, SCX116/117 and SCX111/124 currently share lines. Split their existing factual entries into individual piece lines with the same genuine closed/internal contracts; no product change or proof framework is required. This is a documentation closure, not a missing financial owner. SP-06-COMPLETION identifies genuine flat action contracts and distinguishes receipt closure from Banking application. SP-06-JOINED-NOT-RUN includes authorised8h→7h, unauthorised first-Authorise/no-WORK, local published=false/pending-freeze closure, exact lost-response retry, identity stability, complete withdrawal/reconciliation, permission/browser facts, actor/frame lifetime and parent refresh. Those joined actions remain **NOT_RUN**. Builder-reported local source/load/seal/verifier checks are separate evidence, not executions by this reviewer. Full application/release verification remains pending as required.
+BUILD_LOG has a separate line for each of the six actual actions and records every installed piece, including SCX019/020/023/024/025/026/027/078/085/111/116/117/124 and NX010/017, plus permission and nested financial-input rejection. **Documentation finding CLOSED:** fresh BUILD_LOG:408–413 has six separate action lines; :414–428 has fifteen separate SCX/NX piece lines, each carrying its genuine finite command/status/receipt or internal factual contract. Exact piece set is SCX019/020/023/024/025/027/026/078, NX010/017, SCX085/111/116/117/124. This satisfies the literal one-line-per-action/per-piece requirement of card05:270 without adding a product change or proof framework. SP-06-COMPLETION identifies genuine flat action contracts and distinguishes receipt closure from Banking application. SP-06-JOINED-NOT-RUN includes authorised8h→7h, unauthorised first-Authorise/no-WORK, local published=false/pending-freeze closure, exact lost-response retry, identity stability, complete withdrawal/reconciliation, permission/browser facts, actor/frame lifetime and parent refresh. Those joined actions remain **NOT_RUN**. Builder-reported local source/load/seal/verifier checks are separate evidence, not executions by this reviewer. Full application/release verification remains pending as required.
 
 ## Reviewed raw hashes
 
@@ -39,7 +39,7 @@ BUILD_LOG has a separate line for each of the six actual actions and records eve
 | BE/broker/src/weekly-source/protected-next-preview.mjs | 49ed6b5e24c1ebf6afd9dbada7de0d9d321c8297584491610353c1ee2a2bfc4a |
 | BE/docs/bpay-next/final-definer-closures.json | 88c03a24ed35aef5539614543446c876f6ca514a98d83cc50a64a77d68efb28d |
 | BE/docs/bpay-next/design/SP-06-SCOPE.md | 881ecc5ed1d8826296f4884a1c782326eccd344b708b73bb92b634038e85aba0 |
-| BE/docs/bpay-next/BUILD_LOG.md | f356c4cd87f4b9a27efa843d864d5e16a59633fd21accbbf5a3f283bf64ae040 |
+| BE/docs/bpay-next/BUILD_LOG.md | 23544950f243db00e57d445aac197e4ac32a5797e68c2df45323b9194b9bac85 |
 | BE/docs/bpay-next/SP-06-COMPLETION.md | c9d065feb5268696ff7d92a23e38a6a4c8c446d2e8dd1cc33c5ec7e527d3fdb3 |
 | BE/docs/bpay-next/SP-06-JOINED-NOT-RUN.md | 62eddd6f5a1c96c8de9210de3da9e7c634fa2363d2ba325ec06049e37b4701a4 |
 | FE/js/weekly-source-presentation-v1.js | 8a0064242756964f9accd7cb9ab2245badbe2fa0ea7abae7ac3bf185a2d0d9b1 |
@@ -48,3 +48,7 @@ BUILD_LOG has a separate line for each of the six actual actions and records eve
 | FE/js/main.js | 3a51abe4360398ad21136c54587c89e1ee8c0f3197ecc4bef763208b61c38a27 |
 | FE/index.html | 90d08e1c63ded349e92eb1853fc1fad613722c75b909203d92729be83f85c169 |
 | FE/BANKING_PAY_BIBLE.md | 1139a81feb04a7049ea36831575a09d010085e7d34b9e04c89fa5a558ceb4562 |
+
+## Final documentation closure
+
+Read back the saved BUILD_LOG after the builder split every installed piece. Six action entries and fifteen distinct SCX/NX entries are present, with actual authority and browser-facts guard lines. BUILD_LOG SHA-256 `8e5af6c6986c038cf558a6b6c5e4512cf43bc502a28f3ab3410063039a211984`. **No open source/scope/documentation finding remains in this bounded SP-06 review.** The source guard conclusions and joined NOT_RUN boundary remain unchanged. Local FE checkpoint `d124c705` is builder-reported commit evidence; this reviewer performed no execution or commit.
