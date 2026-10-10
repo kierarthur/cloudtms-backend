@@ -1584,6 +1584,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Two Action Required rows with the same Candidate and amount keep the same order at limits 1, 17 and 100 (RQ-406); paging 100 rows at a time reaches every row (LUI-024, LUI-038).
   - The counts on the tabs match the footers (RQ-004, LUI-021, LUI-025).
 
+WB13 current mounted list/provenance source reviewed at BE a59991e77c00e99b3a9d881d9987d56eeb63624f and FE fcd5baa4c15fa5bf30d522f920e82f8641a0bc48; local compile/source/contract/catalogue PASS. ITEM/D05 OPEN for actual WB14 separate issue window/parent-return and WB17 retained scope; five contexts N/A. Joined app/hosted/queue/timing NOT_RUN.
+
 ## DR-01 — Official pay date and payable work-week rule at preparation start
 
 Seq 57; Draft · D2-A; reviewer R3; current requested-feature status PARTLY_DONE.
