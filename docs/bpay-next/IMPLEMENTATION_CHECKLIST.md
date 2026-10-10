@@ -1301,12 +1301,12 @@ Dependencies: F-05, F-06, WB-36; successor positions: Workbench classifier `priv
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-08-D04 | MIGRATION: private.bpay_next_workbench_item | MISSING | Store durable work/revision/date/channel, due/selected/excluded/paid/reserved amounts and snooze/query/hold/blocker scope; derive segment exclusion under unchanged day parent. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-08-D05 | MIGRATION: private.bpay_next_workbench_candidate_summary | MISSING | Replace only affected contribution and amount/count deltas, separating selected/snoozed/held/queried/blocked quantities. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-08-D06 | MIGRATION: private.bpay_next_workbench_revision | MISSING | Coherent projection revision/dirty barrier/adoption token; agency revision alone not actor baseline or clear-page stability. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-08-D09 | REPEATABLE: private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[]) | MISSING | Bound exact sets/cumulative size; high fanout indexed continuation, no first500 or history. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-08-D10 | REPEATABLE: private.bpay_next_workbench_apply_delta_v1 | MISSING | Single refresh-only delta owner, exact amount dimensions and membership count transitions; atomic rollups/revision. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-08-D11 | REPEATABLE: private.bpay_next_workbench_set_bank_warning_v1(uuid,text) | MISSING | Metadata-only exact warning version/bounded projection; no earnings or section changes. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D04 | MIGRATION: private.bpay_next_workbench_item | MISSING | Store durable work/revision/date/channel, due/selected/excluded/paid/reserved amounts and snooze/query/hold/blocker scope; derive segment exclusion under unchanged day parent. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D05 | MIGRATION: private.bpay_next_workbench_candidate_summary | MISSING | Replace only affected contribution and amount/count deltas, separating selected/snoozed/held/queried/blocked quantities. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D06 | MIGRATION: private.bpay_next_workbench_revision | MISSING | Coherent projection revision/dirty barrier/adoption token; agency revision alone not actor baseline or clear-page stability. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D09 | REPEATABLE: private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[]) | MISSING | Bound exact sets/cumulative size; high fanout indexed continuation, no first500 or history. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D10 | REPEATABLE: private.bpay_next_workbench_apply_delta_v1 | MISSING | Single refresh-only delta owner, exact amount dimensions and membership count transitions; atomic rollups/revision. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-08-D11 | REPEATABLE: private.bpay_next_workbench_set_bank_warning_v1(uuid,text) | MISSING | Metadata-only exact warning version/bounded projection; no earnings or section changes. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-08-D12 | REPEATABLE: private.bpay_next_workbench_candidate_name_trigger_v1 | MISSING | NEXT-gated metadata version + indexed finite current row continuation; no unbounded Candidate updates. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
@@ -1331,6 +1331,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A Candidate whose bank details changed yesterday stays in Ready, tickable, with a "Bank details changed" warning chip (RQ-211, RQ-026 as limited by OR-14).
   - Work in Draft and then paid leaves Ready in the same transaction (W11 callers); a work with damaged evidence shows "missing", never GBP 0.00 (RQ-224, RQ-026); a held work is Blocked "Pay on hold" and cannot be ticked (RQ-028).
   - Work for next week shows Waiting "Not payable until DD/MM/YYYY" and moves to Ready when its week becomes current (RQ-113, WB-37).
+
+WB-08 current source D04/D05/D06/D09/D10/D11 built/reviewed at 79194a24c48a0f9239c56688674720992f93d4f2. Evidence design/WB-08-current-closure.md and reviews/WB-08-*.md. D12/whole ITEM OPEN for actual WB-44 continuation/seed; final1430 hook WB-06. Hosted/app/timing NOT_RUN.
 
 ## WB-02 — Unauthorise / approval withdrawal reaches NEXT without inventing money
 
