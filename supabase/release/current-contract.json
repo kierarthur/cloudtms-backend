@@ -12226,6 +12226,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_operational_health_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "66b0cda81ef72041b8fb50732f3a82d23bd6708bfc1e689d98ee2f3f1c9fcffe"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private"
       ],
       "schema": "private",
@@ -14153,6 +14172,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "54ed6be1a6d91d559eec3b65d2ffe65d8f41e5779ff6851d9d6ebcc5c557b37a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_terminal_cleanup_v1(p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "952f64a7278664d236f7401c892e3a23a6f7d98a4fe9dc56618e180ecfd68586"
     },
     {
       "acl": [
@@ -29305,6 +29343,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_operational_health_service_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f06cae157f9af0fe335f39c78a9276656cc81d16f0d6b02ef25354f7c9984abd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "TimeZone=UTC",
         "search_path=pg_catalog, private, public"
       ],
@@ -29483,6 +29545,30 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "be406d7689b0c10d08538797125488265eaaf32b6c13d7d0bee851ace6f41ca1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_terminal_cleanup_service_v1(p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2106db9d2584adf60153455cf5589bd5e76db02b8b0fc978500608fe32f806a8"
     },
     {
       "acl": [
@@ -102470,6 +102556,148 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (sort_code ~ '^[0-9]{6}$'::text)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_terminal_cleanup_clock",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "id",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "job_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "lane",
+          "type": "text",
+          "default": "'SELECTION'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_page_cursor",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "selection_run_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_terminal_cleanup_clock_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_terminal_cleanup_clock_pkey ON private.bpay_next_terminal_cleanup_clock USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_terminal_cleanup_clock_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((selection_run_cursor IS NULL) = (selection_page_cursor IS NULL))"
+        },
+        {
+          "name": "bpay_next_terminal_cleanup_clock_id_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (id = 1)"
+        },
+        {
+          "name": "bpay_next_terminal_cleanup_clock_lane_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (lane = ANY (ARRAY['SELECTION'::text, 'JOB'::text]))"
+        },
+        {
+          "name": "bpay_next_terminal_cleanup_clock_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_terminal_cleanup_clock_selection_page_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_page_cursor IS NULL OR selection_page_cursor > 0)"
         }
       ],
       "view_definition_sha256": null

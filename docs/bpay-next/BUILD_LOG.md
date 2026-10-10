@@ -279,3 +279,13 @@ Three exact objects inventoried in design/PF-06-SCOPE.md. BD025 private job-only
 ### PF-06 complete — 10/10/2026 London
 
 Whole ITEM BUILT19/288 REVIEWED19/288. D01 missing3jobclocks/D02 finite sixfield actualstep observation/D03 future joined checklist complete underBD025. Private trigger only, historicalNULLs/counters/owners preserved. Independent lifecycle/Worker PASS. Source132/132+4/4,syntax,dbcheck309/810, solePG17 CHANGED1migration+4closures COMPILED protectedverificationPENDING, seal4d640a5d3e55a382adfb74e7d04c807f387a5473d36608eb7732ba2822deb439/coupling PASS. Hosted/app/timing NOT_RUN. ContinuePF04seq22.
+
+### PF-04 scope checkpoint — 10/10/2026 London
+
+Exact five objects listed beforebuild in design/PF-04-SCOPE.md. PF06 localcommit7edaafa0 clocks/reviewscomplete. Required historygate design and terminaltemporaryrow replay/FK census underway; no broad moneyowner or RuleB rewrite.
+
+BUILDER DECISION BD026: terminal temporary metadata may retire after actual closed predicates with all permanent origins retained; late old calls truthfully refuse, never fake DONE. Exact7FKs retained; small private alternating keyset clock needed for bounded cleanup past retained rows. No TTL/archive/financialcommand/producer/moneyowner rewrite. Required historygate checked design in design/PF-04-history-gate-design.md.
+
+### PF-04 complete — 10/10/2026 London
+
+Whole ITEM BUILT20/288 REVIEWED20/288. D01 bounded terminal temporary cleanup/D02 five read-only health measures/D03 fifth existing NEXT minute lane/D04 future joined checklist/D05 finite current-final routine-history point gate complete under BD026. Four independent source reviews PASS; HG01 ONLY/comma/TABLE omission corrected; preliminary PREPARE concern withdrawn after exact COMPLETE/SEALED boundary inspection. Source5/5, Worker48/48, syntax/dbcheck310/812, solePG17 CHANGED1migration+5closures COMPILED protectedverificationPENDING, seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/coupling PASS. No business invocation/fixtures/rehearsal/hosted/app/timing/external action. Progress:20 whole items built and reviewed; earliest remaining plan step PF09 sequence23, earlier staged foundation joined acceptance still pending.

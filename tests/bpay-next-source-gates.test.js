@@ -1,10 +1,29 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
+import { assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
 
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
+});
+test('PF04 routine history reads require the whole reviewed point clause and finite helper edges',()=>{
+  const signature='private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)';
+  const wrap=body=>`create function private.bpay_next_source_book_seed_proof_v1(a uuid,b text,c uuid,d uuid,e uuid)
+    returns void language plpgsql as $body$ begin ${body} end $body$;`;
+  const point='select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_seed_effect_id;';
+  assert.doesNotThrow(()=>assertRoutineHistoryPoints(wrap(point),'source.sql',signature));
+  assert.doesNotThrow(()=>assertRoutineHistoryPoints(wrap('-- from private.bpay_next_case_event\nnull;'),'source.sql',signature));
+  for(const body of [point.replace('e.id=p_seed_effect_id','e.candidate_id=p_seed_effect_id'),
+    point.replace('e.id=p_seed_effect_id','e.id=p_seed_effect_id or true'),point+point,
+    'select count(*) from private.bpay_next_case_event where candidate_id=a;',
+    'select count(*) from only private.bpay_next_case_event where candidate_id=a;',
+    'select count(e.id) from private.bpay_next_job j, private.bpay_next_case_event e where e.candidate_id=j.candidate_id;',
+    'table private.bpay_next_case_event;',
+    "execute 'select * from private.bpay_next_case_event';",
+    'perform public.bpay_next_payment_history_page_v1(null);','perform bpay_next_payment_history_page_v1(null);',
+    'perform private.hidden_history_reader(a);','perform hidden_history_reader(a);']) {
+    assert.throws(()=>assertRoutineHistoryPoints(wrap(body),'source.sql',signature),/BPAY_NEXT_ROUTINE_HISTORY_/);
+  }
 });
 test('F23 source gates reject actual forbidden writes/constructs and missing tail notification',()=>{
   for(const source of ['update private.bpay_next_module_control set active_owner=\'NEXT\';',

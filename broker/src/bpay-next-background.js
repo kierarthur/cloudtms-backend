@@ -7,7 +7,7 @@
  * server recovery pages. Neither an uncertain send nor a lost SQL reply is a
  * completed financial operation. Actual Worker wiring supplies fresh ownership.
  */
-import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage } from './bpay-next-runtime-rpc.js';
+import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows } from './bpay-next-runtime-rpc.js';
 import { receiveBpayNextPreparationExpiry } from './bpay-next-preparation-expiry-rpc.js';
 import { handleBpayNextFinancialQueueMessage } from './bpay-next-financial-queue.js';
 
@@ -95,7 +95,8 @@ export async function handleBpayNextBackgroundMessage(message,deps) {
 }
 
 /** One recovery tick: one enrollment, two <=100 job pages, one <=100 expiry
- * page. Independent lanes each get a turn despite another lane failing. All
+ * page and one <=100 terminal temporary-row cleanup page. Independent lanes
+ * each get a turn despite another lane failing. All
  * sends settle; no recursive drain/large collection or unawaited money work.
  */
 export async function runBpayNextRecoveryTick(deps) {
@@ -122,6 +123,10 @@ export async function runBpayNextRecoveryTick(deps) {
     if(!outcome.ok) return outcome;
     await publish(deps,outcome.result.items.map(expiry));
     return {ok:true,published:outcome.result.items.length};
+  });
+  await lane('CLEANUP',async()=>{
+    const outcome=await cleanupBpayNextTerminalRows({limit:100},{runtimeRpc:deps.runtimeRpc});
+    return outcome.ok?{ok:true,published:0}:outcome;
   });
   return Object.freeze({ok:results.every(result=>result.ok),lanes:Object.freeze(results)});
 }

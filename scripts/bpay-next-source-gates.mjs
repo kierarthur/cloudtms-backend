@@ -17,6 +17,268 @@ export const FROZEN_FILES=Object.freeze([
   'supabase/migrations/04102026_0504_banking_pay_next_factual_email_claim_index.sql',
   'supabase/repeatable/04102026_0558_banking_pay_next_legacy_email_claim_boundary_v1.sql',
 ]);
+// PF04: current operational roots and their finite reviewed helper closure.
+// Resolve actual final definitions below; no unchanged-file/history waiver.
+export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  'private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)',
+  'private.bpay_next_claim_prepare_job_v1(uuid,integer)',
+  'private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint)',
+  'private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)',
+  'private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)',
+  'private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)',
+  'private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)',
+  'private.bpay_next_confirm_simple_run_v1(uuid,bigint)',
+  'private.bpay_next_begin_simple_transfer_v1(uuid,uuid)',
+  'private.bpay_next_claim_simple_transfer_job_v1(uuid,integer)',
+  'private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)',
+  'private.bpay_next_begin_case_transfer_v1(uuid,uuid)',
+  'private.bpay_next_build_case_transfer_page_v1(uuid,uuid,bigint,bigint,integer)',
+  'private.bpay_next_build_destination_group_page_v1(uuid,uuid,bigint,bigint,integer)',
+  'private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)',
+  'private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)',
+  'private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)',
+  'private.bpay_next_bound_source_snapshot_v1(uuid,bigint)',
+  'private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)',
+  'private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)',
+  'private.bpay_next_source_binding_members_v1(uuid)',
+  'private.bpay_next_initial_tsfin_bound_assert_v1(uuid)',
+  'private.bpay_next_initial_tsfin_certificate_v1(uuid)',
+  'private.bpay_next_source_command_id_v1(uuid)',
+  'private.weekly_source_pay_query_admit_v2()',
+  'private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)',
+  'private.bpay_next_capture_instruction_destination_v1(uuid)',
+  'private.bpay_next_case_allocation_row_v1(text,numeric,numeric,numeric,numeric,numeric,numeric,numeric)',
+  'private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date)',
+  'private.pay_finance_selected_quote_v1(public.pay_finance_component_resolution_mode_enum,numeric,text,text,numeric,numeric,numeric,numeric,numeric,boolean)',
+  'private.bpay_next_channel_drafts_page_v1(uuid)',
+  'private.bpay_next_receive_command_v1(uuid,text)',
+  'private._candidate_expense_source_family_v1(uuid)',
+]);
+const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": [
+    "private.bpay_next_reconcile_work_collection_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_claim_prepare_job_v1(uuid,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.gen_random_uuid",
+    "pg_catalog.make_interval",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_pin_selected_work_v1(uuid,uuid,bigint,bigint)": [
+    "private._candidate_expense_source_family_v1",
+    "private.bpay_next_source_command_id_v1",
+    "private.weekly_source_pay_query_admit_v2",
+    "pg_catalog.btrim",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.decode",
+    "pg_catalog.isfinite",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.jsonb_typeof",
+    "pg_catalog.to_jsonb"
+  ],
+  "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+    "private.bpay_next_bound_source_snapshot_v1",
+    "private.bpay_next_source_disposition_seed_v1",
+    "private.bpay_next_work_collection_origin_v1",
+    "pg_catalog.array_agg",
+    "pg_catalog.cardinality",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.octet_length"
+  ],
+  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+    "private.bpay_next_bound_source_snapshot_v1",
+    "private.bpay_next_value_source_for_target_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)": [
+    "private.bpay_next_publish_no_case_week_fact_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_capture_instruction_destination_v1",
+    "private.bpay_next_case_allocation_row_v1",
+    "private.bpay_next_complete_no_case_worker_v1",
+    "private.bpay_next_value_source_for_target_v1",
+    "private.bpay_next_work_collection_origin_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp",
+    "pg_catalog.trunc"
+  ],
+  "private.bpay_next_confirm_simple_run_v1(uuid,bigint)": [
+    "private.bpay_next_channel_drafts_page_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_begin_simple_transfer_v1(uuid,uuid)": [
+    "private.bpay_next_begin_case_transfer_v1",
+    "private.bpay_next_receive_command_v1",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_claim_simple_transfer_job_v1(uuid,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.gen_random_uuid",
+    "pg_catalog.make_interval",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_build_case_transfer_page_v1",
+    "private.bpay_next_build_destination_group_page_v1",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object"
+  ],
+  "private.bpay_next_begin_case_transfer_v1(uuid,uuid)": [
+    "private.bpay_next_receive_command_v1",
+    "pg_catalog.hashtextextended",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.pg_advisory_xact_lock",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_build_case_transfer_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_build_destination_group_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": [
+    "private.bpay_next_expired_work_collection_scope_v1",
+    "pg_catalog.cardinality",
+    "pg_catalog.char_length",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.transaction_timestamp"
+  ],
+  "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)": [
+    "pg_catalog.clock_timestamp"
+  ],
+  "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": [],
+  "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)": [
+    "private.bpay_next_initial_tsfin_bound_assert_v1",
+    "private.bpay_next_source_binding_members_v1",
+    "private.bpay_next_source_command_id_v1",
+    "pg_catalog.count"
+  ],
+  "private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)": [
+    "private.bpay_next_source_book_seed_proof_v1"
+  ],
+  "private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)": [
+    "pg_catalog.convert_to",
+    "pg_catalog.jsonb_build_array",
+    "pg_catalog.sha256"
+  ],
+  "private.bpay_next_source_binding_members_v1(uuid)": [
+    "pg_catalog.cardinality"
+  ],
+  "private.bpay_next_initial_tsfin_bound_assert_v1(uuid)": [
+    "private.bpay_next_initial_tsfin_certificate_v1"
+  ],
+  "private.bpay_next_initial_tsfin_certificate_v1(uuid)": [
+    "private.bpay_next_source_command_id_v1",
+    "private.weekly_source_effective_inventory_v1",
+    "private.weekly_source_inventory_approval_basis_v2",
+    "private.weekly_source_sha256_jsonb_v1"
+  ],
+  "private.bpay_next_source_command_id_v1(uuid)": [
+    "pg_catalog.md5",
+    "pg_catalog.substr"
+  ],
+  "private.weekly_source_pay_query_admit_v2()": [
+    "pg_catalog.hashtextextended",
+    "pg_catalog.pg_try_advisory_xact_lock"
+  ],
+  "private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)": [
+    "pg_catalog.trunc"
+  ],
+  "private.bpay_next_capture_instruction_destination_v1(uuid)": [],
+  "private.bpay_next_case_allocation_row_v1(text,numeric,numeric,numeric,numeric,numeric,numeric,numeric)": [
+    "pg_catalog.trunc"
+  ],
+  "private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date)": [
+    "private.pay_finance_selected_quote_v1"
+  ],
+  "private.pay_finance_selected_quote_v1(public.pay_finance_component_resolution_mode_enum,numeric,text,text,numeric,numeric,numeric,numeric,numeric,boolean)": [
+    "public._pay_convert_paye_to_umbrella",
+    "public._pay_convert_umbrella_to_paye_ex",
+    "public._pay_umbrella_vat_calc"
+  ],
+  "private.bpay_next_channel_drafts_page_v1(uuid)": [
+    "pg_catalog.jsonb_agg",
+    "pg_catalog.jsonb_array_length",
+    "pg_catalog.jsonb_build_object"
+  ],
+  "private.bpay_next_receive_command_v1(uuid,text)": [
+    "pg_catalog.char_length"
+  ],
+  "private._candidate_expense_source_family_v1(uuid)": []
+});
+export const HISTORY_RELATIONS=Object.freeze(['bpay_next_financial_effect','bpay_next_case_event',
+  'bpay_next_transfer_outcome','bpay_next_internal_receipt','bpay_next_return_cash']);
+
+export function assertRoutineHistoryPoints(source,file,signature){
+  const parts=executableParts(source,file).filter(part=>part.signature===signature);
+  if(parts.length!==1||parts[0].unclassified)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
+  const body=parts[0].text;
+  const tokens=scanManagedSql(body).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
+  if(/\b(?:bpay_next_payment_history_page_v1|audit_events_list|pay_finance_case_audit_actor_index)\s*\(/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_READER: ${signature}`);
+  if(/\bexecute\b/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DYNAMIC: ${signature}`);
+  const approved=new Set(ROUTINE_WORK_CALLEES[signature]??[]);
+  const native=new Set(['and','any','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
+    'else','elsif','encode','exists','extract','from','greatest','if','in','jsonb_array_elements',
+    'jsonb_array_length','jsonb_build_array','jsonb_build_object','jsonb_typeof','least','materialized',
+    'not','nullif','numeric','or','over','round','select','sha256','values','when','where']);
+  for(const match of tokens.matchAll(/\b([a-z_][a-z0-9_$]*)(?:\s*\.\s*([a-z_][a-z0-9_$]*))?\s*\(/g)){
+    const prefix=tokens.slice(0,match.index).trimEnd(),schema=match[2]?match[1]:null;
+    const name=match[2]?schema+'.'+match[2]:match[1];
+    // INSERT column targets and casts are declarations, not helper delegation.
+    if(/(?:\binto|:\s*:)\s*$/.test(prefix))continue;
+    if(!schema&&prefix.endsWith(')'))continue; // actual SQL table alias(column list)
+    if(!schema&&native.has(name))continue;
+    if(!approved.has(name))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DELEGATION: ${signature} (${name})`);
+  }
+  let code=body.replace(/\s+/g,' ').trim().toLowerCase();
+  const exact=[];
+  if(signature.startsWith('private.bpay_next_prepare_case_page_v1('))exact.push(
+    "select 1 from private.bpay_next_case_event e where e.id=v_rule.original_funding_event_id and e.case_id=v_case.id and e.event_kind='funded' and e.occurred_at_utc=v_rule.original_funded_at_utc)");
+  if(signature.startsWith('private.bpay_next_source_book_seed_proof_v1('))exact.push(
+    'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_seed_effect_id;');
+  if(signature.startsWith('private.bpay_next_reconcile_work_collection_v1('))exact.push(
+    'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_effect_id;',
+    `select 1 from private.bpay_next_work_collection b
+      join private.bpay_next_case_event ce on ce.id=v_effect.operation_item_id and ce.case_id=b.case_id
+      join private.bpay_next_run_case_instruction i on i.id=ce.instruction_id and i.work_collection_id=b.id
+      join private.bpay_next_case_hold h on h.id=ce.operation_item_id and h.status='realised'
+      join private.bpay_next_case_capacity_use u on u.case_hold_id=h.id and u.status='realised' and u.realisation_event_id=ce.id
+      join private.bpay_next_outcome_request r on r.command_id=v_job.command_id and r.transfer_id=ce.original_transfer_id
+      where b.work_id=p_work_id and b.component_key=p_component_key and b.candidate_id=v_candidate
+        and ce.operation_id=v_job.command_id and ce.event_kind='recovered'
+        and ce.case_component_id=b.case_component_id and ce.source_amount_ex_vat>0
+        and v_effect.operation_id=v_job.command_id and v_effect.work_id=b.work_id
+        and v_effect.component_key=b.component_key and v_effect.candidate_id=b.candidate_id
+        and v_effect.case_id=b.case_id and v_effect.original_transfer_id=ce.original_transfer_id
+        and (v_effect.source_disposition_ex_vat,v_effect.target_amount_ex_vat,v_effect.target_amount_vat,v_effect.target_amount_inc_vat)
+          is not distinct from (-ce.source_amount_ex_vat,-ce.target_amount_ex_vat,-ce.target_amount_vat,-ce.target_amount_inc_vat))`.replace(/\s+/g,' '));
+  for(const clause of exact)code=code.replace(clause,' ');
+  const remaining=scanManagedSql(code).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
+  for(const match of remaining.matchAll(new RegExp(`\\b(?:private\\s*\\.\\s*)?(?:${HISTORY_RELATIONS.join('|')})\\b`,'g'))){
+    const before=remaining.slice(0,match.index).trimEnd(),after=remaining.slice(match.index+match[0].length);
+    // Named row types and INSERT targets are not history reads. Every other
+    // remaining ledger occurrence fails closed, including ONLY/comma/TABLE.
+    if(/^\s*%\s*rowtype\b/.test(after)||/\binsert\s+into\s*$/.test(before)||/:\s*:\s*$/.test(before))continue;
+    throw Error(`BPAY_NEXT_ROUTINE_HISTORY_SCAN: ${signature}`);
+  }
+}
 const read=file=>fs.readFileSync(path.join(repoRoot,file),'utf8');
 const git=args=>{
   const r=spawnSync('git',args,{cwd:repoRoot,encoding:'utf8',maxBuffer:64*1024*1024,windowsHide:true});
@@ -432,6 +694,14 @@ export function verifyBpayNextSourceGates(){
   git(['merge-base','--is-ancestor',FROZEN_BASE,'HEAD']);
   const current=inventory(),changed=changedSourcePaths();
   const {routines,migrationRoots}=definerInventory(current),protectedSignatures=new Map(),frozenSources=new Map();
+  for(const signature of ROUTINE_WORK_SIGNATURES){
+    const final=routines.get(signature)?.at(-1);
+    if(!final)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
+    const source=read(final.physical).replaceAll('\r\n','\n');
+    const rows=scanManagedSql(source).statements.filter(row=>routineDefinitions(source.slice(row.start,row.end),final.physical).includes(signature));
+    if(rows.length!==1)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
+    assertRoutineHistoryPoints(source.slice(rows[0].start,rows[0].end),final.physical,signature);
+  }
   for(const file of FROZEN_FILES){
     const base=spawnSync('git',['show',`${FROZEN_BASE}:${file}`],{cwd:repoRoot,maxBuffer:64*1024*1024,windowsHide:true});
     if(base.status!==0||!fs.readFileSync(path.join(repoRoot,file)).equals(base.stdout))throw Error(`BPAY_NEXT_FROZEN_BYTES_CHANGED: ${file}`);
@@ -508,5 +778,5 @@ export function verifyBpayNextSourceGates(){
     rpcRoots.add(final.root);
   }
   for(const file of rpcRoots)assertRpcReload(readManagedClosure(file,repoRoot).expanded,file);
-  return {frozenFiles:FROZEN_FILES.length,frozenTriggers:authorityPolicy.triggers.size,frozenTables:authorityPolicy.tables.size,protectedSignatures:protectedSignatures.size,sqlSources:sources.size,rpcRoots:rpcRoots.size};
+  return {frozenFiles:FROZEN_FILES.length,frozenTriggers:authorityPolicy.triggers.size,frozenTables:authorityPolicy.tables.size,protectedSignatures:protectedSignatures.size,sqlSources:sources.size,rpcRoots:rpcRoots.size,routineWorkSignatures:ROUTINE_WORK_SIGNATURES.length};
 }

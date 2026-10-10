@@ -12295,6 +12295,62 @@
       ],
       "owner": "PF-06 missing job lifecycle clocks; private supporting trigger only",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_operational_health_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql"
+      ],
+      "owner": "PF-04 read-only operational health and exact supporting service transport",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "public.bpay_next_operational_health_service_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql"
+      ],
+      "owner": "PF-04 read-only operational health and exact supporting service transport",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_terminal_cleanup_v1(integer)",
+      "finalRoot": "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql"
+      ],
+      "owner": "PF-04 bounded terminal temporary-row cleanup and exact supporting service transport",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "public.bpay_next_terminal_cleanup_service_v1(integer)",
+      "finalRoot": "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql"
+      ],
+      "owner": "PF-04 bounded terminal temporary-row cleanup and exact supporting service transport",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

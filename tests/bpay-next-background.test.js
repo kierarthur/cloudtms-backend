@@ -20,6 +20,7 @@ function setup(body=ENROLL,overrides={}) {
     async runtimeRpc(action,args){calls.push([action,args]);events.push(action);
       if(action==='ENROLL') return Response.json(enrollment());
       if(action==='WAKE_PAGE') return Response.json({lane:args.p_lane,items:[]});
+      if(action==='CLEANUP') return Response.json({lane:'JOB',rows_visited:'0',rows_deleted:'0',rows_retained:'0',busy:false});
       return Response.json({items:[],cursor_deadline:null,cursor_run_id:null});},
     async preparationExpiryRpc(action,args){calls.push([action,args]);events.push(action);return Response.json(receipt());},
     async financialJobRpc(action,id,kind,args){calls.push([action,id,kind,args]);events.push(action);
@@ -101,27 +102,29 @@ test('missing dependencies retry explicitly; missing Message methods throw inste
   const s=setup(ENROLL,{queue:null});assert.equal((await handleBpayNextBackgroundMessage(s.message,s.deps)).disposition,'RETRY');
   await assert.rejects(handleBpayNextBackgroundMessage({body:ENROLL},s.deps),/INTERFACE_INVALID/);
 });
-test('one recovery tick visits four independent fixed lanes, sending only bounded IDs',async()=>{
+test('one recovery tick visits five independent fixed lanes, sending only bounded IDs',async()=>{
   const s=setup(ENROLL,{runtimeRpc:async(action,args)=>{
     s.calls.push([action,args]);
     if(action==='ENROLL') return Response.json(enrollment({progressed:false,job_id:null,job_kind:null,job_status:null}));
     if(action==='WAKE_PAGE') return Response.json({lane:args.p_lane,items:[{job_id:JOB,job_kind:'CASE_CREATE',command_sequence:'1'}]});
+    if(action==='CLEANUP') return Response.json({lane:'SELECTION',rows_visited:'100',rows_deleted:'1',rows_retained:'99',busy:false});
     return Response.json({items:[{run_id:RUN,expected_deadline:'2026-10-01T10:00:00.000001Z'}],
       cursor_run_id:RUN,cursor_deadline:'2026-10-01T10:00:00.000001Z'});
   }});
   const result=await runBpayNextRecoveryTick(s.deps);assert.equal(result.ok,true);
   assert.deepEqual(s.calls,[['ENROLL',{}],['WAKE_PAGE',{p_lane:'READY',p_limit:100}],
-    ['WAKE_PAGE',{p_lane:'LEASE_EXPIRED',p_limit:100}],['EXPIRY_PAGE',{p_limit:100}]]);
+    ['WAKE_PAGE',{p_lane:'LEASE_EXPIRED',p_limit:100}],['EXPIRY_PAGE',{p_limit:100}],['CLEANUP',{p_limit:100}]]);
   assert.equal(s.sent.length,3);assert.deepEqual(s.sent[2].body,EXPIRY);assert.equal(s.events.includes('ack'),false);
 });
 test('one failing lane cannot starve the other recovery lanes and sends are all awaited',async()=>{
   const s=setup(ENROLL,{runtimeRpc:async(action,args)=>{
     s.calls.push([action,args]);if(action==='ENROLL') throw Error('secret');
     if(action==='WAKE_PAGE') return Response.json({lane:args.p_lane,items:[]});
+    if(action==='CLEANUP') return Response.json({lane:null,rows_visited:'0',rows_deleted:'0',rows_retained:'0',busy:true});
     return Response.json({items:[],cursor_deadline:null,cursor_run_id:null});
   }});
-  const result=await runBpayNextRecoveryTick(s.deps);assert.equal(result.ok,false);assert.equal(result.lanes.length,4);
-  assert.equal(result.lanes.filter(item=>item.ok).length,3);assert.equal(s.calls.length,4);
+  const result=await runBpayNextRecoveryTick(s.deps);assert.equal(result.ok,false);assert.equal(result.lanes.length,5);
+  assert.equal(result.lanes.filter(item=>item.ok).length,4);assert.equal(s.calls.length,5);
   assert.equal(JSON.stringify(result).includes('secret'),false);
 });
 test('oversized expiry and job pages cannot produce unbounded queue messages',async()=>{

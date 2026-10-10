@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   BPAY_NEXT_RUNTIME_LIMITS, BPAY_NEXT_RUNTIME_JOB_KINDS,
-  createBpayNextRuntimeRpc, enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage
+  createBpayNextRuntimeRpc, enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows
 } from '../broker/src/bpay-next-runtime-rpc.js';
 
 // Unsigned synthetic JWT shape only. Every fetch is injected; no network,
@@ -43,7 +43,7 @@ function failure(value, suffix, unknown = false, retryable = false, recovery = '
   assert.equal(Object.isFrozen(value), true);
 }
 
-test('raw metadata transport fixes only ENROLL/WAKE_PAGE/EXPIRY_PAGE endpoints and exact service args', async () => {
+test('raw metadata transport fixes enrollment/wake/expiry/cleanup endpoints and exact service args', async () => {
   const calls = [];
   const original = new Headers(headers()); original.set('x-task', 'original');
   const raw = createBpayNextRuntimeRpc({ baseUrl: 'http://127.0.0.1:54321/', headers: original,
@@ -54,13 +54,16 @@ test('raw metadata transport fixes only ENROLL/WAKE_PAGE/EXPIRY_PAGE endpoints a
   calls[0].options.headers.set('x-task', 'changed-request');
   await raw('WAKE_PAGE', { p_lane: 'LEASE_EXPIRED', p_limit: 1 }, { signal });
   await raw('EXPIRY_PAGE', { p_limit: 1 }, { signal });
-  assert.equal(calls.length, 3);
+  await raw('CLEANUP', { p_limit: 1 }, { signal });
+  assert.equal(calls.length, 4);
   assert.equal(calls[0].url, 'http://127.0.0.1:54321/rest/v1/rpc/bpay_next_enroll_service_v1');
   assert.equal(calls[1].url, 'http://127.0.0.1:54321/rest/v1/rpc/bpay_next_job_wake_page_v1');
   assert.equal(calls[2].url, 'http://127.0.0.1:54321/rest/v1/rpc/bpay_next_expiry_dispatch_page_v1');
+  assert.equal(calls[3].url, 'http://127.0.0.1:54321/rest/v1/rpc/bpay_next_terminal_cleanup_service_v1');
   assert.deepEqual(JSON.parse(calls[0].options.body), {});
   assert.deepEqual(JSON.parse(calls[1].options.body), { p_lane: 'LEASE_EXPIRED', p_limit: 1 });
   assert.deepEqual(JSON.parse(calls[2].options.body), { p_limit: 1 });
+  assert.deepEqual(JSON.parse(calls[3].options.body), { p_limit: 1 });
   for (const { options } of calls) {
     assert.equal(options.method, 'POST'); assert.equal(options.redirect, 'error'); assert.equal(options.signal, signal);
     assert.equal(options.headers.get('authorization'), headers().Authorization);
@@ -434,10 +437,38 @@ test('fresh explicit calls use only fresh owner results, never cached missing/pr
   assert.equal((await enrollBpayNextOne(dependency)).result.job_id, JOB); assert.equal(calls, 3);
 });
 
-test('module exposes exactly three metadata RPCs and no browser actor/private clock/lease/queue bindings', async () => {
+test('cleanup sends one bounded metadata call and accepts only truthful closed counters', async () => {
+  const receipt = { lane: 'JOB', rows_visited: '100', rows_deleted: '1', rows_retained: '99', busy: false };
+  let calls = 0;
+  const dependency = deps(async (action, args) => {
+    calls++; assert.equal(action, 'CLEANUP'); assert.deepEqual(args, { p_limit: 100 }); return json(receipt);
+  });
+  assert.deepEqual(await cleanupBpayNextTerminalRows({ limit: 100 }, dependency),
+    { ok: true, action: 'CLEANUP', result: receipt });
+  assert.equal(calls, 1);
+  const busy = { lane: null, rows_visited: '0', rows_deleted: '0', rows_retained: '0', busy: true };
+  assert.equal((await cleanupBpayNextTerminalRows({ limit: 1 }, deps(async () => json(busy)))).ok, true);
+  for (const payload of [{ ...receipt, rows_retained: '98' }, { ...receipt, rows_visited: '101' },
+    { ...receipt, rows_deleted: 1 }, { ...receipt, lane: 'ALL' }, { ...receipt, amount: '1.00' },
+    { ...busy, lane: 'JOB' }, { ...busy, rows_visited: '1', rows_retained: '1' }]) {
+    failure(await cleanupBpayNextTerminalRows({ limit: 100 }, deps(async () => json(payload))),
+      'RESPONSE_INVALID', true, true, 'WAIT_FOR_SWEEP_RECOVERY');
+  }
+  let invalidCalls = 0;
+  for (const input of [{ limit: 101 }, { limit: 1, cursor: JOB }]) {
+    failure(await cleanupBpayNextTerminalRows(input, deps(async () => { invalidCalls++; })), 'REQUEST_INVALID');
+  }
+  assert.equal(invalidCalls, 0);
+  let unknownCalls = 0;
+  failure(await cleanupBpayNextTerminalRows({ limit: 1 }, deps(async () => { unknownCalls++; throw Error('lost'); })),
+    'TRANSPORT_FAILED', true, true, 'WAIT_FOR_SWEEP_RECOVERY');
+  assert.equal(unknownCalls, 1);
+});
+
+test('module exposes exactly four metadata RPCs and no browser actor/private clock/lease/queue bindings', async () => {
   const source = await readFile(new URL('../broker/src/bpay-next-runtime-rpc.js', import.meta.url), 'utf8');
   assert.deepEqual([...new Set(source.match(/bpay_next_[a-z_]+_v1/g))].sort(),
-    ['bpay_next_enroll_service_v1', 'bpay_next_expiry_dispatch_page_v1', 'bpay_next_job_wake_page_v1']);
+    ['bpay_next_enroll_service_v1', 'bpay_next_expiry_dispatch_page_v1', 'bpay_next_job_wake_page_v1', 'bpay_next_terminal_cleanup_service_v1']);
   assert.doesNotMatch(source, /p_actor_user_id|p_clock|lease_nonce|lease_until_utc|owner_epoch|env\.[A-Z_]+|\.send\(|\.ack\(|\.retry\(|setInterval\(/);
   assert.doesNotMatch(source, /Date\.(?:parse|now)|new Date\(/);
   assert.equal(BPAY_NEXT_RUNTIME_LIMITS.responseBytes, 32768); assert.equal(BPAY_NEXT_RUNTIME_LIMITS.pageRows, 100);

@@ -3,7 +3,7 @@
  * scheduler, financial worker, historical job drain or lease-recovery API.
  * Queue messages only wake durable jobs. CLAIM alone decides eligibility and
  * creates a fresh lease; these calls never expose or adopt a stored token.
- * All three SQL calls mutate metadata. Lost replies are uncertain; this adapter
+ * All four SQL calls mutate metadata. Lost replies are uncertain; this adapter
  * reports recovery direction and never silently retries or sends a message.
  */
 export const BPAY_NEXT_RUNTIME_LIMITS = Object.freeze({
@@ -15,7 +15,7 @@ export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
   'PREPARATION_EXPIRY', 'CASE_CREATE', 'CASE_WRITE_OFF'
 ]);
 const RPCS = Object.freeze({ ENROLL: 'bpay_next_enroll_service_v1', WAKE_PAGE: 'bpay_next_job_wake_page_v1',
-  EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1' });
+  EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1' });
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const INTEGER = /^(?:0|[1-9]\d{0,18})$/;
 const BIGINT_MAX = 9223372036854775807n;
@@ -201,6 +201,14 @@ function expiryResult(value, call) {
   // describes its returned page, never permission to replace the stored key.
   return Object.freeze({ items: Object.freeze(items), cursor_deadline: value.cursor_deadline, cursor_run_id: value.cursor_run_id });
 }
+function cleanupResult(value, call) {
+  if (!exact(value, ['lane','rows_visited','rows_deleted','rows_retained','busy'])
+      || typeof value.busy !== 'boolean'
+      || ![value.rows_visited,value.rows_deleted,value.rows_retained].every(v => integer(v) && BigInt(v) <= BigInt(call.limit))
+      || BigInt(value.rows_deleted) + BigInt(value.rows_retained) !== BigInt(value.rows_visited)
+      || (value.busy ? value.lane !== null || value.rows_visited !== '0' : !['SELECTION','JOB'].includes(value.lane))) throw new Error();
+  return Object.freeze({ ...value });
+}
 class RuntimeError extends Error {
   constructor(code, retryable = false, known = false) {
     super(code); this.code = code; this.retryable = retryable; this.known = known;
@@ -296,7 +304,7 @@ async function call(action, input, dependencies) {
     if (response.status !== 200) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
     let result;
     try { result = action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
-      ? pageResult(payload, normalized) : expiryResult(payload, normalized); }
+      ? pageResult(payload, normalized) : action === 'CLEANUP' ? cleanupResult(payload, normalized) : expiryResult(payload, normalized); }
     catch { throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true); }
     return Object.freeze({ ok: true, action, result });
   } catch (error) {
@@ -320,3 +328,5 @@ export function enrollBpayNextOne(...args) { return call('ENROLL', args.length =
 export function readBpayNextJobWakePage(...args) { return call('WAKE_PAGE', args.length === 2 ? args[0] : null, args[1]); }
 /** One fixed-watermark expiry sweep page; no client key/clock or auto-receive. */
 export function readBpayNextExpiryDispatchPage(...args) { return call('EXPIRY_PAGE', args.length === 2 ? args[0] : null, args[1]); }
+/** One terminal temporary-row page; SQL keeps its cursor and retained origins. */
+export function cleanupBpayNextTerminalRows(...args) { return call('CLEANUP', args.length === 2 ? args[0] : null, args[1]); }
