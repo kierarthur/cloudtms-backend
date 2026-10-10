@@ -2496,16 +2496,19 @@
     },
     {
       "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
-      "finalRoot": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-06 exact publication Processing and final applied-pointer/linked-Case projection; WB44 closes actual larger indexed continuation, CM10 next1430 editor",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4089,16 +4092,19 @@
     },
     {
       "signature": "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql"
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-06 exact publication Processing and final applied-pointer/linked-Case projection; WB44 closes actual larger indexed continuation, CM10 next1430 editor",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13364,16 +13370,19 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
-      "finalRoot": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
       ],
-      "owner": "WB-08 typed maintained projection; WB02/WB07/WB40/WB41/WB29 classifier successors and WB44 continuation retain actual later ownership"
+      "owner": "WB-06 exact publication Processing and final applied-pointer/linked-Case projection; WB44 closes actual larger indexed continuation, CM10 next1430 editor"
     },
     {
       "signature": "private.bpay_next_workbench_set_bank_warning_v1(uuid,text)",
@@ -13413,6 +13422,19 @@
         "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
       "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41"
+    },
+    {
+      "signature": "private.bpay_next_workbench_mark_processing_v1(uuid)",
+      "finalRoot": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+      ],
+      "owner": "WB-06 exact publication Processing and final applied-pointer/linked-Case projection; WB44 closes actual larger indexed continuation, CM10 next1430 editor"
     }
   ],
   "editorChains": [

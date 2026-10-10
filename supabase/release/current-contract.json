@@ -10694,7 +10694,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "cc28b23b799da3e4a2bbd6faa87cc13b3cf3b3e9d729597b0bf6eaed67821278"
+      "definition_sha256": "e4e9e33f51917a99d96771f20e0f46fab6245166659af6eaa029b6ff794ddaff"
     },
     {
       "acl": [
@@ -13060,7 +13060,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "466f0bef319d4e110cd9c393e59cba829732e428a5ba6df9403f9adbdadc10fc"
+      "definition_sha256": "343d69b154d0c9fd4b5fc115f697b737053fdc60d6681e5a4dc1e7495da6bce1"
     },
     {
       "acl": [
@@ -15488,6 +15488,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_mark_processing_v1(p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a3db29142b89bec971428ae260f55ee66257c8a524eb449966f6d25b921e1721"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_refresh_case_v1(p_case_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15511,7 +15530,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5e5606ac630ec479e3ed1d3c60249eb4b3114a8635bbecb39c4500f668bdd3e5"
+      "definition_sha256": "5ac8e6096f7344de64446a2951850b5d28a1a9414defef6af89c95f97fc9a301"
     },
     {
       "acl": [

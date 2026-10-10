@@ -37,7 +37,10 @@ balances separately. No background NET/headroom, channel conversion or mixing
 outstanding debt with ready payout gross. Candidate membership transitions update
 agency counts rather than adding one Candidate per component.
 
-Only refresh_work and refresh_case call apply_delta. Refresh locks existing
+refresh_work and refresh_case replace complete native contributions through
+apply_delta. WB-06's narrow mark_processing helper also calls that same delta
+owner to invalidate one exact group's stale contribution with unknown Processing
+evidence; it never derives or publishes partially applied earnings. Refresh locks existing
 Candidate control, then exact work/Case, Candidate metadata and projection
 revision in consistent order. It snapshots at most20 natural aggregate rows
 before replacing its exact indexed group, snapshots the same after, and applies

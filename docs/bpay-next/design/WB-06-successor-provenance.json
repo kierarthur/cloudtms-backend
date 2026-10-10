@@ -1,0 +1,22 @@
+[
+  {
+    "signature": "private.bpay_next_workbench_mark_processing_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
+    "predecessor": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+    "final": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_publish_staged_revision_v1(uuid,uuid,uuid)",
+    "predecessor": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+    "final": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
+    "predecessor": "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+    "final": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql"
+  }
+]
