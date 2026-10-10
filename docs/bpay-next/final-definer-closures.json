@@ -4078,16 +4078,19 @@
     },
     {
       "signature": "private.bpay_next_publish_source_staged_pair_v1(uuid[],uuid[],uuid[])",
-      "finalRoot": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql",
+        "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1540_banking_pay_next_source_ordered_publish_v1.sql"
+        "supabase/repeatable/10102026_1403_banking_pay_next_source_pair_projection_lockset_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-05 exact Source pair Contract/Client projection FK preholds before first clock; native receipts/publication/money preserved",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

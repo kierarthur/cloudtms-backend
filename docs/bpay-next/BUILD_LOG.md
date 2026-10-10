@@ -521,3 +521,17 @@ WB06seq51 beforecode exactscope all23rows/fullcard/R2/master/deps read:1430publi
 - Acceptance: first-use, joined app, hosted queue, failure journeys and timing NOT_RUN. Whole ITEM count43/288 BUILT and43/288 REVIEWED; current source receipt to follow. NextWB05seq52.
 
 WB06 current source receipt 5fb23a1180a4db099f0280dfdae54c3b26d21555:14 named current deliverables ticked with realhash; D02/D07/D08/D12/ITEM OPEN exact later closure. Whole43/288 BUILT/REVIEWED. NextWB05seq52.
+
+WB05seq52 beforecode exactscope fullcard/all9rows/R2/master/deps read: context current1346 publisher/1332 Source withdrawal/Workbench refresh/public firstAuthorise; D03 retained1610 Source capture and D04 retained1620 Source hold reconciliation records; D08 stage_source_current1236; D09 exact pair1540. Inspect all listed NX004–019/023/025 current qualified producers, preliminary exclusion, genuine approval/query/manual holds and atomic flat-origin binding. No new publisher; only confirmed bypass approval/current-pointer writer would receive exact NEXT refresh. OR45/SP02 Recover refusal controls stale success wording. Current inspection finds no missing direct pointer refresh; independent census/pair boundary review pending. No product change assumed.
+
+### WB-05 Source publication — done source 10/10/2026
+- Seq:52; Part:whole product/source deliverables; joined acceptance NOT_RUN.
+- Files changed: new1403 private pair successor, final registry/current contract/local checkpoint, WB05 design/current NX producer and pair investigations/provenance, three reviews, actual SP12 hook census.
+- Objects: private.bpay_next_publish_source_staged_pair_v1(uuid[],uuid[],uuid[]) only; retained stage_source_current1236 and Source capture/hold1236 reconciled by exact source record. No Worker/Office/public Source change.
+- Deviations: BD060 narrow pair FK support, exact1–2 selected Contract FOR SHARE and Client FOR KEY SHARE before firstclock, complete replay no added preholds. BD053/SP02/OR45 Recover refusal retained despite older card success wording. Policy X no drift.
+- Admission/shared safety: actual Source/protected earlykey/first-lock/qualified success table and every named NX producer in design/WB-05-source-owner-investigation.md; current nested1346/1332/1403 refresh census appended SP12. No missing direct work approval/current-pointer hook. Full original pair body retained except finite prehold block; global projection serialization already owned1346.
+- Follow-ups: WB44 genuine maintained current producer/seed/fanout; SP15 queryrefresh and SP36 MyTMS census; destination repricing/channel comparison at named CM turns. These separately owned later products are not stubbed early. Blocked:none.
+- Source status:1403 locally compiled/COMMITTED_NOT_INSTALLED hosted; reused1236/2018/0806/1301/0345 genuine saved qualified sources with hashes. Installed evidence:sole localPG17,0 migrations+4 final repeatable closures. No hosted apply/publication.
+- Checks:db321/840;node3 existing Source/indexpaths;source9;seal b6918f06ba2c4dc867a3946a4a55ecd8d1f1d9613752088e649e385572de5681/coupling;browser829/76/0/55bbf326922f59d683823d40f5f3544a actualDO;diff PASS.
+- Reviews:source-pair, pair-lockset and source-census all PASS at1403 ea53f357817e88504cf3e2c6bad75ca228b1abe264aeeb10c8d58dd068a7fc21. All finite findings closed.
+- Acceptance:first-use/actual Source Final/protected/move/queue/app/timing NOT_RUN. Implementation commit and four named deliverable/ITEM ticks follow; nextWB07seq53. Whole count beforeticks43/288 each.
