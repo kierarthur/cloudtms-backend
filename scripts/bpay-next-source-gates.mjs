@@ -975,6 +975,9 @@ function closedWorkbenchExecution(statement){
   const execution=flat.slice(at);
   const values='v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\\+1';
   if(new RegExp('^execute v_sql using '+values+' loop\\b','i').test(execution))return /for v_row in\s*$/i.test(flat.slice(0,at));
+  // WB14 whole exact-group Candidate count uses the same closed maintained
+  // WHERE/template/bind list; no caller SQL or alternative relation is admitted.
+  if(new RegExp("^execute 'select count\\(distinct i\\.candidate_id\\)'\\|\\|v_sql\\|\\|v_where into v_affected using "+values+'\\s*;?$','i').test(execution))return true;
   return new RegExp("^execute 'select exists\\(select 1'\\|\\|v_sql\\|\\|v_where(?:\\|\\|' and '\\|\\|v_tuple\\|\\|'='\\|\\|v_seek)?\\|\\|'\\)' into v_(?:affected|member) using "+values+'\\s*;?$','i').test(execution);
 }
 // Return exact same-signature/declared-type/statement occurrences. Baseline

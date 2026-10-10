@@ -1295,6 +1295,10 @@
       "sha256": "3b471ee4cbe26087f2c8a02040aa190a536288627d213de1e874b42f3ae834fc"
     },
     {
+      "path": "supabase/migrations/10102026_1806_banking_pay_next_issue_reason_read_indexes_v1.sql",
+      "sha256": "99e877d811dd5b530c980930fc9954f807a241ea831f65d28a1bdb1c60c16b65"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

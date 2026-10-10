@@ -15715,7 +15715,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "85243f6670c8e49395d09ca547ae4f8bf9f6a98a676f2077b75a17955dbcb263"
+      "definition_sha256": "02c09ed3546a6b087dc3e06aae06aa8e42ac84146c2044b95ec9d67cd84a8b6b"
     },
     {
       "acl": [
@@ -31258,7 +31258,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "82f456d8d0c999d32f46511fa55358130f01989e407b887d08b231bcf45aa008"
+      "definition_sha256": "b0823786d34907dd7a4c1520db1562f552cd36abea9b73592de8d2b99e5e72f6"
     },
     {
       "acl": [
@@ -114227,6 +114227,14 @@
         {
           "name": "bpay_next_wb10_item_ts_prefix_idx",
           "definition": "CREATE INDEX bpay_next_wb10_item_ts_prefix_idx ON private.bpay_next_workbench_item USING btree (section, timesheet_reference text_pattern_ops, id)"
+        },
+        {
+          "name": "bpay_next_wb14_group_reason_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb14_group_reason_sort_idx ON private.bpay_next_workbench_item USING btree (group_key, section, reason_code, reason_priority, id)"
+        },
+        {
+          "name": "bpay_next_wb14_reason_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb14_reason_sort_idx ON private.bpay_next_workbench_item USING btree (section, reason_priority, reason_code COLLATE \"C\", id)"
         },
         {
           "name": "bpay_next_workbench_item_candidate_idx",

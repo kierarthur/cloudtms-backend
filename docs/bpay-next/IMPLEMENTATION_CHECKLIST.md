@@ -1740,6 +1740,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - An issue whose recoverable amount is GBP 0 shows the server's nominal amount, never a blank or a browser figure (RQ-024).
   - Escape closes, and the list keeps its position.
 
+WB14 available-slice receipt: Available native read/detail slice only; docs/bpay-next/design/WB-14-successor-provenance.json. BLOCKED shared three-Candidate cause; required later action-owner joins OPEN. FE2030016417500563a2699e2fcd842c517e609c3a. reviews/WB-14-issue-sql-review.md; reviews/WB-14-issue-transport-ui-review.md; reviews/WB-14-issue-design-review.md; screen-designs/SCR-05,06,08/review.md (each37 PASS/0 FAIL/5 N/A). Whole item not reviewed complete. ITEM/D01 remain [ ] Built · [ ] Reviewed; hosted/app NOT_RUN.
+
 ## WB-21 — Per-user local selection store and the "Create drafts" submit sequencer
 
 Seq 62; Workbench · WB-S; reviewer R2; current requested-feature status PARTLY_DONE.
