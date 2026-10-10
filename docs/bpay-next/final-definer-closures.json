@@ -13612,21 +13612,23 @@
     },
     {
       "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
       ],
-      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
+      "owner": "WB-12 Ready eligible and explicit parent-intent HEADER counts; Status keyset; retains1634 current read semantics"
     },
     {
       "signature": "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
@@ -13790,19 +13792,21 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
       ],
-      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
+      "owner": "WB-12 Ready eligible and explicit parent-intent HEADER counts; Status keyset; retains1634 current read semantics"
     }
   ],
   "editorChains": [

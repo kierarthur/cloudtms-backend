@@ -15715,7 +15715,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "f13ecfc63700389198328990b5ab66258d37e7bc9c817563649b98be53914398"
+      "definition_sha256": "85243f6670c8e49395d09ca547ae4f8bf9f6a98a676f2077b75a17955dbcb263"
     },
     {
       "acl": [
@@ -31258,7 +31258,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e3caf7edeff262bb80237da8c49c5230fbdf3f097c023f76f22d0dcf3620cfa1"
+      "definition_sha256": "82f456d8d0c999d32f46511fa55358130f01989e407b887d08b231bcf45aa008"
     },
     {
       "acl": [
@@ -112815,6 +112815,14 @@
         {
           "name": "bpay_next_wb10_candidate_ref_prefix_idx",
           "definition": "CREATE INDEX bpay_next_wb10_candidate_ref_prefix_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, tms_ref text_pattern_ops, candidate_id)"
+        },
+        {
+          "name": "bpay_next_wb12_candidate_eligible_count_idx",
+          "definition": "CREATE INDEX bpay_next_wb12_candidate_eligible_count_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, candidate_id) INCLUDE (payable_count, deduction_item_count) WHERE (payable_count > 0)"
+        },
+        {
+          "name": "bpay_next_wb12_candidate_status_idx",
+          "definition": "CREATE INDEX bpay_next_wb12_candidate_status_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, ((payable_count = 0)), ((bank_warning_code IS NULL)), COALESCE(bank_warning_code, ''::text) COLLATE \"C\", candidate_sort_name COLLATE \"C\", candidate_id)"
         },
         {
           "name": "bpay_next_workbench_candidate_metadata_page_idx",
