@@ -355,3 +355,7 @@ All required D01/D02/D05/D06/D07 deliverables complete under BD033; context rows
 PS03 locally committed BEe26edd35/FEab9de41. Before build, BD034 lists exact named objects in design/PS-04-SCOPE.md. Reuse realoperation_item_id→RECOVEREDevent.id rather than duplicatecolumns/Sourcebindingrewrites; add uniquealias andfiniteprivateINSERTqualifieronly. AllnamedCase/moneyownersretained. No-TimesheetCaseoriginlegitimate; CM14futureUmbrellaownedseparately.
 
 PS-04 sequence30 COMPLETE: BD034 native recovered-event link/index plus private qualifier; actual named owners reused. Eight source gates/db314+815/PG17/seal303276/coupling PASS. Link/guard reviews PASS. Whole BUILT28/288 REVIEWED28/288. Joined/app NOT_RUN. Explicit-path local commit; next PS-07 seq31. Plan checkpoint30 recorded.
+
+PS-07 sequence31 scope checkpoint: exact D01-D04 objects listed in PS-07-SCOPE; BD035 correct52-section reuse with first controlling successor, separate Draft guards preserved. No early CM18 expansion.
+
+PS-07 seq31 COMPLETE BD035: correct history/callers retained, first0614controllingclosure, single-envelope packaging fixed. IndependentPASS; caller34/source8/syntax/db314+816/PG17/seal303276/couplingPASS. WholeBUILT29/288REVIEWED29/288; actualjoinedNOT_RUN. NextPS08seq32.
