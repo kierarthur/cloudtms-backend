@@ -64,5 +64,6 @@
   "joinedAppAcceptance": "NOT_RUN; no1000-row fixtures or test programme",
   "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
   "deployment": "NOT_INSTALLED",
-  "frontendCommit": "76be066e4e7520247d8cbdd47b39726496270c63"
+  "frontendCommit": "76be066e4e7520247d8cbdd47b39726496270c63",
+  "backendCommit": "e778bab5090811fef649929be5702e2079b2bff5"
 }

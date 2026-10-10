@@ -1915,6 +1915,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 
 A 1,000-row scope exports 1,000 rows plus a header, with Included "No" for the 3 unticked rows (RQ-012). The CSV total of Included rows equals the headline selected total. A Candidate export holds only that Candidate's rows. No bank account column appears.
 
+WB18 available-slice receipt: bounded output/actual header+Candidate controls source PASS, SCR15 twelve local screenshots33PASS/0FAIL/9NA at BEe778bab5090811fef649929be5702e2079b2bff5, FE76be066e4e7520247d8cbdd47b39726496270c63. D02/D03/whole ITEM PARTLY_BUILT, unchecked for WB27 matching-basis selected-total join. Joined app/1000-row acceptance NOT_RUN; whole51/288 unchanged.
+
 ## WB-19 — Refresh, progress, per-item pending/failed states and error handling
 
 Seq 67; Workbench · WB-L; reviewer R2; current requested-feature status MISSING.
