@@ -10604,7 +10604,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6cd89f91061db0e1e01b24e04118403ceb62a2b74e5130207112ce8b0fed47a7"
+      "definition_sha256": "2f41e073817a4dd9d4d89f0fbaaea0288944d333d6932bd75d25130edbebd468"
     },
     {
       "acl": [
@@ -10623,7 +10623,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fa835d9d613fb58f191a0dcd779e23861c480e86c0d30c41647440a644297ca6"
+      "definition_sha256": "76185a91064bb998e70145ccd07f0fba4b730ca95624fdb4025d57be01a78cd1"
     },
     {
       "acl": [
@@ -11839,7 +11839,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b5154654a86fab4fa531af4035f33d01cbcce71970b575f3a98d66852cb6091a"
+      "definition_sha256": "f584c335a6f44739c60c695924054535bdc887f71a8a14420aa2ba09c7db37c4"
     },
     {
       "acl": [
@@ -31126,7 +31126,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3f1e0ee4ca71f74e9e2f8658367aaa306f664635d8fb22de9229b438e92c769f"
+      "definition_sha256": "3f729f2eb6b6be5f44c7bd5b00cb69c2f7adf9923c7f072d27d6c5929808c275"
     },
     {
       "acl": [
@@ -102561,6 +102561,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "choices_request_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "first_selection_no",
           "type": "bigint",
           "default": null,
@@ -102593,6 +102601,14 @@
           "generated": ""
         },
         {
+          "name": "skipped_json",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "work_ids_json",
           "type": "jsonb",
           "default": null,
@@ -102610,6 +102626,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_selection_page_choices_request_bound",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (choices_request_json IS NULL OR jsonb_typeof(choices_request_json) = 'array'::text AND jsonb_array_length(choices_request_json) = item_count AND octet_length(choices_request_json::text) <= 32768)"
+        },
         {
           "name": "bpay_next_selection_page_first_selection_no_check",
           "type": "c",
@@ -102649,6 +102673,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (run_id) REFERENCES private.bpay_next_pay_run(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_selection_page_skipped_bound",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(skipped_json) = 'array'::text AND jsonb_array_length(skipped_json) <= item_count AND octet_length(skipped_json::text) <= 32768)"
         },
         {
           "name": "bpay_next_selection_page_work_ids_json_check",

@@ -44,8 +44,8 @@ export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
   RETURN_CASH:{run_id:'uuid',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'}
 });
 const OUTPUTS={
-  CREATE:{run_id:'uuid',status:'runStatus',selection_state:'selectionState',selection_count:'integer',selected_candidate_count:'integer'},
-  WORK_PAGE:{run_id:'uuid',page_no:'positive',item_count:'positive',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean'},
+  CREATE:{run_id:'uuid',status:'runStatus',selection_state:'selectionState',selection_count:'integer',selected_candidate_count:'integer',official_pay_date:'date'},
+  WORK_PAGE:{run_id:'uuid',page_no:'positive',item_count:'positive',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean',skipped:'skipped'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',component_count:'positive',replay:'boolean'},
   COMPONENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',sealed:'true',component_count:'positive',replay:'boolean'},
   SEGMENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',segment_count:'positive',replay:'boolean'},
@@ -136,6 +136,9 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='skipCode')return ['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE','BPAY_NEXT_SELECTION_ON_HOLD','BPAY_NEXT_SELECTION_SNOOZED'].includes(v);
+  if(t==='skipped')return Array.isArray(v)&&v.length<=100&&v.every(x=>exact(x,{work_id:'uuid',code:'skipCode'}))
+    &&new Set(v.map(x=>x.work_id.toLowerCase())).size===v.length;
   const reservationEnums={"reservationMode":["UNCONFIRMED","PENDING_PREPARATION","PENDING_NET","ORIGINAL_OBLIGATION","ORIGINAL_LEGS","CANCELLING","CANCELLED","EVIDENCE_CONFLICT"],"reservationState":["EVIDENCE_CONFLICT","SUPPRESSED_UNCONFIRMED","PENDING","INCLUDED_IN_ORIGINAL_OBLIGATION","PAGED_ORIGINAL_LEGS","REISSUE_EXCLUDED","CANCELLING","CANCELLED","RESERVED","ISSUED_AWAITING_RECEIPT","EXECUTION_UNCERTAIN","EXECUTED_PENDING_POSTING","POSTED","RETURNED","INTERNAL_RESERVED","INTERNAL_PENDING_POSTING","CLOSED_INTERNAL"],"reservationHolds":["ACTIVE","NONE","RELEASING","POSTING"]};
   if(Object.hasOwn(reservationEnums,t))return reservationEnums[t].includes(v);
   if(t.endsWith('?'))return v===null||field(v,t.slice(0,-1));
@@ -214,7 +217,8 @@ function normalized(v){
 function commandCall(body){
   if(!record(body)||!Object.hasOwn(BPAY_NEXT_PREPARATION_INPUTS,body.action))throw fault('REQUEST_INVALID',400);
   const {action,...args}=body;
-  if(!exact(args,BPAY_NEXT_PREPARATION_INPUTS[action])||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
+  const schema=action==='CREATE'&&!Object.hasOwn(args,'pay_date')?{run_id:'uuid'}:BPAY_NEXT_PREPARATION_INPUTS[action];
+  if(!exact(args,schema)||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
   return {action,args:action==='SEGMENT_PAGE'?Object.freeze({...normalized(args),segment_keys:Object.freeze([...args.segment_keys])}):normalized(args)};
 }
 function pageCall(request){
@@ -252,6 +256,11 @@ function result(payload,call,mutation){
     if(!exact(payload,OUTPUTS[call.action]))bad();
     for(const key of ['run_id','work_id','expected_revision_id','candidate_id','command_id','page_no','selection_revision'])
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
+    if(call.action==='CREATE'&&Object.hasOwn(call.args,'pay_date')&&payload.official_pay_date!==call.args.pay_date)bad();
+    if(call.action==='WORK_PAGE'){
+      const ids=call.args.choices.map(x=>x.work_id),positions=payload.skipped.map(x=>ids.indexOf(x.work_id));
+      if(positions.some((n,i)=>n<0||(i>0&&n<=positions[i-1])))bad();
+    }
     if(call.action==='REVIEW'&&((payload.phase==='PREPARING')!==(payload.reason!==null)))bad();
     if(call.action==='COMPONENT_SEAL'&&payload.component_count!==call.args.expected_count)bad();
     if(call.action==='SEGMENT_SEAL'&&payload.segment_count!==call.args.expected_count)bad();
@@ -405,6 +414,8 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(['PGRST202','42883','42P01','42703'].includes(db?.code))return fault('SCHEMA_UNAVAILABLE',503,false);
   if(db?.code==='42501'||[401,403].includes(e?.status))return fault('FORBIDDEN',403);
   if(db?.code==='P0002')return fault('SCOPE_NOT_FOUND',404);
+  if(mutation&&action==='CREATE'&&db?.code==='22023'&&db.message==='BPAY_NEXT_PAY_DATE_NOT_OFFICIAL')
+    return new PreparationError('BPAY_NEXT_PAY_DATE_NOT_OFFICIAL',400,false,false);
   if(['22023','22003','22007','22008','22P02'].includes(db?.code))return fault('REQUEST_INVALID',400);
   if(['23514','23505','23503'].includes(db?.code))return fault('CONFLICT',409);
   if(db?.code==='55000')return db.message==='BPAY_NEXT_MODULE_NOT_ACTIVE'?fault('MODULE_NOT_ACTIVE',503):fault('NOT_ELIGIBLE',409);
