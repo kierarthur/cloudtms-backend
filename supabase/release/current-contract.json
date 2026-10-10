@@ -490,12 +490,36 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_run_choice_member",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "service_owner",
       "check": "true",
       "roles": [
         "postgres"
       ],
       "table": "bpay_next_run_segment_capture",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_run_selection_exclusion",
       "using": "true",
       "schema": "private",
       "command": "ALL",
@@ -544,6 +568,18 @@
         "postgres"
       ],
       "table": "bpay_next_selected_segment",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_selection_exclusion_page",
       "using": "true",
       "schema": "private",
       "command": "ALL",
@@ -10281,7 +10317,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "296138e7fd21c236605cac7591f45cdf6f05ca5c36c3ee6cedcf6bbd0df286d1"
+      "definition_sha256": "5016d19ed58abcd98726e4d8fe801a0d24b937af4a58bcec91568df401b98fd9"
     },
     {
       "acl": [
@@ -10429,6 +10465,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_accepted_choice_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "a1d68ef1e8e2d00e5898ec96665ff1fac3fbf6ef7e2fdeba2d51c45f2adfd08f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_accepted_evidence_immutable_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -10524,6 +10579,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_ack_choice_work_page_v1(p_run_id uuid, p_page_no bigint, p_body jsonb, p_explicit boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "24b2fe281008d6422700f34a91aa1f8f3ce44578bb533c35b29072e080d6d986"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_advice_work_v1(p_run_work_id uuid)",
       "parallel": "u",
       "volatility": "s",
@@ -10547,7 +10621,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "d1a36f80b21ee99286f1a6c024a4ebdf954697a01d46ea5887d7eaf19264e9c5"
+      "definition_sha256": "071fe38b299793d0ed7f0a3faa005b7f802c049c2e21fad6128f484b2f964d81"
     },
     {
       "acl": [
@@ -10566,7 +10640,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3a4a45c137cc639f84eb161082730c8c15c1d7a814c2ab86556c2406b971e5de"
+      "definition_sha256": "80b4dc444c548d2f71409ce56970b1db1c4cc60f3be28d5c3a955c4eb4954cec"
     },
     {
       "acl": [
@@ -10604,7 +10678,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2f41e073817a4dd9d4d89f0fbaaea0288944d333d6932bd75d25130edbebd468"
+      "definition_sha256": "fb4efe7fb8e798d7df322c38150396f314f69163d31980162d530c5d15f7f581"
     },
     {
       "acl": [
@@ -10623,7 +10697,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "76185a91064bb998e70145ccd07f0fba4b730ca95624fdb4025d57be01a78cd1"
+      "definition_sha256": "9c6cf25b725d815c415f9df2ce7c540bbf23edeac9e4358554941deff94f9578"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_append_work_skip_v1(p_run_id uuid, p_work_id uuid, p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e799e1e6701c26209481b942109fa688c74e3dd7f6cc8f03f47055cd90f072af"
     },
     {
       "acl": [
@@ -11854,6 +11947,25 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_create_preparation_v1(p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4f88731ae11142766cd38803679b443207e114435a099fd3ad55c9a23a13661d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_csv_instruction_immutable_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -12162,7 +12274,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "af8b2d59f22f812428517937e5a45257c4afc8cab52974f507cf038bb33ecc7e"
+      "definition_sha256": "69a06e2671d148c337b1acd633e4a9c6146231857b6f71320ac9afee488db0d1"
     },
     {
       "acl": [
@@ -12181,7 +12293,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "730ff465636463a4e489222fadf6698ca4151abb4668fd2ea6dadfa74bc2f7d3"
+      "definition_sha256": "76b2645be706bde5586ffbe798ad0652f496126d90101331b57d72e3c06edc3e"
     },
     {
       "acl": [
@@ -12200,7 +12312,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "6d00fd1811a26ac8371b735b986009b0449ff71cee99f556e650a68c51303f67"
+      "definition_sha256": "05f4f97108dd90e238a7f1622650f2449a37a06250181ca6aee6c58866d5b0c1"
     },
     {
       "acl": [
@@ -12605,6 +12717,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_materialise_choice_segments_v1(p_run_id uuid, p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7fb7f0e5ed05f54a9bae5fa8ec7fd1ef033079a17fa4eefdf17e4c74aece2a8c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_net_projection_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -12780,7 +12911,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "c4aacfe07a6a1ed9a0524825162c860dabdddf7f279a6f8288108887413c456f"
+      "definition_sha256": "35695d8bd9278cc7cab63cbafcb27fd900e0e07b0e9d4ef0a3b13efd8d74f7f3"
     },
     {
       "acl": [
@@ -12837,7 +12968,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "7101d5c7db3c23f424966ef92270a6840f7dc1045450214b7d303a5f59432b27"
+      "definition_sha256": "8df2377763aae21e1eb991194748f4af9d411e9c24cbf9096cc80a114a103c35"
     },
     {
       "acl": [
@@ -13597,7 +13728,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "c90b1e32af26da14d96e1abdbf7b5eb558d6f70a2eedfd719dfdd7206f6c5a91"
+      "definition_sha256": "79aca9ec5730fe405c0544c6f98addd3a8085797ef680cf39c26217338a695e9"
     },
     {
       "acl": [
@@ -13616,7 +13747,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dc7cd5f2c512931142c447390946b7e142bea9db29921160e7e964d66a3db9cf"
+      "definition_sha256": "6dfc07a5168f6af3de4fcad8c1a84e048ffd32051a120a5784c4d898aa398c37"
     },
     {
       "acl": [
@@ -13692,7 +13823,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f561fa648822a71db198b043771a8b482181938d5b8708600dc74b4a37308e97"
+      "definition_sha256": "ec254c93d757311511b80b9bb2ba86b276d4d07deb56c8b4c1f6667aea3310ee"
     },
     {
       "acl": [
@@ -31137,7 +31268,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3f729f2eb6b6be5f44c7bd5b00cb69c2f7adf9923c7f072d27d6c5929808c275"
+      "definition_sha256": "3cd48c25c59c2840c1311751bdbedb46497015226bc7e72c76cae172263e4695"
     },
     {
       "acl": [
@@ -52580,6 +52711,13 @@
       "definition": "CREATE TRIGGER bpay_next_internal_request_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_outcome_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_internal_request_guard_v1()"
     },
     {
+      "name": "bpay_next_accepted_choice_guard",
+      "table": "bpay_next_pay_run",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_accepted_choice_guard BEFORE INSERT OR UPDATE ON private.bpay_next_pay_run FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_choice_guard_v1()"
+    },
+    {
       "name": "bpay_next_preparation_expiry_guard_v1",
       "table": "bpay_next_pay_run",
       "schema": "private",
@@ -52867,6 +53005,13 @@
       "definition": "CREATE TRIGGER bpay_next_work_collection_instruction_guard_v1 BEFORE INSERT ON private.bpay_next_run_case_instruction FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_collection_capture_guard_v1()"
     },
     {
+      "name": "bpay_next_accepted_choice_member_guard",
+      "table": "bpay_next_run_choice_member",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_accepted_choice_member_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_choice_member FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_choice_guard_v1()"
+    },
+    {
       "name": "bpay_next_run_line_frozen_immutable_v1",
       "table": "bpay_next_run_line",
       "schema": "private",
@@ -52907,6 +53052,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_capture_progress_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_segment_capture FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_capture_progress_guard_v1()"
+    },
+    {
+      "name": "bpay_next_accepted_choice_exclusion_guard",
+      "table": "bpay_next_run_selection_exclusion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_accepted_choice_exclusion_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_selection_exclusion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_choice_guard_v1()"
     },
     {
       "name": "bpay_next_run_work_frozen_immutable_v1",
@@ -53012,6 +53164,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_selected_segment FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_accepted_choice_exclusion_page_guard",
+      "table": "bpay_next_selection_exclusion_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_accepted_choice_exclusion_page_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_selection_exclusion_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_choice_guard_v1()"
     },
     {
       "name": "bpay_next_detail_guard_v1",
@@ -90225,6 +90384,22 @@
       "schema": "private",
       "columns": [
         {
+          "name": "accepted_choice_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "accepted_choice_descriptor",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "actor_user_id",
           "type": "uuid",
           "default": null,
@@ -90252,6 +90427,14 @@
           "name": "created_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "exclusion_page_count",
+          "type": "bigint",
+          "default": "0",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -90369,6 +90552,22 @@
           "generated": ""
         },
         {
+          "name": "uploaded_choice_work_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "uploaded_selection_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "work_choice_count",
           "type": "bigint",
           "default": "0",
@@ -90394,6 +90593,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_accepted_choice_descriptor_size",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (accepted_choice_descriptor IS NULL OR jsonb_typeof(accepted_choice_descriptor) = 'object'::text AND octet_length(accepted_choice_descriptor::text) <= 32768)"
+        },
+        {
+          "name": "bpay_next_accepted_choice_identity_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((accepted_choice_descriptor IS NULL) = (accepted_choice_command_id IS NULL))"
+        },
         {
           "name": "bpay_next_pay_run_actor_user_id_fkey",
           "type": "f",
@@ -90425,6 +90640,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (sealed_work_choice_count >= 0 AND sealed_work_choice_count <= work_choice_count)"
+        },
+        {
+          "name": "bpay_next_pay_run_exclusion_page_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (exclusion_page_count >= 0)"
         },
         {
           "name": "bpay_next_pay_run_pkey",
@@ -90489,6 +90712,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (snooze_control_sequence >= 0)"
+        },
+        {
+          "name": "bpay_next_pay_run_uploaded_choice_work_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (uploaded_choice_work_count >= 0)"
+        },
+        {
+          "name": "bpay_next_pay_run_uploaded_selection_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (uploaded_selection_count >= 0)"
         },
         {
           "name": "bpay_next_pay_run_work_choice_count_check",
@@ -98624,6 +98863,260 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_choice_member",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "member_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "member_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "member_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selected",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_mode",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "skip_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_choice_member_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_run_choice_member_candidate_idx ON private.bpay_next_run_choice_member USING btree (run_id, candidate_id, member_kind, member_id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_choice_member_pkey ON private.bpay_next_run_choice_member USING btree (run_id, member_kind, member_id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_run_id_member_kind_member_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_choice_member_run_id_member_kind_member_no_key ON private.bpay_next_run_choice_member USING btree (run_id, member_kind, member_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_run_choice_member_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_case_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id) REFERENCES private.bpay_next_case_component(id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (member_kind = 'WORK'::text AND work_id IS NOT NULL AND member_id = work_id AND expected_revision_id IS NOT NULL AND case_component_id IS NULL AND selection_mode IS NOT NULL OR member_kind = 'CASE_COMPONENT'::text AND case_component_id IS NOT NULL AND member_id = case_component_id AND work_id IS NULL AND expected_revision_id IS NULL AND selection_mode IS NULL AND skip_code IS NULL)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_member_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (member_kind = ANY (ARRAY['WORK'::text, 'CASE_COMPONENT'::text]))"
+        },
+        {
+          "name": "bpay_next_run_choice_member_member_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (member_no > 0)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_id, member_kind, member_id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_run_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id) REFERENCES private.bpay_next_pay_run(id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_run_id_member_kind_member_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_id, member_kind, member_no)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_selection_mode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_mode = ANY (ARRAY['ALL'::text, 'SUBSET'::text]))"
+        },
+        {
+          "name": "bpay_next_run_choice_member_skip_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (skip_code = ANY (ARRAY['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE'::text, 'BPAY_NEXT_SELECTION_SNOOZED'::text, 'BPAY_NEXT_SELECTION_PAY_ON_HOLD'::text, 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED'::text, 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT'::text, 'BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text]))"
+        },
+        {
+          "name": "bpay_next_run_choice_member_work_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_run_choice_member_work_id_expected_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, expected_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_run_command",
@@ -100083,6 +100576,184 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_selection_exclusion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "page_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_selection_exclusion_run_id_candidate_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_selection_exclusion_run_id_candidate_id_key ON private.bpay_next_run_selection_exclusion USING btree (run_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_run_id_work_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_selection_exclusion_run_id_work_id_key ON private.bpay_next_run_selection_exclusion USING btree (run_id, work_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_run_selection_exclusion_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((work_id IS NULL) <> (candidate_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_page_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (page_no > 0)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_run_id_candidate_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_run_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id) REFERENCES private.bpay_next_pay_run(id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_run_id_work_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_id, work_id)"
+        },
+        {
+          "name": "bpay_next_run_selection_exclusion_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
         }
       ],
       "view_definition_sha256": null
@@ -102519,6 +103190,124 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_selection_exclusion_page",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "page_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_selection_exclusion_page_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_selection_exclusion_page_pkey ON private.bpay_next_selection_exclusion_page USING btree (run_id, page_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_selection_exclusion_page_page_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (page_no > 0)"
+        },
+        {
+          "name": "bpay_next_selection_exclusion_page_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_id, page_no)"
+        },
+        {
+          "name": "bpay_next_selection_exclusion_page_request_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_json) = 'object'::text AND octet_length(request_json::text) <= 32768)"
+        },
+        {
+          "name": "bpay_next_selection_exclusion_page_run_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id) REFERENCES private.bpay_next_pay_run(id)"
         }
       ],
       "view_definition_sha256": null

@@ -136,7 +136,18 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
-  if(t==='skipCode')return ['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE','BPAY_NEXT_SELECTION_ON_HOLD','BPAY_NEXT_SELECTION_SNOOZED'].includes(v);
+  if(t==='choiceNamespace')return exact(v,{agency_id:'uuid',owner_epoch:'positive',actor_user_id:'uuid',official_pay_date:'date',scope:'choiceScope'});
+  if(t==='choiceScope')return exact(v,{candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel'});
+  if(t==='choiceIntent'){
+    if(!record(v)||Object.keys(v).sort().join()!=='candidates,cases,components,mode,works'||!field(v.mode,'choiceMode'))return false;
+    const schemas={candidates:{candidate_id:'uuid',selected:'boolean'},works:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',selected:'boolean',mode:'mode'},components:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',approved_line_id:'uuid',selected:'boolean'},cases:{candidate_id:'uuid',case_component_id:'uuid',selected:'boolean'}};
+    return Object.entries(schemas).every(([kind,schema])=>Array.isArray(v[kind])&&v[kind].length<=1000&&v[kind].every(row=>exact(row,schema))&&new Set(v[kind].map(row=>(row.case_component_id??row.approved_line_id??row.work_id??row.candidate_id).toLowerCase())).size===v[kind].length);
+  }
+  if(t==='descriptor')return validChoiceDescriptor(v);
+  if(t==='scopeChannel')return ['ALL','PAYE','UMBRELLA'].includes(v);
+  if(t==='localRevision')return Number.isSafeInteger(v)&&v>=0;
+  if(t==='choiceMode')return ['ALL_MATCHING','NONE'].includes(v);
+  if(t==='skipCode')return ['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE','BPAY_NEXT_SELECTION_ON_HOLD','BPAY_NEXT_SELECTION_PAY_ON_HOLD','BPAY_NEXT_SELECTION_SNOOZED','BPAY_NEXT_SELECTION_WORK_NOT_APPROVED','BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT','BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE','PAYE_EXCLUDED_BY_SAME_WEEK_GUARD','SOURCE_PAY_QUERY_OPEN','SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'].includes(v);
   if(t==='skipped')return Array.isArray(v)&&v.length<=100&&v.every(x=>exact(x,{work_id:'uuid',code:'skipCode'}))
     &&new Set(v.map(x=>x.work_id.toLowerCase())).size===v.length;
   const reservationEnums={"reservationMode":["UNCONFIRMED","PENDING_PREPARATION","PENDING_NET","ORIGINAL_OBLIGATION","ORIGINAL_LEGS","CANCELLING","CANCELLED","EVIDENCE_CONFLICT"],"reservationState":["EVIDENCE_CONFLICT","SUPPRESSED_UNCONFIRMED","PENDING","INCLUDED_IN_ORIGINAL_OBLIGATION","PAGED_ORIGINAL_LEGS","REISSUE_EXCLUDED","CANCELLING","CANCELLED","RESERVED","ISSUED_AWAITING_RECEIPT","EXECUTION_UNCERTAIN","EXECUTED_PENDING_POSTING","POSTED","RETURNED","INTERNAL_RESERVED","INTERNAL_PENDING_POSTING","CLOSED_INTERNAL"],"reservationHolds":["ACTIVE","NONE","RELEASING","POSTING"]};
@@ -214,10 +225,14 @@ function normalized(v){
   if(record(v))return Object.freeze(Object.fromEntries(Object.entries(v).map(([k,x])=>[k,normalized(x)])));
   return typeof v==='string'&&UUID.test(v)?v.toLowerCase():v;
 }
+function validChoiceDescriptor(v){
+  if(!exact(v,{namespace:'choiceNamespace',intent:'choiceIntent',revision:'localRevision',workbench_revision:'integer',adoption_revision:'integer'})||ENCODER.encode(JSON.stringify(v)).byteLength>32768)return false;
+  return true;
+}
 function commandCall(body){
   if(!record(body)||!Object.hasOwn(BPAY_NEXT_PREPARATION_INPUTS,body.action))throw fault('REQUEST_INVALID',400);
   const {action,...args}=body;
-  const schema=action==='CREATE'&&!Object.hasOwn(args,'pay_date')?{run_id:'uuid'}:BPAY_NEXT_PREPARATION_INPUTS[action];
+  const schema=action==='CREATE'&&Object.hasOwn(args,'descriptor')?{run_id:'uuid',command_id:'uuid',descriptor:'descriptor'}:action==='CREATE'&&!Object.hasOwn(args,'pay_date')?{run_id:'uuid'}:BPAY_NEXT_PREPARATION_INPUTS[action];
   if(!exact(args,schema)||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
   return {action,args:action==='SEGMENT_PAGE'?Object.freeze({...normalized(args),segment_keys:Object.freeze([...args.segment_keys])}):normalized(args)};
 }
@@ -253,10 +268,12 @@ async function limitedJson(input,maximum,request,signal,mutation){
 function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
   if(mutation){
-    if(!exact(payload,OUTPUTS[call.action]))bad();
+    const schema=call.action==='CREATE'&&Object.hasOwn(call.args,'descriptor')?{...OUTPUTS.CREATE,command_id:'uuid',agency_sequence:'positive?',choice_work_count:'integer',choice_case_count:'integer',empty:'boolean',replay:'boolean'}:OUTPUTS[call.action];
+    if(!exact(payload,schema))bad();
     for(const key of ['run_id','work_id','expected_revision_id','candidate_id','command_id','page_no','selection_revision'])
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
     if(call.action==='CREATE'&&Object.hasOwn(call.args,'pay_date')&&payload.official_pay_date!==call.args.pay_date)bad();
+    if(call.action==='CREATE'&&Object.hasOwn(call.args,'descriptor')&&(payload.empty!==(payload.selected_candidate_count==='0')||payload.empty!==(payload.agency_sequence===null)||BigInt(payload.selection_count)>BigInt(payload.choice_work_count)||payload.official_pay_date!==call.args.descriptor.namespace.official_pay_date))bad();
     if(call.action==='WORK_PAGE'){
       const ids=call.args.choices.map(x=>x.work_id),positions=payload.skipped.map(x=>ids.indexOf(x.work_id));
       if(positions.some((n,i)=>n<0||(i>0&&n<=positions[i-1])))bad();

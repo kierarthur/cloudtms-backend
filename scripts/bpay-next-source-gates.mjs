@@ -514,6 +514,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
   ],
   "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
     "pg_catalog.jsonb_build_object('run_id',v_run,'status',v_result->>'status', 'selection_state',v_result->>'selection_state','selection_count',v_header.selection_count::text, 'selected_candidate_count',v_header.selected_candidate_count::text,'official_pay_date',v_header.pay_date::text)",
+    "jsonb_build_object('command_id',v_result->>'command_id', 'agency_sequence',v_result->'agency_sequence','choice_work_count',v_result->>'choice_work_count', 'choice_case_count',v_result->>'choice_case_count','empty',v_result->'empty','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',p_args->>'selection_revision','page_no',v_result->>'page_no', 'item_count',v_result->>'item_count','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',v_result->>'selection_revision','sealed',v_result->'sealed', 'selected_count',v_result->>'selected_count','excluded_count',v_result->>'excluded_count','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('run_id',v_run,'command_id',v_result->>'command_id', 'agency_sequence',v_result->>'agency_sequence','replay',v_result->'replay')",

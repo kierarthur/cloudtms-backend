@@ -1,0 +1,70 @@
+# WB-21 supplied screen scope and current caller seams
+
+Read-only investigation, 10 October 2026. Read the complete WB21 card (`02_WORKBENCH.md:823–855`), its selection sequence812–821, all23 checklist rows (ITEM and D01–D22), the current owner rulings, DESIGN_INDEX and the seven supplied PNGs below. No product, design-pack, SQL, runtime, test, database, browser or hosted operation was performed. This is a scope/design note, not screen acceptance.
+
+## Binding requirements and exact row scope
+
+A3h requires SCR160 using the existing WB12 selected-count reader and existing CREATE path. A4 requires actual product render screenshots and independent42-item policy review; supplied PNGs are references, not evidence that the product passes. Rule B keeps `work_choice.expected_revision_id`, captured `selection_candidate`, `run_work_query_snapshot` and the original `pin_v2` as authority. Parked F25 objects/resolver, producer protocols and additional financial commands are outside this scope. Later native Case balances remain under their original money locks.
+
+The reviewed owner boundary is recorded at BUILD_LOG610–616 and in `WB-21-current-scope-investigation.md`. E1 applies when the named CREATE/subset/append owners are touched: per-Timesheet ineligibility produces genuine retained skip information rather than discarding the whole requested page. Missing approval/current-applied eligibility, snooze/future week, actual hold authority, signed selection eligibility, and Source query open/unavailable must use their actual database owners. The Office must not infer these from list rows. Changed financial input/release behavior in DR05/WB40/DR13/DR15 remains with those owners; the old blanket REVIEW wording must not be presented as the new policy. Nothing in this screen note implements E1 or another money/capture owner.
+
+Physical WB21 deliverables are D01 CREATE, D03 Work append, D04 selection seal, D05/D06 component append/seal, D07/D08 Case append/seal, D10 public intake, D11 adapters, D14 exclusions and D15 local store/sequencer. D02/D09/D12/D13/D16–D22 are explicit CONTEXT rows, not extra rewrites. Dependencies are WB09, DR01 and F16. The finite SQL/membership gaps and exact signatures are inventoried separately in `WB-21-current-scope-investigation.md`; this note adds only the supplied screens and caller/lifecycle mapping.
+
+## Exact supplied designs
+
+All paths in this table are relative to the read-only `cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010` pack. Every listed PNG was visually inspected. The matching JSON was read, including `reviewNotes`, which resolve illustrative values omitted from the actual contract.
+
+| Screen | Supplied spec / PNG | Required behavior |
+|---|---|---|
+| SCR-160 confirmation | `batches/B4/specs/SCR-160_create_draft_confirm.json`; `batches/B4/png/SCR-160_create_draft_confirm_dark.png` | Small600px confirmation over the retained parent. Title `Create Draft for <server count> Candidates?`; scope and local selection label; Cancel first, Create Draft primary. |
+| SCR-160b counting | Same directories, `SCR-160b_create_draft_counting.json` / `_dark.png` | `Create Draft?`; `Counting ticked Candidates…`; Create disabled with its visible reason. Cancel sends no mutation. |
+| SCR-160c count failure | Same directories, `SCR-160c_create_draft_count_failed.json` / `_dark.png` | `Could not count the ticked Candidates.` / `Nothing was created. Your ticks are kept.`; Cancel and Try again. Retry repeats the read only; no zero substituted. |
+| SCR-38 sending | Same directories, `SCR-38_create_draft_sending.json` / `_dark.png` | Small Creating Draft window, `Sending the ticked payments…` and `Keep this window open until the Draft starts.`; submitting controls disabled, original journal retained. |
+| SCR-38b not permitted | Same directories, `SCR-38b_create_draft_not_allowed.json` / `_dark.png` | Disabled Create with visible `You do not have permission to create Drafts.` when actual permission is known false. The illustration's other later-owned controls are not additions required here. |
+| SCR-38c submit/reply failure | Same directories, `SCR-38c_create_draft_not_started.json` / `_dark.png` | Retain original selected intent/request. Its supplied retry rule is identical selection and original result on replay. Unknown outcome cannot truthfully claim no Draft exists. |
+| SCR-17 unsubmitted ticks | `specs/T04f_message_patterns.json`; `png/T04f_message_patterns_dark.png` | Use only the Unsaved ticks dialog within this pattern: `Discard your unsaved selection?` / `Keep saves your ticks for the next Draft.`; Keep first, Discard danger. It is not an instruction to build the entire message-pattern board. |
+
+DESIGN_INDEX31/52/53 are the complete WB21 screen entries. T07a is a pattern reference; SCR160's indexed final spec is controlling. No distinct WB21 Continue window is supplied. SCR40 progress and its Continue to review action belong to DR06/DR08/DR14/PF08 (INDEX55), SCR41 banners to DR07, and SCR42 **discard an accepted Draft** to DR09 (INDEX57). SCR17 discards only unsubmitted browser intent. Do not combine these different lifetimes or build their future controls as placeholders.
+
+The exact confirmation consequence is: **“The Draft will include exactly what is ticked now. Anything that changes afterwards goes to the next Draft.”** SDP08/12a/37/55/59 apply. There is no pay date, exact selected money total, PAYE/Umbrella numerical split, password/2FA, bank execution or export in this confirmation. SCR38's pictured numerical subtitle contradicts its own review note (“No counts are shown while sending”); omit that subtitle rather than fabricate channel counts. Supplied parent illustrations also contain Updated, Timesheets View and Export controls whose actual fields/owners are absent or later; the current genuine parent remains the baseline.
+
+## Actual supplied fields and smallest current seams
+
+| Visible fact or control | Current authoritative source | Boundary |
+|---|---|---|
+| Selected Candidate count | `mountReadyCandidates.countSelection()` in `js/bpay-next-workbench.js`, current770; explicit HEADER read with `{section:'READY',count_selection:{mode:'ALL'|'NONE',candidate_ids:[…]}}` | Returns `candidate_count` from `selected_candidate_count`, plus `member_count` from `selected_member_count`, and genuine context. Use Candidate count in title; never count loaded rows or subtract from a stale total. |
+| Count freshness | Same function retains `intentRevision` and context across its await; strict response validation compares actor and Workbench revision | The confirmation must retain the counted intent/context and block dispatch after intent/actor/owner/scope/frame changes. Zero is valid only from a successful authoritative read; coherent zero has no payable selection to submit. |
+| Namespace | Closed Workbench context fields: `agency_id`, `actor_user_id`, `owner_epoch`, `official_pay_date`, `workbench_revision`, `adoption_revision`, exact scope | Official date is an internal namespace/binding fact; A3/SDP12a forbids displaying it. The newly drafted `createChoiceStore` uses agency/epoch/actor/date/scope plus IDs/booleans only; that draft needs separate implementation review. |
+| Scope label and All except N | Ready `snapshot().scope`, `selectionLabel()` / bounded local ALL/NONE exceptions | Scope is current accepted filter choice; exception count describes local intent, not a browser-selected Candidate total. Preserve actual NONE/explicit label when applicable; do not call it All except N incorrectly. |
+| Deductions-only selection | Genuine CANDIDATES `payable_count`; existing choose/tick refuses `payable_count==='0'` | Do not tick/count a Candidate whose Ready items only recover/deduct and provide no payment. Do not infer payable cash from browser monetary sums. |
+| CREATE acknowledgement | Existing Office/Worker CREATE receipt: `run_id,status,selection_state,selection_count,selected_candidate_count,official_pay_date` | Existing DR01 winner is `10102026_1621_banking_pay_next_preparation_pay_date_v1.sql`. Original optional date is server-derived; no new public pay-date input or screen field. Count/read does not create a run. |
+| Work page acknowledgement | Existing WORK_PAGE receipt: `run_id,page_no,item_count,selection_count,selected_candidate_count,replay,skipped` | Native exact Work/revision choice and retained skips are server facts. Any genuine E1 additions must be mirrored in actual closed SQL/Worker/Office contracts, not synthesized by UI. |
+| Accepted submission handoff | SEAL_ENQUEUE receipt `run_id,command_id,agency_sequence,replay` | Only this accepted identity authorizes progression/handoff. CREATE/open pages are not sealed preparation completion. Never switch run or invent success from a timer. |
+| Preparation information | Existing WORKERS/STATUS and bounded original WORK_CHOICES/SELECTED_COMPONENTS | Preserve genuine retained fallback/readback. ACCEPTED_* remains dormant under Rule B. `openBpayNextPreparationProgress(run_id)` remains the explicit DR02/DR06 join until that owner is built. |
+| Permission state | Current authenticated/admin Office/Worker entry and database permission owner | Current closed Workbench HEADER has no `can_create`/permission field. Do not assume the supplied “permission in header” note is already transported. Existing entry auth may supply a factual false; otherwise no guessed permission boolean/new reader solely for the illustration. NEXT/environment readiness is a different failure and needs its actual reason. |
+
+Current confirmed reuse: `createController` in Office421 onward saves exact `{action,bytes}` before transport, retries the same pending bytes, adopts only validated correlated receipts, and retains an earlier unknown request even when later authentication/refusal occurs. Its actor-only64KiB journal is not the full WB21 choice namespace. Keep that financial request journal distinct from optional guarded localStorage intent. No storage failure may silently lose an in-flight request; no browser agency-wide member array or money snapshot is required.
+
+## Standard modal and lifetime requirements
+
+Reuse `CloudTMSBpayNextUi.createStandardWindowAdapter` (ui31–63), passed by the actual main.js/Office entry. It already uses the real `__modalStack`, standard panel/header/body/footer, small600px geometry, active/alive checks and guarded initial focus. It uses `kind:'bpay-next-read'`, hides only its own tabs, and restores the retained parent through the standard close path. Confirmation should use the same shell/tokens with labelled `alertdialog`, safe Cancel/Keep first, focus trapping/repaint continuity and phone44px targets. Remain dark in a device-light setting. Do not add a second overlay/window framework.
+
+`onDismiss` is after dismissal. Existing adapter sets `dirtyClosePolicy:'close'`; Office555 currently destroys the local reader on dismiss. The unsubmitted Keep/Discard question therefore needs a finite **before** frame-close decision covering the real header Close, Escape and relevant parent/window exits. Generic main.js `confirm-discard-close` uses `Discard changes?` / `Keep editing` for dirty edit/create children; it does not implement WB21's Keep-and-persist-for-reopen semantics. Merely changing that policy string or showing SCR17 after the frame is popped loses the choices. Scope this support to the actual Banking Pay unsubmitted-intent lifetime; preserve other modal policies.
+
+Keep persists only that exact agency/epoch/actor/date/scope intent and closes as intended; Discard clears only that unsubmitted generation. Neither option clears accepted IDs, pending request bytes or an unknown SEAL. Beforeunload can use the browser's native warning; browsers do not promise the supplied custom dialog wording in their native prompt. Accepted pages/submission may continue to be recoverable from the original journal when the UI closes; closing cannot create a replacement run or imply cancellation.
+
+For async count/create/readback, capture the initiating actor, original parent and exact child frame; check them before dispatch and after every await/late adoption. Repaint/close/focus only when that same frame is live; do not repaint a replacement user/window. Disable duplicate Create while sending. An unknown response gets truthful unknown copy and a manual exact retry, not SCR38c's definite `The Draft was not started.` assertion. A definite pre-admission refusal can use that supplied wording only when its typed contract proves the claim. An error on a later upload also cannot claim no run was created merely because that page was refused.
+
+## A4 evidence still required
+
+No actual WB21 product screenshot was available/reviewed in this investigation. After implementation, capture the real Office/controller entry in the standard frontend with only the smallest fixed response samples and hosted network blocked. Required actual states include SCR160 confirmed/counting/count-failed, coherent zero, SCR38 sending/definite refusal/unknown identical retry, SCR17 Keep/Discard and device-light/390phone as applicable. Save samples and image hashes outside the design pack, then perform all42 policy results plus user-eyes review per supplied screen. No pack generator/spec writes, fixtures, business calls, local300 timing, automatic business dispatch or inferred app acceptance.
+
+## Read snapshot
+
+The root was concurrently drafting WB21. These hashes identify the inspected source, not a finished-batch approval:
+
+- FE `js/bpay-next-workbench.js`: `63e8b6f49f84ffba3ba19225e4d5c2aa19dd4f7ddbe8be6f0080b09050cc4e35`.
+- FE `js/bpay-next-office.js`: `73239f720c497fd17daea4e09cfbe2fead8a0a0443d0067796c2ad7e8a1344f1`.
+- FE `js/bpay-next-ui.js`: `dbdcb12ed8ec027b0df39c52ef6f50b6d91ca93e2cb74451a59e09a6ba029272`.
+- BE1621: `e8415355b5a11f2e75e0bc532f5610b920d542799b89725bba25493d1f1af641`.
+- `WB-21-current-scope-investigation.md`: `a387d0adf2d5bea8ef1e2ba75137295d7983e84a5994540c4f0bdfdc6ee21cf9`.
