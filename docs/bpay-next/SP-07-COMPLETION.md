@@ -1,5 +1,7 @@
 # SP-07 completion receipt
 
+Independent final source PASS:reviews/SP-07-mapping-review.md and reviews/SP-07-owner-reuse-review.md. Local implementation commit f3bc18db04020538ca7aa3fbc92d88718e4343ca. All ticked rows record that exact implementation hash.
+
 Sequence42;BD048;D01/D02 reused unchanged,D03 complete in design/SP-07-legacy-pending-mapping.md. Re-read actual Local1257 after SP12: its early admission was already correct and current root remains1257. All three exact checklist objects are handled; no Source successor, new migration, Worker or screen is required by this verify-and-close card.
 
 Migration0155:10–14 defines the five nullable typed origin columns; actual1257 positively requiresNEXT235–253 and seals them362–373 only through the real same-transaction PREPARING receipt. The unauthorised branch260–301 saves guarded TSFIN and confirmed SAVED_UNAUTHORISED_LOCAL_V1 evidence, no Banking WORK/common bundle, typed origins NULL.0624/2338/1540 preserve saved display evidence;0345 retains first-authorisation refusal. No origin is inferred from later JSON, no backfill.

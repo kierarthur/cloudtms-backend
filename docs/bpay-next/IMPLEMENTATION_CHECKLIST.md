@@ -1076,15 +1076,17 @@ Dependencies: F-05, F-06, F-18, SP-06, SP-12; successor positions: Source gate-i
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-07-D01 | REPEATABLE: S/supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql | INSTALLED_ON_TEST | Reuse complete local seal/receipt; after SP-12 re-read successor, preserve no-auth no-Banking-Work and immediate NEXT common HEAD. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-07-D02 | REPEATABLE: private.weekly_source_pending_entitlement_release_apply_v1(uuid,bigint,bytea,text,uuid,uuid) | PARTLY_DONE | Preserve positively observed current installed definition. Its own exact defining-unit receipt observation is needed before ledger-only INSTALLED_ON_TEST; no absence/not-installed inference. Conditional NEXT adoption or initial-hours producer/screen joins remain separately unfinished. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-07-D03 | DOC: docs/bpay-next/design/SP-07 legacy-pending T-13 outcome/census mapping (proposed record) | MISSING | Map actual pre-switch legacy Save/pending/replay cases to complete-via-LEGACY or owner-approved exact adoption/unreachable reason; no default NEXT pending ledger. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-07-D01 | REPEATABLE: S/supabase/repeatable/04102026_1257_weekly_source_local_protected_decision_v1.sql | INSTALLED_ON_TEST | Reuse complete local seal/receipt; after SP-12 re-read successor, preserve no-auth no-Banking-Work and immediate NEXT common HEAD. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-07-D02 | REPEATABLE: private.weekly_source_pending_entitlement_release_apply_v1(uuid,bigint,bytea,text,uuid,uuid) | PARTLY_DONE | Preserve positively observed current installed definition. Its own exact defining-unit receipt observation is needed before ledger-only INSTALLED_ON_TEST; no absence/not-installed inference. Conditional NEXT adoption or initial-hours producer/screen joins remain separately unfinished. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-07-D03 | DOC: docs/bpay-next/design/SP-07 legacy-pending T-13 outcome/census mapping (proposed record) | MISSING | Map actual pre-switch legacy Save/pending/replay cases to complete-via-LEGACY or owner-approved exact adoption/unreachable reason; no default NEXT pending ledger. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP-07-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, saving 6 h protection on an unauthorised Source Timesheet shows "Approved hours 6" on the Office card and in MyTMS but nothing in Banking Pay NEXT; after Authorise the 6 h WORK appears once. The design note lists every pending-freeze Save case with its NEXT outcome. Observed by: SRQ-027, SRQ-031, RQ-231 and SCX-022 → the 6 h saved check; SRQ-032 and SCX-021 → a completed local receipt on the NEXT agency has the five typed columns filled, and a `:local-complete` replay returns the same receipt; SRQ-042, SRQ-305 → a Save made behind a pending freeze closes the editor, Approved Hours keep the previous basis until release, then show the saved decision; SRQ-166, SRQ-221 → the note lists every pending-freeze Save case.
+
+Whole SP-07 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. docs/bpay-next/SP-07-COMPLETION.md Review: docs/bpay-next/reviews/SP-07-mapping-review.md.
 
 ## SP-13 — Pay Query gate reader, digest, scope and ReceiptV3 lanes (seams S7, S8)
 
