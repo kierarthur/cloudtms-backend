@@ -98,6 +98,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     'private.bpay_next_workbench_apply_delta_v1','array_agg','transaction_timestamp','gen_random_uuid'],
   'private.bpay_next_work_wait_state_v1(uuid)': ['private.bpay_next_workbench_require_next_v1','sum'],
   'private.bpay_next_workbench_refresh_work_v1(uuid)': [
+    'private.weekly_source_pay_query_gate_v1','to_jsonb','char_length',
     'private.bpay_next_work_wait_state_v1','private.bpay_next_workbench_refresh_case_v1',
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
     'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_work_members_v1',

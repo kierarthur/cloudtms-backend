@@ -13344,19 +13344,21 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+        "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
         "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+        "supabase/repeatable/10102026_1410_banking_pay_next_positive_source_query_classifier_v1.sql"
       ],
-      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41"
+      "owner": "WB-07 only qualified positive Source WORK AVAILABLE query classification; preserve WB02 WAIT and native conservation; WB40/WB41/WB29 subsequent master owners"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
