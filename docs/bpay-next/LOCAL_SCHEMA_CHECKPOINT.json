@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "cc622c8a24cbaf419992fceafa845fd11ef52de1",
-  "compiledAtUtc": "2026-10-10T06:45:42.087Z",
+  "sourceCommit": "15f886fdb6161939a161827d0f1b8d1261bab29b",
+  "compiledAtUtc": "2026-10-10T07:07:42.528Z",
   "inventory": {
     "migrations": [
       {
@@ -7430,6 +7430,20 @@
         "sha256": "8041fabdbdd9c4542fb18b2248cb52e88444148295b04571d531396945cd90ea"
       },
       {
+        "path": "supabase/repeatable/10102026_0755_banking_pay_next_first_authorise_qualified_gate_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0755_banking_pay_next_first_authorise_qualified_gate_v1.sql"
+        ],
+        "sha256": "0dc8cf5efff57a710dbf9497de164ad6beee2609f7d2d0dcaa1e2ee96b0020ae"
+      },
+      {
+        "path": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql"
+        ],
+        "sha256": "956cb3e27fdfa10bcad0f4f18bd2164dcf6003f52119634f4b72a244c60a04c4"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7439,12 +7453,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/10102026_0736_banking_pay_next_local_detail_seam.sql",
-        "sha256": "a878daf1db905ccaa71f8d29eb02703b17d3f35703ee34dbfef874e5da3b3509"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -7468,11 +7477,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/10102026_0736_banking_pay_next_local_detail_seam_v1.sql",
+        "path": "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql",
         "paths": [
-          "supabase/repeatable/10102026_0736_banking_pay_next_local_detail_seam_v1.sql"
+          "supabase/repeatable/10102026_0806_banking_pay_next_first_authorise_covered_hours_gate_v1.sql"
         ],
-        "sha256": "8041fabdbdd9c4542fb18b2248cb52e88444148295b04571d531396945cd90ea"
+        "sha256": "956cb3e27fdfa10bcad0f4f18bd2164dcf6003f52119634f4b72a244c60a04c4"
       }
     ]
   },

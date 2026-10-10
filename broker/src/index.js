@@ -63,6 +63,7 @@ import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
 // half of it.
 import {
   weeklySourceAuthoriseRouting,
+  weeklySourceAuthoriseKnownRefusal,
   weeklySourceUnwrapRpc,
   WEEKLY_SOURCE_AUTHORISE_PROBE_RPC,
   WEEKLY_SOURCE_FIRST_AUTHORISE_RPC
@@ -94072,6 +94073,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
     row_key: item.row_key || `timesheet:${timesheetId}`,
     stale: success ? false : lifecycleBulkIsStaleError(payload),
     error_code: success ? null : lifecycleBulkErrorCode(payload),
+    ...(!success && action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(payload?.error_code, payload) ? {retryable: payload.retryable === true} : {}),
     message: success ? null : (payload?.message || payload?.error || 'Lifecycle action failed for this row.'),
     affected_rows: affectedRows,
     lifecycle_patch: payload?.lifecycle_patch || null,
@@ -94287,6 +94289,7 @@ function summarizeTimesheetLifecycleBulkOperation(operation, items) {
       stale: result?.stale === true || item.error_json?.stale === true,
       error_code: result?.error_code || item.error_json?.error_code || null,
       message: result?.message || item.error_json?.message || null,
+      ...(operation.action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(result?.error_code, result) ? {retryable: result.retryable === true} : {}),
       affected_rows: itemAffected,
       row_signature: result?.row_signature || null,
     });
@@ -168051,6 +168054,14 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const code = firstString(detailObj?.error_code, detailObj?.error, detailObj?.code, rawCode, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    const sourceRefusal = weeklySourceAuthoriseKnownRefusal(rawCode, detailObj);
+    if (sourceRefusal) return withJson(sourceRefusal.status, {
+      error: sourceRefusal.error_code, error_code: sourceRefusal.error_code,
+      retryable: sourceRefusal.retryable, message: sourceRefusal.message,
+      detail: detailObj || null, current_timesheet_id: currentTimesheetId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+    });
     if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
       return withJson(409, {
         error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
@@ -169857,6 +169868,15 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const contractWeekId = firstString(detailObj?.contract_week_id, options.contractWeekId, weekId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    const sourceRefusal = weeklySourceAuthoriseKnownRefusal(rawCode, detailObj);
+    if (sourceRefusal) return withJson(sourceRefusal.status, {
+      error: sourceRefusal.error_code, error_code: sourceRefusal.error_code,
+      retryable: sourceRefusal.retryable, message: sourceRefusal.message,
+      detail: detailObj || null, current_timesheet_id: currentTimesheetId || null,
+      contract_week_id: contractWeekId || null,
+      refresh_required: true,
+      affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId, contractWeekId)
+    });
     if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
       return withJson(409, {
         error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
