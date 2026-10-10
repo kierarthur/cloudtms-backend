@@ -652,11 +652,11 @@ function exportInput(body,actor){
     maps[kind]=new Map();const supplied=new Set();
     for(const row of rows){if(!exact(row,Object.keys(schema))||!Object.entries(schema).every(([k,t])=>t==='selectionMode'?['ALL','SUBSET'].includes(row[k]):field(row[k],t))||n.scope.candidate_id!==null&&row.candidate_id!==n.scope.candidate_id)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);const id=row.case_component_id??row.approved_line_id??row.work_id??row.candidate_id;if(supplied.has(id))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);supplied.add(id);if(body.candidate_id===null||row.candidate_id===body.candidate_id)maps[kind].set(id,row);}
   }
-  // The installed ALL Work capture owns every line. Per-line choices require
-  // its existing SUBSET Work intent; contradictory descriptors are refused.
+  // Memory overlays may omit a Work parent; exact supplied parents still bind.
+  // Legacy non-memory descriptors retain their native SUBSET parent.
   for(const line of maps.components.values()){
     const work=maps.works.get(line.work_id);
-    if(!work||!Object.hasOwn(v,'memory_baseline_run_id')&&work.mode!=='SUBSET'||work.candidate_id!==line.candidate_id||work.expected_revision_id!==line.expected_revision_id)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+    if(!work&&!Object.hasOwn(v,'memory_baseline_run_id')||work&&(!Object.hasOwn(v,'memory_baseline_run_id')&&work.mode!=='SUBSET'||work.candidate_id!==line.candidate_id||work.expected_revision_id!==line.expected_revision_id))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   }
   const frozen=JSON.parse(JSON.stringify(body));
   return {body:frozen,maps,scope:{candidate_id:body.candidate_id??n.scope.candidate_id,client_id:n.scope.client_id,channel:n.scope.channel,section:'ALL',search:'',sort:body.sort,selection_memory:Object.hasOwn(v,'memory_baseline_run_id')?{run_id:v.memory_baseline_run_id,scope:n.scope}:null},seen:Object.fromEntries(Object.keys(maps).map(k=>[k,new Set()]))};
@@ -670,7 +670,7 @@ function exportIncluded(row,input,caseCandidateQualified=false){
   }
   if(!row.choice_eligible||!row.candidate_has_pay||candidate?.selected===false)return false;
   const memory=input.body.choice.memory_baseline_run_id!=null,base=candidate?.selected??(memory?row.default_selected:input.body.choice.intent.mode==='ALL_MATCHING');
-  if(row.work_id!==null){if(work?.selected===false||!base&&work?.selected!==true||input.invalidSubsets?.has(row.work_id))return false;if(work?.mode==='SUBSET')return line?.selected===true;return Object.hasOwn(input.body.choice,'memory_baseline_run_id')?line?.selected??true:true;}
+  if(row.work_id!==null){if(work?.selected===false||input.invalidSubsets?.has(row.work_id))return false;if(work?.mode==='SUBSET')return line?.selected===true;return line?.selected??work?.selected??base;}
   if(row.case_component_id!==null)return caseCandidateQualified&&(component?.selected??candidate?.selected??(memory?row.default_selected:true));
   return false;
 }
@@ -717,7 +717,7 @@ export async function handleBpayNextWorkbenchExport(request,dependencies={}){
           const candidate=input.maps.candidates.get(row.candidate_id),base=candidate?.selected??(input.body.choice.memory_baseline_run_id!=null?row.default_selected:input.body.choice.intent.mode==='ALL_MATCHING');
           const chosenCase=row.case_component_id===null?null:input.maps.cases.get(row.case_component_id);
           const chosenWork=row.work_id===null?null:input.maps.works.get(row.work_id);
-          if(touched.has(row.candidate_id)&&exportIncluded(row,input,true)&&(row.work_id!==null&&chosenWork?.mode!=='SUBSET'&&chosenWork?.selected!==false&&(base||chosenWork?.selected===true)||row.case_component_id!==null&&(chosenCase?.selected??true)&&(base||chosenCase?.selected===true)))input.qualifiedCandidates.add(row.candidate_id);
+          if(touched.has(row.candidate_id)&&exportIncluded(row,input,true)&&(row.work_id!==null&&chosenWork?.mode!=='SUBSET'&&chosenWork?.selected!==false||row.case_component_id!==null&&(chosenCase?.selected??true)&&(base||chosenCase?.selected===true)))input.qualifiedCandidates.add(row.candidate_id);
         }
       }
       if(page.complete)break;after=page.next_cursor;page=await load();
