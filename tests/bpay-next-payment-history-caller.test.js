@@ -36,7 +36,9 @@ function row(section, key) {
   return {key,data};
 }
 test('all 52 allowlists, key/parent/state and manifest equal the frozen SQL registry',()=>{
-  const sql=fs.readFileSync(new URL('../supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql',import.meta.url),'utf8');
+  const registry=JSON.parse(fs.readFileSync(new URL('../docs/bpay-next/final-definer-closures.json',import.meta.url),'utf8'));
+  const owner=registry.chains.find(row=>row.signature==='public.bpay_next_payment_history_page_v1(jsonb)');assert.ok(owner);
+  const sql=fs.readFileSync(new URL('../'+owner.finalPhysical,import.meta.url),'utf8');
   const original=JSON.parse(sql.split('$history$')[1]);
   assert.equal(Object.keys(SECTIONS).length,52);
   for(const [name,value] of Object.entries(original)) assert.deepEqual(SECTIONS[name],{

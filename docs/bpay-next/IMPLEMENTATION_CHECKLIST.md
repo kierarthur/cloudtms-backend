@@ -424,16 +424,18 @@ Dependencies: F-05, F-06, F-09, F-10, F-11, F-16; successor positions: none. Des
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-08-D01 | CHECK: Confirm→PAYE/Umbrella channel Drafts | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-08-D02 | CHECK: CHANNEL_DRAFTS/CHANNEL_WORKERS/CHANNEL_STATUS 18-kind contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-08-D03 | CHECK: Cancel run/channel request/reply contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-08-D04 | CHECK: Payment-history 52-section request/reply contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-08-D01 | CHECK: Confirm→PAYE/Umbrella channel Drafts | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-08-D02 | CHECK: CHANNEL_DRAFTS/CHANNEL_WORKERS/CHANNEL_STATUS 18-kind contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-08-D03 | CHECK: Cancel run/channel request/reply contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-08-D04 | CHECK: Payment-history 52-section request/reply contract | PARTLY_DONE | Reconcile pending local SQL/module/screen artefacts to exact current joined contract; history authentication independent of NEXT activation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-08-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 The completion note holds the final contract table (M1-M4: key names, kinds, section names, error codes) agreed by all three layers. On the NEXT test agency, a mixed PAYE+Umbrella preparation confirms and shows "Open PAYE Draft" and "Open Umbrella Draft"; each opens its worker list and status; "Cancel this unpaid Candidate Draft" from an opened channel Draft is accepted; the Candidate/Timesheet "Payment history" button opens with all sections.
+
+Whole F-08 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. F-08-COMPLETION.md and F-08-CONTRACT-APPENDIX.md: exact M1-M4/18 active pages/52 history sections; existing source gates aligned; 83 BE and 60 FE PASS; dbcheck308/808 and local PG17 seal a0177a82/coupling PASS; BD021; no SQL/product rewrite; hosted/app NOT_RUN Review: reviews/F-08-contract-alignment-review.md final source and completion-note PASS; no open findings.
 
 ## F-13 — Make the shared continuation queue safe at one-way activation
 

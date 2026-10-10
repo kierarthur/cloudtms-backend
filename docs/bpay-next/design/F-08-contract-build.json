@@ -1,0 +1,1968 @@
+{
+  "generatedAtUtc": "2026-10-09T20:14:17.864481+00:00",
+  "execution": "Source-only; no product edit/test/runtime/SQL/hosted/network execution",
+  "files": [
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "rawBytes": 256434,
+      "rawSha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+      "lfSha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "rawBytes": 5486,
+      "rawSha256": "a90b3b2fe01e079e7177bedde583d5e0b66dd037b2344272a6a8fb288d008719",
+      "lfSha256": "a90b3b2fe01e079e7177bedde583d5e0b66dd037b2344272a6a8fb288d008719"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql",
+      "rawBytes": 44696,
+      "rawSha256": "d963c739f743e1526647ef101db7b9460dad88be3e2f56c2775c199aeddc2c73",
+      "lfSha256": "d963c739f743e1526647ef101db7b9460dad88be3e2f56c2775c199aeddc2c73"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+      "rawBytes": 23149,
+      "rawSha256": "4c651558f56b85c29cf10f21a1d3168ce259f75a66001a24a7f53dbc76216a87",
+      "lfSha256": "4c651558f56b85c29cf10f21a1d3168ce259f75a66001a24a7f53dbc76216a87"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "broker/src/bpay-next-preparation.js",
+      "rawBytes": 30706,
+      "rawSha256": "defd708e500ea645ee272d326a7b0ed15f03c8b07dc280d3c9590933548c8ed6",
+      "lfSha256": "defd708e500ea645ee272d326a7b0ed15f03c8b07dc280d3c9590933548c8ed6"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "broker/src/bpay-next-command.js",
+      "rawBytes": 21192,
+      "rawSha256": "95f082f6fef61932b0498ea007d47966692ec15094d954fc9cbbf4bd1d7ed059",
+      "lfSha256": "95f082f6fef61932b0498ea007d47966692ec15094d954fc9cbbf4bd1d7ed059"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "broker/src/bpay-next-preparation-rpc.js",
+      "rawBytes": 1424,
+      "rawSha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34",
+      "lfSha256": "642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "rawBytes": 2234,
+      "rawSha256": "060ce9bdab50576aec731d0b9b3c6499a608e3cd71c17a3c9bdf54483db1b68e",
+      "lfSha256": "060ce9bdab50576aec731d0b9b3c6499a608e3cd71c17a3c9bdf54483db1b68e"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "broker/src/bpay-next-history.js",
+      "rawBytes": 33602,
+      "rawSha256": "81d4ca2fb90b1bbec7dea3a41698933f70b306833079484d45a89e4e77738451",
+      "lfSha256": "81d4ca2fb90b1bbec7dea3a41698933f70b306833079484d45a89e4e77738451"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "tests/bpay-next-preparation.test.js",
+      "rawBytes": 33572,
+      "rawSha256": "c1526acd3b6f57f4c60ccf39e2d59d6b21f012f9e258cf9025f224a45fdddeb7",
+      "lfSha256": "c1526acd3b6f57f4c60ccf39e2d59d6b21f012f9e258cf9025f224a45fdddeb7"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "tests/bpay-next-command.test.js",
+      "rawBytes": 30251,
+      "rawSha256": "0d847330d80e8c8e3fad9225e00726e26afd364e7903c810d71ca66cb58fca3d",
+      "lfSha256": "0d847330d80e8c8e3fad9225e00726e26afd364e7903c810d71ca66cb58fca3d"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "tests/bpay-next-payment-history-caller.test.js",
+      "rawBytes": 9859,
+      "rawSha256": "7ea8f4ef53e3bc4fc7c02188fc0ffca629f17bd370ddcd41685b40503b5ef28e",
+      "lfSha256": "7ea8f4ef53e3bc4fc7c02188fc0ffca629f17bd370ddcd41685b40503b5ef28e"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "tests/bpay-next-preparation-rpc.test.js",
+      "rawBytes": 3797,
+      "rawSha256": "dc65cf3e1b0d0d8934c57226357e70fcc00324809d5f537f42667eb4725676e7",
+      "lfSha256": "dc65cf3e1b0d0d8934c57226357e70fcc00324809d5f537f42667eb4725676e7"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-backend-20261009",
+      "path": "tests/bpay-next-command-rpc.test.js",
+      "rawBytes": 6548,
+      "rawSha256": "60ce0eecd5da3c5ad6be7cca3d65ac3e274b4fb0f489d3288cd8d57e397ae9a9",
+      "lfSha256": "60ce0eecd5da3c5ad6be7cca3d65ac3e274b4fb0f489d3288cd8d57e397ae9a9"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "js/bpay-next-office.js",
+      "rawBytes": 80889,
+      "rawSha256": "a4ba8ea0b63f3723a062dea7f915e91ed193c3c20c03e9dfae7765e8de25a356",
+      "lfSha256": "a4ba8ea0b63f3723a062dea7f915e91ed193c3c20c03e9dfae7765e8de25a356"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "js/bpay-next-payment-history.js",
+      "rawBytes": 43925,
+      "rawSha256": "715a1035f88204b39771932a479f733b98ef7c971656c77767bd396861a24e9b",
+      "lfSha256": "715a1035f88204b39771932a479f733b98ef7c971656c77767bd396861a24e9b"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "js/bpay-next-owner.js",
+      "rawBytes": 5785,
+      "rawSha256": "4947d2e61cd4fa734cbaa99b05c415bad8552865d286233123cc48f34e1ca922",
+      "lfSha256": "4947d2e61cd4fa734cbaa99b05c415bad8552865d286233123cc48f34e1ca922"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "tests/unit/bpay-next-office.test.cjs",
+      "rawBytes": 35542,
+      "rawSha256": "6e905cab92c36eafbea0425524038f7e3157fba2014d4711fa1164dcfeca6048",
+      "lfSha256": "6e905cab92c36eafbea0425524038f7e3157fba2014d4711fa1164dcfeca6048"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "tests/unit/bpay-next-office-frozen-detail.test.cjs",
+      "rawBytes": 17395,
+      "rawSha256": "3ac53acadc4251376f2ffcdc703892414bcabaee8447a2e8837848a1df1e6b89",
+      "lfSha256": "3ac53acadc4251376f2ffcdc703892414bcabaee8447a2e8837848a1df1e6b89"
+    },
+    {
+      "root": "C:\\Users\\KierArthur\\OneDrive - Arthur Rai\\Documents\\GitHub\\.codex-worktrees\\bpay-next-build-frontend-20261009",
+      "path": "tests/unit/bpay-next-payment-history.test.cjs",
+      "rawBytes": 8893,
+      "rawSha256": "48b496e942232ae15e7bedebe7da61aa89e6fe65bc5fd71e09c348caf3ce7cdf",
+      "lfSha256": "48b496e942232ae15e7bedebe7da61aa89e6fe65bc5fd71e09c348caf3ce7cdf"
+    }
+  ],
+  "functions": [
+    {
+      "name": "private.bpay_next_confirm_simple_run_v1",
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 1445,
+      "definitionLfSha256": "b36ddb1640122b3fae1530968b80a5933575294864f0eab4ae8beaaf2fefe54f",
+      "definition": "create or replace function private.bpay_next_confirm_simple_run_v1(\n  p_run_id uuid,p_review_revision bigint\n) returns jsonb\nlanguage plpgsql security definer\nset search_path=pg_catalog,private,public\nas $function$\ndeclare\n  v_run private.bpay_next_pay_run%rowtype;\n  v_module_epoch bigint;\n  v_command private.bpay_next_command%rowtype;\nbegin\n  if p_run_id is null or p_review_revision is null then\n    raise exception using errcode='22023',\n      message='BPAY_NEXT_CONFIRM_INPUT_INVALID';\n  end if;\n  select owner_epoch into v_module_epoch\n    from private.bpay_next_module_control\n    where id=1 and active_owner='NEXT' for share;\n  if v_module_epoch is null then\n    raise exception using errcode='55000',\n      message='BPAY_NEXT_MODULE_NOT_ACTIVE';\n  end if;\n  select * into strict v_run from private.bpay_next_pay_run\n    where id=p_run_id for update;\n  if v_run.status='DRAFT' and v_run.review_revision=p_review_revision\n     and v_run.confirmed_at_utc is not null then\n    return pg_catalog.jsonb_build_object('phase','DRAFT','replay',true,\n      'review_revision',v_run.review_revision,\n      'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows');\n  end if;\n  if v_run.status<>'REVIEW' or v_run.selection_state<>'SEALED'\n     or v_run.work_choice_count<>v_run.selection_count\n     or v_run.sealed_work_choice_count<>v_run.selection_count\n     or v_run.review_revision<>p_review_revision\n     or v_run.confirmed_at_utc is not null then\n    raise exception using errcode='55000',\n      message='BPAY_NEXT_CONFIRM_REVIEW_STATE_INVALID';\n  end if;\n  -- The real clock is read AFTER the header lock: a transaction started\n  -- before the deadline cannot confirm late after waiting for that lock.\n  -- The completed DRAFT replay above is permanent and never expires.\n  if v_run.preparation_expires_at_utc is null\n     or v_run.preparation_expires_at_utc<=pg_catalog.clock_timestamp() then\n    raise exception using errcode='55000',\n      message='BPAY_NEXT_CONFIRM_PREPARATION_EXPIRED_OR_UNBOUND';\n  end if;\n  select c.* into strict v_command\n    from private.bpay_next_run_command rc\n    join private.bpay_next_command c on c.id=rc.command_id\n    where rc.run_id=p_run_id;\n  if v_command.status<>'SEALED' or v_command.module_epoch<>v_module_epoch\n     or v_command.expected_member_count<>v_run.selected_candidate_count\n     or v_command.enrolled_member_count<>v_run.selected_candidate_count\n     or exists (select 1 from private.bpay_next_job j\n        where j.command_id=v_command.id and j.job_kind='PREPARE'\n          and j.status<>'DONE')\n     or exists (\n       select 1 from private.bpay_next_run_worker\n       where run_id=p_run_id and status<>'READY') then\n    raise exception using errcode='55000',\n      message='BPAY_NEXT_CONFIRM_UNRESOLVED_WORKER';\n  end if;\n  -- Each bounded holder transaction wrote its line, position and ACTIVE hold\n  -- atomically before its worker became READY. Future cancellation/expiry\n  -- owners must lock this parent and make a worker non-ready before release;\n  -- no such owner is granted or activated in this narrow proof.\n  update private.bpay_next_pay_run\n    set status='DRAFT',confirmed_at_utc=pg_catalog.transaction_timestamp()\n    where id=p_run_id;\n  return pg_catalog.jsonb_build_object('phase','DRAFT','replay',false,\n    'review_revision',p_review_revision,\n    'drafts',private.bpay_next_channel_drafts_page_v1(p_run_id)->'rows');\nend\n$function$;",
+      "signature": "private.bpay_next_confirm_simple_run_v1(uuid,bigint)"
+    },
+    {
+      "name": "public.bpay_next_financial_intake_v1",
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 3044,
+      "definitionLfSha256": "120311d07cdacc85c4cf778d46bd397c2f6559f10f05064c4ee422e1c27b1b9f",
+      "definition": "create or replace function public.bpay_next_financial_intake_v1(\n  p_actor_user_id uuid,p_action text,p_args jsonb\n) returns jsonb\nlanguage plpgsql security definer\nset search_path=pg_catalog,private,public\nas $function$\ndeclare\n  v_keys text[];\n  v_key text;\n  v_command_id uuid;\n  v_worker_id uuid;\n  v_transfer_id uuid;\n  v_instruction_id uuid;\n  v_return_cash_id uuid;\n  v_run_id uuid;\n  v_amount numeric;\n  v_occurred_at timestamptz;\n  v_result jsonb;\n  v_output jsonb;\n  v_sequence text;\n  v_projection_revision bigint;\n  v_case_selection_revision bigint;\n  v_case_component_id uuid;\n  v_component_revision bigint;\nbegin\n  if coalesce(pg_catalog.current_setting('request.jwt.claim.role',true),\n      nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role'\n     or p_actor_user_id is null\n     or not exists(select 1 from public.tms_users u\n                   where u.id=p_actor_user_id and u.is_active is true\n                     and u.role::text='admin' for share) then\n    raise exception using errcode='42501',message='BPAY_NEXT_COMMAND_FORBIDDEN';\n  end if;\n  if not exists(select 1 from private.bpay_next_module_control m\n                where m.id=1 and m.active_owner='NEXT' for share) then\n    raise exception using errcode='55000',message='BPAY_NEXT_MODULE_NOT_ACTIVE';\n  end if;\n  if p_action is null or p_action not in\n      ('PAYE_NET','CASE_PAYOUT','TRANSFER_BEGIN','CANCEL_REQUEST','CASH_REISSUE','REISSUE_CANCEL',\n       'CSV_ISSUE','CSV_SETTLEMENT','CSV_RETURN','INTERNAL_SETTLE','PREPARATION_EXPIRE','WRITE_OFF')\n     or p_args is null or pg_catalog.jsonb_typeof(p_args) is distinct from 'object'\n     or pg_catalog.octet_length(p_args::text)>2048 then\n    raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n  end if;\n  v_keys:=case p_action\n    when 'WRITE_OFF' then array['command_id','case_component_id','expected_component_revision','scope','reason']\n      || case when p_args->>'scope'='AMOUNT' then array['amount'] else array[]::text[] end\n    when 'PAYE_NET' then array['command_id','run_worker_id','entered_paye_net']\n      || case when p_args ? 'expected_projection_revision' then array['expected_projection_revision'] else array[]::text[] end\n    when 'CASE_PAYOUT' then array['command_id','run_worker_id','expected_projection_revision']\n    when 'TRANSFER_BEGIN' then array['command_id','run_worker_id']\n    when 'CANCEL_REQUEST' then array['command_id','run_worker_id']\n      || case when p_args ? 'run_id' or p_args ? 'pay_channel'\n        then array['run_id','pay_channel'] else array[]::text[] end\n    when 'CASH_REISSUE' then array['command_id','return_cash_id']\n    when 'REISSUE_CANCEL' then array['command_id','transfer_id']\n    when 'CSV_ISSUE' then array['instruction_id','transfer_id']\n    when 'INTERNAL_SETTLE' then array['command_id','transfer_id']\n    when 'PREPARATION_EXPIRE' then array['command_id','run_id','expected_deadline']\n    else array['command_id','transfer_id','receipt_id','amount','occurred_at'] end;\n  if (select count(*) from pg_catalog.jsonb_object_keys(p_args))<>pg_catalog.array_length(v_keys,1)\n     or exists(select 1 from pg_catalog.jsonb_object_keys(p_args) k\n               where not(k=any(v_keys))) then\n    raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n  end if;\n  foreach v_key in array v_keys loop\n    if pg_catalog.jsonb_typeof(p_args->v_key) is distinct from 'string' then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    if v_key in ('command_id','run_worker_id','transfer_id','instruction_id','return_cash_id','run_id','case_component_id')\n       and (p_args->>v_key)!~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    if v_key='pay_channel' and (p_args->>v_key) not in ('PAYE','UMBRELLA') then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n  end loop;\n  v_command_id:=(p_args->>'command_id')::uuid;\n  v_worker_id:=(p_args->>'run_worker_id')::uuid;\n  v_transfer_id:=(p_args->>'transfer_id')::uuid;\n  v_instruction_id:=(p_args->>'instruction_id')::uuid;\n  v_return_cash_id:=(p_args->>'return_cash_id')::uuid;\n  if p_action='WRITE_OFF' then\n    v_case_component_id:=(p_args->>'case_component_id')::uuid;\n    if (p_args->>'expected_component_revision')!~'^[1-9][0-9]{0,18}$'\n       or (p_args->>'expected_component_revision')::numeric>9223372036854775807 then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    v_component_revision:=(p_args->>'expected_component_revision')::bigint;\n  end if;\n  if p_action='PREPARATION_EXPIRE' then\n    v_run_id:=(p_args->>'run_id')::uuid;\n    if (p_args->>'expected_deadline')!~\n        '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,6})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$' then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    v_occurred_at:=(p_args->>'expected_deadline')::timestamptz;\n    if not pg_catalog.isfinite(v_occurred_at) then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n  end if;\n  if p_args ? 'expected_projection_revision' then\n    if (p_args->>'expected_projection_revision')!~'^(0|[1-9][0-9]{0,18})$'\n       or (p_args->>'expected_projection_revision')::numeric>=9223372036854775807 then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    v_projection_revision:=(p_args->>'expected_projection_revision')::bigint;\n  end if;\n  if p_action in ('PAYE_NET','CSV_SETTLEMENT','CSV_RETURN') then\n    v_key:=case when p_action='PAYE_NET' then 'entered_paye_net' else 'amount' end;\n    -- Current money columns are numeric(18,2). Explicit finite, ordinary\n    -- decimal syntax prevents exponent/NaN, narrowing and JSON-number coercion.\n    if (p_args->>v_key)!~'^(0|[1-9][0-9]{0,15})([.][0-9]{1,2})?$' then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    v_amount:=(p_args->>v_key)::numeric;\n    if p_action<>'PAYE_NET' and v_amount<=0 then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n  end if;\n  if p_action in ('CSV_SETTLEMENT','CSV_RETURN') then\n    if pg_catalog.octet_length(p_args->>'receipt_id') not between 1 and 256\n       or (p_args->>'occurred_at')!~\n         '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,6})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$' then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n    v_occurred_at:=(p_args->>'occurred_at')::timestamptz;\n    if not pg_catalog.isfinite(v_occurred_at) then\n      raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n    end if;\n  end if;\n\n  -- Fixed branches and exact typed IDs only. No dynamic identifier, query,\n  -- caller actor, arbitrary RPC, live finance/history reconstruction or drain.\n  case p_action\n    when 'WRITE_OFF' then\n      v_result:=private.bpay_next_accept_write_off_v1(v_command_id,v_case_component_id,p_actor_user_id,\n        v_component_revision,p_args->>'scope',p_args->>'amount',p_args->>'reason');\n      v_output:=pg_catalog.jsonb_build_object('command_id',v_result->>'command_id',\n        'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id',\n        'sequence',v_result->>'sequence','phase',v_result->>'phase','requested_scope',v_result->>'requested_scope',\n        'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount',\n        'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id',\n        'issue_code',v_result->>'issue_code','replay',v_result->'replay');\n    when 'PREPARATION_EXPIRE' then\n      -- NULL clock selects the real server clock AFTER acquiring the header.\n      -- Office cannot supply SYSTEM authority, now, or a renewal duration.\n      v_result:=private.bpay_next_accept_preparation_expiry_v1(\n        v_command_id,v_run_id,p_actor_user_id,v_occurred_at,null);\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_result->>'command_id','run_id',v_result->>'run_id',\n        'sequence',v_result->>'sequence','phase',v_result->>'phase',\n        'expected_candidates',v_result->>'expected_candidates',\n        'completed_candidates',v_result->>'completed_candidates',\n        'replay',v_result->'replay');\n    when 'PAYE_NET' then\n      -- Route by the worker's FROZEN selection, never by live Candidate cases.\n      -- Explicit prior projection protects resaves from overwriting a newer one.\n      select w.case_selection_revision into strict v_case_selection_revision\n        from private.bpay_next_run_worker w where w.id=v_worker_id;\n      if v_case_selection_revision>0 then\n        if v_projection_revision is null then\n          raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n        end if;\n        v_result:=private.bpay_next_accept_case_paye_net_v1(\n          v_command_id,v_worker_id,p_actor_user_id,v_amount,v_projection_revision);\n      else\n        if v_projection_revision is not null then\n          raise exception using errcode='22023',message='BPAY_NEXT_COMMAND_REQUEST_INVALID';\n        end if;\n        v_result:=private.bpay_next_accept_simple_paye_net_v1(v_command_id,v_worker_id,v_amount);\n      end if;\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_command_id,'run_worker_id',v_worker_id,\n        'sequence',v_result->>'sequence','request_no',v_result->>'request_no',\n        'phase',v_result->>'phase','replay',v_result->'replay');\n    when 'CASE_PAYOUT' then\n      v_result:=private.bpay_next_accept_case_payout_projection_v1(\n        v_command_id,v_worker_id,p_actor_user_id,v_projection_revision);\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_command_id,'run_worker_id',v_worker_id,\n        'sequence',v_result->>'sequence','request_no',v_result->>'request_no',\n        'phase',v_result->>'phase','replay',v_result->'replay');\n    when 'TRANSFER_BEGIN' then\n      v_result:=private.bpay_next_begin_simple_transfer_v1(v_command_id,v_worker_id);\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_command_id,'run_worker_id',v_worker_id,\n        'sequence',v_result->>'sequence','transfer_id',v_result->>'transfer_id',\n        'phase',v_result->>'phase','replay',v_result->'replay');\n    when 'CANCEL_REQUEST' then\n      -- Optional address is strictly paired and independently bound before accepting intent.\n      if p_args ? 'run_id' and not exists(select 1 from private.bpay_next_run_worker w\n        where w.id=v_worker_id and w.run_id=(p_args->>'run_id')::uuid\n          and w.target_pay_channel=p_args->>'pay_channel') then\n        raise exception using errcode='23514',message='BPAY_NEXT_CANCEL_CHANNEL_SCOPE_INVALID';\n      end if;\n      v_result:=private.bpay_next_accept_simple_cancel_v1(v_command_id,v_worker_id);\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_command_id,'run_worker_id',v_worker_id,\n        'sequence',v_result->>'sequence','phase',v_result->>'phase',\n        'cursor',v_result->>'cursor','released_line_count',v_result->>'released_line_count',\n        'blocked_code',v_result->>'blocked_code','replay',v_result->'replay');\n    when 'CASH_REISSUE' then\n      v_result:=private.bpay_next_receive_simple_reissue_v1(v_command_id,v_return_cash_id,p_actor_user_id);\n      select c.agency_sequence::text into strict v_sequence\n        from private.bpay_next_command c where c.id=v_command_id and c.command_kind='CASH_REISSUE';\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_command_id,'return_cash_id',v_return_cash_id,\n        'sequence',v_sequence,'transfer_id',v_result->>'transfer_id',\n        'phase',case when v_result->>'transfer_id' is null\n          then 'ACCEPTED_PENDING_BUILD' else 'TRANSFER_CREATED' end,\n        'replay',v_result->'replay');\n    when 'REISSUE_CANCEL' then\n      v_result:=private.bpay_next_accept_reissue_cancel_v1(v_command_id,v_transfer_id,p_actor_user_id);\n      select r.blocked_code into v_key from private.bpay_next_reissue_cancel_request r where r.command_id=v_command_id;\n      v_output:=pg_catalog.jsonb_build_object('command_id',v_command_id,'transfer_id',v_transfer_id,\n        'sequence',v_result->>'sequence','phase',v_result->>'phase','blocked_code',v_key,'replay',v_result->'replay');\n    when 'CSV_ISSUE' then\n      -- A new CSV issue first binds its current approved destination using the\n      -- existing owner. Already-issued replay never rebinds or changes bytes.\n      -- Both calls use the same transaction and parent run mutex; any issue\n      -- permission/state failure rolls the destination preparation back too.\n      -- Acquire that mutex BEFORE checking instruction existence: concurrent\n      -- same-ID retry must see the first committed issue and skip rebinding.\n      select w.run_id into strict v_run_id\n        from private.bpay_next_transfer t\n        join private.bpay_next_run_worker w on w.id=t.run_worker_id\n        where t.id=v_transfer_id;\n      perform 1 from private.bpay_next_pay_run where id=v_run_id for update;\n      if not exists(select 1 from private.bpay_next_csv_instruction i where i.id=v_instruction_id) then\n        perform private.bpay_next_bind_simple_csv_destination_v1(v_transfer_id);\n      end if;\n      v_result:=private.bpay_next_issue_simple_csv_v1(v_instruction_id,v_transfer_id,p_actor_user_id);\n      v_output:=pg_catalog.jsonb_build_object(\n        'instruction_id',v_result->>'instruction_id','transfer_id',v_result->>'transfer_id',\n        'file_name',v_result->>'file_name','csv_sha256',v_result->>'csv_sha256',\n        'csv_text',v_result->>'csv_text','phase','ISSUED_CSV',\n        'payment_recorded',v_result->'payment_recorded','replay',v_result->'replay');\n    when 'CSV_SETTLEMENT' then\n      v_result:=private.bpay_next_receive_simple_csv_settlement_v1(\n        v_command_id,v_transfer_id,p_args->>'receipt_id',v_amount,v_occurred_at,p_actor_user_id);\n      select c.agency_sequence::text into strict v_sequence\n        from private.bpay_next_command c\n        where c.id=(v_result->>'command_id')::uuid and c.command_kind='CSV_SETTLEMENT';\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_result->>'command_id','transfer_id',v_transfer_id,\n        'outcome_id',v_result->>'outcome_id','sequence',v_sequence,\n        'posting_complete',v_result->'posting_complete','replay',v_result->'replay',\n        'phase',case when (v_result->>'posting_complete')::boolean\n          then 'POSTED' else 'ACCEPTED_PENDING_POSTING' end);\n    when 'INTERNAL_SETTLE' then\n      -- The server creates an internal receipt for an exact zero-cash frozen\n      -- envelope. There is no caller amount, bank receipt or CSV instruction.\n      v_result:=private.bpay_next_receive_internal_settlement_v1(\n        v_command_id,v_transfer_id,p_actor_user_id);\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_result->>'command_id','transfer_id',v_result->>'transfer_id',\n        'internal_receipt_id',v_result->>'internal_receipt_id','sequence',v_result->>'sequence',\n        'posting_complete',v_result->'posting_complete','phase',v_result->>'phase','replay',v_result->'replay');\n    when 'CSV_RETURN' then\n      v_result:=private.bpay_next_receive_simple_csv_return_v1(\n        v_command_id,v_transfer_id,p_args->>'receipt_id',v_amount,v_occurred_at,p_actor_user_id);\n      select c.agency_sequence::text into strict v_sequence\n        from private.bpay_next_command c\n        where c.id=(v_result->>'command_id')::uuid and c.command_kind='CSV_RETURN';\n      v_output:=pg_catalog.jsonb_build_object(\n        'command_id',v_result->>'command_id','transfer_id',v_transfer_id,\n        'outcome_id',v_result->>'outcome_id','sequence',v_sequence,\n        'posting_complete',v_result->'posting_complete','replay',v_result->'replay',\n        'phase',case when (v_result->>'posting_complete')::boolean\n          then 'POSTED' else 'ACCEPTED_PENDING_POSTING' end);\n  end case;\n  if pg_catalog.jsonb_typeof(v_result->'replay') is distinct from 'boolean'\n     or pg_catalog.octet_length(v_output::text)>120000 then\n    -- Exception aborts the whole request transaction; no partial issue or\n    -- accepted financial request is committed without its bounded receipt.\n    raise exception using errcode='54000',message='BPAY_NEXT_COMMAND_RESPONSE_INVALID';\n  end if;\n  return v_output;\nend\n$function$;",
+      "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)"
+    },
+    {
+      "name": "public.bpay_next_preparation_intake_v1",
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 3678,
+      "definitionLfSha256": "13d5351e6880219e4a0878c55ee7170387cb831907caaf037f92d92e393d9912",
+      "definition": "create or replace function public.bpay_next_preparation_intake_v1(p_actor_user_id uuid,p_action text,p_args jsonb)\nreturns jsonb language plpgsql security definer\nset search_path=pg_catalog,private,public\nas $function$\ndeclare\n  v_keys text[];v_run uuid;v_work uuid;v_revision uuid;v_candidate uuid;v_result jsonb;v_output jsonb;\n  v_ids uuid[];v_selected boolean[];v_entry jsonb;v_header private.bpay_next_pay_run%rowtype;\nbegin\n  perform private.bpay_next_preparation_authority_v1(p_actor_user_id);\n  v_keys:=case p_action\n    when 'CREATE' then array['run_id','pay_date']\n    when 'WORK_PAGE' then array['run_id','page_no','choices']\n    when 'COMPONENT_PAGE' then array['run_id','work_id','expected_revision_id','page_no','approved_line_ids']\n    when 'COMPONENT_SEAL' then array['run_id','work_id','expected_revision_id','expected_pages','expected_count']\n    when 'CASE_PAGE' then array['run_id','candidate_id','selection_revision','page_no','request_id','component_ids','selected']\n    when 'CASE_SEAL' then array['run_id','candidate_id','selection_revision','expected_pages','expected_items']\n    when 'SEAL_ENQUEUE' then array['run_id','command_id','expected_pages','expected_count']\n    when 'REVIEW' then array['run_id']\n    when 'CONFIRM' then array['run_id','review_revision'] else null end;\n  if v_keys is null then raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';end if;\n  perform private.bpay_next_preparation_args_v1(p_args,v_keys);\n  v_run:=(p_args->>'run_id')::uuid;v_work:=(p_args->>'work_id')::uuid;\n  v_revision:=(p_args->>'expected_revision_id')::uuid;v_candidate:=(p_args->>'candidate_id')::uuid;\n  if p_action in ('COMPONENT_PAGE','CASE_PAGE') then\n    for v_entry in select value from pg_catalog.jsonb_array_elements(\n      p_args->case when p_action='CASE_PAGE' then 'component_ids' else 'approved_line_ids' end) loop\n      if pg_catalog.jsonb_typeof(v_entry) is distinct from 'string'\n        or (v_entry#>>'{}')!~*'^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then\n        raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n      end if;\n      v_ids:=pg_catalog.array_append(v_ids,(v_entry#>>'{}')::uuid);\n    end loop;\n    if p_action='CASE_PAGE' then\n      if pg_catalog.jsonb_array_length(p_args->'selected')<>pg_catalog.cardinality(v_ids) then\n        raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n      end if;\n      for v_entry in select value from pg_catalog.jsonb_array_elements(p_args->'selected') loop\n        if pg_catalog.jsonb_typeof(v_entry) is distinct from 'boolean' then\n          raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n        end if;\n        v_selected:=pg_catalog.array_append(v_selected,(v_entry#>>'{}')::boolean);\n      end loop;\n    end if;\n  end if;\n  case p_action\n  when 'CREATE' then\n    v_result:=private.bpay_next_create_preparation_v1(v_run,p_actor_user_id,(p_args->>'pay_date')::date);\n    select r.* into strict v_header from private.bpay_next_pay_run r where r.id=v_run;\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'status',v_result->>'status',\n      'selection_state',v_result->>'selection_state','selection_count',v_header.selection_count::text,\n      'selected_candidate_count',v_header.selected_candidate_count::text);\n  when 'WORK_PAGE' then\n    v_output:=private.bpay_next_append_work_choices_v1(v_run,(p_args->>'page_no')::bigint,p_args->'choices');\n  when 'COMPONENT_PAGE' then\n    v_output:=private.bpay_next_append_component_selection_page_v1(v_run,v_work,v_revision,(p_args->>'page_no')::bigint,v_ids);\n  when 'COMPONENT_SEAL' then\n    v_output:=private.bpay_next_seal_component_selection_v1(v_run,v_work,v_revision,\n      (p_args->>'expected_pages')::bigint,(p_args->>'expected_count')::bigint);\n  when 'CASE_PAGE' then\n    v_result:=private.bpay_next_append_case_selection_page_v1(v_run,v_candidate,(p_args->>'selection_revision')::bigint,\n      (p_args->>'page_no')::bigint,(p_args->>'request_id')::uuid,v_ids,v_selected);\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate,\n      'selection_revision',p_args->>'selection_revision','page_no',v_result->>'page_no',\n      'item_count',v_result->>'item_count','replay',v_result->'replay');\n  when 'CASE_SEAL' then\n    v_result:=private.bpay_next_seal_case_selection_v1(v_run,v_candidate,(p_args->>'selection_revision')::bigint,\n      (p_args->>'expected_pages')::bigint,(p_args->>'expected_items')::bigint);\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate,\n      'selection_revision',v_result->>'selection_revision','sealed',v_result->'sealed',\n      'selected_count',v_result->>'selected_count','excluded_count',v_result->>'excluded_count','replay',v_result->'replay');\n  when 'SEAL_ENQUEUE' then\n    perform private.bpay_next_seal_selection_v1(v_run,(p_args->>'expected_pages')::bigint,(p_args->>'expected_count')::bigint);\n    v_result:=private.bpay_next_enqueue_preparation_v1(v_run,(p_args->>'command_id')::uuid);\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'command_id',v_result->>'command_id',\n      'agency_sequence',v_result->>'agency_sequence','replay',v_result->'replay');\n  when 'REVIEW' then\n    v_result:=private.bpay_next_review_simple_run_v1(v_run);\n    select r.* into strict v_header from private.bpay_next_pay_run r where r.id=v_run;\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase','reason',v_result->>'reason',\n      'review_revision',v_header.review_revision::text,'all_ready',v_result->'all_ready',\n      'replay',coalesce(v_result->'replay','false'::jsonb));\n  when 'CONFIRM' then\n    v_result:=private.bpay_next_confirm_simple_run_v1(v_run,(p_args->>'review_revision')::bigint);\n    v_output:=pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase',\n      'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts');\n  end case;\n  if pg_catalog.octet_length(v_output::text)>120000 then\n    raise exception using errcode='54000',message='BPAY_NEXT_PREPARATION_RESPONSE_TOO_LARGE';\n  end if;\n  return v_output;\nend\n$function$;",
+      "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)"
+    },
+    {
+      "name": "public.bpay_next_preparation_page_v1",
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "line": 3776,
+      "definitionLfSha256": "d056ee51face1a12bfb7d0d2b29dd77aa5960941ce87cd241fb37cbf53ac05f9",
+      "definition": "create or replace function public.bpay_next_preparation_page_v1(p_actor_user_id uuid,p_kind text,p_args jsonb)\nreturns jsonb language plpgsql security definer\nset search_path=pg_catalog,private,public\nas $function$\ndeclare\n  v_keys text[];v_work uuid;v_revision uuid;v_line uuid;v_shift uuid;v_limit integer;\n  v_row jsonb;v_page jsonb[];v_rows jsonb:='[]'::jsonb;v_n integer:=0;v_complete boolean:=true;\nbegin\n  perform private.bpay_next_preparation_authority_v1(p_actor_user_id);\n  v_keys:=case p_kind\n    when 'COMPONENTS' then array['work_id','expected_revision_id','after_line_no','limit']\n    when 'WORK_CHOICES' then array['run_id','after_work_id','limit']\n    when 'SELECTED_COMPONENTS' then array['run_id','work_id','after_selection_no','limit']\n    when 'CHANNEL_DRAFTS' then array['run_id']\n    when 'CHANNEL_WORKERS' then array['run_id','pay_channel','after_candidate_id','limit']\n    when 'CHANNEL_STATUS' then array['run_id','pay_channel','run_worker_id','after_transfer_no','limit']\n    when 'WORKERS' then array['run_id','after_candidate_id','limit']\n    when 'REVISION_COMPARISON' then array['run_worker_id','after_work_id','limit']\n    when 'LINES' then array['run_worker_id','after_line_no','limit']\n    when 'SHIFTS' then array['work_id','expected_revision_id','approved_line_id','after_detail_no','limit']\n    when 'BREAKS' then array['work_id','expected_revision_id','approved_line_id','shift_detail_id','after_break_no','limit']\n    when 'RATES' then array['work_id','expected_revision_id','approved_line_id','after_bucket','limit']\n    when 'CURRENT_WORK' then array['candidate_id','after_week','after_work_id','limit']\n    when 'CURRENT_CASES' then array['candidate_id','after_case_id','limit']\n    when 'CURRENT_STORED_CREDITS' then array['candidate_id','after_legacy_case_id','limit']\n    when 'CASE_COMPONENTS' then array['candidate_id','case_id','after_component_ordinal','limit']\n    when 'STATUS' then array['run_id','run_worker_id','after_transfer_no','limit']\n    when 'RETURN_CASH' then array['run_id','run_worker_id','after_transfer_no','limit'] else null end;\n  if v_keys is null then raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';end if;\n  perform private.bpay_next_preparation_args_v1(p_args,v_keys);\n  v_work:=(p_args->>'work_id')::uuid;v_revision:=(p_args->>'expected_revision_id')::uuid;\n  v_line:=(p_args->>'approved_line_id')::uuid;v_shift:=(p_args->>'shift_detail_id')::uuid;v_limit:=(p_args->>'limit')::integer;\n  if p_kind='CHANNEL_DRAFTS' then\n    return private.bpay_next_channel_drafts_page_v1((p_args->>'run_id')::uuid);\n  elsif p_kind='CHANNEL_WORKERS' then\n    return private.bpay_next_channel_worker_page_v1((p_args->>'run_id')::uuid,\n      p_args->>'pay_channel',(p_args->>'after_candidate_id')::uuid,v_limit);\n  elsif p_kind='CHANNEL_STATUS' then\n    if p_args->'after_transfer_no'<>'null'::jsonb and ((p_args->>'after_transfer_no')::numeric<1\n      or (p_args->>'after_transfer_no')::numeric>2147483647) then\n      raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n    end if;\n    return private.bpay_next_channel_status_page_v1((p_args->>'run_id')::uuid,p_args->>'pay_channel',\n      (p_args->>'run_worker_id')::uuid,(p_args->>'after_transfer_no')::integer,v_limit);\n  end if;\n  -- Only the two exact factual0580 owners; no competing reader or financial\n  -- history/calculation path. CURRENT_WORK does not certify payability.\n  if p_kind='CURRENT_WORK' then\n    return private.bpay_next_current_work_page_v1((p_args->>'candidate_id')::uuid,\n      (p_args->>'after_week')::date,(p_args->>'after_work_id')::uuid,v_limit);\n  elsif p_kind='CURRENT_CASES' then\n    return private.bpay_next_current_case_page_v1((p_args->>'candidate_id')::uuid,\n      (p_args->>'after_case_id')::uuid,v_limit);\n  elsif p_kind='CURRENT_STORED_CREDITS' then\n    -- Factual, exact-Candidate possible origins only; binding revalidates the\n    -- retained creator/component/account facts. This is not pay eligibility.\n    -- Closed raw reply includes scan_cursor from the bounded raw window;\n    -- filtering can produce an empty nonterminal page without restarting it.\n    return private.bpay_next_current_stored_credit_page_v1((p_args->>'candidate_id')::uuid,\n      (p_args->>'after_legacy_case_id')::uuid,v_limit);\n  elsif p_kind='CASE_COMPONENTS' then\n    return private.bpay_next_current_case_component_page_v1((p_args->>'candidate_id')::uuid,\n      (p_args->>'case_id')::uuid,(p_args->>'after_component_ordinal')::bigint,v_limit);\n  elsif p_kind in ('STATUS','RETURN_CASH') then\n    if p_args->'after_transfer_no'<>'null'::jsonb and ((p_args->>'after_transfer_no')::numeric<1\n      or (p_args->>'after_transfer_no')::numeric>2147483647) then\n      raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n    end if;\n    if p_kind='RETURN_CASH' then\n      return private.bpay_next_return_cash_page_v1((p_args->>'run_id')::uuid,\n        (p_args->>'run_worker_id')::uuid,(p_args->>'after_transfer_no')::integer,v_limit);\n    end if;\n    return private.bpay_next_worker_status_page_v1((p_args->>'run_id')::uuid,\n      (p_args->>'run_worker_id')::uuid,(p_args->>'after_transfer_no')::integer,v_limit);\n  end if;\n  if p_kind in ('COMPONENTS','SHIFTS','BREAKS','RATES') then\n    if not exists(select 1 from private.bpay_next_work w\n      join private.bpay_next_work_revision r on r.work_id=w.id and r.id=v_revision\n      where w.id=v_work and w.approval_state='APPROVED' and w.current_revision_id=v_revision\n        and w.applied_revision_id=v_revision and r.sealed_at_utc is not null and r.approved_at_utc is not null) then\n      raise exception using errcode='55000',message='BPAY_NEXT_CHOICE_REVISION_NOT_CURRENT';\n    end if;\n    if p_kind<>'COMPONENTS' and not exists(select 1 from private.bpay_next_approved_line l where l.id=v_line and l.revision_id=v_revision) then\n      raise exception using errcode='23514',message='BPAY_NEXT_CHOICE_LINE_NOT_IN_REVISION';\n    end if;\n    if p_kind='BREAKS' and not exists(select 1 from private.bpay_next_shift_detail s where s.id=v_shift and s.approved_line_id=v_line) then\n      raise exception using errcode='23514',message='BPAY_NEXT_CHOICE_LINE_NOT_IN_REVISION';\n    end if;\n  elsif p_kind in ('WORK_CHOICES','SELECTED_COMPONENTS') then\n    perform 1 from private.bpay_next_pay_run r where r.id=(p_args->>'run_id')::uuid;\n    if not found then raise exception using errcode='P0002',message='BPAY_NEXT_PREPARATION_NOT_FOUND';end if;\n    if p_kind='SELECTED_COMPONENTS' then\n      perform 1 from private.bpay_next_work_choice c where c.run_id=(p_args->>'run_id')::uuid and c.work_id=v_work;\n      if not found then raise exception using errcode='P0002',message='BPAY_NEXT_PREPARATION_NOT_FOUND';end if;\n    end if;\n  end if;\n  -- Each branch is a <=100 indexed relational page. A byte boundary ends\n  -- before an entire row, never truncates facts; callers resume its last key.\n  -- CASE evaluates only its chosen subquery, so unrelated review owners are\n  -- never called with NULL scope. Each subquery orders/limits BEFORE packing.\n  select case p_kind\n    when 'COMPONENTS' then array(\n      select pg_catalog.jsonb_build_object(\n        'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind,\n        'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text,\n        'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text,\n        'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text,\n        'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false)) as value\n        from private.bpay_next_approved_line l join private.bpay_next_work_revision r on r.id=l.revision_id\n        left join private.bpay_next_position p on p.work_id=v_work and p.component_key=l.component_key\n        where l.revision_id=v_revision and l.line_no>coalesce((p_args->>'after_line_no')::bigint,0)\n        order by l.line_no,l.id limit v_limit)\n    when 'WORK_CHOICES' then array(\n      select pg_catalog.jsonb_build_object('work_id',c.work_id,'expected_revision_id',c.expected_revision_id,\n        'selection_mode',c.selection_mode,'selection_state',c.selection_state,'page_count',c.page_count::text,'component_count',c.component_count::text)\n        from private.bpay_next_work_choice c where c.run_id=(p_args->>'run_id')::uuid\n          and ((p_args->>'after_work_id') is null or c.work_id>(p_args->>'after_work_id')::uuid)\n        order by c.work_id limit v_limit)\n    when 'SELECTED_COMPONENTS' then array(\n      select pg_catalog.jsonb_build_object('selection_no',c.selection_no::text,\n        'approved_line_id',c.approved_line_id,'expected_revision_id',c.expected_revision_id,'component_key',c.component_key)\n        from private.bpay_next_selected_component c where c.run_id=(p_args->>'run_id')::uuid and c.work_id=v_work\n          and c.selection_no>coalesce((p_args->>'after_selection_no')::bigint,0)\n        order by c.selection_no limit v_limit)\n    when 'WORKERS' then array(\n      select pg_catalog.jsonb_build_object('run_worker_id',w.run_worker_id,'candidate_id',w.candidate_id,\n        'worker_status',w.worker_status,'frozen_ex_vat',w.frozen_ex_vat::text,'frozen_vat',w.frozen_vat::text,\n        'frozen_inc_vat',w.frozen_inc_vat::text,'review_issue_code',w.review_issue_code)\n        from private.bpay_next_simple_review_worker_page_v1((p_args->>'run_id')::uuid,(p_args->>'after_candidate_id')::uuid,v_limit) w\n        order by w.candidate_id limit v_limit)\n    when 'REVISION_COMPARISON' then array(\n      select pg_catalog.jsonb_build_object('run_work_id',w.run_work_id,'work_id',w.work_id,'original_timesheet_id',w.original_timesheet_id,\n        'captured_revision_id',w.captured_revision_id,'current_revision_id',w.current_revision_id,'newer_approval_available',w.newer_approval_available)\n        from private.bpay_next_simple_revision_comparison_page_v1((p_args->>'run_worker_id')::uuid,(p_args->>'after_work_id')::uuid,v_limit) w\n        order by w.work_id limit v_limit)\n    when 'LINES' then array(\n      select pg_catalog.jsonb_build_object('run_line_id',l.run_line_id,'line_no',l.line_no::text,\n        'original_timesheet_id',l.original_timesheet_id,'captured_revision_id',l.captured_revision_id,'component_key',l.component_key,\n        'component_kind',l.component_kind,'work_date',l.work_date,'source_pay_channel',l.source_pay_channel,'target_pay_channel',l.target_pay_channel,\n        'source_consumed_ex_vat',l.source_consumed_ex_vat::text,'frozen_ex_vat',l.frozen_ex_vat::text,'frozen_vat',l.frozen_vat::text,'frozen_inc_vat',l.frozen_inc_vat::text)\n        from private.bpay_next_simple_review_line_page_v1((p_args->>'run_worker_id')::uuid,(p_args->>'after_line_no')::bigint,v_limit) l\n        order by l.line_no limit v_limit)\n    when 'SHIFTS' then array(\n      select pg_catalog.jsonb_build_object('shift_detail_id',s.id,'detail_no',s.detail_no::text,'work_date',s.work_date,\n        'shift_start_at',s.shift_start_at,'shift_end_at',s.shift_end_at,'shift_start_local',s.shift_start_local,'shift_end_local',s.shift_end_local,\n        'shift_overnight',s.shift_overnight,'submitted_minutes',s.submitted_minutes::text,'approved_minutes',s.approved_minutes::text,\n        'approved_hours',s.approved_hours::text,'detail_label',s.detail_label,'segment_pay_ex_vat',s.segment_pay_ex_vat::text,'pay_excluded',s.pay_excluded,\n        'hours_day',s.hours_day::text,'hours_night',s.hours_night::text,'hours_sat',s.hours_sat::text,'hours_sun',s.hours_sun::text,'hours_bh',s.hours_bh::text)\n        from private.bpay_next_shift_detail s where s.approved_line_id=v_line and s.detail_no>coalesce((p_args->>'after_detail_no')::bigint,0)\n        order by s.detail_no limit v_limit)\n    when 'BREAKS' then array(\n      select pg_catalog.jsonb_build_object('break_detail_id',b.id,'break_no',b.break_no::text,'break_start_at',b.break_start_at,\n        'break_end_at',b.break_end_at,'break_start_local',b.break_start_local,'break_end_local',b.break_end_local,'break_minutes',b.break_minutes::text)\n        from private.bpay_next_break_detail b where b.shift_detail_id=v_shift and b.break_no>coalesce((p_args->>'after_break_no')::bigint,0)\n        order by b.break_no limit v_limit)\n    when 'RATES' then array(\n      select pg_catalog.jsonb_build_object('rate_detail_id',r.id,'bucket',r.bucket,'approved_hours',r.approved_hours::text,'source_pay_rate',r.source_pay_rate::text)\n        from private.bpay_next_rate_detail r where r.approved_line_id=v_line\n          and ((p_args->>'after_bucket') is null or r.bucket>p_args->>'after_bucket')\n        order by r.bucket limit v_limit)\n  end into v_page;\n  foreach v_row in array v_page\n  loop\n    if pg_catalog.octet_length((v_rows||pg_catalog.jsonb_build_array(v_row))::text)>120000 then\n      if v_n=0 then raise exception using errcode='54000',message='BPAY_NEXT_PREPARATION_RESPONSE_TOO_LARGE';end if;\n      v_complete:=false;exit;\n    end if;\n    v_rows:=v_rows||pg_catalog.jsonb_build_array(v_row);v_n:=v_n+1;\n  end loop;\n  if v_n=v_limit then v_complete:=false;end if;\n  return pg_catalog.jsonb_build_object('rows',v_rows,'complete',v_complete);\nend\n$function$;",
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)"
+    },
+    {
+      "name": "private.bpay_next_channel_drafts_page_v1",
+      "path": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "line": 6,
+      "definitionLfSha256": "f698d6cc8f156ec53b6f95a45688337fd5f75c7e20df1fe6e89c902f67458c8c",
+      "definition": "create or replace function private.bpay_next_channel_drafts_page_v1(p_run_id uuid)\nreturns jsonb language plpgsql stable security invoker\nset search_path=pg_catalog,private\nas $function$\ndeclare\n  v_run private.bpay_next_pay_run%rowtype;\n  v_rows jsonb;\nbegin\n  if p_run_id is null then\n    raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n  end if;\n  select r.* into strict v_run from private.bpay_next_pay_run r where r.id=p_run_id;\n  if v_run.confirmed_at_utc is null or v_run.selection_state<>'SEALED'\n     or v_run.status not in ('DRAFT','EXECUTING','COMPLETE','CANCELLED') then\n    raise exception using errcode='55000',message='BPAY_NEXT_CHANNEL_DRAFT_NOT_AVAILABLE';\n  end if;\n  -- Exactly two indexed existence probes; zero money/cancelled workers remain members.\n  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(\n    'run_id',p_run_id,'pay_channel',c.pay_channel) order by c.ordinal),'[]'::jsonb)\n    into v_rows\n  from (values (1,'PAYE'::text),(2,'UMBRELLA'::text)) c(ordinal,pay_channel)\n  where exists(select 1 from private.bpay_next_run_worker w\n    where w.run_id=p_run_id and w.target_pay_channel=c.pay_channel);\n  if pg_catalog.jsonb_array_length(v_rows) not between 1 and 2 then\n    raise exception using errcode='55000',message='BPAY_NEXT_CHANNEL_DRAFT_NOT_AVAILABLE';\n  end if;\n  return pg_catalog.jsonb_build_object('rows',v_rows,'complete',true);\nend\n$function$;",
+      "signature": "private.bpay_next_channel_drafts_page_v1(uuid)"
+    },
+    {
+      "name": "private.bpay_next_channel_worker_page_v1",
+      "path": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "line": 36,
+      "definitionLfSha256": "de545b4345e54ff3b6b170f40f9fef3727d513f23f0ad8a28d9c35793ad15daa",
+      "definition": "create or replace function private.bpay_next_channel_worker_page_v1(\n  p_run_id uuid,p_pay_channel text,p_after_candidate_id uuid,p_limit integer\n) returns jsonb language plpgsql stable security invoker\nset search_path=pg_catalog,private\nas $function$\ndeclare\n  v_query text;v_row record;v_rows jsonb:='[]'::jsonb;\n  v_bytes integer:=512;v_count integer:=0;v_more boolean:=false;\nbegin\n  if p_run_id is null or p_pay_channel is null or p_pay_channel not in ('PAYE','UMBRELLA')\n     or p_limit is null or p_limit not between 1 and 100 then\n    raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n  end if;\n  perform private.bpay_next_channel_drafts_page_v1(p_run_id);\n  if not exists(select 1 from private.bpay_next_run_worker w\n    where w.run_id=p_run_id and w.target_pay_channel=p_pay_channel) then\n    raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_SCOPE_INVALID';\n  end if;\n  -- Equality on run/channel precedes keyset+LIMIT. Two fixed, bound-value query shapes.\n  v_query:=$query$select pg_catalog.to_jsonb(page) as row_value from (\n    select w.id as run_worker_id,w.candidate_id,w.target_pay_channel as pay_channel,w.status as worker_status,\n      w.gross_ex_vat::text as frozen_ex_vat,w.gross_vat::text as frozen_vat,\n      w.gross_inc_vat::text as frozen_inc_vat,w.review_issue_code\n    from private.bpay_next_run_worker w where w.run_id=$1 and w.target_pay_channel=$2$query$;\n  if p_after_candidate_id is not null then\n    v_query:=v_query||' and w.candidate_id>$3';\n  end if;\n  v_query:=v_query||' order by w.candidate_id,w.id limit $4) page';\n  for v_row in execute v_query using p_run_id,p_pay_channel,p_after_candidate_id,p_limit loop\n    if v_bytes+pg_catalog.octet_length(v_row.row_value::text)+1>120000 then\n      if v_count=0 then\n        raise exception using errcode='54000',message='BPAY_NEXT_PREPARATION_ROW_TOO_LARGE';\n      end if;\n      v_more:=true;exit;\n    end if;\n    v_bytes:=v_bytes+pg_catalog.octet_length(v_row.row_value::text)+1;\n    v_rows:=v_rows||pg_catalog.jsonb_build_array(v_row.row_value);v_count:=v_count+1;\n  end loop;\n  -- A full page is conservatively nonterminal; cursor comes from the last EMITTED row.\n  return pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit));\nend\n$function$;",
+      "signature": "private.bpay_next_channel_worker_page_v1(uuid,text,uuid,integer)"
+    },
+    {
+      "name": "private.bpay_next_channel_status_page_v1",
+      "path": "supabase/repeatable/06102026_0236_banking_pay_next_channel_draft_readers_v1.sql",
+      "line": 79,
+      "definitionLfSha256": "f168eabb776cd906885837925e7e9cfdcbcb86f30cbf1cd32a845dba39e8f1f6",
+      "definition": "create or replace function private.bpay_next_channel_status_page_v1(\n  p_run_id uuid,p_pay_channel text,p_worker_id uuid,p_after_transfer_no integer,p_limit integer\n) returns jsonb language plpgsql stable security invoker\nset search_path=pg_catalog,private\nas $function$\nbegin\n  if p_run_id is null or p_worker_id is null or p_pay_channel is null\n     or p_pay_channel not in ('PAYE','UMBRELLA') then\n    raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_REQUEST_INVALID';\n  end if;\n  perform private.bpay_next_channel_drafts_page_v1(p_run_id);\n  if not exists(select 1 from private.bpay_next_run_worker w where w.id=p_worker_id\n    and w.run_id=p_run_id and w.target_pay_channel=p_pay_channel) then\n    raise exception using errcode='22023',message='BPAY_NEXT_PREPARATION_SCOPE_INVALID';\n  end if;\n  return private.bpay_next_worker_status_page_v1(p_run_id,p_worker_id,p_after_transfer_no,p_limit);\nend\n$function$;",
+      "signature": "private.bpay_next_channel_status_page_v1(uuid,text,uuid,integer,integer)"
+    },
+    {
+      "name": "public.bpay_next_payment_history_page_v1",
+      "path": "supabase/repeatable/06102026_1206_banking_pay_payment_history_page_v1.sql",
+      "line": 61,
+      "definitionLfSha256": "6c918dd6a137d9c53f43497a410301b0df9e8a9ffc4774882677a8ac47bfcb91",
+      "definition": "create or replace function public.bpay_next_payment_history_page_v1(p_request jsonb)\nreturns jsonb language plpgsql stable security definer\nset search_path=pg_catalog,private,public\nset timezone='UTC'\nas $function$\ndeclare\n  -- Closed SQL registry. Neither table/column/type nor SQL comes from a caller.\n  v_sections constant jsonb := $history$\n{\n \"WORKS\":{\"table\":\"bpay_next_work\",\"parent\":\"SCOPE\",\"fk\":\"candidate_id\",\"keys\":[[\"week_ending_date\",\"date\"],[\"id\",\"uuid\"]],\"fields\":\"id,candidate_id,contract_id,original_timesheet_id,booking_id,work_kind,week_ending_date,approval_state,current_revision_id,applied_revision_id,current_revision_no,created_at_utc,updated_at_utc\",\"state\":\"CURRENT\"},\n \"REVISIONS\":{\"table\":\"bpay_next_work_revision\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"revision_no\",\"bigint\"]],\"fields\":\"id,work_id,revision_no,source_kind,source_head_id,source_event_id,physical_timesheet_id,physical_timesheet_version,financial_snapshot_id,source_pay_channel,valuation_policy_id,currency,week_ending_date,detail_kind,expected_line_count,expected_rate_schedule_count,certified_zero,approved_source_ex_vat,source_inventory_digest,approved_at_utc,sealed_at_utc,created_at_utc\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"LINES\":{\"table\":\"bpay_next_approved_line\",\"parent\":\"REVISION\",\"fk\":\"revision_id\",\"keys\":[[\"line_no\",\"bigint\"]],\"fields\":\"id,revision_id,line_no,component_key,component_kind,tax_treatment,source_component_id,work_date,approved_quantity,approved_unit_rate,unit_label,source_pay_ex_vat,evidence_ref,expected_rate_detail_count,created_at_utc\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"SHIFTS\":{\"table\":\"bpay_next_shift_detail\",\"parent\":\"LINE\",\"fk\":\"approved_line_id\",\"keys\":[[\"detail_no\",\"integer\"]],\"fields\":\"id,approved_line_id,detail_no,work_date,shift_start_at,shift_end_at,shift_start_local,shift_end_local,shift_overnight,submitted_minutes,approved_minutes,approved_hours,hours_day,hours_night,hours_sat,hours_sun,hours_bh,pay_excluded,segment_pay_ex_vat,detail_label,immutable_evidence_ref\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"BREAKS\":{\"table\":\"bpay_next_break_detail\",\"parent\":\"SHIFT\",\"fk\":\"shift_detail_id\",\"keys\":[[\"break_no\",\"integer\"]],\"fields\":\"id,shift_detail_id,break_no,break_minutes,break_start_at,break_end_at,break_start_local,break_end_local\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"RATES\":{\"table\":\"bpay_next_rate_detail\",\"parent\":\"LINE\",\"fk\":\"approved_line_id\",\"keys\":[[\"bucket\",\"text\"]],\"fields\":\"id,approved_line_id,bucket,approved_hours,source_pay_rate\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"SCHEDULE\":{\"table\":\"bpay_next_rate_schedule\",\"parent\":\"REVISION\",\"fk\":\"revision_id\",\"keys\":[[\"rate_family\",\"text\"],[\"rate_code\",\"text\"]],\"fields\":\"id,revision_id,rate_family,rate_code,paye_rate,umbrella_rate,charge_rate,unit_label\",\"state\":\"IMMUTABLE_SOURCE\"},\n \"POSITIONS\":{\"table\":\"bpay_next_position\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"component_key\",\"text\"]],\"fields\":\"work_id,component_key,applied_revision_id,source_basis_channel,approved_source_ex_vat,realised_source_ex_vat,held_source_ex_vat,realised_target_ex_vat,realised_target_vat,realised_target_inc_vat,held_target_ex_vat,held_target_vat,held_target_inc_vat,updated_at_utc\",\"state\":\"CURRENT_SOURCE_AND_TARGET_CACHE\"},\n \"COLLECTIONS\":{\"table\":\"bpay_next_work_collection\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"component_key\",\"text\"]],\"fields\":\"id,work_id,component_key,candidate_id,original_effect_id,original_run_line_id,original_revision_id,original_approved_line_id,original_transfer_id,original_source_pay_channel,original_valuation_policy_id,original_tax_treatment,paid_basis_qualified,qualification_state,observed_revision_id,observed_approved_source_ex_vat,observed_realised_source_ex_vat,case_id,case_component_id,reconcile_revision,last_job_id,last_effect_id,created_at_utc,updated_at_utc\",\"state\":\"CURRENT_COLLECTION_CACHE\"},\n \"EFFECTS\":{\"table\":\"bpay_next_financial_effect\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"occurred_at_utc\",\"timestamptz\"],[\"id\",\"uuid\"]],\"fields\":\"id,operation_id,operation_item_id,effect_kind,candidate_id,work_id,component_key,case_id,original_timesheet_id,original_transfer_id,source_disposition_ex_vat,target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,occurred_at_utc\",\"state\":\"IMMUTABLE_SOURCE_DISPOSITION_AND_TARGET\"},\n \"PUBLICATIONS\":{\"table\":\"bpay_next_publication\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"revision_no\",\"bigint\"]],\"fields\":\"command_id,work_id,candidate_id,revision_id,predecessor_revision_id,revision_no,status,phase,applied_at_utc\",\"state\":\"RECEIPT_CURRENT_STATUS\"},\n \"RUN_WORKS\":{\"table\":\"bpay_next_run_work\",\"parent\":\"WORK\",\"fk\":\"work_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,run_worker_id,candidate_id,work_id,captured_revision_id,created_at_utc\",\"state\":\"IMMUTABLE_CAPTURE\"},\n \"RUN_POSITIONS\":{\"table\":\"bpay_next_run_position\",\"parent\":\"RUN_WORK\",\"fk\":\"run_work_id\",\"keys\":[[\"component_key\",\"text\"]],\"fields\":\"id,run_work_id,run_worker_id,work_id,captured_revision_id,component_key,approved_line_id,source_pay_channel,source_basis_channel,approved_source_ex_vat,realised_source_ex_vat,held_source_ex_vat,residual_source_ex_vat,realised_target_ex_vat,realised_target_vat,realised_target_inc_vat,held_target_ex_vat,held_target_vat,held_target_inc_vat,needs_financial_resolution,work_collection_id,work_collection_revision,managed_capture_completed,captured_at_utc\",\"state\":\"FROZEN_SOURCE_AND_TARGET\"},\n \"RUN_LINES\":{\"table\":\"bpay_next_run_line\",\"parent\":\"RUN_WORK\",\"fk\":\"run_work_id\",\"keys\":[[\"component_key\",\"text\"]],\"fields\":\"id,run_worker_id,run_work_id,line_no,approved_line_id,captured_revision_id,work_id,component_key,source_consumed_ex_vat,source_pay_channel,target_pay_channel,valuation_policy_id,policy_window_id,frozen_ex_vat,frozen_vat,frozen_inc_vat\",\"state\":\"FROZEN_SOURCE_CONSUMPTION_AND_TARGET\"},\n \"HOLD\":{\"table\":\"bpay_next_hold\",\"parent\":\"RUN_LINE\",\"fk\":\"run_line_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,run_line_id,work_id,component_key,source_reserved_ex_vat,target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,status,created_at_utc,finished_at_utc\",\"state\":\"SOURCE_AND_TARGET_HOLD_CURRENT_STATUS\"},\n \"WORKER\":{\"table\":\"bpay_next_run_worker\",\"parent\":\"WORKER\",\"fk\":\"id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,run_id,candidate_id,target_pay_channel,target_umbrella_id,target_umbrella_vat_chargeable,status,gross_ex_vat,gross_vat,gross_inc_vat,entered_paye_net,net_request_revision,net_projection_revision,preparation_revision,case_selection_revision,captured_line_count,captured_position_count,review_issue_code,review_issue_work_id\",\"state\":\"WHOLE_WORKER_NET_CURRENT_STATUS\"},\n \"PROJECTIONS\":{\"table\":\"bpay_next_net_projection\",\"parent\":\"WORKER\",\"fk\":\"run_worker_id\",\"keys\":[[\"projection_no\",\"bigint\"]],\"fields\":\"id,run_worker_id,request_command_id,projection_no,input_kind,gross_ex_vat,gross_vat,gross_inc_vat,entered_paye_net,accepted_recoveries,accepted_net_additions,accepted_gross_additions,accepted_gross_deductions,cash_amount,accepted_at_utc,retired_at_utc\",\"state\":\"WHOLE_WORKER_FROZEN_NET_CASH\"},\n \"TRANSFERS\":{\"table\":\"bpay_next_transfer\",\"parent\":\"WORKER\",\"fk\":\"run_worker_id\",\"keys\":[[\"transfer_no\",\"bigint\"]],\"fields\":\"id,run_worker_id,candidate_id,projection_id,build_command_id,transfer_no,beneficiary_kind,beneficiary_id,destination_rail,currency,cash_amount,member_count,member_cash_sum,status,original_transfer_id,return_cash_id,execution_kind,created_at_utc\",\"state\":\"WHOLE_TRANSFER_CASH_CURRENT_STATUS\"},\n \"MEMBERS\":{\"table\":\"bpay_next_transfer_member\",\"parent\":\"TRANSFER\",\"fk\":\"transfer_id\",\"keys\":[[\"member_no\",\"bigint\"]],\"fields\":\"transfer_id,member_no,run_worker_id,subject_kind,run_line_id,case_hold_id,case_instruction_id,case_allocation_result_id,signed_cash_contribution\",\"state\":\"TRANSFER_MEMBER_CONTRIBUTION_NOT_TIMESHEET_ALLOCATION\"},\n \"OUTCOMES\":{\"table\":\"bpay_next_transfer_outcome\",\"parent\":\"TRANSFER\",\"fk\":\"transfer_id\",\"keys\":[[\"occurred_at_utc\",\"timestamptz\"],[\"id\",\"uuid\"]],\"fields\":\"id,transfer_id,receipt_id,outcome_kind,whole_transfer_amount,occurred_at_utc,received_at_utc\",\"state\":\"WHOLE_TRANSFER_IMMUTABLE_OUTCOME\"},\n \"RETURN_CASH\":{\"table\":\"bpay_next_return_cash\",\"parent\":\"TRANSFER\",\"fk\":\"original_transfer_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,original_transfer_id,candidate_id,amount_owed,amount_held,amount_reissued_paid,created_at_utc\",\"state\":\"CURRENT_RETURN_CASH_NOT_SOURCE_DISPOSITION\"},\n \"CSV\":{\"table\":\"bpay_next_csv_instruction\",\"parent\":\"TRANSFER\",\"fk\":\"transfer_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,transfer_id,run_worker_id,actor_user_id,cash_amount,csv_sha256,issued_at_utc\",\"state\":\"WHOLE_TRANSFER_IMMUTABLE_CSV_RECEIPT\"},\n \"INTERNAL_RECEIPT\":{\"table\":\"bpay_next_internal_receipt\",\"parent\":\"TRANSFER\",\"fk\":\"transfer_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,command_id,transfer_id,run_worker_id,candidate_id,actor_user_id,projection_id,execution_kind,cash_amount,occurred_at_utc,received_at_utc\",\"state\":\"WHOLE_TRANSFER_IMMUTABLE_INTERNAL_RECEIPT\"},\n \"GROUP_LEGS\":{\"table\":\"bpay_next_destination_group_leg\",\"parent\":\"TRANSFER\",\"fk\":\"anchor_transfer_id\",\"keys\":[[\"transfer_id\",\"uuid\"]],\"fields\":\"anchor_transfer_id,transfer_id,leg_kind,destination_id\",\"state\":\"TRANSFER_GROUP_PROVENANCE\"},\n \"EXPIRY\":{\"table\":\"bpay_next_preparation_expiry_worker\",\"parent\":\"WORKER\",\"fk\":\"run_worker_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,candidate_id,run_id,run_worker_id,job_id,member_no,draft_state_id,preparation_revision,selection_revision,original_job_id,original_job_status,original_job_phase,original_worker_status,original_review_issue_code,original_review_issue_work_id,expected_work_count,expected_case_hold_count,released_work_count,released_case_hold_count,status,stage,checkpoint,created_at_utc,started_at_utc,finished_at_utc\",\"state\":\"EXPIRY_RECEIPT_CURRENT_STATUS\"},\n \"CASES\":{\"table\":\"bpay_next_finance_case\",\"parent\":\"SCOPE\",\"fk\":\"candidate_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,candidate_id,case_kind,tax_treatment,status,principal_approved,principal_funded,principal_recovered,principal_written_off,principal_paid_credit,active_hold_amount,active_payout_hold_amount,active_recovery_hold_amount,current_rule_id,current_rule_revision,case_revision,due_date,updated_at_utc\",\"state\":\"CURRENT_CASE_SOURCE_CACHE\"},\n \"COMPONENTS\":{\"table\":\"bpay_next_case_component\",\"parent\":\"CASE\",\"fk\":\"case_id\",\"keys\":[[\"component_ordinal\",\"bigint\"]],\"fields\":\"id,case_id,candidate_id,component_key,component_ordinal,component_revision,rule_id,case_kind,case_subtype,tax_treatment,instruction_kind,direction,payroll_stage,source_pay_channel,currency,approved_source_ex_vat,funded_source_ex_vat,recovered_source_ex_vat,paid_credit_source_ex_vat,written_off_source_ex_vat,active_payout_source_ex_vat,active_recovery_source_ex_vat,resolution_state,target_pay_channel,target_ex_vat,target_vat,target_inc_vat,valuation_policy_id,valuation_window_id,resolution_ref,updated_at_utc\",\"state\":\"CURRENT_CASE_SOURCE_AND_TARGET_CACHE\"},\n \"RULES\":{\"table\":\"bpay_next_case_rule\",\"parent\":\"CASE\",\"fk\":\"case_id\",\"keys\":[[\"rule_revision\",\"bigint\"]],\"fields\":\"id,case_id,candidate_id,rule_revision,case_kind,case_subtype,tax_treatment,case_created_at_utc,original_funded_at_utc,original_funding_event_id,schedule_start_monday,schedule_week_count,weekly_due_source_ex_vat,minimum_earnings_threshold,take_home_floor_override,next_due_monday,captured_at_utc\",\"state\":\"CAPTURED_CASE_RULE\"},\n \"CASE_EVENTS\":{\"table\":\"bpay_next_case_event\",\"parent\":\"CASE\",\"fk\":\"case_id\",\"keys\":[[\"occurred_at_utc\",\"timestamptz\"],[\"id\",\"uuid\"]],\"fields\":\"id,case_id,operation_id,operation_item_id,event_kind,approved_delta,funded_delta,recovered_delta,written_off_delta,paid_credit_delta,original_transfer_id,original_effect_id,occurred_at_utc,candidate_id,case_component_id,instruction_id,allocation_result_id,run_worker_id,event_case_kind,hold_purpose,pay_week_start,source_amount_ex_vat,target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,shortfall_source_ex_vat,cap_reason\",\"state\":\"IMMUTABLE_CASE_SOURCE_AND_TARGET_EVENT\"},\n \"INSTRUCTIONS\":{\"table\":\"bpay_next_run_case_instruction\",\"parent\":\"COMPONENT\",\"fk\":\"case_component_id\",\"keys\":[[\"pay_week_start\",\"date\"],[\"id\",\"uuid\"]],\"fields\":\"id,run_worker_id,run_id,candidate_id,case_id,case_component_id,component_ordinal,rule_id,rule_revision,captured_case_revision,captured_component_revision,captured_period_revision,preparation_revision,selection_revision,is_selected,case_kind,case_subtype,tax_treatment,instruction_kind,direction,payroll_stage,hold_purpose,allocation_channel,source_pay_channel,target_pay_channel,currency,nominal_source_ex_vat,capacity_source_ex_vat,nominal_target_ex_vat,nominal_target_vat,nominal_target_inc_vat,capacity_target_ex_vat,capacity_target_vat,capacity_target_inc_vat,valuation_policy_id,valuation_window_id,pay_week_start,minimum_earnings_threshold,resolved_take_home_floor,resolution_ref,explanation,captured_at_utc,work_collection_id\",\"state\":\"FROZEN_CASE_SOURCE_AND_TARGET_INSTRUCTION\"},\n \"CASE_HOLDS\":{\"table\":\"bpay_next_case_hold\",\"parent\":\"COMPONENT\",\"fk\":\"case_component_id\",\"keys\":[[\"pay_week_start\",\"date\"],[\"id\",\"uuid\"]],\"fields\":\"id,run_worker_id,candidate_id,case_id,case_component_id,instruction_id,projection_id,allocation_result_id,purpose,pay_week_start,amount,source_reserved_ex_vat,target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,status,created_at_utc,finished_at_utc\",\"state\":\"CASE_SOURCE_AND_TARGET_HOLD_CURRENT_STATUS\"},\n \"RESULTS\":{\"table\":\"bpay_next_case_allocation_result\",\"parent\":\"INSTRUCTION\",\"fk\":\"instruction_id\",\"keys\":[[\"state_id\",\"uuid\"]],\"fields\":\"id,state_id,instruction_id,result_no,run_worker_id,candidate_id,preparation_revision,selection_revision,pass_kind,hold_purpose,allocation_channel,nominal_target_ex_vat,usable_capacity_target_ex_vat,allocated_source_ex_vat,allocated_target_ex_vat,allocated_target_vat,allocated_target_inc_vat,shortfall_target_ex_vat,cap_reason,affordability_reason,capacity_reason,channel_headroom_before,channel_headroom_after,worker_take_home_before,worker_take_home_after,created_at_utc\",\"state\":\"FROZEN_CASE_ALLOCATION_SOURCE_AND_TARGET\"},\n \"COMMANDS\":{\"table\":\"bpay_next_command_member\",\"parent\":\"SCOPE\",\"fk\":\"candidate_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,candidate_id,member_no\",\"state\":\"COMMAND_MEMBERSHIP\"},\n \"COMMAND\":{\"table\":\"bpay_next_command\",\"parent\":\"COMMAND\",\"fk\":\"id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,agency_sequence,module_epoch,command_kind,status,expected_member_count,enrolled_member_count,created_at_utc,sealed_at_utc\",\"state\":\"COMMAND_RECEIPT_CURRENT_STATUS\"},\n \"JOBS\":{\"table\":\"bpay_next_job\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"job_kind\",\"text\"]],\"fields\":\"id,command_id,candidate_id,command_sequence,job_kind,status,phase,attempt_count,applied_line_count,last_error_code,available_at_utc,queue_wake_after_utc\",\"state\":\"JOB_RECEIPT_CURRENT_STATUS\"},\n \"NET_REQUEST\":{\"table\":\"bpay_next_paye_net_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,run_worker_id,candidate_id,actor_user_id,request_no,input_kind,entered_paye_net,frozen_gross_inc_vat,expected_projection_revision,preparation_revision,selection_revision,case_draft_state_id,accepted_at_utc\",\"state\":\"WHOLE_WORKER_IMMUTABLE_NET_REQUEST\"},\n \"OUTCOME_REQUEST\":{\"table\":\"bpay_next_outcome_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,outcome_id,transfer_id,run_worker_id,candidate_id,actor_user_id,posted_member_count,posting_complete,internal_receipt_id\",\"state\":\"OUTCOME_RECEIPT_CURRENT_STATUS\"},\n \"RETURN_REQUEST\":{\"table\":\"bpay_next_return_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,outcome_id,transfer_id,run_worker_id,candidate_id,actor_user_id,posting_complete\",\"state\":\"RETURN_RECEIPT_CURRENT_STATUS\"},\n \"REISSUE_REQUEST\":{\"table\":\"bpay_next_reissue_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,return_cash_id,run_worker_id,candidate_id,actor_user_id,transfer_id\",\"state\":\"REISSUE_RECEIPT_CURRENT_STATUS\"},\n \"CANCEL_REQUEST\":{\"table\":\"bpay_next_cancel_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,run_worker_id,candidate_id,status,expected_line_count,released_line_count,blocked_code,started_at_utc,finished_at_utc\",\"state\":\"CANCEL_RECEIPT_CURRENT_STATUS\"},\n \"REISSUE_CANCEL\":{\"table\":\"bpay_next_reissue_cancel_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,transfer_id,return_cash_id,run_worker_id,candidate_id,actor_user_id,amount,status,blocked_code,accepted_at_utc,completed_at_utc\",\"state\":\"WHOLE_TRANSFER_REISSUE_CANCEL_RECEIPT\"},\n \"WRITE_OFF\":{\"table\":\"bpay_next_write_off_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,candidate_id,case_id,case_component_id,work_collection_id,actor_user_id,expected_component_revision,basis_case_revision,basis_principal,basis_recovered,basis_written_off,basis_protected,requested_scope,input_amount,requested_amount,reason,accepted_at_utc,status,applied_amount,remaining_amount,protected_amount,event_id,issue_code,completed_at_utc\",\"state\":\"SOURCE_FORGIVENESS_NOT_PAID_DISPOSITION\"},\n \"CASE_CREATE\":{\"table\":\"bpay_next_case_create_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,case_id,candidate_id,actor_user_id,case_kind,case_subtype,tax_treatment,source_pay_channel,currency,principal_source_ex_vat,due_date,minimum_earnings_threshold,take_home_floor_override,approval_reason,rule_id,primary_component_id,recovery_component_id,valuation_policy_id,opening_pay_week_start,schedule_week_count,weekly_due_source_ex_vat,accepted_at_utc\",\"state\":\"IMMUTABLE_CASE_APPROVAL_RECEIPT\"},\n \"EXPIRY_REQUEST\":{\"table\":\"bpay_next_preparation_expiry_request\",\"parent\":\"COMMAND\",\"fk\":\"command_id\",\"keys\":[[\"command_id\",\"uuid\"]],\"fields\":\"command_id,run_id,original_prepare_command_id,actor_user_id,initiator_kind,captured_deadline,expected_candidate_count,enrolled_candidate_count,completed_candidate_count,status,accepted_at_utc,finished_at_utc\",\"state\":\"EXPIRY_COMMAND_RECEIPT_CURRENT_STATUS\"},\n \"CASE\":{\"table\":\"bpay_next_finance_case\",\"parent\":\"CASE\",\"fk\":\"id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,candidate_id,case_kind,tax_treatment,status,principal_approved,principal_funded,principal_recovered,principal_written_off,principal_paid_credit,active_hold_amount,active_payout_hold_amount,active_recovery_hold_amount,current_rule_id,current_rule_revision,case_revision,due_date,updated_at_utc\",\"state\":\"CURRENT_CASE_SOURCE_CACHE\"},\n \"PROTECTED_RECEIPT\":{\"table\":\"bpay_next_protected_source_receipt\",\"parent\":\"REVISION\",\"fk\":\"revision_id\",\"keys\":[[\"orchestration_run_id\",\"uuid\"]],\"fields\":\"orchestration_run_id,family_id,generation_id,approval_id,accepted_family_bound_version,source_manifest_sha256,prepared_request_sha256,publication_request_sha256,work_id,revision_id,command_id,agency_sequence,actor_user_id,accepted_at_utc\",\"state\":\"IMMUTABLE_APPROVAL_PROVENANCE\"},\n \"SOURCE_DETAIL\":{\"table\":\"bpay_next_source_chosen_detail\",\"parent\":\"LINE\",\"fk\":\"component_id\",\"keys\":[[\"component_id\",\"uuid\"]],\"fields\":\"head_id,component_id,decision_bundle_id,bundle_revision,component_sha256,detail_sha256,created_at_utc\",\"state\":\"IMMUTABLE_SOURCE_CERTIFICATE_REFERENCES_NOT_RAW_PAYLOAD\"},\n \"POLICY\":{\"table\":\"bpay_next_valuation_policy_window\",\"parent\":\"RUN_LINE\",\"fk\":\"policy_id\",\"keys\":[[\"source_window_id\",\"uuid\"]],\"fields\":\"policy_id,source_window_id,date_from,date_to,erni_pct,vat_rate_pct\",\"state\":\"IMMUTABLE_CAPTURED_POLICY_NOT_LIVE_SETTINGS\"},\n \"CHOICE\":{\"table\":\"bpay_next_work_choice\",\"parent\":\"RUN_WORK\",\"fk\":\"work_id\",\"keys\":[[\"work_id\",\"uuid\"]],\"fields\":\"run_id,work_id,expected_revision_id,selection_mode,selection_state,page_count,component_count\",\"state\":\"CAPTURED_SELECTION_CURRENT_STATUS\"},\n \"SELECTION\":{\"table\":\"bpay_next_selected_component\",\"parent\":\"RUN_WORK\",\"fk\":\"work_id\",\"keys\":[[\"selection_no\",\"bigint\"]],\"fields\":\"run_id,work_id,approved_line_id,expected_revision_id,component_key,selection_no,page_no,page_item_no\",\"state\":\"CAPTURED_COMPONENT_SELECTION\"},\n \"WORKER_CASE_HOLDS\":{\"table\":\"bpay_next_case_hold\",\"parent\":\"WORKER\",\"fk\":\"run_worker_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,run_worker_id,candidate_id,case_id,case_component_id,instruction_id,projection_id,allocation_result_id,purpose,pay_week_start,amount,source_reserved_ex_vat,target_amount_ex_vat,target_amount_vat,target_amount_inc_vat,status,created_at_utc,finished_at_utc\",\"state\":\"HOLD_CURRENT_STATUS_UNTYPED_SOURCE_TARGET_MAY_BE_NULL\"},\n \"COMMAND_WORKER\":{\"table\":\"bpay_next_run_worker\",\"parent\":\"COMMAND\",\"fk\":\"run_id\",\"keys\":[[\"id\",\"uuid\"]],\"fields\":\"id,run_id,candidate_id,target_pay_channel,target_umbrella_id,target_umbrella_vat_chargeable,status,gross_ex_vat,gross_vat,gross_inc_vat,entered_paye_net,net_request_revision,net_projection_revision,preparation_revision,case_selection_revision,captured_line_count,captured_position_count,review_issue_code,review_issue_work_id\",\"state\":\"WHOLE_WORKER_NET_CURRENT_STATUS\"}\n}\n$history$::jsonb;\n  v_actor uuid; v_candidate uuid; v_timesheet uuid; v_work uuid; v_parent uuid; v_context uuid;\n  v_section text; v_component text; v_limit integer; v_def jsonb; v_kind text;\n  v_candidate_check uuid; v_work_check uuid; v_worker uuid; v_case uuid; v_extra uuid;\n  v_run uuid; v_source_component uuid; v_source_head uuid; v_policy uuid; v_window uuid;\n  v_scope uuid; v_where text; v_order text; v_tuple text; v_key_sql text;\n  v_after_sql text; v_upper_sql text; v_fields text; v_column text; v_key jsonb;\n  v_after jsonb; v_upper jsonb; v_i integer; v_text text; v_type text;\n  v_query text; v_item jsonb; v_rows jsonb := '[]'::jsonb; v_last jsonb; v_cursor jsonb;\n  v_scope_kind text; v_scope_id uuid;\n  v_more boolean := false; v_result jsonb; v_count integer := 0;\nbegin\n  if coalesce(pg_catalog.current_setting('request.jwt.claim.role',true),\n       nullif(pg_catalog.current_setting('request.jwt.claims',true),'')::jsonb->>'role','')<>'service_role'\n    or p_request is null or pg_catalog.jsonb_typeof(p_request) is distinct from 'object'\n    or pg_catalog.octet_length(p_request::text)>16384 then\n    raise exception using errcode='42501',message='BPAY_NEXT_HISTORY_FORBIDDEN';\n  end if;\n  if not p_request ?& array['version','actor_user_id','candidate_id','timesheet_id','section',\n      'parent_id','context_id','component_key','after','upper','limit']\n    or p_request-array['version','actor_user_id','candidate_id','timesheet_id','section',\n      'parent_id','context_id','component_key','after','upper','limit']<>'{}'::jsonb\n    or p_request->>'version' is distinct from 'PAYMENT_HISTORY_V1'\n    or pg_catalog.jsonb_typeof(p_request->'limit') is distinct from 'number'\n    or p_request->>'limit' !~ '^([1-9][0-9]?|100)$'\n    or pg_catalog.jsonb_typeof(p_request->'section') is distinct from 'string'\n    or pg_catalog.jsonb_typeof(p_request->'component_key') not in ('string','null')\n    or (p_request->'candidate_id'='null'::jsonb)=(p_request->'timesheet_id'='null'::jsonb) then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_REQUEST_INVALID';\n  end if;\n  foreach v_column in array array['actor_user_id','candidate_id','timesheet_id','parent_id','context_id'] loop\n    if p_request->v_column='null'::jsonb and v_column<>'actor_user_id' then continue; end if;\n    if pg_catalog.jsonb_typeof(p_request->v_column) is distinct from 'string'\n      or p_request->>v_column !~ '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_REQUEST_INVALID';\n    end if;\n  end loop;\n  v_actor:=(p_request->>'actor_user_id')::uuid;\n  if not exists(select 1 from public.tms_users u where u.id=v_actor\n      and u.is_active is true and u.role::text='admin') then\n    raise exception using errcode='42501',message='BPAY_NEXT_HISTORY_FORBIDDEN';\n  end if;\n  v_candidate:=(p_request->>'candidate_id')::uuid; v_timesheet:=(p_request->>'timesheet_id')::uuid;\n  v_scope_kind:=case when v_timesheet is null then 'CANDIDATE' else 'TIMESHEET' end;\n  v_scope_id:=coalesce(v_timesheet,v_candidate);\n  if v_timesheet is not null then\n    -- Two existing unique keys; no historical chooser or current-authorised filter.\n    select w.id,w.candidate_id into v_work,v_candidate from private.bpay_next_work w\n      where w.original_timesheet_id=v_timesheet;\n    if not found then\n      select w.id,w.candidate_id into v_work,v_candidate from public.timesheets t\n        join private.bpay_next_work w on w.booking_id=t.booking_id\n        where t.timesheet_id=v_timesheet;\n    end if;\n    if v_work is null then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_SCOPE_NOT_FOUND';\n    end if;\n  elsif not exists(select 1 from public.candidates c where c.id=v_candidate) then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_SCOPE_NOT_FOUND';\n  end if;\n  v_section:=p_request->>'section'; v_parent:=(p_request->>'parent_id')::uuid;\n  v_context:=(p_request->>'context_id')::uuid;\n  v_component:=p_request->>'component_key'; v_limit:=(p_request->>'limit')::integer;\n  v_after:=p_request->'after'; v_upper:=p_request->'upper';\n  if v_section='MANIFEST' then\n    if v_parent is not null or v_context is not null or v_component is not null or v_after<>'null'::jsonb or v_upper<>'null'::jsonb then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_REQUEST_INVALID';\n    end if;\n    select jsonb_agg(jsonb_build_object('section',k,'parent',d->>'parent','keys',d->'keys',\n      'fields',string_to_array(d->>'fields',','),'amount_scope',d->>'state',\n      'applicability',case when v_work is not null and k in ('COMMANDS','CASES') then 'CANDIDATE_ONLY_USE_REFERENCED_PARENT'\n        else 'SCOPE_QUALIFIED' end) order by k) into v_rows from jsonb_each(v_sections) as s(k,d);\n    return jsonb_build_object('version','PAYMENT_HISTORY_V1','candidate_id',v_candidate,'work_id',v_work,\n      'sections',v_rows,'terminal',true,'next_cursor',null,'consistency','LIVE_KEYSET_REFRESH_FOR_LATE_COMMIT',\n      'scalar_encoding','STRING_OR_NULL','unavailable',array['MOVED_ROOT_FLAT_PAID_BINDING',\n        'CANONICAL_MULTI_CHANNEL_VECTOR','MOVE_COMPARISON_RECEIPT','GENERAL_APPROVAL_ACTOR_REASON_NOT_CAPTURED_IN_NEXT_ROWS']\n        ||case when v_work is not null then array['TIMESHEET_COMMAND_WITHOUT_WORK_OR_CASE_ANCESTRY'] else array[]::text[] end);\n  end if;\n  v_def:=v_sections->v_section;\n  if v_def is null or (v_section='EFFECTS' and (v_component is null or octet_length(v_component) not between 1 and 256))\n    or (v_section<>'EFFECTS' and v_component is not null) then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_REQUEST_INVALID';\n  end if;\n  v_kind:=v_def->>'parent';\n  if (v_kind='SCOPE')<>(v_parent is null) or (v_work is not null and v_section in ('COMMANDS','CASES'))\n    or (v_context is not null and (v_work is null or v_kind not in ('WORKER','TRANSFER','COMMAND'))) then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_PARENT_INVALID';\n  end if;\n  if v_after<>'null'::jsonb then\n    if jsonb_typeof(v_after) is distinct from 'object'\n      or not v_after ?& array['version','scope_kind','scope_id','section','parent_id',\n        'context_id','component_key','upper','key']\n      or v_after-array['version','scope_kind','scope_id','section','parent_id',\n        'context_id','component_key','upper','key']<>'{}'::jsonb\n      or v_after->>'version' is distinct from 'PAYMENT_HISTORY_CURSOR_V1'\n      or v_after->>'scope_kind' is distinct from v_scope_kind\n      or v_after->>'scope_id' is distinct from v_scope_id::text\n      or v_after->>'section' is distinct from v_section\n      or v_after->'parent_id' is distinct from p_request->'parent_id'\n      or v_after->'context_id' is distinct from p_request->'context_id'\n      or v_after->'component_key' is distinct from p_request->'component_key'\n      or v_after->'upper' is distinct from v_upper then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n    end if;\n    v_after:=v_after->'key';\n    if v_after='null'::jsonb then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n    end if;\n  elsif v_upper<>'null'::jsonb then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n  end if;\n  -- Exact indexed parent ancestry. Never authorise a child by its bare UUID.\n  if v_kind='WORK' then\n    select w.candidate_id,w.id into v_candidate_check,v_work_check from private.bpay_next_work w where w.id=v_parent;\n  elsif v_kind='REVISION' then\n    select w.candidate_id,w.id into v_candidate_check,v_work_check from private.bpay_next_work_revision r\n      join private.bpay_next_work w on w.id=r.work_id where r.id=v_parent and r.sealed_at_utc is not null;\n  elsif v_kind='LINE' then\n    select w.candidate_id,w.id,l.source_component_id,r.source_head_id\n      into v_candidate_check,v_work_check,v_source_component,v_source_head from private.bpay_next_approved_line l\n      join private.bpay_next_work_revision r on r.id=l.revision_id join private.bpay_next_work w on w.id=r.work_id\n      where l.id=v_parent and r.sealed_at_utc is not null;\n  elsif v_kind='SHIFT' then\n    select w.candidate_id,w.id into v_candidate_check,v_work_check from private.bpay_next_shift_detail s\n      join private.bpay_next_approved_line l on l.id=s.approved_line_id join private.bpay_next_work_revision r on r.id=l.revision_id\n      join private.bpay_next_work w on w.id=r.work_id where s.id=v_parent and r.sealed_at_utc is not null;\n  elsif v_kind='RUN_WORK' then\n    select w.candidate_id,w.id,rw.run_id into v_candidate_check,v_work_check,v_run from private.bpay_next_run_work r\n      join private.bpay_next_work w on w.id=r.work_id join private.bpay_next_run_worker rw on rw.id=r.run_worker_id\n      where r.id=v_parent;\n  elsif v_kind='RUN_LINE' then\n    select w.candidate_id,w.id,r.valuation_policy_id,r.policy_window_id\n      into v_candidate_check,v_work_check,v_policy,v_window from private.bpay_next_run_line r\n      join private.bpay_next_work w on w.id=r.work_id where r.id=v_parent;\n  elsif v_kind='WORKER' then\n    select r.candidate_id,r.id into v_candidate_check,v_worker from private.bpay_next_run_worker r where r.id=v_parent;\n  elsif v_kind='TRANSFER' then\n    select t.candidate_id,t.run_worker_id into v_candidate_check,v_worker from private.bpay_next_transfer t where t.id=v_parent;\n  elsif v_kind='CASE' then\n    select c.candidate_id,c.id into v_candidate_check,v_case from private.bpay_next_finance_case c where c.id=v_parent;\n  elsif v_kind='COMPONENT' then\n    select c.candidate_id,c.case_id into v_candidate_check,v_case from private.bpay_next_case_component c where c.id=v_parent;\n  elsif v_kind='INSTRUCTION' then\n    select i.candidate_id,i.case_id into v_candidate_check,v_case from private.bpay_next_run_case_instruction i where i.id=v_parent;\n  elsif v_kind='COMMAND' then\n    select m.candidate_id into v_candidate_check from private.bpay_next_command_member m\n      where m.command_id=v_parent and m.candidate_id=v_candidate;\n    if v_work is not null then\n      select p.work_id into v_work_check from private.bpay_next_publication p where p.command_id=v_parent and p.work_id=v_work;\n      if v_work_check is null then\n        -- Requests are exact primary-key points; their worker membership uses\n        -- unique(run_worker_id,work_id). Does not allocate worker/transfer cash.\n        select x.run_worker_id into v_worker from (\n          select r.id as run_worker_id from private.bpay_next_run_command c\n            join private.bpay_next_run_worker r on r.run_id=c.run_id and r.candidate_id=v_candidate where c.command_id=v_parent\n          union all select n.run_worker_id from private.bpay_next_paye_net_request n where n.command_id=v_parent\n          union all select o.run_worker_id from private.bpay_next_outcome_request o where o.command_id=v_parent\n          union all select r.run_worker_id from private.bpay_next_return_request r where r.command_id=v_parent\n          union all select r.run_worker_id from private.bpay_next_reissue_request r where r.command_id=v_parent\n          union all select c.run_worker_id from private.bpay_next_cancel_request c where c.command_id=v_parent\n          union all select c.run_worker_id from private.bpay_next_reissue_cancel_request c where c.command_id=v_parent\n          union all select e.run_worker_id from private.bpay_next_preparation_expiry_worker e\n            where e.command_id=v_parent and e.candidate_id=v_candidate\n        ) x limit 1;\n        if v_worker is null then\n          select c.work_id into v_work_check from private.bpay_next_write_off_request r\n            join private.bpay_next_work_collection c on c.id=r.work_collection_id where r.command_id=v_parent and c.work_id=v_work;\n          if v_work_check is null then\n            select c.work_id into v_work_check from private.bpay_next_case_create_request r\n              join private.bpay_next_work_collection c on c.case_id=r.case_id where r.command_id=v_parent and c.work_id=v_work;\n          end if;\n        end if;\n      end if;\n    end if;\n  end if;\n  if v_context is not null then\n    -- Exact immutable origin for a CASE-only worker, not an instruction scan.\n    if not exists(select 1 from private.bpay_next_run_case_instruction i\n      join private.bpay_next_work_collection c on c.case_id=i.case_id\n      where i.id=v_context and i.candidate_id=v_candidate and i.run_worker_id=v_worker and c.work_id=v_work) then\n      raise exception using errcode='42501',message='BPAY_NEXT_HISTORY_CONTEXT_FORBIDDEN';\n    end if;\n    v_work_check:=v_work;\n  end if;\n  if v_kind<>'SCOPE' and (v_candidate_check is distinct from v_candidate\n    or (v_work is not null and v_work_check is distinct from v_work\n      and not (v_worker is not null and exists(select 1 from private.bpay_next_run_work r\n        where r.run_worker_id=v_worker and r.work_id=v_work))\n      and not (v_case is not null and exists(select 1 from private.bpay_next_work_collection c\n        where c.case_id=v_case and c.work_id=v_work)))) then\n    raise exception using errcode='42501',message='BPAY_NEXT_HISTORY_PARENT_FORBIDDEN';\n  end if;\n  v_scope:=case when v_kind='SCOPE' then v_candidate else v_parent end;\n  v_where:=format('t.%I=$1',v_def->>'fk');\n  if v_section='WORKS' and v_work is not null then v_where:='t.id=$8'; end if;\n  if v_section='SOURCE_DETAIL' then\n    v_scope:=v_source_component;v_extra:=v_source_head;v_where:=v_where||' and t.head_id=$9';\n  elsif v_section='POLICY' then\n    v_scope:=v_policy;v_extra:=v_window;v_where:=v_where||' and t.source_window_id=$9';\n  elsif v_section in ('CHOICE','SELECTION') then\n    v_scope:=v_work_check;v_extra:=v_run;v_where:=v_where||' and t.run_id=$9';\n  elsif v_section='COMMAND_WORKER' then\n    select c.run_id into v_scope from private.bpay_next_run_command c where c.command_id=v_parent;\n    v_where:=v_where||' and t.candidate_id=$7';\n  end if;\n  if v_section='REVISIONS' then v_where:=v_where||' and t.sealed_at_utc is not null'; end if;\n  if v_section='EFFECTS' then v_where:=v_where||' and t.component_key=$4'; end if;\n  if v_section='JOBS' then v_where:=v_where||' and t.candidate_id=$7'; end if;\n  -- Validate every key type/shape before its closed SQL cast. No free SQL/order.\n  foreach v_key in array array[v_after,v_upper] loop\n    if v_key='null'::jsonb then continue; end if;\n    if jsonb_typeof(v_key) is distinct from 'array' or jsonb_array_length(v_key)<>jsonb_array_length(v_def->'keys') then\n      raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n    end if;\n    for v_i in 0..jsonb_array_length(v_key)-1 loop\n      v_text:=v_key->>v_i; v_type:=v_def->'keys'->v_i->>1;\n      if jsonb_typeof(v_key->v_i) is distinct from 'string' or octet_length(v_text) not between 1 and 256\n        or (v_type='uuid' and v_text !~ '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$')\n        or (v_type in ('bigint','integer') and (v_text !~ '^(0|[1-9][0-9]{0,18})$' or v_text::numeric>9223372036854775807))\n        or (v_type='integer' and v_text::numeric>2147483647)\n        or (v_type='date' and (v_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or not isfinite(v_text::date)\n          or v_text::date::text<>v_text))\n        or (v_type='timestamptz' and (v_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} ' or not isfinite(v_text::timestamptz)\n          or v_text::timestamptz::text<>v_text)) then\n        raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n      end if;\n    end loop;\n  end loop;\n  if v_after<>'null'::jsonb and v_upper='null'::jsonb then\n    raise exception using errcode='22023',message='BPAY_NEXT_HISTORY_CURSOR_INVALID';\n  end if;\n  v_order:=''; v_tuple:=''; v_key_sql:=''; v_after_sql:=''; v_upper_sql:=''; v_i:=0;\n  for v_key in select value from jsonb_array_elements(v_def->'keys') loop\n    if v_i>0 then v_order:=v_order||',';v_tuple:=v_tuple||',';v_key_sql:=v_key_sql||',';\n      v_after_sql:=v_after_sql||',';v_upper_sql:=v_upper_sql||','; end if;\n    v_order:=v_order||format('t.%I',v_key->>0); v_tuple:=v_tuple||format('t.%I',v_key->>0);\n    v_key_sql:=v_key_sql||format('t.%I::text',v_key->>0);\n    v_after_sql:=v_after_sql||format('($2->>%s)::%s',v_i,v_key->>1);\n    v_upper_sql:=v_upper_sql||format('($3->>%s)::%s',v_i,v_key->>1);v_i:=v_i+1;\n  end loop;\n  v_fields:='';\n  foreach v_column in array string_to_array(v_def->>'fields',',') loop\n    if v_fields<>'' then v_fields:=v_fields||','; end if;\n    v_fields:=v_fields||format('%L,t.%I::text',v_column,v_column);\n  end loop;\n  if v_section='POSITIONS' then\n    v_fields:=v_fields||','||quote_literal('current_residual_source_ex_vat')||',\n      (t.approved_source_ex_vat-t.realised_source_ex_vat-t.held_source_ex_vat)::text';\n  end if;\n  if v_upper='null'::jsonb then\n    -- An indexed last key, not COUNT/history hash. DESC applies to EACH key.\n    select string_agg(format('t.%I desc',value->>0),',' order by ord) into v_text\n      from jsonb_array_elements(v_def->'keys') with ordinality as k(value,ord);\n    execute format('select jsonb_build_array(%s) from private.%I t where %s order by %s limit 1',\n      v_key_sql,v_def->>'table',v_where,v_text) into v_upper\n      using v_scope,v_after,v_upper,v_component,v_limit,v_parent,v_candidate,v_work,v_extra;\n    if v_upper is null then v_upper:='null'::jsonb; end if;\n  end if;\n  -- Execute even an empty section: the actual full allowlist expression is\n  -- resolved/compiled, while a NULL upper tuple safely yields zero data rows.\n  v_query:=format('select jsonb_build_object(''key'',jsonb_build_array(%s),''data'',jsonb_build_object(%s))\n      from private.%I t where %s and ($2=''null''::jsonb or row(%s)>row(%s))\n      and row(%s)<=row(%s) order by %s limit $5',v_key_sql,v_fields,v_def->>'table',v_where,\n      v_tuple,v_after_sql,v_tuple,v_upper_sql,v_order);\n  for v_item in execute v_query using v_scope,v_after,v_upper,v_component,v_limit+1,v_parent,v_candidate,v_work,v_extra loop\n      if v_count=v_limit then v_more:=true; exit; end if;\n      if octet_length((v_rows||jsonb_build_array(v_item))::text)>100000 then\n        if v_count=0 then raise exception using errcode='54000',message='BPAY_NEXT_HISTORY_ROW_TOO_LARGE'; end if;\n        v_more:=true;exit;\n      end if;\n      v_rows:=v_rows||jsonb_build_array(v_item);v_last:=v_item->'key';v_count:=v_count+1;\n  end loop;\n  if v_more then\n    v_cursor:=jsonb_build_object('version','PAYMENT_HISTORY_CURSOR_V1','scope_kind',v_scope_kind,\n      'scope_id',v_scope_id,'section',v_section,'parent_id',v_parent,'context_id',v_context,\n      'component_key',v_component,'upper',v_upper,'key',v_last);\n  end if;\n  v_result:=jsonb_build_object('version','PAYMENT_HISTORY_V1','candidate_id',v_candidate,'work_id',v_work,\n    'section',v_section,'parent_id',v_parent,'context_id',v_context,'component_key',v_component,'amount_scope',v_def->>'state',\n    'consistency','LIVE_KEYSET_REFRESH_FOR_LATE_COMMIT','rows',v_rows,'upper',v_upper,\n    'terminal',not v_more,'next_cursor',v_cursor);\n  if octet_length(v_result::text)>120000 then\n    raise exception using errcode='54000',message='BPAY_NEXT_HISTORY_RESPONSE_TOO_LARGE';\n  end if;\n  return v_result;\nend\n$function$;",
+      "signature": "public.bpay_next_payment_history_page_v1(jsonb)"
+    }
+  ],
+  "pageContracts": [
+    {
+      "kind": "COMPONENTS",
+      "sqlKeys": [
+        "work_id",
+        "expected_revision_id",
+        "after_line_no",
+        "limit"
+      ],
+      "worker": {
+        "work_id": "uuid",
+        "expected_revision_id": "uuid",
+        "after_line_no": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "WORK_CHOICES",
+      "sqlKeys": [
+        "run_id",
+        "after_work_id",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "after_work_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "SELECTED_COMPONENTS",
+      "sqlKeys": [
+        "run_id",
+        "work_id",
+        "after_selection_no",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "work_id": "uuid",
+        "after_selection_no": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "CHANNEL_DRAFTS",
+      "sqlKeys": [
+        "run_id"
+      ],
+      "worker": {
+        "run_id": "uuid"
+      },
+      "thinOffice": {
+        "run_id": "uuid"
+      }
+    },
+    {
+      "kind": "CHANNEL_WORKERS",
+      "sqlKeys": [
+        "run_id",
+        "pay_channel",
+        "after_candidate_id",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "pay_channel": "channel",
+        "after_candidate_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_id": "uuid",
+        "pay_channel": "channel",
+        "after_candidate_id": "uuid?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "CHANNEL_STATUS",
+      "sqlKeys": [
+        "run_id",
+        "pay_channel",
+        "run_worker_id",
+        "after_transfer_no",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "pay_channel": "channel",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_id": "uuid",
+        "pay_channel": "channel",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "WORKERS",
+      "sqlKeys": [
+        "run_id",
+        "after_candidate_id",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "after_candidate_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_id": "uuid",
+        "after_candidate_id": "uuid?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "REVISION_COMPARISON",
+      "sqlKeys": [
+        "run_worker_id",
+        "after_work_id",
+        "limit"
+      ],
+      "worker": {
+        "run_worker_id": "uuid",
+        "after_work_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_worker_id": "uuid",
+        "after_work_id": "uuid?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "LINES",
+      "sqlKeys": [
+        "run_worker_id",
+        "after_line_no",
+        "limit"
+      ],
+      "worker": {
+        "run_worker_id": "uuid",
+        "after_line_no": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_worker_id": "uuid",
+        "after_line_no": "integer?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "SHIFTS",
+      "sqlKeys": [
+        "work_id",
+        "expected_revision_id",
+        "approved_line_id",
+        "after_detail_no",
+        "limit"
+      ],
+      "worker": {
+        "work_id": "uuid",
+        "expected_revision_id": "uuid",
+        "approved_line_id": "uuid",
+        "after_detail_no": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "BREAKS",
+      "sqlKeys": [
+        "work_id",
+        "expected_revision_id",
+        "approved_line_id",
+        "shift_detail_id",
+        "after_break_no",
+        "limit"
+      ],
+      "worker": {
+        "work_id": "uuid",
+        "expected_revision_id": "uuid",
+        "approved_line_id": "uuid",
+        "shift_detail_id": "uuid",
+        "after_break_no": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "RATES",
+      "sqlKeys": [
+        "work_id",
+        "expected_revision_id",
+        "approved_line_id",
+        "after_bucket",
+        "limit"
+      ],
+      "worker": {
+        "work_id": "uuid",
+        "expected_revision_id": "uuid",
+        "approved_line_id": "uuid",
+        "after_bucket": "bucket?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "CURRENT_WORK",
+      "sqlKeys": [
+        "candidate_id",
+        "after_week",
+        "after_work_id",
+        "limit"
+      ],
+      "worker": {
+        "candidate_id": "uuid",
+        "after_week": "date?",
+        "after_work_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "candidate_id": "uuid",
+        "after_week": "date?",
+        "after_work_id": "uuid?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "CURRENT_CASES",
+      "sqlKeys": [
+        "candidate_id",
+        "after_case_id",
+        "limit"
+      ],
+      "worker": {
+        "candidate_id": "uuid",
+        "after_case_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "candidate_id": "uuid",
+        "after_case_id": "uuid?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "CURRENT_STORED_CREDITS",
+      "sqlKeys": [
+        "candidate_id",
+        "after_legacy_case_id",
+        "limit"
+      ],
+      "worker": {
+        "candidate_id": "uuid",
+        "after_legacy_case_id": "uuid?",
+        "limit": "limit"
+      },
+      "thinOffice": null
+    },
+    {
+      "kind": "CASE_COMPONENTS",
+      "sqlKeys": [
+        "candidate_id",
+        "case_id",
+        "after_component_ordinal",
+        "limit"
+      ],
+      "worker": {
+        "candidate_id": "uuid",
+        "case_id": "uuid",
+        "after_component_ordinal": "integer?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "candidate_id": "uuid",
+        "case_id": "uuid",
+        "after_component_ordinal": "integer?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "STATUS",
+      "sqlKeys": [
+        "run_id",
+        "run_worker_id",
+        "after_transfer_no",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_id": "uuid",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      }
+    },
+    {
+      "kind": "RETURN_CASH",
+      "sqlKeys": [
+        "run_id",
+        "run_worker_id",
+        "after_transfer_no",
+        "limit"
+      ],
+      "worker": {
+        "run_id": "uuid",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      },
+      "thinOffice": {
+        "run_id": "uuid",
+        "run_worker_id": "uuid",
+        "after_transfer_no": "transferNo?",
+        "limit": "limit"
+      }
+    }
+  ],
+  "page18KindsEqual": true,
+  "history52Equal": true,
+  "historySections": {
+    "WORKS": {
+      "parent": "SCOPE",
+      "keys": [
+        [
+          "week_ending_date",
+          "date"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "candidate_id",
+        "contract_id",
+        "original_timesheet_id",
+        "booking_id",
+        "work_kind",
+        "week_ending_date",
+        "approval_state",
+        "current_revision_id",
+        "applied_revision_id",
+        "current_revision_no",
+        "created_at_utc",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT"
+    },
+    "REVISIONS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "revision_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "work_id",
+        "revision_no",
+        "source_kind",
+        "source_head_id",
+        "source_event_id",
+        "physical_timesheet_id",
+        "physical_timesheet_version",
+        "financial_snapshot_id",
+        "source_pay_channel",
+        "valuation_policy_id",
+        "currency",
+        "week_ending_date",
+        "detail_kind",
+        "expected_line_count",
+        "expected_rate_schedule_count",
+        "certified_zero",
+        "approved_source_ex_vat",
+        "source_inventory_digest",
+        "approved_at_utc",
+        "sealed_at_utc",
+        "created_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "LINES": {
+      "parent": "REVISION",
+      "keys": [
+        [
+          "line_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "revision_id",
+        "line_no",
+        "component_key",
+        "component_kind",
+        "tax_treatment",
+        "source_component_id",
+        "work_date",
+        "approved_quantity",
+        "approved_unit_rate",
+        "unit_label",
+        "source_pay_ex_vat",
+        "evidence_ref",
+        "expected_rate_detail_count",
+        "created_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "SHIFTS": {
+      "parent": "LINE",
+      "keys": [
+        [
+          "detail_no",
+          "integer"
+        ]
+      ],
+      "fields": [
+        "id",
+        "approved_line_id",
+        "detail_no",
+        "work_date",
+        "shift_start_at",
+        "shift_end_at",
+        "shift_start_local",
+        "shift_end_local",
+        "shift_overnight",
+        "submitted_minutes",
+        "approved_minutes",
+        "approved_hours",
+        "hours_day",
+        "hours_night",
+        "hours_sat",
+        "hours_sun",
+        "hours_bh",
+        "pay_excluded",
+        "segment_pay_ex_vat",
+        "detail_label",
+        "immutable_evidence_ref"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "BREAKS": {
+      "parent": "SHIFT",
+      "keys": [
+        [
+          "break_no",
+          "integer"
+        ]
+      ],
+      "fields": [
+        "id",
+        "shift_detail_id",
+        "break_no",
+        "break_minutes",
+        "break_start_at",
+        "break_end_at",
+        "break_start_local",
+        "break_end_local"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "RATES": {
+      "parent": "LINE",
+      "keys": [
+        [
+          "bucket",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "approved_line_id",
+        "bucket",
+        "approved_hours",
+        "source_pay_rate"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "SCHEDULE": {
+      "parent": "REVISION",
+      "keys": [
+        [
+          "rate_family",
+          "text"
+        ],
+        [
+          "rate_code",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "revision_id",
+        "rate_family",
+        "rate_code",
+        "paye_rate",
+        "umbrella_rate",
+        "charge_rate",
+        "unit_label"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE"
+    },
+    "POSITIONS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "component_key",
+          "text"
+        ]
+      ],
+      "fields": [
+        "work_id",
+        "component_key",
+        "applied_revision_id",
+        "source_basis_channel",
+        "approved_source_ex_vat",
+        "realised_source_ex_vat",
+        "held_source_ex_vat",
+        "realised_target_ex_vat",
+        "realised_target_vat",
+        "realised_target_inc_vat",
+        "held_target_ex_vat",
+        "held_target_vat",
+        "held_target_inc_vat",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT_SOURCE_AND_TARGET_CACHE"
+    },
+    "COLLECTIONS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "component_key",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "work_id",
+        "component_key",
+        "candidate_id",
+        "original_effect_id",
+        "original_run_line_id",
+        "original_revision_id",
+        "original_approved_line_id",
+        "original_transfer_id",
+        "original_source_pay_channel",
+        "original_valuation_policy_id",
+        "original_tax_treatment",
+        "paid_basis_qualified",
+        "qualification_state",
+        "observed_revision_id",
+        "observed_approved_source_ex_vat",
+        "observed_realised_source_ex_vat",
+        "case_id",
+        "case_component_id",
+        "reconcile_revision",
+        "last_job_id",
+        "last_effect_id",
+        "created_at_utc",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT_COLLECTION_CACHE"
+    },
+    "EFFECTS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "occurred_at_utc",
+          "timestamptz"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "operation_id",
+        "operation_item_id",
+        "effect_kind",
+        "candidate_id",
+        "work_id",
+        "component_key",
+        "case_id",
+        "original_timesheet_id",
+        "original_transfer_id",
+        "source_disposition_ex_vat",
+        "target_amount_ex_vat",
+        "target_amount_vat",
+        "target_amount_inc_vat",
+        "occurred_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE_DISPOSITION_AND_TARGET"
+    },
+    "PUBLICATIONS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "revision_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "work_id",
+        "candidate_id",
+        "revision_id",
+        "predecessor_revision_id",
+        "revision_no",
+        "status",
+        "phase",
+        "applied_at_utc"
+      ],
+      "amount_scope": "RECEIPT_CURRENT_STATUS"
+    },
+    "RUN_WORKS": {
+      "parent": "WORK",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "candidate_id",
+        "work_id",
+        "captured_revision_id",
+        "created_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_CAPTURE"
+    },
+    "RUN_POSITIONS": {
+      "parent": "RUN_WORK",
+      "keys": [
+        [
+          "component_key",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_work_id",
+        "run_worker_id",
+        "work_id",
+        "captured_revision_id",
+        "component_key",
+        "approved_line_id",
+        "source_pay_channel",
+        "source_basis_channel",
+        "approved_source_ex_vat",
+        "realised_source_ex_vat",
+        "held_source_ex_vat",
+        "residual_source_ex_vat",
+        "realised_target_ex_vat",
+        "realised_target_vat",
+        "realised_target_inc_vat",
+        "held_target_ex_vat",
+        "held_target_vat",
+        "held_target_inc_vat",
+        "needs_financial_resolution",
+        "work_collection_id",
+        "work_collection_revision",
+        "managed_capture_completed",
+        "captured_at_utc"
+      ],
+      "amount_scope": "FROZEN_SOURCE_AND_TARGET"
+    },
+    "RUN_LINES": {
+      "parent": "RUN_WORK",
+      "keys": [
+        [
+          "component_key",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "run_work_id",
+        "line_no",
+        "approved_line_id",
+        "captured_revision_id",
+        "work_id",
+        "component_key",
+        "source_consumed_ex_vat",
+        "source_pay_channel",
+        "target_pay_channel",
+        "valuation_policy_id",
+        "policy_window_id",
+        "frozen_ex_vat",
+        "frozen_vat",
+        "frozen_inc_vat"
+      ],
+      "amount_scope": "FROZEN_SOURCE_CONSUMPTION_AND_TARGET"
+    },
+    "HOLD": {
+      "parent": "RUN_LINE",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_line_id",
+        "work_id",
+        "component_key",
+        "source_reserved_ex_vat",
+        "target_amount_ex_vat",
+        "target_amount_vat",
+        "target_amount_inc_vat",
+        "status",
+        "created_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "SOURCE_AND_TARGET_HOLD_CURRENT_STATUS"
+    },
+    "WORKER": {
+      "parent": "WORKER",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_id",
+        "candidate_id",
+        "target_pay_channel",
+        "target_umbrella_id",
+        "target_umbrella_vat_chargeable",
+        "status",
+        "gross_ex_vat",
+        "gross_vat",
+        "gross_inc_vat",
+        "entered_paye_net",
+        "net_request_revision",
+        "net_projection_revision",
+        "preparation_revision",
+        "case_selection_revision",
+        "captured_line_count",
+        "captured_position_count",
+        "review_issue_code",
+        "review_issue_work_id"
+      ],
+      "amount_scope": "WHOLE_WORKER_NET_CURRENT_STATUS"
+    },
+    "PROJECTIONS": {
+      "parent": "WORKER",
+      "keys": [
+        [
+          "projection_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "request_command_id",
+        "projection_no",
+        "input_kind",
+        "gross_ex_vat",
+        "gross_vat",
+        "gross_inc_vat",
+        "entered_paye_net",
+        "accepted_recoveries",
+        "accepted_net_additions",
+        "accepted_gross_additions",
+        "accepted_gross_deductions",
+        "cash_amount",
+        "accepted_at_utc",
+        "retired_at_utc"
+      ],
+      "amount_scope": "WHOLE_WORKER_FROZEN_NET_CASH"
+    },
+    "TRANSFERS": {
+      "parent": "WORKER",
+      "keys": [
+        [
+          "transfer_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "candidate_id",
+        "projection_id",
+        "build_command_id",
+        "transfer_no",
+        "beneficiary_kind",
+        "beneficiary_id",
+        "destination_rail",
+        "currency",
+        "cash_amount",
+        "member_count",
+        "member_cash_sum",
+        "status",
+        "original_transfer_id",
+        "return_cash_id",
+        "execution_kind",
+        "created_at_utc"
+      ],
+      "amount_scope": "WHOLE_TRANSFER_CASH_CURRENT_STATUS"
+    },
+    "MEMBERS": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "member_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "transfer_id",
+        "member_no",
+        "run_worker_id",
+        "subject_kind",
+        "run_line_id",
+        "case_hold_id",
+        "case_instruction_id",
+        "case_allocation_result_id",
+        "signed_cash_contribution"
+      ],
+      "amount_scope": "TRANSFER_MEMBER_CONTRIBUTION_NOT_TIMESHEET_ALLOCATION"
+    },
+    "OUTCOMES": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "occurred_at_utc",
+          "timestamptz"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "transfer_id",
+        "receipt_id",
+        "outcome_kind",
+        "whole_transfer_amount",
+        "occurred_at_utc",
+        "received_at_utc"
+      ],
+      "amount_scope": "WHOLE_TRANSFER_IMMUTABLE_OUTCOME"
+    },
+    "RETURN_CASH": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "original_transfer_id",
+        "candidate_id",
+        "amount_owed",
+        "amount_held",
+        "amount_reissued_paid",
+        "created_at_utc"
+      ],
+      "amount_scope": "CURRENT_RETURN_CASH_NOT_SOURCE_DISPOSITION"
+    },
+    "CSV": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "transfer_id",
+        "run_worker_id",
+        "actor_user_id",
+        "cash_amount",
+        "csv_sha256",
+        "issued_at_utc"
+      ],
+      "amount_scope": "WHOLE_TRANSFER_IMMUTABLE_CSV_RECEIPT"
+    },
+    "INTERNAL_RECEIPT": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "command_id",
+        "transfer_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "projection_id",
+        "execution_kind",
+        "cash_amount",
+        "occurred_at_utc",
+        "received_at_utc"
+      ],
+      "amount_scope": "WHOLE_TRANSFER_IMMUTABLE_INTERNAL_RECEIPT"
+    },
+    "GROUP_LEGS": {
+      "parent": "TRANSFER",
+      "keys": [
+        [
+          "transfer_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "anchor_transfer_id",
+        "transfer_id",
+        "leg_kind",
+        "destination_id"
+      ],
+      "amount_scope": "TRANSFER_GROUP_PROVENANCE"
+    },
+    "EXPIRY": {
+      "parent": "WORKER",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "candidate_id",
+        "run_id",
+        "run_worker_id",
+        "job_id",
+        "member_no",
+        "draft_state_id",
+        "preparation_revision",
+        "selection_revision",
+        "original_job_id",
+        "original_job_status",
+        "original_job_phase",
+        "original_worker_status",
+        "original_review_issue_code",
+        "original_review_issue_work_id",
+        "expected_work_count",
+        "expected_case_hold_count",
+        "released_work_count",
+        "released_case_hold_count",
+        "status",
+        "stage",
+        "checkpoint",
+        "created_at_utc",
+        "started_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "EXPIRY_RECEIPT_CURRENT_STATUS"
+    },
+    "CASES": {
+      "parent": "SCOPE",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "candidate_id",
+        "case_kind",
+        "tax_treatment",
+        "status",
+        "principal_approved",
+        "principal_funded",
+        "principal_recovered",
+        "principal_written_off",
+        "principal_paid_credit",
+        "active_hold_amount",
+        "active_payout_hold_amount",
+        "active_recovery_hold_amount",
+        "current_rule_id",
+        "current_rule_revision",
+        "case_revision",
+        "due_date",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT_CASE_SOURCE_CACHE"
+    },
+    "COMPONENTS": {
+      "parent": "CASE",
+      "keys": [
+        [
+          "component_ordinal",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "case_id",
+        "candidate_id",
+        "component_key",
+        "component_ordinal",
+        "component_revision",
+        "rule_id",
+        "case_kind",
+        "case_subtype",
+        "tax_treatment",
+        "instruction_kind",
+        "direction",
+        "payroll_stage",
+        "source_pay_channel",
+        "currency",
+        "approved_source_ex_vat",
+        "funded_source_ex_vat",
+        "recovered_source_ex_vat",
+        "paid_credit_source_ex_vat",
+        "written_off_source_ex_vat",
+        "active_payout_source_ex_vat",
+        "active_recovery_source_ex_vat",
+        "resolution_state",
+        "target_pay_channel",
+        "target_ex_vat",
+        "target_vat",
+        "target_inc_vat",
+        "valuation_policy_id",
+        "valuation_window_id",
+        "resolution_ref",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT_CASE_SOURCE_AND_TARGET_CACHE"
+    },
+    "RULES": {
+      "parent": "CASE",
+      "keys": [
+        [
+          "rule_revision",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "id",
+        "case_id",
+        "candidate_id",
+        "rule_revision",
+        "case_kind",
+        "case_subtype",
+        "tax_treatment",
+        "case_created_at_utc",
+        "original_funded_at_utc",
+        "original_funding_event_id",
+        "schedule_start_monday",
+        "schedule_week_count",
+        "weekly_due_source_ex_vat",
+        "minimum_earnings_threshold",
+        "take_home_floor_override",
+        "next_due_monday",
+        "captured_at_utc"
+      ],
+      "amount_scope": "CAPTURED_CASE_RULE"
+    },
+    "CASE_EVENTS": {
+      "parent": "CASE",
+      "keys": [
+        [
+          "occurred_at_utc",
+          "timestamptz"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "case_id",
+        "operation_id",
+        "operation_item_id",
+        "event_kind",
+        "approved_delta",
+        "funded_delta",
+        "recovered_delta",
+        "written_off_delta",
+        "paid_credit_delta",
+        "original_transfer_id",
+        "original_effect_id",
+        "occurred_at_utc",
+        "candidate_id",
+        "case_component_id",
+        "instruction_id",
+        "allocation_result_id",
+        "run_worker_id",
+        "event_case_kind",
+        "hold_purpose",
+        "pay_week_start",
+        "source_amount_ex_vat",
+        "target_amount_ex_vat",
+        "target_amount_vat",
+        "target_amount_inc_vat",
+        "shortfall_source_ex_vat",
+        "cap_reason"
+      ],
+      "amount_scope": "IMMUTABLE_CASE_SOURCE_AND_TARGET_EVENT"
+    },
+    "INSTRUCTIONS": {
+      "parent": "COMPONENT",
+      "keys": [
+        [
+          "pay_week_start",
+          "date"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "run_id",
+        "candidate_id",
+        "case_id",
+        "case_component_id",
+        "component_ordinal",
+        "rule_id",
+        "rule_revision",
+        "captured_case_revision",
+        "captured_component_revision",
+        "captured_period_revision",
+        "preparation_revision",
+        "selection_revision",
+        "is_selected",
+        "case_kind",
+        "case_subtype",
+        "tax_treatment",
+        "instruction_kind",
+        "direction",
+        "payroll_stage",
+        "hold_purpose",
+        "allocation_channel",
+        "source_pay_channel",
+        "target_pay_channel",
+        "currency",
+        "nominal_source_ex_vat",
+        "capacity_source_ex_vat",
+        "nominal_target_ex_vat",
+        "nominal_target_vat",
+        "nominal_target_inc_vat",
+        "capacity_target_ex_vat",
+        "capacity_target_vat",
+        "capacity_target_inc_vat",
+        "valuation_policy_id",
+        "valuation_window_id",
+        "pay_week_start",
+        "minimum_earnings_threshold",
+        "resolved_take_home_floor",
+        "resolution_ref",
+        "explanation",
+        "captured_at_utc",
+        "work_collection_id"
+      ],
+      "amount_scope": "FROZEN_CASE_SOURCE_AND_TARGET_INSTRUCTION"
+    },
+    "CASE_HOLDS": {
+      "parent": "COMPONENT",
+      "keys": [
+        [
+          "pay_week_start",
+          "date"
+        ],
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "candidate_id",
+        "case_id",
+        "case_component_id",
+        "instruction_id",
+        "projection_id",
+        "allocation_result_id",
+        "purpose",
+        "pay_week_start",
+        "amount",
+        "source_reserved_ex_vat",
+        "target_amount_ex_vat",
+        "target_amount_vat",
+        "target_amount_inc_vat",
+        "status",
+        "created_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "CASE_SOURCE_AND_TARGET_HOLD_CURRENT_STATUS"
+    },
+    "RESULTS": {
+      "parent": "INSTRUCTION",
+      "keys": [
+        [
+          "state_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "state_id",
+        "instruction_id",
+        "result_no",
+        "run_worker_id",
+        "candidate_id",
+        "preparation_revision",
+        "selection_revision",
+        "pass_kind",
+        "hold_purpose",
+        "allocation_channel",
+        "nominal_target_ex_vat",
+        "usable_capacity_target_ex_vat",
+        "allocated_source_ex_vat",
+        "allocated_target_ex_vat",
+        "allocated_target_vat",
+        "allocated_target_inc_vat",
+        "shortfall_target_ex_vat",
+        "cap_reason",
+        "affordability_reason",
+        "capacity_reason",
+        "channel_headroom_before",
+        "channel_headroom_after",
+        "worker_take_home_before",
+        "worker_take_home_after",
+        "created_at_utc"
+      ],
+      "amount_scope": "FROZEN_CASE_ALLOCATION_SOURCE_AND_TARGET"
+    },
+    "COMMANDS": {
+      "parent": "SCOPE",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "candidate_id",
+        "member_no"
+      ],
+      "amount_scope": "COMMAND_MEMBERSHIP"
+    },
+    "COMMAND": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "agency_sequence",
+        "module_epoch",
+        "command_kind",
+        "status",
+        "expected_member_count",
+        "enrolled_member_count",
+        "created_at_utc",
+        "sealed_at_utc"
+      ],
+      "amount_scope": "COMMAND_RECEIPT_CURRENT_STATUS"
+    },
+    "JOBS": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "job_kind",
+          "text"
+        ]
+      ],
+      "fields": [
+        "id",
+        "command_id",
+        "candidate_id",
+        "command_sequence",
+        "job_kind",
+        "status",
+        "phase",
+        "attempt_count",
+        "applied_line_count",
+        "last_error_code",
+        "available_at_utc",
+        "queue_wake_after_utc"
+      ],
+      "amount_scope": "JOB_RECEIPT_CURRENT_STATUS"
+    },
+    "NET_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "request_no",
+        "input_kind",
+        "entered_paye_net",
+        "frozen_gross_inc_vat",
+        "expected_projection_revision",
+        "preparation_revision",
+        "selection_revision",
+        "case_draft_state_id",
+        "accepted_at_utc"
+      ],
+      "amount_scope": "WHOLE_WORKER_IMMUTABLE_NET_REQUEST"
+    },
+    "OUTCOME_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "outcome_id",
+        "transfer_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "posted_member_count",
+        "posting_complete",
+        "internal_receipt_id"
+      ],
+      "amount_scope": "OUTCOME_RECEIPT_CURRENT_STATUS"
+    },
+    "RETURN_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "outcome_id",
+        "transfer_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "posting_complete"
+      ],
+      "amount_scope": "RETURN_RECEIPT_CURRENT_STATUS"
+    },
+    "REISSUE_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "return_cash_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "transfer_id"
+      ],
+      "amount_scope": "REISSUE_RECEIPT_CURRENT_STATUS"
+    },
+    "CANCEL_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "run_worker_id",
+        "candidate_id",
+        "status",
+        "expected_line_count",
+        "released_line_count",
+        "blocked_code",
+        "started_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "CANCEL_RECEIPT_CURRENT_STATUS"
+    },
+    "REISSUE_CANCEL": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "transfer_id",
+        "return_cash_id",
+        "run_worker_id",
+        "candidate_id",
+        "actor_user_id",
+        "amount",
+        "status",
+        "blocked_code",
+        "accepted_at_utc",
+        "completed_at_utc"
+      ],
+      "amount_scope": "WHOLE_TRANSFER_REISSUE_CANCEL_RECEIPT"
+    },
+    "WRITE_OFF": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "candidate_id",
+        "case_id",
+        "case_component_id",
+        "work_collection_id",
+        "actor_user_id",
+        "expected_component_revision",
+        "basis_case_revision",
+        "basis_principal",
+        "basis_recovered",
+        "basis_written_off",
+        "basis_protected",
+        "requested_scope",
+        "input_amount",
+        "requested_amount",
+        "reason",
+        "accepted_at_utc",
+        "status",
+        "applied_amount",
+        "remaining_amount",
+        "protected_amount",
+        "event_id",
+        "issue_code",
+        "completed_at_utc"
+      ],
+      "amount_scope": "SOURCE_FORGIVENESS_NOT_PAID_DISPOSITION"
+    },
+    "CASE_CREATE": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "case_id",
+        "candidate_id",
+        "actor_user_id",
+        "case_kind",
+        "case_subtype",
+        "tax_treatment",
+        "source_pay_channel",
+        "currency",
+        "principal_source_ex_vat",
+        "due_date",
+        "minimum_earnings_threshold",
+        "take_home_floor_override",
+        "approval_reason",
+        "rule_id",
+        "primary_component_id",
+        "recovery_component_id",
+        "valuation_policy_id",
+        "opening_pay_week_start",
+        "schedule_week_count",
+        "weekly_due_source_ex_vat",
+        "accepted_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_CASE_APPROVAL_RECEIPT"
+    },
+    "EXPIRY_REQUEST": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "command_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "command_id",
+        "run_id",
+        "original_prepare_command_id",
+        "actor_user_id",
+        "initiator_kind",
+        "captured_deadline",
+        "expected_candidate_count",
+        "enrolled_candidate_count",
+        "completed_candidate_count",
+        "status",
+        "accepted_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "EXPIRY_COMMAND_RECEIPT_CURRENT_STATUS"
+    },
+    "CASE": {
+      "parent": "CASE",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "candidate_id",
+        "case_kind",
+        "tax_treatment",
+        "status",
+        "principal_approved",
+        "principal_funded",
+        "principal_recovered",
+        "principal_written_off",
+        "principal_paid_credit",
+        "active_hold_amount",
+        "active_payout_hold_amount",
+        "active_recovery_hold_amount",
+        "current_rule_id",
+        "current_rule_revision",
+        "case_revision",
+        "due_date",
+        "updated_at_utc"
+      ],
+      "amount_scope": "CURRENT_CASE_SOURCE_CACHE"
+    },
+    "PROTECTED_RECEIPT": {
+      "parent": "REVISION",
+      "keys": [
+        [
+          "orchestration_run_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "orchestration_run_id",
+        "family_id",
+        "generation_id",
+        "approval_id",
+        "accepted_family_bound_version",
+        "source_manifest_sha256",
+        "prepared_request_sha256",
+        "publication_request_sha256",
+        "work_id",
+        "revision_id",
+        "command_id",
+        "agency_sequence",
+        "actor_user_id",
+        "accepted_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_APPROVAL_PROVENANCE"
+    },
+    "SOURCE_DETAIL": {
+      "parent": "LINE",
+      "keys": [
+        [
+          "component_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "head_id",
+        "component_id",
+        "decision_bundle_id",
+        "bundle_revision",
+        "component_sha256",
+        "detail_sha256",
+        "created_at_utc"
+      ],
+      "amount_scope": "IMMUTABLE_SOURCE_CERTIFICATE_REFERENCES_NOT_RAW_PAYLOAD"
+    },
+    "POLICY": {
+      "parent": "RUN_LINE",
+      "keys": [
+        [
+          "source_window_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "policy_id",
+        "source_window_id",
+        "date_from",
+        "date_to",
+        "erni_pct",
+        "vat_rate_pct"
+      ],
+      "amount_scope": "IMMUTABLE_CAPTURED_POLICY_NOT_LIVE_SETTINGS"
+    },
+    "CHOICE": {
+      "parent": "RUN_WORK",
+      "keys": [
+        [
+          "work_id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "run_id",
+        "work_id",
+        "expected_revision_id",
+        "selection_mode",
+        "selection_state",
+        "page_count",
+        "component_count"
+      ],
+      "amount_scope": "CAPTURED_SELECTION_CURRENT_STATUS"
+    },
+    "SELECTION": {
+      "parent": "RUN_WORK",
+      "keys": [
+        [
+          "selection_no",
+          "bigint"
+        ]
+      ],
+      "fields": [
+        "run_id",
+        "work_id",
+        "approved_line_id",
+        "expected_revision_id",
+        "component_key",
+        "selection_no",
+        "page_no",
+        "page_item_no"
+      ],
+      "amount_scope": "CAPTURED_COMPONENT_SELECTION"
+    },
+    "WORKER_CASE_HOLDS": {
+      "parent": "WORKER",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_worker_id",
+        "candidate_id",
+        "case_id",
+        "case_component_id",
+        "instruction_id",
+        "projection_id",
+        "allocation_result_id",
+        "purpose",
+        "pay_week_start",
+        "amount",
+        "source_reserved_ex_vat",
+        "target_amount_ex_vat",
+        "target_amount_vat",
+        "target_amount_inc_vat",
+        "status",
+        "created_at_utc",
+        "finished_at_utc"
+      ],
+      "amount_scope": "HOLD_CURRENT_STATUS_UNTYPED_SOURCE_TARGET_MAY_BE_NULL"
+    },
+    "COMMAND_WORKER": {
+      "parent": "COMMAND",
+      "keys": [
+        [
+          "id",
+          "uuid"
+        ]
+      ],
+      "fields": [
+        "id",
+        "run_id",
+        "candidate_id",
+        "target_pay_channel",
+        "target_umbrella_id",
+        "target_umbrella_vat_chargeable",
+        "status",
+        "gross_ex_vat",
+        "gross_vat",
+        "gross_inc_vat",
+        "entered_paye_net",
+        "net_request_revision",
+        "net_projection_revision",
+        "preparation_revision",
+        "case_selection_revision",
+        "captured_line_count",
+        "captured_position_count",
+        "review_issue_code",
+        "review_issue_work_id"
+      ],
+      "amount_scope": "WHOLE_WORKER_NET_CURRENT_STATUS"
+    }
+  },
+  "confirmWorker": {
+    "run_id": "uuid",
+    "phase": "draft",
+    "review_revision": "positive",
+    "replay": "boolean",
+    "drafts": "drafts"
+  },
+  "confirmOffice": {
+    "run_id": "uuid",
+    "phase": "draft",
+    "review_revision": "positive",
+    "replay": "boolean",
+    "drafts": "drafts"
+  },
+  "f25Status": "accepted_input/effective_work_cut/seal_effective_work_cut definitions absent from live supabase migration/repeatable source at investigation",
+  "remaining": [
+    "Canonical final-source gate selection for changed 0270/0575/2359 routines",
+    "Explicit backend run/channel CANCEL_REQUEST source-unit coverage",
+    "F25/F11 exact cutoff dependencies and source registry readback",
+    "Record M1-M4 contract table without rewriting aligned product"
+  ]
+}

@@ -2,6 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { scanManagedSql } from '../scripts/cloudtms-managed-release-sql.mjs';
+import { routineDefinitions } from '../scripts/bpay-next-final-definers.mjs';
+function finalRoutine(signature) {
+  const registry=JSON.parse(readFileSync(new URL('../docs/bpay-next/final-definer-closures.json',import.meta.url),'utf8'));
+  const chain=registry.chains.find(row=>row.signature===signature);
+  assert.ok(chain,'Designated final source missing for '+signature);
+  const closure=readFileSync(new URL('../'+chain.finalPhysical,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  const statements=scanManagedSql(closure).statements.filter(row=>routineDefinitions(closure.slice(row.start,row.end),chain.finalPhysical).includes(signature));
+  assert.equal(statements.length,1,'One actual designated routine statement');
+  return {statement:closure.slice(statements[0].start,statements[0].end),closure};
+}
 
 import { handleBpayNextCommand, BPAY_NEXT_COMMAND_LIMITS } from '../broker/src/bpay-next-command.js';
 
@@ -65,7 +76,7 @@ test('preparation expiry has no caller clock or SYSTEM authority and checks exac
     const bad=await handleBpayNextCommand(request(body),deps(payload));
     assert.equal(bad.status,503);assert.equal((await bad.json()).outcome_unknown,true);
   }
-  const sql=readFileSync(new URL('../supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql',import.meta.url),'utf8');
+  const {statement:sql,closure}=finalRoutine('public.bpay_next_financial_intake_v1(uuid,text,jsonb)');
   assert.match(sql,/private\.bpay_next_accept_preparation_expiry_v1\(\s*v_command_id,v_run_id,p_actor_user_id,v_occurred_at,null\)/);
 });
 function result(action = 'PAYE_NET') {
@@ -158,6 +169,19 @@ for (const action of Object.keys(INPUTS)) {
     assert.equal(call.options.timeoutMs, 8000);
     assert.equal(call.options.maxResponseBytes, 128 * 1024);
     assert.equal(call.options.routeClass, 'OPERATION_NUDGE');
+    if (action === 'CANCEL_REQUEST') {
+      const args = { ...INPUTS[action], run_id: OTHER, pay_channel: 'PAYE' };
+      const scoped = deps(payload);
+      assert.equal((await handleBpayNextCommand(request({ action, ...args }), scoped)).status, 200);
+      assert.equal(scoped.calls.length, 1);
+      assert.deepEqual(scoped.calls[0].args, args);
+      for (const extra of [{ run_id: OTHER }, { pay_channel: 'PAYE' },
+        { run_id: OTHER, pay_channel: 'BANK' }, { ...args, selected_line_ids: [OTHER] }]) {
+        const refused = deps(payload);
+        await failed({ action, ...INPUTS[action], ...extra }, refused, 'BPAY_NEXT_COMMAND_REQUEST_INVALID');
+        assert.equal(refused.calls.length, 0);
+      }
+    }
   });
 }
 
@@ -410,15 +434,15 @@ test('deadline aborts a pending response stream without automatic re-dispatch', 
 
 test('service wrapper source closes actions, independently authorises actor and stringifies numeric outputs', () => {
   // Source contract only; parent task owns actual local PostgreSQL first-use.
-  const sql = readFileSync(new URL('../supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql', import.meta.url), 'utf8');
+  const {statement:sql,closure}=finalRoutine('public.bpay_next_financial_intake_v1(uuid,text,jsonb)');
   assert.match(sql, /public\.bpay_next_financial_intake_v1\(\s*p_actor_user_id uuid,p_action text,p_args jsonb/);
   assert.match(sql, /request\.jwt\.claim\.role/);
   assert.match(sql, /u\.is_active is true[\s\S]*u\.role::text='admin'/);
   assert.match(sql, /jsonb_typeof\(p_args->v_key\) is distinct from 'string'/);
   assert.match(sql, /c\.agency_sequence::text/);
   assert.match(sql, /'released_line_count',v_result->>'released_line_count'/);
-  assert.match(sql, /from public,anon,authenticated,service_role/);
-  assert.match(sql, /grant execute on function public\.bpay_next_financial_intake_v1\(uuid,text,jsonb\) to service_role/);
+  assert.match(closure, /REVOKE ALL ON FUNCTION public\.bpay_next_financial_intake_v1\(uuid,text,jsonb\) FROM PUBLIC,\s*anon,\s*authenticated,\s*service_role/i);
+  assert.match(closure, /grant execute on function public\.bpay_next_financial_intake_v1\(uuid,text,jsonb\) to service_role/i);
   assert.match(sql, /private\.bpay_next_issue_simple_csv_v1\(v_instruction_id,v_transfer_id,p_actor_user_id\)/);
   assert.match(sql, /private\.bpay_next_receive_simple_reissue_v1\(v_command_id,v_return_cash_id,p_actor_user_id\)/);
   const csvBranch = sql.slice(sql.indexOf("when 'CSV_ISSUE' then\n      --"));

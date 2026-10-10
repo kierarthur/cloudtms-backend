@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import { scanManagedSql } from '../scripts/cloudtms-managed-release-sql.mjs';
+import { routineDefinitions } from '../scripts/bpay-next-final-definers.mjs';
+function finalRoutine(signature) {
+  const registry=JSON.parse(readFileSync(new URL('../docs/bpay-next/final-definer-closures.json',import.meta.url),'utf8'));
+  const chain=registry.chains.find(row=>row.signature===signature);
+  assert.ok(chain,'Designated final source missing for '+signature);
+  const closure=readFileSync(new URL('../'+chain.finalPhysical,import.meta.url),'utf8').replaceAll('\r\n','\n');
+  const statements=scanManagedSql(closure).statements.filter(row=>routineDefinitions(closure.slice(row.start,row.end),chain.finalPhysical).includes(signature));
+  assert.equal(statements.length,1,'One actual designated routine statement');
+  return {statement:closure.slice(statements[0].start,statements[0].end),closure};
+}
 import {handleBpayNextPreparationCommand,handleBpayNextPreparationPage,BPAY_NEXT_PREPARATION_LIMITS} from '../broker/src/bpay-next-preparation.js';
 
 const id=n=>`b8570000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -289,6 +300,12 @@ test('CURRENT_STORED_CREDITS rejects caller actor/account/value and oversized pa
 const transfer=(n='1')=>({transfer_id:DETAIL,transfer_no:n,projection_id:REV,execution_kind:'BANK',status:'RETURNED',cash_amount:'85.00',original_transfer_id:null});
 test('STATUS preserves accepted projection while explicitly pending, one original transfer cursor and no bank fields',async()=>{
  const header=statusHeader(),rows=[transfer()];const d=deps({header,rows,complete:false});
+ const channelArgs={run_id:RUN,pay_channel:'PAYE',run_worker_id:WORKER,limit:1};
+ const channel=deps({header,rows,complete:false});
+ const channelResponse=await handleBpayNextPreparationPage(page('CHANNEL_STATUS',channelArgs),channel);
+ assert.equal(channelResponse.status,200);assert.equal((await channelResponse.json()).kind,'CHANNEL_STATUS');
+ assert.equal(channel.calls.length,1);assert.equal(channel.calls[0].args.pay_channel,'PAYE');
+ await failed(page('CHANNEL_STATUS',{...channelArgs,pay_channel:'UMBRELLA'}),deps({header,rows,complete:false}),'RESPONSE_INVALID',503,false,true);
  const response=await handleBpayNextPreparationPage(page('STATUS',{run_id:RUN,run_worker_id:WORKER,limit:1}),d);
  assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true,kind:'STATUS',header,rows,complete:false,next_cursor:{after_transfer_no:'1'}});
  assert.equal(d.calls[0].args.after_transfer_no,null);assert.equal(d.calls.length,1);
@@ -328,17 +345,27 @@ test('saved selection schema/owners preserve nullable ALL evidence, exact FK, ty
   const source=p=>readFileSync(new URL(p,import.meta.url),'utf8');
   const schema=source('../supabase/migrations/04102026_1241_bpay_next_component_selection.sql');
   const owners=source('../supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql');
-  const service=source('../supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql');
+  const intake=finalRoutine('public.bpay_next_preparation_intake_v1(uuid,text,jsonb)');
+  const pages=finalRoutine('public.bpay_next_preparation_page_v1(uuid,text,jsonb)');
+  const authority=finalRoutine('private.bpay_next_preparation_authority_v1(uuid)').statement;
+  const args=finalRoutine('private.bpay_next_preparation_args_v1(jsonb,text[])').statement;
+  const service=intake.statement+'\n'+pages.statement;
   assert.match(schema,/expected_revision_id uuid,/);assert.match(schema,/selection_mode='SUBSET' and expected_revision_id is not null/);
   assert.match(schema,/references private\.bpay_next_approved_line\(revision_id,id,component_key\)/);
   assert.match(schema,/expected_selected_component_count/);assert.match(schema,/captured_selected_component_count/);
   assert.match(owners,/return; -- original evidence, never re-read a newer revision/);
   assert.match(owners,/v_count<>v_page\.item_count/);assert.match(owners,/BPAY_NEXT_CHOICE_LINE_NOT_IN_REVISION/);
-  assert.match(service,/request\.jwt\.claim\.role/);assert.match(service,/u\.is_active is true and u\.role::text='admin'/);
-  assert.match(service,/grant execute on function public\.bpay_next_preparation_intake_v1\(uuid,text,jsonb\),\s*public\.bpay_next_preparation_page_v1\(uuid,text,jsonb\) to service_role/);
-  assert.doesNotMatch(service,/grant[^;]*(?:anon|authenticated)/i);assert.doesNotMatch(owners+service,/timesheets_financials|pay_session|execute format|EXECUTE\s+v_/i);
+  assert.match(authority,/request\.jwt\.claim\.role/);assert.match(authority,/u\.is_active is true and u\.role::text='admin'/);
+  assert.match(intake.statement,/perform private\.bpay_next_preparation_authority_v1\(p_actor_user_id\)/);
+  assert.match(pages.statement,/perform private\.bpay_next_preparation_authority_v1\(p_actor_user_id\)/);
+  assert.match(intake.closure,/grant execute on function public\.bpay_next_preparation_intake_v1\(uuid,text,jsonb\) to service_role/i);
+  assert.match(pages.closure,/grant execute on function public\.bpay_next_preparation_page_v1\(uuid,text,jsonb\) to service_role/i);
+  assert.match(intake.closure,/revoke all on function public\.bpay_next_preparation_intake_v1\(uuid,text,jsonb\) from public,\s*anon,\s*authenticated,\s*service_role/i);
+  assert.match(pages.closure,/revoke all on function public\.bpay_next_preparation_page_v1\(uuid,text,jsonb\) from public,\s*anon,\s*authenticated,\s*service_role/i);
+  assert.doesNotMatch(intake.closure+'\n'+pages.closure,/grant[^;]*(?:anon|authenticated)/i);assert.doesNotMatch(owners+service,/timesheets_financials|pay_session|execute format|EXECUTE\s+v_/i);
   assert.match(service,/select case p_kind[\s\S]*order by l\.line_no,l\.id limit v_limit/);
   assert.match(service,/A byte boundary ends/);
   assert.match(service,/return private\.bpay_next_current_work_page_v1/);assert.match(service,/return private\.bpay_next_worker_status_page_v1/);
   assert.match(service,/2147483647/);
+  assert.match(args,/9223372036854775807/);
 });
