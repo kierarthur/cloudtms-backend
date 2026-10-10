@@ -1158,7 +1158,7 @@ Dependencies: WB-01, F-16; successor positions: `bpay_next_approval_route_v1`: 1
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-03-D04 | DOC: 03102026_1530 Additional/expense/mileage tax treatment assignment | MISSING | DR-38 must assign existing Additional TAXABLE and reimbursement NON_TAXABLE vocabulary and retain fixed amounts; installed/local publisher code existence is not this assignment. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-03-D04 | DOC: 03102026_1530 Additional/expense/mileage tax treatment assignment | MISSING | DR-38 must assign existing Additional TAXABLE and reimbursement NON_TAXABLE vocabulary and retain fixed amounts; installed/local publisher code existence is not this assignment. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1175,6 +1175,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A Magnit imported expense shows its pay amount in Banking, as a `SOURCE_FIXED_EXPENSE` component of the Source HOURS Timesheet, while its charge is unchanged (J1h, RQ-227).
   - Unticking the expense in Banking leaves the claim's approval unchanged in the Timesheet screen (RQ-035).
   - An imported reversal/replacement pair produces no payable row (J1i).
+
+Whole WB-03 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. docs/bpay-next/WB-03-COMPLETION.md Review: reviews/WB-03-expense-boundary-review.md.
 
 ## WB-04 — Daily (booked-shift) Timesheets publish through the same path
 
