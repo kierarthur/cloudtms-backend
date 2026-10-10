@@ -1,0 +1,7 @@
+# PF-09 exact scope before implementation
+
+Sequence23,10 October2026. Full card06:1852–1871, exact current D01–D03 checklist rows and file08 sequence/dependencies re-read. F06/F09 are complete; PF04 local commitbb0e8d85 precedes this item.
+
+Exact objects: D01 typed transport/exact decimal/reply-key source check; D02 broker/src/bpay-next-command.js exact typed command transport; D03 future joined in-app TEST checklist. No new SQL/Worker financial owner, screen or testing programme is named. The correct existing command/preparation/history allow-lists, transport caps, SQL calculations and F08 contract alignment must be reused. The check belongs in the existing F23 source gate and ordinary source units. No design-first gate applies; a narrow census will identify any missing interface guard before code changes.
+
+BUILDER DECISION BD027: the SELECT-star/opaque whole-record prohibition applies to transported financial interfaces. Preserve private typed point-key row locks and guards; do not rewrite their owners. Exact decimal strings/BigInt validation must preserve separate Source ex, realised/held credit, target ex/VAT/inc, payroll NET, bank cash and Case principal. Only missing named source/transport controls warrant implementation; current correct schemas and routes are reused. Future penny agreement/large-negative-zero transport acceptance stays NOT_RUN until the authorised joined session.

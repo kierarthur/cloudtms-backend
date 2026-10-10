@@ -289,3 +289,11 @@ BUILDER DECISION BD026: terminal temporary metadata may retire after actual clos
 ### PF-04 complete — 10/10/2026 London
 
 Whole ITEM BUILT20/288 REVIEWED20/288. D01 bounded terminal temporary cleanup/D02 five read-only health measures/D03 fifth existing NEXT minute lane/D04 future joined checklist/D05 finite current-final routine-history point gate complete under BD026. Four independent source reviews PASS; HG01 ONLY/comma/TABLE omission corrected; preliminary PREPARE concern withdrawn after exact COMPLETE/SEALED boundary inspection. Source5/5, Worker48/48, syntax/dbcheck310/812, solePG17 CHANGED1migration+5closures COMPILED protectedverificationPENDING, seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/coupling PASS. No business invocation/fixtures/rehearsal/hosted/app/timing/external action. Progress:20 whole items built and reviewed; earliest remaining plan step PF09 sequence23, earlier staged foundation joined acceptance still pending.
+
+### PF-09 scope checkpoint — 10/10/2026 London
+
+PF04 committed locally bb0e8d85; whole counts20/288. Exact three PF09 objects listed before implementation in design/PF-09-SCOPE.md. BUILDER DECISION BD027: restrict opaque/select-star prohibition to transported payment projections, preserve typed private row locks/guards and existing exact command/preparation/history allow-lists. Build only the missing targeted source gate and future joined checklist; reuse correct actual transport and fixed integration. No new financial owner, product pricing, Source/F25 change or testing programme.
+
+### PF-09 complete — 10/10/2026 London
+
+Whole ITEM BUILT21/288 REVIEWED21/288. Three exact objects complete underBD027; required targeted gate extends existing sourcechecks and reuses correct command/runtime. Independent D01/D02/D03 source PASS; PT01–04 extra/composite field, text-to-numeric, staticDO floatDDL and literal-case findings corrected. Source90/90+7/7, syntax/dbcheck310/812, unchanged solePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/coupling PASS. No changed SQL/business/fixtures/rehearsal/hosted/app/timing/external action. ContinuePF11sequence24.

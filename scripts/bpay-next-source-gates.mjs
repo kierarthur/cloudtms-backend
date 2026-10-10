@@ -226,6 +226,267 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
 export const HISTORY_RELATIONS=Object.freeze(['bpay_next_financial_effect','bpay_next_case_event',
   'bpay_next_transfer_outcome','bpay_next_internal_receipt','bpay_next_return_cash']);
 
+// PF09: actual NEXT table column types, not prose or private row-lock syntax.
+export function assertNextExactNumericTypes(source,file){
+  const floating=t=>['REAL','FLOAT','FLOAT4','FLOAT8'].includes(t[0])||(t[0]==='DOUBLE'&&t[1]==='PRECISION');
+  const parts=[sqlWithoutComments(source),...executableParts(source,file).map(part=>part.text)];
+  for(const part of parts)for(const row of scanManagedSql(part).statements){
+    const start=row.tokens.findIndex(token=>token==='CREATE'||token==='ALTER');
+    const t=start<0?[]:row.tokens.slice(start),table=t.indexOf('TABLE');
+    if(!['CREATE','ALTER'].includes(t[0])||table<0)continue;
+    let at=table+1;while(['IF','NOT','EXISTS','ONLY'].includes(t[at]))at++;
+    const name=t[at+1]==='.'?t[at+2]:t[at];
+    if(!name?.startsWith('BPAY_NEXT_'))continue;
+    const type=(tokens)=>floating(tokens[0]==='PG_CATALOG'&&tokens[1]==='.'?tokens.slice(2):tokens);
+    if(t[0]==='CREATE'){
+      let depth=0,column=[];
+      const check=()=>{if(type(column.slice(1)))throw Error(`BPAY_NEXT_FLOAT_COLUMN_FORBIDDEN: ${file}`);};
+      for(const token of t.slice(at+(t[at+1]==='.'?3:1))){
+        if(token==='('){depth++;if(depth===1)continue;}
+        if(token===')'){if(depth===1){check();break;}depth--;}
+        if(token===','&&depth===1){check();column=[];continue;}
+        if(depth>=1)column.push(token);
+      }
+    }else for(let i=at+1;i<t.length;i++){
+      if(t[i]==='ADD'){
+        let col=i+1;while(['COLUMN','IF','NOT','EXISTS'].includes(t[col]))col++;
+        if(type(t.slice(col+1)))throw Error(`BPAY_NEXT_FLOAT_COLUMN_FORBIDDEN: ${file}`);
+      }else if(t[i]==='TYPE'&&type(t.slice(i+1)))throw Error(`BPAY_NEXT_FLOAT_COLUMN_FORBIDDEN: ${file}`);
+    }
+  }
+}
+
+export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_advice_work_v1(uuid)",
+  "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+  "private.bpay_next_current_case_page_v1(uuid,uuid,integer)",
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)",
+  "private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)",
+  "private.bpay_next_return_cash_page_v1(uuid,uuid,integer,integer)",
+  "private.bpay_next_simple_break_page_v1(uuid,uuid,integer,integer)",
+  "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)",
+  "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+  "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+  "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)",
+  "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)",
+  "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+  "private.bpay_next_channel_drafts_page_v1(uuid)",
+  "private.bpay_next_channel_worker_page_v1(uuid,text,uuid,integer)",
+  "private.bpay_next_channel_status_page_v1(uuid,text,uuid,integer,integer)",
+  "public.bpay_next_payment_history_page_v1(jsonb)",
+  "public.bpay_next_bind_stored_credit_v1(uuid,uuid,uuid)"
+]);
+const TYPED_PAGE_PROJECTIONS=Object.freeze({
+  "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_component_id,c.case_id,c.candidate_id,c.component_ordinal::text, c.component_revision::text,c.case_kind,c.case_subtype,c.tax_treatment, c.instruction_kind,c.direction,c.payroll_stage,c.source_pay_channel,c.resolution_state, c.approved_source_ex_vat::text,c.funded_source_ex_vat::text,c.recovered_source_ex_vat::text, c.written_off_source_ex_vat::text,c.active_payout_source_ex_vat::text,c.active_recovery_source_ex_vat::text from"
+  ],
+  "private.bpay_next_current_case_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_id,c.candidate_id,c.case_kind,c.tax_treatment,c.status, c.principal_approved::text,c.principal_funded::text,c.principal_recovered::text, c.principal_written_off::text,c.active_hold_amount::text from"
+  ],
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.to_jsonb(page) into v_value from ( select a.id as legacy_case_id,a.candidate_id,c.source_amount::text as principal_source_ex_vat, c.source_pay_method as original_source_pay_channel, a.taxability::text as original_tax_treatment,a.routing_kind::text as original_routing_kind, a.created_at as original_created_at_utc,b.updated_at_utc as bank_version_at_utc, b.bank_details_hash,b.beneficiary_name,pg_catalog.right(b.account_number,4) as account_last4 from"
+  ],
+  "private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select w.id as work_id,w.candidate_id,w.original_timesheet_id,w.work_kind, w.week_ending_date,w.approval_state,w.current_revision_id,w.applied_revision_id, coalesce(w.approval_state='APPROVED' and w.current_revision_id=w.applied_revision_id and r.sealed_at_utc is not null,false) as position_ready, r.source_pay_channel,r.timesheet_reference,r.client_display_name, r.approved_source_ex_vat::text from"
+  ],
+  "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select t.id as transfer_id,t.transfer_no::text,t.projection_id,t.execution_kind, t.status,t.cash_amount::text,t.original_transfer_id from"
+  ],
+  "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)": [
+    "to_jsonb(page) row_value from (select rate_schedule_id,rate_family,rate_code,unit_label, paye_rate::text,umbrella_rate::text,charge_rate::text from",
+    "to_jsonb(page) row_value from (select shift_detail_id,detail_no,work_date,shift_start_at,shift_end_at, shift_start_local,shift_end_local,shift_overnight,submitted_minutes, approved_minutes,approved_hours::text,detail_label, segment_pay_ex_vat::text,pay_excluded, hours_day::text,hours_night::text,hours_sat::text,hours_sun::text,hours_bh::text from",
+    "to_jsonb(page) row_value from private.bpay_next_simple_break_page_v1($1,$2,$3,$7) page",
+    "to_jsonb(page) row_value from (select rate_detail_id,bucket,approved_hours::text,source_pay_rate::text from"
+  ],
+  "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)": [
+    "to_jsonb(page) row_value from ( select s.id shift_detail_id,s.detail_no,s.work_date,s.shift_start_at,s.shift_end_at,s.shift_start_local, s.shift_end_local,s.shift_overnight,s.submitted_minutes,s.approved_minutes,s.approved_hours::text,s.detail_label, s.segment_pay_ex_vat::text,s.pay_excluded,s.hours_day::text,s.hours_night::text,s.hours_sat::text,s.hours_sun::text,s.hours_bh::text from",
+    "to_jsonb(page) row_value from ( select b.id break_detail_id,b.break_no,b.break_start_at,b.break_end_at,b.break_start_local,b.break_end_local,b.break_minutes from",
+    "to_jsonb(page) row_value from ( select d.id rate_detail_id,d.bucket,d.approved_hours::text,d.source_pay_rate::text from",
+    "to_jsonb(page) row_value from ( select s.id rate_schedule_id,s.rate_family,s.rate_code,s.unit_label,s.paye_rate::text,s.umbrella_rate::text,s.charge_rate::text from"
+  ],
+  "private.bpay_next_channel_worker_page_v1(uuid,text,uuid,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select w.id as run_worker_id,w.candidate_id,w.target_pay_channel as pay_channel,w.status as worker_status, w.gross_ex_vat::text as frozen_ex_vat,w.gross_vat::text as frozen_vat, w.gross_inc_vat::text as frozen_inc_vat,w.review_issue_code from"
+  ]
+});
+const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,break_start_at timestamptz, break_end_at timestamptz,break_start_local text,break_end_local text, break_minutes integer )";
+const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
+// Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
+const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
+  "private.bpay_next_advice_work_v1(uuid)": [
+    "pg_catalog.jsonb_build_object( 'run_work_id',rw.id,'work_id',rw.work_id,'captured_revision_id',rw.captured_revision_id, 'physical_timesheet_id',r.physical_timesheet_id,'physical_timesheet_version',r.physical_timesheet_version, 'source_kind',r.source_kind,'detail_kind',r.detail_kind,'week_ending_date',r.week_ending_date, 'candidate_display_name',r.candidate_display_name,'candidate_reference',r.candidate_reference, 'client_display_name',r.client_display_name,'job_title',r.job_title,'band_label',r.band_label, 'timesheet_reference',r.timesheet_reference,'expected_rate_schedule_count',r.expected_rate_schedule_count)"
+  ],
+  "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "private.bpay_next_current_case_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "private.bpay_next_current_stored_credit_page_v1(uuid,uuid,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',true,'scan_cursor',null)",
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not v_more,'scan_cursor',v_scan_cursor)"
+  ],
+  "private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "private.bpay_next_return_cash_page_v1(uuid,uuid,integer,integer)": [
+    "pg_catalog.jsonb_build_object('run_id',r.id,'run_worker_id',w.id, 'candidate_id',w.candidate_id,'financial_view_revision',c.financial_view_revision::text)",
+    "pg_catalog.jsonb_build_object( 'original_transfer_id',v_row.id,'original_transfer_no',v_row.transfer_no::text, 'original_transfer_status',v_row.status,'original_cash_amount',v_row.cash_amount::text, 'beneficiary_kind',v_row.beneficiary_kind,'beneficiary_id',v_row.beneficiary_id, 'return_command_id',v_return.command_id,'return_posting_complete',v_return.posting_complete, 'return_cash_id',v_cash.id,'amount_owed',v_cash.amount_owed::text,'amount_held',v_cash.amount_held::text, 'amount_reissued_paid',v_cash.amount_reissued_paid::text,'amount_available',v_available::text, 'pending_reissue_command_id',v_pending.command_id,'action_state',v_action)",
+    "pg_catalog.jsonb_build_object('header',v_header,'rows',v_rows, 'complete',not(v_more or v_count=p_limit),'scan_cursor',v_scan::text)"
+  ],
+  "private.bpay_next_simple_break_page_v1(uuid,uuid,integer,integer)": [],
+  "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)": [
+    "pg_catalog.jsonb_build_object( 'run_id',r.id,'run_status',r.status,'selection_state',r.selection_state, 'review_revision',r.review_revision::text,'run_worker_id',w.id, 'candidate_id',w.candidate_id,'worker_status',w.status, 'target_pay_channel',w.target_pay_channel,'umbrella_id',w.target_umbrella_id, 'preparation_revision',w.preparation_revision::text, 'case_selection_revision',w.case_selection_revision::text, 'net_request_revision',w.net_request_revision::text, 'net_projection_revision',w.net_projection_revision::text, 'net_pending',w.net_request_revision<>w.net_projection_revision, 'review_issue_code',w.review_issue_code,'review_issue_work_id',w.review_issue_work_id, 'frozen_gross_ex_vat',w.gross_ex_vat::text,'frozen_gross_vat',w.gross_vat::text, 'frozen_gross_inc_vat',w.gross_inc_vat::text, 'projection_id',p.id,'projection_input_kind',p.input_kind, 'entered_paye_net',p.entered_paye_net::text, 'accepted_recoveries',p.accepted_recoveries::text, 'accepted_net_additions',p.accepted_net_additions::text, 'cash_amount',p.cash_amount::text )",
+    "pg_catalog.jsonb_build_object('header',v_header,'rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "public.bpay_next_financial_intake_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('command_id',v_result->>'command_id', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase','requested_scope',v_result->>'requested_scope', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id', 'issue_code',v_result->>'issue_code','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','run_id',v_result->>'run_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'expected_candidates',v_result->>'expected_candidates', 'completed_candidates',v_result->>'completed_candidates', 'replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','request_no',v_result->>'request_no', 'phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','request_no',v_result->>'request_no', 'phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','transfer_id',v_result->>'transfer_id', 'phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'run_worker_id',v_worker_id, 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'cursor',v_result->>'cursor','released_line_count',v_result->>'released_line_count', 'blocked_code',v_result->>'blocked_code','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_command_id,'return_cash_id',v_return_cash_id, 'sequence',v_sequence,'transfer_id',v_result->>'transfer_id', 'phase',case when v_result->>'transfer_id' is null then 'ACCEPTED_PENDING_BUILD' else 'TRANSFER_CREATED' end, 'replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('command_id',v_command_id,'transfer_id',v_transfer_id, 'sequence',v_result->>'sequence','phase',v_result->>'phase','blocked_code',v_key,'replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'instruction_id',v_result->>'instruction_id','transfer_id',v_result->>'transfer_id', 'file_name',v_result->>'file_name','csv_sha256',v_result->>'csv_sha256', 'csv_text',v_result->>'csv_text','phase','ISSUED_CSV', 'payment_recorded',v_result->'payment_recorded','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','transfer_id',v_transfer_id, 'outcome_id',v_result->>'outcome_id','sequence',v_sequence, 'posting_complete',v_result->'posting_complete','replay',v_result->'replay', 'phase',case when (v_result->>'posting_complete')::boolean then 'POSTED' else 'ACCEPTED_PENDING_POSTING' end)",
+    "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','transfer_id',v_result->>'transfer_id', 'internal_receipt_id',v_result->>'internal_receipt_id','sequence',v_result->>'sequence', 'posting_complete',v_result->'posting_complete','phase',v_result->>'phase','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','transfer_id',v_transfer_id, 'outcome_id',v_result->>'outcome_id','sequence',v_sequence, 'posting_complete',v_result->'posting_complete','replay',v_result->'replay', 'phase',case when (v_result->>'posting_complete')::boolean then 'POSTED' else 'ACCEPTED_PENDING_POSTING' end)"
+  ],
+  "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object( 'job_id',p_job_id,'job_kind',p_job_kind,'phase',v_job.phase, 'lease_nonce',v_claim.lease_nonce,'owner_epoch',v_claim.owner_epoch::text, 'lease_until_utc',v_lease_until,'cursor',v_job.cursor_key)",
+    "pg_catalog.jsonb_build_object( 'cursor',case when v_job.phase in ('NEW','PINNING','FINANCE_ALLOCATE') then v_job.cursor_key else null end, 'work_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_work_cursor else null end, 'component_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_component_cursor else null end)",
+    "pg_catalog.jsonb_build_object('phase',v_page.next_phase, 'cursor',v_page.next_cursor,'rows_visited',v_page.rows_visited::text,'done',v_page.done)",
+    "pg_catalog.jsonb_build_object('rows_visited','0')",
+    "pg_catalog.jsonb_build_object('rows_visited',case when v_result->>'replay'='true' then '0' when v_result->>'work_id' is not null then '1' else '0' end)",
+    "pg_catalog.jsonb_build_object( 'job_id',p_job_id,'job_kind',p_job_kind,'owner_epoch',v_job.owner_epoch::text, 'lease_until_utc',v_lease_until,'done',v_job.status='DONE')",
+    "pg_catalog.jsonb_build_object('replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited')",
+    "pg_catalog.jsonb_build_object('phase','EXPIRED', 'cursor',v_result->>'cursor','work_cursor',v_result->>'work_cursor', 'component_cursor',v_result->>'component_cursor', 'run_worker_id',v_result->>'run_worker_id','worker_status',v_result->>'worker_status', 'issue_code',v_result->>'issue_code','issue_work_id',v_result->>'issue_work_id', 'rows_visited',v_result->>'rows_visited')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',case when v_job.phase in ('NEW','PINNING','FINANCE_ALLOCATE') then v_job.cursor_key else null end, 'work_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_work_cursor else null end, 'component_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_component_cursor else null end, 'run_worker_id',v_worker.id,'worker_status',v_worker.status, 'issue_code',v_worker.review_issue_code,'issue_work_id',v_worker.review_issue_work_id, 'rows_visited',v_result->>'rows_visited')",
+    "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','projection_id',v_result->>'projection_id')",
+    "pg_catalog.jsonb_build_object( 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'run_worker_id',v_result->>'run_worker_id','issue_code',v_result->>'issue_code')",
+    "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','transfer_id',v_result->>'transfer_id', 'transfer_status',coalesce(v_result->>'transfer_status',v_result->>'phase'), 'cursor',v_job.cursor_key,'member_count',v_result->>'member_count', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
+    "pg_catalog.jsonb_build_object( 'phase',case when v_job.status='DONE' then 'COMPLETE' else 'MEMBERS' end, 'cursor',v_job.cursor_key,'posted_members',v_result->>'posted_members', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
+    "pg_catalog.jsonb_build_object( 'phase',case when v_job.status='DONE' then 'COMPLETE' else 'MEMBERS' end, 'cursor',v_job.cursor_key,'posted_members',v_result->>'posted_members', 'rows_visited',coalesce(v_result->>'rows_visited','0'))",
+    "pg_catalog.jsonb_build_object( 'phase','COMPLETE','return_cash_id',v_result->>'return_cash_id')",
+    "pg_catalog.jsonb_build_object( 'phase','COMPLETE','transfer_id',v_result->>'transfer_id')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'transfer_id',v_result->>'transfer_id','blocked_code',v_result->>'blocked_code')",
+    "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','run_worker_id',v_result->>'run_worker_id', 'cursor',v_job.cursor_key,'released_line_count',v_result->>'released_line_count', 'rows_visited',coalesce(v_result->>'rows_visited','0'), 'holds_released',coalesce(v_result->>'holds_released','0'), 'blocked_code',v_result->>'blocked_code')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'work_released',v_result->>'work_released','case_holds_released',v_result->>'case_holds_released', 'run_worker_id',v_result->>'run_worker_id')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id')",
+    "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id','issue_code',v_result->>'issue_code')"
+  ],
+  "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)": [
+    "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)": [
+    "jsonb_build_object( 'instruction_id',v_instruction.id,'transfer_id',v_transfer.id,'projection_id',v_projection.id, 'projection_no',v_projection.projection_no::text,'input_kind',v_projection.input_kind, 'run_id',v_run.id,'run_worker_id',v_worker.id,'candidate_id',v_worker.candidate_id, 'pay_date',v_run.pay_date,'target_pay_channel',v_worker.target_pay_channel, 'beneficiary_name_snapshot',v_transfer.beneficiary_name_snapshot, 'payment_reference',v_instruction.payment_reference,'issued_at_utc',v_instruction.issued_at_utc, 'member_count',v_transfer.member_count::text, 'gross_ex_vat',v_projection.gross_ex_vat::text,'gross_vat',v_projection.gross_vat::text, 'gross_inc_vat',v_projection.gross_inc_vat::text,'entered_paye_net',v_projection.entered_paye_net::text, 'accepted_gross_additions',v_projection.accepted_gross_additions::text, 'accepted_gross_deductions',v_projection.accepted_gross_deductions::text, 'accepted_net_additions',v_projection.accepted_net_additions::text, 'accepted_recoveries',v_projection.accepted_recoveries::text,'cash_amount',v_instruction.cash_amount::text, 'projection_cash_amount',v_projection.cash_amount::text,'destination_kind',v_destination_kind)",
+    "jsonb_build_object('rows',v_rows,'complete',true)",
+    "jsonb_build_object( 'member_no',m.member_no::text,'subject_kind',m.subject_kind,'signed_cash_contribution',m.signed_cash_contribution::text, 'work',case when m.subject_kind='WORK' then private.bpay_next_advice_work_v1(l.run_work_id) end, 'line',case when m.subject_kind='WORK' then jsonb_build_object( 'run_line_id',l.id,'run_work_id',l.run_work_id,'captured_revision_id',l.captured_revision_id, 'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',a.component_kind, 'work_date',a.work_date,'unit_label',a.unit_label,'approved_quantity',a.approved_quantity::text, 'approved_unit_rate',a.approved_unit_rate::text,'expected_rate_detail_count',a.expected_rate_detail_count, 'evidence_ref',a.evidence_ref,'approved_source_ex_vat',a.source_pay_ex_vat::text, 'source_consumed_ex_vat',l.source_consumed_ex_vat::text,'frozen_ex_vat',l.frozen_ex_vat::text, 'frozen_vat',l.frozen_vat::text,'frozen_inc_vat',l.frozen_inc_vat::text) end, 'case',case when m.subject_kind='CASE' then jsonb_build_object( 'case_instruction_id',ci.id,'allocation_result_id',cr.id,'case_id',ci.case_id, 'case_kind',ci.case_kind,'case_subtype',ci.case_subtype,'tax_treatment',ci.tax_treatment, 'instruction_kind',ci.instruction_kind,'direction',ci.direction,'payroll_stage',ci.payroll_stage, 'resolution_ref',ci.resolution_ref,'explanation',ci.explanation, 'allocated_target_ex_vat',cr.allocated_target_ex_vat::text,'allocated_target_vat',cr.allocated_target_vat::text, 'allocated_target_inc_vat',cr.allocated_target_inc_vat::text) end)",
+    "jsonb_build_object( 'run_line_id',l.id,'run_work_id',l.run_work_id,'captured_revision_id',l.captured_revision_id, 'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',a.component_kind, 'work_date',a.work_date,'unit_label',a.unit_label,'approved_quantity',a.approved_quantity::text, 'approved_unit_rate',a.approved_unit_rate::text,'expected_rate_detail_count',a.expected_rate_detail_count, 'evidence_ref',a.evidence_ref,'approved_source_ex_vat',a.source_pay_ex_vat::text, 'source_consumed_ex_vat',l.source_consumed_ex_vat::text,'frozen_ex_vat',l.frozen_ex_vat::text, 'frozen_vat',l.frozen_vat::text,'frozen_inc_vat',l.frozen_inc_vat::text)",
+    "jsonb_build_object( 'case_instruction_id',ci.id,'allocation_result_id',cr.id,'case_id',ci.case_id, 'case_kind',ci.case_kind,'case_subtype',ci.case_subtype,'tax_treatment',ci.tax_treatment, 'instruction_kind',ci.instruction_kind,'direction',ci.direction,'payroll_stage',ci.payroll_stage, 'resolution_ref',ci.resolution_ref,'explanation',ci.explanation, 'allocated_target_ex_vat',cr.allocated_target_ex_vat::text,'allocated_target_vat',cr.allocated_target_vat::text, 'allocated_target_inc_vat',cr.allocated_target_inc_vat::text)",
+    "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('run_id',v_run,'status',v_result->>'status', 'selection_state',v_result->>'selection_state','selection_count',v_header.selection_count::text, 'selected_candidate_count',v_header.selected_candidate_count::text)",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',p_args->>'selection_revision','page_no',v_result->>'page_no', 'item_count',v_result->>'item_count','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',v_result->>'selection_revision','sealed',v_result->'sealed', 'selected_count',v_result->>'selected_count','excluded_count',v_result->>'excluded_count','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'command_id',v_result->>'command_id', 'agency_sequence',v_result->>'agency_sequence','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase','reason',v_result->>'reason', 'review_revision',v_header.review_revision::text,'all_ready',v_result->'all_ready', 'replay',coalesce(v_result->'replay','false'::jsonb))",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
+  ],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object( 'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind, 'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text, 'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text, 'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text, 'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false))",
+    "pg_catalog.jsonb_build_object('work_id',c.work_id,'expected_revision_id',c.expected_revision_id, 'selection_mode',c.selection_mode,'selection_state',c.selection_state,'page_count',c.page_count::text,'component_count',c.component_count::text)",
+    "pg_catalog.jsonb_build_object('selection_no',c.selection_no::text, 'approved_line_id',c.approved_line_id,'expected_revision_id',c.expected_revision_id,'component_key',c.component_key)",
+    "pg_catalog.jsonb_build_object('run_worker_id',w.run_worker_id,'candidate_id',w.candidate_id, 'worker_status',w.worker_status,'frozen_ex_vat',w.frozen_ex_vat::text,'frozen_vat',w.frozen_vat::text, 'frozen_inc_vat',w.frozen_inc_vat::text,'review_issue_code',w.review_issue_code)",
+    "pg_catalog.jsonb_build_object('run_work_id',w.run_work_id,'work_id',w.work_id,'original_timesheet_id',w.original_timesheet_id, 'captured_revision_id',w.captured_revision_id,'current_revision_id',w.current_revision_id,'newer_approval_available',w.newer_approval_available)",
+    "pg_catalog.jsonb_build_object('run_line_id',l.run_line_id,'line_no',l.line_no::text, 'original_timesheet_id',l.original_timesheet_id,'captured_revision_id',l.captured_revision_id,'component_key',l.component_key, 'component_kind',l.component_kind,'work_date',l.work_date,'source_pay_channel',l.source_pay_channel,'target_pay_channel',l.target_pay_channel, 'source_consumed_ex_vat',l.source_consumed_ex_vat::text,'frozen_ex_vat',l.frozen_ex_vat::text,'frozen_vat',l.frozen_vat::text,'frozen_inc_vat',l.frozen_inc_vat::text)",
+    "pg_catalog.jsonb_build_object('shift_detail_id',s.id,'detail_no',s.detail_no::text,'work_date',s.work_date, 'shift_start_at',s.shift_start_at,'shift_end_at',s.shift_end_at,'shift_start_local',s.shift_start_local,'shift_end_local',s.shift_end_local, 'shift_overnight',s.shift_overnight,'submitted_minutes',s.submitted_minutes::text,'approved_minutes',s.approved_minutes::text, 'approved_hours',s.approved_hours::text,'detail_label',s.detail_label,'segment_pay_ex_vat',s.segment_pay_ex_vat::text,'pay_excluded',s.pay_excluded, 'hours_day',s.hours_day::text,'hours_night',s.hours_night::text,'hours_sat',s.hours_sat::text,'hours_sun',s.hours_sun::text,'hours_bh',s.hours_bh::text)",
+    "pg_catalog.jsonb_build_object('break_detail_id',b.id,'break_no',b.break_no::text,'break_start_at',b.break_start_at, 'break_end_at',b.break_end_at,'break_start_local',b.break_start_local,'break_end_local',b.break_end_local,'break_minutes',b.break_minutes::text)",
+    "pg_catalog.jsonb_build_object('rate_detail_id',r.id,'bucket',r.bucket,'approved_hours',r.approved_hours::text,'source_pay_rate',r.source_pay_rate::text)",
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',v_complete)"
+  ],
+  "private.bpay_next_channel_drafts_page_v1(uuid)": [
+    "pg_catalog.jsonb_build_object( 'run_id',p_run_id,'pay_channel',c.pay_channel)",
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',true)"
+  ],
+  "private.bpay_next_channel_worker_page_v1(uuid,text,uuid,integer)": [
+    "pg_catalog.jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+  ],
+  "private.bpay_next_channel_status_page_v1(uuid,text,uuid,integer,integer)": [],
+  "public.bpay_next_payment_history_page_v1(jsonb)": [
+    "jsonb_build_object('section',k,'parent',d->>'parent','keys',d->'keys', 'fields',string_to_array(d->>'fields',','),'amount_scope',d->>'state', 'applicability',case when v_work is not null and k in ('COMMANDS','CASES') then 'CANDIDATE_ONLY_USE_REFERENCED_PARENT' else 'SCOPE_QUALIFIED' end)",
+    "jsonb_build_object('version','PAYMENT_HISTORY_V1','candidate_id',v_candidate,'work_id',v_work, 'sections',v_rows,'terminal',true,'next_cursor',null,'consistency','LIVE_KEYSET_REFRESH_FOR_LATE_COMMIT', 'scalar_encoding','STRING_OR_NULL','unavailable',array['MOVED_ROOT_FLAT_PAID_BINDING', 'CANONICAL_MULTI_CHANNEL_VECTOR','MOVE_COMPARISON_RECEIPT','GENERAL_APPROVAL_ACTOR_REASON_NOT_CAPTURED_IN_NEXT_ROWS'] ||case when v_work is not null then array['TIMESHEET_COMMAND_WITHOUT_WORK_OR_CASE_ANCESTRY'] else array[]::text[] end)",
+    "jsonb_build_object(''key'',jsonb_build_array(%s),''data'',jsonb_build_object(%s))",
+    "jsonb_build_object(%s)",
+    "jsonb_build_object('version','PAYMENT_HISTORY_CURSOR_V1','scope_kind',v_scope_kind, 'scope_id',v_scope_id,'section',v_section,'parent_id',v_parent,'context_id',v_context, 'component_key',v_component,'upper',v_upper,'key',v_last)",
+    "jsonb_build_object('version','PAYMENT_HISTORY_V1','candidate_id',v_candidate,'work_id',v_work, 'section',v_section,'parent_id',v_parent,'context_id',v_context,'component_key',v_component,'amount_scope',v_def->>'state', 'consistency','LIVE_KEYSET_REFRESH_FOR_LATE_COMMIT','rows',v_rows,'upper',v_upper, 'terminal',not v_more,'next_cursor',v_cursor)"
+  ],
+  "public.bpay_next_bind_stored_credit_v1(uuid,uuid,uuid)": []
+});
+function typedObjectConstructors(body){
+  const result=[];
+  for(const call of body.matchAll(/\b(?:pg_catalog\s*\.\s*)?jsonb?_build_object\s*\(/gi)){
+    let end=call.index+call[0].length,depth=1,quote=false;
+    for(;end<body.length&&depth;end++){
+      const c=body[end];
+      if(c==="'"){if(quote&&body[end+1]==="'"){end++;continue;}quote=!quote;}
+      else if(!quote){if(c==='(')depth++;if(c===')')depth--;}
+    }
+    if(depth)throw Error('BPAY_NEXT_TRANSPORT_CONSTRUCTOR_UNCLOSED');
+    result.push(body.slice(call.index,end).replace(/\s+/g,' ').trim());
+  }
+  return result;
+}
+
+export function assertTypedFinancialProjection(source,file,signature){
+  const parts=executableParts(source,file).filter(part=>part.signature===signature);
+  if(parts.length!==1||parts[0].unclassified)throw Error(`BPAY_NEXT_TRANSPORT_BODY_MISSING: ${signature}`);
+  const expected=TYPED_OBJECT_CONSTRUCTORS[signature];
+  if(expected&&JSON.stringify(typedObjectConstructors(parts[0].text))!==JSON.stringify(expected))throw Error(`BPAY_NEXT_TYPED_REPLY_KEYS_CHANGED: ${signature}`);
+  const body=parts[0].text.toLowerCase(),flat=body.replace(/\s+/g,' ').trim();
+  if(signature==='private.bpay_next_simple_break_page_v1(uuid,uuid,integer,integer)'){
+    const declaration=sqlWithoutComments(source).replace(/\s+/g,' ').toLowerCase();
+    const queries=[...flat.matchAll(/\breturn\s+query\s+(select\b[\s\S]*?\bfrom\b)/g)];
+    if(!declaration.includes(TYPED_BREAK_RETURN)||queries.length!==1||queries[0][1]!==TYPED_BREAK_QUERY)throw Error(`BPAY_NEXT_TYPED_PROJECTION_CHANGED: ${signature}`);
+  }
+  if(signature==='public.bpay_next_payment_history_page_v1(jsonb)'&&
+    (!flat.includes("v_fields:=v_fields||format('%l,t.%i::text',v_column,v_column)")
+      ||!flat.includes("'scalar_encoding','string_or_null'")))throw Error(`BPAY_NEXT_DECIMAL_TEXT_MISSING: ${signature}`);
+  const scalar=new Set(['true','false','null']);
+  for(const match of body.matchAll(/\b([a-z_][a-z0-9_]*)\s+(?:jsonb?|uuid|text|boolean|date|timestamptz)\b/g))scalar.add(match[1]);
+  for(const match of body.matchAll(/\b(?:pg_catalog\s*\.\s*)?(?:to_jsonb?|row_to_json|jsonb?_agg|jsonb?_build_array)\s*\(\s*(?:\(\s*)*([a-z_][a-z0-9_]*)\s*(?:\.\s*\*)?\s*(?:\)\s*)*(?=[,)])/g)){
+    const value=match[1],tail=parts[0].text.slice(match.index).replace(/\s+/g,' ');
+    if(value==='page'&&(TYPED_PAGE_PROJECTIONS[signature]??[]).some(prefix=>tail.startsWith(prefix)))continue;
+    if(!scalar.has(value))throw Error(`BPAY_NEXT_OPAQUE_FINANCIAL_ROW: ${signature} (${value})`);
+  }
+  for(const call of body.matchAll(/\b(?:pg_catalog\s*\.\s*)?(?:to_jsonb?|row_to_json)\s*\(/g)){
+    const argument=body.slice(call.index+call[0].length);
+    if(!/^(?:\s*\()*\s*[a-z_][a-z0-9_]*\s*(?:\.\s*\*)?\s*(?:\)\s*)*(?=[,)])/.test(argument))throw Error(`BPAY_NEXT_OPAQUE_FINANCIAL_ROW: ${signature}`);
+  }
+  if(/\breturn\s+query\s+select\s+(?:(?:distinct|all)\s+)?(?:[a-z_][a-z0-9_]*\s*\.\s*)?\*/.test(body)
+    ||(signature==='public.bpay_next_financial_intake_v1(uuid,text,jsonb)'&&/\breturn\s+v_result\s*;/.test(body)))throw Error(`BPAY_NEXT_OPAQUE_FINANCIAL_ROW: ${signature}`);
+  if(/::\s*(?:pg_catalog\s*\.\s*)?(?:real|float[48]?|double\s+precision)\b/.test(body))throw Error(`BPAY_NEXT_FLOAT_TRANSPORT_FORBIDDEN: ${signature}`);
+  const money=/\b(?:approved|realised|held|residual|funded|recovered|written_off|source_consumed|source_reserved|target_amount|frozen|frozen_gross|gross)_(?:source_)?(?:ex_vat|vat|inc_vat)\b|^(?:entered_paye_net|accepted_recoveries|accepted_net_additions|cash_amount|original_cash_amount|principal_(?:approved|funded|recovered|written_off)|active_hold_amount|amount_(?:owed|held|reissued_paid|available)|applied_amount|remaining_amount|protected_amount)$/;
+  if(!signature.startsWith('public.bpay_next_payment_history_page_v1('))for(const match of flat.matchAll(/'([a-z_][a-z0-9_]*)'\s*,\s*/g)){
+    if(!money.test(match[1]))continue;
+    if(/->>?\s*$/.test(flat.slice(0,match.index)))continue; // operand key, not a reply key
+    const start=match.index+match[0].length;let end=start,depth=0,quote=false;
+    for(;end<flat.length;end++){
+      const token=flat[end];
+      if(token==="'"){if(quote&&flat[end+1]==="'"){end++;continue;}quote=!quote;continue;}
+      if(quote)continue;
+      if(token==='(')depth++;
+      if(token===')'){if(depth===0)break;depth--;}
+      if((token===','&&depth===0)||token===';')break;
+    }
+    const value=flat.slice(start,end);
+    if(!/::\s*(?:pg_catalog\s*\.\s*)?text\s*\)*$|->>\s*'[^']+'\s*\)*$|^null$/.test(value.trim()))throw Error(`BPAY_NEXT_DECIMAL_TEXT_MISSING: ${signature} (${match[1]})`);
+  }
+}
+
 export function assertRoutineHistoryPoints(source,file,signature){
   const parts=executableParts(source,file).filter(part=>part.signature===signature);
   if(parts.length!==1||parts[0].unclassified)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
@@ -694,13 +955,15 @@ export function verifyBpayNextSourceGates(){
   git(['merge-base','--is-ancestor',FROZEN_BASE,'HEAD']);
   const current=inventory(),changed=changedSourcePaths();
   const {routines,migrationRoots}=definerInventory(current),protectedSignatures=new Map(),frozenSources=new Map();
-  for(const signature of ROUTINE_WORK_SIGNATURES){
+  for(const signature of new Set([...ROUTINE_WORK_SIGNATURES,...TYPED_TRANSPORT_SIGNATURES])){
     const final=routines.get(signature)?.at(-1);
     if(!final)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
     const source=read(final.physical).replaceAll('\r\n','\n');
     const rows=scanManagedSql(source).statements.filter(row=>routineDefinitions(source.slice(row.start,row.end),final.physical).includes(signature));
     if(rows.length!==1)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
-    assertRoutineHistoryPoints(source.slice(rows[0].start,rows[0].end),final.physical,signature);
+    const statement=source.slice(rows[0].start,rows[0].end);
+    if(ROUTINE_WORK_SIGNATURES.includes(signature))assertRoutineHistoryPoints(statement,final.physical,signature);
+    if(TYPED_TRANSPORT_SIGNATURES.includes(signature))assertTypedFinancialProjection(statement,final.physical,signature);
   }
   for(const file of FROZEN_FILES){
     const base=spawnSync('git',['show',`${FROZEN_BASE}:${file}`],{cwd:repoRoot,maxBuffer:64*1024*1024,windowsHide:true});
@@ -757,7 +1020,7 @@ export function verifyBpayNextSourceGates(){
   for(const hazard of specialConstructViolations(retainedProjection,projectionFile))if(correctionSignatures.has(JSON.parse(hazard.key)[0])&&hazard.hazard.startsWith('ROWTYPE_SELECT:'))projectionHazards.set(hazard.key,1);
   const sourceFailures=[];
   for(const file of sources){
-    const source=read(file);assertSqlWriteBoundaries(source,file);
+    const source=read(file);assertSqlWriteBoundaries(source,file);assertNextExactNumericTypes(source,file);
     if(changed.has(file)){
       try{assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:baselineHazards);assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}
@@ -778,5 +1041,5 @@ export function verifyBpayNextSourceGates(){
     rpcRoots.add(final.root);
   }
   for(const file of rpcRoots)assertRpcReload(readManagedClosure(file,repoRoot).expanded,file);
-  return {frozenFiles:FROZEN_FILES.length,frozenTriggers:authorityPolicy.triggers.size,frozenTables:authorityPolicy.tables.size,protectedSignatures:protectedSignatures.size,sqlSources:sources.size,rpcRoots:rpcRoots.size,routineWorkSignatures:ROUTINE_WORK_SIGNATURES.length};
+  return {frozenFiles:FROZEN_FILES.length,frozenTriggers:authorityPolicy.triggers.size,frozenTables:authorityPolicy.tables.size,protectedSignatures:protectedSignatures.size,sqlSources:sources.size,rpcRoots:rpcRoots.size,routineWorkSignatures:ROUTINE_WORK_SIGNATURES.length,typedTransportSignatures:TYPED_TRANSPORT_SIGNATURES.length};
 }

@@ -1,10 +1,49 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
+import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
 
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
+});
+test('PF09 NEXT column types require exact numeric while prose and private guards remain allowed',()=>{
+  for(const type of ['float','float4','float8','real','double precision','pg_catalog.float8']){
+    for(const source of [`create table private.bpay_next_amount(id uuid,amount ${type});`,
+      `alter table private.bpay_next_amount add column amount ${type};`,
+      `alter table private.bpay_next_amount alter column amount type ${type};`,
+      `do $$begin alter table private.bpay_next_amount add column amount ${type}; end$$;`]){
+      assert.throws(()=>assertNextExactNumericTypes(source,'next.sql'),/BPAY_NEXT_FLOAT_COLUMN_FORBIDDEN/);
+    }
+  }
+  assert.doesNotThrow(()=>assertNextExactNumericTypes('-- real history\ncreate table private.bpay_next_amount(amount numeric(30,6), label text);','next.sql'));
+  assert.doesNotThrow(()=>assertNextExactNumericTypes('select p.* into v_position from private.bpay_next_position p where p.work_id=work for update;','next.sql'));
+});
+test('PF09 transported rows retain explicit fields and exact decimal text, with private locks permitted',()=>{
+  const wrap=body=>`create function public.bpay_next_transport_example(a uuid) returns jsonb language plpgsql
+    as $body$ declare v_row private.bpay_next_transfer%rowtype; begin ${body} end $body$;`;
+  const signature='public.bpay_next_transport_example(uuid)';
+  assert.doesNotThrow(()=>assertTypedFinancialProjection(wrap("select t.* into v_row from private.bpay_next_transfer t where t.id=a for update; return jsonb_build_object('cash_amount',v_row.cash_amount::text);"),'source.sql',signature));
+  for(const expression of ['to_jsonb(v_row)','to_jsonb((v_row))','to_jsonb(v_row.*)',
+    'row_to_json(c)','jsonb_agg(c)','to_jsonb((select c from private.bpay_next_transfer c))',
+    "jsonb_build_object('cash_amount',v_row.cash_amount)",
+    "jsonb_build_object('cash_amount',(v_row.cash_amount::text)::numeric)"]){
+    assert.throws(()=>assertTypedFinancialProjection(wrap('return '+expression+';'),'source.sql',signature),/BPAY_NEXT_(?:OPAQUE_FINANCIAL_ROW|DECIMAL_TEXT_MISSING)/);
+  }
+  const file='supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql',source=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+  const work='private.bpay_next_current_work_page_v1(uuid,date,uuid,integer)';
+  assert.doesNotThrow(()=>assertTypedFinancialProjection(source,file,work));
+  for(const changed of [source.replace('w.id as work_id,w.candidate_id','w.*'),
+    source.replace('r.approved_source_ex_vat::text','r.approved_source_ex_vat'),
+    source.replace('w.id as work_id,w.candidate_id','w.id as work_id,w.candidate_id,w.unknown_field'),
+    source.replace("w.approval_state='APPROVED'","w.approval_state='approved'")]){
+    assert.throws(()=>assertTypedFinancialProjection(changed,file,work),/BPAY_NEXT_OPAQUE_FINANCIAL_ROW/);
+  }
+  const prepFile='supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql';
+  const prep=fs.readFileSync(new URL('../'+prepFile,import.meta.url),'utf8');
+  const prepSignature='public.bpay_next_preparation_page_v1(uuid,text,jsonb)';
+  const added=prep.replace('false)) as value',"false),'extra_financial',l) as value");
+  assert.notEqual(added,prep);
+  assert.throws(()=>assertTypedFinancialProjection(added,prepFile,prepSignature),/BPAY_NEXT_TYPED_REPLY_KEYS_CHANGED/);
 });
 test('PF04 routine history reads require the whole reviewed point clause and finite helper edges',()=>{
   const signature='private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)';
