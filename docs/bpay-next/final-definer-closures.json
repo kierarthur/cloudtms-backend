@@ -3262,16 +3262,19 @@
     },
     {
       "signature": "private.bpay_next_contract_rate_rows_v1(jsonb,jsonb,jsonb,numeric,numeric)",
-      "finalRoot": "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql",
+        "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1510_banking_pay_next_rate_rows_v1.sql"
+        "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-01 exact canonical available/approved-used rate freeze; ordinary approval next editor WB-36 then WB-02/DY-04/DY-06/DY-10/DR-38",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4029,19 +4032,21 @@
     },
     {
       "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "WB-01 exact canonical available/approved-used rate freeze; ordinary approval next editor WB-36 then WB-02/DY-04/DY-06/DY-10/DR-38",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
