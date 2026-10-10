@@ -837,7 +837,11 @@ function errorResponse(error, correlationId, office = false, safeDiagnosticDetai
   // Stage 2 H3: a Banking Pay busy refusal is a clean, retryable 409. It
   // carries no transport diagnostic, so no database text reaches the client.
   const busy = bpayBusyEnvelope(error);
-  if (busy) return jsonResponse(busy.status, { ...busy.body, retryable: true, request_id: correlationId });
+  if (busy) return jsonResponse(busy.status, {
+    ...busy.body, retryable: true, request_id: correlationId,
+    ...(busy.body.error_code === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY'
+      ? { retry_class: 'RETRY_SAME_REQUEST' } : {})
+  });
   const code = office ? officeErrorCode(error) : knownErrorCode(error);
   let status = error instanceof CandidateHttpError ? error.status : 400;
   if (AUTH_ERROR_CODES.has(code)) status = 401;

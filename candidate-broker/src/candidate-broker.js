@@ -1191,6 +1191,19 @@ async function publicSafePrivateResponse(response, env = null) {
     error_code: errorCode,
     request_id: text(source.request_id) || undefined
   };
+  if (response.status === 409 && isObject(source) && source.ok === false
+      && source.error_code === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY'
+      && source.retryable === true && source.retry_class === 'RETRY_SAME_REQUEST'
+      && source.failed_rpc_outcome === 'ROLLED_BACK' && source.automatic_retry === false
+      && source.workflow_outcome === 'NOT_ESTABLISHED') {
+    Object.assign(body, {
+      error_code: 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY',
+      message: 'Another Source update is in progress. Try again in a moment.',
+      retryable: true, retry_class: 'RETRY_SAME_REQUEST',
+      failed_rpc_outcome: 'ROLLED_BACK', automatic_retry: false,
+      workflow_outcome: 'NOT_ESTABLISHED'
+    });
+  }
   const transportDiagnostic = publicTestTransportDiagnostic(env, source);
   if (transportDiagnostic) body.details = { transport_diagnostic: transportDiagnostic };
   if (['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 'CANDIDATE_CHALLENGE_RESEND_LIMIT'].includes(errorCode)
