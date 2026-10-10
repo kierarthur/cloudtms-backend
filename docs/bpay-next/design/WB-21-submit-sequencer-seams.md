@@ -94,4 +94,3 @@ DR02-D10 explicitly allows until DR06: “Preparation started — run <id>”. T
 | BE preparation raw RPC transport | 642a7d989f526c821b36eb58b1bb00f32439da953bc260c35ac290601fd37c34 |
 
 Full WB21/WB23/WB25/WB26 cards and exact checklist rows, shared seven-step interface, DR02/DR06 owning rows and current1832 intake allowlist were read. This is source investigation, not implementation or in-app acceptance.
-

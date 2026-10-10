@@ -92,4 +92,3 @@ Acceptance is the place for actual approval/current-applied, native pay-hold, ru
 | 0310 Case guards | 7dd5085d3307a0194b3745487cc19a952ee3b8cb11d03f096d275d23632500fe |
 
 The in-progress1832 membership schema was read only for context; this note does not approve that draft or assert implementation completeness.
-
