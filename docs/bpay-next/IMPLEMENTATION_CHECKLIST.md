@@ -1428,10 +1428,10 @@ Dependencies: F-03, F-04, F-05, F-06, F-14, WB-06, WB-08, F-16; successor positi
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-05-D03 | DOC: 1610 later Source capture delta | LOCAL_ONLY | Reconcile local source-book/query/channel seams vs installed body and final SP20/DR38/move/boundary chain; do not overwrite local source with installed old repeatable. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-05-D04 | DOC: 1620 later Source hold delta | LOCAL_ONLY | Reconcile local Source book/channel seam vs installed body; preserve residual and hold equality while adding only exact boundary decision consumption. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-05-D08 | REPEATABLE: private.bpay_next_stage_source_current_v1(p_root_timesheet_id uuid, p_source_event_id uuid, p_expected_head_id uuid) | INSTALLED_ON_TEST | Working installed stage signature and first-Authorise caller exists. Reconcile latest exact root/HEAD/protection/physical evidence and separate Pay Query/invoice contracts; metadata alone does not prove current local successor conformance. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-05-D09 | REPEATABLE: private.bpay_next_publish_source_staged_pair_v1(p_work_ids uuid[], p_revision_ids uuid[], p_source_event_ids uuid[]) | INSTALLED_ON_TEST | Working installed publisher signature and first-Authorise tail exists. Keep genuine Source approval, atomic typed member publication and Candidate order; add finite contribution/barrier hooks, not proposal=pay. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-05-D03 | DOC: 1610 later Source capture delta | LOCAL_ONLY | Reconcile local source-book/query/channel seams vs installed body and final SP20/DR38/move/boundary chain; do not overwrite local source with installed old repeatable. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-05-D04 | DOC: 1620 later Source hold delta | LOCAL_ONLY | Reconcile local Source book/channel seam vs installed body; preserve residual and hold equality while adding only exact boundary decision consumption. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-05-D08 | REPEATABLE: private.bpay_next_stage_source_current_v1(p_root_timesheet_id uuid, p_source_event_id uuid, p_expected_head_id uuid) | INSTALLED_ON_TEST | Working installed stage signature and first-Authorise caller exists. Reconcile latest exact root/HEAD/protection/physical evidence and separate Pay Query/invoice contracts; metadata alone does not prove current local successor conformance. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-05-D09 | REPEATABLE: private.bpay_next_publish_source_staged_pair_v1(p_work_ids uuid[], p_revision_ids uuid[], p_source_event_ids uuid[]) | INSTALLED_ON_TEST | Working installed publisher signature and first-Authorise tail exists. Keep genuine Source approval, atomic typed member publication and Candidate order; add finite contribution/barrier hooks, not proposal=pay. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1452,6 +1452,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A receipt-published Source line and a book-bound line appear once each (NX-008, NX-019, NX-018, NX-005); every Weekly Source caller listed in the completion note reaches the publisher (NX-023).
   - A Contract A->B move shows the moved work once, under B, after the Contract-move review completes (RQ-229, J2f).
   - "Recover finalised pay" in Weekly Source still works on the NEXT agency (LSV-132). Preserve genuine Source facts/permissions and NEXT publication (OR-45/B4.4); no old Banking regression.
+
+WB05 ITEM and D03/D04/D08/D09 source BUILT/REVIEWED at 01944e0be8a04825aae90f5edde77d82ddd2caa6. Evidence design/WB-05-current-closure.md and three WB05 reviews; BD060 exact pair preholds and actual SP12 hook census recorded. OR45/SP02 controls old Recover wording. Hosted/app/queue/timing NOT_RUN.
 
 ## WB-07 — Pay Query state is visible in Banking Pay NEXT (Banking side only)
 
