@@ -306,3 +306,11 @@ PF09 localcommita8089ee7 complete; exactthreeobjects listed beforebuild in desig
 
 Whole ITEM BUILT22/288 REVIEWED22/288. Exactthreeobjects complete underBD028: shared London/dateonlypresentation, finite actualconsumer/sourcecheck, futurejoinedNOT_RUN. IndependentreviewsPASS; fourhistoryexceptions closed. Source63/63 syntax/diff/dbcheck310/812 unchangedsolePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. No SQL/Worker/business/fixtures/hosted/timing/externalaction. BUILD-FE reviewed localcommit recorded below; proceedPF12sequence25.
 BUILD-FE PF11 reviewed localcommit236fc42; BUILD-BE PF11 evidence checkpoint follows.
+
+### PF-12 scope checkpoint — 10/10/2026 London
+
+Exact three checklist objects listed before build in design/PF-12-SCOPE.md. BD029 scopes the existing sheet/history keyboard, focus continuity and phone/theme CSS; shared local focus helper is the small support needed by both. No DB/Worker/money owner or future workflow. Joined app/timing NOT_RUN.
+
+### PF-12 complete — 10/10/2026 London
+
+Whole ITEM BUILT23/288 REVIEWED23/288. Exact three objects complete underBD029; finite focus/CSS findings corrected and fresh independent reviewPASS. 65/65 ordinary source/caller controls, seven source/final-definer controls, sixsyntax/diff/dbcheck310/812 unchangedsolePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. NoSQLtoload; alljoined375px/browser/keyboard/theme/fullWorker/queue/minute/timingNOT_RUN. BUILD-FE reviewedlocalcommit516aeee; BEevidencecommit follows. ProceedPF13sequence26.

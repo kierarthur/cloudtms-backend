@@ -618,9 +618,9 @@ Dependencies: F-16; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PF-12-D01 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: responsive/theme/keyboard controls completion | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Existing Escape/focus is baseline; complete narrow-width/theme CSS, explicit Close/back focus and keyboard reachability across CM/DY/XD controls. No installed-screen parity claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-12-D02 | SCREEN: banking-pay-reset-office-20261004/css/bpay-next-office.css :: narrow-width/theme styles | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Existing Escape/focus is baseline; complete narrow-width/theme CSS, explicit Close/back focus and keyboard reachability across CM/DY/XD controls. No installed-screen parity claim. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-12-D03 | CHECK: PF-12 future joined in-app TEST checklist | MISSING | Future keyboard/mouse every control, Escape/Close restores focus, phone width and light/dark legibility. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PF-12-D01 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: responsive/theme/keyboard controls completion | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Existing Escape/focus is baseline; complete narrow-width/theme CSS, explicit Close/back focus and keyboard reachability across CM/DY/XD controls. No installed-screen parity claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-12-D02 | SCREEN: banking-pay-reset-office-20261004/css/bpay-next-office.css :: narrow-width/theme styles | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Existing Escape/focus is baseline; complete narrow-width/theme CSS, explicit Close/back focus and keyboard reachability across CM/DY/XD controls. No installed-screen parity claim. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-12-D03 | CHECK: PF-12 future joined in-app TEST checklist | MISSING | Future keyboard/mouse every control, Escape/Close restores focus, phone width and light/dark legibility. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF-12-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -628,6 +628,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF
 
 At 375 px width the NEXT sheet and history modal show a reachable Close; Tab reaches every button; dark mode is legible. (RQ-256)
   - Joined future check: Future keyboard/mouse every control, Escape/Close restores focus, phone width and light/dark legibility. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Whole PF-12 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. PF12-COMPLETION.md; BD029; 65 ordinary source/caller controls, seven source/final-definer controls, syntax/dbcheck310/812/solePG17 unchangedseal552e0947/couplingPASS; joinedNOT_RUN Review: reviews/PF-12-focus-review.md; reviews/PF-12-css-review.md; reviews/PF-12-source-review.md PASS.
 
 ## PF-13 — Environment, Confirmation-of-Payee, funding and error banners under NEXT
 

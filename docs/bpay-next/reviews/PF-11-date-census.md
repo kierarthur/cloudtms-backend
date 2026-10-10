@@ -71,7 +71,7 @@ Owner module does not render a timestamp/civil day. Its timeouts/TTL metadata ar
 | `CASE_HOLDS` (42) | `created_at_utc`, `finished_at_utc` | `pay_week_start` |
 | `RESULTS` (43) | `created_at_utc` |  |
 | `COMMAND` (45) | `created_at_utc`, `sealed_at_utc` |  |
-| `JOBS` (46) | `available_at_utc` |  |
+| `JOBS` (46) | `available_at_utc`, `queue_wake_after_utc` |  |
 | `NET_REQUEST` (47) | `accepted_at_utc` |  |
 | `CANCEL_REQUEST` (51) | `started_at_utc`, `finished_at_utc` |  |
 | `REISSUE_CANCEL` (52) | `accepted_at_utc`, `completed_at_utc` |  |
@@ -130,3 +130,7 @@ The three finite history gaps above are now closed in current saved source. `js/
 
 - Current history SHA-256: `1fa2b62a050a1859ae29c0152b0a1b9aa01619c6d1ea9f725c5076886d0ebed6`.
 - Current history ordinary unit SHA-256: `8c9fef76951058926112c6263a49686b22a9f61361ca17f8d360cfa32c6b1b3f`.
+
+## PF-11 JOBS timestamp closure (second fresh follow-up)
+
+The complete temporal census now explicitly includes `JOBS.queue_wake_after_utc` (history section literal line 46), a timestamptz whose name does not end `_at_utc`. Current dispatch at 280 formats it alongside `captured_deadline`; ordinary positive source case at unit line 55 uses PostgreSQL fractional timestamp/offset notation and expects the exact London BST midnight crossover. The JOBS table entry above is corrected. Source closure PASS for this additional finite field; no execution or joined result. Current history SHA-256 `b81e0968410a2c6cc5500da50283d911c4ec603bc5b85f2b86de95b3d14cd258`; ordinary unit SHA-256 `a5f8cfd186accc30b079a85f487e3738f8afaabd3d674d1fbe842024714c875a`.
