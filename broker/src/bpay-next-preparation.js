@@ -61,7 +61,7 @@ const ROWS={
   ACCEPTED_WORK:{candidate_id:'uuid',accepted_input_id:'uuid',accepted_work_input_id:'uuid',work_id:'uuid',original_revision_id:'uuid',effective_revision_id:'uuid',selection_mode:'mode',selected_line_count:'integer',publication_command_id:'uuid',predecessor_sequence:'positive',source_kind:'acceptedSourceKind',query_disposition:'acceptedQuery?',query_state_sha256:'sha?',input_evidence_sha256:'sha',effective_cut_id:'uuid?',cut_state:'acceptedCutState'},
   CHANNEL_WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',pay_channel:'channel',worker_status:'workerStatus',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',review_issue_code:'issue?'},
   COMPONENTS:{approved_line_id:'uuid',line_no:'positive',component_key:'key',component_kind:'componentKind',work_date:'date?',source_pay_channel:'channel',
-    approved_source_ex_vat:'money',realised_source_ex_vat:'money?',held_source_ex_vat:'money?',residual_source_ex_vat:'money?',position_ready:'boolean'},
+    approved_source_ex_vat:'money',realised_source_ex_vat:'money?',held_source_ex_vat:'money?',residual_source_ex_vat:'money?',position_ready:'boolean',unit_label:'unit?',approved_quantity:'money?',approved_unit_rate:'money?',job_title:'label?',band_label:'label?',original_work_ref:'label?',original_timesheet_id:'uuid?',is_adjustment:'boolean?',correction_kind:'label?',associated_rate_schedule_id:'uuid?',associated_rate_family:'rateFamily?',associated_rate_code:'nativeRateCode?',available_paye_rate:'money?',available_umbrella_rate:'money?',available_charge_rate:'money?',approved_charge_rate:'money?',standard_rate_schedule:'standardSchedule'},
   WORK_CHOICES:{work_id:'uuid',expected_revision_id:'uuid?',selection_mode:'mode',selection_state:'selectionState',page_count:'integer',component_count:'integer'},
   SELECTED_COMPONENTS:{selection_no:'positive',approved_line_id:'uuid',expected_revision_id:'uuid',component_key:'key'},
   WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',frozen_ex_vat:'money?',frozen_vat:'money?',frozen_inc_vat:'money?',review_issue_code:'issue?'},
@@ -70,9 +70,9 @@ const ROWS={
     work_date:'date?',source_pay_channel:'channel',target_pay_channel:'channel',source_consumed_ex_vat:'money',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money'},
   SHIFTS:{shift_detail_id:'uuid',detail_no:'positive',work_date:'date',shift_start_at:'timestamp?',shift_end_at:'timestamp?',shift_start_local:'clock?',shift_end_local:'clock?',
     shift_overnight:'boolean?',submitted_minutes:'integer?',approved_minutes:'integer?',approved_hours:'money?',detail_label:'label?',segment_pay_ex_vat:'money?',pay_excluded:'boolean?',
-    hours_day:'money?',hours_night:'money?',hours_sat:'money?',hours_sun:'money?',hours_bh:'money?'},
+    hours_day:'money?',hours_night:'money?',hours_sat:'money?',hours_sun:'money?',hours_bh:'money?',segment_key:'key?',approved_segment_id:'uuid?',job_title:'label?',band_label:'label?'},
   BREAKS:{break_detail_id:'uuid',break_no:'positive',break_start_at:'timestamp?',break_end_at:'timestamp?',break_start_local:'clock?',break_end_local:'clock?',break_minutes:'integer'},
-  RATES:{rate_detail_id:'uuid',bucket:'bucket',approved_hours:'money',source_pay_rate:'money?'},
+  RATES:{rate_detail_id:'uuid',bucket:'bucket',approved_hours:'money',source_pay_rate:'money?',rate_schedule_id:'uuid?',available_paye_rate:'money?',available_umbrella_rate:'money?',available_charge_rate:'money?',approved_charge_rate:'money?'},
   CURRENT_WORK:{work_id:'uuid',candidate_id:'uuid',original_timesheet_id:'uuid',work_kind:'workKind',week_ending_date:'date',approval_state:'approvalState',
     current_revision_id:'uuid?',applied_revision_id:'uuid?',position_ready:'boolean',source_pay_channel:'channel?',timesheet_reference:'text?',client_display_name:'text?',approved_source_ex_vat:'money?'},
   STATUS:{transfer_id:'uuid',transfer_no:'transferNo',projection_id:'uuid?',execution_kind:'executionKind',status:'transferStatus',cash_amount:'money',original_transfer_id:'uuid?',reservation_state:'reservationState',remaining_reservation_cash:'cashMoney?',reservation_holds_state:'reservationHolds'},
@@ -88,7 +88,7 @@ const ROWS={
   CASE_COMPONENTS:{case_component_id:'uuid',case_id:'uuid',candidate_id:'uuid',component_ordinal:'positive',component_revision:'positive',
     case_kind:'caseKind',case_subtype:'caseSubtype',tax_treatment:'taxTreatment',instruction_kind:'instructionKind',direction:'direction',
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
-    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money'}
+    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null'}
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
@@ -136,6 +136,12 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='null')return v===null;
+  if(t==='unit')return typeof v==='string'&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=512;
+  if(t==='nativeRateCode')return typeof v==='string'&&!v.includes('\0')&&[...v].length>=1&&[...v].length<=245;
+  if(t==='rateFamily')return ['STANDARD','ADDITIONAL','MILEAGE'].includes(v);
+  if(t==='standardSchedule')return Array.isArray(v)&&v.length<=5&&v.every(x=>exact(x,{rate_schedule_id:'uuid',bucket:'bucket',available_paye_rate:'money?',available_umbrella_rate:'money?',available_charge_rate:'money?',approved_charge_rate:'money?'}))&&new Set(v.map(x=>x.bucket)).size===v.length&&new Set(v.map(x=>x.rate_schedule_id.toLowerCase())).size===v.length;
+
   if(t==='choiceNamespace')return exact(v,{agency_id:'uuid',owner_epoch:'positive',actor_user_id:'uuid',official_pay_date:'date',scope:'choiceScope'});
   if(t==='choiceScope')return exact(v,{candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel'});
   if(t==='choiceIntent'){
@@ -394,6 +400,13 @@ function result(payload,call,mutation){
   const [key,inputKey]=CURSORS[call.kind];let previous=call.args[inputKey];const caseIds=new Set();
   for(const row of payload.rows){
     if(!exact(row,ROWS[call.kind]))bad();
+      if(call.kind==='COMPONENTS'){
+        if((row.associated_rate_schedule_id===null)!==(row.associated_rate_family===null)||(row.associated_rate_schedule_id===null)!==(row.associated_rate_code===null)
+          ||(row.associated_rate_schedule_id===null&&['available_paye_rate','available_umbrella_rate','available_charge_rate','approved_charge_rate'].some(k=>row[k]!==null))
+          ||(row.original_timesheet_id===null&&row.original_work_ref!==null))bad();
+      }
+      if(call.kind==='RATES'&&row.rate_schedule_id===null&&['available_paye_rate','available_umbrella_rate','available_charge_rate','approved_charge_rate'].some(k=>row[k]!==null))bad();
+      if(call.kind==='SHIFTS'&&row.segment_key===null&&row.approved_segment_id!==null)bad();
     if(call.kind==='STATUS'&&!validReservation(payload.header,row))bad();
     if(call.kind==='CHANNEL_WORKERS'&&row.pay_channel!==call.args.pay_channel)bad();
     const value=row[key];

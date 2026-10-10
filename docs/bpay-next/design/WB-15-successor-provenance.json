@@ -72,5 +72,6 @@
   "publicCatalogue": "No new/removed publicSECDEF or ACL; verifier unchanged, no fresh catalogue execution claimed",
   "joinedAppAcceptance": "NOT_RUN; no12-group/timing/business experiment",
   "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
-  "deployment": "COMMITTED_NOT_INSTALLED"
+  "deployment": "COMMITTED_NOT_INSTALLED",
+  "backendCommit": "f458884a8155ff683e653c1e1f2a374235a1a397"
 }

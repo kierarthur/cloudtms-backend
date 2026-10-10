@@ -1,0 +1,76 @@
+{
+  "item": "WB-16",
+  "sequence": 64,
+  "state": "PARTLY_BUILT; whole ITEM and D07 require ordered joins",
+  "builderDecision": "BD072",
+  "exactDeliverables": [
+    "WB-16-D02",
+    "WB-16-D03",
+    "WB-16-D07"
+  ],
+  "successors": [
+    {
+      "object": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+      "chain": [
+        "0585",
+        "2019",
+        "2026"
+      ],
+      "change": "native retained Case parent Original/rule/current period Due/component Outstanding; recoverable NULL"
+    },
+    {
+      "object": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "chain": [
+        "2018",
+        "2019",
+        "2026"
+      ],
+      "change": "named current factual kinds only; Candidate-proved original physical reference/native rate/segment facts; successor removes nonexistent column"
+    },
+    {
+      "object": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "chain": [
+        "1946",
+        "2026"
+      ],
+      "change": "bounded GROUP_LINES seed before native enrichment and server known Ready/Waiting/Reserved totals only"
+    }
+  ],
+  "sourceFiles": {
+    "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql": "ee5f2d83158cb7bcb3afc331641051e2f531214782478f5ecb28d82458d6fe61",
+    "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql": "278bd4d3dccc1e7453a69d1d2e0e4bdcde7075e5fe5181c5fe090c4a9dfc7e8a"
+  },
+  "checks": {
+    "dbCheck": "328 migrations/854 repeatables PASS",
+    "localPg17": "CHANGED 0 migrations/4 repeatable closures compiled",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "a72d5e07f8939df7840e9ddd44613cc785320a39fbcc0432e87757abe9010da5",
+    "coupling": "PASS"
+  },
+  "reviews": [
+    "WB-16-detail-sql-review.md",
+    "WB-16-group-detail-sql-review.md",
+    "WB-16-detail-transport-review.md",
+    "WB-16-group-detail-transport-review.md",
+    "WB-16-detail-ui-source-review.md"
+  ],
+  "screens": {
+    "id": "SCR-10",
+    "method": "Actual local Office/native frames and strict transport; minimal fixed responses; hosted network aborted; no DB rows",
+    "policyReview": "38 PASS / 0 FAIL / 4 N/A; all 42 policy rows independently checked",
+    "screenshots": 13,
+    "review": "docs/bpay-next/screen-designs/SCR-10/review.md"
+  },
+  "pendingJoins": [
+    "WB25 day ticks",
+    "WB38 Snooze actions",
+    "WB27 estimate/headroom cap",
+    "WB29/WB45 saved rate decision/suggested fields/Original-New and whole resolution badges",
+    "WB17 exact Timesheet evidence navigation"
+  ],
+  "publicCatalogue": "No new/removed publicSECDEF or ACL; verifier unchanged; no fresh catalogue execution claimed",
+  "joinedAppAcceptance": "NOT_RUN",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED",
+  "frontendCommit": "4cfdbbe67a406e34c5dc18594282c14797ffd127"
+}
