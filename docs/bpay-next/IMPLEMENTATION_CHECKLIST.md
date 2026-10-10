@@ -1344,11 +1344,11 @@ Dependencies: WB-01, WB-08, F-16; successor positions: Workbench classifier `pri
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-02-D03 | REPEATABLE: private.bpay_next_source_withdrawal_guard_v1 | INSTALLED_ON_TEST | Existing qualified Source withdrawal guard installed by exact metadata; add actual finite work/origin-case WAIT projection hook and boundary timing, no zero/recovery. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-02-D04 | REPEATABLE: private.bpay_next_work_payable_state_v1(p_work_id uuid) | INSTALLED_ON_TEST | Coarse NOT_APPROVED/APPLY_PENDING/READY is real; replace no function with fake full classifier. New component admissibility/projection remains missing. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-02-D03 | REPEATABLE: private.bpay_next_source_withdrawal_guard_v1 | INSTALLED_ON_TEST | Existing qualified Source withdrawal guard installed by exact metadata; add actual finite work/origin-case WAIT projection hook and boundary timing, no zero/recovery. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-02-D04 | REPEATABLE: private.bpay_next_work_payable_state_v1(p_work_id uuid) | INSTALLED_ON_TEST | Coarse NOT_APPROVED/APPLY_PENDING/READY is real; replace no function with fake full classifier. New component admissibility/projection remains missing. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-02-D06 | REPEATABLE: private.bpay_next_workbench_refresh_case_v1(uuid) | MISSING | Exact case-component contributions and origin WAIT/control transitions; unrelated debt unaffected. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-02-D07 | REPEATABLE: private.bpay_next_work_wait_state_v1(uuid) | MISSING | Exact withdrawn-paid/Source unauthorised origin predicate; no Pay Query debt pause; frozen offer boundary inputs. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-02-D09 | REPEATABLE: public.weekly_source_first_authorise_v1(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid) | INSTALLED_ON_TEST | Keep installed qualified first-Authorise NEXT tail calling stage_current and publish_staged_pair after genuine approval. Reconcile exact latest Source protected/query/root deltas separately; finite maintained projection/runtime and full queue path remain unproved. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-02-D07 | REPEATABLE: private.bpay_next_work_wait_state_v1(uuid) | MISSING | Exact withdrawn-paid/Source unauthorised origin predicate; no Pay Query debt pause; frozen offer boundary inputs. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-02-D09 | REPEATABLE: public.weekly_source_first_authorise_v1(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text, p_actor_user_id uuid) | INSTALLED_ON_TEST | Keep installed qualified first-Authorise NEXT tail calling stage_current and publish_staged_pair after genuine approval. Reconcile exact latest Source protected/query/root deltas separately; finite maintained projection/runtime and full queue path remain unproved. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1366,6 +1366,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - If that paid Timesheet has an overpayment recovery, the recovery row shows "Waiting for re-authorisation — recovery paused" in Action Required straight after the unauthorise, and returns to Ready after re-authorising (WB-41, RQ-078).
   - Re-authorise returns appropriate scope Ready. Unauthorise after accepted Create, including during preparation, leaves first Draft unchanged and creates no zero revision, position job or debt; current next-run WAIT/Blocked projections update.
   - Unauthorising a Source week on the NEXT agency passes through the Source withdrawal guard (NX-009) and the week shows the same states (J1b); preserve genuine Source withdrawal guards, not an old Banking regression path.
+
+WB02 current source D03/D04/D07/D09 built/reviewed at 2bfad23967d8d2e45e9ba8956917d0daa9c919d5. Evidence design/WB-02-current-closure.md and reviews/WB-02-withdrawal-owner-review.md. D06/wholeITEM OPEN genuine WB06/WB41 joins; WB13 renderer later. Hosted/app/timingNOT_RUN.
 
 ## WB-06 — Ordered, targeted position application and the visible pending state
 
