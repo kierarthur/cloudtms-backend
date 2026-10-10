@@ -1260,16 +1260,16 @@ Dependencies: F-05, F-06, F-10; successor positions: `0570` selection append / s
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-36-D08 | MIGRATION: private.bpay_next_snooze | MISSING | Store exact work/revision and stable segment membership or whole-Timesheet scope, mutually exclusive; inclusive UK wake date; worker-pay digest, not client charge, governs wake. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D08 | MIGRATION: private.bpay_next_snooze | MISSING | Store exact work/revision and stable segment membership or whole-Timesheet scope, mutually exclusive; inclusive UK wake date; worker-pay digest, not client charge, governs wake. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-36-D09 | MIGRATION: private.bpay_next_snooze_event | MISSING | Append server-timestamped scope/actor/reason/wake facts atomically with ordered command and projection invalidation. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D10 | MIGRATION: private.bpay_next_snooze_warning_ack | MISSING | Exact warning body/revision receipt; read-only check does not write an acknowledgement. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D10 | MIGRATION: private.bpay_next_snooze_warning_ack | MISSING | Exact warning body/revision receipt; read-only check does not write an acknowledgement. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-36-D11 | DOC: SNOOZE_WARNING_ACK_ISSUE command / true SNOOZE_CHECK reader separation | MISSING | Exact warning body/revision receipt; read-only check does not write an acknowledgement. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D14 | MIGRATION: private.bpay_next_approved_segment | MISSING | Stable upstream segment identity and complete hours/rate/gross facts; unique revision/day/segment; validate parent totals. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D15 | MIGRATION: private.bpay_next_selected_segment | MISSING | Seal selected and excluded segment identity under the accepted cut; no per-shift payment unit. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D16 | MIGRATION: private.bpay_next_run_work_segment | MISSING | Immutable selected frozen breakdown and original gross credit; return reopens cash only, not wages. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D17 | MIGRATION: private.bpay_next_work_segment_origin_share | MISSING | Immutable hold and separate append-only effect membership; exact parent sums/FKs, no per-segment NET allocation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D18 | REPEATABLE: private.bpay_next_record_work_segment_origin_shares_v1 | MISSING | 1620 writes captured hold shares; 0200/0490 append realised effect membership; 1647 collection uses exact negative origins. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-36-D19 | REPEATABLE: private.bpay_next_work_segment_gross_balance_v1 | MISSING | Read derived gross from captured shares and existing parent owners; 0230/0240 retain gross and reissue only original cash. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D14 | MIGRATION: private.bpay_next_approved_segment | MISSING | Stable upstream segment identity and complete hours/rate/gross facts; unique revision/day/segment; validate parent totals. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D15 | MIGRATION: private.bpay_next_selected_segment | MISSING | Seal selected and excluded segment identity under the accepted cut; no per-shift payment unit. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D16 | MIGRATION: private.bpay_next_run_work_segment | MISSING | Immutable selected frozen breakdown and original gross credit; return reopens cash only, not wages. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D17 | MIGRATION: private.bpay_next_work_segment_origin_share | MISSING | Immutable hold and separate append-only effect membership; exact parent sums/FKs, no per-segment NET allocation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D18 | REPEATABLE: private.bpay_next_record_work_segment_origin_shares_v1 | MISSING | 1620 writes captured hold shares; 0200/0490 append realised effect membership; 1647 collection uses exact negative origins. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-36-D19 | REPEATABLE: private.bpay_next_work_segment_gross_balance_v1 | MISSING | Read derived gross from captured shares and existing parent owners; 0230/0240 retain gross and reissue only original cash. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1288,6 +1288,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 Prove one shift snoozed; shifts on different days; two same-day shifts snoozed and a third paid; whole-Timesheet mutual exclusion; wake and pay exactly the remainder; later corrected/reordered segments, prior payment, whole return and retry cannot resurrect or double-count excluded work.
+
+WB-36 current source: D08/D10/D14-D19 built/reviewed at 22863cce3c6f97cd7ac382e60f7cb060437e9722. Evidence design/WB-36-current-closure.md and reviews/WB-36-*.md. D09/D11 and whole ITEM remain OPEN for master-chain joins under BD054. Hosted/app/timing NOT_RUN.
 
 ## WB-08 — Maintained Workbench summary and control (the background-built Workbench)
 
