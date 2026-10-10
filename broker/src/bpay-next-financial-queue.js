@@ -182,7 +182,10 @@ export async function handleBpayNextFinancialQueueMessage(message, dependencies 
     || typeof dependencies.onFailure !== 'function') {
     return retry(message, errorResult('BPAY_NEXT_QUEUE_DEPENDENCY_UNAVAILABLE', true, false, 'RETRY_CALL'));
   }
-  const outcome = await stepBpayNextFinancialJob(call, { financialJobRpc: dependencies.financialJobRpc });
+  const outcome = await stepBpayNextFinancialJob(call, {
+    financialJobRpc: dependencies.financialJobRpc,
+    onStepMeasurement: dependencies.onStepMeasurement
+  });
   if (!outcome.ok) {
     if (call.action === 'CLAIM' && outcome.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
       message.ack();

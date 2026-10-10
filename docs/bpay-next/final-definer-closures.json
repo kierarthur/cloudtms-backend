@@ -12281,6 +12281,20 @@
       ],
       "owner": "F-25 BD019 parked protocol; latest surviving original authority",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_job_lifecycle_clock_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0352_banking_pay_next_job_lifecycle_clock_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0352_banking_pay_next_job_lifecycle_clock_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0352_banking_pay_next_job_lifecycle_clock_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0352_banking_pay_next_job_lifecycle_clock_v1.sql"
+      ],
+      "owner": "PF-06 missing job lifecycle clocks; private supporting trigger only",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

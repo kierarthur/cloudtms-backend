@@ -84,6 +84,7 @@ export async function handleBpayNextBackgroundMessage(message,deps) {
     }
     return await handleBpayNextFinancialQueueMessage(message,{
       financialJobRpc:deps.financialJobRpc,
+      onStepMeasurement:deps.onStepMeasurement,
       sendContinuation:envelope=>publish(deps,[envelope]),
       onFailure:deps.onFailure
     });

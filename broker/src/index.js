@@ -40993,6 +40993,9 @@ function bpayNextBackgroundDependencies(env) {
     runtimeRpc: createBpayNextRuntimeRpc(config),
     preparationExpiryRpc: createBpayNextPreparationExpiryRpc(config),
     financialJobRpc: createBpayNextFinancialJobRpc(config),
+    onStepMeasurement: (measurement, payQueryBusy) => {
+      console.info(payQueryBusy ? '[banking-pay-next] pay query admission busy step' : '[banking-pay-next] step', measurement);
+    },
     queue: env.BANKING_PAY_CONTINUATION_QUEUE,
     onFailure: async (failure) => {
       console.warn('[banking-pay-next] recoverable delivery refusal', {

@@ -12105,6 +12105,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_job_lifecycle_clock_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "080cda8ed29481210d4b65075bb265279a5912246b651395b9ba8c4b8e33f1c5"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_legacy_callback_enabled_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -50649,6 +50668,13 @@
       "definition": "CREATE TRIGGER bpay_next_internal_receipt_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_internal_receipt FOR EACH ROW EXECUTE FUNCTION private.bpay_next_internal_receipt_guard_v1()"
     },
     {
+      "name": "bpay_next_job_lifecycle_clock_v1",
+      "table": "bpay_next_job",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_job_lifecycle_clock_v1 BEFORE INSERT OR UPDATE ON private.bpay_next_job FOR EACH ROW EXECUTE FUNCTION private.bpay_next_job_lifecycle_clock_v1()"
+    },
+    {
       "name": "bpay_next_destination_state_guard_v1",
       "table": "bpay_next_net_destination_amount",
       "schema": "private",
@@ -85830,8 +85856,24 @@
           "generated": ""
         },
         {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "cursor_key",
           "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "finished_at_utc",
+          "type": "timestamp with time zone",
           "default": null,
           "identity": "",
           "not_null": false,
@@ -85923,6 +85965,14 @@
           "default": "transaction_timestamp()",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "started_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {

@@ -522,9 +522,9 @@ Dependencies: F-05, F-06, F-11; successor positions: none. Design note: not requ
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PF-06-D01 | MIGRATION: job/step clock and row-count completeness; only missing columns | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Census existing job/step clocks and counts before adding exact missing columns. Add {job_id,kind,step,rows,bytes,ms} logs; console warning is not a complete measurement hook. No payloads, secrets, nonces or personal financial data. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-06-D02 | QUEUE-CRON: broker/src/index.js :: structured step measurement hooks | MISSING | Implement the exact worker target after its existing dependencies. Census existing job/step clocks and counts before adding exact missing columns. Add {job_id,kind,step,rows,bytes,ms} logs; console warning is not a complete measurement hook. No payloads, secrets, nonces or personal financial data. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-06-D03 | CHECK: PF-06 future joined in-app TEST checklist | MISSING | Future step logs match stored state and separate DB/Worker/browser latency without sensitive data. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PF-06-D01 | MIGRATION: job/step clock and row-count completeness; only missing columns | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Census existing job/step clocks and counts before adding exact missing columns. Add {job_id,kind,step,rows,bytes,ms} logs; console warning is not a complete measurement hook. No payloads, secrets, nonces or personal financial data. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-06-D02 | QUEUE-CRON: broker/src/index.js :: structured step measurement hooks | MISSING | Implement the exact worker target after its existing dependencies. Census existing job/step clocks and counts before adding exact missing columns. Add {job_id,kind,step,rows,bytes,ms} logs; console warning is not a complete measurement hook. No payloads, secrets, nonces or personal financial data. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-06-D03 | CHECK: PF-06 future joined in-app TEST checklist | MISSING | Future step logs match stored state and separate DB/Worker/browser latency without sensitive data. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF-06-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -534,6 +534,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF
   - A small run started beside a large one shows its own enrolment delay (FIFO), and cancellation, return and PAYE update have their own step rows (RQ-245).
   - Pay Query admission busy replies are logged with their step identity (RQ-268 hook part).
   - Joined future check: Future step logs match stored state and separate DB/Worker/browser latency without sensitive data. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Whole PF-06 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. docs/bpay-next/PF-06-COMPLETION.md Review: docs/bpay-next/reviews/PF-06-worker-review.md.
 
 ## PF-04 — No history scans in routine work
 

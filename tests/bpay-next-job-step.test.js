@@ -14,6 +14,50 @@ const UNTIL = '2026-10-04T14:15:16.123456Z';
 const KINDS = ['PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE', 'SIMPLE_CANCEL', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT', 'CASE_CREATE'];
 const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'SIMPLE_CANCEL', 'INTERNAL_SETTLEMENT'];
 
+test('PF06 observes one completed bounded read with visited rows and preserves unknown counts', async () => {
+  for (const kind of ['TRANSFER_BUILD', 'CSV_RETURN']) {
+    const payload = result(kind), seen = [], dependencies = deps(payload);
+    dependencies.onStepMeasurement = (line, busy) => seen.push({ line, busy });
+    const outcome = await stepBpayNextFinancialJob(input(kind), dependencies);
+    assert.equal(outcome.ok, true);
+    assert.equal(dependencies.calls.length, 1);
+    assert.equal(seen.length, 1);
+    assert.deepEqual(Object.keys(seen[0].line).sort(), ['bytes','job_id','kind','ms','rows','step']);
+    assert.equal(seen[0].line.job_id, JOB);
+    assert.equal(seen[0].line.kind, kind);
+    assert.equal(seen[0].line.step, 'STEP');
+    assert.equal(seen[0].line.rows, kind === 'TRANSFER_BUILD' ? '100' : null);
+    assert.equal(seen[0].line.bytes, new TextEncoder().encode(JSON.stringify(payload)).byteLength);
+    assert.equal(seen[0].busy, false);
+    assert.ok(Number.isFinite(seen[0].line.ms) && seen[0].line.ms >= 0);
+    assert.equal(JSON.stringify(seen).includes(NONCE), false);
+    assert.equal(JSON.stringify(seen).includes(CURSOR), false);
+  }
+  const seen = [], value = prepareStep('PINNING');
+  const dependencies = deps(prepareReceipt('RESERVE'));
+  dependencies.onStepMeasurement = line => seen.push(line);
+  assert.equal((await stepBpayNextFinancialJob(value, dependencies)).ok, true);
+  assert.equal(seen[0].step, 'STEP:PINNING');
+});
+
+test('PF06 exact Pay Query contention is labeled without changing errors or observer failure disposition', async () => {
+  for (const message of ['WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY', 'SOME_OTHER_LOCK_BUSY']) {
+    const seen = [];
+    const dependencies = { financialJobRpc: async () => Response.json({code:'55P03',message}, {status:409}),
+      onStepMeasurement: (line, busy) => { seen.push({line,busy}); throw Error('observer failed'); } };
+    const outcome = await stepBpayNextFinancialJob(input(), dependencies);
+    assert.equal(outcome.error_code, 'BPAY_NEXT_JOB_TRANSACTION_RETRY');
+    assert.equal(outcome.recovery, 'RETRY_CALL');
+    assert.equal(outcome.outcome_unknown, false);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].busy, message === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY');
+    assert.equal(seen[0].line.rows, null);
+  }
+  const dependencies = deps();
+  dependencies.onStepMeasurement = () => { throw Error('logging failed'); };
+  assert.equal((await stepBpayNextFinancialJob(input(), dependencies)).ok, true);
+});
+
 test('case NET uses one bounded page and exposes a projection only at completion', async () => {
   const call = { ...input('PAYE_NET_ENTRY'), expected_phase: 'FINANCE_ALLOCATE', expected_cursor: null, limit: 17 };
   const unfinished = { ...result('PAYE_NET_ENTRY'), phase: 'FINANCE_ALLOCATE', done: false,

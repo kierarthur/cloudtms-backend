@@ -34,7 +34,7 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE',expected_cursor:string|null,limit:number}} FinancialJobCaseNetPageStep */
 /** @typedef {{signal:AbortSignal,timeoutMs:number,maxResponseBytes:number,routeClass:'OPERATION_NUDGE'}} FinancialJobRpcOptions */
-/** @typedef {{financialJobRpc?:(action:'CLAIM'|'STEP',jobId:string,jobKind:FinancialJobKind,args:Readonly<Record<string,string|number|null>>,options:FinancialJobRpcOptions)=>Promise<Response>}} FinancialJobDependencies */
+/** @typedef {{financialJobRpc?:(action:'CLAIM'|'STEP',jobId:string,jobKind:FinancialJobKind,args:Readonly<Record<string,string|number|null>>,options:FinancialJobRpcOptions)=>Promise<Response>,onStepMeasurement?:(measurement:Readonly<{job_id:string,kind:FinancialJobKind,step:string,rows:string|null,bytes:number|null,ms:number}>,payQueryBusy:boolean)=>void}} FinancialJobDependencies */
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const DECIMAL_INTEGER = /^(?:0|[1-9]\d{0,18})$/;
@@ -289,7 +289,7 @@ function prepareCheckpoint(payload) {
 
 // Read at most 128KiB encoded bytes before parsing any JSON; cancel unread
 // bodies on error/deadline, including late responses from an ignored signal.
-async function limitedJson(response, signal, unknown) {
+async function limitedJson(response, signal, unknown, measurement) {
   const maximum = BPAY_NEXT_JOB_LIMITS.responseBytes;
   const declared = response.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) {
@@ -301,6 +301,7 @@ async function limitedJson(response, signal, unknown) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const parts = [];
   let bytes = 0;
+  measurement.bytes = 0;
   const cancel = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
   try {
@@ -309,6 +310,7 @@ async function limitedJson(response, signal, unknown) {
       const { value, done } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
+      measurement.bytes = bytes;
       if (bytes > maximum) throw unknown('BPAY_NEXT_JOB_RESPONSE_TOO_LARGE');
       parts.push(decoder.decode(value, { stream: true }));
     }
@@ -361,6 +363,12 @@ function dependencyError(error, attempted, action) {
 export async function stepBpayNextFinancialJob(input, dependencies = {}) {
   let call, controller, timer;
   let attempted = false;
+  let started, payQueryBusy = false;
+  const measurement = { rows: null, bytes: null };
+  const observeBusy = (error) => {
+    const db = error?.json ?? error;
+    if (db?.code === '55P03' && db.message === 'WEEKLY_SOURCE_PAY_QUERY_ADMISSION_BUSY') payQueryBusy = true;
+  };
   try {
     call = callInput(input);
     if (typeof dependencies.financialJobRpc !== 'function') throw fault('BPAY_NEXT_JOB_DEPENDENCY_UNAVAILABLE', true, false, 'RETRY_CALL');
@@ -375,21 +383,42 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
     });
     const send = async () => {
       attempted = true;
+      started = performance.now();
       const response = await dependencies.financialJobRpc(call.action, call.jobId, call.jobKind, call.args, {
         signal: controller.signal, timeoutMs: BPAY_NEXT_JOB_LIMITS.timeoutMs,
         maxResponseBytes: BPAY_NEXT_JOB_LIMITS.responseBytes, routeClass: 'OPERATION_NUDGE'
       });
       if (!(response instanceof Response)) throw unknown('BPAY_NEXT_JOB_RESPONSE_INVALID');
-      const payload = await limitedJson(response, controller.signal, unknown);
-      if (!response.ok) throw dependencyError({ status: response.status, json: payload }, true, call.action);
-      return { ok: true, action: call.action, job_kind: call.jobKind, result: resultInput(payload, call, unknown) };
+      const payload = await limitedJson(response, controller.signal, unknown, measurement);
+      if (!response.ok) {
+        observeBusy(payload);
+        throw dependencyError({ status: response.status, json: payload }, true, call.action);
+      }
+      const result = resultInput(payload, call, unknown);
+      // Only the validated owner's per-call visited count has this meaning.
+      // CLAIM/single-step receipts and unknown outcomes have no such count.
+      measurement.rows = Object.hasOwn(result, 'rows_visited') ? result.rows_visited : null;
+      return { ok: true, action: call.action, job_kind: call.jobKind, result };
     };
     return await Promise.race([send(), timeout]);
   } catch (error) {
+    observeBusy(error);
     const safe = dependencyError(error, attempted, call?.action);
     return { ok: false, error_code: safe.code, retryable: safe.retryable,
       outcome_unknown: safe.unknown, recovery: safe.recovery };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (attempted && typeof dependencies.onStepMeasurement === 'function') {
+      try {
+        const report = dependencies.onStepMeasurement(Object.freeze({
+          job_id: call.jobId, kind: call.jobKind,
+          step: call.action === 'CLAIM' ? 'CLAIM' : call.args.expected_phase ? `STEP:${call.args.expected_phase}` : 'STEP',
+          rows: measurement.rows, bytes: measurement.bytes,
+          ms: Math.max(0, performance.now() - started)
+        }), payQueryBusy);
+        // Observation never participates in SQL success or queue disposition.
+        if (typeof report?.catch === 'function') report.catch(() => {});
+      } catch {}
+    }
   }
 }

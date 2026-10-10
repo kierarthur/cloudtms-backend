@@ -271,3 +271,11 @@ Local commit9a7524fa first foundation package. On that commit final-definer+sour
 ### PF-05 complete — 10/10/2026 London
 
 Whole ITEM BUILT18/288 REVIEWED18/288. Exact D01 finite semantic processing-admission source guard/D02 future joined checklist complete. Existing source gate and normal units reused; SQL/Worker runtime unchanged. Independent review PASS all concrete findings fixed. Source3/3, syntax, dbcheck308/809, unchanged sole PG17 seal ec576ad3baa47d0cc972ee39dd53e5de96a49f62b6ea703d392f3c1c3d217044/coupling PASS. Hosted/application/timing NOT_RUN. Sequence20 progress:18 whole items complete; earlier staged later foundation acceptance remains pending. ContinuePF06 seq21.
+
+### PF-06 scope checkpoint — 10/10/2026 London
+
+Three exact objects inventoried in design/PF-06-SCOPE.md. BD025 private job-only lifecycle support, existing counters and finite Worker observation; no monetary/F25/enroller replacement or public trigger. Joined application NOT_RUN.
+
+### PF-06 complete — 10/10/2026 London
+
+Whole ITEM BUILT19/288 REVIEWED19/288. D01 missing3jobclocks/D02 finite sixfield actualstep observation/D03 future joined checklist complete underBD025. Private trigger only, historicalNULLs/counters/owners preserved. Independent lifecycle/Worker PASS. Source132/132+4/4,syntax,dbcheck309/810, solePG17 CHANGED1migration+4closures COMPILED protectedverificationPENDING, seal4d640a5d3e55a382adfb74e7d04c807f387a5473d36608eb7732ba2822deb439/coupling PASS. Hosted/app/timing NOT_RUN. ContinuePF04seq22.

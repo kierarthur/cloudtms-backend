@@ -78,11 +78,17 @@ test('unknown expiry response never claims completion or sends a second intake',
   assert.equal(calls,1);assert.equal(s.sent.length,0);assert.deepEqual(s.message.body,EXPIRY);
 });
 test('financial CLAIM delegates once and durably retains the actual lease before ACK',async()=>{
-  const s=setup({version:1,action:'CLAIM',job_id:JOB,job_kind:'CASE_CREATE',lease_seconds:120});
+  const observed=[];
+  const s=setup({version:1,action:'CLAIM',job_id:JOB,job_kind:'CASE_CREATE',lease_seconds:120},
+    {onStepMeasurement:(line,busy)=>{observed.push({line,busy});throw Error('logging failed');}});
   const result=await handleBpayNextBackgroundMessage(s.message,s.deps);
   assert.equal(result.reason,'CONTINUATION_PERSISTED');assert.deepEqual(s.events,['CLAIM','send','durable','ack']);
   assert.equal(s.calls.length,1);assert.deepEqual(s.sent[0].body,{version:1,action:'STEP',job_id:JOB,
     job_kind:'CASE_CREATE',lease_nonce:NONCE,owner_epoch:'3'});
+  assert.equal(observed.length,1);assert.equal(observed[0].line.step,'CLAIM');
+  assert.equal(observed[0].line.job_id,JOB);assert.equal(observed[0].line.rows,null);
+  assert.equal(observed[0].busy,false);
+  assert.equal(JSON.stringify(observed).includes(NONCE),false);
 });
 test('malformed runtime envelopes cannot smuggle financials, clocks or partial confirmation',async()=>{
   for(const body of [{...ENROLL,actor:'SYSTEM'},{...EXPIRY,observed_now:'yesterday'},
