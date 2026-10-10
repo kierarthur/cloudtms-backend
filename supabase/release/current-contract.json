@@ -13008,6 +13008,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_recovery_effect_link_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e76644cf30eeb86808140a3b46c33d026fbcd69282cd7ea9af4ad536bdf49109"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_reissue_cancel_block_v1(p_transfer_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -50712,6 +50731,13 @@
       "definition": "CREATE TRIGGER bpay_next_financial_effect_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
+      "name": "bpay_next_recovery_effect_link_guard_v1",
+      "table": "bpay_next_financial_effect",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_recovery_effect_link_guard_v1 BEFORE INSERT ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_recovery_effect_link_guard_v1()"
+    },
+    {
       "name": "bpay_next_input_version_event_immutable",
       "table": "bpay_next_input_version_event",
       "schema": "private",
@@ -84452,6 +84478,10 @@
         {
           "name": "bpay_next_financial_effect_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_financial_effect_pkey ON private.bpay_next_financial_effect USING btree (id)"
+        },
+        {
+          "name": "bpay_next_work_recovery_event_once",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_recovery_event_once ON private.bpay_next_financial_effect USING btree (operation_item_id) WHERE (effect_kind = 'WORK_COLLECTION_RECOVERED'::text)"
         }
       ],
       "options": [],

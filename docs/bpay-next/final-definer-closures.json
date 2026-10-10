@@ -12359,6 +12359,19 @@
       ],
       "owner": "PF-04 bounded terminal temporary-row cleanup and exact supporting service transport",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_recovery_effect_link_guard_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0604_banking_pay_next_ps_c04_recovery_link_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0604_banking_pay_next_ps_c04_recovery_link_guard_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0604_banking_pay_next_ps_c04_recovery_link_guard_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0604_banking_pay_next_ps_c04_recovery_link_guard_v1.sql"
+      ],
+      "owner": "PS-04 finite private recovery-link insert qualification"
     }
   ],
   "editorChains": [

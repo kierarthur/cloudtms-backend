@@ -349,3 +349,9 @@ PS02 local evidence commit2d5b9585. Exact seven checklist rows listed before bui
 ### PS-03 complete — 10/10/2026 London
 
 All required D01/D02/D05/D06/D07 deliverables complete under BD033; context rows reused. Whole ITEM BUILT27/288 REVIEWED27/288. Independent SQL/history reviews PASS after Case-request and actor-context corrections. Source/final-definer8, Worker-history8, Office-history11, bothsyntax, dbcheck313/814, solePG17COMPILED, seal79f15e52185c48f7912768a00e3c4e761a552fe5606d6331d9862b5a0550f495/couplingPASS. Existingmoney/Case/destination/historySQL ownersreused; nofixtures/rehearsals/hosted/externalaction. ProtectedverificationPENDING; actualapp/installed/business/fullWorker/queue/minute/timingNOT_RUN. ContinuePS04sequence30.
+
+### PS-04 scope checkpoint — 10/10/2026 London
+
+PS03 locally committed BEe26edd35/FEab9de41. Before build, BD034 lists exact named objects in design/PS-04-SCOPE.md. Reuse realoperation_item_id→RECOVEREDevent.id rather than duplicatecolumns/Sourcebindingrewrites; add uniquealias andfiniteprivateINSERTqualifieronly. AllnamedCase/moneyownersretained. No-TimesheetCaseoriginlegitimate; CM14futureUmbrellaownedseparately.
+
+PS-04 sequence30 COMPLETE: BD034 native recovered-event link/index plus private qualifier; actual named owners reused. Eight source gates/db314+815/PG17/seal303276/coupling PASS. Link/guard reviews PASS. Whole BUILT28/288 REVIEWED28/288. Joined/app NOT_RUN. Explicit-path local commit; next PS-07 seq31. Plan checkpoint30 recorded.
