@@ -1658,7 +1658,7 @@ Dependencies: WB-09, F-16; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-11-D05 | SCREEN: Workbench official date/header/filter controls in js/bpay-next-workbench.js | MISSING | Build read-only official date, Both/PAYE/Umbrella/client widgets and server counts; filters never later frozen financial inputs. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-11-D05 | SCREEN: Workbench official date/header/filter controls in js/bpay-next-workbench.js | MISSING | Build read-only official date, Both/PAYE/Umbrella/client widgets and server counts; filters never later frozen financial inputs. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1677,6 +1677,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Choosing Umbrella only + Client X in Filters and pressing Apply shows only those rows, with the chip "Umbrella · Client X" (RQ-005, LUI-040, LUI-042, LUI-043); picking a Candidate narrows the same way (LUI-041).
   - Clear filters restores everything (LUI-044).
   - The pay date cannot be edited anywhere in the NEXT screen (NX-086).
+
+Whole WB-11 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. FE d6a8547045ce40808ca69810fa3da2b0702a1390; actual local screen-designs/SCR-01/02/03; BUILD_LOG WB11 Review: reviews/WB-11-header-filter-source-review.md; reviews/WB-11-standard-frame-review.md; reviews/WB-11-design-scope-review.md; screen-designs/SCR-01/02/03/review.md.
 
 ## WB-12 — Ready to Pay Candidate list (level 1)
 

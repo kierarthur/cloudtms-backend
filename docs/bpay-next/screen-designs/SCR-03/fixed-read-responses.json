@@ -1,0 +1,56 @@
+{
+  "context": {
+    "agency_id": "10000000-0000-0000-0000-000000000002",
+    "actor_user_id": "10000000-0000-0000-0000-000000000001",
+    "owner_epoch": "1",
+    "official_pay_date": "2026-10-16",
+    "workbench_revision": "1",
+    "adoption_revision": "1"
+  },
+  "candidates": [
+    {
+      "candidate_id": "20000000-0000-0000-0000-000000000001",
+      "candidate_sort_name": "Amelia Hughes",
+      "tms_ref": "10421"
+    },
+    {
+      "candidate_id": "20000000-0000-0000-0000-000000000002",
+      "candidate_sort_name": "Bethany Clarke",
+      "tms_ref": "10502"
+    }
+  ],
+  "clients": [
+    {
+      "client_id": "30000000-0000-0000-0000-000000000001",
+      "client_display_name": "Riverside Care Home"
+    },
+    {
+      "client_id": "30000000-0000-0000-0000-000000000002",
+      "client_display_name": "Southbank Clinic"
+    }
+  ],
+  "capabilities": {
+    "ok": true,
+    "scope": "NEXT",
+    "worker_environment": "TEST",
+    "requested_environment": "TEST",
+    "environment_ready": true,
+    "test_mode": true,
+    "env_mismatch": false,
+    "cop_available": false,
+    "provider_status": "DISABLED",
+    "funding_status": "UNAVAILABLE",
+    "csv_available": true
+  },
+  "issue_rows": [],
+  "failed_read": {
+    "status": 503,
+    "body": {
+      "ok": false,
+      "error_code": "BPAY_NEXT_WORKBENCH_UNAVAILABLE",
+      "retryable": true,
+      "reload_required": false
+    }
+  },
+  "empty_rows": []
+}
