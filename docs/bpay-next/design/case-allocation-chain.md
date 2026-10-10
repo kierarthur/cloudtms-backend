@@ -222,3 +222,7 @@ RuleB accepted input means work_choice.expected_revision_id, captured selection_
 ## Separately owned schema and branch hunks
 
 All59 exact ALTER statements and their source/owner are retained individually in `CM-02a-build.objects.json.schemaAlterHunkRouting`. CM03 owns only the reservation-basis after hunks0157(387BF695…),0241(642073B5…),1620(AA312905…). CM13a owns ordinary Umbrella portions of0140/0150/0200/0310/0390/0410/0430/0460/0490/0510/1157 and0360 merged into0549; CM13 owns comparison case/0410/0200:336–355/1519:445–460. CM14 owns0460:316carry plus0157/0241PREPAREfix; CM15 owns0510:314–319,:408–418 and0260:494carry. Those are bounded hunk editors, not second owners of whole functions. Exact hashes, full paths and dependency dispositions remain in the preserved design/map. No reference object is promoted by this item.
+
+## STATUS successor ownership
+
+`0580 -> PS-14 (0639) -> DR-37`. Current private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer) final is supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql. DR-37 merges onto 0639 and retains PS-14 obligation/remaining-leg reservation fields. Early phase3 DR-37 is D14/D18 only; no early D12 or D17. F-26 remains unbuilt until sequence280.

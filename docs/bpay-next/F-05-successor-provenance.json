@@ -1983,5 +1983,16 @@
     "final": "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql",
     "disposition": "F-04 sole shared-quote target valuer; no re-added1500 body"
   },
-  "unreviewedCorrectionAdopted": false
+  "unreviewedCorrectionAdopted": false,
+  "corrections": [
+    {
+      "owner": "F-05",
+      "foundBy": "F-23 foundation gate",
+      "successor": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "implementationCommit": "9a7524fa2b20630931ab6b69d9ee7ca0022196f4",
+      "remainingChange": "Four F-05 ROWTYPE projections, full named definitions/ACL/settings otherwise preserved; not F-23 product work",
+      "review": "reviews/F-23-csv-projection-review.md",
+      "acceptance": "NOT_RUN"
+    }
+  ]
 }
