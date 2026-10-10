@@ -78,7 +78,19 @@ Android 40 is built and signed; the owner now explicitly excludes uploads to
 Google Play and Apple. No store action or new Apple/EAS build is part of this
 continuation. Existing Android 39 store releases and iOS 0.1.5/build 24 do not
 contain this notification UI; the connected phone's Play package remains 37.
-Live signed-in web and current-source USB acceptance are being checked separately.
+The canonical Windows device-test launcher subsequently installed the separate
+`net.cloudtms.mytms.test.dev` package on Fold3 `RFCRB0RS08T`, from documentation-only
+runtime child `c7631eaface588f9b691c02c9e8861d355a0f8bd`. APK SHA-256:
+`b645a3aea7a00609e1384c7f9daadf3937d68765b25eb78105f9b7ed34e2856e`.
+Kier's signed-in session loaded the real inbox and new accessible Delete,
+Mark all as read and Delete all controls. Current and History timesheets loaded,
+and the Stage 8 week-ending-4-October £5 expense claim exposes Printed documents.
+No notification or claim was mutated during this physical read-only check.
+Exact-record permission for temporary Delete followed by Undo remains pending.
+The actual retained inbox has fewer notices than required to expose Load More;
+larger-inbox paging is proved by automated tests only. A complete print/sign/photo
+submission is not claimed. The supplied browser session is Office TEST, not
+Candidate web; its credentials were not transferred or reused.
 
 No LIVE resource, secret rotation, payment/provider execution or email drain was
 used for this qualification. Disposable proof resources must be removed after use.
