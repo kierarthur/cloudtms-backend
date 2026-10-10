@@ -7351,6 +7351,44 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_expense_approval_policy_v1(p_client_id uuid, p_contract_id uuid, p_evaluation_date date, p_workflow_kind text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "72cd6e6d927ae8afa935ba66eb1a63cf9ae52cf7526b80909881147664feba87"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_expense_approval_route_v1(p_timesheet_id uuid, p_contract_week_id uuid, p_workflow_kind text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "a15a01946ab958f278c23e272c34b1a5bac12e6b7c7f817986d96c78c4ee9b6b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
@@ -29213,7 +29251,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "aad10a4db15f6b6cc1fecd07fcf954c77cfb2c4c972056238779a01c3589cbaf"
+      "definition_sha256": "096c818818f2bc07dca0cd21aa694694fda96258bcac2ee7f67c8796edfe0a44"
     },
     {
       "acl": [
@@ -31154,7 +31192,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b703cdfa84ddef19e941743b4d54fc81635696756bfc19854b2c7819e98691e4"
+      "definition_sha256": "decdfe668a8482f481e36e92a390ee86aa7dcbb919fea1d712202aeee265f57c"
     },
     {
       "acl": [
@@ -31370,7 +31408,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "37a3ad3358c8780c0cd8c8a3bd04aed3baeb70c6f1092b26692e8314ad81cb19"
+      "definition_sha256": "0ff12be5ae3cb04cb3447552af1e76dd8a18b25fe7a5afad5f0be87c566863df"
     },
     {
       "acl": [
