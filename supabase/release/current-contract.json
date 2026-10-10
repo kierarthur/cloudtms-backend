@@ -20892,6 +20892,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "weekly_source_office_contact_policy_v1(p_source_cycle_id uuid, p_query jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "c9428e5fdbe2b3fd026277ac1d6d8c7f54a138f84b32aa2abc137a4dc59be3f2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=private, pg_catalog, pg_temp"
       ],
       "schema": "private",
@@ -48656,7 +48675,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "4fa59ff8c86232f543f5c57f8d2bf358584754729d02106dc6fdc8041fe5f86f"
+      "definition_sha256": "fe4c2158c8d8c2f923841d955dacbeb3f9b9b42035bf760691e528d88e7978bf"
     },
     {
       "acl": [
