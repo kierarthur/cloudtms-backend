@@ -1,0 +1,7 @@
+# SP-08 exact scope before build
+
+Sequence38. Fullcard05:305–331 and allrows reread. D01 context: initial_tsfin_bind and0557 genuine successful outer-stage NEXT tail, physical edit ownedSP03. D02 exact1245 Sourcebook-binding migration. D03 exact1246 bound snapshot/book guards. D04 exact1301 receipt identity/S2 enqueue and current Source0556/0557 chain. D05 existing0155/0201/0212/0224 flat12-key origin producers/consumers,1257local completion,0355 once-only cutover,0556head capture/immutableguard; confirm full prior digest remains unchanged/no ancestry or backfill. D06 required SP-08-closing.md records T26 on0114, C29 flat origin and C30 PRIM erratum. Named0018 initial TSFIN certificate/boundassert and1548/0302chosen details checked as required support. Worker/screens none.
+
+BD042: apply the card's explicit fix-only-confirmed-mismatch rule. Reuse existing correctly composed Source/Binding definitions and locked migration; do not rebuild or run business scenarios. Record current physical winners and actual local release ledger count separately from unobserved hosted/app acceptance. Any mismatch gets a new successor through db:new and preserves chain order. No producer/evidence framework, publictrigger, new origin arm or RuleB change.
+
+Confirmed SRQ304 gap requires only one private per-HEAD consumption marker, its immutable private guard and the named0302 detail successor. Frozen0556 is preserved. No other replacement is required. The first uncommitted broader publisher draft failed F23 and was narrowed before installation.

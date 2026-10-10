@@ -454,6 +454,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "bpay_next_local_detail_seam_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_local_detail_seam",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_next_source_binding_owner_all",
       "check": "true",
       "roles": [
@@ -10817,7 +10829,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "232499d63bb36673ae5f44a9d36ef860aef177211a57f459b042c0c7821be32d"
+      "definition_sha256": "d3dd52cb0ba644d56eac46ba0d1badbf1ef9ff70dc2eaf7553f6f1022d26f598"
     },
     {
       "acl": [
@@ -12196,6 +12208,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "362abb92f3a6db9ab9428a89053bc8fb8f649268f3314e3a67f58f88d4e1a534"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_local_detail_seam_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "ae972bf6b97a39db7e5d59fe18aebe868753bc8f1a464c3a81bf3352960aed12"
     },
     {
       "acl": [
@@ -50830,6 +50861,20 @@
       "definition": "CREATE TRIGGER bpay_next_job_lifecycle_clock_v1 BEFORE INSERT OR UPDATE ON private.bpay_next_job FOR EACH ROW EXECUTE FUNCTION private.bpay_next_job_lifecycle_clock_v1()"
     },
     {
+      "name": "bpay_next_local_detail_seam_guard",
+      "table": "bpay_next_local_detail_seam",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_local_detail_seam_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_local_detail_seam FOR EACH ROW EXECUTE FUNCTION private.bpay_next_local_detail_seam_guard_v1()"
+    },
+    {
+      "name": "bpay_next_local_detail_seam_truncate_guard",
+      "table": "bpay_next_local_detail_seam",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_local_detail_seam_truncate_guard BEFORE TRUNCATE ON private.bpay_next_local_detail_seam FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_local_detail_seam_guard_v1()"
+    },
+    {
       "name": "bpay_next_destination_state_guard_v1",
       "table": "bpay_next_net_destination_amount",
       "schema": "private",
@@ -86323,6 +86368,108 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (status = ANY (ARRAY['READY'::text, 'LEASED'::text, 'BLOCKED'::text, 'DONE'::text, 'FAILED'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_local_detail_seam",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "consumed",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "head_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "transaction_id",
+          "type": "xid8",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_local_detail_seam_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_local_detail_seam_pkey ON private.bpay_next_local_detail_seam USING btree (head_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_local_detail_seam_head_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (head_id) REFERENCES weekly_source_entitlement_heads(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_local_detail_seam_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (head_id)"
         }
       ],
       "view_definition_sha256": null

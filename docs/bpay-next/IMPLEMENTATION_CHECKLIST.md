@@ -964,11 +964,11 @@ Dependencies: F-04, F-05, F-06; successor positions: none. Design note: not requ
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-08-D02 | MIGRATION: W/supabase/migrations/06102026_1245_banking_pay_next_source_book_binding.sql | LOCAL_ONLY | Port genuine book-binding schema and owner/security chain after current reread; no history backfill or fake approved initial basis. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-08-D03 | REPEATABLE: W/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql | LOCAL_ONLY | Integrate exact bound_source_snapshot/book guards with current Source definition chain; installation not proved. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-08-D04 | REPEATABLE: W/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql | LOCAL_ONLY | Keep original receipt/source-book identity and S2 enqueue; reconcile current Source/0556/0557 successors. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-08-D05 | MIGRATION: 05102026_0155/0201/0212/0224 origins plus0355 cutover | INSTALLED_ON_TEST | Verify flat12-key producer/consumer/digest and no-backfill currentness; no new recursive origin. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-08-D06 | DOC: docs/bpay-next/design/SP-08-closing.md | MISSING | Record real T-26 Source closing, flat-origin status, bind order and PRIM erratum; technical interface closure not new business gate. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-08-D02 | MIGRATION: W/supabase/migrations/06102026_1245_banking_pay_next_source_book_binding.sql | LOCAL_ONLY | Port genuine book-binding schema and owner/security chain after current reread; no history backfill or fake approved initial basis. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-08-D03 | REPEATABLE: W/supabase/repeatable/06102026_1246_banking_pay_next_source_book_binding_v1.sql | LOCAL_ONLY | Integrate exact bound_source_snapshot/book guards with current Source definition chain; installation not proved. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-08-D04 | REPEATABLE: W/supabase/repeatable/06102026_1301_banking_pay_next_source_receipt_binding_v1.sql | LOCAL_ONLY | Keep original receipt/source-book identity and S2 enqueue; reconcile current Source/0556/0557 successors. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-08-D05 | MIGRATION: 05102026_0155/0201/0212/0224 origins plus0355 cutover | INSTALLED_ON_TEST | Verify flat12-key producer/consumer/digest and no-backfill currentness; no new recursive origin. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-08-D06 | DOC: docs/bpay-next/design/SP-08-closing.md | MISSING | Record real T-26 Source closing, flat-origin status, bind order and PRIM erratum; technical interface closure not new business gate. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -979,6 +979,8 @@ Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, the first authorisation of a Source Timesheet with no Final yields a WORK whose origin is INITIAL_AUTHORISED_TSFIN_V1 bound to a Source book; three successive protected amendments 8 h → 7 h → 6 h → 7 h publish three HEADs whose origin payload stays the same size, each closing the editor; BUILD_LOG records that `0355` ran once in the release ledger. Observed by: SRQ-160, SCX-090 and NX-020 → the INITIAL_AUTHORISED_TSFIN_V1 WORK bound to a Source book; SRQ-034, SRQ-036, SRQ-063, SRQ-306, SCX-041 and NX-005, NX-016 → the three-amendment size check, with each stored HEAD showing its `source_revision`; SRQ-036 → the `0355` ledger line and the twelve-key witness (BUILD_LOG); SRQ-035 → a mixed or unknown origin is refused (BUILD_LOG); SRQ-150 → the initial inventory digest is unchanged after the amendments; SRQ-304 → a second use of the same seam token is refused (BUILD_LOG); SCX-091, SCX-092 and NX-018, NX-019 → the receipt is bound to the same Source book; SRQ-228 → the closing note exists.
+
+Whole SP-08 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. SP-08-COMPLETION.md; new0736private immutable seam +0302only, frozen0556 reused; 315/821local/source10/sealbb18/couplingPASS Review: reviews/SP-08-sql-review.md; reviews/SP-08-scope-review.md; reviews/SP-08-interface-review.md finaltwofunctionPASS.
 
 ## SP-03 — Source first Authorise publishes to NEXT (seam S1)
 

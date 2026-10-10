@@ -387,3 +387,8 @@ CM-02a seq36 COMPLETE BD040: chosen0549 metadata plus198uniqueobjectowners/59ALT
 BUILDER DECISION BD041 SP02: preserve genuine2336/ordinaryTSFIN/protectedstage facts; oneDB serviceadmission supports explicitretiredRecover/externalC1entries, noWorkerownerdecision. PositiveNEXTabsence/notice andF15scopedOfficecopy only.
 
 SP-02 seq37 COMPLETE BD041: allsixrows, four-function0715/DB-ownedentry admission, actualSourcefacts retained, losslessC1 and currentF15plaincopy. Threeindependent sourcePASS; BE23FE40/source10/syntax/db314820/PG0+4/seal6ed0bc43/couplingPASS. WholeBUILT35/288REVIEWED35/288. ActualjoinedNOT_RUN/protectedverificationPENDING. No producer/parkedF25/hostedaction. NextSP08seq38.
+
+SP02localcommits BEcc622c8a FE12f0868. SP-08 seq38scopecheckpoint BD042 exactD01context/D02–D06objects listed beforebuild in SP-08-SCOPE; fix-only-confirmed-mismatch, noWorker/screen. Actualsolelocal0355ledger_count1 recorded; hostedledger/app notobserved.
+
+BUILDER DECISION BD042 SP08: fix only confirmedSRQ304 with actualHEAD/currentxid private append-only consumption in0302. First uncommitted0556copy rejected byF23; removed beforelocalinstallation, noexemption. Frozen0556 unchanged, eightlinedetaildelta/oneprivateguard.
+SP-08 seq38 COMPLETE: D02-D06 Sourcebook/receipt/flat-origin/closing fullyreused orfinished; actual0355localledger1. Source10/db315821/PG1+4/sealbb18df89/couplingPASS; threefinalsourcePASS. WholeBUILT36/288REVIEWED36/288. Business/appNOT_RUN. NextSP03seq39.
