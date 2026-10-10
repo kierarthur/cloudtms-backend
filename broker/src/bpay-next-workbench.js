@@ -223,7 +223,7 @@ export const ROWS=Object.freeze({
     "recovery_source_ex_vat": "decimal?",
     "included_source_ex_vat": "decimal?",
     "gross_due_source_ex_vat": "decimal?"
-  },
+  ,"physical_revision_id":"uuid?","physical_timesheet_version":"positive?","source_kind":"sourceKind?","source_head_id":"uuid?","source_root_timesheet_id":"uuid?","source_root_timesheet_version":"positive?","source_week_ending_date":"date?"},
   "GROUP_LINES": {
     "item_id": "uuid",
     "group_key": "text",
@@ -391,7 +391,7 @@ export const ROWS=Object.freeze({
     "eligible_from_date": "date?",
     "pay_hold_reason": "text?",
     "reason_priority": "small"
-  }
+  ,"physical_revision_id":"uuid?","physical_timesheet_version":"positive?","source_kind":"sourceKind?","source_head_id":"uuid?","source_root_timesheet_id":"uuid?","source_root_timesheet_version":"positive?","source_week_ending_date":"date?"}
 });
 const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','limit'].includes(k))));
 const CONTEXT={kind:'kind',agency_id:'uuid',actor_user_id:'uuid',owner_epoch:'positive',official_pay_date:'date',workbench_revision:'integer',adoption_revision:'integer',scope:'scope'};
@@ -416,6 +416,7 @@ function field(v,type){
   if(type==='date'){if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v.startsWith('0000'))return false;const d=new Date(`${v}T00:00:00Z`);return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
   if(type==='countSelection')return exact(v,['mode','candidate_ids'])&&['ALL','NONE'].includes(v.mode)&&Array.isArray(v.candidate_ids)&&v.candidate_ids.every(id=>field(id,'uuid'))&&new Set(v.candidate_ids).size===v.candidate_ids.length&&ENCODER.encode(JSON.stringify(v)).byteLength<=32768;
   if(type==='scope')return shape(v,SCOPE);
+  if(type==='sourceKind')return ['ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT'].includes(v);
   if(type==='cursor')return exact(v,['context','key'])&&shape(v.context,CONTEXT)&&validKey(v.key,v.context.kind,v.context.scope.sort);
   if(type==='refusal')return FAILURE_CODES.includes(v);
   return false;
@@ -497,6 +498,13 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     if(kind==='GROUP_LINES'){
       const facts=['approved_line_no','job_title','band_label','original_work_ref','original_timesheet_id','is_adjustment','component_amount_known','component_ready_amount','component_waiting_amount','component_reserved_amount'];
       if(row.work_id===null&&facts.some(k=>row[k]!==null)||(row.shift_detail_id===null)!==(row.shift_detail_no===null)||row.approved_segment_id===null&&row.shift_detail_id!==null||row.original_timesheet_id===null&&row.original_work_ref!==null||row.component_amount_known!==true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]!==null)||row.component_amount_known===true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]===null))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    }
+    if(['CANDIDATE_GROUPS','ISSUE_DETAIL'].includes(kind)){
+      const ids=['physical_revision_id','physical_timesheet_id','physical_timesheet_version'];
+      if(ids.some(k=>row[k]===null)&&ids.some(k=>row[k]!==null)||row.work_id===null&&[...ids,'source_kind','source_head_id','source_root_timesheet_id','source_root_timesheet_version','source_week_ending_date'].some(k=>row[k]!==null)
+        ||(row.source_root_timesheet_id===null)!==(row.source_root_timesheet_version===null)
+        ||!['SOURCE','PROTECTED'].includes(row.source_kind)&&['source_head_id','source_root_timesheet_id','source_root_timesheet_version','source_week_ending_date'].some(k=>row[k]!==null)
+        ||['SOURCE','PROTECTED'].includes(row.source_kind)&&row.source_week_ending_date===null)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     }
     if(kind==='CANDIDATE_GROUPS'){
       if(row.group_key!==row.group_kind+':'+row.presentation_id||row.parent_group_key!==(row.work_id!==null?'WORK:'+row.work_id:'CASE:'+row.case_id)||(row.group_kind==='ROW')!==(row.case_component_id!==null)||row.group_kind==='ROW'&&row.presentation_id!==row.case_component_id||(row.accepted_run_id===null)!==(row.accepted_command_id===null)||(row.accepted_run_id===null)!==(row.accepted_module_epoch===null)||['ready_net_add_amount','gross_deduction_balance','net_deduction_balance','waiting_amount','waiting_net_add_amount'].some(k=>(row[k]===null)!==(row.group_amount===null)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');

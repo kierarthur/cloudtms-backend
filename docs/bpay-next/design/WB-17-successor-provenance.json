@@ -1,0 +1,53 @@
+{
+  "item": "WB-17",
+  "sequence": 65,
+  "state": "PARTLY_BUILT; whole ITEM/D04 require ordered joins",
+  "builderDecision": "BD073",
+  "exactDeliverables": [
+    "WB-17-D02",
+    "WB-17-D04",
+    "WB-17-D06",
+    "WB-17-D07"
+  ],
+  "successors": [
+    {
+      "object": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "chain": [
+        "2026",
+        "2105"
+      ],
+      "change": "bounded native CANDIDATE_GROUPS/ISSUE_DETAIL exact current or withdrawn-applied physical revision and Source root/week identity; other kinds unchanged"
+    }
+  ],
+  "sourceFiles": {
+    "supabase/repeatable/10102026_2105_banking_pay_next_exact_work_navigation_v1.sql": "dad87c105db7daa58b4b62433812d13bcab89aa86481a158e012791777d2c12e"
+  },
+  "checks": {
+    "dbCheck": "328 migrations/855 repeatables PASS",
+    "localPg17": "CHANGED 0 migrations/4 final repeatable closures compiled",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "19bdf5bbd7aaf1ffc3404bdbae2ee61fd7a12d7d7cb36076672d6a36921b6ecb",
+    "coupling": "PASS",
+    "changedJsSyntax": "PASS"
+  },
+  "reviews": [
+    "reviews/WB-17-navigation-sql-review.md",
+    "reviews/WB-17-navigation-ui-source-review.md"
+  ],
+  "screens": {
+    "id": "SCR-13",
+    "screenshots": 12,
+    "policyReview": "37 PASS / 0 FAIL / 5 N/A",
+    "review": "screen-designs/SCR-13/review.md",
+    "method": "Actual local Office/native Timesheet frames, minimal fixed factual responses, hosted network blocked, no DB rows"
+  },
+  "pendingJoins": [
+    "WB23/WB24/WB25 complete selected Ready Timesheet membership for SCR14 amount icon; native summary finite <=200 physical IDs is not complete larger scope",
+    "DR02/DR06 actual Open Draft destination; existing captured four-kind views unchanged"
+  ],
+  "publicCatalogue": "No publicSECDEF addition/removal or ACL change; verifier unchanged",
+  "joinedAppAcceptance": "NOT_RUN",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED",
+  "frontendCommit": "c4f4647ba080546da5657c27c32593324fb39832"
+}
