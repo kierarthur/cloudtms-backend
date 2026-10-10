@@ -15858,7 +15858,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "f24c32a1e88013c2640cb8d822d621a53a8746e1c9666a1a2ec3101fc571ab26"
+      "definition_sha256": "06e2ccdabafa1ed11a392ff27c717d27dbdcf71c2cb84423c86581c504342755"
     },
     {
       "acl": [
@@ -31420,7 +31420,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "835a2b4a2ea3e7b9bc691f38439c2041df10de16f612eae815d548f4e9f07a2d"
+      "definition_sha256": "bfb7bd71c587ca17f21106e3f17f9992a3ca8ff36ff4803d117ff9021d547fd2"
     },
     {
       "acl": [
@@ -115545,6 +115545,10 @@
         {
           "name": "bpay_next_wb14_reason_sort_idx",
           "definition": "CREATE INDEX bpay_next_wb14_reason_sort_idx ON private.bpay_next_workbench_item USING btree (section, reason_priority, reason_code COLLATE \"C\", id)"
+        },
+        {
+          "name": "bpay_next_wb18_export_group_item_idx",
+          "definition": "CREATE INDEX bpay_next_wb18_export_group_item_idx ON private.bpay_next_workbench_item USING btree (group_key, candidate_id, case_component_id, id)"
         },
         {
           "name": "bpay_next_workbench_item_candidate_idx",

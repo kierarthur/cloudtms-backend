@@ -3,6 +3,8 @@
 export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
+const EXPORT_SORT_FIELDS={"C_NAME":["text","boolean","text","uuid","uuid"],"C_AMOUNT":["boolean","decimal","uuid","uuid"],"C_DEDUCTIONS":["boolean","text","boolean","text","uuid","uuid"],"C_STATUS":["boolean","boolean","text","text","uuid","uuid"],"G_PAYMENT":["boolean","date","text","uuid","uuid"],"G_CLIENT":["boolean","text","text","uuid","uuid"],"G_CHANNEL":["boolean","text","text","uuid","uuid"],"G_AMOUNT":["boolean","decimal","text","uuid","uuid"],"G_DEDUCTIONS":["boolean","text","uuid","uuid"],"G_REASON":["small","text","text","uuid","uuid"]};
+const EXPORT_SORTS=Object.keys(EXPORT_SORT_FIELDS).flatMap(k=>[k+'_ASC',k+'_DESC']);
 const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',count_selection:'countSelection?',after:'cursor?',limit:'limit'};
 export const BPAY_NEXT_WORKBENCH_PAGE_INPUTS=Object.freeze(Object.fromEntries(KINDS.map(k=>[k,Object.freeze({...COMMON})])));
 // Generated once from the explicit SQL projections; reviewed source is durable.
@@ -338,7 +340,8 @@ export const ROWS=Object.freeze({
     "selectable": "boolean",
     "financial_view_revision": "integer",
     "projection_revision": "positive",
-    "metadata_version": "positive"
+    "metadata_version": "positive",
+    "export_key":"exportKey","approved_line_id":"uuid?","physical_timesheet_id":"uuid?","job_title":"text?","band_label":"text?","shift_start":"text?","shift_finish":"text?","detail_label":"text?","candidate_has_pay":"boolean","export_amount":"decimal?","export_label":"text","choice_eligible":"boolean"
   },
   "CANDIDATE_GROUPS": {
     "group_key": "text",
@@ -400,7 +403,7 @@ const FAILURE_CODES=['BPAY_NEXT_MODULE_NOT_ACTIVE','BPAY_NEXT_WORKBENCH_FORBIDDE
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&[Object.prototype,null].includes(Object.getPrototypeOf(v));
 function exact(v,keys){return record(v)&&Reflect.ownKeys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k)&&Object.getOwnPropertyDescriptor(v,k)?.enumerable===true&&Object.hasOwn(Object.getOwnPropertyDescriptor(v,k),'value'));}
 const same=(a,b)=>a===b||(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,n)=>same(v,b[n])))||(record(a)&&record(b)&&exact(a,Object.keys(b))&&Object.keys(a).every(k=>same(a[k],b[k])));
-const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:['NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC','CLIENT_ASC','CLIENT_DESC','CHANNEL_ASC','CHANNEL_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE','ROW'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
+const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:[...EXPORT_SORTS,'NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC','CLIENT_ASC','CLIENT_DESC','CHANNEL_ASC','CHANNEL_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE','ROW'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
 function field(v,type){
   if(type.endsWith('?'))return v===null||field(v,type.slice(0,-1));
   if(Object.hasOwn(enums,type))return enums[type].includes(v);
@@ -415,6 +418,7 @@ function field(v,type){
   if(type==='groupKey')return typeof v==='string'&&/^(?:WORK|CASE|ROW):[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
   if(type==='date'){if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v.startsWith('0000'))return false;const d=new Date(`${v}T00:00:00Z`);return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
   if(type==='countSelection')return exact(v,['mode','candidate_ids'])&&['ALL','NONE'].includes(v.mode)&&Array.isArray(v.candidate_ids)&&v.candidate_ids.every(id=>field(id,'uuid'))&&new Set(v.candidate_ids).size===v.candidate_ids.length&&ENCODER.encode(JSON.stringify(v)).byteLength<=32768;
+  if(type==='exportKey')return Array.isArray(v)&&v.length>=4&&v.length<=6&&v.every(x=>typeof x==='string'||typeof x==='boolean'||Number.isInteger(x));
   if(type==='scope')return shape(v,SCOPE);
   if(type==='sourceKind')return ['ORDINARY','SOURCE','PROTECTED','EXPENSE','ADJUSTMENT'].includes(v);
   if(type==='cursor')return exact(v,['context','key'])&&shape(v.context,CONTEXT)&&validKey(v.key,v.context.kind,v.context.scope.sort);
@@ -424,6 +428,7 @@ function field(v,type){
 const shape=(v,schema)=>exact(v,Object.keys(schema))&&Object.entries(schema).every(([k,type])=>field(v[k],type));
 function validKey(key,kind,sort){
   if(!Array.isArray(key))return false;
+  if(kind==='EXPORT_ROWS'){const types=EXPORT_SORT_FIELDS[sort.replace(/_(?:ASC|DESC)$/,'')];return Boolean(types&&key.length===types.length&&types.every((t,n)=>field(key[n],t)));}
   if(['CANDIDATES','PICK_CANDIDATES'].includes(kind))return sort.startsWith('STATUS_')?key.length===5&&field(key[0],'boolean')&&field(key[1],'boolean')&&field(key[2],'text')&&field(key[3],'text')&&field(key[4],'uuid'):sort.startsWith('DEDUCTIONS_')?key.length===5&&field(key[0],'boolean')&&field(key[1],'text')&&field(key[2],'boolean')&&field(key[3],'text')&&field(key[4],'uuid'):sort.startsWith('AMOUNT_')?key.length===3&&field(key[0],'boolean')&&field(key[1],'decimal')&&field(key[2],'uuid'):key.length===4&&field(key[0],'text')&&field(key[1],'boolean')&&field(key[2],'text')&&field(key[3],'uuid');
   if(kind==='CANDIDATE_GROUPS'){
     if(sort.startsWith('DEDUCTIONS_'))return key.length===3&&field(key[0],'boolean')&&field(key[1],'group')&&field(key[2],'uuid');
@@ -440,6 +445,7 @@ function validKey(key,kind,sort){
 }
 function rowKey(kind,scope,row){
   if(['CANDIDATES','PICK_CANDIDATES'].includes(kind)){if(scope.sort.startsWith('STATUS_'))return [row.payable_count==='0',row.bank_warning_code===null,row.bank_warning_code??'',row.candidate_sort_name,row.candidate_id];if(scope.sort.startsWith('DEDUCTIONS_'))return [row.has_deduction,row.candidate_sort_name,row.tms_ref===null,row.tms_ref??'',row.candidate_id];if(scope.sort.startsWith('AMOUNT_'))return [row.unknown_amount_count!=='0',row.amount??'0',row.candidate_id];return [row.candidate_sort_name,row.tms_ref===null,row.tms_ref??'',row.candidate_id];}
+  if(kind==='EXPORT_ROWS')return row.export_key;
   if(kind==='HEADER')return null;
   if(kind==='CANDIDATE_GROUPS'){
     const suffix=[row.group_kind,row.presentation_id];
@@ -456,14 +462,14 @@ function rowKey(kind,scope,row){
 function textCompare(a,b){const x=ENCODER.encode(a),y=ENCODER.encode(b);for(let n=0;n<Math.min(x.length,y.length);n++)if(x[n]!==y[n])return x[n]<y[n]?-1:1;return Math.sign(x.length-y.length);}
 // Ordering validation only. Exact decimal strings never become browser money.
 function decimalCompare(a,b){const negA=a.startsWith('-'),negB=b.startsWith('-');const parts=v=>{const [whole,fraction='']=v.replace(/^-/,'').split('.');return [whole,fraction.replace(/0+$/,'')];};const [aw,af]=parts(a),[bw,bf]=parts(b);const az=aw==='0'&&af==='',bz=bw==='0'&&bf==='';if(az&&bz)return 0;const an=negA&&!az,bn=negB&&!bz;if(an!==bn)return an?-1:1;const sign=an?-1:1;return sign*(aw.length!==bw.length?Math.sign(aw.length-bw.length):aw!==bw?textCompare(aw,bw):textCompare(af.padEnd(Math.max(af.length,bf.length),'0'),bf.padEnd(Math.max(af.length,bf.length),'0')));}
-function keyCompare(a,b,kind,sort){for(let n=0;n<a.length;n++){const value=typeof a[n]==='number'?a[n]-b[n]:typeof a[n]==='boolean'?Number(a[n])-Number(b[n]):n===1&&sort.startsWith('AMOUNT_')?decimalCompare(a[n],b[n]):textCompare(a[n],b[n]);if(value)return sort.endsWith('_DESC')?-value:value;}return 0;}
+function keyCompare(a,b,kind,sort){for(let n=0;n<a.length;n++){const value=typeof a[n]==='number'?a[n]-b[n]:typeof a[n]==='boolean'?Number(a[n])-Number(b[n]):n===1&&(sort.startsWith('AMOUNT_')||kind==='EXPORT_ROWS'&&sort.includes('_AMOUNT_'))?decimalCompare(a[n],b[n]):textCompare(a[n],b[n]);if(value)return sort.endsWith('_DESC')?-value:value;}return 0;}
 function fail(code,status=503,retryable=false,reload=false){return Object.assign(new Error(code),{code,status,retryable,reload});}
 export function normalizeWorkbenchInput(kind,input={}){
   if(!KINDS.includes(kind)||!record(input)||Reflect.ownKeys(input).some(k=>typeof k!=='string'||!Object.hasOwn(COMMON,k)))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
   for(const k of ['candidate_id','client_id','item_id'])if(typeof args[k]==='string')args[k]=args[k].toLowerCase();
   if(args.count_selection!==null&&(kind!=='HEADER'||args.section!=='READY')||kind!=='CANDIDATES'&&String(args.sort).startsWith('STATUS_'))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-  if(!shape(args,COMMON)||(kind==='CANDIDATE_GROUPS'&&args.limit>10)||(!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort!=='NAME_ASC')||(!['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort.startsWith('REASON_'))||(kind==='CANDIDATES'&&args.sort.startsWith('PAYMENT_'))||(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('DEDUCTIONS_'))
+  if(!shape(args,COMMON)||(kind==='CANDIDATE_GROUPS'&&args.limit>10)||(kind==='EXPORT_ROWS'?!EXPORT_SORTS.includes(args.sort):EXPORT_SORTS.includes(args.sort)||!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort!=='NAME_ASC')||(!['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort.startsWith('REASON_'))||(kind==='CANDIDATES'&&args.sort.startsWith('PAYMENT_'))||(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('DEDUCTIONS_'))
     ||(['CANDIDATE_GROUPS','GROUP_LINES'].includes(kind)&&args.candidate_id===null)||(['GROUP_LINES','ISSUE_DETAIL'].includes(kind)&&args.group_key===null)||(kind==='ISSUE_DETAIL'&&args.reason_code===null)
     ||(!['GROUP_LINES','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&[args.group_key,args.item_id,args.reason_code].some(v=>v!==null)||kind==='CANDIDATE_GROUPS'&&[args.item_id,args.reason_code].some(v=>v!==null))
     ||(!['CANDIDATES','PICK_CANDIDATES','PICK_CLIENTS','ACTION_REQUIRED','BLOCKED','EXPORT_ROWS'].includes(kind)&&args.search!=='')||(kind==='HEADER'&&args.after!==null))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
@@ -495,6 +501,7 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     if(Object.hasOwn(row,'amount_known')&&row.amount_known===false&&row.nominal_source_ex_vat!==null)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'amount_known')&&row.selectable===true&&(row.section!=='READY'||row.amount_known!==true||!['AVAILABLE','ZERO'].includes(row.portion_kind)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'group_key')){if(!field(row.group_key,'groupKey')||(row.work_id!==null)===(row.case_id!==null)||row.group_key!==(row.work_id!==null?'WORK:'+row.work_id:row.group_key.startsWith('ROW:')?'ROW:'+row.case_component_id:'CASE:'+row.case_id))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}
+    if(kind==='EXPORT_ROWS'&&(row.export_key.at(-1)!==row.item_id||row.work_id===null&&[row.approved_line_id,row.physical_timesheet_id,row.job_title,row.band_label,row.shift_start,row.shift_finish].some(v=>v!==null)||row.choice_eligible&&(!row.selectable||row.section!=='READY')))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(kind==='GROUP_LINES'){
       const facts=['approved_line_no','job_title','band_label','original_work_ref','original_timesheet_id','is_adjustment','component_amount_known','component_ready_amount','component_waiting_amount','component_reserved_amount'];
       if(row.work_id===null&&facts.some(k=>row[k]!==null)||(row.shift_detail_id===null)!==(row.shift_detail_no===null)||row.approved_segment_id===null&&row.shift_detail_id!==null||row.original_timesheet_id===null&&row.original_work_ref!==null||row.component_amount_known!==true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]!==null)||row.component_amount_known===true&&['component_ready_amount','component_waiting_amount','component_reserved_amount'].some(k=>row[k]===null))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
@@ -549,4 +556,114 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
     return await Promise.race([send(),timeout]);
   }catch(e){const safe=typeof e?.code==='string'&&/^BPAY_NEXT_[A-Z_]+$/.test(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null},readKind);}
   finally{if(timer!==undefined)clearTimeout(timer);}
+}
+
+// WB18 output-only walk. The complete local intent stays immutable here and is
+// never copied into every SQL cursor or admitted as a financial command.
+export const BPAY_NEXT_EXPORT_HEADERS=Object.freeze(['Included','Line type','Breakdown type','Candidate ref','Candidate','Client','Week / Date','Channel','Amount','Timesheet ID','Economic key type','Economic key value','Role','Band','Start','Finish','Break','Detail','Preview row ID']);
+const EXPORT_LIMITS=Object.freeze({requestBytes:32768,csvBytes:33554432,pages:2000,rows:200000,deadlineMs:120000});
+function exportInput(body,actor){
+  if(!exact(body,['choice','context','candidate_id','sort'])||!shape(body.context,CONTEXT)||body.context.actor_user_id!==actor||!field(body.candidate_id,'uuid?')||!EXPORT_SORTS.includes(body.sort))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  const v=body.choice;
+  if(!exact(v,['namespace','intent','revision','workbench_revision','adoption_revision'])||!exact(v.namespace,['agency_id','owner_epoch','actor_user_id','official_pay_date','scope'])||!exact(v.namespace.scope,['candidate_id','client_id','channel'])||!Number.isSafeInteger(v.revision)||v.revision<0||!field(v.workbench_revision,'integer')||!field(v.adoption_revision,'integer'))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  const c=body.context,n=v.namespace;
+  if(n.agency_id!==c.agency_id||n.owner_epoch!==c.owner_epoch||n.actor_user_id!==actor||n.official_pay_date!==c.official_pay_date||v.workbench_revision!==c.workbench_revision||v.adoption_revision!==c.adoption_revision||n.scope.client_id!==c.scope.client_id||n.scope.channel!==c.scope.channel||n.scope.candidate_id!==null&&n.scope.candidate_id!==c.scope.candidate_id||body.candidate_id!==null&&n.scope.candidate_id!==null&&body.candidate_id!==n.scope.candidate_id||body.sort.startsWith('G_')&&body.candidate_id===null)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
+  if(!exact(v.intent,['mode','candidates','works','components','cases'])||!['ALL_MATCHING','NONE'].includes(v.intent.mode))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  const schemas={candidates:{candidate_id:'uuid',selected:'boolean'},works:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',selected:'boolean',mode:'selectionMode'},components:{candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',approved_line_id:'uuid',selected:'boolean'},cases:{candidate_id:'uuid',case_component_id:'uuid',selected:'boolean'}},maps={};
+  for(const [kind,schema]of Object.entries(schemas)){
+    const rows=v.intent[kind];if(!Array.isArray(rows)||rows.length>1000)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+    maps[kind]=new Map();const supplied=new Set();
+    for(const row of rows){if(!exact(row,Object.keys(schema))||!Object.entries(schema).every(([k,t])=>t==='selectionMode'?['ALL','SUBSET'].includes(row[k]):field(row[k],t))||n.scope.candidate_id!==null&&row.candidate_id!==n.scope.candidate_id)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);const id=row.case_component_id??row.approved_line_id??row.work_id??row.candidate_id;if(supplied.has(id))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);supplied.add(id);if(body.candidate_id===null||row.candidate_id===body.candidate_id)maps[kind].set(id,row);}
+  }
+  // The installed ALL Work capture owns every line. Per-line choices require
+  // its existing SUBSET Work intent; contradictory descriptors are refused.
+  for(const line of maps.components.values()){
+    const work=maps.works.get(line.work_id);
+    if(!work||work.mode!=='SUBSET'||work.candidate_id!==line.candidate_id||work.expected_revision_id!==line.expected_revision_id)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  }
+  const frozen=JSON.parse(JSON.stringify(body));
+  return {body:frozen,maps,scope:{candidate_id:body.candidate_id??n.scope.candidate_id,client_id:n.scope.client_id,channel:n.scope.channel,section:'ALL',search:'',sort:body.sort},seen:Object.fromEntries(Object.keys(maps).map(k=>[k,new Set()]))};
+}
+function exportIncluded(row,input,caseCandidateQualified=false){
+  const {maps,seen}=input,candidate=maps.candidates.get(row.candidate_id),work=row.work_id===null?null:maps.works.get(row.work_id),line=row.approved_line_id===null?null:maps.components.get(row.approved_line_id),component=row.case_component_id===null?null:maps.cases.get(row.case_component_id);
+  if(candidate)seen.candidates.add(row.candidate_id);
+  for(const [kind,choice,id]of [['works',work,row.work_id],['components',line,row.approved_line_id],['cases',component,row.case_component_id]])if(choice){
+    if(choice.candidate_id!==row.candidate_id||choice.work_id!==undefined&&(choice.work_id!==row.work_id||choice.expected_revision_id!==row.revision_id))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
+    seen[kind].add(id);
+  }
+  if(!row.choice_eligible||!row.candidate_has_pay||candidate?.selected===false)return false;
+  const base=candidate?.selected??input.body.choice.intent.mode==='ALL_MATCHING';
+  if(row.work_id!==null){if(work?.selected===false||!base&&work?.selected!==true||input.invalidSubsets?.has(row.work_id))return false;if(work?.mode==='SUBSET')return line?.selected===true;return true;}
+  if(row.case_component_id!==null)return caseCandidateQualified&&(component?.selected??true);
+  return false;
+}
+function csvCell(value,money=false){let text=value===null?'':String(value);if(!money&&/^[\s]*[=+\-@]/.test(text))text="'"+text;return /[",\r\n]/.test(text)?'"'+text.replaceAll('"','""')+'"':text;}
+function exportCsvRow(row,included){
+  const date=row.work_date??row.week_ending_date,kind=row.direction==='DEDUCTION'?row.export_label+' balance':row.export_label;
+  const values=[included?'Yes':'No',kind,row.member_kind+' / '+row.portion_kind,row.candidate_reference,row.candidate_display_name,row.client_display_name,date===null?'':date.split('-').reverse().join('/'),row.target_pay_channel,row.export_amount,row.physical_timesheet_id,row.member_kind,row.member_key,row.job_title,row.band_label,row.shift_start,row.shift_finish,'',row.detail_label,row.item_id];
+  return values.map((v,n)=>csvCell(v,n===8)).join(',')+'\r\n';
+}
+export async function handleBpayNextWorkbenchExport(request,dependencies={}){
+  let controller,deadline,timer,pageTimer,closed=false;
+  try{
+    if(request.method!=='POST')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
+    const user=await dependencies.requireOfficeUser?.();if(!user||user.role!=='admin'||!field(user.id?.toLowerCase(),'uuid'))throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
+    const actor=user.id.toLowerCase();controller=new AbortController();
+    const bodyDeadline=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400));},BPAY_NEXT_WORKBENCH_LIMITS.timeoutMs);});
+    let raw;try{raw=await Promise.race([readWorkbenchJson(request,controller.signal),bodyDeadline]);}finally{clearTimeout(timer);}
+    if(ENCODER.encode(JSON.stringify(raw)).byteLength>EXPORT_LIMITS.requestBytes)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+    const input=exportInput(raw,actor);if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+    controller=new AbortController();deadline=Date.now()+EXPORT_LIMITS.deadlineMs;
+    const stop=()=>{closed=true;controller.abort();clearTimeout(timer);clearTimeout(pageTimer);request.signal?.removeEventListener('abort',stop);};
+    request.signal?.addEventListener('abort',stop,{once:true});if(request.signal?.aborted){stop();throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+    let pages=0,rows=0,bytes=0,context=null,after=null,first=true,streamController;
+    timer=setTimeout(()=>{stop();streamController?.error(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},EXPORT_LIMITS.deadlineMs);
+    const load=async()=>{
+      if(closed||Date.now()>=deadline||++pages>EXPORT_LIMITS.pages)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+      const args=normalizeWorkbenchInput('EXPORT_ROWS',{...input.scope,after,limit:100});
+      const task=(async()=>{const response=await dependencies.workbenchRpc('EXPORT_ROWS',args,{actorUserId:actor,signal:controller.signal});if(!(response instanceof Response)||!response.ok)throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);const payload=await readWorkbenchJson(response,controller.signal),page=validateWorkbenchResponse(payload,'EXPORT_ROWS',args,actor);if(!page.ok)throw fail(page.error_code,refusalStatus(page.error_code),page.retryable,page.reload_required);if(!context){context=page.context;const c=input.body.context;if(!['agency_id','owner_epoch','actor_user_id','official_pay_date','workbench_revision','adoption_revision'].every(k=>context[k]===c[k]))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);}else if(!same(context,page.context))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);return page;})();
+      const timeout=new Promise((_,reject)=>{pageTimer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},BPAY_NEXT_WORKBENCH_LIMITS.timeoutMs);});
+      try{return await Promise.race([task,timeout]);}finally{clearTimeout(pageTimer);}
+    };
+    // A finite validation walk records only Candidates addressed by bounded
+    // exceptions (or selected NONE intents), never every agency row/identity.
+    // It also proves every retained override before any CSV can be offered.
+    const touched=new Set();for(const map of Object.values(input.maps))for(const choice of map.values())touched.add(choice.candidate_id);
+    input.qualifiedCandidates=new Set();const eligibleLines=new Set(),invalidSubsets=new Set();input.invalidSubsets=invalidSubsets;let scanned=0;
+    let page=await load();
+    while(true){
+      for(const row of page.rows){if(++scanned>EXPORT_LIMITS.rows)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');
+        exportIncluded(row,input);
+        const subset=row.work_id===null?null:input.maps.works.get(row.work_id),line=row.approved_line_id===null?null:input.maps.components.get(row.approved_line_id);
+        if(subset?.mode==='SUBSET'&&line?.selected===true&&row.choice_eligible&&row.direction==='PAYMENT')eligibleLines.add(row.approved_line_id);
+        if(row.direction==='PAYMENT'&&row.choice_eligible&&row.candidate_has_pay&&input.maps.candidates.get(row.candidate_id)?.selected!==false){
+          const candidate=input.maps.candidates.get(row.candidate_id),base=candidate?.selected??input.body.choice.intent.mode==='ALL_MATCHING';
+          const chosenCase=row.case_component_id===null?null:input.maps.cases.get(row.case_component_id);
+          const chosenWork=row.work_id===null?null:input.maps.works.get(row.work_id);
+          if(touched.has(row.candidate_id)&&(row.work_id!==null&&chosenWork?.mode!=='SUBSET'&&chosenWork?.selected!==false&&(base||chosenWork?.selected===true)||row.case_component_id!==null&&(chosenCase?.selected??true)&&(base||chosenCase?.selected===true)))input.qualifiedCandidates.add(row.candidate_id);
+        }
+      }
+      if(page.complete)break;after=page.next_cursor;page=await load();
+    }
+    for(const kind of Object.keys(input.maps))for(const id of input.maps[kind].keys())if(!input.seen[kind].has(id))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
+    for(const line of input.maps.components.values())if(line.selected===true&&!eligibleLines.has(line.approved_line_id))invalidSubsets.add(line.work_id);
+    for(const work of input.maps.works.values())if(work.mode==='SUBSET'&&work.selected===true&&input.maps.candidates.get(work.candidate_id)?.selected!==false&&!invalidSubsets.has(work.work_id)&&[...input.maps.components.values()].some(line=>line.work_id===work.work_id&&line.selected===true&&eligibleLines.has(line.approved_line_id)))input.qualifiedCandidates.add(work.candidate_id);
+    // All export pages retain that exact first context; no newer-version retry.
+    after=null;page=await load();
+    const stream=new ReadableStream({start(c){streamController=c;},async pull(c){
+      if(closed)return;
+      try{
+        if(!first)page=await load();
+        let csv=first?'\ufeff'+BPAY_NEXT_EXPORT_HEADERS.map(v=>csvCell(v)).join(',')+'\r\n':'';first=false;
+        for(const row of page.rows){if(++rows>EXPORT_LIMITS.rows)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');
+          const qualified=touched.has(row.candidate_id)?input.qualifiedCandidates.has(row.candidate_id):input.body.choice.intent.mode==='ALL_MATCHING'&&row.candidate_has_pay;
+          csv+=exportCsvRow(row,exportIncluded(row,input,qualified));}
+        if(page.complete){for(const kind of Object.keys(input.maps))for(const id of input.maps[kind].keys())if(!input.seen[kind].has(id))throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);}
+        const chunk=ENCODER.encode(csv);bytes+=chunk.byteLength;if(bytes>EXPORT_LIMITS.csvBytes)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');
+        c.enqueue(chunk);after=page.next_cursor;
+        if(page.complete){stop();c.close();}
+      }catch(e){stop();c.error(e?.code?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));}
+    },cancel(){stop();}},{highWaterMark:0});
+    return new Response(stream,{headers:{'content-type':'text/csv; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
+  }catch(e){closed=true;controller?.abort();clearTimeout(timer);clearTimeout(pageTimer);const safe=typeof e?.code==='string'&&FAILURE_CODES.includes(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null});}
 }
