@@ -52,6 +52,7 @@ import { createBpayNextRuntimeRpc } from './bpay-next-runtime-rpc.js';
 import { createBpayNextPreparationExpiryRpc } from './bpay-next-preparation-expiry-rpc.js';
 import { createBpayNextFinancialJobRpc } from './bpay-next-job-rpc.js';
 import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick } from './bpay-next-background.js';
+import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './bpay-next-legacy-retirement.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
 import { parseWeeklySourceFile } from './weekly-source/index.js';
 import { dispatchWeeklySourceRequest } from './weekly-source/routes.js';
@@ -41053,6 +41054,25 @@ async function handleBankingPayContinuationQueue(batch, env, ctx) {
   try {
     const owner = await bpayNextOwnerStatusRpc(env)();
     if (owner.active_owner !== 'NEXT') {
+      message.retry({ delaySeconds: 30 });
+      return;
+    }
+    const family = classifyBpayNextContinuation(message.body, bankingPayContinuationSourcePolicy);
+    if (family.startsWith('LEGACY_')) {
+      const retirement = await createBpayNextLegacyRetirement({
+        baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
+      })(message, family, owner.owner_epoch);
+      if (retirement.retired) {
+        const current = await bpayNextOwnerStatusRpc(env)();
+        if (current.active_owner === 'NEXT' && current.owner_epoch === owner.owner_epoch) {
+          // The unique verified audit row is the once-only durable ID/reason log.
+          message.ack();
+          return;
+        }
+      }
+      console.warn('[banking-pay-next] legacy delivery retained', {
+        code: 'BPAY_NEXT_LEGACY_DISPOSITION_UNPROVEN'
+      });
       message.retry({ delaySeconds: 30 });
       return;
     }

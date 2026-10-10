@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleBpayNextBackgroundMessage,runBpayNextRecoveryTick} from '../broker/src/bpay-next-background.js';
+import {classifyBpayNextContinuation,createBpayNextLegacyRetirement} from '../broker/src/bpay-next-legacy-retirement.js';
 const JOB='b8f70000-0000-4000-8000-000000000001';
 const RUN='b8f70000-0000-4000-8000-000000000002';
 const NONCE='b8f70000-0000-4000-8000-000000000003';
@@ -124,4 +125,76 @@ test('oversized expiry and job pages cannot produce unbounded queue messages',as
     return Response.json({items:Array(101).fill({run_id:RUN,expected_deadline:'2026-10-01T10:00:00Z'}),cursor_run_id:RUN,cursor_deadline:'2026-10-01T10:00:00Z'});
   }});
   assert.equal((await runBpayNextRecoveryTick(s.deps)).ok,false);assert.equal(s.sent.length,0);
+});
+
+test('shared legacy classification admits exact original schemas without coercion or extra fields',()=>{
+  const time='2026-10-10T12:00:00.000Z';
+  const certificate={message_type:'WORKBENCH_SETTLED_CERTIFICATE_CONTINUATION_V8',contract_version:1,
+    continuation_sequence:1,session_id:RUN,actor_user_id:COMMAND,certificate_uuid:JOB,lease_owner:'original-owner',enqueued_at_utc:time};
+  const operation={version:1,operation_id:JOB,operation_type:'DRAFT_CREATE',pay_batch_id:null,root_operation_id:null,
+    successor_relation:'SELF',phase:'INITIALISE',run_after_utc:null,source:'handleBankingPayCreateDraft',enqueued_at_utc:time};
+  const policy=source=>source==='handleBankingPayCreateDraft'?{types:['DRAFT_CREATE'],relations:['SELF']}:null;
+  const wake={message_type:'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',contract_version:1,wake_depth:1,wake_id:JOB,
+    wake_reason:'PRE_ENTRY_COMMITTED_WORK',origin:null,scope_kind:'GLOBAL',requested_profile:'NUDGE',
+    previous_drain_invocation_id:null,session_id:null,candidate_id:null,actor_user_id:null,enqueued_at_utc:time};
+  assert.equal(classifyBpayNextContinuation(certificate,policy),'LEGACY_CERTIFICATE_V8');
+  assert.equal(classifyBpayNextContinuation(operation,policy),'LEGACY_OPERATION_V1');
+  assert.equal(classifyBpayNextContinuation(wake,policy),'LEGACY_WORKBENCH_WAKE_V1');
+  for(const body of [{...certificate,contract_version:'1'},{...certificate,actor_user_id:undefined},
+    {...certificate,extra:true},{...certificate,enqueued_at_utc:'2026-10-10T24:00:00.000Z'},
+    {...certificate,enqueued_at_utc:'2026-02-30T12:00:00.000Z'},
+    {...operation,source:'UNKNOWN_SOURCE'},{...operation,successor_relation:'ROOT'},
+    {...wake,scope_kind:'SESSION'},{...wake,wake_depth:33}])assert.equal(classifyBpayNextContinuation(body,policy),'UNKNOWN');
+  assert.equal(classifyBpayNextContinuation(ENROLL,policy),'NEXT_CANDIDATE');
+});
+
+test('completed native certificate retirement awaits exact durable audit reread and replays one ID',async()=>{
+  const certificate={message_type:'WORKBENCH_SETTLED_CERTIFICATE_CONTINUATION_V8',contract_version:1,
+    continuation_sequence:1,session_id:RUN,actor_user_id:COMMAND,certificate_uuid:JOB,lease_owner:'original-owner',enqueued_at_utc:'2026-10-10T12:00:00.000Z'};
+  const status={ok:true,workbench_session_id:RUN,session_version:1,progress_counter_version:1,authority_fence_generation:1,
+    selected_constituent_count:1,session_current_ready:true,certificate_lifecycle:'SEALED_CURRENT',certificate_uuid:JOB,
+    certificate_contract:'WORKBENCH_SETTLED_CERTIFICATION_V2',certification_id:'WORKBENCH_SETTLED_CERTIFICATION_V2:'+ 'a'.repeat(64),
+    overall_digest_sha256:'a'.repeat(64),certificate_ready_for_draft:true,certificate_build_pending:false,
+    certificate_continue_polling:false,certificate_recovery_required:false,certificate_error_code:null,certificate_error_message:null,
+    maximum_selected_constituents:50000,no_candidate_locks:true,read_only:true};
+  const nativeId='b8f70000000040008000000000000005',events=[];let stored=null,postCount=0,loseReply=true;
+  const token='x.'+Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')+'.y';
+  const retire=createBpayNextLegacyRetirement({baseUrl:'http://127.0.0.1:55440',headers:{authorization:'Bearer '+token},
+    fetchImpl:async(url,init)=>{
+      assert.equal(init.redirect,'error');assert.ok(init.signal instanceof AbortSignal);
+      if(url.includes('/rpc/pay_workbench_settled_certificate_status_v8')){
+        assert.deepEqual(JSON.parse(init.body),{p_workbench_session_id:RUN,p_actor_user_id:COMMAND});events.push('qualify');return Response.json(status);
+      }
+      if(init.method==='POST'){
+        assert.ok(url.endsWith('/audit_events'));events.push('insert');postCount++;
+        const full=JSON.parse(init.body);stored=Object.fromEntries(['id','object_type','object_id_text','action','reason','correlation_id','after_json'].map(k=>[k,full[k]]));
+        assert.equal(JSON.stringify(stored).includes('original-owner'),false);
+        if(loseReply){loseReply=false;throw Error('uncertain insert');}return new Response(null,{status:201});
+      }
+      events.push('reread');return Response.json(stored?[stored]:[]);
+    }});
+  const message={id:nativeId,body:certificate};
+  await assert.rejects(retire(message,'LEGACY_CERTIFICATE_V8','3'));
+  assert.deepEqual(events,['qualify','reread','insert']);
+  const outcome=await retire(message,'LEGACY_CERTIFICATE_V8','3');
+  assert.equal(outcome.retired,true);assert.equal(outcome.created,false);assert.equal(postCount,1);
+  assert.deepEqual(events.slice(3),['qualify','reread']);
+  stored.after_json.certificate_uuid=NONCE;
+  assert.equal((await retire(message,'LEGACY_CERTIFICATE_V8','3')).retired,false);assert.equal(postCount,1);
+  stored.after_json.certificate_uuid=JOB;
+  status.certificate_build_pending=true;
+  const beforePending=events.length;
+  assert.equal((await retire(message,'LEGACY_CERTIFICATE_V8','3')).retired,false);assert.equal(postCount,1);
+  assert.deepEqual(events.slice(beforePending),['qualify']);
+});
+
+test('unknown native scope and unsupported message IDs cannot manufacture retirement receipts',async()=>{
+  let calls=0;
+  const token='x.'+Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url')+'.y';
+  const retire=createBpayNextLegacyRetirement({baseUrl:'http://127.0.0.1:55440',headers:{authorization:'Bearer '+token},
+    fetchImpl:async()=>{calls++;throw Error('must not read/write');}});
+  for(const message of [{id:'unsupported-format',body:{}},{id:'b8f70000000040008000000000000005',body:{scope_kind:'GLOBAL'}}]){
+    assert.equal((await retire(message,'LEGACY_WORKBENCH_WAKE_V1','3')).retired,false);
+  }
+  assert.equal(calls,0);
 });

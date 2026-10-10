@@ -447,15 +447,17 @@ Dependencies: F-11, F-18; successor positions: none. Design note: required; exac
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-13-D01 | QUEUE-CRON: Exact legacy/NEXT envelope classifier | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-13-D02 | QUEUE-CRON: Durable reconciled message-retirement receipt | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-13-D03 | DOC: DLQ/transport-exhaustion recovery procedure | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-13-D01 | QUEUE-CRON: Exact legacy/NEXT envelope classifier | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-13-D02 | QUEUE-CRON: Durable reconciled message-retirement receipt | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-13-D03 | DOC: DLQ/transport-exhaustion recovery procedure | MISSING | Implement exact envelope ownership/schema classification plus durable terminal/reconciled disposition; preserve unknown/nonterminal work and bounded DLQ recovery. One-way switch only; no return-to-LEGACY or reverse-owner rehearsal. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-13-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 After the separately authorised one-way NEXT switch, a recognised legacy wake is acknowledged only when its durable terminal/reconciled disposition is established, and its bounded ID/reason is logged once as `BPAY_NEXT_LEGACY_ENVELOPE_RETIRED`. Genuine unknown or nonterminal obligations are not lost. No old-operation, recovery, fallback or drain parity test and no reverse-owner rehearsal is required (OR-45). Any separately approved DISABLED pause/resume preserves durable NEXT jobs and uses the F-26 epoch-validity completion. With no retained old work, no seeded old-work fixture or operational old queue is a clean-launch prerequisite.
+
+Whole F-13 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. F-13-COMPLETION.md; 31 source cases/syntax/dbcheck308/808/seal a0177a82/coupling PASS; hosted NOT_RUN Review: reviews/F-13-implementation-review.md and F-13-native-disposition-review.md PASS; case finding CLOSED.
 
 ## F-23 — Assemble the release package: lock, contract seal and source gates
 
