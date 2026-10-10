@@ -76,5 +76,6 @@
   "joinedAppAcceptance": "NOT_RUN; no failure/money fixtures or actual queue/timing programme",
   "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
   "deployment": "NOT_INSTALLED",
-  "frontendCommit": "3a8abd174a34f76bae9a7042f1f942455616c461"
+  "frontendCommit": "3a8abd174a34f76bae9a7042f1f942455616c461",
+  "backendCommit": "04f385f233a301f20d0b57664a0822a99e7089f6"
 }

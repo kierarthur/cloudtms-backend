@@ -1927,11 +1927,11 @@ Dependencies: WB-09, WB-12, WB-13, WB-14, WB-15, WB-16, F-16; successor position
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-19-D06 | REPEATABLE: public.bpay_next_financial_intake_v1(p_actor_user_id uuid, p_action text, p_args jsonb) | INSTALLED_ON_TEST | Preserve service actor admission and exact receipts; no browser money, clear/decision control joins ordered boundary. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-19-D11 | REPEATABLE: public.bpay_next_workbench_command_v1(jsonb) | MISSING | Exact request/body receipt and ordered affected control; RETRY_WORK_JOB and decision/snooze/clear actions, genuine read/ack separation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-19-D12 | WORKER ROUTE: POST /api/banking/pay/next/workbench-command | MISSING | Implement exact closed action/admin/actor/fence and no browser computed money; unknown reply exact journal/readback. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-19-D06 | REPEATABLE: public.bpay_next_financial_intake_v1(p_actor_user_id uuid, p_action text, p_args jsonb) | INSTALLED_ON_TEST | Preserve service actor admission and exact receipts; no browser money, clear/decision control joins ordered boundary. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-19-D11 | REPEATABLE: public.bpay_next_workbench_command_v1(jsonb) | MISSING | Exact request/body receipt and ordered affected control; RETRY_WORK_JOB and decision/snooze/clear actions, genuine read/ack separation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-19-D12 | WORKER ROUTE: POST /api/banking/pay/next/workbench-command | MISSING | Implement exact closed action/admin/actor/fence and no browser computed money; unknown reply exact journal/readback. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-19-D13 | SCREEN: Workbench progress/error/retry/adoption controls in js/bpay-next-workbench.js | MISSING | Exact unknown outcome readback/retry, definite READY/lease repair; own completion no manual Refresh prerequisite or long Candidate polling. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-19-D15 | WORKER ROUTE: createBpayNextFinancialCommandRpc in broker/src/bpay-next-command-rpc.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-19-D15 | WORKER ROUTE: createBpayNextFinancialCommandRpc in broker/src/bpay-next-command-rpc.js | LOCAL_ONLY | Preserve real saved exact transport/authority/continuation; reconcile complete authenticated runtime and final closed allowlist, then real consumer/minute stored-data acceptance. This is working local code, not MISSING or installed-route proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1959,6 +1959,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A work whose position job failed shows "Failed — Retry", and Retry leads to Ready without duplicating money; pressing Retry twice sends one identical request (RQ-029, RQ-238, LUI-047, J2a).
   - Snoozing from page 3 of Action Required keeps the user on page 3 and the item moves section once (RQ-027).
   - Without an own action there is no long Candidate polling or history from reads. Own pending action completion adopts bounded affected state, preserving page/scroll/selection; unrelated newer information is an explicit refresh notice and failures remain Candidate-isolated.
+
+WB19 available-slice receipt: exact retry SQL/Worker/local screen source PASS;21 actual SCR16 screenshots independently approved. D06/D11/D12/D15 ticked at BE04f385f233a301f20d0b57664a0822a99e7089f6, FE3a8abd174a34f76bae9a7042f1f942455616c461. D13/whole ITEM PARTLY_BUILT, unchecked for WB34 full own-completion adoption and WB36 Snooze journey. Joined app/duplicate-money/queue acceptance NOT_RUN; whole51/288 unchanged.
 
 ## WB-23 — Include-all and clear-all across pages, with paged exclusions (server select-matching)
 
