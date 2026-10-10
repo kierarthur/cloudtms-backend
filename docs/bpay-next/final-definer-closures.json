@@ -3877,25 +3877,27 @@
     },
     {
       "signature": "private.bpay_next_preparation_args_v1(jsonb,text[])",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners",
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4442,21 +4444,23 @@
     },
     {
       "signature": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1590_banking_pay_next_selection_manifest_v1.sql",
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners",
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7363,9 +7367,18 @@
     },
     {
       "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
@@ -7373,38 +7386,33 @@
         "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-        "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners",
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
         "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql"
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "owner": "WB-16 bounded current GROUP_LINES native component facts and retained Case original; successors1946/2019",
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13934,16 +13942,19 @@
     },
     {
       "signature": "private.bpay_next_ack_choice_work_page_v1(uuid,bigint,jsonb,boolean)",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "owner": "WB-21 bounded choice-input support; no monetary or producer authority"
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
@@ -14012,6 +14023,90 @@
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
       ],
       "owner": "WB-19 exact retry/status support; later W2 action owners merge this final definition"
+    },
+    {
+      "signature": "private.bpay_next_selection_page_authority_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "owner": "WB-23 bounded retained-input/immutable page receipt support"
+    },
+    {
+      "signature": "private.bpay_next_exclusion_page_v1(uuid,bigint,jsonb)",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "owner": "WB-23 bounded retained-input/immutable page receipt support"
+    },
+    {
+      "signature": "private.bpay_next_matching_page_v1(uuid,bigint,jsonb)",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "owner": "WB-23 bounded retained-input/immutable page receipt support"
+    },
+    {
+      "signature": "private.bpay_next_choice_inputs_page_v1(uuid,bigint,integer)",
+      "finalRoot": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql"
+      ],
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority"
+    },
+    {
+      "signature": "private.bpay_next_selection_receipt_guard_v1()",
+      "finalRoot": "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql"
+      ],
+      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority"
+    },
+    {
+      "signature": "private.bpay_next_ack_choice_work_page_v2(uuid,bigint,jsonb,boolean,jsonb)",
+      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+      ],
+      "owner": "WB-23 bounded retained-input/immutable page receipt support"
     }
   ],
   "editorChains": [

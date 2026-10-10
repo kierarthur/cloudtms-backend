@@ -1,0 +1,100 @@
+{
+  "item": "WB-23",
+  "sequence": 68,
+  "state": "BUILT_REVIEWED; source/local compile and actual local screens; joined application acceptance NOT_RUN",
+  "builderDecision": "BD076",
+  "exactDeliverables": [
+    "WB-23-D06"
+  ],
+  "contextOwners": "D01-D05/D07 are references to reused WB21 objects, not duplicate tasks",
+  "successors": [
+    {
+      "object": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+      "chain": [
+        "1832",
+        "2232"
+      ],
+      "change": "EXCLUSION_PAGE and MATCHING_PAGE only; original actions retained"
+    },
+    {
+      "object": "private.bpay_next_seal_selection_v1(uuid,bigint,bigint)",
+      "chain": [
+        "1832",
+        "2232"
+      ],
+      "change": "Only descriptor exclusion empty-page completeness; Rule-B snapshot and original counters retained"
+    },
+    {
+      "object": "public.bpay_next_preparation_page_v1(jsonb)",
+      "chain": [
+        "2026",
+        "2232"
+      ],
+      "change": "WORK_CHOICES accepted_inputs bounded variant; all normal reader branches retained"
+    },
+    {
+      "object": "private.bpay_next_selection_receipt_guard_v1()",
+      "chain": [
+        "2232",
+        "2240"
+      ],
+      "change": "Only actual COMPLETE/CANCELLED run cleanup DELETE allowed under native run lock"
+    },
+    {
+      "object": "private.bpay_next_selection_choice_inputs_page_v1(uuid,bigint,integer)",
+      "chain": [
+        "2232",
+        "2245"
+      ],
+      "change": "Nullable original choice state/component-page/component counts for truthful prior short/reordered subset resume"
+    }
+  ],
+  "sourceFiles": {
+    "supabase/migrations/10102026_2232_banking_pay_next_selection_page_receipts.sql": "6ece229f994bfc8229a66bd4b9102e6d3353c7e9bdd2b10a4df7f0f3f4b02125",
+    "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql": "cc1491f55ff1f4afe48f82e8892015aa2f91500f42d0d41d692f0e6b78dd3e48",
+    "supabase/repeatable/10102026_2240_banking_pay_next_selection_receipt_cleanup_guard_v1.sql": "36c7a3aac98fc13431e03f4534ba3ca1242cef2fc735775ebe890e412bb1fb45",
+    "supabase/repeatable/10102026_2245_banking_pay_next_subset_upload_context_v1.sql": "e1c9936055a24b271b887ee431a8f8dd4e2a224d1b8bb184f3e709534e1fabb4"
+  },
+  "checks": {
+    "dbCheck": "331 migrations/861 repeatables PASS",
+    "localPg17": "Sole PG17 compile only: 1 migration/4 final closures, then 0/4 twice",
+    "sourceGates": "9/9 PASS",
+    "changedJsSyntax": "PASS",
+    "diffCheck": "PASS",
+    "contractSeal": "0814f8644b176f62d91090bb509572f401a25ef9feb14c7641c0e355aaf32c14",
+    "coupling": "PASS"
+  },
+  "publicCatalogue": {
+    "count": 833,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "hash": "01ac3d90c572327934daabf869623c85",
+    "delta": "No public SECDEF signature added or removed; fresh catalogue unchanged"
+  },
+  "reviews": [
+    "reviews/WB-23-design-review.md",
+    "reviews/WB-23-sql-review.md",
+    "reviews/WB-23-transport-review.md",
+    "reviews/WB-23-sequencer-review.md",
+    "reviews/WB-23-ui-review.md"
+  ],
+  "screens": {
+    "id": "SCR-04",
+    "screenshots": 12,
+    "policyReview": "38 PASS /0 FAIL /4 N/A",
+    "review": "screen-designs/SCR-04/review.md",
+    "method": "Actual local Office fixed responses; dark/device-light/390px phone; no DB rows or hosted calls"
+  },
+  "scopeDifferences": [
+    "Card-required Select all/Clear all supplement supplied global Include control",
+    "Unsupported later Timesheets link/Create/progress fields remain their named joins"
+  ],
+  "laterJoins": [
+    "WB26 accepted Case enumeration",
+    "DR10 guard",
+    "DR02/DR06 progress destination"
+  ],
+  "joinedAppAcceptance": "NOT_RUN; no1200/150-row fixtures, whole Create or financial invocation claimed",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "deployment": "NOT_INSTALLED"
+}

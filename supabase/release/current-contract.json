@@ -10607,7 +10607,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "24b2fe281008d6422700f34a91aa1f8f3ce44578bb533c35b29072e080d6d986"
+      "definition_sha256": "3f160d28010cd71422a0b071eda5fcb614dd5ee54c30bb8db9083fbbffa17222"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_ack_choice_work_page_v2(p_run_id uuid, p_page_no bigint, p_body jsonb, p_explicit boolean, p_matching_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "a759f804e173d68eb4fd8fd5c5f950df3e4def7aec43c017cedbf4af806f0fd3"
     },
     {
       "acl": [
@@ -11667,6 +11686,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_choice_inputs_page_v1(p_run_id uuid, p_after bigint, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "862da41b518c8b39af8f6b3ed33dc5a76a2ce73f0de43980dadc519cf65f46c6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_claim_case_create_job_v1(p_job_id uuid, p_lease_seconds integer)",
       "parallel": "u",
       "volatility": "v",
@@ -12370,6 +12408,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_exclusion_page_v1(p_run_id uuid, p_page_no bigint, p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "36e87a286cb2f1aea16aead704b6832b0606dd9bd562325e43e480cd4f6bfeb7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_expire_preparation_worker_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_checkpoint bigint, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
@@ -12741,6 +12798,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_matching_page_v1(p_run_id uuid, p_page_no bigint, p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "804c18760e612b4a737bc62627e10065d0240283c4450a1021d83d3dbf71ba8f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_materialise_choice_segments_v1(p_run_id uuid, p_work_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -12935,7 +13011,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "35695d8bd9278cc7cab63cbafcb27fd900e0e07b0e9d4ef0a3b13efd8d74f7f3"
+      "definition_sha256": "c8b17a6d5c03d3dd9aa6805782cae87645dd334c0335660d7ab79f43b605a3fb"
     },
     {
       "acl": [
@@ -13866,7 +13942,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ec254c93d757311511b80b9bb2ba86b276d4d07deb56c8b4c1f6667aea3310ee"
+      "definition_sha256": "e506533782d08862da7dc85d28c0f5ef7e297d708e1bc668c6c2b2d2f664ff2c"
     },
     {
       "acl": [
@@ -14209,6 +14285,44 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "92b3e59cef50b0cdda302ca149ff501249c559fd9dd60d8b7ec7188c85b17082"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_selection_page_authority_v1(p_run_id uuid, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "fb0df6c093ecf56dd90a55e2be86b73b7a98c634112754ed30d1e59ad284c0d3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_selection_receipt_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "0239870a29d48d72437d7f2eca105298c96211c16af8984670c9e6b56171a9ac"
     },
     {
       "acl": [
@@ -31368,7 +31482,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3cd48c25c59c2840c1311751bdbedb46497015226bc7e72c76cae172263e4695"
+      "definition_sha256": "de9ddebbd861e5f914f7e852113c7ebbfef3128a83ef41a71ba8f1b5eb0e5e67"
     },
     {
       "acl": [
@@ -31392,7 +31506,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b487001d349e26a9b8406392ea8b95eef2e54d4efdec1a4476a643069cf04516"
+      "definition_sha256": "3a942b482c4e20419cb8e2a174154e1d979ba47fb9d53c218bfa94eb56b79b35"
     },
     {
       "acl": [
@@ -53319,6 +53433,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_accepted_choice_exclusion_page_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_selection_exclusion_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_choice_guard_v1()"
+    },
+    {
+      "name": "bpay_next_selection_receipt_guard",
+      "table": "bpay_next_selection_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_selection_receipt_guard BEFORE DELETE OR UPDATE ON private.bpay_next_selection_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_selection_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_selection_receipt_truncate_guard",
+      "table": "bpay_next_selection_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_selection_receipt_truncate_guard BEFORE TRUNCATE ON private.bpay_next_selection_page FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_selection_receipt_guard_v1()"
     },
     {
       "name": "bpay_next_detail_guard_v1",
@@ -103458,6 +103586,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "captured_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "page_no",
           "type": "bigint",
           "default": null,
@@ -103491,6 +103627,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_next_exclusion_captured_result_bound",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_result_json IS NULL OR jsonb_typeof(captured_result_json) = 'object'::text AND octet_length(captured_result_json::text) <= 120000)"
+        },
         {
           "name": "bpay_next_selection_exclusion_page_page_no_check",
           "type": "c",
@@ -103576,6 +103720,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "captured_result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "choices_request_json",
           "type": "jsonb",
           "default": null,
@@ -103597,6 +103749,14 @@
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "matching_request_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -103634,6 +103794,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_selection_matching_page_idx",
+          "definition": "CREATE INDEX bpay_next_selection_matching_page_idx ON private.bpay_next_selection_page USING btree (run_id, page_no DESC) WHERE (matching_request_json IS NOT NULL)"
+        },
+        {
           "name": "bpay_next_selection_page_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_selection_page_pkey ON private.bpay_next_selection_page USING btree (run_id, page_no)"
         }
@@ -103641,6 +103805,22 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_selection_captured_result_bound",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_result_json IS NULL OR jsonb_typeof(captured_result_json) = 'object'::text AND octet_length(captured_result_json::text) <= 120000)"
+        },
+        {
+          "name": "bpay_next_selection_matching_receipt_bound",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (matching_request_json IS NULL OR jsonb_typeof(matching_request_json) = 'object'::text AND octet_length(matching_request_json::text) <= 32768 AND captured_result_json IS NOT NULL)"
+        },
         {
           "name": "bpay_next_selection_page_choices_request_bound",
           "type": "c",
@@ -103663,7 +103843,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (item_count >= 1 AND item_count <= 100)"
+          "definition": "CHECK (item_count >= 0 AND item_count <= 100 AND (item_count > 0 OR matching_request_json IS NOT NULL))"
         },
         {
           "name": "bpay_next_selection_page_page_no_check",
@@ -103703,7 +103883,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (jsonb_typeof(work_ids_json) = 'array'::text AND jsonb_array_length(work_ids_json) >= 1 AND jsonb_array_length(work_ids_json) <= 100 AND octet_length(work_ids_json::text) <= 262144)"
+          "definition": "CHECK (jsonb_typeof(work_ids_json) = 'array'::text AND jsonb_array_length(work_ids_json) = item_count AND octet_length(work_ids_json::text) <= 262144)"
         }
       ],
       "view_definition_sha256": null

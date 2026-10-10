@@ -9,6 +9,9 @@ const INT=/^(?:0|[1-9]\d{0,18})$/;
 const MONEY=/^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/;
 const ENCODER=new TextEncoder();
 export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
+  EXCLUSION_PAGE:{run_id:'uuid',page_no:'positive',excluded_work_ids:'emptyIds',excluded_candidate_ids:'emptyIds'},
+  MATCHING_PAGE:{run_id:'uuid',page_no:'positive',after_member_no:'positive?'},
+
   CREATE:{run_id:'uuid',pay_date:'date'},
   WORK_PAGE:{run_id:'uuid',page_no:'positive',choices:'choices'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',approved_line_ids:'ids'},
@@ -44,6 +47,9 @@ export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
   RETURN_CASH:{run_id:'uuid',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'}
 });
 const OUTPUTS={
+  EXCLUSION_PAGE:{run_id:'uuid',page_no:'positive',item_count:'integer',complete:'boolean',replay:'boolean'},
+  MATCHING_PAGE:{run_id:'uuid',page_no:'positive',item_count:'integer',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean',skipped:'skipped',complete:'boolean',next_after_member_no:'positive?'},
+
   CREATE:{run_id:'uuid',status:'runStatus',selection_state:'selectionState',selection_count:'integer',selected_candidate_count:'integer',official_pay_date:'date'},
   WORK_PAGE:{run_id:'uuid',page_no:'positive',item_count:'positive',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean',skipped:'skipped'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',component_count:'positive',replay:'boolean'},
@@ -136,6 +142,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+    if(t==='emptyIds')return Array.isArray(v)&&v.length<=100&&v.every(x=>field(x,'uuid'))&&new Set(v.map(x=>x.toLowerCase())).size===v.length;
   if(t==='null')return v===null;
   if(t==='unit')return typeof v==='string'&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=512;
   if(t==='nativeRateCode')return typeof v==='string'&&!v.includes('\0')&&[...v].length>=1&&[...v].length<=245;
@@ -239,17 +246,17 @@ function commandCall(body){
   if(!record(body)||!Object.hasOwn(BPAY_NEXT_PREPARATION_INPUTS,body.action))throw fault('REQUEST_INVALID',400);
   const {action,...args}=body;
   const schema=action==='CREATE'&&Object.hasOwn(args,'descriptor')?{run_id:'uuid',command_id:'uuid',descriptor:'descriptor'}:action==='CREATE'&&!Object.hasOwn(args,'pay_date')?{run_id:'uuid'}:BPAY_NEXT_PREPARATION_INPUTS[action];
-  if(!exact(args,schema)||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
+  if(!exact(args,schema)||(action==='EXCLUSION_PAGE'&&args.excluded_work_ids.length+args.excluded_candidate_ids.length>100)||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
   return {action,args:action==='SEGMENT_PAGE'?Object.freeze({...normalized(args),segment_keys:Object.freeze([...args.segment_keys])}):normalized(args)};
 }
 function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>BPAY_NEXT_PREPARATION_LIMITS.requestBytes)throw fault('REQUEST_TOO_LARGE',413);
-  const kind=url.searchParams.get('kind'),schema=BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const kind=url.searchParams.get('kind'),schema=kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit'}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);
+    let v=url.searchParams.get(key);if(key==='accepted_inputs'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
     if(!field(v,type))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
@@ -278,6 +285,10 @@ function result(payload,call,mutation){
     if(!exact(payload,schema))bad();
     for(const key of ['run_id','work_id','expected_revision_id','candidate_id','command_id','page_no','selection_revision'])
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
+    if(call.action==='EXCLUSION_PAGE'&&payload.item_count!==String(call.args.excluded_work_ids.length+call.args.excluded_candidate_ids.length))bad();
+    if(call.action==='MATCHING_PAGE'&&(BigInt(payload.item_count)>100n||payload.skipped.length>Number(payload.item_count)
+      ||(payload.complete!==(payload.next_after_member_no===null))||(!payload.complete&&(payload.item_count==='0'
+      ||BigInt(payload.next_after_member_no)!==BigInt(call.args.after_member_no??'0')+BigInt(payload.item_count)))))bad();
     if(call.action==='CREATE'&&Object.hasOwn(call.args,'pay_date')&&payload.official_pay_date!==call.args.pay_date)bad();
     if(call.action==='CREATE'&&Object.hasOwn(call.args,'descriptor')&&(payload.empty!==(payload.selected_candidate_count==='0')||payload.empty!==(payload.agency_sequence===null)||BigInt(payload.selection_count)>BigInt(payload.choice_work_count)||payload.official_pay_date!==call.args.descriptor.namespace.official_pay_date))bad();
     if(call.action==='WORK_PAGE'){
@@ -331,6 +342,14 @@ function result(payload,call,mutation){
       }
     }
     return {header:h,rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{[inputKey]:previous}};
+  }
+  if(call.kind==='WORK_CHOICES'&&call.args.accepted_inputs===true){
+    if(!record(payload)||Object.keys(payload).sort().join()!=='complete,header,rows'||!exact(payload.header,{run_id:'uuid',uploaded_choice_work_count:'integer',selection_page_count:'integer',selection_count:'integer',exclusion_page_count:'integer'})
+      ||payload.header.run_id!==call.args.run_id||!Array.isArray(payload.rows)||payload.rows.length>call.args.limit
+      ||typeof payload.complete!=='boolean'||(!payload.complete&&!payload.rows.length))bad();
+    let previous=BigInt(call.args.after_member_no??'0');const ids=new Set();
+    for(const row of payload.rows){if(!exact(row,{member_no:'positive',candidate_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',selection_mode:'mode',skip_code:'skipCode?',choice_state:'selectionState?',component_page_count:'integer?',component_count:'integer?'})||BigInt(row.member_no)!==previous+1n||ids.has(row.work_id.toLowerCase()))bad();if((row.skip_code!==null)!==(row.choice_state===null)||(row.choice_state===null)!==(row.component_page_count===null)||(row.choice_state===null)!==(row.component_count===null)||row.choice_state!==null&&row.selection_mode==='ALL'&&(row.choice_state!=='SEALED'||row.component_page_count!=='0'||row.component_count!=='0'))bad();previous=BigInt(row.member_no);ids.add(row.work_id.toLowerCase());}
+    return {header:payload.header,rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{after_member_no:String(previous)}};
   }
   if(call.kind==='CHANNEL_DRAFTS'){
     if(!exact(payload,{rows:'drafts',complete:'true'})||payload.rows.some(d=>d.run_id!==call.args.run_id))bad();
