@@ -1,0 +1,13 @@
+# PF-13 future joined acceptance
+
+All actual app/installed/browser/fullWorker/queue/minute clauses remain NOT_RUN. This saved finite checklist is not a scenario runner, data set, timing round or provider probe. Reuse one future authorised joined receipt.
+
+- Under NEXT, authenticated GET /api/banking/capabilities?scope=NEXT remains reachable and returns the closed factual diagnostic without settings/rail/token/provider probes. Default capabilities and Invoice Discounting retain their own independent contract.
+- A supported TEST Worker and matching TEST Office show TEST MODE and the explicit environment. Name check is unavailable, provider execution disabled and funding verification unavailable; no label certifies connection/balance/CoP. Missing/mismatched capabilities show the blocker and Re-check while Close remains usable.
+- Existing Funding Required/global-error/rail-chip presentation stays on Payment Batches, Payment Advances/Snoozes and Invoice Discounting; those shared banners/chip stay hidden on Banking Pay. Do not resurrect retired legacy financial workflows under OR45.
+- Anonymous/nonadmin current NEXT business requests retain existing401/403. After authentication, missing/foreign/mismatched caller/deployment/database-gateway configuration is refused before its NEXT business RPC. Verify history, frozen detail, preparation-page, original advice, prepare and command interfaces; command covers export/execute/retry/corrections. Owner-status/scoped capabilities remain diagnostic bootstrap exceptions.
+- Office, history and original advice carry the same explicit build environment header. CORS accepts only the necessary named header; command/preparation/history bodies, IDs, exact cursor and saved retry bytes remain unchanged. Unsupported/LIVE deployment cannot be enabled by this TEST build or by editable payroll_testing. Provider SANDBOX/PROD is not application environment.
+- Initial pre-RPC financial refusal is known non-acceptance; an earlier unknown journal survives a later environment refusal with its original bytes/identity until a validated receipt. Capabilities Re-check does no financial work, resumes no command and drains nothing; blocked/unavailable capabilities disable business/progress/Retry controls.
+- Closed error envelopes match each current caller, advice remains incomplete on failure, actor/owner/frame guards remain intact, and no stale/later diagnostic reply authorizes another actor. Served assets share the coherent dependency marker.
+
+No SQL marker is built ahead of F22, physical database TEST parity is not certified by a configuration label, and no payment/provider/bank/email/drain/hosted release occurred. Rule-B captured authority and parked F25 files remain untouched.

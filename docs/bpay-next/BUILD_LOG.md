@@ -314,3 +314,12 @@ Exact three checklist objects listed before build in design/PF-12-SCOPE.md. BD02
 ### PF-12 complete — 10/10/2026 London
 
 Whole ITEM BUILT23/288 REVIEWED23/288. Exact three objects complete underBD029; finite focus/CSS findings corrected and fresh independent reviewPASS. 65/65 ordinary source/caller controls, seven source/final-definer controls, sixsyntax/diff/dbcheck310/812 unchangedsolePG17 seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. NoSQLtoload; alljoined375px/browser/keyboard/theme/fullWorker/queue/minute/timingNOT_RUN. BUILD-FE reviewedlocalcommit516aeee; BEevidencecommit follows. ProceedPF13sequence26.
+
+### PF-13 design and scope checkpoint — 10/10/2026 London
+
+Exact three checklist objects listed before build in design/PF-13-SCOPE.md. BD030 adopts the narrow explicit NEXT diagnostic capabilities branch and required pre-RPC environment guard, preserving Invoice Discounting and existing per-tab banner rules. Required design written and checked before product edits. F12 source prerequisite complete; quiet runtime acceptance pending. No SQL/provider/producer/global framework additions. Joined/timing NOT_RUN.
+
+### PF-13 complete — 10/10/2026 London
+
+Whole ITEM BUILT24/288 REVIEWED24/288. Exactthreeobjects complete underBD030; design/server/callerreviewsPASS, finiteauth/origin/future-route wording corrected. Ordinary66/66caller15/15Worker, syntax/source7/dbcheck310/812/unchangedsolePG17seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. NoSQLtoload. Actualapp/physicalDB/installed/fullWorker/queue/minute/timingNOT_RUN. Localcommitsonly; proceedPS01sequence27.
+BUILD-FE PF13 reviewed localcommit39002ab; BUILD-BE evidence checkpoint follows.

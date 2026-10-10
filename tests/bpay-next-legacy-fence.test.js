@@ -239,3 +239,35 @@ test('saved SQL contains exact33 financial scopes and retires only its own factu
   assert.match(source, /notify pgrst,'reload schema'/);
   assert.doesNotMatch(source, /update\s+private\.bpay_next_module_control|session_replication_role|pg_trigger_depth|current_user\s*=|current_user\s+in/i);
 });
+
+
+test('PF13 exact NEXT environment and diagnostic capabilities precede business RPCs without provider probes',async()=>{
+  const {bpayNextEnvironmentFailure,bpayNextCapabilities}=await import('../broker/src/bpay-next-environment.js');
+  const env={CANDIDATE_APP_ENVIRONMENT:'TEST',SUPABASE_URL:'https://codex-cloudtms-miget-gateway.kier-88a.workers.dev'};
+  const request=(path,environment='TEST',method='POST')=>new Request('https://controlled.invalid'+path,{method,headers:environment===null?{}:{'X-CloudTMS-Banking-Environment':environment}});
+  for(const path of ['/api/banking/pay/next/command','/api/banking/pay/next/preparation','/api/banking/pay/next/preparation-page','/api/banking/pay/next/history-page','/api/banking/pay/next/frozen-detail','/api/banking/pay/next/advice/11111111-2222-4333-8444-555555555555']){
+    assert.equal(bpayNextEnvironmentFailure(env,request(path)),null);
+    for(const value of [null,'LIVE','test','TEST,LIVE']){
+      const response=bpayNextEnvironmentFailure(env,request(path,value));assert.equal(response.status,409);
+      const payload=await response.json();assert.equal(payload.error_code,'BPAY_NEXT_ENVIRONMENT_MISMATCH');assert.equal(payload.retryable,false);
+      if(['/api/banking/pay/next/command','/api/banking/pay/next/preparation','/api/banking/pay/next/preparation-page'].includes(path))assert.equal(payload.outcome_unknown,false);else assert.deepEqual(Object.keys(payload),['ok','error_code','retryable']);
+    }
+  }
+  for(const invalid of [{...env,CANDIDATE_APP_ENVIRONMENT:'LIVE'},{...env,CANDIDATE_APP_ENVIRONMENT:''},{...env,SUPABASE_URL:'https://foreign.invalid'}, {...env,SUPABASE_URL:'https://user@codex-cloudtms-miget-gateway.kier-88a.workers.dev'}, {...env,SUPABASE_URL:env.SUPABASE_URL+'?route=other'}, {...env,SUPABASE_URL:env.SUPABASE_URL+':8443'}, {...env,SUPABASE_URL:env.SUPABASE_URL+'/other'}])assert.ok(bpayNextEnvironmentFailure(invalid,request('/api/banking/pay/next/command')));
+  assert.equal(bpayNextEnvironmentFailure({...env,SUPABASE_URL:'http://127.0.0.1:3000'},request('/api/banking/pay/next/command')),null);
+  assert.equal(bpayNextEnvironmentFailure({},request('/api/banking/pay/next/owner-status',null,'GET')),null);
+  assert.equal(bpayNextEnvironmentFailure({},request('/api/banking/id/preview',null,'GET')),null);
+  assert.equal(isBpayNextLegacyFinancialRoute('GET','/api/banking/capabilities'),false);
+  const caps=bpayNextCapabilities(env,request('/api/banking/capabilities?scope=NEXT','TEST','GET'));
+  assert.deepEqual(caps,{ok:true,scope:'NEXT',worker_environment:'TEST',requested_environment:'TEST',environment_ready:true,test_mode:true,env_mismatch:false,cop_available:false,provider_status:'DISABLED',funding_status:'UNAVAILABLE',csv_available:true});
+  assert.equal(bpayNextCapabilities({},request('/api/banking/capabilities?scope=NEXT','TEST','GET')).environment_ready,false);
+  const source=await readFile(new URL('../broker/src/index.js',import.meta.url),'utf8');
+  const next=source.slice(source.indexOf('  if (nextOfficeRoute) {'),source.indexOf("if (p.startsWith('/api/banking/'))",source.indexOf('  if (nextOfficeRoute) {')));
+  assert.ok(next.indexOf('if (user.role')<next.indexOf('bpayNextEnvironmentFailure(env, req)'));
+  assert.ok(next.indexOf('bpayNextEnvironmentFailure(env, req)')<next.indexOf('createBpayNextPreparationRpc'));
+  assert.ok(next.indexOf('bpayNextEnvironmentFailure(env, req)')<next.indexOf('createBpayNextHistoryRpc'));
+  const handler=source.slice(source.indexOf('async function handleBankingCapabilities'),source.indexOf('async function saveAndRecalculateCanonicalDaily'));
+  assert.ok(handler.indexOf("searchParams.get('scope') === 'NEXT'")<handler.indexOf("const select = ["));
+  assert.match(handler,/return withCORS\(env, req, ok\(bpayNextCapabilities\(env, req\)\)\)/);
+  assert.match(source,/Access-Control-Allow-Headers.*x-cloudtms-banking-environment/);
+});

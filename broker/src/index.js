@@ -48,6 +48,7 @@ import { handleBpayNextPreparationCommand, handleBpayNextPreparationPage } from 
 import { createBpayNextPreparationRpc, createBpayNextPreparationPageRpc } from './bpay-next-preparation-rpc.js';
 import { createBpayNextOwnerStatusRpc, createBpayNextLegacyFence, isBpayNextLegacyFinancialRoute } from './bpay-next-legacy-fence.js';
 import { isBpayNextLegacyFinancialEmail } from './bpay-next-legacy-email.js';
+import { bpayNextCapabilities, bpayNextEnvironmentFailure } from './bpay-next-environment.js';
 import { createBpayNextRuntimeRpc } from './bpay-next-runtime-rpc.js';
 import { createBpayNextPreparationExpiryRpc } from './bpay-next-preparation-expiry-rpc.js';
 import { createBpayNextFinancialJobRpc } from './bpay-next-job-rpc.js';
@@ -27887,6 +27888,11 @@ async function revolutEnsurePayeesReadyFromPreview(env, railEnv, payees, actorUs
 
 async function handleBankingCapabilities(env, req, user) {
   try {
+    // NEXT diagnostics never enter the legacy adapter/token probe. Default
+    // capabilities retain the separate Invoice Discounting contract.
+    if (new URL(req.url).searchParams.get('scope') === 'NEXT') {
+      return withCORS(env, req, ok(bpayNextCapabilities(env, req)));
+    }
     const select = [
       'rail_provider_default',
       'rail_env_default',
@@ -135590,7 +135596,7 @@ function buildCORSHeaders(env, reqOrigin) {
   const allowed = splitCsv(env.ALLOWED_ORIGINS || "");
   const h = {
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Headers": "authorization,content-type,content-md5,x-requested-with,idempotency-key,x-idempotency-key",
+    "Access-Control-Allow-Headers": "authorization,content-type,content-md5,x-requested-with,idempotency-key,x-idempotency-key,x-cloudtms-banking-environment",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Vary": "Origin",
   };
@@ -198707,6 +198713,10 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
     if (user.role !== 'admin') return withCORS(env, req, new Response(JSON.stringify({
       ok: false, error_code: 'BPAY_NEXT_OFFICE_FORBIDDEN', retryable: false
     }), { status: 403, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } }));
+    // Preserve authentication, then refuse before any NEXT business RPC.
+    // Owner-status/capabilities are diagnostic bootstrap reads.
+    const nextEnvironmentFailure = bpayNextEnvironmentFailure(env, req);
+    if (nextEnvironmentFailure) return withCORS(env, req, nextEnvironmentFailure);
   if (req.method === 'GET' && nextPath === '/api/banking/pay/next/owner-status') {
     try {
       const status = await bpayNextOwnerStatusRpc(env)();
