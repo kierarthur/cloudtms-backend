@@ -303,9 +303,25 @@ function unwrapRpc(value, functionName) {
   return payload;
 }
 
+function retiredFinanceCode(error) {
+  if (['BPAY_NEXT_LEGACY_WRITER_RETIRED','BPAY_NEXT_LEGACY_WRITER_DISABLED'].includes(error?.code)) return error.code;
+  const diagnostic = error?.json;
+  if (['PT410','55000'].includes(diagnostic?.code) && diagnostic?.message === 'BPAY_NEXT_LEGACY_WRITER_RETIRED') return diagnostic.message;
+  if (diagnostic?.code === 'PT503' && diagnostic?.message === 'BPAY_NEXT_LEGACY_WRITER_DISABLED') return diagnostic.message;
+  return null;
+}
+
 async function rpc(dependencies, name, pRequest) {
-  const value = await dependencies.dataRpc(name, { p_request: pRequest });
-  return unwrapRpc(value, name);
+  try {
+    const value = await dependencies.dataRpc(name, { p_request: pRequest });
+    return unwrapRpc(value, name);
+  } catch (error) {
+    const code = retiredFinanceCode(error);
+    if (code) fail(code, code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED'
+      ? 'Pay is published through Banking Pay NEXT; there is nothing to recover here' : 'Banking Pay is paused.',
+      code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED' ? 410 : 503);
+    throw error;
+  }
 }
 
 function validateFinalisation(value, request) {
@@ -823,6 +839,9 @@ async function processReadyTasks({
       });
       serviceSnapshot = validateServiceSnapshot(built, task.root_context);
     } catch (error) {
+      const retired = retiredFinanceCode(error);
+      if (retired) return sourceFinalisedResult('FINALISED_PAY_ACTION_REQUIRED', sourceFinalisation, run,
+        { pay_projection_error_code: retired, pay_projection_task_id: task.task_id });
       const errorCode = boundedErrorCode(
         error,
         'WEEKLY_SOURCE_FINALISATION_PAY_PREPARATION_FAILED',
@@ -876,6 +895,9 @@ async function processReadyTasks({
         },
       ), task, run.final_revision_id);
     } catch (error) {
+      const retired = retiredFinanceCode(error);
+      if (retired) return sourceFinalisedResult('FINALISED_PAY_ACTION_REQUIRED', sourceFinalisation, run,
+        { pay_projection_error_code: retired, pay_projection_task_id: task.task_id });
       return sourceFinalisedResult(
         'FINALISED_PAY_RECOVERY_REQUIRED',
         sourceFinalisation,
@@ -908,6 +930,12 @@ async function processReadyTasks({
       );
     }
 
+    // The validated start receipt proves this exact task was committed as started.
+    run = Object.freeze({
+      ...run, state: 'RUNNING',
+      tasks: Object.freeze(run.tasks.map((entry) => entry.task_id === task.task_id ? task : entry)),
+    });
+
     let receipt;
     try {
       receipt = validateReceipt(await rpc(
@@ -919,6 +947,9 @@ async function processReadyTasks({
         },
       ), task, run.final_revision_id);
     } catch (error) {
+      const retired = retiredFinanceCode(error);
+      if (retired) return sourceFinalisedResult('FINALISED_PAY_ACTION_REQUIRED', sourceFinalisation, run,
+        { pay_projection_error_code: retired, pay_projection_task_id: task.task_id });
       run = await markUnknown(dependencies, actorUserId, run, task, error);
       return resultAfterUnknown(sourceFinalisation, run, task);
     }
@@ -938,6 +969,9 @@ async function processReadyTasks({
         },
       ), run.final_revision_id);
     } catch (error) {
+      const retired = retiredFinanceCode(error);
+      if (retired) return sourceFinalisedResult('FINALISED_PAY_ACTION_REQUIRED', sourceFinalisation, run,
+        { pay_projection_error_code: retired, pay_projection_task_id: task.task_id });
       run = await markUnknown(dependencies, actorUserId, run, task, error);
       return resultAfterUnknown(sourceFinalisation, run, task);
     }
@@ -993,6 +1027,9 @@ export async function orchestrateWeeklySourceFinalisation(input = {}) {
       },
     ), sourceFinalisation.final_revision_id);
   } catch (error) {
+    const retired = retiredFinanceCode(error);
+    if (retired) return sourceFinalisedResult('FINALISED_PAY_ACTION_REQUIRED', sourceFinalisation, null,
+      { pay_projection_error_code: retired });
     return sourceFinalisedResult(
       'FINALISED_PAY_CHECKPOINT_REQUIRED',
       sourceFinalisation,
@@ -1032,6 +1069,24 @@ export async function recoverWeeklySourceFinalisationPayProjection(input = {}) {
   );
   if (actorUserId !== request.actor_user_id) {
     fail('WEEKLY_SOURCE_FINALISATION_PAY_ACTOR_MISMATCH', 'The Office user changed.', 401);
+  }
+
+  // Explicit retired Recover entry only; shared finalisation/TSFIN preparation stays available.
+  try {
+    const admitted = unwrapRpc(await dependencies.dataRpc('bpay_next_source_legacy_finance_admit_v1', {}),
+      'bpay_next_source_legacy_finance_admit_v1');
+    if (admitted !== true) fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', 'Banking ownership is unavailable.', 503);
+  } catch (error) {
+    const refusal = error?.json;
+    if ((['PT410','55000'].includes(refusal?.code) && refusal?.message === 'BPAY_NEXT_LEGACY_WRITER_RETIRED')
+        || error?.code === 'BPAY_NEXT_LEGACY_WRITER_RETIRED') {
+      fail('BPAY_NEXT_LEGACY_WRITER_RETIRED', 'Pay is published through Banking Pay NEXT; there is nothing to recover here', 410);
+    }
+    if ((refusal?.code === 'PT503' && refusal?.message === 'BPAY_NEXT_LEGACY_WRITER_DISABLED')
+        || error?.code === 'BPAY_NEXT_LEGACY_WRITER_DISABLED') {
+      fail('BPAY_NEXT_LEGACY_WRITER_DISABLED', 'Banking Pay is paused.', 503);
+    }
+    fail('BPAY_NEXT_OWNER_STATUS_UNAVAILABLE', 'Banking ownership is unavailable.', 503);
   }
 
   const opened = validateRun(await rpc(

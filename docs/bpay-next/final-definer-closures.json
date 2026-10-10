@@ -12424,6 +12424,71 @@
       ],
       "owner": "PS-14 bounded native reservation read support",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.weekly_source_banking_pay_absence_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql",
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "owner": "SP-02 exact retired finance entry and NEXT absence boundary; facts retained",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.weekly_source_banking_pay_boundary_notice_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql",
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "owner": "SP-02 exact retired finance entry and NEXT absence boundary; facts retained",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.weekly_source_banking_pay_integration_arrived_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql",
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/17092026_0100_weekly_source_banking_pay_absence_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "owner": "SP-02 exact retired finance entry and NEXT absence boundary; facts retained",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "public.bpay_next_source_legacy_finance_admit_v1()",
+      "finalRoot": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0715_banking_pay_next_source_retired_finance_entry_v1.sql"
+      ],
+      "owner": "SP-02 exact retired finance entry and NEXT absence boundary; facts retained",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

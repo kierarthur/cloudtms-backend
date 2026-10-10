@@ -383,3 +383,7 @@ CM-02a seq36 scopecheckpoint BD040: exact D01–D03 listed in design/CM-02a-SCOP
 SP-02 seq37 scopecheckpoint: exactsixdeliverables listed in SP-02-SCOPE beforeproduct edits. Designcensus separates genuinefacts fromretiredfinance; no blanketpay-name fence.
 
 CM-02a seq36 COMPLETE BD040: chosen0549 metadata plus198uniqueobjectowners/59ALTERhunkroutes, RuleB0151 executableunchanged, noSQL. ThreeindependentreviewsPASS;source10/syntax/db314819/PG0+0/sealf063/couplingPASS. WholeBUILT34/288REVIEWED34/288,joinedNOT_RUN. NextSP02seq37.
+
+BUILDER DECISION BD041 SP02: preserve genuine2336/ordinaryTSFIN/protectedstage facts; oneDB serviceadmission supports explicitretiredRecover/externalC1entries, noWorkerownerdecision. PositiveNEXTabsence/notice andF15scopedOfficecopy only.
+
+SP-02 seq37 COMPLETE BD041: allsixrows, four-function0715/DB-ownedentry admission, actualSourcefacts retained, losslessC1 and currentF15plaincopy. Threeindependent sourcePASS; BE23FE40/source10/syntax/db314820/PG0+4/seal6ed0bc43/couplingPASS. WholeBUILT35/288REVIEWED35/288. ActualjoinedNOT_RUN/protectedverificationPENDING. No producer/parkedF25/hostedaction. NextSP08seq38.
