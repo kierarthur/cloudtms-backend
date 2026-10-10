@@ -1267,6 +1267,14 @@
       "sha256": "8c9700927ee6ef6a543cbe611f62a0182d983cba10968af7668f53cee75a3cb1"
     },
     {
+      "path": "supabase/migrations/10102026_1252_banking_pay_next_workbench_summary.sql",
+      "sha256": "aa9a42864893856c9ae02479edb1172cdf39c764a6ca2e9e77f2fd11253affab"
+    },
+    {
+      "path": "supabase/migrations/10102026_1316_banking_pay_next_workbench_native_conservation.sql",
+      "sha256": "367f4e133ff30453e6eeb9ce86cf96ff503f45ebb4da94b3ad96a91bf4098339"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

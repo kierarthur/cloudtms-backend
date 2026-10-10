@@ -98,3 +98,5 @@ F-04-D01/D07 require the ordinary case successor to be compile-safe; D02 require
 WB-36 final replay closure: `10102026_1236_banking_pay_next_segment_authority_final_v1.sql` replays the installed 1100 segment authority and then issues the required PostgREST schema reload. All 40 physical definitions remain 1100; later editors merge those definitions and retain this final-root ordering.
 
 The 1236 final successor is packaged atomically with the exact 1100 definitions and ACLs, followed by reload inside its transaction; all 40 final physical definitions are therefore 1236, and 1100 is retained as its installed predecessor. This supersedes the provisional include-closure packaging described above.
+
+WB08 current projection owners are1252; actualSourceSeed successor1309 merges1246 with one post-update refresh. Work-member1321 merges installed1252 with exact retained Source classification only. Later WB02 classifier merges1252 refresh_work; WB061430 actualfinalapply turn remains nextafterWB02/WB08. WB44 metadata seed/continuation remainsopen. Exact per-signature winners/provenance are recorded in WB-08-successor-provenance.json and final-definer-closures.json.

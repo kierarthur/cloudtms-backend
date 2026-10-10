@@ -64,8 +64,49 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)',
   'private.bpay_next_segment_pay_basis_v1(uuid)',
   'private.bpay_next_line_pay_basis_v1(uuid)',
+  // WB08 exact typed current projection closure. No history waiver.
+  'private.bpay_next_workbench_require_next_v1()',
+  'private.bpay_next_workbench_ensure_metadata_v1(uuid)',
+  'private.bpay_next_workbench_group_contribution_v1(text)',
+  'private.bpay_next_workbench_apply_delta_v1(private.bpay_next_workbench_delta[],private.bpay_next_workbench_delta[])',
+  'private.bpay_next_workbench_accepted_work_v1(uuid,text,text)',
+  'private.bpay_next_workbench_work_members_v1(uuid,uuid)',
+  'private.bpay_next_workbench_refresh_work_v1(uuid)',
+  'private.bpay_next_workbench_refresh_case_v1(uuid)',
+  'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])',
+  'private.bpay_next_workbench_set_bank_warning_v1(uuid,text)',
+  'private.bpay_next_workbench_candidate_name_trigger_v1()',
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  'private.bpay_next_workbench_require_next_v1()': [],
+  'private.bpay_next_workbench_ensure_metadata_v1(uuid)': [
+    'private.bpay_next_workbench_require_next_v1','concat_ws'],
+  'private.bpay_next_workbench_group_contribution_v1(text)': [
+    'private.bpay_next_workbench_require_next_v1','lateral','sum','filter','distinct'],
+  'private.bpay_next_workbench_apply_delta_v1(private.bpay_next_workbench_delta[],private.bpay_next_workbench_delta[])': [
+    'private.bpay_next_workbench_require_next_v1','cardinality','pg_column_size','unnest','sum'],
+  'private.bpay_next_workbench_accepted_work_v1(uuid,text,text)': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_snooze_at_cut_v1'],
+  'private.bpay_next_workbench_work_members_v1(uuid,uuid)': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_bound_source_snapshot_v1',
+    'private.bpay_next_work_segment_gross_balance_v1','sum'],
+  'private.bpay_next_workbench_refresh_work_v1(uuid)': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
+    'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_work_members_v1',
+    'private.bpay_next_workbench_accepted_work_v1','private.bpay_next_snooze_at_cut_v1',
+    'private.bpay_next_workbench_apply_delta_v1','array_agg','transaction_timestamp','gen_random_uuid','filter','sum'],
+  'private.bpay_next_workbench_refresh_case_v1(uuid)': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
+    'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_apply_delta_v1',
+    'array_agg','transaction_timestamp','gen_random_uuid','max','filter','on','sum'],
+  'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
+    'private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1',
+    'cardinality','pg_column_size','array_position','array_agg','unnest'],
+  'private.bpay_next_workbench_set_bank_warning_v1(uuid,text)': [
+    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1','transaction_timestamp'],
+  'private.bpay_next_workbench_candidate_name_trigger_v1()': [
+    'private.bpay_next_workbench_ensure_metadata_v1','concat_ws','transaction_timestamp'],
   "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": [
     "private.bpay_next_reconcile_work_collection_v1",
     "pg_catalog.clock_timestamp",
@@ -204,6 +245,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.count"
   ],
   "private.bpay_next_source_disposition_seed_v1(uuid,text,uuid,uuid,uuid)": [
+    "private.bpay_next_workbench_refresh_work_v1",
     "private.bpay_next_source_book_seed_proof_v1"
   ],
   "private.bpay_next_source_book_seed_proof_v1(uuid,text,uuid,uuid,uuid)": [
