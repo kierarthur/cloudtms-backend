@@ -13,6 +13,8 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   WORK_PAGE:{run_id:'uuid',page_no:'positive',choices:'choices'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',approved_line_ids:'ids'},
   COMPONENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',expected_pages:'positive',expected_count:'positive'},
+  SEGMENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',request_id:'uuid',segment_keys:'segmentKeys'},
+  SEGMENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',expected_pages:'integer',expected_count:'integer'},
   CASE_PAGE:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',page_no:'positive',request_id:'uuid',component_ids:'ids',selected:'booleans'},
   CASE_SEAL:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',expected_pages:'positive',expected_items:'positive'},
   SEAL_ENQUEUE:{run_id:'uuid',command_id:'uuid',expected_pages:'integer',expected_count:'integer'},
@@ -46,6 +48,8 @@ const OUTPUTS={
   WORK_PAGE:{run_id:'uuid',page_no:'positive',item_count:'positive',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',component_count:'positive',replay:'boolean'},
   COMPONENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',sealed:'true',component_count:'positive',replay:'boolean'},
+  SEGMENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',segment_count:'positive',replay:'boolean'},
+  SEGMENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',sealed:'true',segment_count:'integer',replay:'boolean'},
   CASE_PAGE:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',page_no:'positive',item_count:'positive',replay:'boolean'},
   CASE_SEAL:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',sealed:'true',selected_count:'integer',excluded_count:'integer',replay:'boolean'},
   SEAL_ENQUEUE:{run_id:'uuid',command_id:'uuid',agency_sequence:'positive',replay:'boolean'},
@@ -196,6 +200,7 @@ function field(v,t){
   if(t==='clock')return typeof v==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v);
   if(t==='timestamp')return typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(v)&&field(v.slice(0,10),'date')&&Number.isFinite(Date.parse(v));
   if(t==='ids')return Array.isArray(v)&&v.length>=1&&v.length<=100&&v.every(x=>field(x,'uuid'))&&new Set(v.map(x=>x.toLowerCase())).size===v.length;
+  if(t==='segmentKeys')return Array.isArray(v)&&v.length>=1&&v.length<=100&&v.every(x=>typeof x==='string'&&!x.includes('\0')&&x.trim()===x&&[...x].length>=1&&[...x].length<=245)&&new Set(v).size===v.length;
   if(t==='booleans')return Array.isArray(v)&&v.length>=1&&v.length<=100&&v.every(x=>typeof x==='boolean');
   if(t==='choices')return Array.isArray(v)&&v.length>=1&&v.length<=100&&v.every(x=>exact(x,{work_id:'uuid',expected_revision_id:'uuid',mode:'mode'}))
     &&new Set(v.map(x=>x.work_id.toLowerCase())).size===v.length;
@@ -210,7 +215,7 @@ function commandCall(body){
   if(!record(body)||!Object.hasOwn(BPAY_NEXT_PREPARATION_INPUTS,body.action))throw fault('REQUEST_INVALID',400);
   const {action,...args}=body;
   if(!exact(args,BPAY_NEXT_PREPARATION_INPUTS[action])||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
-  return {action,args:normalized(args)};
+  return {action,args:action==='SEGMENT_PAGE'?Object.freeze({...normalized(args),segment_keys:Object.freeze([...args.segment_keys])}):normalized(args)};
 }
 function pageCall(request){
   const url=new URL(request.url);
@@ -249,9 +254,10 @@ function result(payload,call,mutation){
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
     if(call.action==='REVIEW'&&((payload.phase==='PREPARING')!==(payload.reason!==null)))bad();
     if(call.action==='COMPONENT_SEAL'&&payload.component_count!==call.args.expected_count)bad();
+    if(call.action==='SEGMENT_SEAL'&&payload.segment_count!==call.args.expected_count)bad();
     if(call.action==='CONFIRM'&&(payload.review_revision!==call.args.review_revision||payload.drafts.some(d=>d.run_id!==call.args.run_id)))bad();
-    if(['WORK_PAGE','COMPONENT_PAGE','CASE_PAGE'].includes(call.action)){
-      const n=call.args.choices?.length??call.args.approved_line_ids?.length??call.args.component_ids?.length;
+    if(['WORK_PAGE','COMPONENT_PAGE','CASE_PAGE','SEGMENT_PAGE'].includes(call.action)){
+      const n=call.args.choices?.length??call.args.approved_line_ids?.length??call.args.component_ids?.length??call.args.segment_keys?.length;
       if(payload.item_count!==String(n))bad();
     }
     return payload;

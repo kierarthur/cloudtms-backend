@@ -53,6 +53,17 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_channel_drafts_page_v1(uuid)',
   'private.bpay_next_receive_command_v1(uuid,text)',
   'private._candidate_expense_source_family_v1(uuid)',
+  // WB36 exact normalized helper closure: no hidden financial-history edge.
+  'private.bpay_next_selected_position_keys_v1(uuid,uuid,text,integer)',
+  'private.bpay_next_run_segment_members_v1(uuid,uuid,text,text,integer)',
+  'private.bpay_next_capture_segment_page_v1(uuid,integer)',
+  'private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)',
+  'private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)',
+  'private.bpay_next_segment_collection_basis_v1(uuid,text,uuid)',
+  'private.bpay_next_work_segment_debt_basis_v1(uuid,text,uuid)',
+  'private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)',
+  'private.bpay_next_segment_pay_basis_v1(uuid)',
+  'private.bpay_next_line_pay_basis_v1(uuid)',
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": [
@@ -79,6 +90,9 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.to_jsonb"
   ],
   "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+    "private.bpay_next_selected_position_keys_v1",
+    "private.bpay_next_capture_segment_page_v1",
+    "private.bpay_next_snooze_at_cut_v1",
     "private.bpay_next_bound_source_snapshot_v1",
     "private.bpay_next_source_disposition_seed_v1",
     "private.bpay_next_work_collection_origin_v1",
@@ -89,6 +103,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.octet_length"
   ],
   "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+    "private.bpay_next_record_work_segment_origin_shares_v1",
     "private.bpay_next_bound_source_snapshot_v1",
     "private.bpay_next_value_source_for_target_v1",
     "pg_catalog.clock_timestamp",
@@ -154,6 +169,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.transaction_timestamp"
   ],
   "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": [
+    "private.bpay_next_segment_collection_basis_v1",
     "private.bpay_next_expired_work_collection_scope_v1",
     "pg_catalog.cardinality",
     "pg_catalog.char_length",
@@ -163,7 +179,24 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_expired_work_collection_scope_v1(uuid,uuid,uuid)": [
     "pg_catalog.clock_timestamp"
   ],
-  "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": [],
+  "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)": ["private.bpay_next_segment_collection_basis_v1"],
+  "private.bpay_next_selected_position_keys_v1(uuid,uuid,text,integer)": [],
+  "private.bpay_next_run_segment_members_v1(uuid,uuid,text,text,integer)": [],
+  "private.bpay_next_capture_segment_page_v1(uuid,integer)": [
+    "private.bpay_next_run_segment_members_v1","private.bpay_next_work_segment_gross_balance_v1",
+    "private.bpay_next_work_collection_origin_v1","clock_timestamp","row","sum"
+  ],
+  "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)": ["sum"],
+  "private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)": [
+    "private.bpay_next_value_source_for_target_v1","lag","sum"
+  ],
+  "private.bpay_next_segment_collection_basis_v1(uuid,text,uuid)": ["private.bpay_next_work_segment_debt_basis_v1","sum"],
+  "private.bpay_next_work_segment_debt_basis_v1(uuid,text,uuid)": ["private.bpay_next_work_segment_gross_balance_v1","sum"],
+  "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)": [
+    "private.bpay_next_segment_pay_basis_v1","private.bpay_next_line_pay_basis_v1","lateral","by"
+  ],
+  "private.bpay_next_segment_pay_basis_v1(uuid)": ["pg_catalog.sha256","pg_catalog.convert_to"],
+  "private.bpay_next_line_pay_basis_v1(uuid)": ["pg_catalog.sha256","pg_catalog.convert_to","jsonb_agg"],
   "private.bpay_next_bound_source_snapshot_v1(uuid,bigint)": [
     "private.bpay_next_initial_tsfin_bound_assert_v1",
     "private.bpay_next_source_binding_members_v1",
@@ -495,10 +528,10 @@ export function assertRoutineHistoryPoints(source,file,signature){
   if(/\b(?:bpay_next_payment_history_page_v1|audit_events_list|pay_finance_case_audit_actor_index)\s*\(/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_READER: ${signature}`);
   if(/\bexecute\b/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DYNAMIC: ${signature}`);
   const approved=new Set(ROUTINE_WORK_CALLEES[signature]??[]);
-  const native=new Set(['and','any','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
+  const native=new Set(['and','any','as','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
     'else','elsif','encode','exists','extract','from','greatest','if','in','jsonb_array_elements',
     'jsonb_array_length','jsonb_build_array','jsonb_build_object','jsonb_typeof','least','materialized',
-    'not','nullif','numeric','or','over','round','select','sha256','values','when','where']);
+    'not','nullif','numeric','or','over','round','select','sha256','then','values','when','where']);
   for(const match of tokens.matchAll(/\b([a-z_][a-z0-9_$]*)(?:\s*\.\s*([a-z_][a-z0-9_$]*))?\s*\(/g)){
     const prefix=tokens.slice(0,match.index).trimEnd(),schema=match[2]?match[1]:null;
     const name=match[2]?schema+'.'+match[2]:match[1];

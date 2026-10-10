@@ -85,6 +85,8 @@ The master table at `<!-- CHAIN-TABLE-SYNC -->` in plan file 01 is controlling. 
 | 0310 case guards; 0355 reissue cancel; 2120 approval basis; 0580 status; 0100/0110/0420 PAYE-net owners | One editor each as master table assigns; no competing chain |
 | 0270 financial intake and 0575 preparation service | Each item's own dependency order; keep all previous command/page kinds |
 
+WB-36 sequence48's current1100 exact predecessors and newly authored private support signatures are recorded in `WB-36-successor-provenance.json` and the final-definer registry. The thirteen native replacements merge1009 ordinary approval;0570 choice guard;2018 preparation args/intake/capture/hold/reconcile;1550 Source staging;1548 frozen-pair detail;0345 protected staging;1519 collection/capture guards. Later editors merge these1100 bodies. Existing0200/0490 common payroll and0316/1647 recovery/forgiveness receive private share callbacks beneath their native owners; their original money bodies and0230/0240 cash owners remain current. WB-08/WB-19/WB-44/WB-45 retain projection/dispatcher/stale-refresh/resolved-warning obligations. Rule-B query snapshot and post-click revision REVIEW remain unchanged; no parked F-25 authority participates.
+
 Preserve every explicit master-table row, including the Worker row, one-editor grouped row and intake row. The checklist's shorthand "all 33 editor chains" must not cause a later master row to be dropped; a count alone is not semantic coverage.
 
 From WB-27 the chain edits also belong in new STABLE, write-free `private.bpay_next_case_allocation_plan_v1`, including read-only instruction derivation. F-04 must create `case-allocation-chain.md` and `intake-successors.md` with this controlling order and initially empty branches-added lists. Those are separate F-04 deliverables, not claimed complete by this investigation note. F-07 owns the ordinary successor; F-06 owns the local 1157/1301 imports; later CM items own comparison promotion.
@@ -92,3 +94,7 @@ From WB-27 the chain edits also belong in new STABLE, write-free `private.bpay_n
 ## Checklist completion boundaries
 
 F-04-D01/D07 require the ordinary case successor to be compile-safe; D02 requires mandatory final 0557 selection; D03/D05 require one shared-calculator target valuer; D04/D06 require 1301 and its dependencies/trigger attachment; D08 requires the signature/closure gate plus all changed-signature coverage and both mode-selection checks. Build-status evidence must distinguish the current source census, planned successor and actual gate/SQL completion. Local schema compilation and sealed contract do not establish post-release function read-back or app acceptance. The later authorised release retains its full verifier inventories.
+
+WB-36 final replay closure: `10102026_1236_banking_pay_next_segment_authority_final_v1.sql` replays the installed 1100 segment authority and then issues the required PostgREST schema reload. All 40 physical definitions remain 1100; later editors merge those definitions and retain this final-root ordering.
+
+The 1236 final successor is packaged atomically with the exact 1100 definitions and ACLs, followed by reload inside its transaction; all 40 final physical definitions are therefore 1236, and 1100 is retained as its installed predecessor. This supersedes the provisional include-closure packaging described above.

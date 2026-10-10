@@ -1,0 +1,307 @@
+[
+  {
+    "signature": "private.bpay_next_segment_pay_basis_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_line_pay_basis_v1(uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_revision_seal_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_child_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_run_boundary_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_choice_boundary_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_choice_sealed_count_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_append_segment_selection_page_v1(uuid,uuid,uuid,bigint,uuid,text[])",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_seal_segment_selection_v1(uuid,uuid,uuid,bigint,bigint)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
+    "predecessor": "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_choice_guard_v1()",
+    "predecessor": "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_preparation_args_v1(jsonb,text[])",
+    "predecessor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+    "predecessor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_stage_source_current_v1(uuid,uuid,uuid)",
+    "predecessor": "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_capture_source_pair_before_detail_v1(uuid,bigint,uuid[],uuid[])",
+    "predecessor": "supabase/repeatable/03102026_1548_banking_pay_next_source_chosen_detail_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_stage_protected_source_v1(uuid,uuid,uuid,jsonb)",
+    "predecessor": "supabase/repeatable/04102026_0345_banking_pay_next_protected_source_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_segment_gross_balance_v1(uuid,text,text)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_record_work_segment_origin_shares_v1(uuid,uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_payroll_effect_membership_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_selected_position_keys_v1(uuid,uuid,text,integer)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_run_segment_members_v1(uuid,uuid,text,text,integer)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_capture_segment_page_v1(uuid,integer)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+    "predecessor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+    "predecessor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_collection_capture_guard_v1()",
+    "predecessor": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_prepare_owner_v1(uuid,text)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_fact_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_segment_debt_basis_v1(uuid,text,uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_collection_basis_v1(uuid,text,uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+    "predecessor": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_collection_origin_v1(uuid,uuid,uuid)",
+    "predecessor": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_work_collection_guard_v1()",
+    "predecessor": "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_available_segment_recovery_origins_v1(uuid,text,uuid)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_recovery_reservation_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_recovery_effect_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_write_off_membership_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_capture_progress_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_position_capture_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_negative_fact_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_segment_membership_commit_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+    "predecessor1100": "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_snooze_context_v1(uuid,jsonb)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_snooze_action_v1(uuid,text,jsonb)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_snooze_metadata_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_snooze_at_cut_v1(uuid,uuid,text,text,bigint,date)",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
+  },
+  {
+    "signature": "private.bpay_next_snooze_receipt_guard_v1()",
+    "predecessor": null,
+    "final": "supabase/repeatable/10102026_1100_banking_pay_next_snooze_v1.sql"
+  }
+]

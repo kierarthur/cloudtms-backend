@@ -454,12 +454,144 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_approved_segment",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_next_local_detail_seam_owner_all",
       "check": "true",
       "roles": [
         "postgres"
       ],
       "table": "bpay_next_local_detail_seam",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_revision_worker_basis",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_run_segment_capture",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_run_work_segment",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_run_work_segment_parent",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_segment_selection_page",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_selected_segment",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_snooze",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_snooze_event",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_snooze_request",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_snooze_warning_ack",
       "using": "true",
       "schema": "private",
       "command": "ALL",
@@ -484,6 +616,66 @@
         "postgres"
       ],
       "table": "bpay_next_source_component_binding_version",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_work_segment_effect_origin",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_work_segment_effect_share",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_work_segment_origin_share",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_work_segment_recovery_share",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "service_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_work_segment_write_off_share",
       "using": "true",
       "schema": "private",
       "command": "ALL",
@@ -10290,6 +10482,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_append_segment_selection_page_v1(p_run_id uuid, p_work_id uuid, p_expected_revision_id uuid, p_page_no bigint, p_request_id uuid, p_segment_keys text[])",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "99852203e108ac86cdc313e4f2e4d79068d386ec9e922ccb43ebf9ba631f79dd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -10545,6 +10756,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "10341a6edebb62f21922cdec5c1871497e0fb3d0af858d77b6166992bee5855f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_available_segment_recovery_origins_v1(p_work_id uuid, p_component_key text, p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f624f909a04aa04e14442f24228a151257c0b71723af816ee82a6dd60fd3d82f"
     },
     {
       "acl": [
@@ -10848,7 +11078,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "77fee70a6cdf66ccf1453e252dee3a47ba93f59473cddd108dfcc6835672dad4"
+      "definition_sha256": "d657f81aa00f365b684ce7e7a151029d2f004c22574e9c2e32c797d01ce6cbbc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_capture_segment_page_v1(p_run_worker_id uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "9b7245cae9b2b68b1dd297c0aff6734132a4b8d46d25f87fc091c60f442e4844"
     },
     {
       "acl": [
@@ -10867,7 +11116,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "0df26d48691c0c97d58573396cebf5e56a3d8997c7406b7a5e9bdcf2ff1a85d0"
+      "definition_sha256": "287657a5c1ae7c59f2addd2eb5cb3300998b14f9d5ba898e88f376416eca9044"
     },
     {
       "acl": [
@@ -11988,7 +12237,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b52471cf638e1d92a9c36221512e0387e657e08deb9192b51adfd77752b138da"
+      "definition_sha256": "28f9994e7d2193119525b84843cedaf5ac4d1ad7fb0cbcdadef8d11e8fb4ec0c"
     },
     {
       "acl": [
@@ -12219,6 +12468,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_line_pay_basis_v1(p_line_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "4201c246c4b5ba1e626c96f876d6daf2f5f74c068684172a8669d5e385eaa75c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog"
       ],
       "schema": "private",
@@ -12416,7 +12684,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "29e6f8c0bba83e98a0814a4b2dfb41925185308f5b27e2dab775c04e64ea82e3"
+      "definition_sha256": "c4aacfe07a6a1ed9a0524825162c860dabdddf7f279a6f8288108887413c456f"
     },
     {
       "acl": [
@@ -12682,7 +12950,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "87fd7d00ecb55503a9a24d4d0b2b4f31d8bfbc5e5bc8eb400e41b05cfd8b095c"
+      "definition_sha256": "06ab82e4d195051a28b53e46875ec0150f51b6dad9e20c19895a59d8efc97517"
     },
     {
       "acl": [
@@ -13005,7 +13273,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a24aa60b5d5d51f67917482214bf439dc640b817396a0f17e8afc2e32e8de915"
+      "definition_sha256": "414024cf7f62c381a2fcab1ea59f83923d77c40d8b6fc7564663a0cfddb4aa8a"
     },
     {
       "acl": [
@@ -13044,6 +13312,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "9443cacd9ac561150bc78b203036035482107f59d8c3686156bd139878737069"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_record_work_segment_origin_shares_v1(p_run_line_id uuid, p_hold_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "fc254118db4b9d5736583354a5a27cd7558ffb9b967666406192f7fee82368b9"
     },
     {
       "acl": [
@@ -13169,6 +13456,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_run_segment_members_v1(p_run_worker_id uuid, p_work_cursor uuid, p_component_cursor text, p_segment_cursor text, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "96d84f5f383d1fd466e2980efc8caddbaa8226f36d41a1f76ff50fe4c64d9993"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -13267,11 +13573,372 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_seal_segment_selection_v1(p_run_id uuid, p_work_id uuid, p_expected_revision_id uuid, p_expected_pages bigint, p_expected_count bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "58b3a53a44c041e553b1d5ca9f18fbd980c6417c2b8264417257f04503768ef3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_seal_selection_v1(p_run_id uuid, p_expected_pages bigint, p_expected_count bigint)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "f561fa648822a71db198b043771a8b482181938d5b8708600dc74b4a37308e97"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_capture_progress_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e6f12be0071ac92fb709525f553a30a45aa23a075c9d46f13e72ba4eeaa82e15"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_child_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "1792f3e9a96d8e82934e7d17d9c6e33224541ddb6fcf699f7d86c778ae65dbdf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_choice_boundary_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "3f482ed6b7138a04967b3b02c4143e3d9fb5094a3cd455feb7521bf249198403"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_choice_sealed_count_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "15c3edb0b1336c993b2d1df9aefdb18d481724a1c89afc328758de095e5b4a8c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_collection_basis_v1(p_work_id uuid, p_component_key text, p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "9c31543cb57d19ce9362645ccc6ee4242ad5e8d79f15499f1fb1e465e9bee374"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_fact_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "60cf2e6eab5376dc9471db0081ec6a642205c58bdd84b59ac90e19da0e303cc4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_membership_commit_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4c916ee1f4971663072e1ffe9f6a03ee81b1ca8545bfa43f519322a9430c4be0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_negative_fact_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "78e3a4d596be770a2cd04f566945dd31f1bcd5603a3c6098fe70a4c5bb62cb69"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_pay_basis_v1(p_segment_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "cb1042009d888a6bab8b34edea89ed829cb7d8faab1c6efb911aac20a4ea52c6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_payroll_effect_membership_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "90312b18ea87bb14f67a8871658d3c006266e08f95163c13a693d29f1480903d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_position_capture_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "49f1be2de1cdfbe5c0d6705fddf19322760b7e0a1b67094cbf40ef8fcf3b2689"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_prepare_owner_v1(p_run_worker_id uuid, p_phase text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "cdeb2335ac90032e0c3f1692760bf8ae3289451f80d58e74f02336430c14d40f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_recovery_effect_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "78f1d751d4aa185fa9fd3e8570cd2be786dbdcbf90cbfb03a19a3edabbbaaf41"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_recovery_reservation_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7b40ed7538e7d002003f8b7bcf094c5a95cdc98e18b83b5e62ea351d5a8fa3dc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_revision_seal_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "f631ec84b4d8182fcf82f0e8bd6133ac8d05b6dd4b36ca7038a285d0abe11e0f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_run_boundary_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c546e618073f2c2bbd0c8285e13201f09bbf41e82975ed7394ab94393f19b511"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_segment_write_off_membership_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "48e80e88318ab94e9ac24f14b124278a0c7cebda0a5f58abc74e401f416df735"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_selected_position_keys_v1(p_run_worker_id uuid, p_work_cursor uuid, p_component_cursor text, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "92b3e59cef50b0cdda302ca149ff501249c559fd9dd60d8b7ec7188c85b17082"
     },
     {
       "acl": [
@@ -13462,6 +14129,101 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "3a8e505cad25a4ab54ab95775fb644d197a07f983dfed10b552672fed43cd370"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_action_v1(p_actor_id uuid, p_action text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "6b43a53bdd4a059e2a6965633eb3985debce572fd54a2420facdd4aa38f0216e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_at_cut_v1(p_work_id uuid, p_revision_id uuid, p_segment_key text, p_component_key text, p_sequence bigint, p_business_date date)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "8ba45da5b2fbd3ba59b8caed0a92dc534c03fa6f5dbd3b2ec5fe7f80bd8e140c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_context_v1(p_actor_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "2b87e4aa02cebe43cdedf1c975c40be3c5dba813421b177fb44ce275ecc8bbdb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_metadata_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "84a67f3509d307319a5360ed6b9a471afc088dfd5f3edeb2a513a57687a393de"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_receipt_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "99e20e804df595ab897812e6e2603adb469e2cc834faa146e180c7b86d48cfd7"
     },
     {
       "acl": [
@@ -14202,7 +14964,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "16cdee95201d8588e9a1f35022a3a802c0f703e0714fe1c4ecc63d26b88dcdf8"
+      "definition_sha256": "d11eda3ec7ea68715a345fc489314afef3e502d76ae808cdf009c492e387f46f"
     },
     {
       "acl": [
@@ -14221,7 +14983,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c755344e14071589e3962e5d93681349f2be9684ac0b5234f77382b768cb3c80"
+      "definition_sha256": "c06a9636dce5f331972c33fea898d6bada7f8bb97291c17ad1330710f3cabb34"
     },
     {
       "acl": [
@@ -14354,7 +15116,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6f4e46c710e14121534475cfc9c14fe596b3d46d589cc0906aa6d4b8e9723426"
+      "definition_sha256": "633e8755202b67f5b556b701ea16da30d66ff2e6b00c05c371556e89e13aaea2"
     },
     {
       "acl": [
@@ -14373,7 +15135,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "0721e303c213d2021068e749cb5b400ecffc657d866ba89333fbd23d6fdaa613"
+      "definition_sha256": "b6cd62fd3fe8e1d0907d07cfd7c1ef89bb0774d7ba3d8953465b9da78365221d"
     },
     {
       "acl": [
@@ -14411,7 +15173,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "04438a5961bbfd3d7f62027c8afd15fec3e1b03b3f0e2bc1ef680306647c05f3"
+      "definition_sha256": "e7e7be6b0de1b716ebf611ef0ad23a856af0466b3e2fe232e7151a591caead58"
     },
     {
       "acl": [
@@ -14430,7 +15192,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "969648df8c9675e5ddd2e9071fa6a046da09d2715724bdc724a45cec5693b5f8"
+      "definition_sha256": "07d8cdb917f4cf9fc7303ce6ce9e4435077ef2372c1c8d7bb0213185d6d8b0e4"
     },
     {
       "acl": [
@@ -14488,6 +15250,44 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "b218e20737f09ab34367785aeba5aec68a136b667e39c496bc2621e51fda0ee0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_work_segment_debt_basis_v1(p_work_id uuid, p_component_key text, p_revision_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "bb99a575bac6443850b3537b85f36c50397da3dedff9b9d485916338620e6320"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_work_segment_gross_balance_v1(p_work_id uuid, p_component_key text, p_segment_key text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "df4c2739ced3c9dda24ba9a8b2d50fd232d1ef8edfa67de8d0fbe97283ec718b"
     },
     {
       "acl": [
@@ -29584,7 +30384,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "28b0f9159dc8f0a82d3fa740484d3a5ddb799c43031120c13208ba20932dbba2"
+      "definition_sha256": "3f1e0ee4ca71f74e9e2f8658367aaa306f664635d8fb22de9229b438e92c769f"
     },
     {
       "acl": [
@@ -50481,6 +51281,20 @@
       "definition": "CREATE TRIGGER bpay_next_line_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_approved_line FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
     },
     {
+      "name": "bpay_next_approved_segment_guard",
+      "table": "bpay_next_approved_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_approved_segment_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_approved_segment FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_child_guard_v1()"
+    },
+    {
+      "name": "bpay_next_approved_segment_truncate_guard",
+      "table": "bpay_next_approved_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_approved_segment_truncate_guard BEFORE TRUNCATE ON private.bpay_next_approved_segment FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_child_guard_v1()"
+    },
+    {
       "name": "bpay_next_break_guard_v1",
       "table": "bpay_next_break_detail",
       "schema": "private",
@@ -50635,6 +51449,13 @@
       "definition": "CREATE TRIGGER bpay_next_case_event_insert_v1 BEFORE INSERT ON private.bpay_next_case_event FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_event_insert_guard_v1()"
     },
     {
+      "name": "bpay_next_segment_write_off_membership",
+      "table": "bpay_next_case_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_write_off_membership AFTER INSERT ON private.bpay_next_case_event FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_write_off_membership_v1()"
+    },
+    {
       "name": "bpay_next_write_off_commit_guard_v1",
       "table": "bpay_next_case_event",
       "schema": "private",
@@ -50654,6 +51475,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_case_hold_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_hold_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_case_hold_commit_guard",
+      "table": "bpay_next_case_hold",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_case_hold_commit_guard AFTER INSERT OR UPDATE ON private.bpay_next_case_hold DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_recovery_reservation",
+      "table": "bpay_next_case_hold",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_recovery_reservation AFTER INSERT ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_recovery_reservation_v1()"
     },
     {
       "name": "bpay_next_work_collection_period_guard_v1",
@@ -50831,6 +51666,20 @@
       "definition": "CREATE TRIGGER bpay_next_recovery_effect_link_guard_v1 BEFORE INSERT ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_recovery_effect_link_guard_v1()"
     },
     {
+      "name": "bpay_next_segment_payroll_effect_membership",
+      "table": "bpay_next_financial_effect",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_payroll_effect_membership AFTER INSERT ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_payroll_effect_membership_v1()"
+    },
+    {
+      "name": "bpay_next_segment_recovery_effect",
+      "table": "bpay_next_financial_effect",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_recovery_effect AFTER INSERT ON private.bpay_next_financial_effect FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_recovery_effect_v1()"
+    },
+    {
       "name": "bpay_next_input_version_event_immutable",
       "table": "bpay_next_input_version_event",
       "schema": "private",
@@ -50934,6 +51783,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_preparation_expiry_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_pay_run FOR EACH ROW EXECUTE FUNCTION private.bpay_next_preparation_expiry_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_run_boundary_guard",
+      "table": "bpay_next_pay_run",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_run_boundary_guard BEFORE INSERT OR UPDATE ON private.bpay_next_pay_run FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_run_boundary_guard_v1()"
     },
     {
       "name": "bpay_next_net_request_immutable_v1",
@@ -51174,6 +52030,20 @@
       "definition": "CREATE TRIGGER bpay_next_rate_schedule_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_rate_schedule FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
     },
     {
+      "name": "bpay_next_revision_worker_basis_guard",
+      "table": "bpay_next_revision_worker_basis",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_revision_worker_basis_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_revision_worker_basis FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_child_guard_v1()"
+    },
+    {
+      "name": "bpay_next_revision_worker_basis_truncate_guard",
+      "table": "bpay_next_revision_worker_basis",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_revision_worker_basis_truncate_guard BEFORE TRUNCATE ON private.bpay_next_revision_worker_basis FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_child_guard_v1()"
+    },
+    {
       "name": "bpay_next_case_fact_immutable_v1",
       "table": "bpay_next_run_case_instruction",
       "schema": "private",
@@ -51209,11 +52079,32 @@
       "definition": "CREATE TRIGGER bpay_next_run_line_frozen_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_run_line FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
+      "name": "a_bpay_next_segment_position_capture_guard",
+      "table": "bpay_next_run_position",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER a_bpay_next_segment_position_capture_guard BEFORE INSERT OR UPDATE ON private.bpay_next_run_position FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_position_capture_guard_v1()"
+    },
+    {
       "name": "bpay_next_work_collection_capture_guard_v1",
       "table": "bpay_next_run_position",
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_work_collection_capture_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_position FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_collection_capture_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_capture_progress_guard",
+      "table": "bpay_next_run_segment_capture",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_capture_progress_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_segment_capture FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_capture_progress_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_capture_progress_truncate_guard",
+      "table": "bpay_next_run_segment_capture",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_capture_progress_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_segment_capture FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_capture_progress_guard_v1()"
     },
     {
       "name": "bpay_next_run_work_frozen_immutable_v1",
@@ -51258,6 +52149,48 @@
       "definition": "CREATE TRIGGER bpay_next_run_work_query_snapshot_no_truncate BEFORE TRUNCATE ON private.bpay_next_run_work_query_snapshot FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_run_work_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_work_segment FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_run_work_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_work_segment FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_run_work_segment_parent",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_work_segment_parent FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_run_work_segment_parent",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_work_segment_parent FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_segment_selection_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_segment_selection_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_segment_selection_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_segment_selection_page FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
       "name": "bpay_next_selected_component_guard",
       "table": "bpay_next_selected_component",
       "schema": "private",
@@ -51265,11 +52198,109 @@
       "definition": "CREATE TRIGGER bpay_next_selected_component_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_selected_component FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_choice_guard_v1()"
     },
     {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_selected_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_selected_segment FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_selected_segment",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_selected_segment FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
       "name": "bpay_next_detail_guard_v1",
       "table": "bpay_next_shift_detail",
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_detail_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_shift_detail FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_guard",
+      "table": "bpay_next_snooze",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_receipt_guard",
+      "table": "bpay_next_snooze",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_snooze_receipt_guard AFTER INSERT OR UPDATE ON private.bpay_next_snooze DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_truncate_guard",
+      "table": "bpay_next_snooze",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_event_guard",
+      "table": "bpay_next_snooze_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_event_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_event FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_event_receipt_guard",
+      "table": "bpay_next_snooze_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_snooze_event_receipt_guard AFTER INSERT ON private.bpay_next_snooze_event DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_event_truncate_guard",
+      "table": "bpay_next_snooze_event",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_event_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_event FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_request_guard",
+      "table": "bpay_next_snooze_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_request_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_request_receipt_guard",
+      "table": "bpay_next_snooze_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_snooze_request_receipt_guard AFTER INSERT ON private.bpay_next_snooze_request DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_request_truncate_guard",
+      "table": "bpay_next_snooze_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_request_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_ack_guard",
+      "table": "bpay_next_snooze_warning_ack",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_ack_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_warning_ack FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_ack_receipt_guard",
+      "table": "bpay_next_snooze_warning_ack",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_snooze_ack_receipt_guard AFTER INSERT OR UPDATE ON private.bpay_next_snooze_warning_ack DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_receipt_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_ack_truncate_guard",
+      "table": "bpay_next_snooze_warning_ack",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_ack_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_warning_ack FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
     },
     {
       "name": "bpay_next_source_binding_guard_v1",
@@ -51405,6 +52436,20 @@
       "definition": "CREATE TRIGGER bpay_next_work_pointer_guard_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_work FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_pointer_guard_v1()"
     },
     {
+      "name": "a_bpay_next_segment_choice_boundary",
+      "table": "bpay_next_work_choice",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER a_bpay_next_segment_choice_boundary BEFORE INSERT ON private.bpay_next_work_choice FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_choice_boundary_v1()"
+    },
+    {
+      "name": "bpay_next_segment_choice_sealed_count",
+      "table": "bpay_next_work_choice",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_choice_sealed_count AFTER INSERT OR UPDATE ON private.bpay_next_work_choice FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_choice_sealed_count_v1()"
+    },
+    {
       "name": "bpay_next_work_choice_guard",
       "table": "bpay_next_work_choice",
       "schema": "private",
@@ -51431,6 +52476,118 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_revision_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_revision FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_revision_seal",
+      "table": "bpay_next_work_revision",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_revision_seal BEFORE UPDATE ON private.bpay_next_work_revision FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_revision_seal_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_work_segment_effect_origin",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_segment_effect_origin FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_work_segment_effect_origin",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_effect_origin FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_membership_commit_guard",
+      "table": "bpay_next_work_segment_effect_origin",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_membership_commit_guard AFTER INSERT ON private.bpay_next_work_segment_effect_origin DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_work_segment_effect_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_segment_effect_share FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_work_segment_effect_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_effect_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_membership_commit_guard",
+      "table": "bpay_next_work_segment_effect_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_membership_commit_guard AFTER INSERT ON private.bpay_next_work_segment_effect_share DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_guard",
+      "table": "bpay_next_work_segment_origin_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_segment_origin_share FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_fact_truncate_guard",
+      "table": "bpay_next_work_segment_origin_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_origin_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_membership_commit_guard",
+      "table": "bpay_next_work_segment_origin_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_membership_commit_guard AFTER INSERT ON private.bpay_next_work_segment_origin_share DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_membership_commit_guard",
+      "table": "bpay_next_work_segment_recovery_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_membership_commit_guard AFTER INSERT ON private.bpay_next_work_segment_recovery_share DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_negative_fact_guard",
+      "table": "bpay_next_work_segment_recovery_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_negative_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_segment_recovery_share FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_negative_truncate_guard",
+      "table": "bpay_next_work_segment_recovery_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_negative_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_recovery_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_membership_commit_guard",
+      "table": "bpay_next_work_segment_write_off_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_segment_membership_commit_guard AFTER INSERT ON private.bpay_next_work_segment_write_off_share DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_membership_commit_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_negative_fact_guard",
+      "table": "bpay_next_work_segment_write_off_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_negative_fact_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_segment_write_off_share FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_segment_negative_truncate_guard",
+      "table": "bpay_next_work_segment_write_off_share",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_segment_negative_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_write_off_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
     },
     {
       "name": "bpay_next_week_projection_guard_v1",
@@ -71956,6 +73113,368 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_approved_segment",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approved_hours",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_bh",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_day",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_night",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_sat",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hours_sun",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_bh",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_day",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_excluded",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_night",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_sat",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_sun",
+          "type": "numeric(18,6)",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "shift_detail_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "shift_end_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "shift_end_local",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "shift_overnight",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "shift_start_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "shift_start_local",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_approved_segment_parent_idx",
+          "definition": "CREATE INDEX bpay_next_approved_segment_parent_idx ON private.bpay_next_approved_segment USING btree (revision_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_approved_segment_pkey ON private.bpay_next_approved_segment USING btree (id)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_id_component_key_seg_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_approved_segment_revision_id_id_component_key_seg_key ON private.bpay_next_approved_segment USING btree (revision_id, id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_approved_segment_revision_id_id_key ON private.bpay_next_approved_segment USING btree (revision_id, id)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_segment_key_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_approved_segment_revision_id_segment_key_key ON private.bpay_next_approved_segment USING btree (revision_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_shift_detail_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_approved_segment_shift_detail_id_key ON private.bpay_next_approved_segment USING btree (shift_detail_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_approved_segment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (approved_hours = (hours_day + hours_night + hours_sat + hours_sun + hours_bh))"
+        },
+        {
+          "name": "bpay_next_approved_segment_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT pay_excluded OR approved_source_ex_vat = 0::numeric)"
+        },
+        {
+          "name": "bpay_next_approved_segment_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_approved_line_id_co_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (revision_id, approved_line_id, component_key) REFERENCES private.bpay_next_approved_line(revision_id, id, component_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_id_component_key_seg_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (revision_id, id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (revision_id, id)"
+        },
+        {
+          "name": "bpay_next_approved_segment_revision_id_segment_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (revision_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_segment_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(segment_key) >= 1 AND length(segment_key) <= 245 AND btrim(segment_key) = segment_key)"
+        },
+        {
+          "name": "bpay_next_approved_segment_shift_detail_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (shift_detail_id) REFERENCES private.bpay_next_shift_detail(id)"
+        },
+        {
+          "name": "bpay_next_approved_segment_shift_detail_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (shift_detail_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_break_detail",
@@ -79071,6 +80590,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (instruction_id IS NULL AND allocation_result_id IS NULL AND allocation_pass_kind IS NULL AND case_component_id IS NULL AND purpose IS NULL AND pay_week_start IS NULL AND projection_id IS NULL AND source_reserved_ex_vat IS NULL AND target_amount_ex_vat IS NULL AND target_amount_vat IS NULL AND target_amount_inc_vat IS NULL OR instruction_id IS NOT NULL AND allocation_result_id IS NOT NULL AND allocation_pass_kind IS NOT NULL AND case_component_id IS NOT NULL AND purpose IS NOT NULL AND pay_week_start IS NOT NULL AND source_reserved_ex_vat IS NOT NULL AND target_amount_ex_vat IS NOT NULL AND target_amount_vat IS NOT NULL AND target_amount_inc_vat IS NOT NULL AND source_reserved_ex_vat::numeric > 0::numeric AND amount::numeric = source_reserved_ex_vat::numeric AND target_amount_inc_vat::numeric = (target_amount_ex_vat::numeric + target_amount_vat::numeric) AND (purpose <> 'NET_RECOVERY_CAPACITY'::text OR status <> 'REALISED'::text OR projection_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_segment_case_hold_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
         }
       ],
       "view_definition_sha256": null
@@ -87951,6 +89478,14 @@
           "generated": ""
         },
         {
+          "name": "segment_sealed_choice_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "selected_candidate_count",
           "type": "bigint",
           "default": "0",
@@ -87980,6 +89515,22 @@
           "default": "'OPEN'::text",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_business_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "snooze_control_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -88065,6 +89616,14 @@
           "definition": "CHECK (review_revision >= 0)"
         },
         {
+          "name": "bpay_next_pay_run_segment_sealed_choice_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_sealed_choice_count >= 0)"
+        },
+        {
           "name": "bpay_next_pay_run_selected_candidate_count_check",
           "type": "c",
           "deferred": false,
@@ -88095,6 +89654,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (selection_state = ANY (ARRAY['OPEN'::text, 'SEALED'::text]))"
+        },
+        {
+          "name": "bpay_next_pay_run_snooze_control_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (snooze_control_sequence >= 0)"
         },
         {
           "name": "bpay_next_pay_run_work_choice_count_check",
@@ -95202,6 +96769,124 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_revision_worker_basis",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "expense_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "whole_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_revision_worker_basis_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_revision_worker_basis_pkey ON private.bpay_next_revision_worker_basis USING btree (revision_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_revision_worker_basis_expense_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(expense_basis) = 32)"
+        },
+        {
+          "name": "bpay_next_revision_worker_basis_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (revision_id)"
+        },
+        {
+          "name": "bpay_next_revision_worker_basis_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (revision_id) REFERENCES private.bpay_next_work_revision(id)"
+        },
+        {
+          "name": "bpay_next_revision_worker_basis_whole_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(whole_basis) = 32)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_run_case_instruction",
@@ -96847,6 +98532,86 @@
           "generated": ""
         },
         {
+          "name": "segment_attribution_complete",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_excluded_positive_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_expected_member_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_held_overhang_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_included_positive_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_member_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_recovery_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_excluded_positive_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "snooze_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "source_basis_channel",
           "type": "text",
           "default": null,
@@ -96950,7 +98715,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (work_collection_id IS NULL AND NOT managed_capture_completed OR work_collection_id IS NOT NULL AND work_collection_revision > 0 AND NOT needs_financial_resolution AND residual_source_ex_vat < 0::numeric)"
+          "definition": "CHECK (work_collection_id IS NULL AND NOT managed_capture_completed OR work_collection_id IS NOT NULL AND work_collection_revision > 0 AND NOT needs_financial_resolution AND (residual_source_ex_vat < 0::numeric OR segment_attribution_complete AND segment_recovery_ex_vat > 0::numeric))"
         },
         {
           "name": "bpay_next_position_line_or_managed_check",
@@ -96958,7 +98723,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (approved_line_id IS NOT NULL OR needs_financial_resolution OR work_collection_id IS NOT NULL)"
+          "definition": "CHECK (approved_line_id IS NOT NULL OR needs_financial_resolution OR work_collection_id IS NOT NULL OR segment_attribution_complete AND segment_member_count > 0 AND approved_source_ex_vat = 0::numeric AND realised_source_ex_vat = 0::numeric AND held_source_ex_vat = 0::numeric)"
         },
         {
           "name": "bpay_next_run_position_captured_revision_id_approved_line__fkey",
@@ -97025,6 +98790,94 @@
           "definition": "FOREIGN KEY (run_work_id, run_worker_id, work_id, captured_revision_id) REFERENCES private.bpay_next_run_work(id, run_worker_id, work_id, captured_revision_id) ON DELETE RESTRICT"
         },
         {
+          "name": "bpay_next_run_position_segment_complete_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT segment_attribution_complete OR segment_member_count = segment_expected_member_count)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_member_count <= segment_expected_member_count)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_excluded_positive_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_excluded_positive_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_expected_member_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_expected_member_count >= 0)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_held_overhang_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_held_overhang_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_included_positive_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_included_positive_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_member_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_member_count >= 0)"
+        },
+        {
+          "name": "bpay_next_run_position_segment_recovery_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_recovery_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_position_snooze_event_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (snooze_id, snooze_version) REFERENCES private.bpay_next_snooze_event(snooze_id, version)"
+        },
+        {
+          "name": "bpay_next_run_position_snooze_excluded_positive_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (snooze_excluded_positive_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_position_snooze_pair_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((snooze_id IS NULL) = (snooze_version IS NULL))"
+        },
+        {
           "name": "bpay_next_run_position_source_approval_fk",
           "type": "f",
           "deferred": false,
@@ -97071,6 +98924,196 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (canonical_source_work_id, canonical_source_component_key) REFERENCES private.bpay_next_position(work_id, component_key) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_segment_capture",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "complete",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cursor_component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cursor_segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "cursor_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "processed_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_segment_capture_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_segment_capture_pkey ON private.bpay_next_run_segment_capture USING btree (run_worker_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_run_segment_capture_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (processed_count <= expected_count)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT complete OR processed_count = expected_count)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((cursor_work_id IS NULL) = (cursor_segment_key IS NULL))"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((cursor_work_id IS NULL) = (cursor_component_key IS NULL))"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (processed_count = 0 OR cursor_work_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_expected_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_count >= 0)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_worker_id)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_processed_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (processed_count >= 0)"
+        },
+        {
+          "name": "bpay_next_run_segment_capture_run_worker_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_worker_id) REFERENCES private.bpay_next_run_worker(id)"
         }
       ],
       "view_definition_sha256": null
@@ -97814,6 +99857,506 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_work_segment",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approved_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "captured_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "disposition",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_work_segment_id_run_work_id_work_id_captured__key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_segment_id_run_work_id_work_id_captured__key ON private.bpay_next_run_work_segment USING btree (id, run_work_id, work_id, captured_revision_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_segment_pkey ON private.bpay_next_run_work_segment USING btree (id)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_run_work_id_segment_key_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_segment_run_work_id_segment_key_key ON private.bpay_next_run_work_segment USING btree (run_work_id, segment_key)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_run_work_segment_captured_revision_id_approved_s_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (captured_revision_id, approved_segment_id) REFERENCES private.bpay_next_approved_segment(revision_id, id)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((disposition = 'REMOVED'::text) = (approved_segment_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_run_work_segment_disposition_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (disposition = ANY (ARRAY['INCLUDED'::text, 'SNOOZED'::text, 'NOT_SELECTED'::text, 'REMOVED'::text]))"
+        },
+        {
+          "name": "bpay_next_run_work_segment_id_run_work_id_work_id_captured__key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, run_work_id, work_id, captured_revision_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_run_work_id_run_worker_id_work__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_work_id, run_worker_id, work_id, captured_revision_id) REFERENCES private.bpay_next_run_work(id, run_worker_id, work_id, captured_revision_id)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_run_work_id_segment_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_work_id, segment_key)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_run_work_segment_parent",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approved_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "approved_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "excluded_positive_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "held_overhang_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "held_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "included_positive_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "realised_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "recovery_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "residual_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_work_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_run_segment_parent_idx",
+          "definition": "CREATE INDEX bpay_next_run_segment_parent_idx ON private.bpay_next_run_work_segment_parent USING btree (run_work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pa_run_work_id_component_key_seg_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_segment_pa_run_work_id_component_key_seg_key ON private.bpay_next_run_work_segment_parent USING btree (run_work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_run_work_segment_parent_pkey ON private.bpay_next_run_work_segment_parent USING btree (run_work_segment_id, component_key)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_run_work_segment_p_excluded_positive_source_ex__check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (excluded_positive_source_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_p_included_positive_source_ex__check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (included_positive_source_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pa_captured_revision_id_approve_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (captured_revision_id, approved_segment_id, component_key, segment_key) REFERENCES private.bpay_next_approved_segment(revision_id, id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pa_held_overhang_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (held_overhang_source_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pa_run_work_id_component_key_seg_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_pa_run_work_segment_id_run_work_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_work_segment_id, run_work_id, work_id, captured_revision_id, segment_key) REFERENCES private.bpay_next_run_work_segment(id, run_work_id, work_id, captured_revision_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_paren_run_work_id_component_key_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_work_id, component_key) REFERENCES private.bpay_next_run_position(run_work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (residual_source_ex_vat = (approved_source_ex_vat - realised_source_ex_vat - held_source_ex_vat))"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((included_positive_source_ex_vat + excluded_positive_source_ex_vat - recovery_source_ex_vat - held_overhang_source_ex_vat) = residual_source_ex_vat)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (approved_segment_id IS NOT NULL OR approved_line_id IS NULL AND approved_source_ex_vat = 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_held_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (held_source_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_work_segment_id, component_key)"
+        },
+        {
+          "name": "bpay_next_run_work_segment_parent_recovery_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (recovery_source_ex_vat >= 0::numeric)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_run_worker",
@@ -98386,6 +100929,184 @@
       ],
       "rls": true,
       "kind": "r",
+      "name": "bpay_next_segment_selection_page",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "captured_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "first_member_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "item_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "page_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_selection_page_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_segment_selection_page_pkey ON private.bpay_next_segment_selection_page USING btree (run_id, work_id, page_no)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_segment_selection_page_request_id_key ON private.bpay_next_segment_selection_page USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_selection_page_first_member_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (first_member_no > 0)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_item_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (item_count >= 1 AND item_count <= 100)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_page_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (page_no > 0)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_id, work_id, page_no)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (request_id)"
+        },
+        {
+          "name": "bpay_next_segment_selection_page_run_id_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id, work_id) REFERENCES private.bpay_next_work_choice(run_id, work_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
       "name": "bpay_next_selected_component",
       "owner": "postgres",
       "schema": "private",
@@ -98563,6 +101284,244 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (selection_no > 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_selected_segment",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "approved_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "control_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "disposition",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "snooze_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_selected_segment_parent_idx",
+          "definition": "CREATE INDEX bpay_next_selected_segment_parent_idx ON private.bpay_next_selected_segment USING btree (run_id, work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_selected_segment_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_selected_segment_pkey ON private.bpay_next_selected_segment USING btree (run_id, work_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_selected_segment_run_id_work_id_selection_no_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_selected_segment_run_id_work_id_selection_no_key ON private.bpay_next_selected_segment USING btree (run_id, work_id, selection_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_selected_segment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((disposition = 'SNOOZED'::text) = (snooze_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_selected_segment_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((snooze_id IS NULL) = (snooze_version IS NULL))"
+        },
+        {
+          "name": "bpay_next_selected_segment_control_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (control_sequence >= 0)"
+        },
+        {
+          "name": "bpay_next_selected_segment_disposition_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (disposition = ANY (ARRAY['INCLUDED'::text, 'SNOOZED'::text]))"
+        },
+        {
+          "name": "bpay_next_selected_segment_expected_revision_id_approved_s_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (expected_revision_id, approved_segment_id, component_key, segment_key) REFERENCES private.bpay_next_approved_segment(revision_id, id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_selected_segment_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (run_id, work_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_selected_segment_run_id_work_id_expected_revisio_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id, work_id, expected_revision_id) REFERENCES private.bpay_next_work_choice(run_id, work_id, expected_revision_id)"
+        },
+        {
+          "name": "bpay_next_selected_segment_run_id_work_id_selection_no_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_id, work_id, selection_no)"
+        },
+        {
+          "name": "bpay_next_selected_segment_selection_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_no > 0)"
+        },
+        {
+          "name": "bpay_next_selected_segment_snooze_event_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (snooze_id, snooze_version) REFERENCES private.bpay_next_snooze_event(snooze_id, version)"
         }
       ],
       "view_definition_sha256": null
@@ -99041,6 +102000,14 @@
           "generated": ""
         },
         {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "segment_pay_ex_vat",
           "type": "numeric(18,2)",
           "default": null,
@@ -99211,6 +102178,14 @@
           "definition": "PRIMARY KEY (id)"
         },
         {
+          "name": "bpay_next_shift_detail_segment_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_key IS NULL OR length(segment_key) >= 1 AND length(segment_key) <= 245 AND btrim(segment_key) = segment_key)"
+        },
+        {
           "name": "bpay_next_shift_detail_submitted_minutes_check",
           "type": "c",
           "deferred": false,
@@ -99225,6 +102200,1262 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (pay_excluded IS NULL AND segment_pay_ex_vat IS NULL AND hours_day IS NULL AND hours_night IS NULL AND hours_sat IS NULL AND hours_sun IS NULL AND hours_bh IS NULL OR pay_excluded IS NOT NULL AND segment_pay_ex_vat IS NOT NULL AND hours_day IS NOT NULL AND hours_night IS NOT NULL AND hours_sat IS NOT NULL AND hours_sun IS NOT NULL AND hours_bh IS NOT NULL AND hours_day >= 0::numeric AND hours_night >= 0::numeric AND hours_sat >= 0::numeric AND hours_sun >= 0::numeric AND hours_bh >= 0::numeric AND (NOT pay_excluded OR segment_pay_ex_vat = 0::numeric))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "active",
+          "type": "boolean",
+          "default": "true",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "case_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "control_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expense_approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "default": "''::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "scope_identity",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "snooze_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "until_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "worker_pay_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_active_scope_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_active_scope_idx ON private.bpay_next_snooze USING btree (candidate_id, scope_kind, scope_identity) WHERE active"
+        },
+        {
+          "name": "bpay_next_snooze_active_work_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_active_work_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, segment_key, component_key) WHERE active"
+        },
+        {
+          "name": "bpay_next_snooze_due_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_due_idx ON private.bpay_next_snooze USING btree (until_date, id) WHERE (active AND (until_date IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_pkey ON private.bpay_next_snooze USING btree (id)"
+        },
+        {
+          "name": "bpay_next_snooze_scope_history_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_scope_history_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, scope_identity, id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_approved_segment_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approved_segment_id) REFERENCES private.bpay_next_approved_segment(id)"
+        },
+        {
+          "name": "bpay_next_snooze_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_snooze_case_component_id_case_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_snooze_case_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id) REFERENCES private.bpay_next_case_component(id)"
+        },
+        {
+          "name": "bpay_next_snooze_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id)"
+        },
+        {
+          "name": "bpay_next_snooze_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'CASE'::text) = (case_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'CASE'::text) = (case_component_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check10",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = ANY (ARRAY['SEGMENT'::text, 'EXPENSE_LINE'::text])) OR component_key IS NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_check11",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind = 'CASE'::text AND (snooze_kind = 'OVERPAYMENT_RECOVERY'::text AND case_kind = 'OVERPAYMENT'::text OR snooze_kind = 'PAYMENT_ADVANCE_REPAYMENT'::text AND (case_kind = ANY (ARRAY['LOAN'::text, 'ADVANCE'::text])) OR snooze_kind = 'MANUAL_DEBT_RECOVERY'::text AND case_kind = 'MANUAL_DEBT'::text) OR scope_kind <> 'CASE'::text AND (snooze_kind = ANY (ARRAY['DO_NOT_PAY'::text, 'BLOCKED_TIMESHEET'::text, 'TIMESHEET_PAYMENT'::text])))"
+        },
+        {
+          "name": "bpay_next_snooze_check12",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind <> ALL (ARRAY['EXPENSE_LINE'::text, 'EXPENSES_ALL'::text])) OR snooze_kind = 'DO_NOT_PAY'::text)"
+        },
+        {
+          "name": "bpay_next_snooze_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'CASE'::text) = (work_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind = 'CASE'::text OR expected_revision_id IS NOT NULL AND physical_timesheet_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'SEGMENT'::text) = (segment_key IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'SEGMENT'::text) = (approved_segment_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind = 'EXPENSE_LINE'::text) = (expense_approved_line_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((scope_kind <> ALL (ARRAY['SEGMENT'::text, 'EXPENSE_LINE'::text])) OR component_key IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind = 'CASE'::text OR case_kind IS NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_check9",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind <> 'CASE'::text OR case_kind IS NOT NULL AND expected_revision_id IS NULL AND physical_timesheet_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_control_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (control_sequence > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_created_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (created_by) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_expected_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (expected_revision_id) REFERENCES private.bpay_next_work_revision(id)"
+        },
+        {
+          "name": "bpay_next_snooze_expense_approved_line_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (expense_approved_line_id) REFERENCES private.bpay_next_approved_line(id)"
+        },
+        {
+          "name": "bpay_next_snooze_note_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(note) <= 500)"
+        },
+        {
+          "name": "bpay_next_snooze_physical_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id)"
+        },
+        {
+          "name": "bpay_next_snooze_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_snooze_receipt_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_snooze_scope_identity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(scope_identity) >= 1 AND length(scope_identity) <= 500)"
+        },
+        {
+          "name": "bpay_next_snooze_scope_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind = ANY (ARRAY['WHOLE_TIMESHEET'::text, 'SEGMENT'::text, 'EXPENSE_LINE'::text, 'EXPENSES_ALL'::text, 'CASE'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_snooze_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (snooze_kind = ANY (ARRAY['DO_NOT_PAY'::text, 'BLOCKED_TIMESHEET'::text, 'TIMESHEET_PAYMENT'::text, 'OVERPAYMENT_RECOVERY'::text, 'PAYMENT_ADVANCE_REPAYMENT'::text, 'MANUAL_DEBT_RECOVERY'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_updated_by_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (updated_by) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_work_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_snooze_work_id_expected_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, expected_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id)"
+        },
+        {
+          "name": "bpay_next_snooze_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
+        },
+        {
+          "name": "bpay_next_snooze_worker_pay_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(worker_pay_basis) = 32)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_event",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "after_state",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "before_state",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "control_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "occurred_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_event_cut_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_event_cut_idx ON private.bpay_next_snooze_event USING btree (snooze_id, control_sequence DESC)"
+        },
+        {
+          "name": "bpay_next_snooze_event_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_event_pkey ON private.bpay_next_snooze_event USING btree (id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_snooze_id_version_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_event_snooze_id_version_key ON private.bpay_next_snooze_event USING btree (snooze_id, version)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_event_actor_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_control_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (control_sequence > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_event_event_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_kind = ANY (ARRAY['SET'::text, 'AMENDED'::text, 'CLEARED'::text, 'CANCELLED'::text, 'WOKEN'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_event_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(reason) <= 500)"
+        },
+        {
+          "name": "bpay_next_snooze_event_receipt_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_snooze_event_snooze_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (snooze_id) REFERENCES private.bpay_next_snooze(id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_snooze_id_version_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (snooze_id, version)"
+        },
+        {
+          "name": "bpay_next_snooze_event_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version > 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_request",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_request_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_request_pkey ON private.bpay_next_snooze_request USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_request_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['SNOOZE_WARNING_ACK_ISSUE'::text, 'SNOOZE_SET'::text, 'SNOOZE_CLEAR'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_request_actor_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_request_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_request_receipt_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_snooze_request_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (request_id) REFERENCES private.bpay_next_command(id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_warning_ack",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "consumed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "consumed_by_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issued_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_identity",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "token",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "warning_context",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_pay_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_warning_ack_consumed_by_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_warning_ack_consumed_by_request_id_key ON private.bpay_next_snooze_warning_ack USING btree (consumed_by_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_warning_ack_pkey ON private.bpay_next_snooze_warning_ack USING btree (token)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_warning_ack_request_id_key ON private.bpay_next_snooze_warning_ack USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_ack_receipt_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_actor_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expires_at_utc = (issued_at_utc + '00:30:00'::interval))"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((consumed_by_request_id IS NULL) = (consumed_at_utc IS NULL))"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_consumed_by_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (consumed_by_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_expected_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_version >= 0)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (token)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_scope_identity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(scope_identity) >= 1 AND length(scope_identity) <= 500)"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_scope_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_kind = ANY (ARRAY['WHOLE_TIMESHEET'::text, 'SEGMENT'::text, 'EXPENSE_LINE'::text, 'EXPENSES_ALL'::text, 'CASE'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_warning_ack_worker_pay_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(worker_pay_basis) = 32)"
         }
       ],
       "view_definition_sha256": null
@@ -104923,6 +109154,38 @@
           "generated": ""
         },
         {
+          "name": "segment_control_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "segment_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_page_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_sealed_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "selection_mode",
           "type": "text",
           "default": null,
@@ -104960,6 +109223,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_choice_segment_seal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_sealed_count IS NULL OR segment_sealed_count = segment_count)"
+        },
         {
           "name": "bpay_next_work_choice_check",
           "type": "c",
@@ -105007,6 +109278,38 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (run_id, work_id) REFERENCES private.bpay_next_run_selection(run_id, work_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_choice_segment_control_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_control_sequence >= 0)"
+        },
+        {
+          "name": "bpay_next_work_choice_segment_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_count >= 0)"
+        },
+        {
+          "name": "bpay_next_work_choice_segment_page_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_page_count >= 0)"
+        },
+        {
+          "name": "bpay_next_work_choice_segment_sealed_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_sealed_count >= 0)"
         },
         {
           "name": "bpay_next_work_choice_selection_mode_check",
@@ -105173,6 +109476,14 @@
           "generated": ""
         },
         {
+          "name": "observed_segment_negative_ex_vat",
+          "type": "numeric(18,2)",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "original_approved_line_id",
           "type": "uuid",
           "default": null,
@@ -105256,6 +109567,14 @@
           "name": "reconcile_revision",
           "type": "bigint",
           "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_attribution_complete",
+          "type": "boolean",
+          "default": "false",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -105437,6 +109756,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (last_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_work_collection_observed_segment_negative_ex_va_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (observed_segment_negative_ex_vat >= 0::numeric)"
         },
         {
           "name": "bpay_next_work_collection_original_effect_id_fkey",
@@ -106091,6 +110418,932 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (work_id, revision_no)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_work_segment_effect_origin",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "effect_share_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_share_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_disposition_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_effect_origin_credit_idx",
+          "definition": "CREATE INDEX bpay_next_segment_effect_origin_credit_idx ON private.bpay_next_work_segment_effect_origin USING btree (origin_share_id, effect_share_id)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_origin_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_effect_origin_pkey ON private.bpay_next_work_segment_effect_origin USING btree (effect_share_id, origin_share_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_membership_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_o_source_disposition_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_disposition_ex_vat <> 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_origin_effect_share_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (effect_share_id) REFERENCES private.bpay_next_work_segment_effect_share(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_origin_origin_share_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (origin_share_id) REFERENCES private.bpay_next_work_segment_origin_share(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_origin_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (effect_share_id, origin_share_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_work_segment_effect_share",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "effect_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_disposition_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_inc_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_effect_balance_idx",
+          "definition": "CREATE INDEX bpay_next_segment_effect_balance_idx ON private.bpay_next_work_segment_effect_share USING btree (work_id, component_key, segment_key, effect_id)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_effect_id_segment_key_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_effect_share_effect_id_segment_key_key ON private.bpay_next_work_segment_effect_share USING btree (effect_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_effect_share_pkey ON private.bpay_next_work_segment_effect_share USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_membership_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_inc_vat = (target_ex_vat + target_vat))"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_effect_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (effect_id) REFERENCES private.bpay_next_financial_effect(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_effect_id_segment_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (effect_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_effect_share_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_work_segment_origin_share",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_work_segment_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_reserved_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_reserved_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_reserved_inc_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_reserved_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_share_balance_idx",
+          "definition": "CREATE INDEX bpay_next_segment_share_balance_idx ON private.bpay_next_work_segment_origin_share USING btree (work_id, component_key, segment_key, hold_id)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_id_work_id_component_key_segm_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_origin_id_work_id_component_key_segm_key ON private.bpay_next_work_segment_origin_share USING btree (id, work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_hold_id_segment_key_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_origin_share_hold_id_segment_key_key ON private.bpay_next_work_segment_origin_share USING btree (hold_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_origin_share_pkey ON private.bpay_next_work_segment_origin_share USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_membership_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_id_work_id_component_key_segm_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_run_line_id_work_id_componen_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_line_id, work_id, component_key) REFERENCES private.bpay_next_run_line(id, work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_run_work_segment_id_componen_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_work_segment_id, component_key) REFERENCES private.bpay_next_run_work_segment_parent(run_work_segment_id, component_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_shar_source_reserved_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_reserved_ex_vat > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_shar_target_reserved_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_reserved_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_reserved_inc_vat = (target_reserved_ex_vat + target_reserved_vat))"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_hold_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (hold_id) REFERENCES private.bpay_next_hold(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_hold_id_segment_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (hold_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_work_segment_origin_share_target_reserved_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_reserved_vat >= 0::numeric)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_work_segment_recovery_share",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "captured_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_share_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reserved_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_collection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_recovery_capacity_idx",
+          "definition": "CREATE INDEX bpay_next_segment_recovery_capacity_idx ON private.bpay_next_work_segment_recovery_share USING btree (work_id, component_key, segment_key, case_hold_id, origin_share_id)"
+        },
+        {
+          "name": "bpay_next_segment_recovery_origin_idx",
+          "definition": "CREATE INDEX bpay_next_segment_recovery_origin_idx ON private.bpay_next_work_segment_recovery_share USING btree (origin_share_id, case_hold_id)"
+        },
+        {
+          "name": "bpay_next_work_segment_recovery_share_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_recovery_share_pkey ON private.bpay_next_work_segment_recovery_share USING btree (case_hold_id, origin_share_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_membership_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_work_segment_recove_origin_share_id_work_id_comp_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (origin_share_id, work_id, component_key, segment_key) REFERENCES private.bpay_next_work_segment_origin_share(id, work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_recove_work_collection_id_work_id_c_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_collection_id, work_id, component_key) REFERENCES private.bpay_next_work_collection(id, work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_recovery_sh_reserved_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reserved_source_ex_vat > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_segment_recovery_share_captured_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (captured_revision_id) REFERENCES private.bpay_next_work_revision(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_recovery_share_case_hold_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_hold_id) REFERENCES private.bpay_next_case_hold(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_recovery_share_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (case_hold_id, origin_share_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_work_segment_write_off_share",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "case_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_share_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "segment_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_collection_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "written_off_source_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_segment_write_off_capacity_idx",
+          "definition": "CREATE INDEX bpay_next_segment_write_off_capacity_idx ON private.bpay_next_work_segment_write_off_share USING btree (work_id, component_key, segment_key, case_event_id, origin_share_id)"
+        },
+        {
+          "name": "bpay_next_segment_write_off_origin_idx",
+          "definition": "CREATE INDEX bpay_next_segment_write_off_origin_idx ON private.bpay_next_work_segment_write_off_share USING btree (origin_share_id, case_event_id)"
+        },
+        {
+          "name": "bpay_next_work_segment_write_off_share_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_work_segment_write_off_share_pkey ON private.bpay_next_work_segment_write_off_share USING btree (case_event_id, origin_share_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_segment_membership_commit_guard",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
+          "name": "bpay_next_work_segment_write__origin_share_id_work_id_comp_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (origin_share_id, work_id, component_key, segment_key) REFERENCES private.bpay_next_work_segment_origin_share(id, work_id, component_key, segment_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_write__work_collection_id_work_id_c_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_collection_id, work_id, component_key) REFERENCES private.bpay_next_work_collection(id, work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_work_segment_write_of_written_off_source_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (written_off_source_ex_vat > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_work_segment_write_off_share_case_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_event_id) REFERENCES private.bpay_next_case_event(id)"
+        },
+        {
+          "name": "bpay_next_work_segment_write_off_share_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (case_event_id, origin_share_id)"
         }
       ],
       "view_definition_sha256": null
