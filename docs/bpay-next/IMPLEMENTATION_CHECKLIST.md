@@ -1483,6 +1483,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Accepting the Source hours in Office Checks moves GBP 20.00 to Ready once SP-15's hook has refreshed the work (RQ-260); the query id shown matches the Source receipt (RQ-266).
   - A Source work whose query scope cannot be resolved shows Blocked "Pay Query status unavailable", never Ready (RQ-263); an error inside the gate does the same and never stops the writer that triggered the refresh.
 
+WB07 ITEM source BUILT/REVIEWED at 8fe50630a2ad62b5a51a8ed7f560a6c8c1970bac. Five shared-owner context rows stay N/A. Evidence design/WB-07-current-closure.md and both independent WB07 reviews; BD061 exact positive AVAILABLE query isolation. All later producer/UI joins and hosted/app/queue/timing NOT_RUN.
+
 ## WB-44 — Complete maintained projection producer/seed contract
 
 Seq 54; Workbench/background · WB-C; reviewer R2; current requested-feature status MISSING.
