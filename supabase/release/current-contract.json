@@ -85628,6 +85628,14 @@
           "generated": ""
         },
         {
+          "name": "business_date",
+          "type": "date",
+          "default": "((occurred_at_utc AT TIME ZONE 'Europe/London'::text))::date",
+          "identity": "",
+          "not_null": true,
+          "generated": "s"
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -85729,6 +85737,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_internal_business_date_finite",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(business_date))"
+        },
         {
           "name": "bpay_next_internal_receipt_actor_user_id_fkey",
           "type": "f",
@@ -103556,6 +103572,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "business_date",
+          "type": "date",
+          "default": "((occurred_at_utc AT TIME ZONE 'Europe/London'::text))::date",
+          "identity": "",
+          "not_null": true,
+          "generated": "s"
+        },
+        {
           "name": "id",
           "type": "uuid",
           "default": "gen_random_uuid()",
@@ -103633,6 +103657,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_outcome_business_date_finite",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(business_date))"
+        },
         {
           "name": "bpay_next_transfer_outcome_outcome_kind_check",
           "type": "c",

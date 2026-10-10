@@ -1,0 +1,9 @@
+# PS-02 completion (PS-C02)
+
+Sequence 28. D01 adds stored, generated, nonnull, finite business_date to the actual transfer_outcome and internal_receipt facts. The fixed Europe/London date derives only from each immutable original occurrence; UTC occurrence and independent server ingestion remain intact. An internal date is accounting acceptance, never bank payment. BD032 records this calendar convention.
+
+D02/D04 reuse the correct final settlement receive/post in 2018 and claim in 0200. All existing bodies, signatures, ACLs, locks, receipt replay and atomic fact/request/status behavior are unchanged. Per-producer confirmation is recorded in the three investigation/review pairs: settlement and return have their own immutable occurrence/ingestion; internal receipt has server-owned clocks; reissue creation preserves cash lineage and its later settlement determines its own paid date. Current cancellation requests are not CANCELLED outcome facts; EX-16/27 still own that schema/producer. Provider enums do not qualify as producers. D05 is the reviewed future joined checklist, entirely NOT_RUN.
+
+Independent date, transition and scope reviews PASS. Eight normal source/final-definer controls PASS; no changed JavaScript. db:check passes 312 migrations/813 repeatables. The sole local PG17 CHANGED load compiled one migration and three isolation closures; catalog shows both dates generated STORED/NOT NULL with the exact London expression. Contract seal 058ea606b68f85f4786b31bfa4bf97052a65978b3bd0c1abded0966149e32a7a and coupling PASS. Protected release verification remains PENDING. No business function, fixture, rehearsal, hosted install, timing or external action was performed.
+
+PS-C02 current source/schema delivery is complete; future producer completeness and actual app/installed/full Worker/queue/minute acceptance remain separate and NOT_RUN. Whole BUILT26/288 REVIEWED26/288; continue PS-03, sequence29. Local evidence commit follows; no push.

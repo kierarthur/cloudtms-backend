@@ -333,3 +333,11 @@ PS01BD031 correction: independent schema review caught cancellation all-null FK 
 ### PS-01 complete — 10/10/2026 London
 
 PS-C01 exactfourdeliverablesbuilt/reviewed, contextrowsreused. WholeITEMBUILT25/288REVIEWED25/288. Newstoredprojection/transferbridgeandterminalUMBBUILDsuccessorwithminimalnamed0145freeze; fourindependentreviewsPASS. Eightnormal source/final-definercontrols/twosyntax/dbcheck311/813/solePG17COMPILED/contractseal08427e282a43d3e32d34012b00f891c3124ce9dede1e8788fa9bc3e56ed22dfc/couplingPASS. ProtectedverificationPENDING; actualbusiness/app/installed/fullWorker/queue/minute/timingNOT_RUN. No backfill/provider/payment/hostedaction. ExistingreadyUMBrowswithoutbridgeareexplicitreleaseprecondition. ContinuePS02sequence28.
+
+### PS-02 scope checkpoint — 10/10/2026 London
+
+PS01reviewedlocalcommit04312e95. ExactPS02objectslistedbeforebuild in design/PS-02-SCOPE.md. BD032 choosesstoredUKbusinessdatefromactualimmutableeventoccurrence, preservingseparateingestion/economicclocks andexisting0200atomic/replayowners. Futurecancel/providerproducersremainwiththeirnamedcards.
+
+### PS-02 complete — 10/10/2026 London
+
+PS-C02 current date/schema and five producer-area confirmations complete under BD032. Existing correct money owners reused; cancellation/provider producer completeness stays with named later cards. Whole ITEM BUILT26/288 REVIEWED26/288. Three independent reviews PASS; source/final-definer8, dbcheck312/813, solePG17 one migration/three closures COMPILED, two generated catalog fields, seal058ea606b68f85f4786b31bfa4bf97052a65978b3bd0c1abded0966149e32a7a/coupling PASS. Protected verification PENDING; actual app/installed/fullWorker/queue/minute/timing NOT_RUN. No fixtures/rehearsals/hosted/external action. Continue PS03 sequence29.
