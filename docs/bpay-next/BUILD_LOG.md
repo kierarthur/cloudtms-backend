@@ -323,3 +323,13 @@ Exact three checklist objects listed before build in design/PF-13-SCOPE.md. BD03
 
 Whole ITEM BUILT24/288 REVIEWED24/288. Exactthreeobjects complete underBD030; design/server/callerreviewsPASS, finiteauth/origin/future-route wording corrected. Ordinary66/66caller15/15Worker, syntax/source7/dbcheck310/812/unchangedsolePG17seal552e0947ec5772a246278a1c0c43edf91fa2dec072274e59fa1f317e02b8bf0a/couplingPASS. NoSQLtoload. Actualapp/physicalDB/installed/fullWorker/queue/minute/timingNOT_RUN. Localcommitsonly; proceedPS01sequence27.
 BUILD-FE PF13 reviewed localcommit39002ab; BUILD-BE evidence checkpoint follows.
+
+### PS-01 scope checkpoint — 10/10/2026 London
+
+PF13 BE73e0c6d5/FE39002ab locally committed. Exact checklist objects listed in design/PS-01-SCOPE.md before implementation. BD031 adopts dedicated stored Umbrella Case TARGET INC and exact immutable-projection FK for transfer bridge, preserving existing ordinary-WORK refusal and named future Case ownership. No trigger/Worker/screen/protocol expansion.
+
+PS01BD031 correction: independent schema review caught cancellation all-null FK bypass. Same successor now adds only six-field captured bridge equality to existing named0145guard, preserving all other owner behavior; no newtrigger. Recompile/check before closure.
+
+### PS-01 complete — 10/10/2026 London
+
+PS-C01 exactfourdeliverablesbuilt/reviewed, contextrowsreused. WholeITEMBUILT25/288REVIEWED25/288. Newstoredprojection/transferbridgeandterminalUMBBUILDsuccessorwithminimalnamed0145freeze; fourindependentreviewsPASS. Eightnormal source/final-definercontrols/twosyntax/dbcheck311/813/solePG17COMPILED/contractseal08427e282a43d3e32d34012b00f891c3124ce9dede1e8788fa9bc3e56ed22dfc/couplingPASS. ProtectedverificationPENDING; actualbusiness/app/installed/fullWorker/queue/minute/timingNOT_RUN. No backfill/provider/payment/hostedaction. ExistingreadyUMBrowswithoutbridgeareexplicitreleaseprecondition. ContinuePS02sequence28.

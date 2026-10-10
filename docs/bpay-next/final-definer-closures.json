@@ -2736,19 +2736,21 @@
     },
     {
       "signature": "private.bpay_next_build_simple_transfer_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "PS-01 stored ordinary Umbrella bridge; next DY-09 follows master0130 chain",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4931,16 +4933,19 @@
     },
     {
       "signature": "private.bpay_next_transfer_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql"
+        "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-01 minimal captured Umbrella bridge immutability support; all0145 behavior retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

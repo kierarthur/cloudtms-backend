@@ -10722,7 +10722,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "322af2c31c3a08a9898bc5450a4ac98379169f6023c325e513b4f0684e489b8a"
+      "definition_sha256": "4ad5941458ab8285109d22c84de4c1adfa1c6f50d75eeba7f42932469c208b0e"
     },
     {
       "acl": [
@@ -14209,7 +14209,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "bbb7b73776db5ef12162c4c879578a3637f865b87f3c9a178e2aac71244da6e9"
+      "definition_sha256": "ee149a50ad67ba36711582a094dd415120b597f94adca1ae3cb4d6b6537c127b"
     },
     {
       "acl": [
@@ -87032,6 +87032,14 @@
           "generated": ""
         },
         {
+          "name": "deduction_case_target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "entered_paye_net",
           "type": "numeric(18,2)",
           "default": null,
@@ -87075,6 +87083,14 @@
           "name": "input_kind",
           "type": "text",
           "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "payment_case_target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": "0",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -87128,6 +87144,10 @@
         {
           "name": "bpay_next_net_projection_run_worker_id_projection_no_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_net_projection_run_worker_id_projection_no_key ON private.bpay_next_net_projection USING btree (run_worker_id, projection_no)"
+        },
+        {
+          "name": "bpay_next_projection_umbrella_bridge_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_projection_umbrella_bridge_key ON private.bpay_next_net_projection USING btree (id, run_worker_id, input_kind, gross_ex_vat, gross_vat, gross_inc_vat, payment_case_target_inc_vat, deduction_case_target_inc_vat, cash_amount)"
         }
       ],
       "options": [],
@@ -87182,12 +87202,28 @@
           "definition": "CHECK (gross_inc_vat = (gross_ex_vat + gross_vat))"
         },
         {
+          "name": "bpay_next_net_projection_deduction_case_target_inc_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (deduction_case_target_inc_vat::numeric >= 0::numeric)"
+        },
+        {
           "name": "bpay_next_net_projection_id_run_worker_id_key",
           "type": "u",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (id, run_worker_id)"
+        },
+        {
+          "name": "bpay_next_net_projection_payment_case_target_inc_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (payment_case_target_inc_vat::numeric >= 0::numeric)"
         },
         {
           "name": "bpay_next_net_projection_pkey",
@@ -87235,7 +87271,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (input_kind = 'UMBRELLA'::text OR (input_kind = ANY (ARRAY['PAYE_MANUAL'::text, 'PAYE_IMPORT'::text])) AND cash_amount = (entered_paye_net + accepted_net_additions::numeric - accepted_recoveries) OR input_kind = 'CASE_PAYOUT'::text AND gross_ex_vat = 0::numeric AND gross_vat = 0::numeric AND gross_inc_vat = 0::numeric AND accepted_gross_additions::numeric = 0::numeric AND accepted_gross_deductions::numeric = 0::numeric AND accepted_recoveries = 0::numeric AND cash_amount = accepted_net_additions::numeric)"
+          "definition": "CHECK (input_kind = 'UMBRELLA'::text AND entered_paye_net IS NULL AND cash_amount = (gross_inc_vat + payment_case_target_inc_vat::numeric - deduction_case_target_inc_vat::numeric) OR (input_kind = ANY (ARRAY['PAYE_MANUAL'::text, 'PAYE_IMPORT'::text])) AND cash_amount = (entered_paye_net + accepted_net_additions::numeric - accepted_recoveries) OR input_kind = 'CASE_PAYOUT'::text AND gross_ex_vat = 0::numeric AND gross_vat = 0::numeric AND gross_inc_vat = 0::numeric AND accepted_gross_additions::numeric = 0::numeric AND accepted_gross_deductions::numeric = 0::numeric AND accepted_recoveries = 0::numeric AND cash_amount = accepted_net_additions::numeric)"
         },
         {
           "name": "bpay_next_projection_input_kind",
@@ -87260,6 +87296,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (request_command_id) REFERENCES private.bpay_next_paye_net_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_projection_umbrella_bridge_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, run_worker_id, input_kind, gross_ex_vat, gross_vat, gross_inc_vat, payment_case_target_inc_vat, deduction_case_target_inc_vat, cash_amount)"
         },
         {
           "name": "bpay_next_projection_umbrella_work_cash_bridge_v1",
@@ -102934,6 +102978,54 @@
           "identity": "",
           "not_null": true,
           "generated": ""
+        },
+        {
+          "name": "umbrella_bridge_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_deduction_case_target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_gross_ex_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_gross_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_gross_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_payment_case_target_inc_vat",
+          "type": "private.bpay_next_penny_amount",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -102960,6 +103052,10 @@
         {
           "name": "bpay_next_transfer_run_worker_id_transfer_no_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_transfer_run_worker_id_transfer_no_key ON private.bpay_next_transfer USING btree (run_worker_id, transfer_no)"
+        },
+        {
+          "name": "bpay_next_transfer_umbrella_projection_bridge_idx",
+          "definition": "CREATE INDEX bpay_next_transfer_umbrella_projection_bridge_idx ON private.bpay_next_transfer USING btree (projection_id, run_worker_id, umbrella_bridge_kind, umbrella_gross_ex_vat, umbrella_gross_vat, umbrella_gross_inc_vat, umbrella_payment_case_target_inc_vat, umbrella_deduction_case_target_inc_vat, cash_amount) WHERE (umbrella_bridge_kind IS NOT NULL)"
         },
         {
           "name": "bpay_next_transfer_worker_idx",
@@ -103160,6 +103256,30 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (transfer_no > 0)"
+        },
+        {
+          "name": "bpay_next_transfer_umbrella_bridge_required",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (beneficiary_kind <> 'UMBRELLA'::text OR original_transfer_id IS NOT NULL OR (status = ANY (ARRAY['BUILDING'::text, 'CANCELLED'::text])) OR umbrella_bridge_kind IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_transfer_umbrella_bridge_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (umbrella_bridge_kind IS NULL AND umbrella_gross_ex_vat IS NULL AND umbrella_gross_vat IS NULL AND umbrella_gross_inc_vat IS NULL AND umbrella_payment_case_target_inc_vat IS NULL AND umbrella_deduction_case_target_inc_vat IS NULL OR umbrella_bridge_kind IS NOT NULL AND umbrella_bridge_kind = 'UMBRELLA'::text AND projection_id IS NOT NULL AND original_transfer_id IS NULL AND beneficiary_kind = 'UMBRELLA'::text AND umbrella_gross_ex_vat IS NOT NULL AND umbrella_gross_ex_vat::numeric >= 0::numeric AND umbrella_gross_vat IS NOT NULL AND umbrella_gross_vat::numeric >= 0::numeric AND umbrella_gross_inc_vat IS NOT NULL AND umbrella_gross_inc_vat::numeric >= 0::numeric AND umbrella_payment_case_target_inc_vat IS NOT NULL AND umbrella_payment_case_target_inc_vat::numeric >= 0::numeric AND umbrella_deduction_case_target_inc_vat IS NOT NULL AND umbrella_deduction_case_target_inc_vat::numeric >= 0::numeric AND umbrella_gross_inc_vat::numeric = (umbrella_gross_ex_vat::numeric + umbrella_gross_vat::numeric) AND cash_amount = (umbrella_gross_inc_vat::numeric + umbrella_payment_case_target_inc_vat::numeric - umbrella_deduction_case_target_inc_vat::numeric))"
+        },
+        {
+          "name": "bpay_next_transfer_umbrella_projection_bridge_fk",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (projection_id, run_worker_id, umbrella_bridge_kind, umbrella_gross_ex_vat, umbrella_gross_vat, umbrella_gross_inc_vat, umbrella_payment_case_target_inc_vat, umbrella_deduction_case_target_inc_vat, cash_amount) REFERENCES private.bpay_next_net_projection(id, run_worker_id, input_kind, gross_ex_vat, gross_vat, gross_inc_vat, payment_case_target_inc_vat, deduction_case_target_inc_vat, cash_amount) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

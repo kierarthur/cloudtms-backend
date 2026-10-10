@@ -823,7 +823,10 @@ export function specialConstructViolations(source,file){
       const historyExecution=historyTemplates&&(/execute\s+format\(\s*'select jsonb_build_array\(%s\) from private\.%I t where %s order by %s limit 1'\s*,\s*v_key_sql\s*,\s*v_def->>'table'\s*,\s*v_where\s*,\s*v_text\s*\)\s+into\s+v_upper\s+using/i.test(statement)
         ||/for\s+v_item\s+in\s+execute\s+v_query\s+using/i.test(statement));
       const historyConstant=historyTemplates&&/^\s*declare\s+v_sections\s+constant\s+jsonb\s*:=/i.test(statement);
-      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
+      // A closed catalog predecessor comparison consumes a dollar literal as
+      // metadata only; it is not an EXECUTE producer or a SQL body.
+      const catalogAssertion=!dynamic&&t.filter(token=>token==='<BODY>').length===1&&/^\s*(?:begin\s+)?if\s+\(select\s+pg_catalog\.pg_get_constraintdef\(c\.oid\)\s+from\s+pg_catalog\.pg_constraint\s+c\s+where\s+c\.conrelid='private\.[a-z_][a-z0-9_]*'::pg_catalog\.regclass\s+and\s+c\.conname='[a-z_][a-z0-9_]*'\)\s+is\s+distinct\s+from\s+\$([a-z_][a-z0-9_]*)\$[\s\S]*?\$\1\$\s+then\s+raise\s+exception\s+using\s+errcode='23514',\s*message='BPAY_NEXT_[A-Z0-9_]+';\s*$/i.test(statement);
+      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
       if(/\bPG_CATALOG \. (?:COALESCE|NULLIF|LEAST|GREATEST) \(/.test(text))hazards.add('SPECIAL_QUALIFIER');
       const intoAt=t.indexOf('INTO'),selectAt=intoAt>=0?t.lastIndexOf('SELECT',intoAt):t.indexOf('SELECT');
       if(selectAt>=0&&intoAt>selectAt){

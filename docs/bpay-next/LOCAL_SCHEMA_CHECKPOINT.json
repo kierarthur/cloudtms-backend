@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "7edaafa041a25e5d1cfefce60c888059cdf8bb44",
-  "compiledAtUtc": "2026-10-10T03:22:06.926Z",
+  "sourceCommit": "73e0c6d551752d9fc5f13d743f874f347a640dae",
+  "compiledAtUtc": "2026-10-10T04:38:52.845Z",
   "inventory": {
     "migrations": [
       {
@@ -1248,6 +1248,10 @@
       {
         "path": "supabase/migrations/10102026_0408_banking_pay_next_terminal_cleanup_clock.sql",
         "sha256": "e0b55f9dda602a404654c45308fad7dc90bc445d32efab90e7f095318c546f20"
+      },
+      {
+        "path": "supabase/migrations/10102026_0533_banking_pay_next_ps_c01_umbrella_cash_bridge_v1.sql",
+        "sha256": "23d0375090ef26692d19051eed62b3033b2218b6cb4622430ce2c6421a822964"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -7344,6 +7348,13 @@
         "sha256": "1599cdd60cd09c26a4f6594a6b100831d82292b88339fd3e1f767e99a7f919fd"
       },
       {
+        "path": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
+        ],
+        "sha256": "22cd6f6e2e418f30685015bdbf1dd733570d5e3b2ad1d32fe06807b428d0217e"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7353,12 +7364,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/10102026_0408_banking_pay_next_terminal_cleanup_clock.sql",
-        "sha256": "e0b55f9dda602a404654c45308fad7dc90bc445d32efab90e7f095318c546f20"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -7382,18 +7388,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql",
+        "path": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
         "paths": [
-          "supabase/repeatable/10102026_0403_banking_pay_next_operational_health_v1.sql"
+          "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
         ],
-        "sha256": "6179e42984f461a3c259fb0f068613020eaca73b660b57eb584b5bcc7e158fce"
-      },
-      {
-        "path": "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql",
-        "paths": [
-          "supabase/repeatable/10102026_0406_banking_pay_next_terminal_cleanup_v1.sql"
-        ],
-        "sha256": "1599cdd60cd09c26a4f6594a6b100831d82292b88339fd3e1f767e99a7f919fd"
+        "sha256": "22cd6f6e2e418f30685015bdbf1dd733570d5e3b2ad1d32fe06807b428d0217e"
       }
     ]
   },

@@ -6,6 +6,17 @@ import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutin
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
 });
+test('catalog predecessor dollar metadata is data while actual dynamic execution stays refused',()=>{
+  const metadata="if (select pg_catalog.pg_get_constraintdef(c.oid) from pg_catalog.pg_constraint c where c.conrelid='private.bpay_next_net_projection'::pg_catalog.regclass and c.conname='bpay_next_projection_case_cash') is distinct from $expected$CHECK (cash_amount=0)$expected$ then raise exception using errcode='23514',message='BPAY_NEXT_PREDECESSOR_MISMATCH'; end if;";
+  const wrap=body=>'do $outer$begin '+body+' end$outer$;';
+  assert.doesNotThrow(()=>assertSpecialConstructs(wrap(metadata),'source.sql'));
+  for(const body of [metadata+"execute $query$select pg_catalog.coalesce(1,2)$query$;",
+    metadata.replace('then raise exception',()=>"then execute $query$select 1$query$; raise exception"),
+    metadata.replace('$expected$CHECK (cash_amount=0)$expected$',()=>'$expected$CHECK$expected$ || private.some_function() || $expected$tail$expected$'),
+    "q := $expected$CHECK (cash_amount=0)$expected$; execute q;"])
+    assert.throws(()=>assertSpecialConstructs(wrap(body),'source.sql'),/DYNAMIC_SQL_UNCLASSIFIED/);
+});
+
 test('PF09 NEXT column types require exact numeric while prose and private guards remain allowed',()=>{
   for(const type of ['float','float4','float8','real','double precision','pg_catalog.float8']){
     for(const source of [`create table private.bpay_next_amount(id uuid,amount ${type});`,
