@@ -1629,7 +1629,7 @@ Dependencies: WB-08, WB-09, F-16; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-10-D04 | DOC: Owner Lane C local300 Timesheet/30workers/twoDraft DB proof | PARTLY_DONE | Retain ~1.1s Draft/~1.8s all-detail owner result as local DB-only evidence; receipt not located by R2. Full real Worker/queue/network and hosted60s later checks remain NOT_RUN. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-10-D04 | DOC: Owner Lane C local300 Timesheet/30workers/twoDraft DB proof | PARTLY_DONE | Retain ~1.1s Draft/~1.8s all-detail owner result as local DB-only evidence; receipt not located by R2. Full real Worker/queue/network and hosted60s later checks remain NOT_RUN. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1645,6 +1645,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 - On the NEXT TEST agency with its real data, each of these opens within 2 seconds: the Ready list, the Action Required list, a Candidate window, and the refresh after a rate save (RQ-240).
   - The Candidate with the most Timesheets on that agency opens within 2 seconds, without reading history rows (RQ-243).
   - Paging at limits 1, 17 and 100 stays within 2 seconds per page (RQ-009); no read takes more than 5 s (RQ-244).
+
+Whole WB-10 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. design/WB-10-successor-provenance.json; localPG17/db/syntax/source/seal/coupling PASS; historicalDBonlyreceiptunlocated; actuallatencyNOT_RUN Review: reviews/WB-10-read-limits-review.md; reviews/WB-10-measurement-transport-review.md.
 
 ## WB-11 — Banking Pay NEXT shell: header, official pay date, scope badges, filters
 
