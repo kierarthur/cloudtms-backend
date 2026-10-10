@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   BPAY_NEXT_HISTORY_SECTIONS as SECTIONS, handleBpayNextHistoryRead,
-  createBpayNextHistoryRpc, validateBpayNextHistoryRequest, validateBpayNextHistoryResponse
+  createBpayNextHistoryRpc, validateBpayNextHistoryRequest, validateBpayNextHistoryResponse, projectBpayNextMemberOrigin
 } from '../broker/src/bpay-next-history.js';
 const actor = 'b8100000-0000-4000-8000-000000000001';
 const candidate = 'b8100000-0000-4000-8000-000000000002';
@@ -128,4 +128,22 @@ test('SQL refusals retain closed status without payload/logging and read stays a
   assert.match(broker.slice(route,route+480),/requireOfficeUser: async \(\) => user/);
   const owner=fs.readFileSync(new URL('../broker/src/bpay-next-history.js',import.meta.url),'utf8');
   assert.doesNotMatch(owner,/console\.|module_status|NEXT.*enabled|waitUntil|queue\.send/);
+});
+
+test('PS03 typed member projection keeps genuine zero Case and refuses wrong shapes/parent without money arithmetic',()=>{
+  const data={...row('MEMBERS',['1']).data,transfer_id:work,run_worker_id:candidate,subject_kind:'WORK',run_line_id:actor,signed_cash_contribution:'12.34'};
+  assert.equal(projectBpayNextMemberOrigin(data).origin.id,actor);
+  assert.throws(()=>projectBpayNextMemberOrigin({...data,case_hold_id:timesheet}));
+  const zero={...data,subject_kind:'CASE',run_line_id:null,case_instruction_id:actor,case_allocation_result_id:timesheet,signed_cash_contribution:'0.00'};
+  assert.equal(projectBpayNextMemberOrigin(zero).origin.hold_id,null);
+  assert.throws(()=>projectBpayNextMemberOrigin({...zero,signed_cash_contribution:'1.00'}));
+  for(const subject_kind of ['NET_ADJUSTMENT','CASH_REISSUE']) {
+    const member={...data,subject_kind,run_line_id:null};
+    assert.equal(projectBpayNextMemberOrigin(member).origin.id,work);
+    assert.throws(()=>projectBpayNextMemberOrigin({...member,run_line_id:actor}));
+  }
+  assert.throws(()=>projectBpayNextMemberOrigin({...data,signed_cash_contribution:12.34}));
+  const own=call({section:'MEMBERS',parent_id:work});
+  assert.equal(validateBpayNextHistoryResponse(page(own,[{key:['1'],data}]),own).rows[0].data.signed_cash_contribution,'12.34');
+  assert.throws(()=>validateBpayNextHistoryResponse(page(own,[{key:['1'],data:{...data,transfer_id:actor}}]),own));
 });

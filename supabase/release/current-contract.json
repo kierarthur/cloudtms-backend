@@ -14228,7 +14228,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d2e0b58e679e19f31875ec729ea23a0e01cf5d015218d6e81366a496880ea084"
+      "definition_sha256": "b11389162a854f13da2da77e47388b16b68baf2b14a11ad299cd45e05ea6feee"
     },
     {
       "acl": [
@@ -103438,6 +103438,10 @@
         {
           "name": "bpay_next_transfer_member_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_transfer_member_pkey ON private.bpay_next_transfer_member USING btree (transfer_id, member_no)"
+        },
+        {
+          "name": "bpay_next_transfer_singleton_origin_once",
+          "definition": "CREATE UNIQUE INDEX bpay_next_transfer_singleton_origin_once ON private.bpay_next_transfer_member USING btree (transfer_id, subject_kind) WHERE (subject_kind = ANY (ARRAY['NET_ADJUSTMENT'::text, 'CASH_REISSUE'::text]))"
         },
         {
           "name": "bpay_next_transfer_work_member_once_idx",

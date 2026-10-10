@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "04312e9567b8204294d3b438d6c100056eed8242",
-  "compiledAtUtc": "2026-10-10T04:47:28.661Z",
+  "sourceCommit": "2d5b958561df5c5b28f2dcd4b1740750745c1f8c",
+  "compiledAtUtc": "2026-10-10T04:59:56.361Z",
   "inventory": {
     "migrations": [
       {
@@ -1256,6 +1256,10 @@
       {
         "path": "supabase/migrations/10102026_0544_banking_pay_next_ps_c02_stored_business_dates_v1.sql",
         "sha256": "7537d120fb13c61b78b06a77e5697065152529f4c7ad911bdf7e83653fd5ce5b"
+      },
+      {
+        "path": "supabase/migrations/10102026_0554_banking_pay_next_ps_c03_member_origin_singletons_v1.sql",
+        "sha256": "b6a3cb6c1f681926e97136e00f3a4c99b44a5da0f477c87720592d5fda0d4120"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -7359,6 +7363,13 @@
         "sha256": "22cd6f6e2e418f30685015bdbf1dd733570d5e3b2ad1d32fe06807b428d0217e"
       },
       {
+        "path": "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql"
+        ],
+        "sha256": "e9625dea549f8faa640149f318aa9aad19c9d121ba36cacbdb4d8025eb8bd58b"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7368,12 +7379,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/10102026_0544_banking_pay_next_ps_c02_stored_business_dates_v1.sql",
-        "sha256": "7537d120fb13c61b78b06a77e5697065152529f4c7ad911bdf7e83653fd5ce5b"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -7395,6 +7401,13 @@
           "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
         ],
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
+      },
+      {
+        "path": "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql",
+        "paths": [
+          "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql"
+        ],
+        "sha256": "e9625dea549f8faa640149f318aa9aad19c9d121ba36cacbdb4d8025eb8bd58b"
       }
     ]
   },

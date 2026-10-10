@@ -1,0 +1,10 @@
+# PS-03 future joined in-app acceptance
+
+D05 saved checklist; every actual installed, app, business, Worker/queue/minute case below is NOT_RUN. Source controls and local schema compilation are separate evidence. No fixtures or rehearsals created.
+
+- WORK: genuine frozen run-line/worker origin and exact signed frozen contribution; wrong worker, foreign line, extra Case origin and altered contribution refuse. Ordinary Umbrella supported WORK retains its original basis; unsupported Case/conversion stays refused until the named later financial owner.
+- CASE: genuine instruction/result with correct signed TARGET INC and exact nonzero hold. Real zero result has no fabricated hold. Wrong instruction/result/worker/preparation/state/amount or multiple origin fails in the retained Case/destination owners.
+- NET adjustment: exact immutable parent projection and accepted request, one per leg; ordinary retained cash-minus-gross and Case/destination retained entered-NET-minus-gross remain distinct. Wrong projection/request/worker, fake line/Case origin, wrong value or duplicate (including concurrent insertion) refuses.
+- Cash reissue: exact original transfer/return obligation and accepted reissue request; one member equals this new leg's cash. No new earnings or current-balance reinterpretation. Wrong/foreign parent, original transfer falsely labelled reissue, fabricated line/hold or duplicate refuses. Request.transfer_id need not already be attached at member insertion.
+- History: four typed origins and raw server signed contribution remain exact. Existing parent transfer/projection pages show the exact accepted request or parent cash. Missing retained context is explicit; no latest-selection guess. Wrong MEMBER parent or disjoint shape refuses, and read-only actor/scope/keyset/byte bounds stay closed.
+- Conservation: original server builders reconcile the full member set and stored sum to each leg. Office preserves those complete server totals separately and never sums a partial page or allocates Candidate cash to Timesheets/Clients. Replay, late append, UPDATE/DELETE and changed origin refuse; actual whole-queue traversal remains NOT_RUN.

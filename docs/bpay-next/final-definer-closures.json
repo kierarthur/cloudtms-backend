@@ -4950,16 +4950,19 @@
     },
     {
       "signature": "private.bpay_next_transfer_member_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql",
+        "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0145_banking_pay_next_transfer_guards_v1.sql"
+        "supabase/repeatable/10102026_0554_banking_pay_next_ps_c03_member_origin_guard_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-03 ordinary origin enforcement; Case/destination owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

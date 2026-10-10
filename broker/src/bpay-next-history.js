@@ -90,6 +90,25 @@ class HistoryError extends Error {
 const fail = (code, status, retryable) => { throw new HistoryError(code,status,retryable); };
 const invalidRequest = () => fail('BPAY_NEXT_HISTORY_REQUEST_INVALID',400);
 const invalidResponse = () => fail('BPAY_NEXT_HISTORY_RESPONSE_INVALID');
+export function projectBpayNextMemberOrigin(data) {
+  if (!record(data) || !uuid(data.transfer_id) || !uuid(data.run_worker_id)
+    || typeof data.signed_cash_contribution !== 'string'
+    || !/^-?[0-9]{1,16}\.[0-9]{2}$/.test(data.signed_cash_contribution)) invalidResponse();
+  const line=uuid(data.run_line_id), instruction=uuid(data.case_instruction_id), result=uuid(data.case_allocation_result_id);
+  const hold=data.case_hold_id===null || uuid(data.case_hold_id);
+  let origin;
+  if(data.subject_kind==='WORK' && line && data.case_hold_id===null && data.case_instruction_id===null && data.case_allocation_result_id===null)
+    origin={kind:'FROZEN_RUN_LINE',id:data.run_line_id};
+  else if(data.subject_kind==='CASE' && data.run_line_id===null && instruction && result && hold
+    && (data.case_hold_id!==null || /^-?0\.00$/.test(data.signed_cash_contribution)))
+    origin={kind:'FROZEN_CASE_RESULT',instruction_id:data.case_instruction_id,result_id:data.case_allocation_result_id,hold_id:data.case_hold_id};
+  else if(['NET_ADJUSTMENT','CASH_REISSUE'].includes(data.subject_kind)
+    && [data.run_line_id,data.case_hold_id,data.case_instruction_id,data.case_allocation_result_id].every(value=>value===null))
+    origin={kind:data.subject_kind==='NET_ADJUSTMENT'?'ACCEPTED_PROJECTION_ON_TRANSFER':'RETURN_CASH_ON_TRANSFER',id:data.transfer_id};
+  else invalidResponse();
+  return Object.freeze({kind:data.subject_kind,transfer_id:data.transfer_id,run_worker_id:data.run_worker_id,
+    signed_cash_contribution:data.signed_cash_contribution,origin:Object.freeze(origin)});
+}
 function keyTuple(value, definition) {
   if (!Array.isArray(value) || value.length !== definition.keys.length) return false;
   return value.every((item, index) => {
@@ -166,6 +185,7 @@ export function validateBpayNextHistoryResponse(value, request) {
         || !fields.every(field => row.data[field] === null || typeof row.data[field] === 'string')
         || !definition.keys.every(([field], index) => row.data[field] === row.key[index])
         || seen.has(JSON.stringify(row.key)) || (request.after && same(row.key,request.after.key))) invalidResponse();
+      if(request.section==='MEMBERS') {if(row.data.transfer_id!==request.parent_id)invalidResponse();projectBpayNextMemberOrigin(row.data);}
       seen.add(JSON.stringify(row.key));
     }
     if (value.terminal ? value.next_cursor !== null : value.rows.length === 0
