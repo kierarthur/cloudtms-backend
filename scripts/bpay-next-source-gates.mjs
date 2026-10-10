@@ -71,6 +71,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_workbench_apply_delta_v1(private.bpay_next_workbench_delta[],private.bpay_next_workbench_delta[])',
   'private.bpay_next_workbench_accepted_work_v1(uuid,text,text)',
   'private.bpay_next_workbench_work_members_v1(uuid,uuid)',
+  'private.bpay_next_work_wait_state_v1(uuid)',
   'private.bpay_next_workbench_refresh_work_v1(uuid)',
   'private.bpay_next_workbench_refresh_case_v1(uuid)',
   'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])',
@@ -90,7 +91,9 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_workbench_work_members_v1(uuid,uuid)': [
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_bound_source_snapshot_v1',
     'private.bpay_next_work_segment_gross_balance_v1','sum'],
+  'private.bpay_next_work_wait_state_v1(uuid)': ['private.bpay_next_workbench_require_next_v1','sum'],
   'private.bpay_next_workbench_refresh_work_v1(uuid)': [
+    'private.bpay_next_work_wait_state_v1','private.bpay_next_workbench_refresh_case_v1',
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
     'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_work_members_v1',
     'private.bpay_next_workbench_accepted_work_v1','private.bpay_next_snooze_at_cut_v1',

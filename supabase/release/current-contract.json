@@ -12623,7 +12623,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5e81baba3d5da077f2abda381f8281f05c96e7f5ce2ff808413b2605b6ecee61"
+      "definition_sha256": "8b78028ed04ad26e3d5740c1f6e832d43c60cb2bdc16d7f63fe9d1490902d9c0"
     },
     {
       "acl": [
@@ -14998,7 +14998,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "81df5cee2d396d6e08dab6d2338449d2a528af15bacb8f1d9daab403e35e7f57"
+      "definition_sha256": "8c98494335b0edcf58c880543b0daa6d93d8412b664c140c89499e58ed703cbb"
     },
     {
       "acl": [
@@ -15374,6 +15374,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_work_wait_state_v1(p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "fd999b2ca2262e805a59a62140a32461c05025cc06f007c7c54953bf7ef2a12e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_accepted_work_v1(p_work_id uuid, p_component_key text, p_segment_key text)",
       "parallel": "u",
       "volatility": "s",
@@ -15454,7 +15473,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "7996c451a7d0d4f3ff06ee2ac56a82c711cc266feb83084917dc4a03883d6c8d"
+      "definition_sha256": "fa7ed2198d1034ccbb4a726300fbcd62c883c45aff5ca506144c1fa29c71f81e"
     },
     {
       "acl": [
@@ -15511,7 +15530,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9731a6018578053caca8d180ea64e435238b6dcc9629da9a1b5053817b1e2494"
+      "definition_sha256": "7d66b737040ea7c231ab8472911249317e90a878ef6dd650c3a7cd2d9325151a"
     },
     {
       "acl": [
@@ -113859,7 +113878,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (portion_kind = ANY (ARRAY['AVAILABLE'::text, 'RESERVED'::text, 'RECOVERY'::text, 'ZERO'::text, 'EVIDENCE'::text]))"
+          "definition": "CHECK (portion_kind = ANY (ARRAY['AVAILABLE'::text, 'RESERVED'::text, 'RECOVERY'::text, 'ZERO'::text, 'EVIDENCE'::text, 'WITHDRAWN'::text]))"
         },
         {
           "name": "bpay_next_workbench_item_progress_state_check",
@@ -114004,6 +114023,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_id, revision_id) REFERENCES private.bpay_next_work_revision(work_id, id)"
+        },
+        {
+          "name": "bpay_next_workbench_withdrawn_shape",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (portion_kind <> 'WITHDRAWN'::text OR member_kind = 'WORK_COMPONENT'::text AND amount_known AND direction = 'INFORMATIONAL'::text AND NOT selectable AND (section = ANY (ARRAY['ACTION'::text, 'BLOCKED'::text])) AND (reason_code = ANY (ARRAY['AWAITING_REAUTHORISATION'::text, 'APPROVAL_WITHDRAWN'::text])) AND nominal_source_ex_vat::numeric = approved_source_ex_vat::numeric AND residual_source_ex_vat::numeric = (approved_source_ex_vat::numeric - realised_source_ex_vat::numeric - active_reserved_source_ex_vat::numeric) AND gross_due_source_ex_vat::numeric = 0::numeric AND included_source_ex_vat::numeric = 0::numeric AND excluded_source_ex_vat::numeric = 0::numeric AND recovery_source_ex_vat::numeric = 0::numeric AND held_overhang_source_ex_vat::numeric = 0::numeric AND written_off_source_ex_vat::numeric = 0::numeric)"
         },
         {
           "name": "bpay_next_workbench_writeoff_known_shape",

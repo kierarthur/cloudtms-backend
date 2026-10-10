@@ -66,7 +66,7 @@ shift credit needs review'; IN_PREPARATION 'Included in Draft preparation';
 FUTURE_WEEK 'Not payable until {eligible_from_date}'; SNOOZED 'Snoozed';
 SNOOZE_SEGMENT_STALE 'Saved shift snooze no longer matches'; PAY_QUERY_OPEN
 'Pay Query open'; PAY_QUERY_UNAVAILABLE 'Pay Query evidence unavailable';
-PAY_ON_HOLD 'Pay on hold'; APPROVAL_WITHDRAWN 'Approval withdrawn';
+PAY_ON_HOLD 'Pay on hold'; APPROVAL_WITHDRAWN 'Missing approval — approval withdrawn';
 AWAITING_REAUTHORISATION 'Paid — awaiting re-authorisation';
 ORIGIN_UNAUTHORISED_WAIT 'Waiting for re-authorisation — recovery paused';
 RATE_RESOLUTION_REQUIRED/GROSS_RESOLUTION_REQUIRED 'Pay channel value required'.

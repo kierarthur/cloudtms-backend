@@ -3743,16 +3743,19 @@
     },
     {
       "signature": "private.bpay_next_ordinary_authorisation_trigger_v1()",
-      "finalRoot": "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql"
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4926,16 +4929,19 @@
     },
     {
       "signature": "private.bpay_next_source_withdrawal_guard_v1()",
-      "finalRoot": "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1580_banking_pay_next_source_withdrawal_guard_v1.sql"
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13271,16 +13277,19 @@
     },
     {
       "signature": "private.bpay_next_workbench_group_contribution_v1(text)",
-      "finalRoot": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "owner": "WB-08 typed maintained projection; WB02/WB07/WB40/WB41/WB29 classifier successors and WB44 continuation retain actual later ownership"
+      "owner": "WB-02 minimal genuine withdrawn native held-count projection; all other typed rollups retained"
     },
     {
       "signature": "private.bpay_next_workbench_apply_delta_v1(private.bpay_next_workbench_delta[],private.bpay_next_workbench_delta[])",
@@ -13326,16 +13335,19 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "owner": "WB-08 typed maintained projection; WB02/WB07/WB40/WB41/WB29 classifier successors and WB44 continuation retain actual later ownership"
+      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
@@ -13388,6 +13400,19 @@
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
       ],
       "owner": "WB-08 typed maintained projection; WB02/WB07/WB40/WB41/WB29 classifier successors and WB44 continuation retain actual later ownership"
+    },
+    {
+      "signature": "private.bpay_next_work_wait_state_v1(uuid)",
+      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+      ],
+      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41"
     }
   ],
   "editorChains": [
