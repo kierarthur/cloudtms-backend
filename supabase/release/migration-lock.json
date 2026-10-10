@@ -1207,6 +1207,22 @@
       "sha256": "d6dfda1236deeddf6f7f6f1f720ff95ff4521d605dd93260c574307cf1842be1"
     },
     {
+      "path": "supabase/migrations/10102026_0020_banking_pay_next_query_root_completion_v1.sql",
+      "sha256": "bf36da5429faebb2d02995ab24f1dc8538e83e8587a7273ab8acb62aaa6c60bf"
+    },
+    {
+      "path": "supabase/migrations/10102026_0036_banking_pay_next_query_sync_branch_evidence_v1.sql",
+      "sha256": "9acb438e59f38cd2cca753f03a8dd10b8ef1ba0f63c0e4d435a2badd9a440a36"
+    },
+    {
+      "path": "supabase/migrations/10102026_0057_banking_pay_next_query_witness_envelope_v1.sql",
+      "sha256": "784c3cb5b26b9fe447e4d5e2983c3fe9b6d4c3e1e833a950d46d96c8bc1e1cbc"
+    },
+    {
+      "path": "supabase/migrations/10102026_0111_banking_pay_next_candidate_query_completion_v1.sql",
+      "sha256": "76d1e2909770819fe2b8e872f9fb958a8144404bbc98a07b3dc60db7010fc1b3"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

@@ -12834,6 +12834,44 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_comparison_row_stage_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "49298f7ac24e284c067dae897d49fc84e7908bae3fa365c57ba8fe4ed520d029"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_completion_insert_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4e601cadecea4a9959b9136bcaa56404312aec6a2bea8481c53ff1ea4ed4befc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -12841,7 +12879,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "dfa6a88e51813e00568aeaba24f4bb3e16e4300a79a65601fd48351b439e54f9"
+      "definition_sha256": "8992d1f37e97a4a3e8ba3a2bccb3d70b186498d65b886109af0d5285a4834b16"
     },
     {
       "acl": [
@@ -12894,11 +12932,68 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_query_incident_row_stage_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "0accf2a299b2f3ba0f0a0a8a395e13f4c078501c747d904c22ffc80fb3012ff7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_query_manual_review_row_stage_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "ce2e8dd1d5d54a443add7c27940ec71bf76f1325a10b92ee5d353c52a686699d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_matched_facts_digest_v1(p_contract uuid, p_family text, p_presence text, p_candidate_start timestamp without time zone, p_candidate_end timestamp without time zone, p_candidate_break integer, p_system_start timestamp without time zone, p_system_end timestamp without time zone, p_system_break integer)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "31c38d816bc3817b2e39026252c08536d5a56a20b359260369fb1023820f21bb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_original_evidence_digest_v1(p_witness_kind text, p_comparison_revision_id uuid, p_discrepancy_event_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "69eff7b4fe55874fd255e866c95fd3ca8040da6deb0cb598d15de87f94f730fc"
     },
     {
       "acl": [
@@ -12917,7 +13012,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "df6e45a9ec3239b84feb34f1d4276a15d6e40e44bfe7b77eb803891fc3b7c0e9"
+      "definition_sha256": "d9c424ce8e5bd14157699b7b53e59c4eff8e4909e195842ac6fdece5739fc147"
     },
     {
       "acl": [
@@ -12994,6 +13089,424 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "4e9aabd10b306929b1a8bb0417bf2143476662dc8c8fd2ecb37dfb2d7129e5c4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_raw_stages_v1(p_producer_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "5414a8c823293e21ef17347aaae3cafb6f9ffab94ff97d8a125cdbf9003afc8c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_resolved_evidence_assert_v1(p_comparison_id uuid, p_resolved_event_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "7b07b9a6bc34fb5aebd4ac8dc046703a687a0b5d2a64bbc056a6006060f79e0c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_response_completion_digest_v1(p_producer_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "3d43b08b167f480c85ed56be7e54e839cb8836c8a8355212176afd748fc93f0d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_root_completion_assert_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "395f90a6969a74cc23a9218a38f7788a26627ea16d3d0d665349bbd3d59c43ca"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_root_completion_digest_v1(p_header private.bpay_next_query_root_completion)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "6a24171847167f7ac56854d7e370354f1eef4cfe01c5f6110a3ad07f7e075a74"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_certificate_evidence_assert_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e8b54c7cffb4bd8d9bcd7705d7ab13422639981bbb347e78b6eb5d5c51797c41"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_certificate_insert_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7f8652bced58571e2ea202c0c2fc61731f68f40b53df3212cd11dd42fb467935"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_children_digests_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "7fd3338f50808a2b4da8fd2cbddc23179697273388e201b5f72ac1980a4f528b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_complete_v1(p_producer_id uuid, p_actor uuid, p_cycle uuid, p_publication uuid, p_input_ids uuid[], p_issue_hashes bytea[], p_seen_work_ids uuid[], p_omitted_ids uuid[], p_new_count bigint, p_changed_count bigint, p_unchanged_count bigint, p_resolved_count bigint, p_inputs private.bpay_next_query_sync_input_completion[], p_omissions private.bpay_next_query_sync_omission_completion[])",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7df2fcc2cc0f6b4c193e7bcf09b40e153cc9b924cedef0fe5b715b414a93d5bb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_expected_stages_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "dde0bd97671385bb9d6558660c47c7bba14281eab1a088d2860a1d5f485774fd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_expected_witnesses_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "d05eea7988f237dcc772ab45b667d947ba654aad968438fe54014d5c30764f31"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_input_completion_digest_v1(p_row private.bpay_next_query_sync_input_completion)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "b50f262bef9ef1178ff51812848bc08e7e505e0613b8f93a84d82b09701fc203"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_issue_digest_v1(p_issue jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "825ecae6bf6f7a287cd2cf9436d58f0454b9a9983cf9be1ecbda925c3e6d8a76"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_omission_completion_digest_v1(p_row private.bpay_next_query_sync_omission_completion)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "17276850c3d479d522749e056eb6b22ec09eb7217fb8e06036de953925298ecc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_request_digest_v1(p_actor uuid, p_cycle uuid, p_publication uuid, p_work_ids uuid[], p_issue_sha256 bytea[])",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "f8cc44c9f087ddae3485e632474ea16e93935ee929429a1be16dd65610413140"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_root_completion_assert_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "d7d6419044fe0c97412edd694541950fdad6a776006ac063acae6595bf0d43bd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_stage_matches_v1(p_event_id uuid, p_operation text, p_work_event_id uuid, p_comparison_id uuid, p_prior_comparison_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a0d512589503e29856b56dfd285489b2607025fb729b868e1cf5734a1d296999"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_stages_assert_v1(p_completion_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "ad77c1c59f2b1b4b2478f71dcd9205d4b6dfad151817011f3c3bb94bce415bd3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_sync_supplied_witnesses_v1(p_inputs private.bpay_next_query_sync_input_completion[], p_omissions private.bpay_next_query_sync_omission_completion[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "4e2585437ca4b743664bcecbd172e942b38aae6cd119304e0cf5463bec3e9e04"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_system_action_digest_v1(p_actor uuid, p_cycle uuid, p_publication uuid, p_incidents uuid[])",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "04533a024940364941acf54d8ac907b560e00556aa9cb3428d41ca2aca728fe2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_system_complete_v1(p_producer_id uuid, p_variant text, p_cycle uuid, p_publication uuid, p_actor uuid, p_incidents uuid[], p_child_sha256 bytea)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "93bcf14d2d304c3338bf4a363398c9d9c3e48e65ba5fce3d454717c34d9814da"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_query_system_witnesses_v1(p_producer_id uuid, p_cycle uuid, p_publication uuid, p_actor uuid, p_incidents uuid[])",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "5833a33f01f8193d2851142eb580e5012c53cbcf8cbccbbead286145bf1e7459"
     },
     {
       "acl": [
@@ -48107,7 +48620,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5720d54afec37190f2a9f607813c901f85662c6d105246e8f32806c2e505e804"
+      "definition_sha256": "40ebeb9a3009b4324649f2cdf4d91095139358f00dc4850c41287e4647488f03"
     },
     {
       "acl": [
@@ -48251,7 +48764,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "14712e8468bce969c72270506203ad1c876063fb5f195fc05c064ca17fa5b73e"
+      "definition_sha256": "482645ce5d7ded839e5195103e0374f93ec798345a8ebe6c60ecc9c042ba0eed"
     },
     {
       "acl": [
@@ -49283,7 +49796,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b33c954970367494fe6ac310726481aca8c0dba03e41459c33a750cc4b7035ec"
+      "definition_sha256": "5610af9a011562166ff275fa643c9879c863c9af860a662ecc701a573000a5d9"
     },
     {
       "acl": [
@@ -49763,7 +50276,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "87de49e4416b193a865dc9d5e62cb352ddc82a9412e4c9d51f196e847c7e8365"
+      "definition_sha256": "f7f109c3bc96424dda026bd55c0306cf13ce4a939fc13ebc74f36c4fcf12ef02"
     },
     {
       "acl": [
@@ -50171,7 +50684,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cdc706df8dfdb46d51b12a872bea3be660faca6e2d09d70ff0324edca2147f78"
+      "definition_sha256": "9b209c25daf5eaf63e11842b907a9d2c2abe8523900e9a7e2a5505b838812aa2"
     },
     {
       "acl": [
@@ -50267,7 +50780,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "77de73a8bcbc177172e8eb15c5d6d6e24f0ff364c92829680bfe528463a3620e"
+      "definition_sha256": "b430b4220ee9c452a66d3dc6bc073efd34ff08ede97cd9524b72c0fe7fc70578"
     },
     {
       "acl": [
@@ -50841,6 +51354,48 @@
       "definition": "CREATE TRIGGER bpay_next_break_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_break_detail FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
     },
     {
+      "name": "bpay_next_candidate_compare_completion_immutable",
+      "table": "bpay_next_candidate_compare_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_candidate_compare_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_compare_completion_no_truncate",
+      "table": "bpay_next_candidate_compare_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_compare_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_compare_input_completion_immutable",
+      "table": "bpay_next_candidate_compare_input_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_input_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_candidate_compare_input_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_compare_input_completion_no_truncate",
+      "table": "bpay_next_candidate_compare_input_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_input_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_compare_input_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_compare_omission_completion_immutable",
+      "table": "bpay_next_candidate_compare_omission_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_omission_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_candidate_compare_omission_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_compare_omission_completion_no_truncate",
+      "table": "bpay_next_candidate_compare_omission_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_compare_omission_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_compare_omission_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
       "name": "bpay_next_candidate_input_version_immutable",
       "table": "bpay_next_candidate_input_version",
       "schema": "private",
@@ -50853,6 +51408,34 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_candidate_input_version_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_input_version FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_materialise_completion_immutable",
+      "table": "bpay_next_candidate_materialise_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_materialise_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_candidate_materialise_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_materialise_completion_no_truncate",
+      "table": "bpay_next_candidate_materialise_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_materialise_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_materialise_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_root_completion_immutable",
+      "table": "bpay_next_candidate_root_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_root_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_candidate_root_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_candidate_root_completion_no_truncate",
+      "table": "bpay_next_candidate_root_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_candidate_root_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_candidate_root_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
       "name": "bpay_next_case_fact_immutable_v1",
@@ -51338,6 +51921,48 @@
       "definition": "CREATE TRIGGER bpay_next_query_producer_operational_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_query_producer FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_producer_operational_guard_v1()"
     },
     {
+      "name": "bpay_next_query_completion_insert_guard_v1",
+      "table": "bpay_next_query_root_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_completion_insert_guard_v1 BEFORE INSERT ON private.bpay_next_query_root_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_completion_insert_guard_v1()"
+    },
+    {
+      "name": "bpay_next_query_root_completion_immutable",
+      "table": "bpay_next_query_root_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_root_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_root_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_root_completion_no_truncate",
+      "table": "bpay_next_query_root_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_root_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_root_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_completion_insert_guard_v1",
+      "table": "bpay_next_query_root_completion_witness",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_completion_insert_guard_v1 BEFORE INSERT ON private.bpay_next_query_root_completion_witness FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_completion_insert_guard_v1()"
+    },
+    {
+      "name": "bpay_next_query_root_completion_witness_immutable",
+      "table": "bpay_next_query_root_completion_witness",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_root_completion_witness_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_root_completion_witness FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_root_completion_witness_no_truncate",
+      "table": "bpay_next_query_root_completion_witness",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_root_completion_witness_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_root_completion_witness FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
       "name": "bpay_next_query_source_group_immutable_v1",
       "table": "bpay_next_query_source_group",
       "schema": "private",
@@ -51364,6 +51989,48 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_query_source_member_no_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_query_source_member FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_input_completion_immutable",
+      "table": "bpay_next_query_sync_input_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_input_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_sync_input_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_input_completion_insert_guard",
+      "table": "bpay_next_query_sync_input_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_input_completion_insert_guard BEFORE INSERT ON private.bpay_next_query_sync_input_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_sync_certificate_insert_guard_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_input_completion_no_truncate",
+      "table": "bpay_next_query_sync_input_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_input_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_sync_input_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_omission_completion_immutable",
+      "table": "bpay_next_query_sync_omission_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_omission_completion_immutable BEFORE DELETE OR UPDATE ON private.bpay_next_query_sync_omission_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_omission_completion_insert_guard",
+      "table": "bpay_next_query_sync_omission_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_omission_completion_insert_guard BEFORE INSERT ON private.bpay_next_query_sync_omission_completion FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_sync_certificate_insert_guard_v1()"
+    },
+    {
+      "name": "bpay_next_query_sync_omission_completion_no_truncate",
+      "table": "bpay_next_query_sync_omission_completion",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_sync_omission_completion_no_truncate BEFORE TRUNCATE ON private.bpay_next_query_sync_omission_completion FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
     },
     {
       "name": "bpay_next_query_tail_target_immutable_v1",
@@ -54628,6 +55295,13 @@
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_discrepancy_events FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
     },
     {
+      "name": "bpay_next_query_incident_row_stage_v1",
+      "table": "weekly_discrepancy_incidents",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_incident_row_stage_v1 AFTER INSERT OR DELETE OR UPDATE ON weekly_discrepancy_incidents FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_incident_row_stage_v1()"
+    },
+    {
       "name": "weekly_source_immutable_record_guard",
       "table": "weekly_exceptional_c1_component_records",
       "schema": "public",
@@ -54794,6 +55468,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER weekly_source_immutable_truncate_guard BEFORE TRUNCATE ON weekly_final_source_correction_root_impacts FOR EACH STATEMENT EXECUTE FUNCTION private._weekly_source_immutable_record_guard_v1()"
+    },
+    {
+      "name": "bpay_next_query_comparison_row_stage_v1",
+      "table": "weekly_issue_comparison_revisions",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_query_comparison_row_stage_v1 AFTER INSERT ON weekly_issue_comparison_revisions FOR EACH ROW EXECUTE FUNCTION private.bpay_next_query_comparison_row_stage_v1()"
     },
     {
       "name": "weekly_source_immutable_record_guard",
@@ -72651,6 +73332,1276 @@
       ],
       "rls": true,
       "kind": "r",
+      "name": "bpay_next_candidate_compare_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actual_stage_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "begin_event_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "call_now_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "call_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "call_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "caller_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_generation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "changed_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "end_event_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generated_issue_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generated_issues_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generated_work_ids",
+          "type": "uuid[]",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_completions_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "membership_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "new_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omission_completions_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omitted_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omitted_incident_ids",
+          "type": "uuid[]",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "open_issue_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_witness_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_witnesses_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparing_transaction_id",
+          "type": "xid8",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "producer_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "profile_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "raw_stages_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolved_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_cycle_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_group_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_revision",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "unchanged_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_compare_comple_producer_id_call_ordinal_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_comple_producer_id_call_ordinal_key ON private.bpay_next_candidate_compare_completion USING btree (producer_id, call_ordinal)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_id_producer_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_completion_id_producer_id_key ON private.bpay_next_candidate_compare_completion USING btree (id, producer_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_completion_pkey ON private.bpay_next_candidate_compare_completion USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_compare_c_omission_completions_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(omission_completions_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_c_producer_id_preparing_transa_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (producer_id, preparing_transaction_id, module_epoch) REFERENCES private.bpay_next_query_producer(id, preparing_transaction_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_com_original_witnesses_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(original_witnesses_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_comp_input_completions_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(input_completions_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_compl_generated_issues_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(generated_issues_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_comple_candidate_generation_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_generation_id) REFERENCES weekly_candidate_outreach_generations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_comple_original_witness_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_witness_count >= 0 AND original_witness_count <= 4000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_comple_producer_id_call_ordinal_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (producer_id, call_ordinal)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_complet_generated_issue_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (generated_issue_count >= 0 AND generated_issue_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completio_begin_event_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (begin_event_ordinal >= 0 AND begin_event_ordinal <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completio_call_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(call_request_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_actual_stage_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count >= 0 AND actual_stage_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_call_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (call_ordinal >= 1 AND call_ordinal <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_caller_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (caller_kind = ANY (ARRAY['MATERIALISE'::text, 'PREFINAL'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_changed_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (changed_count >= 0 AND changed_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (caller_kind = 'MATERIALISE'::text AND call_ordinal = 1 AND candidate_generation_id IS NOT NULL AND membership_id IS NOT NULL OR caller_kind = 'PREFINAL'::text AND candidate_generation_id IS NULL AND membership_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((new_count + changed_count + unchanged_count) = generated_issue_count AND resolved_count = omitted_count)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((outcome = 'MATCHED'::text) = (open_issue_count = 0))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (end_event_ordinal >= begin_event_ordinal AND actual_stage_count = (end_event_ordinal - begin_event_ordinal) AND actual_stage_count = (3 * new_count + 2 * changed_count + resolved_count))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cardinality(generated_work_ids) = generated_issue_count AND array_position(generated_work_ids, NULL::uuid) IS NULL AND (generated_issue_count = 0 OR array_ndims(generated_work_ids) = 1 AND array_lower(generated_work_ids, 1) = 1))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cardinality(omitted_incident_ids) = omitted_count AND array_position(omitted_incident_ids, NULL::uuid) IS NULL AND (omitted_count = 0 OR array_ndims(omitted_incident_ids) = 1 AND array_lower(omitted_incident_ids, 1) = 1))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_completion_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_end_event_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (end_event_ordinal >= 0 AND end_event_ordinal <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_id_producer_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, producer_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_membership_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (membership_id) REFERENCES weekly_timesheet_submission_request_memberships(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_new_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (new_count >= 0 AND new_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_omitted_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (omitted_count >= 0 AND omitted_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_open_issue_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (open_issue_count >= 0)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['MATCHED'::text, 'ISSUES'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_raw_stages_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(raw_stages_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_resolved_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (resolved_count >= 0 AND resolved_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_result_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(result_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_source_cycle_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_cycle_id) REFERENCES weekly_source_cycles(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_source_group_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_group_id) REFERENCES weekly_source_groups(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_timesheet_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(timesheet_hash) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_timesheet_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (timesheet_revision > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_completion_unchanged_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (unchanged_count >= 0 AND unchanged_count <= 1000)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_candidate_compare_input_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "compare_completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "evidence_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "generated_issue_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "incident_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issue_episode",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "matched_facts_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "producer_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "recheck_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "resolved_decision_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_compare_i_compare_completion_id_inciden_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_i_compare_completion_id_inciden_key ON private.bpay_next_candidate_compare_input_completion USING btree (compare_completion_id, incident_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_input_completion_pkey ON private.bpay_next_candidate_compare_input_completion USING btree (compare_completion_id, work_event_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_compare_i_compare_completion_id_inciden_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (compare_completion_id, incident_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_i_compare_completion_id_produc_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (compare_completion_id, producer_id) REFERENCES private.bpay_next_candidate_compare_completion(id, producer_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_i_prior_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_inp_resolved_decision_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (resolved_decision_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input__generated_issue_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(generated_issue_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_c_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_co_matched_facts_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(matched_facts_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_complet_evidence_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(evidence_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_complet_recheck_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (recheck_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completio_issue_episode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (issue_episode >= 1)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = 'NEW'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NOT NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'CHANGED'::text AND prior_comparison_revision_id IS NOT NULL AND prior_comparison_revision_id <> comparison_revision_id AND recheck_event_id IS NOT NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'UNCHANGED_OPEN'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'UNCHANGED_RESOLVED'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NULL AND resolved_decision_event_id IS NOT NULL AND matched_facts_sha256 IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_incident_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (incident_id) REFERENCES weekly_discrepancy_incidents(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['NEW'::text, 'CHANGED'::text, 'UNCHANGED_OPEN'::text, 'UNCHANGED_RESOLVED'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (compare_completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_input_completion_work_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_candidate_compare_omission_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "compare_completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "evidence_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "incident_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issue_episode",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "producer_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolved_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_compare_o_compare_completion_id_resolve_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_o_compare_completion_id_resolve_key ON private.bpay_next_candidate_compare_omission_completion USING btree (compare_completion_id, resolved_event_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_o_compare_completion_id_work_ev_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_o_compare_completion_id_work_ev_key ON private.bpay_next_candidate_compare_omission_completion USING btree (compare_completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_compare_omission_completion_pkey ON private.bpay_next_candidate_compare_omission_completion USING btree (compare_completion_id, incident_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_compare_o_compare_completion_id_produc_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (compare_completion_id, producer_id) REFERENCES private.bpay_next_candidate_compare_completion(id, producer_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_o_compare_completion_id_resolve_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (compare_completion_id, resolved_event_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_o_compare_completion_id_work_ev_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (compare_completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omissio_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_com_resolved_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (resolved_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_comp_evidence_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(evidence_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_comple_issue_episode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (issue_episode >= 1)"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_complet_work_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_completio_incident_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (incident_id) REFERENCES weekly_discrepancy_incidents(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_compare_omission_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (compare_completion_id, incident_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
       "name": "bpay_next_candidate_input_version",
       "owner": "postgres",
       "schema": "private",
@@ -72784,6 +74735,1074 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (event_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_candidate_materialise_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "account_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actual_stage_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "begin_event_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "caller_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_generation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "comparison_completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "comparison_completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_week_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "end_event_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "environment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "immutable_submission_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "materialise_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparing_transaction_id",
+          "type": "xid8",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "producer_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "projection_publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "raw_stages_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_key",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_scope_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "result_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "signature_content_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "signature_copy_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "submission_membership_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_hash",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_revision",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "variant",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_materialise_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_materialise_completion_pkey ON private.bpay_next_candidate_materialise_completion USING btree (producer_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_materiali_comparison_completion_id_pro_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_completion_id, producer_id) REFERENCES private.bpay_next_candidate_compare_completion(id, producer_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materiali_immutable_submission_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(immutable_submission_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materiali_producer_id_preparing_transa_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (producer_id, preparing_transaction_id, module_epoch) REFERENCES private.bpay_next_query_producer(id, preparing_transaction_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialis_materialise_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(materialise_request_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise__projection_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (projection_publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise__signature_content_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(signature_content_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_c_submission_membership_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (submission_membership_id) REFERENCES weekly_timesheet_submission_request_memberships(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_co_candidate_generation_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_generation_id) REFERENCES weekly_candidate_outreach_generations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_compl_begin_event_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (begin_event_ordinal >= 0 AND begin_event_ordinal <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_compl_expected_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_generation > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_comple_actual_stage_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count >= 0 AND actual_stage_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_comple_timesheet_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (timesheet_revision > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_complet_completion_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_complet_end_event_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (end_event_ordinal >= 0 AND end_event_ordinal <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_complet_raw_stages_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(raw_stages_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_complet_result_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (result_generation > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completi_signature_copy_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (signature_copy_id) REFERENCES candidate_submission_components(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completio_contract_week_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_week_id) REFERENCES contract_weeks(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_account_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (account_id) REFERENCES candidate_app_accounts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_caller_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (caller_kind = ANY (ARRAY['DIRECT'::text, 'CANDIDATE_SELF_SUBMIT'::text, 'CANDIDATE_APP_SUBMIT'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (end_event_ordinal >= begin_event_ordinal AND actual_stage_count = (end_event_ordinal - begin_event_ordinal))"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_completion_id IS NULL AND comparison_completion_sha256 IS NULL OR comparison_completion_id IS NOT NULL AND comparison_completion_sha256 IS NOT NULL AND octet_length(comparison_completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (variant = 'FRESH'::text AND request_kind = 'SUBMIT_TIMESHEET'::text AND comparison_completion_id IS NOT NULL AND submission_membership_id IS NOT NULL OR (variant = 'EXACT_LAST_REPLAY'::text OR (request_kind = ANY (ARRAY['CHECK_HOURS'::text, 'SELF_SUBMIT'::text]))) AND comparison_completion_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_kind <> 'SELF_SUBMIT'::text OR candidate_generation_id IS NULL AND projection_publication_id IS NULL AND request_scope_id IS NULL AND submission_membership_id IS NULL)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (variant <> 'EXACT_LAST_REPLAY'::text OR actual_stage_count = 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_kind = 'SUBMIT_TIMESHEET'::text OR actual_stage_count = 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_contract_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_environment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (environment = ANY (ARRAY['TEST'::text, 'LIVE'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (producer_id)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_request_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_kind = ANY (ARRAY['CHECK_HOURS'::text, 'SUBMIT_TIMESHEET'::text, 'SELF_SUBMIT'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_result_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(result_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_timesheet_hash_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(timesheet_hash) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_variant_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (variant = ANY (ARRAY['FRESH'::text, 'EXACT_LAST_REPLAY'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_materialise_completion_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_candidate_root_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actual_stage_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "app_receipt_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "app_response_item_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "app_response_request_key",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "app_response_set_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "app_submission_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "comparison_child_count",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "comparison_children_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "first_stage_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "last_stage_ordinal",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "materialise_completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "materialise_completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "owner_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparing_transaction_id",
+          "type": "xid8",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "producer_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "raw_stages_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_key",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "root_request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "variant",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_root_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_root_completion_pkey ON private.bpay_next_candidate_root_completion USING btree (producer_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_root_comp_producer_id_preparing_transa_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (producer_id, preparing_transaction_id, module_epoch) REFERENCES private.bpay_next_query_producer(id, preparing_transaction_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_root_compl_comparison_children_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(comparison_children_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_complet_materialise_completion_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (materialise_completion_id) REFERENCES private.bpay_next_candidate_materialise_completion(producer_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_root_completi_app_response_item_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (app_response_item_count >= 0 AND app_response_item_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completi_app_response_set_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(app_response_set_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completio_comparison_child_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (comparison_child_count >= 0 AND comparison_child_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_actual_stage_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count >= 0 AND actual_stage_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_app_receipt_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (app_receipt_id) REFERENCES weekly_candidate_app_mutation_receipts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_app_submission_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (app_submission_kind = ANY (ARRAY['RESPONSES_ONLY'::text, 'WHOLE_WEEK_REVISION'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (materialise_completion_id IS NULL AND materialise_completion_sha256 IS NULL OR materialise_completion_id IS NOT NULL AND materialise_completion_id = producer_id AND materialise_completion_sha256 IS NOT NULL AND octet_length(materialise_completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_kind = 'CANDIDATE_MATERIALISE'::text AND variant = 'DIRECT_MATERIALISE'::text AND materialise_completion_id IS NOT NULL AND app_receipt_id IS NULL AND app_submission_kind IS NULL AND app_response_request_key IS NULL AND app_response_item_count = 0 OR owner_kind = 'CANDIDATE_SELF_SUBMIT'::text AND variant = 'SELF_SUBMIT'::text AND materialise_completion_id IS NOT NULL AND app_receipt_id IS NULL AND app_submission_kind IS NULL AND app_response_request_key IS NULL AND app_response_item_count = 0 AND comparison_child_count = 0 AND actual_stage_count = 0 OR owner_kind = 'CANDIDATE_APP_SUBMIT'::text AND variant = 'APP_RECEIPT_ATTACH'::text AND app_receipt_id IS NOT NULL AND app_submission_kind IS NOT NULL AND (app_submission_kind = 'WHOLE_WEEK_REVISION'::text AND materialise_completion_id IS NOT NULL OR app_submission_kind = 'RESPONSES_ONLY'::text AND materialise_completion_id IS NULL) AND (app_response_item_count = 0 AND app_response_request_key IS NULL OR app_response_item_count > 0 AND app_response_request_key IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count = 0 AND first_stage_ordinal IS NULL AND last_stage_ordinal IS NULL OR actual_stage_count > 0 AND first_stage_ordinal IS NOT NULL AND last_stage_ordinal IS NOT NULL AND first_stage_ordinal >= 1 AND first_stage_ordinal <= 1000 AND last_stage_ordinal >= first_stage_ordinal AND last_stage_ordinal <= 1000 AND actual_stage_count <= (last_stage_ordinal - first_stage_ordinal + 1))"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_completion_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_owner_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_kind = ANY (ARRAY['CANDIDATE_MATERIALISE'::text, 'CANDIDATE_SELF_SUBMIT'::text, 'CANDIDATE_APP_SUBMIT'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (producer_id)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_raw_stages_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(raw_stages_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_result_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(result_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_root_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(root_request_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_candidate_root_completion_variant_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (variant = ANY (ARRAY['DIRECT_MATERIALISE'::text, 'SELF_SUBMIT'::text, 'APP_RECEIPT_ATTACH'::text]))"
         }
       ],
       "view_definition_sha256": null
@@ -89429,6 +92448,766 @@
       ],
       "rls": true,
       "kind": "r",
+      "name": "bpay_next_query_root_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actual_stage_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "changed_comparison_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "child_action_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "first_stage_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_identities",
+          "type": "uuid[]",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_identities_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_identity_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_stage_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "new_incident_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omitted_incident_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omitted_incident_ids",
+          "type": "uuid[]",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "omitted_incidents_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_witness_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_witnesses_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "owner_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "preparing_transaction_id",
+          "type": "xid8",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "projection_publication_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "query_input_completions_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "query_omission_completions_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "raw_stages_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolved_incident_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "root_variant",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_cycle_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "unchanged_incident_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_query_root_completion_id_module_epoch_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_root_completion_id_module_epoch_key ON private.bpay_next_query_root_completion USING btree (id, module_epoch)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_root_completion_pkey ON private.bpay_next_query_root_completion USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_query_root_completi_id_preparing_transaction_id__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (id, preparing_transaction_id, module_epoch) REFERENCES private.bpay_next_query_producer(id, preparing_transaction_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_actual_stage_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count >= 0 AND actual_stage_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_changed_comparison_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (changed_comparison_count >= 0 AND changed_comparison_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((root_variant = 'QUERY_SYNC'::text) = (owner_kind = 'QUERY_SYNC'::text))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((root_variant = 'QUERY_SYNC'::text) = (child_action_sha256 IS NULL))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (root_variant <> 'DIRECT_SYSTEM_HOURS'::text OR child_action_sha256 = request_sha256)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cardinality(input_identities) = input_identity_count AND array_position(input_identities, NULL::uuid) IS NULL AND (input_identity_count = 0 OR array_ndims(input_identities) = 1 AND array_lower(input_identities, 1) = 1))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cardinality(omitted_incident_ids) = omitted_incident_count AND array_position(omitted_incident_ids, NULL::uuid) IS NULL AND (omitted_incident_count = 0 OR array_ndims(omitted_incident_ids) = 1 AND array_lower(omitted_incident_ids, 1) = 1))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actual_stage_count = 0 AND first_stage_ordinal IS NULL AND last_stage_ordinal IS NULL OR actual_stage_count > 0 AND first_stage_ordinal IS NOT NULL AND last_stage_ordinal IS NOT NULL AND first_stage_ordinal >= 1 AND first_stage_ordinal <= 1000 AND last_stage_ordinal >= first_stage_ordinal AND last_stage_ordinal <= 1000 AND actual_stage_count <= (last_stage_ordinal - first_stage_ordinal + 1))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_kind = 'QUERY_SYNC'::text AND (new_incident_count + changed_comparison_count + unchanged_incident_count) = input_identity_count AND resolved_incident_count = omitted_incident_count OR owner_kind = 'SYSTEM_HOURS_ACCEPT'::text AND new_incident_count = 0 AND changed_comparison_count = 0 AND unchanged_incident_count = 0 AND input_identity_count > 0 AND omitted_incident_count = 0 AND resolved_incident_count = input_identity_count AND original_witness_count = (2 * input_identity_count))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_child_action_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(child_action_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_completion_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(completion_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_id_module_epoch_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (id, module_epoch)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_input_identities_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(input_identities_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_input_identity_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (input_identity_count >= 0 AND input_identity_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_new_incident_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (new_incident_count >= 0 AND new_incident_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_omitted_incident_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (omitted_incident_count >= 0 AND omitted_incident_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_omitted_incidents_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(omitted_incidents_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_original_witness_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_witness_count >= 0 AND original_witness_count <= 4000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_original_witnesses_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(original_witnesses_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_owner_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_kind = ANY (ARRAY['SYSTEM_HOURS_ACCEPT'::text, 'QUERY_SYNC'::text]))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_projection_publication_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (projection_publication_id) REFERENCES weekly_source_projection_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_query_children_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_kind = 'QUERY_SYNC'::text AND query_input_completions_sha256 IS NOT NULL AND query_omission_completions_sha256 IS NOT NULL AND octet_length(query_input_completions_sha256) = 32 AND octet_length(query_omission_completions_sha256) = 32 OR owner_kind <> 'QUERY_SYNC'::text AND query_input_completions_sha256 IS NULL AND query_omission_completions_sha256 IS NULL)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_raw_stages_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(raw_stages_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(request_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_resolved_incident_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (resolved_incident_count >= 0 AND resolved_incident_count <= 1000)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_root_variant_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (root_variant = ANY (ARRAY['DIRECT_SYSTEM_HOURS'::text, 'BULK_SYSTEM_HOURS'::text, 'QUERY_SYNC'::text]))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_source_cycle_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (source_cycle_id) REFERENCES weekly_source_cycles(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_unchanged_incident_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (unchanged_incident_count >= 0 AND unchanged_incident_count <= 1000)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_query_root_completion_witness",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "discrepancy_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "evidence_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "witness_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "witness_ordinal",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_query_root_completi_completion_id_witness_kind_co_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_root_completi_completion_id_witness_kind_co_key ON private.bpay_next_query_root_completion_witness USING btree (completion_id, witness_kind, comparison_revision_id)"
+        },
+        {
+          "name": "bpay_next_query_root_completi_completion_id_witness_kind_di_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_root_completi_completion_id_witness_kind_di_key ON private.bpay_next_query_root_completion_witness USING btree (completion_id, witness_kind, discrepancy_event_id)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_root_completion_witness_pkey ON private.bpay_next_query_root_completion_witness USING btree (completion_id, witness_ordinal)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_query_root_completi_completion_id_witness_kind_co_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (completion_id, witness_kind, comparison_revision_id)"
+        },
+        {
+          "name": "bpay_next_query_root_completi_completion_id_witness_kind_di_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (completion_id, witness_kind, discrepancy_event_id)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_wit_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witne_discrepancy_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (discrepancy_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (witness_kind = 'COMPARISON'::text AND comparison_revision_id IS NOT NULL AND discrepancy_event_id IS NULL OR witness_kind <> 'COMPARISON'::text AND comparison_revision_id IS NULL AND discrepancy_event_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_completion_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (completion_id) REFERENCES private.bpay_next_query_root_completion(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_evidence_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(evidence_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (completion_id, witness_ordinal)"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_witness_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (witness_kind = ANY (ARRAY['COMPARISON'::text, 'SOURCE_RECHECKED'::text, 'SOURCE_MATCHED'::text, 'OFFICE_ACCEPTED'::text, 'OFFICE_RESOLVED'::text, 'RESOLVED_DECISION'::text]))"
+        },
+        {
+          "name": "bpay_next_query_root_completion_witness_witness_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (witness_ordinal >= 1 AND witness_ordinal <= 4000)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
       "name": "bpay_next_query_source_group",
       "owner": "postgres",
       "schema": "private",
@@ -89924,6 +93703,494 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_query_sync_input_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "evidence_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "incident_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_issue_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issue_episode",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "matched_facts_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "recheck_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "resolved_decision_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_query_sync_input_comple_completion_id_incident_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_sync_input_comple_completion_id_incident_id_key ON private.bpay_next_query_sync_input_completion USING btree (completion_id, incident_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_sync_input_completion_pkey ON private.bpay_next_query_sync_input_completion USING btree (completion_id, work_event_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_query_sync_input_co_prior_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (prior_comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_comp_resolved_decision_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (resolved_decision_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_comple_completion_id_incident_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (completion_id, incident_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completi_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completio_matched_facts_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(matched_facts_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = 'NEW'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NOT NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'CHANGED'::text AND prior_comparison_revision_id IS NOT NULL AND prior_comparison_revision_id <> comparison_revision_id AND recheck_event_id IS NOT NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'UNCHANGED_OPEN'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NULL AND resolved_decision_event_id IS NULL AND matched_facts_sha256 IS NULL OR outcome = 'UNCHANGED_RESOLVED'::text AND prior_comparison_revision_id IS NULL AND recheck_event_id IS NULL AND resolved_decision_event_id IS NOT NULL AND matched_facts_sha256 IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_completion_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (completion_id) REFERENCES private.bpay_next_query_root_completion(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_evidence_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(evidence_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_incident_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (incident_id) REFERENCES weekly_discrepancy_incidents(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_input_issue_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(input_issue_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_issue_episode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (issue_episode >= 1)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['NEW'::text, 'CHANGED'::text, 'UNCHANGED_OPEN'::text, 'UNCHANGED_RESOLVED'::text]))"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_recheck_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (recheck_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_input_completion_work_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_query_sync_omission_completion",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "comparison_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completion_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "evidence_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "incident_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "issue_episode",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resolved_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_event_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_query_sync_omission_c_completion_id_work_event_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_sync_omission_c_completion_id_work_event_id_key ON private.bpay_next_query_sync_omission_completion USING btree (completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_id_resolved_event__key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_sync_omission_completion_id_resolved_event__key ON private.bpay_next_query_sync_omission_completion USING btree (completion_id, resolved_event_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_query_sync_omission_completion_pkey ON private.bpay_next_query_sync_omission_completion USING btree (completion_id, incident_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_query_sync_omission_c_completion_id_work_event_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (completion_id, work_event_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_compl_comparison_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (comparison_revision_id) REFERENCES weekly_issue_comparison_revisions(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_completion_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (completion_id) REFERENCES private.bpay_next_query_root_completion(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_evidence_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(evidence_sha256) = 32)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_id_resolved_event__key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (completion_id, resolved_event_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_incident_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (incident_id) REFERENCES weekly_discrepancy_incidents(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_issue_episode_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (issue_episode >= 1)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (completion_id, incident_id)"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_resolved_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (resolved_event_id) REFERENCES weekly_discrepancy_events(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_query_sync_omission_completion_work_event_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_event_id) REFERENCES weekly_work_events(id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null
