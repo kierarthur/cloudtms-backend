@@ -1098,15 +1098,17 @@ Dependencies: F-05, F-06, SP-12; successor positions: none. Design note: require
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-13-D01 | REPEATABLE: Query ScopeV2/ReceiptV3/PAY_QUERY_STATE_V3 exact gate shapes | INSTALLED_ON_TEST | Verify each current nine/five-key scope/gate and receipt/digest/clear placement without adding money/Draft facts. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-13-D02 | REPEATABLE: private.weekly_source_pay_query_open_display_v1 proposed paged display reader | MISSING | Record closed actual signature/reply; implement root/relevance limit1–100 typed keyset, complete/next_cursor and genuine actors/incidents, bound rows before JSON. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-13-D03 | DOC: SP-13/WB-07 typed open-query display page interface record | MISSING | Record real incident columns, cursor types/ACL and exact corresponding WB-07 consumer, not a silent20-row list. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-13-D01 | REPEATABLE: Query ScopeV2/ReceiptV3/PAY_QUERY_STATE_V3 exact gate shapes | INSTALLED_ON_TEST | Verify each current nine/five-key scope/gate and receipt/digest/clear placement without adding money/Draft facts. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-13-D02 | REPEATABLE: private.weekly_source_pay_query_open_display_v1 proposed paged display reader | MISSING | Record closed actual signature/reply; implement root/relevance limit1–100 typed keyset, complete/next_cursor and genuine actors/incidents, bound rows before JSON. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-13-D03 | DOC: SP-13/WB-07 typed open-query display page interface record | MISSING | Record real incident columns, cursor types/ACL and exact corresponding WB-07 consumer, not a silent20-row list. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP-13-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 On the NEXT agency: a query on Monday blocks NEXT capture of that Timesheet's positive Source WORK; a later genuine Final containing the same Monday event clears it even with unchanged hours; a provisional upload or a replay of the old Final does not. Observed by: SRQ-071, SRQ-301 and RQ-261 → the later-Final clear and the replay that does not clear; SRQ-076, SRQ-077, SRQ-314 and RQ-262 → the Monday block, while a query on another Candidate's Timesheet does not block; SRQ-016 … SRQ-019 and RQ-263 → a Timesheet with no unique ordinary contract-week row is reported as Pay Query evidence unavailable (SCOPE_UNAVAILABLE), never cleared, while an ordinary common-HEAD Source Timesheet with no exceptional family (ScopeV2 `target_family_id`/`family_bound_version` NULL) gets a clear gate and pins normally (not SCOPE_UNAVAILABLE), and a raw `booking_id` with surrounding spaces is matched without trimming (PQ V4 corrections 1-2; `03102026_1600:398-410`); with WB-07 built, opening the Banking item detail for the blocked Monday work shows the query's reason, the user who opened it and the DD/MM/YYYY hh:mm:ss time from the display reader; SRQ-079, SRQ-311, SRQ-312 → an accepted protected-pay receipt for the same Monday event clears the block, while a receipt for another Candidate's or another event's work never does; SRQ-078, SRQ-308, SRQ-313 and SCX-044 → a BUILD_LOG line exists for each (digest fields and internal shapes).
+
+Whole SP-13 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. SP-13-COMPLETION.md Review: reviews/SP-13-display-contract-review.md.
 
 ## WB-01 — Ordinary weekly hours authorisation publishes a NEXT revision and position
 

@@ -460,3 +460,5 @@ SP13 SCX0440308:13–20 gateSTABLEowneronlyexact5keys/factsminus2arrays/realerro
 SP13 SCX0441417qualified_coverage.inc:30–43manual9fields/160–166hours13fields/171–173PAY_QUERY_STATE_V3four-keycanonicalUTF8SHA256;83–153latestexception6keys/onequalified6or9or12keylane/legitsiblingsuperseded; nochange.
 SP13 SCX0440645:5–447 exactexistingselectedfactualSourcewitness/CURRENT_ROWorCERTIFIED_ABSENCE/rawscope/configuredweek/noinventedFinalzero; nochange.
 SP13 SRQ071301/RQ261: exactly2actualmanual_reviews_finalised calls Final1534:2736afterCURRENTCAS2688–2706beforeselector2742;CorrectFinal1534:2039afterCURRENTCAS2007–2032beforeselector2046/originalcompletion2049;0428helper249–323privatefreshcallerCASonly/exactcontainedsameevent/replayearly. NoSourceownerreplacement.
+
+SP-13 seq43 complete: implementation 1c6cd7d0a6608fadec806121e7618f974fa11388; ITEM+D01-D03 BUILT/REVIEWED; total41/288 each. Local PG17 seal e7d0f59bf8655e5afbe585c6bba7068bcfe11c9e502ff8a4efc81ecc406a6770, nine source gates and catalogue829/76/0/55bbf326922f59d683823d40f5f3544a PASS. No business/app/timing execution. Next WB-01 seq44.
