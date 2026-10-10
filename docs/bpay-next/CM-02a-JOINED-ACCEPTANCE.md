@@ -1,0 +1,5 @@
+# CM-02a future joined acceptance
+
+NOT_RUN: no fixtures, rehearsal, new timing programme, hosted mutation or Worker/queue/minute path was run. After the composed build and owner-authorised TEST release: prepare ordinary non-move PAYE and Umbrella Cases without adopting comparison; excluded comparison branches must refuse BPAY_NEXT_COMPARISON_NOT_INSTALLED until CM02 replaces the named refusal. Check RuleB captured channel/VAT/floor/query and expected_revision_id remain authoritative, real postclick changed revisions produce REVIEW, live Case balances use real money locks.
+
+Check final F04 root/physical evidence plus chosen0549 metadata; all198object routing unique, capacity selected0549 and earlier0157/0241 superseded, twelve postF25 links ordered. DR11 and ordinary CM13a need no CM01 approval. No financial effects or business acceptance may be inferred from local compile/source security. Reuse one actual joined receipt across explicit clauses; full Worker/queue/minute proof remains separately NOT_RUN.

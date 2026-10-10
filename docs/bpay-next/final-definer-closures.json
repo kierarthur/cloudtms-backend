@@ -3888,7 +3888,25 @@
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
       ],
       "owner": "F-25 owner rule B minimal Create Draft snapshot; next master editor follows",
-      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "chosenReferenceBase": {
+        "item": "CM-02a",
+        "path": "supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql",
+        "sha256": "9e2488857dc7ad0823b172e2c4efbc9eef6687c0300392ed812e7a99e88f027e",
+        "duplicate": "PBW 08102026_0510",
+        "executableFinalUnchanged": true
+      },
+      "capacityProofReference": {
+        "signature": "private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)",
+        "selectedReference": "supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql",
+        "line": 706,
+        "supersededReferences": [
+          "07102026_0157_bpay_next_source_comparison_full_v2.sql:213",
+          "07102026_0241_source_comparison_review_credit_carry_v2.sql:5"
+        ],
+        "status": "REFERENCE_ONLY_PENDING_GENUINE_COMPARISON_SUPPORT",
+        "owner": "CM-02a"
+      }
     },
     {
       "signature": "private.bpay_next_protected_current_decision_capture_v1(uuid)",
@@ -12422,7 +12440,19 @@
     {
       "family": "`private.bpay_next_prepare_case_page_v1` (definers `04102026_0360`, `08102026_0549`, E `08102026_0510`) and, from WB-27, its allocation plan `private.bpay_next_case_allocation_plan_v1`",
       "orderedEditors": "F-25 → CM-02a → WB-27 → DR-04 → DR-11 → DR-12 → FC-10 → WB-41 → CM-13a → CM-02 → CM-10 → CM-12 → CM-13",
-      "design": "`docs/bpay-next/design/case-allocation-chain.md` (one note for the whole chain)"
+      "design": "`docs/bpay-next/design/case-allocation-chain.md` (one note for the whole chain); CM-02a chosen0549 reference; executable ordinary1958→RuleB0151 retained; no comparison promotion",
+      "chosenReferenceBase": "supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql",
+      "capacityProofReference": {
+        "signature": "private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)",
+        "selectedReference": "supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql",
+        "line": 706,
+        "supersededReferences": [
+          "07102026_0157_bpay_next_source_comparison_full_v2.sql:213",
+          "07102026_0241_source_comparison_review_credit_carry_v2.sql:5"
+        ],
+        "status": "REFERENCE_ONLY_PENDING_GENUINE_COMPARISON_SUPPORT",
+        "owner": "CM-02a"
+      }
     },
     {
       "family": "`04102026_0140` bind destination",

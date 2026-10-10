@@ -377,3 +377,9 @@ PS-14 seq34 COMPLETE BD038: native original-obligation→paged-original-leg rese
 PS14localcommits BE81840f72 FE69e9587. PS-15 seq35 scopecheckpoint BD039 exactD01-D04/D06 in PS-15-SCOPE; R2§7 and owner AUTH-PS preapproval reconcile currenthistory now vs approvedS1seq287 APIs. No missing exact index; retain correct schema/adapter and compose0653closure.
 
 PS-15 seq35 COMPLETE BD039: allnativehistorypathsindexed; sixexistingcapturedrevisiondisplayfields nowprojected in0653+BE/FEclosedmirrors, no duplicatecapture/liveClient/permission/indexchange. Sourcecontrols caughtwrongtestattribution toRUN_WORKS; correctedtoactualREVISIONS. IndependentSQL/callerPASS; BE21FE13/syntax/db314+819/PG17/sealf063d012/couplingPASS. WholeBUILT33/288REVIEWED33/288. ActualjoinedNOT_RUN. NextCM02aseq36.
+
+CM-02a seq36 scopecheckpoint BD040: exact D01–D03 listed in design/CM-02a-SCOPE.md. Paper chosen0549/198unique object owners/59ALTERhunкs; current executable0151 retained. No SQL/Worker/screen or comparison promotion.
+
+SP-02 seq37 scopecheckpoint: exactsixdeliverables listed in SP-02-SCOPE beforeproduct edits. Designcensus separates genuinefacts fromretiredfinance; no blanketpay-name fence.
+
+CM-02a seq36 COMPLETE BD040: chosen0549 metadata plus198uniqueobjectowners/59ALTERhunkroutes, RuleB0151 executableunchanged, noSQL. ThreeindependentreviewsPASS;source10/syntax/db314819/PG0+0/sealf063/couplingPASS. WholeBUILT34/288REVIEWED34/288,joinedNOT_RUN. NextSP02seq37.
