@@ -236,3 +236,12 @@ Parked names (all under supabase/repeatable; recovery of committed bytes is hist
 ### F-25 rule B completion — 10/10/2026 London
 
 Whole ITEM counts BUILT13/288 REVIEWED13/288. D01,D02,D03,D05,D06,D08 complete under BD019; D07 SUPERSEDED (owner rule B requires no resolver). Four latest-owner consumer edits and snapshot migration independently reviewed PASS; Office calls dormant and exact refusal/pending journal preserved. Clean sole local PG17 COMPILED,308 locked migrations/808 repeatables,2040 source signatures/726 registered chains, final-definer source gate PASS; seal a0177a8200237bc983e8eb8cc303b97243299903ef18829a296746fc1af2753a and contract coupling PASS. Nine prior migrations empty/unused; original producer source restored through removal of parked successors. No hosted install/app acceptance/timing/activation or external effects. Proceed to F-11 sequence16; parked files are not revisited absent later acceptance failure.
+
+### F-11 scope checkpoint — 10/10/2026 London
+
+BD020 binding scope guard recorded in design/F-11-SCOPE.md. Exact D01–D06 objects inventoried before implementation; product change only shared broker/src/index.js required entry points and supporting existing-transport factory. No SQL/config/producers/money-owner changes. F25 closed local BE cadf7b8e4b834059b81f76435996c9123555b945 and FE c85a329. F11 source syntax and existing28 bounded background/owner source checks PASS; independent review underway, full item not ticked until findings corrected. F25 parked objects remain closed.
+
+### F-11 complete — 10/10/2026 London
+
+Whole ITEM BUILT14/288 REVIEWED14/288. D01–D06 complete:0560 runtime services, claim/PIN/order and ruleB bindings reused; index alone wires freshowner consumer, four independent minute lanes, exact ENROLL wakes and lifetime-retained synchronous nudge. Independent source PASS reviews/F-11-background-wiring-review.md SHA29cfa90d56aa10b6d86c50c687445a4649c876d3799d64a7287b8a6162d623ec. waitUntil-throw finding corrected beforefinalreview. Every malformedbatch message retained; no inactive oldengine/implicitACK; noSQL/config/producers. Syntax/28 existing sourcechecks/dbcheck308/808/localPG17 unchangedseal a0177a8200237bc983e8eb8cc303b97243299903ef18829a296746fc1af2753a/couplingPASS. No hosted/app/timing/sideeffects. ProceedF08 seq17 exactM1–M4 contracts; completionnotes requirecurrentowner source, not oldtests.
+

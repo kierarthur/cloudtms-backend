@@ -399,18 +399,20 @@ Dependencies: F-09, F-10, F-12, F-25; successor positions: none. Design note: no
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-11-D01 | REPEATABLE: supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql | INSTALLED_ON_TEST | Reuse existing metadata enrollment/wake/expiry discovery; add only necessary epoch/cutoff integration. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-11-D02 | QUEUE-CRON: Continuation queue NEXT owner dispatch | LOCAL_ONLY | Port one-message dispatch, exact owner check and durable recovery; safe wrong-owner retirement belongsF13. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-11-D03 | QUEUE-CRON: Minute recovery tick | LOCAL_ONLY | Port bounded lanes and exact owner gating; resumed job epochs must be valid. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-11-D04 | QUEUE-CRON: Preparation/command ENROLL wakes | LOCAL_ONLY | Preserve durable DB receipt before wake and missed-wake recovery. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-11-D05 | REPEATABLE: Installed PREPARE mutable read gap | PARTLY_DONE | Keep existing sealed selection/per-Candidate order; bind only genuinely live channel/floor/rule/revision inputs to accepted cutoff. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-11-D06 | REPEATABLE: Existing PREPARE claim and PIN owners | INSTALLED_ON_TEST | Preserve correctly implemented freeze/order process; modify only exact proven missing mutable binding if needed. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D01 | REPEATABLE: supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql | INSTALLED_ON_TEST | Reuse existing metadata enrollment/wake/expiry discovery; add only necessary epoch/cutoff integration. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D02 | QUEUE-CRON: Continuation queue NEXT owner dispatch | LOCAL_ONLY | Port one-message dispatch, exact owner check and durable recovery; safe wrong-owner retirement belongsF13. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D03 | QUEUE-CRON: Minute recovery tick | LOCAL_ONLY | Port bounded lanes and exact owner gating; resumed job epochs must be valid. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D04 | QUEUE-CRON: Preparation/command ENROLL wakes | LOCAL_ONLY | Preserve durable DB receipt before wake and missed-wake recovery. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D05 | REPEATABLE: Installed PREPARE mutable read gap | PARTLY_DONE | Keep existing sealed selection/per-Candidate order; bind only genuinely live channel/floor/rule/revision inputs to accepted cutoff. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-11-D06 | REPEATABLE: Existing PREPARE claim and PIN owners | INSTALLED_ON_TEST | Preserve correctly implemented freeze/order process; modify only exact proven missing mutable binding if needed. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-11-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, a sealed preparation reaches READY with the browser closed; REVIEW no longer stays `ENROLLMENT_INCOMPLETE`; an unconfirmed preparation expires after 72 hours. A pre-click accepted Pay Query is included in the ordered cutoff while unaffected Candidates complete; a later Pay Query changes neither that Draft nor its preparation and reaches the next run. No old Workbench rebuild or old-operation progress test is required (OR-45).
+
+Whole F-11 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. Existing0560/claim/PIN/order reused; ruleB mutable binding reused; broker index fresh-owner queue/minute/wakes wired. Syntax,28 existing source checks,db:check308/808, unchanged local PG17 seal a0177a82 and coupling PASS. Hosted/app NOT_RUN. Review: reviews/F-11-background-wiring-review.md.
 
 ## F-08 — Align the Draft-channel, channel-page, cancel-channel and payment-history contracts across database, Worker and screen
 
