@@ -96,5 +96,7 @@
   ],
   "joinedAppAcceptance": "NOT_RUN; no1200/150-row fixtures, whole Create or financial invocation claimed",
   "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
-  "deployment": "NOT_INSTALLED"
+  "deployment": "NOT_INSTALLED",
+  "backendCommit": "82907cb6b797f751f4a8e2e25d2819203fc5a1f9",
+  "frontendCommit": "f0326649d3b604054348ac81f04c3d314b939414"
 }

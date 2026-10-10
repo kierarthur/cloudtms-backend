@@ -1964,7 +1964,7 @@ WB19 available-slice receipt: exact retry SQL/Worker/local screen source PASS;21
 
 ## WB-23 — Include-all and clear-all across pages, with paged exclusions (server select-matching)
 
-Seq 68; Workbench · WB-S; reviewer R2; current requested-feature status MISSING.
+Seq 68; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Max100 page receipts and frozen filter/membership; no changed amount/name-sort silent continue.
 
@@ -1972,7 +1972,7 @@ Dependencies: WB-08, WB-21, F-05, F-16; successor positions: none. Design note: 
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-23-D06 | SCREEN: MATCHING/EXCLUSION finite selection enumeration in preparation intake and NEXT UI | MISSING | ≤100 immutable accepted-scope pages including empty/skipped, no mutable sort silent continuation or changed filter after acceptance. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-23-D06 | SCREEN: MATCHING/EXCLUSION finite selection enumeration in preparation intake and NEXT UI | BUILT_REVIEWED | ≤100 immutable accepted-scope pages including empty/skipped, no mutable sort silent continuation or changed filter after acceptance. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1992,6 +1992,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A work with a day unticked (subset) is sealed once, as a subset, not also as ALL.
   - Pressing Clear all and then ticking 2 rows seals exactly 2 (LUI-026).
   - No request reads more than one bounded page (RQ-244).
+
+WB23 ITEM [x] Built [x] Reviewed; exact D06 finite selection/control source and local compile/screen checks PASS. Implementation BE82907cb6b797f751f4a8e2e25d2819203fc5a1f9, FEf0326649d3b604054348ac81f04c3d314b939414. Actual12 SCR04 captures38PASS/0FAIL/4NA. Joined in-app journeys NOT_RUN; installation unchecked. Whole52/288 BUILT52/288 REVIEWED.
 
 ## WB-22 — Default ticks, new/changed rows ticked, and untick persistence
 
