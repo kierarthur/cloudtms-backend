@@ -167,8 +167,11 @@ begin
   -- Root read-only proof e74a06: 167 / 9 / 0. Removing only that exact reader
   -- reproduces 166 / 9 / 0 and 0c6caf136fd2647a46960b64944ab000.
   -- No existing grant, table/view isolation or MFA requirement changed.
-  if v_count<>167 or v_service_missing<>9 or v_browser_executable<>0
-     or v_hash<>'83ccfa8f2422ab86c38bcd48c12a2e16' then
+  -- 10 October: the two session-owned notification page/management authorities
+  -- add exactly two service-only routines; the 167 pre-existing rows and grants
+  -- are unchanged. Full canonical PostgreSQL 17 NEW inventory: 169 / 9 / 0.
+  if v_count<>169 or v_service_missing<>9 or v_browser_executable<>0
+     or v_hash<>'1d353a1d80ad8cb20aaa841fb4dfe948' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

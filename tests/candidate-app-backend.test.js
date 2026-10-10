@@ -1595,34 +1595,89 @@ test('Candidate notification feed is scoped to the selected candidate and reads 
   globalThis.fetch = async url => {
     const value = String(url);
     if (value.includes('/candidate_app_sessions?')) return Response.json([session]);
-    if (value.includes('/candidate_notifications?')) {
-      notificationRequest = value;
-      return Response.json([{
+    throw new Error(`unexpected request ${value}`);
+  };
+  const deps = { routeAudience: 'PRIVATE', async rpc(name, args) {
+      assert.equal(name, 'candidate_app_notifications_page_v1');
+      notificationRequest = args;
+      return { notifications: [{
         id: '00000000-0000-4000-8000-000000000067', workflow_id: null,
         timesheet_id: '00000000-0000-4000-8000-000000000068',
         event_type: 'AUTHORISED', template_key: 'candidate-submission-finalised-v1',
         template_params: { auto_authorised: true },
         deep_link_json: { type: 'timesheet', timesheet_id: '00000000-0000-4000-8000-000000000068' },
         state: 'UNREAD', created_at_utc: '2026-08-23T11:00:00.000Z', read_at_utc: null
-      }]);
-    }
-    throw new Error(`unexpected request ${value}`);
-  };
+      }], next_cursor: null };
+  }};
   try {
     const response = await handleCandidateAppRequest(new Request(
       'https://private.test/candidate-app/v1/notifications',
       { headers: { authorization: `Bearer ${token}` } }
-    ), env, {}, { routeAudience: 'PRIVATE' });
+    ), env, {}, deps);
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.notifications[0].payload_json.message, 'Your timesheet has been authorised.');
     assert.equal(body.notifications[0].deep_link_json.destination, 'TIMESHEET_DETAIL');
-    assert.match(notificationRequest, new RegExp(`candidate_id=eq\\.${candidateId}`));
-    assert.match(notificationRequest, /template_params/);
-    assert.doesNotMatch(notificationRequest, /payload_json/);
+    assert.equal(notificationRequest.p_session_id, sessionId);
+    assert.equal(notificationRequest.p_expected_rotation, 1);
+    assert.equal(notificationRequest.p_environment, 'TEST');
+    assert.equal(notificationRequest.p_limit, 14);
+    assert.equal(Object.hasOwn(notificationRequest, 'p_candidate_id'), false);
+    const preciseTimestamp = '2026-10-10T12:34:56.123456+00:00';
+    const cursorId = '00000000-0000-4000-8000-000000000067';
+    const nextPage = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/notifications?cursor=${encodeURIComponent(`${preciseTimestamp}|${cursorId}`)}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    ), env, {}, deps);
+    assert.equal(nextPage.status, 200);
+    assert.equal(notificationRequest.p_cursor_created_at_utc, preciseTimestamp);
+    assert.equal(notificationRequest.p_cursor_id, cursorId);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('notification management routes bind only the authenticated session and reject client selectors and malformed targets', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000064';
+  const candidateId = '00000000-0000-4000-8000-000000000066';
+  const targetId = '00000000-0000-4000-8000-000000000067';
+  const env = { CANDIDATE_APP_ENVIRONMENT: 'TEST', CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material', SUPABASE_URL: 'https://test.example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder' };
+  const session = { id: sessionId, session_id: sessionId, account_id: '00000000-0000-4000-8000-000000000065', selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1, expires_at_utc: '2099-01-01T00:00:00Z', absolute_expires_at_utc: '2099-01-02T00:00:00Z' };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    if (String(url).includes('/candidate_app_sessions?')) return Response.json([session]);
+    throw new Error('Notification management must not perform a direct REST write');
+  };
+  const calls = [];
+  const deps = { routeAudience: 'PRIVATE', async rpc(name, args) { assert.equal(name, 'candidate_app_notifications_manage_v1'); calls.push(args); return { ok: true, affected_count: 1 }; } };
+  const invoke = (suffix, body) => handleCandidateAppRequest(new Request(`https://private.test/candidate-app/v1/notifications/${suffix}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }), env, {}, deps);
+  try {
+    const cases = [
+      ['bulk-snapshot', 'SNAPSHOT', { action: 'DELETE' }],
+      ['read-all', 'MARK_READ', { snapshot_id: targetId }],
+      ['delete', 'DELETE', { notification_id: targetId }],
+      [`deletions/${targetId}/undo`, 'UNDO', {}]
+    ];
+    for (const [suffix, action, body] of cases) {
+      const request = { ...body, idempotency_key: 'notification-test-key' };
+      assert.equal((await invoke(suffix, request)).status, 200);
+      const args = calls.at(-1);
+      assert.deepEqual(Object.keys(args).sort(), ['p_action', 'p_environment', 'p_expected_rotation', 'p_request', 'p_session_id']);
+      assert.equal(args.p_session_id, sessionId); assert.equal(args.p_environment, 'TEST'); assert.equal(args.p_expected_rotation, 1); assert.equal(args.p_action, action);
+      assert.deepEqual(args.p_request, action === 'UNDO' ? { ...request, deletion_id: targetId } : request);
+      for (const selector of ['candidate_id', 'account_id', 'agency_id']) {
+        const count = calls.length;
+        assert.equal((await invoke(suffix, { ...request, [selector]: candidateId })).status, 400);
+        assert.equal(calls.length, count);
+      }
+    }
+    for (const [suffix, body] of [['bulk-snapshot', { action: 'OTHER' }], ['delete', {}], ['delete', { notification_id: targetId, snapshot_id: targetId }], ['read-all', { snapshot_id: 'invalid' }], ['delete', { notification_id: targetId, idempotency_key: '' }]]) {
+      const count = calls.length;
+      const response = await invoke(suffix, { idempotency_key: 'notification-test-key', ...body });
+      assert.equal(response.status, body.snapshot_id === 'invalid' ? 404 : 400); assert.equal(calls.length, count);
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 function noLogoBranding(agencyName = 'Configured Agency') {

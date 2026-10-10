@@ -569,6 +569,42 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "candidate_notification_deleted_items_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "candidate_notification_deleted_items",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "candidate_notification_dismissal_owners_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "candidate_notification_dismissal_owners",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "candidate_notification_operations_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "candidate_notification_operations",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "cloudtms_miget_service_owner_all",
       "check": "true",
       "roles": [
@@ -5689,7 +5725,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "e7a3c9fa3e0db5bf9c1cb9a858f535a4d539c98c10c437e43c245d5d2fb26500"
+      "definition_sha256": "d08a87f80930c68e046d23cc7ed831b7d7aace9e9f6f92982c60aaa4ffc752d4"
     },
     {
       "acl": [
@@ -14379,6 +14415,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "adde7f8241f87f38eb332d9afb5d7595f52e81faa72f358fbc8a970a67405940"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "candidate_notification_visible_v1(p_notification candidate_notifications, p_now_utc timestamp with time zone, p_restored_state text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "1cb77387e5a11bc91e8317d887d3d735eb6df4daccd6862da773f57bc8a892ff"
     },
     {
       "acl": [
@@ -29228,6 +29283,54 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "dcbf14bfbb6f36f990e973539a79ed5af24450c4db2baed14cfbf616f5b3e3b7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_app_notifications_manage_v1(p_session_id uuid, p_environment text, p_expected_rotation integer, p_action text, p_request jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "eb7ea221f973e4ba80e83040b539f28be623befbc28e2d9c3264ac38cd22bbbd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_app_notifications_page_v1(p_session_id uuid, p_environment text, p_expected_rotation integer, p_limit integer, p_cursor_created_at_utc timestamp with time zone, p_cursor_id uuid, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "f4a06370f2c81eed49243a52d4e92da78c4360b5503f0d27b3c2d533232bb5d9"
     },
     {
       "acl": [
@@ -48281,7 +48384,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "62af8d99cf0fbcb55e501495080eed2bfa3b67ae970de6da4e18d560750693e0"
+      "definition_sha256": "f82adcd26c4deeed6d2f7bf2aabba324afd027f172c93dcf4b92718b15e825b0"
     },
     {
       "acl": [
@@ -48329,7 +48432,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b5798113c682baf8b97e2f17a7293528879a97d290afa81992886784720bdc8c"
+      "definition_sha256": "cb000cd0b29792b9a748375461f6881e95c7b07e5e7c3486a1ca9cb8be95df87"
     },
     {
       "acl": [
@@ -97268,6 +97371,456 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_notification_deleted_items",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "notification_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_read_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "prior_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_notification_deleted_items_notification_idx",
+          "definition": "CREATE INDEX candidate_notification_deleted_items_notification_idx ON private.candidate_notification_deleted_items USING btree (notification_id)"
+        },
+        {
+          "name": "candidate_notification_deleted_items_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_notification_deleted_items_pkey ON private.candidate_notification_deleted_items USING btree (operation_id, notification_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_notification_deleted_items_notification_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (notification_id) REFERENCES candidate_notifications(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "candidate_notification_deleted_items_operation_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (operation_id) REFERENCES private.candidate_notification_operations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_notification_deleted_items_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (operation_id, notification_id)"
+        },
+        {
+          "name": "candidate_notification_deleted_items_prior_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (prior_state = ANY (ARRAY['UNREAD'::text, 'READ'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_notification_dismissal_owners",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "dismissed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "notification_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_notification_dismissal_owners_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_notification_dismissal_owners_pkey ON private.candidate_notification_dismissal_owners USING btree (notification_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_notification_dismissal_owners_notification_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (notification_id) REFERENCES candidate_notifications(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "candidate_notification_dismissal_owners_operation_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (operation_id) REFERENCES private.candidate_notification_operations(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_notification_dismissal_owners_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (notification_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_notification_operations",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "account_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "notification_ids",
+          "type": "uuid[]",
+          "default": "'{}'::uuid[]",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_notification_operat_account_id_candidate_id_idemp_key",
+          "definition": "CREATE UNIQUE INDEX candidate_notification_operat_account_id_candidate_id_idemp_key ON private.candidate_notification_operations USING btree (account_id, candidate_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_notification_operations_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_notification_operations_pkey ON private.candidate_notification_operations USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_notification_operat_account_id_candidate_id_idemp_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (account_id, candidate_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_notification_operations_account_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (account_id) REFERENCES candidate_app_accounts(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_notification_operations_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['SNAPSHOT'::text, 'MARK_READ'::text, 'DELETE'::text, 'UNDO'::text]))"
+        },
+        {
+          "name": "candidate_notification_operations_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_notification_operations_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(idempotency_key) >= 1 AND length(idempotency_key) <= 200)"
+        },
+        {
+          "name": "candidate_notification_operations_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "candidate_notification_operations_request_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_json) = 'object'::text)"
+        },
+        {
+          "name": "candidate_notification_operations_result_json_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(result_json) = 'object'::text)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "candidate_timesheet_summary_revisions",
@@ -122192,6 +122745,10 @@
         {
           "name": "candidate_notifications_dedupe_uq",
           "definition": "CREATE UNIQUE INDEX candidate_notifications_dedupe_uq ON public.candidate_notifications USING btree (dedupe_key)"
+        },
+        {
+          "name": "candidate_notifications_inbox_scope_idx",
+          "definition": "CREATE INDEX candidate_notifications_inbox_scope_idx ON public.candidate_notifications USING btree (account_id, candidate_id, created_at_utc DESC, id DESC) WHERE (state = ANY (ARRAY['UNREAD'::text, 'READ'::text]))"
         },
         {
           "name": "candidate_notifications_pkey",

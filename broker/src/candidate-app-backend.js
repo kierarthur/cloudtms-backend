@@ -69,6 +69,7 @@ const AUTH_ERROR_CODES = new Set([
 ]);
 
 const CONFLICT_ERROR_CODES = new Set([
+  'CANDIDATE_NOTIFICATION_IDEMPOTENCY_CONFLICT',
   'TIMESHEET_WORK_INTERVAL_OVERLAP',
   'CANDIDATE_CONTEXT_STALE',
   'CANDIDATE_TIMESHEET_MOVED',
@@ -115,6 +116,7 @@ const CONFLICT_ERROR_CODES = new Set([
 ]);
 
 const NOT_FOUND_ERROR_CODES = new Set([
+  'CANDIDATE_NOTIFICATION_NOT_FOUND',
   'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND',
   'CANDIDATE_ROUTE_NOT_FOUND',
   'CANDIDATE_WORKFLOW_NOT_FOUND',
@@ -10812,27 +10814,51 @@ async function handleNotifications(request, env, deps) {
   const access = await verifyCandidateAccess(request, env);
   const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
   const url = new URL(request.url);
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+  const limit = Number(url.searchParams.get('limit') || 14);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
   const cursor = text(url.searchParams.get('cursor'));
-  let cursorFilter = '';
+  let cursorCreatedAt = null;
+  let cursorId = null;
   if (cursor) {
-    const [createdAt, id] = cursor.split('|');
-    if (!createdAt || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
+    const [createdAt, id, extra] = cursor.split('|');
+    if (extra !== undefined || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(createdAt || '') || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
       throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_CURSOR_INVALID');
     }
-    cursorFilter = `&or=(created_at_utc.lt.${encodeURIComponent(createdAt)},and(created_at_utc.eq.${encodeURIComponent(createdAt)},id.lt.${encodeURIComponent(id)}))`;
+    // PostgreSQL cursors retain microseconds; JavaScript Date would silently
+    // truncate them and skip rows at the original timestamp on the next page.
+    cursorCreatedAt = createdAt;
+    cursorId = id;
   }
-  const rows = await restRows(env, 'candidate_notifications',
-    `account_id=eq.${encodeURIComponent(access.account_id)}`
-    + `&candidate_id=eq.${encodeURIComponent(candidateId)}${cursorFilter}`
-    + `&select=id,workflow_id,timesheet_id,event_type,template_key,template_params,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
-  const hasMore = rows.length > limit;
-  const page = rows.slice(0, limit).map(safeCandidateNotification);
-  const tail = page[page.length - 1];
-  return jsonResponse(200, {
-    ok: true, notifications: page,
-    next_cursor: hasMore && tail ? `${tail.created_at_utc}|${tail.id}` : null
+  const result = await rpcCall(deps, 'candidate_app_notifications_page_v1', {
+    p_session_id: access.session_id, p_environment: access.environment, p_expected_rotation: access.rotation,
+    p_limit: limit, p_cursor_created_at_utc: cursorCreatedAt, p_cursor_id: cursorId
   });
+  return jsonResponse(200, {
+    ok: true, notifications: result.notifications.map(safeCandidateNotification), next_cursor: result.next_cursor
+  });
+}
+
+async function handleNotificationManagement(request, env, deps, action, deletionId = null) {
+  const access = await verifyCandidateAccess(request, env);
+  requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const body = await readJson(request);
+  requireCandidateIdempotency(body.idempotency_key);
+  const keys = action === 'SNAPSHOT' ? ['action', 'idempotency_key']
+    : action === 'MARK_READ' ? ['snapshot_id', 'idempotency_key']
+    : action === 'DELETE' ? ['notification_id', 'snapshot_id', 'idempotency_key'] : ['idempotency_key'];
+  if (Object.keys(body).some(key => !keys.includes(key))) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+  if (action === 'SNAPSHOT' && !['MARK_READ', 'DELETE'].includes(body.action)) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+  if (action === 'MARK_READ') requireUuid(body.snapshot_id, 'CANDIDATE_NOTIFICATION_NOT_FOUND');
+  if (action === 'DELETE') {
+    if (Object.hasOwn(body, 'notification_id') === Object.hasOwn(body, 'snapshot_id')) throw new CandidateHttpError(400, 'CANDIDATE_REQUEST_INVALID');
+    requireUuid(body.notification_id ?? body.snapshot_id, 'CANDIDATE_NOTIFICATION_NOT_FOUND');
+  }
+  const payload = action === 'UNDO' ? { ...body, deletion_id: requireUuid(deletionId, 'CANDIDATE_NOTIFICATION_NOT_FOUND') } : body;
+  const result = await rpcCall(deps, 'candidate_app_notifications_manage_v1', {
+    p_session_id: access.session_id, p_environment: access.environment, p_expected_rotation: access.rotation,
+    p_action: action, p_request: payload
+  });
+  return jsonResponse(200, result);
 }
 
 async function requireOfficeActor(request, deps, permission = 'view_candidate_state') {
@@ -12350,6 +12376,11 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     if (match && request.method === 'GET') return await handleDocumentStream(request, env, deps, 'candidate', match.workflowId, match.componentId);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/no-work`);
     if (match && request.method === 'POST') return await handleCandidateNoWork(request, env, deps, match.contractWeekId);
+    if (path === `${CANDIDATE_PREFIX}/notifications/bulk-snapshot` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'SNAPSHOT');
+    if (path === `${CANDIDATE_PREFIX}/notifications/read-all` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'MARK_READ');
+    if (path === `${CANDIDATE_PREFIX}/notifications/delete` && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'DELETE');
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/notifications/deletions/:deletionId/undo`);
+    if (match && request.method === 'POST') return await handleNotificationManagement(request, env, deps, 'UNDO', match.deletionId);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/notifications/:notificationId/read`);
     if (match && request.method === 'POST') {
       return await handleAccountAction(request, env, deps, 'MARK_NOTIFICATION_READ', {

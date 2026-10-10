@@ -55,3 +55,19 @@ public definition hashes. Contract comparison and source coupling pass at
 Hosted installation, exact source commits and native/store installation must
 be recorded separately after they occur. Source or mock browser qualification
 does not prove that an existing installed native app contains the new code.
+
+## Installed and store-submission evidence — 10 October 2026
+
+- Protected agency TEST database release run 38056026756 passed at 14:22:09 UTC.
+  Installed QR repeatable SHA256: `171d41d8ed2f958cb75ae65573bb0c51fd54de1c0f87e46c82f594d2484fb03b`.
+  Runtime Workers were unchanged; the fix changes SQL and Candidate application source.
+- Android `MyTMS TEST 0.1.0 (39)`, source `ee30351e24ce0c2d81291fcd963da2f2cd20065f`,
+  published to internal testing at 16:09 UK. The same binary was submitted to the
+  existing Closed testing — Alpha track, preserving the tester cohort and opt-ins.
+  Google showed Changes in review, pending automated checks, after submission.
+- iOS `0.1.5 (24)`, source `abfc6ab5f96fa2b60b7f9246600563723d80617e`,
+  submitted; Apple showed Waiting for Review, one item submitted. Submission
+  `34436ee4-9f83-4e12-b7d5-801e05ce9830`. No new EAS build was consumed.
+- On the USB phone the existing affected expense claim offered Printed documents
+  after installation. Physical printing and camera-return acceptance remains
+  outstanding; store review is not proof of that workflow.

@@ -1396,6 +1396,34 @@ begin
   select value into strict v_target_two from pg_catalog.jsonb_array_elements(v_claim->'targets')
   where value->>'external_target_id'='f2000000-0000-4000-8000-000000000002';
   v_target_two_id:=(v_target_two->>'dispatch_target_id')::uuid;
+  -- Inbox cleanup must suppress an unstarted PUSH even if transport already
+  -- leased it. The exception-owned subtransaction restores this fixture so
+  -- the normal two-device/replay matrix below remains unchanged.
+  begin
+    update public.candidate_notifications notification set state='READ'
+    from public.weekly_candidate_message_notifications message_notification,
+         public.weekly_message_dispatch_commands command
+    where command.id=v_command_id
+      and message_notification.message_intent_id=command.message_intent_id
+      and notification.id=message_notification.notification_id;
+    perform pg_temp.assert_true(found,'PUSH fixture has no owning inbox notification');
+    update public.weekly_message_dispatch_targets set state='READY',
+      lease_owner=null,lease_token=null,lease_expires_at_utc=null
+    where id=(v_target_one->>'dispatch_target_id')::uuid;
+    v_claim:=pg_temp.claim_fixture_targets_v1('notification-hidden-proof',v_command_id);
+    perform pg_temp.assert_true((v_claim->>'claimed_count')::integer=0,
+      'read inbox notification remained eligible for PUSH claim');
+    v_start:=public.weekly_source_message_dispatch_target_start_atomic_v1(
+      pg_catalog.jsonb_build_object('dispatch_target_id',v_target_two->>'dispatch_target_id',
+        'lease_token',v_target_two->>'lease_token','worker_id','multi-device-targets'));
+    perform pg_temp.assert_true(not (v_start->>'ok')::boolean
+      and v_start->>'reason'='NOTIFICATION_NO_LONGER_ACTIONABLE'
+      and exists(select 1 from public.weekly_message_dispatch_targets
+        where id=v_target_two_id and state='RETIRED'),
+      'read inbox notification reached provider submission after lease');
+    raise exception using errcode='P9999',message='NOTIFICATION_PUSH_FIXTURE_ROLLBACK';
+  exception when sqlstate 'P9999' then null;
+  end;
   v_start:=public.weekly_source_message_dispatch_target_start_atomic_v1(
     pg_catalog.jsonb_build_object(
       'dispatch_target_id',v_target_one->>'dispatch_target_id',

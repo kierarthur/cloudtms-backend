@@ -317,6 +317,87 @@ paths:
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses: *standardResponses
+  /candidate-app/v1/notifications/bulk-snapshot:
+    post:
+      tags: [Candidate]
+      operationId: createCandidateNotificationSnapshot
+      summary: Freeze the current candidate inbox for one whole-inbox action
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications/bulk-snapshot
+      requestBody:
+        $ref: '#/components/requestBodies/IdempotentJsonBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /candidate-app/v1/notifications/read-all:
+    post:
+      tags: [Candidate]
+      operationId: markAllCandidateNotificationsRead
+      summary: Mark the exact frozen inbox as read
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications/read-all
+      requestBody:
+        $ref: '#/components/requestBodies/IdempotentJsonBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /candidate-app/v1/notifications/delete:
+    post:
+      tags: [Candidate]
+      operationId: deleteCandidateNotifications
+      summary: Remove one notification or the exact frozen inbox with Undo
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications/delete
+      requestBody:
+        $ref: '#/components/requestBodies/IdempotentJsonBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /candidate-app/v1/notifications/deletions/{deletionId}/undo:
+    post:
+      tags: [Candidate]
+      operationId: undoCandidateNotificationDeletion
+      summary: Undo a candidate-owned notification removal within its deadline
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications/deletions/{deletionId}/undo
+      parameters:
+      - name: deletionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        $ref: '#/components/requestBodies/IdempotentJsonBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
   /candidate-app/v1/notifications/{notificationId}/read:
     post:
       tags: [Candidate]
