@@ -78,8 +78,30 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])',
   'private.bpay_next_workbench_set_bank_warning_v1(uuid,text)',
   'private.bpay_next_workbench_candidate_name_trigger_v1()',
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
+  "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)",
+  "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)",
+  "private.bpay_next_workbench_umbrella_metadata_trigger_v1()",
+  "private.bpay_next_workbench_task_result_v1(private.bpay_next_workbench_task,boolean,integer,boolean,boolean)",
+  "private.bpay_next_workbench_finish_task_v1(uuid)",
+  "private.bpay_next_workbench_queue_origin_v1(uuid)",
+  "private.bpay_next_workbench_claim_task_v1(uuid,integer)",
+  "private.bpay_next_workbench_step_task_v1(uuid,uuid,bigint,bigint,bigint,text,text,integer)",
+  "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)",
+  'private.bpay_next_workbench_snooze_due_trigger_v1()',
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
+  "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
+  "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","concat_ws","transaction_timestamp"],
+  "private.bpay_next_workbench_umbrella_metadata_trigger_v1()": ["private.bpay_next_workbench_schedule_task_v1"],
+  "private.bpay_next_workbench_task_result_v1(private.bpay_next_workbench_task,boolean,integer,boolean,boolean)": [],
+  "private.bpay_next_workbench_finish_task_v1(uuid)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","transaction_timestamp"],
+  "private.bpay_next_workbench_queue_origin_v1(uuid)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_schedule_task_v1","private.bpay_next_workbench_mark_processing_v1"],
+  "private.bpay_next_workbench_claim_task_v1(uuid,integer)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_task_result_v1","clock_timestamp","transaction_timestamp","gen_random_uuid","make_interval"],
+  "private.bpay_next_workbench_step_task_v1(uuid,uuid,bigint,bigint,bigint,text,text,integer)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","private.bpay_next_workbench_task_result_v1","private.bpay_next_workbench_refresh_many_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_apply_delta_v1","private.bpay_next_workbench_finish_task_v1","private.bpay_next_workbench_refresh_case_v1","private.bpay_next_workbench_refresh_work_core_v1","private.bpay_next_workbench_metadata_changed_v1","clock_timestamp","transaction_timestamp","octet_length","array_agg","unnest","filter","cardinality","by","concat_ws"],
+  "public.bpay_next_workbench_runtime_service_v1(text,uuid,jsonb)": ["private.bpay_next_workbench_refresh_case_v1","substring","private.bpay_next_workbench_queue_origin_v1","private.bpay_next_workbench_schedule_task_v1","private.bpay_next_workbench_claim_task_v1","private.bpay_next_workbench_step_task_v1","current_setting","pg_column_size","clock_timestamp","transaction_timestamp","array_agg","unnest","filter","cardinality"],
   'private.bpay_next_workbench_require_next_v1()': [],
   'private.bpay_next_workbench_ensure_metadata_v1(uuid)': [
     'private.bpay_next_workbench_require_next_v1','concat_ws'],
@@ -97,25 +119,14 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     'private.bpay_next_work_wait_state_v1','private.bpay_next_workbench_group_contribution_v1',
     'private.bpay_next_workbench_apply_delta_v1','array_agg','transaction_timestamp','gen_random_uuid'],
   'private.bpay_next_work_wait_state_v1(uuid)': ['private.bpay_next_workbench_require_next_v1','sum'],
-  'private.bpay_next_workbench_refresh_work_v1(uuid)': [
-    'private.weekly_source_pay_query_gate_v1','to_jsonb','char_length',
-    'private.bpay_next_work_wait_state_v1','private.bpay_next_workbench_refresh_case_v1',
-    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
-    'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_work_members_v1',
-    'private.bpay_next_workbench_accepted_work_v1','private.bpay_next_snooze_at_cut_v1',
-    'private.bpay_next_workbench_apply_delta_v1','array_agg','transaction_timestamp','gen_random_uuid','filter','sum'],
+  "private.bpay_next_workbench_refresh_work_v1(uuid)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_queue_origin_v1","private.bpay_next_workbench_refresh_work_core_v1","private.bpay_next_workbench_refresh_case_v1","array_agg","cardinality","unnest"],
   'private.bpay_next_workbench_refresh_case_v1(uuid)': [
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
     'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_apply_delta_v1',
     'array_agg','transaction_timestamp','gen_random_uuid','max','filter','on','sum'],
-  'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])': [
-    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
-    'private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1',
-    'cardinality','pg_column_size','array_position','array_agg','unnest'],
-  'private.bpay_next_workbench_set_bank_warning_v1(uuid,text)': [
-    'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1','transaction_timestamp'],
-  'private.bpay_next_workbench_candidate_name_trigger_v1()': [
-    'private.bpay_next_workbench_ensure_metadata_v1','concat_ws','transaction_timestamp'],
+  "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_refresh_work_v1","private.bpay_next_workbench_refresh_case_v1","private.bpay_next_workbench_queue_origin_v1","private.bpay_next_workbench_schedule_task_v1","private.bpay_next_workbench_mark_processing_v1","cardinality","pg_column_size","array_position","array_agg","unnest"],
+  "private.bpay_next_workbench_set_bank_warning_v1(uuid,text)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","transaction_timestamp"],
+  "private.bpay_next_workbench_candidate_name_trigger_v1()": ["private.bpay_next_workbench_metadata_changed_v1","concat_ws"],
   "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": [
     "private.bpay_next_workbench_mark_processing_v1",
     "private.bpay_next_workbench_refresh_many_v1",
@@ -154,14 +165,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object",
     "pg_catalog.octet_length"
   ],
-  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
-    "private.bpay_next_record_work_segment_origin_shares_v1",
-    "private.bpay_next_bound_source_snapshot_v1",
-    "private.bpay_next_value_source_for_target_v1",
-    "pg_catalog.clock_timestamp",
-    "pg_catalog.jsonb_build_object",
-    "pg_catalog.transaction_timestamp"
-  ],
+  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["private.bpay_next_record_work_segment_origin_shares_v1","private.bpay_next_bound_source_snapshot_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_workbench_refresh_many_v1","array_append","pg_catalog.clock_timestamp","pg_catalog.jsonb_build_object","pg_catalog.transaction_timestamp"],
   "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)": [
     "private.bpay_next_publish_no_case_week_fact_v1",
     "pg_catalog.clock_timestamp",

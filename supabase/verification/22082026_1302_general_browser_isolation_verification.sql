@@ -475,8 +475,12 @@ begin
   -- No membership removal, prior ACL change or browser exposure is forgiven.
   -- Every future public SECURITY DEFINER addition/removal must remeasure and
   -- update this verifier in the same implementation commit.
-  if v_count<>829 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'55bbf326922f59d683823d40f5f3544a' then
+  -- WB-44 adds only service-only public.bpay_next_workbench_runtime_service_v1
+  -- (text,uuid,jsonb), with fixed search_path and no direct private table access.
+  -- Fresh sole PG17 catalogue:830/76/0/9ca786a0b905925c3b6c7e5d52bccb4f.
+  -- Excluding only that identity reproduces the preceding829/76/0 seal.
+  if v_count<>830 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'9ca786a0b905925c3b6c7e5d52bccb4f' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

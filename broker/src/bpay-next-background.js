@@ -7,7 +7,8 @@
  * server recovery pages. Neither an uncertain send nor a lost SQL reply is a
  * completed financial operation. Actual Worker wiring supplies fresh ownership.
  */
-import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows } from './bpay-next-runtime-rpc.js';
+import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows,
+  readBpayNextWorkbenchWakePage,recoverBpayNextWorkbenchDuePage,claimBpayNextWorkbenchTask,stepBpayNextWorkbenchTask } from './bpay-next-runtime-rpc.js';
 import { receiveBpayNextPreparationExpiry } from './bpay-next-preparation-expiry-rpc.js';
 import { handleBpayNextFinancialQueueMessage } from './bpay-next-financial-queue.js';
 
@@ -24,6 +25,10 @@ function exact(value,keys) {
 }
 const claim=item=>Object.freeze({version:1,action:'CLAIM',job_id:item.job_id,job_kind:item.job_kind,lease_seconds:120});
 const expiry=item=>Object.freeze({version:1,runtime_action:'EXPIRY',run_id:item.run_id});
+const workbenchClaim=item=>Object.freeze({version:1,runtime_action:'WORKBENCH_CLAIM',task_id:item.task_id,lease_seconds:120});
+const workbenchStep=item=>Object.freeze({version:1,runtime_action:'WORKBENCH_STEP',task_id:item.task_id,
+  lease_nonce:item.lease_nonce,owner_epoch:item.owner_epoch,generation:item.generation,step_no:item.step_no,
+  phase:item.phase,cursor_key:item.cursor_key,limit:100});
 function binding(deps) {
   if(!deps||typeof deps.runtimeRpc!=='function'||typeof deps.queue?.sendBatch!=='function') {
     throw new TypeError('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
@@ -60,6 +65,26 @@ export async function handleBpayNextBackgroundMessage(message,deps) {
     // Only an explicit runtime discriminator selects metadata processing. All
     // financial schemas retain the existing exact financial adapter/consumer.
     if(body&&Object.hasOwn(body,'runtime_action')) {
+      if(['WORKBENCH_CLAIM','WORKBENCH_STEP'].includes(body.runtime_action)) {
+        const isClaim=body.runtime_action==='WORKBENCH_CLAIM';
+        const keys=isClaim?['version','runtime_action','task_id','lease_seconds']:
+          ['version','runtime_action','task_id','lease_nonce','owner_epoch','generation','step_no','phase','cursor_key','limit'];
+        if(!exact(body,keys)||body.version!==1) return retry(message,'BPAY_NEXT_BACKGROUND_ENVELOPE_INVALID');
+        const {version,runtime_action,...input}=body;
+        const outcome=await(isClaim?claimBpayNextWorkbenchTask:stepBpayNextWorkbenchTask)(input,{runtimeRpc:deps.runtimeRpc});
+        if(!outcome.ok) return retry(message,outcome.error_code);
+        const result=outcome.result;
+        if(result.status==='DONE') {message.ack();return {disposition:'ACK',reason:'WORKBENCH_TASK_FINISHED'};}
+        if(result.status==='ERROR'||result.status==='LEASED'&&(result.stale||!isClaim)) {
+          return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
+        }
+        // Fresh CLAIM alone exposes its nonce. A stale STEP only wakes the
+        // stored task; it never adopts another active lease or repeats a page.
+        if(isClaim&&result.status==='LEASED'&&!result.stale) await publish(deps,[workbenchStep(result)]);
+        else if(!isClaim&&result.status==='READY') await publish(deps,[workbenchClaim(result)]);
+        else return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
+        message.ack();return {disposition:'ACK',reason:'WORKBENCH_CONTINUATION_PERSISTED'};
+      }
       if(exact(body,['version','runtime_action'])&&body.version===1&&body.runtime_action==='ENROLL') {
         const outcome=await enroll(deps);
         if(!outcome.ok) return retry(message,outcome.error_code);
@@ -127,6 +152,16 @@ export async function runBpayNextRecoveryTick(deps) {
   await lane('CLEANUP',async()=>{
     const outcome=await cleanupBpayNextTerminalRows({limit:100},{runtimeRpc:deps.runtimeRpc});
     return outcome.ok?{ok:true,published:0}:outcome;
+  });
+  await lane('WORKBENCH_DUE',async()=>{
+    const outcome=await recoverBpayNextWorkbenchDuePage({limit:100},{runtimeRpc:deps.runtimeRpc});
+    return outcome.ok?{ok:true,published:0}:outcome;
+  });
+  await lane('WORKBENCH',async()=>{
+    const outcome=await readBpayNextWorkbenchWakePage({limit:100},{runtimeRpc:deps.runtimeRpc});
+    if(!outcome.ok) return outcome;
+    await publish(deps,outcome.result.items.map(workbenchClaim));
+    return {ok:true,published:outcome.result.items.length};
   });
   return Object.freeze({ok:results.every(result=>result.ok),lanes:Object.freeze(results)});
 }

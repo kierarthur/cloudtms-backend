@@ -15,7 +15,9 @@ export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
   'PREPARATION_EXPIRY', 'CASE_CREATE', 'CASE_WRITE_OFF'
 ]);
 const RPCS = Object.freeze({ ENROLL: 'bpay_next_enroll_service_v1', WAKE_PAGE: 'bpay_next_job_wake_page_v1',
-  EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1' });
+  EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1',
+  WORKBENCH_DUE_PAGE:'bpay_next_workbench_runtime_service_v1',WORKBENCH_WAKE_PAGE:'bpay_next_workbench_runtime_service_v1',
+  WORKBENCH_CLAIM:'bpay_next_workbench_runtime_service_v1',WORKBENCH_STEP:'bpay_next_workbench_runtime_service_v1' });
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const INTEGER = /^(?:0|[1-9]\d{0,18})$/;
 const BIGINT_MAX = 9223372036854775807n;
@@ -46,6 +48,60 @@ function expiryInput(value) {
     throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
   }
   return Object.freeze({ limit: value.limit });
+}
+const WORKBENCH_PHASES=Object.freeze(['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN',
+  'METADATA_GROUP','METADATA_SUMMARY','ORIGIN_CASE','ORIGIN_WORK','UMBRELLA_CANDIDATE','DONE']);
+function workbenchInput(action,value) {
+  if(['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)) return expiryInput(value);
+  if(action==='WORKBENCH_CLAIM') {
+    if(!exact(value,['task_id','lease_seconds'])||!uuid(value.task_id)||!Number.isInteger(value.lease_seconds)
+      ||value.lease_seconds<1||value.lease_seconds>120) throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  } else if(!exact(value,['task_id','lease_nonce','owner_epoch','generation','step_no','phase','cursor_key','limit'])
+    ||!uuid(value.task_id)||!uuid(value.lease_nonce)||!integer(value.owner_epoch,true)||!integer(value.generation,true)
+    ||!integer(value.step_no)||!WORKBENCH_PHASES.includes(value.phase)||value.phase==='DONE'
+    ||!(value.cursor_key===null||typeof value.cursor_key==='string'&&ENCODER.encode(value.cursor_key).byteLength<=64)
+    ||!Number.isInteger(value.limit)||value.limit<1||value.limit>100) throw new Error('BPAY_NEXT_RUNTIME_REQUEST_INVALID');
+  return Object.freeze({...value});
+}
+function workbenchArgs(action,input) {
+  const {task_id,...args}=input;
+  return Object.freeze({p_action:action.slice('WORKBENCH_'.length),p_task_id:task_id??null,p_args:Object.freeze(args)});
+}
+function workbenchResult(value,action,input) {
+  if(action==='WORKBENCH_DUE_PAGE') {
+    if(!exact(value,['rows_visited'])||!integer(value.rows_visited)||BigInt(value.rows_visited)>BigInt(input.limit)) throw new Error();
+    return Object.freeze({...value});
+  }
+  if(action==='WORKBENCH_WAKE_PAGE') {
+    if(!exact(value,['items','adoption_state','adoption_revision','pending_task_count'])
+      ||!['UNSEEDED','SEEDING','CURRENT','ERROR'].includes(value.adoption_state)||!integer(value.adoption_revision)
+      ||!integer(value.pending_task_count)||!Array.isArray(value.items)||value.items.length>input.limit) throw new Error();
+    const seen=new Set();const items=value.items.map(item=>{
+      if(!exact(item,['task_id'])||!uuid(item.task_id)||seen.has(item.task_id.toLowerCase())) throw new Error();
+      seen.add(item.task_id.toLowerCase());return Object.freeze({...item});
+    });return Object.freeze({...value,items:Object.freeze(items)});
+  }
+  const phases={SEED:['SEED_WORK','SEED_CASE','SEED_GROUP','SEED_SNOOZE','SEED_METADATA','SEED_DRAIN','DONE'],
+    METADATA:['METADATA_GROUP','METADATA_SUMMARY','DONE'],ORIGIN:['ORIGIN_CASE','ORIGIN_WORK','DONE'],UMBRELLA:['UMBRELLA_CANDIDATE','DONE']};
+  if(!exact(value,['task_id','task_type','status','phase','cursor_key','generation','owner_epoch','step_no',
+    'lease_nonce','rows_visited','progressed','stale','error_code'])||!uuid(value.task_id)
+    ||value.task_id.toLowerCase()!==input.task_id.toLowerCase()||!Object.hasOwn(phases,value.task_type)
+    ||!phases[value.task_type].includes(value.phase)||!['READY','LEASED','DONE','ERROR'].includes(value.status)
+    ||(value.status==='DONE')!==(value.phase==='DONE')||!integer(value.generation,true)||!integer(value.owner_epoch,true)
+    ||!integer(value.step_no)||!integer(value.rows_visited)||BigInt(value.rows_visited)>100n
+    ||typeof value.progressed!=='boolean'||typeof value.stale!=='boolean'
+    ||!(value.cursor_key===null||typeof value.cursor_key==='string'&&ENCODER.encode(value.cursor_key).byteLength<=64)
+    ||!(value.error_code===null||typeof value.error_code==='string'&&/^SQLSTATE:[A-Z0-9]{5}$/.test(value.error_code))
+    ||(value.status==='ERROR')!==(value.error_code!==null)
+    ||(action==='WORKBENCH_CLAIM'&&value.status==='LEASED'&&!value.stale?!uuid(value.lease_nonce):value.lease_nonce!==null)
+    ||(value.stale&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_CLAIM'&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_STEP'&&BigInt(value.rows_visited)>BigInt(input.limit))
+    ||(value.status==='ERROR'&&(value.progressed||value.rows_visited!=='0'))
+    ||(action==='WORKBENCH_STEP'&&!value.stale&&['READY','DONE'].includes(value.status)
+      &&(!value.progressed||value.generation!==input.generation||value.owner_epoch!==input.owner_epoch
+        ||BigInt(value.step_no)!==BigInt(input.step_no)+1n))) throw new Error();
+  return Object.freeze({...value});
 }
 // PostgreSQL timestamps carry microseconds. Calendar validation/comparison
 // must not round through Date's millisecond precision; retain original strings.
@@ -110,7 +166,11 @@ export function createBpayNextRuntimeRpc(config) {
     try {
       if (values.length !== 3 || typeof action !== 'string' || !Object.hasOwn(RPCS, action)
           || !exact(options, ['signal']) || !(options.signal instanceof AbortSignal)) throw new Error();
-      if (action === 'ENROLL') {
+      if(action.startsWith('WORKBENCH_')) {
+        if(!exact(args,['p_action','p_task_id','p_args'])||args.p_action!==action.slice('WORKBENCH_'.length)) throw new Error();
+        const normalized=workbenchInput(action,['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)?args.p_args:{task_id:args.p_task_id,...args.p_args});
+        if(args.p_task_id!==(normalized.task_id??null)) throw new Error();
+      } else if (action === 'ENROLL') {
         if (!exact(args, [])) throw new Error();
       } else if (action === 'WAKE_PAGE') {
         if (!exact(args, ['p_lane', 'p_limit'])) throw new Error();
@@ -248,7 +308,7 @@ async function call(action, input, dependencies) {
     if (action === 'ENROLL') {
       if (!exact(input, [])) throw new RuntimeError('BPAY_NEXT_RUNTIME_REQUEST_INVALID', false, true);
       normalized = Object.freeze({});
-    } else normalized = action === 'WAKE_PAGE' ? pageInput(input) : expiryInput(input);
+    } else normalized = action.startsWith('WORKBENCH_')?workbenchInput(action,input):action === 'WAKE_PAGE' ? pageInput(input) : expiryInput(input);
     if (!exact(dependencies, ['runtimeRpc', ...(Object.hasOwn(dependencies || {}, 'timeoutMs') ? ['timeoutMs'] : [])])
         || typeof dependencies.runtimeRpc !== 'function') {
       throw new RuntimeError('BPAY_NEXT_RUNTIME_DEPENDENCY_UNAVAILABLE', true, true);
@@ -257,7 +317,7 @@ async function call(action, input, dependencies) {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > BPAY_NEXT_RUNTIME_LIMITS.timeoutMs) {
       throw new RuntimeError('BPAY_NEXT_RUNTIME_REQUEST_INVALID', false, true);
     }
-    const args = Object.freeze(action === 'ENROLL' ? {} : action === 'WAKE_PAGE'
+    const args = Object.freeze(action.startsWith('WORKBENCH_')?workbenchArgs(action,normalized):action === 'ENROLL' ? {} : action === 'WAKE_PAGE'
       ? { p_lane: normalized.lane, p_limit: normalized.limit } : { p_limit: normalized.limit });
     controller = new AbortController();
     const deadline = new Promise((_, reject) => {
@@ -303,7 +363,7 @@ async function call(action, input, dependencies) {
     if (!response.ok) throw sqlFailure(payload) || new RuntimeError('BPAY_NEXT_RUNTIME_TRANSPORT_FAILED', true);
     if (response.status !== 200) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
     let result;
-    try { result = action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
+    try { result = action.startsWith('WORKBENCH_')?workbenchResult(payload,action,normalized):action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
       ? pageResult(payload, normalized) : action === 'CLEANUP' ? cleanupResult(payload, normalized) : expiryResult(payload, normalized); }
     catch { throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true); }
     return Object.freeze({ ok: true, action, result });
@@ -330,3 +390,7 @@ export function readBpayNextJobWakePage(...args) { return call('WAKE_PAGE', args
 export function readBpayNextExpiryDispatchPage(...args) { return call('EXPIRY_PAGE', args.length === 2 ? args[0] : null, args[1]); }
 /** One terminal temporary-row page; SQL keeps its cursor and retained origins. */
 export function cleanupBpayNextTerminalRows(...args) { return call('CLEANUP', args.length === 2 ? args[0] : null, args[1]); }
+export function readBpayNextWorkbenchWakePage(...args) {return call('WORKBENCH_WAKE_PAGE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextWorkbenchDuePage(...args) {return call('WORKBENCH_DUE_PAGE',args.length===2?args[0]:null,args[1]);}
+export function claimBpayNextWorkbenchTask(...args) {return call('WORKBENCH_CLAIM',args.length===2?args[0]:null,args[1]);}
+export function stepBpayNextWorkbenchTask(...args) {return call('WORKBENCH_STEP',args.length===2?args[0]:null,args[1]);}

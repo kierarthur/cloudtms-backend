@@ -754,6 +754,30 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_workbench_snooze_due",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_workbench_task",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_protected_reference_events_v1_owner",
       "check": "true",
       "roles": [
@@ -12309,7 +12333,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "28f9994e7d2193119525b84843cedaf5ac4d1ad7fb0cbcdadef8d11e8fb4ec0c"
+      "definition_sha256": "197a88ba7c64bc81ab072f7dabf6f376a438be1862a8fdbad6729d61fc263aa3"
     },
     {
       "acl": [
@@ -15435,7 +15459,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "bfdb714f929fa9c69dd67d479b1c513f8d113d15fac8b1ea2665bb155f42c892"
+      "definition_sha256": "b4de09d2619071791d63c8a800dd4cfb24e643218a210f2d0e45ace1cf9dc9e4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_claim_task_v1(p_task_id uuid, p_lease_seconds integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "22cdbd9738c7f1b4bce9a015e9c34d8d1bd72e657a728e9d46e5be705f1e8f35"
     },
     {
       "acl": [
@@ -15454,7 +15497,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ae1bf0ae937cc4ff64bc00d0408d8f05aaab51154256463ca76367ad5569988f"
+      "definition_sha256": "ea17de8ea22fe267a694e7ceb1883625243f1484bedf05ac1d69643479992226"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_finish_task_v1(p_task_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c73b87d02828aea985bb3ec3e46a7cf520b775752bb3597a342530de5a4c45dc"
     },
     {
       "acl": [
@@ -15507,6 +15569,44 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_metadata_changed_v1(p_candidate_id uuid, p_bank_changed boolean, p_control_changed boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9c8a4a44d3f32f8b554fa444c57f39d9ee305eba7649981fbd17e3cec6b2401c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_queue_origin_v1(p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "dbf980a2bcb171f11c9e92c431192587b41aec1a5093233fd48166e6fc9b573c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_refresh_case_v1(p_case_id uuid)",
       "parallel": "u",
       "volatility": "v",
@@ -15530,7 +15630,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5ac8e6096f7344de64446a2951850b5d28a1a9414defef6af89c95f97fc9a301"
+      "definition_sha256": "2c66c882e3d37cba8bc1150bcf9a0f088eec25d47e79aa9defec7ea2b2327389"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_refresh_work_core_v1(p_work_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8d80f992cad574bc17eef2424b7bd2fa2638c74eeb403ce0b0dff8157cc4b791"
     },
     {
       "acl": [
@@ -15549,7 +15668,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "708ba3d4777c15f5ea7354e58a23842eb6054c1ad77c0b6f3ad68cfc6b221be2"
+      "definition_sha256": "bd4e7dca7a36796cc17d449837f21e8bf31538f32ff84f1fddd3975d8605e73b"
     },
     {
       "acl": [
@@ -15583,11 +15702,106 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_workbench_schedule_task_v1(p_type text, p_candidate_id uuid, p_work_id uuid, p_umbrella_id uuid, p_bank_changed boolean, p_control_changed boolean, p_previous_pending boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "821584434a316e533827da0bd340c716c54db378f11027f6e5e2924c94079f65"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_workbench_set_bank_warning_v1(p_candidate_id uuid, p_warning_code text)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "77934c0331ce1571c179c5741b4d1aa43b65578d62b807591c02479ccda8ee94"
+      "definition_sha256": "35142e3373534ce05b17a5a94b788f09d5bf49939fd2ddb54aeb873c47702aae"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_snooze_due_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "fb1ab68d5a0d593ccc9464d686d6e040ae7c4abe9230cac7d0b8d0eb5f615775"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_step_task_v1(p_task_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_generation bigint, p_step_no bigint, p_phase text, p_cursor_key text, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "42317578343718d8ce92a4bbaa16058d46bc706266c786ddd388567eb1b04d50"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_task_result_v1(p_task private.bpay_next_workbench_task, p_reveal_lease boolean, p_rows integer, p_progressed boolean, p_stale boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "86fa539e5ae8356a3449d4cf56b4f23d7f6efabe11a275fd5be203ab8de01bec"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_umbrella_metadata_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4a086252e3363a3f341b2da4f2505edf2ebafce4028504d17b9fe510e1f6ff27"
     },
     {
       "acl": [
@@ -30800,6 +31014,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "2106db9d2584adf60153455cf5589bd5e76db02b8b0fc978500608fe32f806a8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_workbench_runtime_service_v1(p_action text, p_task_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "872e55097271e016aa0688cb0c3d61f22f4a1239b48b13c54727eee9e069c451"
     },
     {
       "acl": [
@@ -52559,6 +52797,13 @@
       "definition": "CREATE TRIGGER bpay_next_snooze_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
     },
     {
+      "name": "bpay_next_workbench_snooze_due_trigger",
+      "table": "bpay_next_snooze",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_workbench_snooze_due_trigger AFTER INSERT OR UPDATE OF version, until_date, active ON private.bpay_next_snooze FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_snooze_due_trigger_v1()"
+    },
+    {
       "name": "bpay_next_snooze_event_guard",
       "table": "bpay_next_snooze_event",
       "schema": "private",
@@ -53361,7 +53606,7 @@
       "table": "candidates",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER bpay_next_workbench_candidate_name_trigger AFTER UPDATE OF display_name, first_name, last_name, tms_ref ON candidates FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_candidate_name_trigger_v1()"
+      "definition": "CREATE TRIGGER bpay_next_workbench_candidate_name_trigger AFTER UPDATE OF display_name, first_name, last_name, tms_ref, pay_method, umbrella_id, bank_details_hash, account_holder, sort_code, account_number ON candidates FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_candidate_name_trigger_v1()"
     },
     {
       "name": "candidate_expense_candidate_identity_summary_refresh",
@@ -55763,6 +56008,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_ts_summary_pay_cache_adjustments_au AFTER UPDATE ON ts_pay_adjustments REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_timesheet_summary_pay_state_refresh_trigger()"
+    },
+    {
+      "name": "bpay_next_workbench_umbrella_metadata_trigger",
+      "table": "umbrellas",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_workbench_umbrella_metadata_trigger AFTER UPDATE OF name, bank_details_hash, vat_chargeable, enabled, sort_code, account_number ON umbrellas FOR EACH ROW EXECUTE FUNCTION private.bpay_next_workbench_umbrella_metadata_trigger_v1()"
     },
     {
       "name": "trg_cc_umbrellas",
@@ -86028,6 +86280,10 @@
         {
           "name": "bpay_next_finance_case_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_finance_case_pkey ON private.bpay_next_finance_case USING btree (id)"
+        },
+        {
+          "name": "bpay_next_workbench_seed_case_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_seed_case_idx ON private.bpay_next_finance_case USING btree (id) WHERE (status = ANY (ARRAY['OPEN'::text, 'PAUSED'::text]))"
         }
       ],
       "options": [],
@@ -102808,6 +103064,10 @@
         {
           "name": "bpay_next_snooze_scope_history_idx",
           "definition": "CREATE INDEX bpay_next_snooze_scope_history_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, scope_identity, id)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_seed_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_snooze_seed_idx ON private.bpay_next_snooze USING btree (id) WHERE active"
         }
       ],
       "options": [],
@@ -109270,6 +109530,10 @@
         {
           "name": "bpay_next_work_unapplied_idx",
           "definition": "CREATE INDEX bpay_next_work_unapplied_idx ON private.bpay_next_work USING btree (candidate_id, id) WHERE (current_revision_id IS DISTINCT FROM applied_revision_id)"
+        },
+        {
+          "name": "bpay_next_workbench_seed_work_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_seed_work_idx ON private.bpay_next_work USING btree (id) WHERE ((approval_state = ANY (ARRAY['APPROVED'::text, 'WITHDRAWN'::text])) AND ((current_revision_id IS NOT NULL) OR (applied_revision_id IS NOT NULL)))"
         }
       ],
       "options": [],
@@ -109958,6 +110222,10 @@
         {
           "name": "bpay_next_work_collection_work_id_component_key_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_work_collection_work_id_component_key_key ON private.bpay_next_work_collection USING btree (work_id, component_key)"
+        },
+        {
+          "name": "bpay_next_workbench_origin_case_page_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_origin_case_page_idx ON private.bpay_next_work_collection USING btree (work_id, case_id) WHERE (case_id IS NOT NULL)"
         }
       ],
       "options": [],
@@ -111772,6 +112040,38 @@
           "generated": ""
         },
         {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_enabled",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_umbrella_vat_chargeable",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "tms_ref",
           "type": "text",
           "default": null,
@@ -111796,6 +112096,10 @@
         {
           "name": "bpay_next_workbench_metadata_pending_idx",
           "definition": "CREATE INDEX bpay_next_workbench_metadata_pending_idx ON private.bpay_next_workbench_candidate_metadata USING btree (candidate_id) WHERE continuation_pending"
+        },
+        {
+          "name": "bpay_next_workbench_metadata_umbrella_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_metadata_umbrella_idx ON private.bpay_next_workbench_candidate_metadata USING btree (target_umbrella_id, candidate_id) WHERE (target_pay_channel = 'UMBRELLA'::text)"
         }
       ],
       "options": [],
@@ -111864,6 +112168,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (candidate_id)"
+        },
+        {
+          "name": "bpay_next_workbench_candidate_metadata_target_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_candidate_metadata_target_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (target_umbrella_id) REFERENCES umbrellas(id)"
         },
         {
           "name": "bpay_next_workbench_candidate_metadata_tms_ref_check",
@@ -112199,6 +112519,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_workbench_candidate_metadata_page_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_candidate_metadata_page_idx ON private.bpay_next_workbench_candidate_summary USING btree (candidate_id, (((((client_scope || ':'::text) || pay_channel) || ':'::text) || section)) COLLATE \"C\")"
+        },
         {
           "name": "bpay_next_workbench_candidate_sort_idx",
           "definition": "CREATE INDEX bpay_next_workbench_candidate_sort_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, client_scope, pay_channel, candidate_sort_name, candidate_id)"
@@ -114152,6 +114476,14 @@
           "generated": ""
         },
         {
+          "name": "pending_task_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "updated_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
@@ -114216,6 +114548,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (id = 1)"
+        },
+        {
+          "name": "bpay_next_workbench_revision_pending_task_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pending_task_count >= 0)"
         },
         {
           "name": "bpay_next_workbench_revision_pkey",
@@ -114686,6 +115026,750 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (unknown_amount_count >= 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_workbench_snooze_due",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pending",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "until_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_workbench_snooze_due_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_snooze_due_pkey ON private.bpay_next_workbench_snooze_due USING btree (snooze_id)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_expiry_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_snooze_expiry_idx ON private.bpay_next_workbench_snooze_due USING btree (until_date, snooze_id) WHERE pending"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_workbench_snooze_due_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT pending OR until_date IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((work_id IS NULL) = (case_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (snooze_id)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_snooze_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (snooze_id) REFERENCES private.bpay_next_snooze(id)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_snooze_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (snooze_version > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_snooze_due_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_workbench_task",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "attempt_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "available_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "bank_warning_changed",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "control_changed",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cursor_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_applied_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_approval_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_wait_state",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "financial_view_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "generation",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_error_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "lease_nonce",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "lease_until_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "metadata_version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "owner_epoch",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "phase",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "rows_visited",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "seed_fenced",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'READY'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "step_no",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "task_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "task_type",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "through_candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "through_case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "through_group_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "through_snooze_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "through_summary_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "through_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "umbrella_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "wake_after_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_workbench_task_candidate_pending_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_task_candidate_pending_idx ON private.bpay_next_workbench_task USING btree (candidate_id, id) WHERE (status <> 'DONE'::text)"
+        },
+        {
+          "name": "bpay_next_workbench_task_expired_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_task_expired_idx ON private.bpay_next_workbench_task USING btree (lease_until_utc, id) WHERE (status = 'LEASED'::text)"
+        },
+        {
+          "name": "bpay_next_workbench_task_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_task_pkey ON private.bpay_next_workbench_task USING btree (id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_task_key_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_task_task_key_key ON private.bpay_next_workbench_task USING btree (task_key)"
+        },
+        {
+          "name": "bpay_next_workbench_task_wake_idx",
+          "definition": "CREATE INDEX bpay_next_workbench_task_wake_idx ON private.bpay_next_workbench_task USING btree (wake_after_utc, id) WHERE (status = ANY (ARRAY['READY'::text, 'ERROR'::text]))"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_workbench_task_attempt_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (attempt_count >= 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (\nCASE\n    WHEN status = 'LEASED'::text THEN lease_nonce IS NOT NULL AND lease_until_utc IS NOT NULL\n    ELSE lease_nonce IS NULL AND lease_until_utc IS NULL\nEND)"
+        },
+        {
+          "name": "bpay_next_workbench_task_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((status = 'DONE'::text) = (phase = 'DONE'::text))"
+        },
+        {
+          "name": "bpay_next_workbench_task_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (task_type = 'SEED'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = 'SEED'::text OR task_type = 'METADATA'::text AND candidate_id IS NOT NULL AND work_id IS NULL AND umbrella_id IS NULL AND task_key = ('METADATA:'::text || candidate_id::text) OR task_type = 'ORIGIN'::text AND candidate_id IS NOT NULL AND work_id IS NOT NULL AND umbrella_id IS NULL AND task_key = ('ORIGIN:'::text || work_id::text) OR task_type = 'UMBRELLA'::text AND candidate_id IS NULL AND work_id IS NULL AND umbrella_id IS NOT NULL AND task_key = ('UMBRELLA:'::text || umbrella_id::text))"
+        },
+        {
+          "name": "bpay_next_workbench_task_cursor_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(cursor_key) <= 64)"
+        },
+        {
+          "name": "bpay_next_workbench_task_expected_approval_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_approval_state = ANY (ARRAY['PENDING'::text, 'APPROVED'::text, 'WITHDRAWN'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_task_financial_view_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (financial_view_revision >= 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (generation > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_last_error_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(last_error_code) <= 256)"
+        },
+        {
+          "name": "bpay_next_workbench_task_metadata_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (metadata_version > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_owner_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (owner_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_phase_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (phase = ANY (ARRAY['SEED_WORK'::text, 'SEED_CASE'::text, 'SEED_GROUP'::text, 'SEED_SNOOZE'::text, 'SEED_METADATA'::text, 'SEED_DRAIN'::text, 'METADATA_GROUP'::text, 'METADATA_SUMMARY'::text, 'ORIGIN_CASE'::text, 'ORIGIN_WORK'::text, 'UMBRELLA_CANDIDATE'::text, 'DONE'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_task_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_rows_visited_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (rows_visited >= 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_status_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (status = ANY (ARRAY['READY'::text, 'LEASED'::text, 'DONE'::text, 'ERROR'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_task_step_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (step_no >= 0)"
+        },
+        {
+          "name": "bpay_next_workbench_task_task_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(task_key) <= 64)"
+        },
+        {
+          "name": "bpay_next_workbench_task_task_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (task_key)"
+        },
+        {
+          "name": "bpay_next_workbench_task_task_type_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (task_type = ANY (ARRAY['SEED'::text, 'METADATA'::text, 'ORIGIN'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_task_umbrella_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (umbrella_id) REFERENCES umbrellas(id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_work_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, candidate_id) REFERENCES private.bpay_next_work(id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_work_id_expected_applied_revision_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, expected_applied_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_work_id_expected_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id, expected_revision_id) REFERENCES private.bpay_next_work_revision(work_id, id)"
+        },
+        {
+          "name": "bpay_next_workbench_task_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
         }
       ],
       "view_definition_sha256": null
