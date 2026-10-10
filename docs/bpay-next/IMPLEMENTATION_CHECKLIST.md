@@ -1210,6 +1210,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Its frozen rates window lists every bucket, missing ones shown as missing (RQ-225 Daily part).
   - A Daily work shows hours lines only; no Additional, expense or mileage line appears for it (OR-39).
 
+WB-04 current reconciliation reviewed; ITEM and D07 remain OPEN under BD052 for the actual Daily and projection successors. docs/bpay-next/WB-04-COMPLETION.md; reviews/WB-04-reconciliation-review.md. No completion tick; joined app NOT_RUN.
+
 ## WB-35 — Upstream pay inputs keep feeding NEXT unchanged
 
 Seq 47; Rates · WB-R; reviewer R2; current requested-feature status PARTLY_DONE.
