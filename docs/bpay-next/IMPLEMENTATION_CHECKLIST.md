@@ -1823,6 +1823,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Selected Ready Timesheets shown for the Candidate match the store (LSV-026); opening the detail does not run a preview (LSV-007).
   - The "Candidate Banking" window opens from the list; Escape/Close closes it and the Candidate's ticks in the main list are unchanged (RQ-010, J2e, NX-027 no longer shown).
 
+WB15 available-slice receipt: Available native indexed group-reader/outer-window slice; whole required WB16/17/24/25/18/27/20/38/DR joins OPEN. design/WB-15-successor-provenance.json FEb3e0ca039a071a39a7404427635ccb302df1a6f4. reviews/WB-15-group-sql-review.md; reviews/WB-15-candidate-window-source-review.md; screen-designs/SCR-09/review.md (36PASS/0FAIL/6NA); SCR-07/review.md (35PASS/0FAIL/7NA). Whole item not reviewed complete. ITEM and all deliverable completion ticks remain open; actual local screenshots reviewed, hosted/app NOT_RUN.
+
 ## WB-16 — Timesheet expand: days, lines, overpayment and deduction rows, badges
 
 Seq 64; Workbench · WB-L; reviewer R2; current requested-feature status MISSING.

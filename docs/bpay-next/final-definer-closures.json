@@ -13417,16 +13417,19 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql"
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
-      "owner": "WB-08 typed maintained projection; WB02/WB07/WB40/WB41/WB29 classifier successors and WB44 continuation retain actual later ownership"
+      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
@@ -13623,16 +13626,19 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql"
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
-      "owner": "WB-44 finite current metadata/seed/origin continuation; unchanged money classification; actual later master owners retain order"
+      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged"
     },
     {
       "signature": "private.bpay_next_workbench_snooze_due_trigger_v1()",
@@ -13649,25 +13655,27 @@
     },
     {
       "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
         "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
         "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql"
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
-      "owner": "WB-14 current1743 issue reason keyset and whole exact-group affected count; retained WB12 counts and all reader semantics"
+      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged"
     },
     {
       "signature": "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
@@ -13831,23 +13839,25 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
         "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
         "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql"
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
-      "owner": "WB-14 current1743 issue reason keyset and whole exact-group affected count; retained WB12 counts and all reader semantics"
+      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged"
     },
     {
       "signature": "private.bpay_next_accepted_choice_guard_v1()",
@@ -13913,6 +13923,19 @@
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
       "owner": "WB-21 bounded choice-input support; no monetary or producer authority"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_group_display_v1(text)",
+      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+      ],
+      "owner": "WB-15 own-reader display-sort support; no monetary or producer authority"
     }
   ],
   "editorChains": [

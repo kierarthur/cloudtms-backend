@@ -75,6 +75,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_work_wait_state_v1(uuid)',
   'private.bpay_next_workbench_refresh_work_v1(uuid)',
   'private.bpay_next_workbench_refresh_case_v1(uuid)',
+  'private.bpay_next_workbench_refresh_group_display_v1(text)',
   'private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])',
   'private.bpay_next_workbench_set_bank_warning_v1(uuid,text)',
   'private.bpay_next_workbench_candidate_name_trigger_v1()',
@@ -114,7 +115,8 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
-  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
+  "private.bpay_next_workbench_refresh_group_display_v1(text)": ["lateral","private.bpay_next_workbench_require_next_v1","pg_catalog.jsonb_build_array","bool_or","min","array_agg","filter","sum","cardinality"],
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
   "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
   "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","concat_ws","transaction_timestamp"],
   "private.bpay_next_workbench_umbrella_metadata_trigger_v1()": ["private.bpay_next_workbench_schedule_task_v1"],
@@ -143,6 +145,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_work_wait_state_v1(uuid)': ['private.bpay_next_workbench_require_next_v1','sum'],
   "private.bpay_next_workbench_refresh_work_v1(uuid)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_queue_origin_v1","private.bpay_next_workbench_refresh_work_core_v1","private.bpay_next_workbench_refresh_case_v1","array_agg","cardinality","unnest"],
   'private.bpay_next_workbench_refresh_case_v1(uuid)': [
+    'private.bpay_next_workbench_refresh_group_display_v1',
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
     'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_apply_delta_v1',
     'array_agg','transaction_timestamp','gen_random_uuid','max','filter','on','sum'],
@@ -932,10 +935,12 @@ function closedHistoryTemplates(part,file){
 function closedWorkbenchTemplates(part,file){
   if(part.signature!=='private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)')return false;
   const variables=new Set(['V_SQL','V_WHERE','V_PROJECTION','V_TUPLE','V_SEEK','V_KEY','V_ORDER','V_OP','V_DESC']);
-  const allowed=new Set([...variables,'CASE','WHEN','THEN','ELSE','END','IN','AND','LIKE','P_KIND','V_SORT','V_SECTION','V_DESC','V_OP','REPLACE']);
+  const allowed=new Set([...variables,'CASE','WHEN','THEN','ELSE','END','IN','AND','LIKE','P_KIND','V_SORT','V_SECTION','V_DESC','V_OP','REPLACE','V_ANCHOR_PAGE','OR']);
   let producers=0;
   const declaration=part.text.match(/\bdeclare\b([\s\S]*?)\bbegin\b/i);
   if(!declaration)return false;
+  // WB15 anchor is a closed literal BOOLEAN, never a SQL fragment or caller value.
+  if(/\bv_anchor_page\b/i.test(part.text)&&((declaration[1].match(/\bv_anchor_page\b/gi)??[]).length!==1||! /\bv_anchor_page\s+boolean\s*:=\s*false\s*;/i.test(declaration[1])))return false;
   const declared=new Set();
   for(const row of scanManagedSql(declaration[1]).statements){
     const tokens=operatorTokens(row.tokens);
@@ -946,7 +951,10 @@ function closedWorkbenchTemplates(part,file){
   if(declared.size!==variables.size)return false;
   for(const row of scanManagedSql(part.text).statements){
     const tokens=operatorTokens(row.tokens);
-    if(tokens.some((token,n)=>token==='INTO'&&variables.has(tokens[n+1+(tokens[n+1]==='STRICT'?1:0)])))return false;
+    if(tokens.some((token,n)=>token==='INTO'&&(variables.has(tokens[n+1+(tokens[n+1]==='STRICT'?1:0)])||tokens[n+1+(tokens[n+1]==='STRICT'?1:0)]==='V_ANCHOR_PAGE')))return false;
+    for(let n=0;n<tokens.length-2;n++)if(tokens[n]==='V_ANCHOR_PAGE'&&((tokens[n+1]===':'&&tokens[n+2]==='=')||tokens[n+1]==='=')){
+      const rest=tokens.slice(n+(tokens[n+1]===':'?3:2));if(rest.length!==1||rest[0]!=='TRUE')return false;
+    }
     for(let n=0;n<tokens.length-2;n++){
       if(!variables.has(tokens[n])||!((tokens[n+1]===':'&&tokens[n+2]==='=')||tokens[n+1]==='='))continue;
       producers++;
@@ -968,7 +976,7 @@ function closedWorkbenchTemplates(part,file){
   }
   return producers>0&&/for v_row in execute v_sql using v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\+1 loop/i.test(part.text)
     &&/execute 'select exists\(select 1'\|\|v_sql\|\|v_where/i.test(part.text)
-    &&!/[|]{2}\s*(?:p_scope|p_after|p_limit|v_search|v_client|v_candidate|v_group|v_item|v_reason)\b/i.test(part.text);
+    &&!/[|]{2}\s*(?:p_scope|p_after|p_limit|v_search|v_client|v_candidate|v_group|v_item|v_reason|v_anchor_page)\b/i.test(part.text);
 }
 function closedWorkbenchExecution(statement){
   const flat=sqlWithoutComments(statement).replace(/\s+/g,' ').trim();
@@ -976,6 +984,8 @@ function closedWorkbenchExecution(statement){
   const execution=flat.slice(at);
   const values='v_client_scope,v_channel,v_section,v_candidate,v_client,v_search,v_group,v_item,v_reason,p_after,p_limit\\+1';
   if(new RegExp('^execute v_sql using '+values+' loop\\b','i').test(execution))return /for v_row in\s*$/i.test(flat.slice(0,at));
+  // WB15 native first-visible group seeks use only the closed reader template and typed bindings.
+  if(new RegExp("^execute 'select '\\|\\|v_key\\|\\|v_sql\\|\\|v_where\\|\\|' and s\\.presentation_key=\\$7' into p_after using "+values+'\\s*;?$','i').test(execution))return true;
   // WB14 whole exact-group Candidate count uses the same closed maintained
   // WHERE/template/bind list; no caller SQL or alternative relation is admitted.
   if(new RegExp("^execute 'select count\\(distinct i\\.candidate_id\\)'\\|\\|v_sql\\|\\|v_where into v_affected using "+values+'\\s*;?$','i').test(execution))return true;

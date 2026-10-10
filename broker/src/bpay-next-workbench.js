@@ -376,7 +376,21 @@ export const ROWS=Object.freeze({
     "group_amount": "decimal?",
     "ready_net_add_amount": "decimal?",
     "gross_deduction_balance": "decimal?",
-    "net_deduction_balance": "decimal?"
+    "net_deduction_balance": "decimal?",
+    "presentation_id": "uuid",
+    "parent_group_key": "groupKey",
+    "case_component_id": "uuid?",
+    "payment_label": "text",
+    "timesheet_reference": "text?",
+    "waiting_amount": "decimal?",
+    "waiting_net_add_amount": "decimal?",
+    "accepted_run_id": "uuid?",
+    "accepted_command_id": "uuid?",
+    "accepted_module_epoch": "positive?",
+    "snooze_until_date": "date?",
+    "eligible_from_date": "date?",
+    "pay_hold_reason": "text?",
+    "reason_priority": "small"
   }
 });
 const SCOPE=Object.freeze(Object.fromEntries(Object.entries(COMMON).filter(([k])=>!['after','limit'].includes(k))));
@@ -386,7 +400,7 @@ const FAILURE_CODES=['BPAY_NEXT_MODULE_NOT_ACTIVE','BPAY_NEXT_WORKBENCH_FORBIDDE
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&[Object.prototype,null].includes(Object.getPrototypeOf(v));
 function exact(v,keys){return record(v)&&Reflect.ownKeys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k)&&Object.getOwnPropertyDescriptor(v,k)?.enumerable===true&&Object.hasOwn(Object.getOwnPropertyDescriptor(v,k),'value'));}
 const same=(a,b)=>a===b||(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,n)=>same(v,b[n])))||(record(a)&&record(b)&&exact(a,Object.keys(b))&&Object.keys(a).every(k=>same(a[k],b[k])));
-const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:['NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
+const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:['NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC','CLIENT_ASC','CLIENT_DESC','CHANNEL_ASC','CHANNEL_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE','ROW'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
 function field(v,type){
   if(type.endsWith('?'))return v===null||field(v,type.slice(0,-1));
   if(Object.hasOwn(enums,type))return enums[type].includes(v);
@@ -398,7 +412,7 @@ function field(v,type){
   if(type==='decimal')return typeof v==='string'&&ENCODER.encode(v).byteLength<=BPAY_NEXT_WORKBENCH_LIMITS.responseBytes&&/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(v);
   if(type==='text'||type==='search')return typeof v==='string'&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=(type==='search'?800:8192)&&(type!=='search'||([...v].length<=200&&v.trim()===v));
   if(type==='code')return typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,255}$/.test(v);
-  if(type==='groupKey')return typeof v==='string'&&/^(?:WORK|CASE):[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
+  if(type==='groupKey')return typeof v==='string'&&/^(?:WORK|CASE|ROW):[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
   if(type==='date'){if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v)||v.startsWith('0000'))return false;const d=new Date(`${v}T00:00:00Z`);return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
   if(type==='countSelection')return exact(v,['mode','candidate_ids'])&&['ALL','NONE'].includes(v.mode)&&Array.isArray(v.candidate_ids)&&v.candidate_ids.every(id=>field(id,'uuid'))&&new Set(v.candidate_ids).size===v.candidate_ids.length&&ENCODER.encode(JSON.stringify(v)).byteLength<=32768;
   if(type==='scope')return shape(v,SCOPE);
@@ -410,14 +424,31 @@ const shape=(v,schema)=>exact(v,Object.keys(schema))&&Object.entries(schema).eve
 function validKey(key,kind,sort){
   if(!Array.isArray(key))return false;
   if(['CANDIDATES','PICK_CANDIDATES'].includes(kind))return sort.startsWith('STATUS_')?key.length===5&&field(key[0],'boolean')&&field(key[1],'boolean')&&field(key[2],'text')&&field(key[3],'text')&&field(key[4],'uuid'):sort.startsWith('DEDUCTIONS_')?key.length===5&&field(key[0],'boolean')&&field(key[1],'text')&&field(key[2],'boolean')&&field(key[3],'text')&&field(key[4],'uuid'):sort.startsWith('AMOUNT_')?key.length===3&&field(key[0],'boolean')&&field(key[1],'decimal')&&field(key[2],'uuid'):key.length===4&&field(key[0],'text')&&field(key[1],'boolean')&&field(key[2],'text')&&field(key[3],'uuid');
-  if(kind==='CANDIDATE_GROUPS')return key.length===4&&field(key[0],'boolean')&&(key[0]?key[1]==='':field(key[1],'date'))&&field(key[2],'group')&&field(key[3],'uuid');
+  if(kind==='CANDIDATE_GROUPS'){
+    if(sort.startsWith('DEDUCTIONS_'))return key.length===3&&field(key[0],'boolean')&&field(key[1],'group')&&field(key[2],'uuid');
+    if(key.length!==4||!field(key[2],'group')||!field(key[3],'uuid'))return false;
+    if(sort.startsWith('REASON_'))return field(key[0],'small')&&field(key[1],'code');
+    if(!field(key[0],'boolean'))return false;
+    if(sort.startsWith('AMOUNT_'))return field(key[1],'decimal')&&(!key[0]||key[1]==='0');
+    if(sort.startsWith('CLIENT_'))return field(key[1],'text')&&(!key[0]||key[1]==='');
+    if(sort.startsWith('CHANNEL_'))return key[0]?key[1]==='':field(key[1],'channel');
+    return key[0]?key[1]==='':field(key[1],'date');
+  }
   if(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind))return sort.startsWith('REASON_')?key.length===3&&field(key[0],'small')&&field(key[1],'text')&&field(key[2],'uuid'):sort.startsWith('PAYMENT_')?key.length===2&&field(key[0],'text')&&field(key[1],'uuid'):sort.startsWith('AMOUNT_')?key.length===3&&field(key[0],'boolean')&&field(key[1],'decimal')&&field(key[2],'uuid'):key.length===3&&field(key[0],'text')&&field(key[1],'uuid')&&field(key[2],'uuid');
   return kind!=='HEADER'&&key.length===1&&field(key[0],kind==='CANDIDATE_GROUPS'?'groupKey':'uuid');
 }
 function rowKey(kind,scope,row){
   if(['CANDIDATES','PICK_CANDIDATES'].includes(kind)){if(scope.sort.startsWith('STATUS_'))return [row.payable_count==='0',row.bank_warning_code===null,row.bank_warning_code??'',row.candidate_sort_name,row.candidate_id];if(scope.sort.startsWith('DEDUCTIONS_'))return [row.has_deduction,row.candidate_sort_name,row.tms_ref===null,row.tms_ref??'',row.candidate_id];if(scope.sort.startsWith('AMOUNT_'))return [row.unknown_amount_count!=='0',row.amount??'0',row.candidate_id];return [row.candidate_sort_name,row.tms_ref===null,row.tms_ref??'',row.candidate_id];}
   if(kind==='HEADER')return null;
-  if(kind==='CANDIDATE_GROUPS')return [row.week_ending_date===null,row.week_ending_date??'',row.group_kind,row.work_id??row.case_id];
+  if(kind==='CANDIDATE_GROUPS'){
+    const suffix=[row.group_kind,row.presentation_id];
+    if(scope.sort.startsWith('CLIENT_'))return [row.client_display_name===null,row.client_display_name??'',...suffix];
+    if(scope.sort.startsWith('CHANNEL_'))return [row.target_pay_channel===null,row.target_pay_channel??'',...suffix];
+    if(scope.sort.startsWith('DEDUCTIONS_'))return [row.has_deduction,...suffix];
+    if(scope.sort.startsWith('AMOUNT_'))return [row.group_amount===null,row.group_amount??'0',...suffix];
+    if(scope.sort.startsWith('REASON_'))return [row.reason_priority,row.reason_code,...suffix];
+    return [row.week_ending_date===null,row.week_ending_date??'',...suffix];
+  }
   if(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)){if(scope.sort.startsWith('REASON_'))return [row.reason_priority,row.reason_code,row.item_id];if(scope.sort.startsWith('PAYMENT_'))return [row.timesheet_reference??'',row.item_id];if(scope.sort.startsWith('AMOUNT_'))return [row.nominal_source_ex_vat===null,row.nominal_source_ex_vat??'0',row.item_id];return [row.candidate_display_name??'',row.candidate_id,row.item_id];}
   return [kind==='PICK_CLIENTS'?row.client_id:row.item_id];
 }
@@ -431,10 +462,11 @@ export function normalizeWorkbenchInput(kind,input={}){
   const args={candidate_id:null,client_id:null,channel:'ALL',section:'ALL',search:'',sort:'NAME_ASC',group_key:null,item_id:null,reason_code:null,count_selection:null,after:null,limit:kind==='CANDIDATE_GROUPS'?10:50,...input};
   for(const k of ['candidate_id','client_id','item_id'])if(typeof args[k]==='string')args[k]=args[k].toLowerCase();
   if(args.count_selection!==null&&(kind!=='HEADER'||args.section!=='READY')||kind!=='CANDIDATES'&&String(args.sort).startsWith('STATUS_'))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
-  if(!shape(args,COMMON)||(kind==='CANDIDATE_GROUPS'&&args.limit>10)||(!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort!=='NAME_ASC')||(!['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('REASON_'))||(kind==='CANDIDATES'&&args.sort.startsWith('PAYMENT_'))||(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('DEDUCTIONS_'))
+  if(!shape(args,COMMON)||(kind==='CANDIDATE_GROUPS'&&args.limit>10)||(!['CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort!=='NAME_ASC')||(!['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&args.sort.startsWith('REASON_'))||(kind==='CANDIDATES'&&args.sort.startsWith('PAYMENT_'))||(['ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL'].includes(kind)&&args.sort.startsWith('DEDUCTIONS_'))
     ||(['CANDIDATE_GROUPS','GROUP_LINES'].includes(kind)&&args.candidate_id===null)||(['GROUP_LINES','ISSUE_DETAIL'].includes(kind)&&args.group_key===null)||(kind==='ISSUE_DETAIL'&&args.reason_code===null)
-    ||(!['GROUP_LINES','ISSUE_DETAIL'].includes(kind)&&[args.group_key,args.item_id,args.reason_code].some(v=>v!==null))
+    ||(!['GROUP_LINES','ISSUE_DETAIL','CANDIDATE_GROUPS'].includes(kind)&&[args.group_key,args.item_id,args.reason_code].some(v=>v!==null)||kind==='CANDIDATE_GROUPS'&&[args.item_id,args.reason_code].some(v=>v!==null))
     ||(!['CANDIDATES','PICK_CANDIDATES','PICK_CLIENTS','ACTION_REQUIRED','BLOCKED','EXPORT_ROWS'].includes(kind)&&args.search!=='')||(kind==='HEADER'&&args.after!==null))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  if((args.sort.startsWith('CLIENT_')||args.sort.startsWith('CHANNEL_'))&&kind!=='CANDIDATE_GROUPS'||kind==='CANDIDATE_GROUPS'&&args.sort==='NAME_DESC'||args.group_key?.startsWith('ROW:')&&!['GROUP_LINES','CANDIDATE_GROUPS'].includes(kind))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   if(kind==='CANDIDATES')args.section='READY';else if(kind==='ACTION_REQUIRED')args.section='ACTION';else if(kind==='BLOCKED')args.section='BLOCKED';
   if(kind==='PICK_CANDIDATES'&&args.sort!=='NAME_ASC')throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
   const scope=Object.fromEntries(Object.keys(SCOPE).map(k=>[k,args[k]]));
@@ -457,11 +489,14 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
   let prior=args.after?.key??null,last=null;const seen=new Set();
   for(const row of payload.rows){if(!shape(row,ROWS[kind]))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');const key=rowKey(kind,scope,row);
     if(key!==null){if(!validKey(key,kind,scope.sort)||(prior!==null&&keyCompare(prior,key,kind,scope.sort)>=0)||seen.has(JSON.stringify(key)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');seen.add(JSON.stringify(key));prior=key;last=key;}
-    if(args.candidate_id!==null&&Object.hasOwn(row,'candidate_id')&&row.candidate_id!==args.candidate_id||args.client_id!==null&&Object.hasOwn(row,'client_id')&&row.client_id!==args.client_id||args.group_key!==null&&row.group_key!==args.group_key||args.item_id!==null&&row.item_id!==args.item_id||args.reason_code!==null&&row.reason_code!==args.reason_code)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    if(args.candidate_id!==null&&Object.hasOwn(row,'candidate_id')&&row.candidate_id!==args.candidate_id||args.client_id!==null&&Object.hasOwn(row,'client_id')&&row.client_id!==args.client_id||kind!=='CANDIDATE_GROUPS'&&args.group_key!==null&&row.group_key!==args.group_key||args.item_id!==null&&row.item_id!==args.item_id||args.reason_code!==null&&row.reason_code!==args.reason_code)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'section')&&scope.section!=='ALL'&&row.section!==scope.section||Object.hasOwn(row,'target_pay_channel')&&scope.channel!=='ALL'&&row.target_pay_channel!==scope.channel)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'amount_known')&&row.amount_known===false&&row.nominal_source_ex_vat!==null)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'amount_known')&&row.selectable===true&&(row.section!=='READY'||row.amount_known!==true||!['AVAILABLE','ZERO'].includes(row.portion_kind)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
-    if(Object.hasOwn(row,'group_key')){if(!field(row.group_key,'groupKey')||(row.work_id!==null)===(row.case_id!==null)||row.group_key!==(row.work_id!==null?'WORK:'+row.work_id:'CASE:'+row.case_id))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}
+    if(Object.hasOwn(row,'group_key')){if(!field(row.group_key,'groupKey')||(row.work_id!==null)===(row.case_id!==null)||row.group_key!==(row.work_id!==null?'WORK:'+row.work_id:row.group_key.startsWith('ROW:')?'ROW:'+row.case_component_id:'CASE:'+row.case_id))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');}
+    if(kind==='CANDIDATE_GROUPS'){
+      if(row.group_key!==row.group_kind+':'+row.presentation_id||row.parent_group_key!==(row.work_id!==null?'WORK:'+row.work_id:'CASE:'+row.case_id)||(row.group_kind==='ROW')!==(row.case_component_id!==null)||row.group_kind==='ROW'&&row.presentation_id!==row.case_component_id||(row.accepted_run_id===null)!==(row.accepted_command_id===null)||(row.accepted_run_id===null)!==(row.accepted_module_epoch===null)||['ready_net_add_amount','gross_deduction_balance','net_deduction_balance','waiting_amount','waiting_net_add_amount'].some(k=>(row[k]===null)!==(row.group_amount===null)))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    }
     if(kind==='CANDIDATE_GROUPS'&&row.selectable&&(!row.complete||row.dirty||row.progress_state!=='CURRENT'))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(kind==='HEADER'){
       const counted=args.count_selection!==null;

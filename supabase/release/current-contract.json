@@ -759,6 +759,18 @@
       "roles": [
         "postgres"
       ],
+      "table": "bpay_next_workbench_group_display",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
       "table": "bpay_next_workbench_item",
       "using": "true",
       "schema": "private",
@@ -15846,7 +15858,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "02c09ed3546a6b087dc3e06aae06aa8e42ac84146c2044b95ec9d67cd84a8b6b"
+      "definition_sha256": "e1e64c4090e6df5cbb48362024f463bf5512475cead3f6e5fb9eaef961c7ba56"
     },
     {
       "acl": [
@@ -15962,7 +15974,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "32e4ad7e0e16947a99ecd32212221fe9fbdee5f6de083e970aba6546ad98bc7b"
+      "definition_sha256": "5dda3c308cce4a002e488ec011da45010ea9ef86b2bd386dd4f55fb9ec8a7b21"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_workbench_refresh_group_display_v1(p_group_key text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d61c19e66f491a898187025d4ac5f78cf6f6360e0f189ba0796db4c31b704e9f"
     },
     {
       "acl": [
@@ -16000,7 +16031,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8d80f992cad574bc17eef2424b7bd2fa2638c74eeb403ce0b0dff8157cc4b791"
+      "definition_sha256": "9bd0278a4e29467c30d54828ad9cc626f2111fe8024cfe6ce3839ec37bc3c7b0"
     },
     {
       "acl": [
@@ -31389,7 +31420,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b0823786d34907dd7a4c1520db1562f552cd36abea9b73592de8d2b99e5e72f6"
+      "definition_sha256": "835a2b4a2ea3e7b9bc691f38439c2041df10de16f612eae815d548f4e9f07a2d"
     },
     {
       "acl": [
@@ -114322,6 +114353,496 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (work_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_workbench_group_display",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "accepted_module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "accepted_run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "eligible_from_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "gross_deduction_balance",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "group_amount",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "has_deduction",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "net_deduction_balance",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "parent_group_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "payment_label",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "presentation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "presentation_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "presentation_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ready_net_add_amount",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason_priority",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "section",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selectable",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "snooze_until_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_pay_channel",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "timesheet_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "waiting_amount",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "waiting_net_add_amount",
+          "type": "numeric",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "week_ending_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_wb15_amount_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_amount_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, ((group_amount IS NULL)), COALESCE(group_amount, (0)::numeric), presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_wb15_channel_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_channel_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, ((target_pay_channel IS NULL)), COALESCE(target_pay_channel, ''::text) COLLATE \"C\", presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_wb15_client_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_client_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, ((client_display_name IS NULL)), COALESCE(client_display_name, ''::text) COLLATE \"C\", presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_wb15_deduction_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_deduction_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, has_deduction, presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_wb15_display_parent_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_display_parent_idx ON private.bpay_next_workbench_group_display USING btree (parent_group_key)"
+        },
+        {
+          "name": "bpay_next_wb15_payment_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_payment_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, ((week_ending_date IS NULL)), COALESCE(week_ending_date, '0001-01-01'::date), presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_wb15_reason_sort_idx",
+          "definition": "CREATE INDEX bpay_next_wb15_reason_sort_idx ON private.bpay_next_workbench_group_display USING btree (candidate_id, section, reason_priority, reason_code COLLATE \"C\", presentation_kind COLLATE \"C\", presentation_id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_workbench_group_display_pkey ON private.bpay_next_workbench_group_display USING btree (presentation_key, section)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_workbench_group_dis_parent_group_key_candidate_i_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (parent_group_key, candidate_id) REFERENCES private.bpay_next_workbench_group(group_key, candidate_id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_accepted_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (accepted_command_id) REFERENCES private.bpay_next_command(id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_accepted_run_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (accepted_run_id) REFERENCES private.bpay_next_pay_run(id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_case_component_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id) REFERENCES private.bpay_next_case_component(id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (presentation_key = ((presentation_kind || ':'::text) || presentation_id::text))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((presentation_kind = 'ROW'::text) = (case_component_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (presentation_kind <> 'ROW'::text OR presentation_id = case_component_id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (presentation_kind = 'ROW'::text OR presentation_key = parent_group_key)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((accepted_run_id IS NULL) = (accepted_command_id IS NULL) AND (accepted_run_id IS NULL) = (accepted_module_epoch IS NULL))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((group_amount IS NULL) = (ready_net_add_amount IS NULL) AND (group_amount IS NULL) = (gross_deduction_balance IS NULL) AND (group_amount IS NULL) = (net_deduction_balance IS NULL) AND (group_amount IS NULL) = (waiting_amount IS NULL) AND (group_amount IS NULL) = (waiting_net_add_amount IS NULL))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_client_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(client_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_pay_hold_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(pay_hold_reason) <= 8192)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_payment_label_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(payment_label) <= 256)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (presentation_key, section)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_presentation_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (presentation_kind = ANY (ARRAY['WORK'::text, 'CASE'::text, 'ROW'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_reason_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_code ~ '^[A-Z][A-Z0-9_]{0,255}$'::text)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_reason_priority_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_priority >= 1 AND reason_priority <= 200)"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_section_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (section = ANY (ARRAY['READY'::text, 'WAITING'::text, 'ACTION'::text, 'BLOCKED'::text, 'ALL'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_target_pay_channel_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_pay_channel = ANY (ARRAY['PAYE'::text, 'UMBRELLA'::text]))"
+        },
+        {
+          "name": "bpay_next_workbench_group_display_timesheet_reference_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(timesheet_reference) <= 8192)"
         }
       ],
       "view_definition_sha256": null

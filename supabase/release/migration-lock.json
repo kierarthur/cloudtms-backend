@@ -1303,6 +1303,10 @@
       "sha256": "e21c27ec2d19e912330c652e6096036eacdc6396a476fd363826ad0c72ad6747"
     },
     {
+      "path": "supabase/migrations/10102026_1946_banking_pay_next_candidate_group_display.sql",
+      "sha256": "08040425d1d1e603782b9c157421df33adf64075ff50f79cd0329d239df861b7"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
