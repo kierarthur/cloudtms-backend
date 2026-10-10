@@ -458,8 +458,16 @@ begin
   -- 824/76/0/2cb2ef197993c05bb0c1566b04c601dd; removing ONLY these two rows
   -- reproduces the complete NEW7 822/76/0/3303d05b216d5527b559b76f9c7949b0.
   -- No removed/changed earlier ACL row, new omission or browser exposure.
-  if v_count<>824 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'2cb2ef197993c05bb0c1566b04c601dd' then
+  -- Banking Pay NEXT foundation adds exactly two service-only jsonb readers:
+  -- public.bpay_next_cutover_readiness_page_v1(pg_catalog.jsonb) and
+  -- public.bpay_next_payment_history_page_v1(pg_catalog.jsonb).
+  -- Sole local PG17 catalogue:826/76/0/10128c0eb0ada910eea370f487d5f214.
+  -- Excluding ONLY these exact two signatures from this same query reproduces
+  -- 824/76/0/2cb2ef197993c05bb0c1566b04c601dd; no previous ACL row changed.
+  -- Both actual routines are SECURITY DEFINER with fixed search_path and
+  -- owner/service_role execution only. The Candidate inventory is unchanged.
+  if v_count<>826 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'10128c0eb0ada910eea370f487d5f214' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

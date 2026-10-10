@@ -91,9 +91,9 @@ test('durable continuation uses the existing bounded queue wake and cron remains
   assert.match(worker, /BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1/);
   assert.match(worker, /delaySeconds = wakeReason === 'PRE_ENTRY_COMMITTED_WORK' \? 0 : 1/);
   assert.match(worker, /BANKING_PAY_CONTINUATION_QUEUE\.send\(message, \{ delaySeconds \}\)/);
-  assert.match(worker, /canAutoContinueFrom\(finalSummary\)/);
-  assert.match(worker, /MAX_DURABLE_WAKE_DEPTH/);
-  assert.match(worker, /cron_fallback_required: true/);
+  assert.match(worker, /async function enqueueBankingPayWorkbenchDrainWake[^]*?const wake = await bpayNextEnrollmentWake\(env\);\s*if \(wake.enqueued \|\| wake.skipped\) return wake;/);
+  assert.match(worker, /runBpayNextRecoveryTick\(bpayNextBackgroundDependencies\(env\)\)/);
+  assert.match(worker, /runtime_action: 'ENROLL'/);
   assert.match(wrangler, /binding = "BANKING_PAY_CONTINUATION_QUEUE"/);
   assert.match(wrangler, /BANKING_PAY_CONTINUATION_ENABLED = "true"/);
   assert.match(wrangler, /queue = "test-cloudtms-banking-pay-continuation"/);

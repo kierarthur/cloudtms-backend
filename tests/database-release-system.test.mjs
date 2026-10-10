@@ -167,7 +167,8 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /--lockfile=\.\/package-lock\.json/);
   assert.match(workflow, /npm run security:dependencies/);
   assert.match(workflow, /npm run security:secrets/);
-  assert.match(workflow, /fetch-depth:\s*2/);
+  // F04/F23 require the exact reviewed ancestor, available from full history.
+  assert.match(workflow, /fetch-depth:\s*0/);
   assert.match(workflow, /npm run db:contract:coupling/);
   const sourceGate = workflow.slice(workflow.indexOf('source-gate:'), workflow.indexOf('\n  release:'));
   assert.doesNotMatch(sourceGate, /npm run security:verify/);

@@ -63,6 +63,8 @@ jobs:
       - run: npm run security:secrets
       - run: npm run db:check
       - run: npm run db:contract:coupling
+      - name: Verify Banking Pay NEXT source boundaries and exact route exemptions
+        run: node --test tests/bpay-next-source-gates.test.js tests/bpay-next-legacy-fence.test.js
       - name: Verify final function authority for the reviewed release range
         shell: bash
         run: |

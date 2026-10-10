@@ -469,24 +469,26 @@ Dependencies: F-02, F-03, F-04, F-05, F-06, F-07, F-08, F-09, F-10, F-11, F-12, 
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| F-23-D01 | CHECK: scripts/cloudtms-managed-release.mjs | PARTLY_DONE | Retain current engine; no runtime deployment evidence inspected in this lane. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D02 | CHECK: supabase/release/current-release.json verifier authority | PARTLY_DONE | Preserve and deliberately extend mode-specific verifier/Candidate inventory, never regenerate wholesale. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D03 | CHECK: scripts/seal-local-database-contract.mjs | PARTLY_DONE | Use canonical committed replay only where applicable; name uncommitted local apply adapter. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D04 | CHECK: scripts/verify-database-contract-coupling.mjs | PARTLY_DONE | Retain contract-neutral attestation and same-commit coupling; untrackedSQL must be staged/committed under authority. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D05 | CHECK: Single/final-definer closure gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D06 | CHECK: Module owner writer gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D07 | CHECK: TEST-marker writer/simulation vocabulary gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D08 | CHECK: Provider default-off gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D09 | CHECK: SQL special-construct source guards | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D10 | CHECK: RPC NOTIFY exact-caller gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D11 | CHECK: NEXT route exact exemption gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| F-23-D12 | CHECK: Frozen core byte/semantic authority gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D01 | CHECK: scripts/cloudtms-managed-release.mjs | PARTLY_DONE | Retain current engine; no runtime deployment evidence inspected in this lane. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D02 | CHECK: supabase/release/current-release.json verifier authority | PARTLY_DONE | Preserve and deliberately extend mode-specific verifier/Candidate inventory, never regenerate wholesale. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D03 | CHECK: scripts/seal-local-database-contract.mjs | PARTLY_DONE | Use canonical committed replay only where applicable; name uncommitted local apply adapter. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D04 | CHECK: scripts/verify-database-contract-coupling.mjs | PARTLY_DONE | Retain contract-neutral attestation and same-commit coupling; untrackedSQL must be staged/committed under authority. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D05 | CHECK: Single/final-definer closure gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D06 | CHECK: Module owner writer gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D07 | CHECK: TEST-marker writer/simulation vocabulary gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D08 | CHECK: Provider default-off gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D09 | CHECK: SQL special-construct source guards | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D10 | CHECK: RPC NOTIFY exact-caller gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D11 | CHECK: NEXT route exact exemption gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| F-23-D12 | CHECK: Frozen core byte/semantic authority gate | MISSING | Implement current reviewed final-authority/source gate without weakening normal release security/first-use checks. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R1.json, CSV rows F-23-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 The protected Database Release PLAN on TEST (when authorised) lists exactly the expected pending migrations and changed repeatable closures and no others. The repository's push-time source-gate commands, including the new gates, were run locally on the build commit and are recorded green in BUILD_LOG (CI runs them again at the AUTH-PUBLISH push). Core files match the exact F-01 base with no competing frozen-authority redefinition. The browser-isolation and SCX-122 ACL verifiers pass in the local PG17 compile.
+
+Whole F-23 ITEM: [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested. F23 first foundation check: source/PG17/ACL/browser/seal/coupling/drybuild/security/source gates PASS; R1 final pass and hosted/app NOT_RUN. See F-23-COMPLETION.md and BUILD_LOG.md. Review: Independent F23 boundary/SQL/projection/foundation/release-test source reviews PASS; all concrete findings closed..
 
 ## PF-05 — No admission tariffs, processing budgets or fee graphs
 

@@ -2555,19 +2555,21 @@
     },
     {
       "signature": "private.bpay_next_apply_work_collection_recovery_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_1519_banking_pay_next_work_collection_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "F-05 required row projection correction under F-23/B2.13; next editor follows master chain",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2659,19 +2661,21 @@
     },
     {
       "signature": "private.bpay_next_bind_simple_csv_destination_v1(uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0140_banking_pay_next_simple_csv_destination_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "F05 D15/D16 alias-only row projection correction under F23/B2.13; next named master editor follows",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3631,19 +3635,21 @@
     },
     {
       "signature": "private.bpay_next_issue_simple_csv_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0150_banking_pay_next_simple_csv_issue_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "F05 D15/D16 alias-only row projection correction under F23/B2.13; next named master editor follows",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4092,19 +4098,21 @@
     },
     {
       "signature": "private.bpay_next_receive_simple_reissue_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-      "finalPhysical": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0240_banking_pay_next_simple_cash_reissue_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0240_banking_pay_next_simple_cash_reissue_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0240_banking_pay_next_simple_cash_reissue_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+        "supabase/repeatable/10102026_0316_banking_pay_next_csv_umbrella_row_projection_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain",
+      "owner": "F-05 required row projection correction under F-23/B2.13; next editor follows master chain",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

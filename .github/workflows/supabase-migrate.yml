@@ -9,6 +9,12 @@ on:
       - "scripts/seal-local-database-contract.mjs"
       - "scripts/verify-database-contract-coupling.mjs"
       - "tests/database-release-system.test.mjs"
+      - "scripts/bpay-next-*.mjs"
+      - "scripts/cloudtms-managed-release*.mjs"
+      - "tests/bpay-next-*.test.js"
+      - "docs/bpay-next/final-definer-closures.json"
+      - "broker/src/**"
+      - "wrangler.toml"
       - "docs/DATABASE_RELEASE_BIBLE.md"
       - "AGENTS.md"
       - "package.json"
@@ -27,6 +33,12 @@ on:
       - "scripts/seal-local-database-contract.mjs"
       - "scripts/verify-database-contract-coupling.mjs"
       - "tests/database-release-system.test.mjs"
+      - "scripts/bpay-next-*.mjs"
+      - "scripts/cloudtms-managed-release*.mjs"
+      - "tests/bpay-next-*.test.js"
+      - "docs/bpay-next/final-definer-closures.json"
+      - "broker/src/**"
+      - "wrangler.toml"
       - "docs/DATABASE_RELEASE_BIBLE.md"
       - "AGENTS.md"
       - ".github/workflows/**"
@@ -67,6 +79,8 @@ jobs:
       - run: npm run security:verify
       - run: npm run db:check
       - run: npm run db:contract:coupling
+      - name: Verify Banking Pay NEXT source boundaries and exact route exemptions
+        run: node --test tests/bpay-next-source-gates.test.js tests/bpay-next-legacy-fence.test.js
       - run: node --test tests/database-release-system.test.mjs
       - name: Verify retained catalogue and runtime authority artifacts
         shell: bash
