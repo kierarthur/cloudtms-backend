@@ -246,7 +246,7 @@ test('CURRENT_WORK is a factual candidate-scoped bounded composite cursor, not p
 const statusHeader=()=>({run_id:RUN,run_status:'DRAFT',selection_state:'SEALED',review_revision:SEQ,run_worker_id:WORKER,candidate_id:CANDIDATE,worker_status:'READY',
  target_pay_channel:'PAYE',umbrella_id:null,preparation_revision:'1',case_selection_revision:'0',net_request_revision:'2',net_projection_revision:'1',net_pending:true,
  review_issue_code:null,review_issue_work_id:null,frozen_gross_ex_vat:'120.00',frozen_gross_vat:'0.00',frozen_gross_inc_vat:'120.00',
- projection_id:REV,projection_input_kind:'PAYE_MANUAL',entered_paye_net:'85.00',accepted_recoveries:'0.00',accepted_net_additions:'0.00',cash_amount:'85.00'});
+ projection_id:REV,projection_input_kind:'PAYE_MANUAL',entered_paye_net:'85.00',accepted_recoveries:'0.00',accepted_net_additions:'0.00',cash_amount:'85.00',reservation_mode:'ORIGINAL_LEGS',reservation_projection_id:REV,remaining_reservation_cash:null,reservation_internal_zero:false,reservation_holds_state:'NONE'});
 const storedCredit=(n=11)=>({legacy_case_id:id(n),candidate_id:CANDIDATE,principal_source_ex_vat:'9007199254740993.01',
  original_source_pay_channel:'UMBRELLA',original_tax_treatment:'NON_TAXABLE',original_routing_kind:'ONE_OFF_SPECIFIED_BANK_ACCOUNT',
  original_created_at_utc:'2026-09-28T09:00:00Z',bank_version_at_utc:'2026-09-28T09:01:00+00:00',
@@ -297,7 +297,21 @@ test('CURRENT_STORED_CREDITS rejects caller actor/account/value and oversized pa
    const d=deps({rows:[],complete:true});await failed(page('CURRENT_STORED_CREDITS',args),d,'REQUEST_INVALID',400,false,true);assert.equal(d.calls.length,0);
  }
 });
-const transfer=(n='1')=>({transfer_id:DETAIL,transfer_no:n,projection_id:REV,execution_kind:'BANK',status:'RETURNED',cash_amount:'85.00',original_transfer_id:null});
+const transfer=(n='1')=>({transfer_id:DETAIL,transfer_no:n,projection_id:REV,execution_kind:'BANK',status:'RETURNED',cash_amount:'85.00',original_transfer_id:null,reservation_state:'RETURNED',remaining_reservation_cash:'0.00',reservation_holds_state:'NONE'});
+test('PS14 reservation authority is mutually exclusive and refuses invented cash or lifecycle',async()=>{
+ const req=()=>page('STATUS',{run_id:RUN,run_worker_id:WORKER});
+ const parent={...statusHeader(),reservation_mode:'ORIGINAL_OBLIGATION',remaining_reservation_cash:'85.00',reservation_holds_state:'ACTIVE'};
+ const building={...transfer(),status:'BUILDING',reservation_state:'INCLUDED_IN_ORIGINAL_OBLIGATION',remaining_reservation_cash:null,reservation_holds_state:'ACTIVE'};
+ assert.equal((await handleBpayNextPreparationPage(req(),deps({header:parent,rows:[building],complete:true}))).status,200);
+ const settled={...transfer(),status:'SETTLED',reservation_state:'EXECUTED_PENDING_POSTING',reservation_holds_state:'POSTING'};
+ assert.equal((await handleBpayNextPreparationPage(req(),deps({header:statusHeader(),rows:[settled],complete:true}))).status,200);
+ for(const payload of [{header:{...parent,remaining_reservation_cash:null},rows:[building],complete:true},
+  {header:{...statusHeader(),remaining_reservation_cash:'85.00'},rows:[],complete:true},
+  {header:parent,rows:[{...building,remaining_reservation_cash:'85.00'}],complete:true},
+  {header:statusHeader(),rows:[{...settled,reservation_state:'RESERVED',remaining_reservation_cash:'85.00',reservation_holds_state:'ACTIVE'}],complete:true},
+  {header:statusHeader(),rows:[{...settled,remaining_reservation_cash:0}],complete:true}])
+  await failed(req(),deps(payload),'RESPONSE_INVALID',503,false,true);
+});
 test('STATUS preserves accepted projection while explicitly pending, one original transfer cursor and no bank fields',async()=>{
  const header=statusHeader(),rows=[transfer()];const d=deps({header,rows,complete:false});
  const channelArgs={run_id:RUN,pay_channel:'PAYE',run_worker_id:WORKER,limit:1};
@@ -315,7 +329,7 @@ test('STATUS preserves accepted projection while explicitly pending, one origina
  assert.equal(read.status,200);assert.equal((await read.json()).header.cash_amount,null);
  const payout={...header,projection_input_kind:'CASE_PAYOUT',entered_paye_net:null,accepted_net_additions:'35.00',cash_amount:'35.00'};
  assert.equal((await handleBpayNextPreparationPage(page('STATUS',{run_id:RUN,run_worker_id:WORKER}),deps({header:payout,rows:[],complete:true}))).status,200);
- const zero={...transfer(),execution_kind:'INTERNAL_ZERO',cash_amount:'0.00',status:'INTERNAL_SETTLED'};
+ const zero={...transfer(),execution_kind:'INTERNAL_ZERO',cash_amount:'0.00',status:'INTERNAL_SETTLED',reservation_state:'CLOSED_INTERNAL'};
  assert.equal((await handleBpayNextPreparationPage(page('STATUS',{run_id:RUN,run_worker_id:WORKER}),deps({header,rows:[zero],complete:true}))).status,200);
  for(const after_transfer_no of ['0','2147483648','01','1e2'])await failed(page('STATUS',{run_id:RUN,run_worker_id:WORKER,after_transfer_no}),deps(),'REQUEST_INVALID',400,false,true);
 });

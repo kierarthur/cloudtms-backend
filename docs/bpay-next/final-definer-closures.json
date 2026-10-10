@@ -3197,16 +3197,19 @@
     },
     {
       "signature": "private.bpay_next_complete_destination_leg_v1(uuid)",
-      "finalRoot": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-14 scoped successor; existing money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3382,16 +3385,19 @@
     },
     {
       "signature": "private.bpay_next_destination_execution_leg_v1(uuid)",
-      "finalRoot": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-14 scoped successor; existing money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3424,30 +3430,36 @@
     },
     {
       "signature": "private.bpay_next_destination_posted_leg_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-14 scoped successor; existing money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "private.bpay_next_destination_posting_guard_v1()",
-      "finalRoot": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_2025_banking_pay_next_destination_execution_v1.sql"
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-14 scoped successor; existing money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5108,16 +5120,19 @@
     },
     {
       "signature": "private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer)",
-      "finalRoot": "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql",
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0580_banking_pay_next_office_status_v1.sql"
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "PS-14 scoped successor; existing money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12375,6 +12390,20 @@
         "supabase/repeatable/10102026_0604_banking_pay_next_ps_c04_recovery_link_guard_v1.sql"
       ],
       "owner": "PS-04 finite private recovery-link insert qualification"
+    },
+    {
+      "signature": "private.bpay_next_original_reservation_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql"
+      ],
+      "owner": "PS-14 bounded native reservation read support",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

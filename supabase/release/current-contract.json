@@ -12267,6 +12267,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_original_reservation_v1(p_worker_id uuid, p_transfer_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "2365dab3cfb9802c84040d13c0f1630d7e3ac694dbcd7a0b001cdf982281bac3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_pin_selected_work_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_cursor bigint)",
       "parallel": "u",
       "volatility": "v",
@@ -14456,7 +14475,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "0deaa3a4e8837bbf589c96da1b7c0c816293136389cd254904dd8c64b170ac16"
+      "definition_sha256": "bddb9ec3c54ba0a45d8fbc7532e1f900bb7082a81cb26a6d690afa18a527df5c"
     },
     {
       "acl": [

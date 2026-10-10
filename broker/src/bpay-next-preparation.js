@@ -71,7 +71,7 @@ const ROWS={
   RATES:{rate_detail_id:'uuid',bucket:'bucket',approved_hours:'money',source_pay_rate:'money?'},
   CURRENT_WORK:{work_id:'uuid',candidate_id:'uuid',original_timesheet_id:'uuid',work_kind:'workKind',week_ending_date:'date',approval_state:'approvalState',
     current_revision_id:'uuid?',applied_revision_id:'uuid?',position_ready:'boolean',source_pay_channel:'channel?',timesheet_reference:'text?',client_display_name:'text?',approved_source_ex_vat:'money?'},
-  STATUS:{transfer_id:'uuid',transfer_no:'transferNo',projection_id:'uuid?',execution_kind:'executionKind',status:'transferStatus',cash_amount:'money',original_transfer_id:'uuid?'},
+  STATUS:{transfer_id:'uuid',transfer_no:'transferNo',projection_id:'uuid?',execution_kind:'executionKind',status:'transferStatus',cash_amount:'money',original_transfer_id:'uuid?',reservation_state:'reservationState',remaining_reservation_cash:'cashMoney?',reservation_holds_state:'reservationHolds'},
   RETURN_CASH:{original_transfer_id:'uuid',original_transfer_no:'transferNo',original_transfer_status:'returned',original_cash_amount:'positiveCashMoney',
     beneficiary_kind:'beneficiaryKind',beneficiary_id:'uuid',return_command_id:'uuid',return_posting_complete:'boolean',return_cash_id:'uuid?',
     amount_owed:'positiveCashMoney?',amount_held:'cashMoney?',amount_reissued_paid:'cashMoney?',amount_available:'cashMoney?',
@@ -90,7 +90,7 @@ const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
   target_pay_channel:'channel',umbrella_id:'uuid?',preparation_revision:'positive',case_selection_revision:'integer',net_request_revision:'integer',net_projection_revision:'integer',net_pending:'boolean',
   review_issue_code:'issue?',review_issue_work_id:'uuid?',frozen_gross_ex_vat:'money',frozen_gross_vat:'money',frozen_gross_inc_vat:'money',projection_id:'uuid?',
-  projection_input_kind:'projectionKind?',entered_paye_net:'money?',accepted_recoveries:'money?',accepted_net_additions:'money?',cash_amount:'money?'};
+  projection_input_kind:'projectionKind?',entered_paye_net:'money?',accepted_recoveries:'money?',accepted_net_additions:'money?',cash_amount:'money?',reservation_mode:'reservationMode',reservation_projection_id:'uuid?',remaining_reservation_cash:'cashMoney?',reservation_internal_zero:'boolean',reservation_holds_state:'reservationHolds'};
 const RETURN_CASH_HEADER={run_id:'uuid',run_worker_id:'uuid',candidate_id:'uuid',financial_view_revision:'integer'};
 const CURSORS={COMPONENTS:['line_no','after_line_no'],WORK_CHOICES:['work_id','after_work_id'],SELECTED_COMPONENTS:['selection_no','after_selection_no'],
   CHANNEL_WORKERS:['candidate_id','after_candidate_id'],WORKERS:['candidate_id','after_candidate_id'],REVISION_COMPARISON:['work_id','after_work_id'],LINES:['line_no','after_line_no'],
@@ -102,7 +102,38 @@ class PreparationError extends Error {
 const fault=(suffix,status=503,retryable=false,unknown=false)=>new PreparationError(`BPAY_NEXT_PREPARATION_${suffix}`,status,retryable,unknown);
 const record=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function exact(v,schema){return record(v)&&Object.keys(v).length===Object.keys(schema).length&&Object.entries(schema).every(([k,t])=>Object.hasOwn(v,k)&&field(v[k],t));}
+
+function validReservation(h,row=null){
+  const amountModes=['ORIGINAL_OBLIGATION','CANCELLING','CANCELLED'];
+  if(amountModes.includes(h.reservation_mode)!==(h.remaining_reservation_cash!==null))return false;
+  if(h.reservation_mode==='ORIGINAL_LEGS'&&h.reservation_projection_id===null)return false;
+  if(['CANCELLING','CANCELLED'].includes(h.reservation_mode)&&h.remaining_reservation_cash!=='0.00')return false;
+  if(h.reservation_internal_zero&&(h.reservation_mode!=='ORIGINAL_OBLIGATION'||h.remaining_reservation_cash!=='0.00'))return false;
+  if(row===null)return true;
+  const s=row.reservation_state,c=row.remaining_reservation_cash;
+  const nativeStatuses={RESERVED:['MEMBERS_READY','DRAFT','SCHEDULED','REFUSED'],ISSUED_AWAITING_RECEIPT:['ISSUED_CSV'],EXECUTION_UNCERTAIN:['SUBMITTED','UNKNOWN'],EXECUTED_PENDING_POSTING:['SETTLED'],POSTED:['SETTLED'],RETURNED:['RETURNED'],INTERNAL_RESERVED:['MEMBERS_READY','DRAFT','SCHEDULED','REFUSED'],INTERNAL_PENDING_POSTING:['INTERNAL_PROCESSING','INTERNAL_SETTLED'],CLOSED_INTERNAL:['INTERNAL_SETTLED']};
+  if(Object.hasOwn(nativeStatuses,s)&&!nativeStatuses[s].includes(row.status))return false;
+  if(['RESERVED','ISSUED_AWAITING_RECEIPT'].includes(s)&&row.reservation_holds_state!=='ACTIVE')return false;
+  if(s==='EXECUTION_UNCERTAIN'&&h.reservation_mode!=='ORIGINAL_LEGS')return false;
+  if(['CANCELLING','CANCELLED'].includes(s)&&s!==h.reservation_mode)return false;
+  if((row.original_transfer_id!==null)!==(s==='REISSUE_EXCLUDED'))return false;
+  if(['EVIDENCE_CONFLICT','SUPPRESSED_UNCONFIRMED','PENDING','INCLUDED_IN_ORIGINAL_OBLIGATION','EXECUTION_UNCERTAIN'].includes(s)){
+    if(c!==null)return false;
+    if(s==='INCLUDED_IN_ORIGINAL_OBLIGATION'&&h.reservation_mode!=='ORIGINAL_OBLIGATION')return false;
+  }else if(['RESERVED','ISSUED_AWAITING_RECEIPT'].includes(s)){
+    if(c!==row.cash_amount||row.execution_kind!=='BANK'||h.reservation_mode!=='ORIGINAL_LEGS')return false;
+  }else if(['REISSUE_EXCLUDED','CANCELLING','CANCELLED','EXECUTED_PENDING_POSTING','POSTED','RETURNED','INTERNAL_RESERVED','INTERNAL_PENDING_POSTING','CLOSED_INTERNAL'].includes(s)){
+    if(c!=='0.00')return false;
+    if(s.startsWith('INTERNAL_')||s==='CLOSED_INTERNAL'){
+      if(row.execution_kind!=='INTERNAL_ZERO'||row.cash_amount!=='0.00')return false;
+    }
+  }else return false;
+  return true;
+}
+
 function field(v,t){
+  const reservationEnums={"reservationMode":["UNCONFIRMED","PENDING_PREPARATION","PENDING_NET","ORIGINAL_OBLIGATION","ORIGINAL_LEGS","CANCELLING","CANCELLED","EVIDENCE_CONFLICT"],"reservationState":["EVIDENCE_CONFLICT","SUPPRESSED_UNCONFIRMED","PENDING","INCLUDED_IN_ORIGINAL_OBLIGATION","PAGED_ORIGINAL_LEGS","REISSUE_EXCLUDED","CANCELLING","CANCELLED","RESERVED","ISSUED_AWAITING_RECEIPT","EXECUTION_UNCERTAIN","EXECUTED_PENDING_POSTING","POSTED","RETURNED","INTERNAL_RESERVED","INTERNAL_PENDING_POSTING","CLOSED_INTERNAL"],"reservationHolds":["ACTIVE","NONE","RELEASING","POSTING"]};
+  if(Object.hasOwn(reservationEnums,t))return reservationEnums[t].includes(v);
   if(t.endsWith('?'))return v===null||field(v,t.slice(0,-1));
   if(t==='sha')return typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
   const acceptedEnums={acceptedCaseScope:['NO_CASE','SEALED_SELECTION'],settingsWitness:['BASELINE_AT_ACCEPTANCE','ORDERED_VERSION'],
@@ -312,7 +343,7 @@ function result(payload,call,mutation){
   if(call.kind==='STATUS'){
     const h=payload.header;
     if(!exact(h,STATUS_HEADER)||h.run_id!==call.args.run_id||h.run_worker_id!==call.args.run_worker_id
-      ||h.net_pending!==(h.net_request_revision!==h.net_projection_revision))bad();
+      ||h.net_pending!==(h.net_request_revision!==h.net_projection_revision)||!validReservation(h))bad();
     const facts=['projection_input_kind','entered_paye_net','accepted_recoveries','accepted_net_additions','cash_amount'];
     if(h.projection_id===null&&facts.some(k=>h[k]!==null))bad();
     if(h.projection_id!==null&&(h.projection_input_kind===null||['accepted_recoveries','accepted_net_additions','cash_amount'].some(k=>h[k]===null)
@@ -331,6 +362,7 @@ function result(payload,call,mutation){
   const [key,inputKey]=CURSORS[call.kind];let previous=call.args[inputKey];const caseIds=new Set();
   for(const row of payload.rows){
     if(!exact(row,ROWS[call.kind]))bad();
+    if(call.kind==='STATUS'&&!validReservation(payload.header,row))bad();
     if(call.kind==='CHANNEL_WORKERS'&&row.pay_channel!==call.args.pay_channel)bad();
     const value=row[key];
     if(previous!==null){const ordered=key.endsWith('_no')||key==='component_ordinal'?BigInt(value)>BigInt(previous):value>previous;if(!ordered)bad();}

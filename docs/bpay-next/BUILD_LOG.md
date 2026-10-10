@@ -367,3 +367,9 @@ PS-08 seq32 COMPLETE BD036: sole0718DDL retained, exactlocal4triggerreadback, al
 PS-11 seq33 scopecheckpoint BD037 exactD01-D05 listed; actual0380CASE_PAYOUT NULL distinguished; preservedSQLgraph plusfiniteWorker/Office semantics, noNETallocation/cashownerchanges.
 
 PS-11 seq33 COMPLETE BD037: scopedcapturedhistoryclosure, recordedNETonce/exactprojection/NULL0unallocatedsemantics;0380scaleH01fixed. Independentserver/callerPASS; BE10FE13source10syntax/db314+817/PG17/seal303276/couplingPASS. WholeBUILT31/288REVIEWED31/288; actualjoinedNOT_RUN. NextPS14seq34.
+
+PS11localcommits BE976ba1c9 FE9d9f8a7; FEfollow-up removesone trailing rendering space after diff-whitespace check, no behaviorchange/no amend. ContinuePS14.
+
+PS-14 seq34scopecheckpoint BD038 exactD01/D04/D05/D06objects listed. Correct4destinationmoneyownersreused; boundednativeobligation/legreservationreadsupport/status integration only. Noheader/childdoublecount ornewmoneycounter.
+
+PS-14 seq34 COMPLETE BD038: native original-obligation→paged-original-leg reservation, four2025 bodies unchanged; positive activeholds/receipt/cancel/Case-only/internal0 rules and strictSTATUS callers. H01–H03 fixed independentSQL/callerPASS. BE55FE46sourcecontrols/syntax/db314+818/PG17/seald1b40713/couplingPASS. WholeBUILT32/288REVIEWED32/288. ActualjoinedNOT_RUN; nofixtures/hosted/push/externalactions. NextPS15seq35.
