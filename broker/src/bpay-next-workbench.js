@@ -1,6 +1,6 @@
 /** WB09 pure Office reads. Closed kinds, trusted admin actor, fixed RPC only.
  * No reconstruction, financial calculation, command or automatic page retry. */
-export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:8000});
+export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
 const COMMON={candidate_id:'uuid?',client_id:'uuid?',channel:'scopeChannel',section:'scopeSection',search:'search',sort:'sort',group_key:'groupKey?',item_id:'uuid?',reason_code:'code?',after:'cursor?',limit:'limit'};
@@ -471,21 +471,26 @@ export function createBpayNextWorkbenchRpc({baseUrl,headers,fetchImpl=fetch}){
     const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');h.set('X-CloudTMS-Banking-Pay-Route-Class','READ');
     return fetchImpl(endpoint.href,{method:'POST',headers:h,body,redirect:'error',signal:options.signal});};
 }
-const json=(status,body)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
+const json=(status,body,kind=null)=>{
+  const bytes=JSON.stringify(body),headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
+  // WB10 factual read metadata only: no identity, search, cursor or bank fields.
+  if(KINDS.includes(kind)){headers['x-bpay-next-step']='kind='+kind+';rows='+(body.ok===true?body.rows.length:0)+';bytes='+ENCODER.encode(bytes).byteLength;headers['access-control-expose-headers']='x-bpay-next-step';}
+  return new Response(bytes,{status,headers});
+};
 function refusalStatus(code){return code.endsWith('_FORBIDDEN')?403:code.endsWith('_REQUEST_INVALID')?400:code.endsWith('_CURSOR_STALE')?409:503;}
 export async function handleBpayNextWorkbenchPage(request,dependencies={}){
-  let timer,controller;try{
+  let timer,controller,readKind=null;try{
     if(request.method!=='GET')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
     const user=await dependencies.requireOfficeUser?.(request,['admin']);if(!user||typeof user.id!=='string'||!UUID.test(user.id.toLowerCase()))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
     const actor=user.id.toLowerCase(),url=new URL(request.url);if(ENCODER.encode(url.search).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
     const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'){try{input.after=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
-    const args=normalizeWorkbenchInput(kind,input);if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
+    const args=normalizeWorkbenchInput(kind,input);readKind=kind;if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
     if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
-    controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},8000);});
+    controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},BPAY_NEXT_WORKBENCH_LIMITS.timeoutMs);});
     const send=async()=>{const response=await dependencies.workbenchRpc(kind,args,{actorUserId:actor,signal:controller.signal});if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}const payload=await readWorkbenchJson(response,controller.signal);
       if(!response.ok)throw fail(response.status===401||response.status===403?'BPAY_NEXT_WORKBENCH_FORBIDDEN':'BPAY_NEXT_WORKBENCH_UNAVAILABLE',response.status===401||response.status===403?403:503,true);
-      const body=validateWorkbenchResponse(payload,kind,args,actor);if(ENCODER.encode(JSON.stringify(body)).byteLength>131072)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');return json(body.ok?200:refusalStatus(body.error_code),body);};
+      const body=validateWorkbenchResponse(payload,kind,args,actor);if(ENCODER.encode(JSON.stringify(body)).byteLength>131072)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');return json(body.ok?200:refusalStatus(body.error_code),body,kind);};
     return await Promise.race([send(),timeout]);
-  }catch(e){const safe=typeof e?.code==='string'&&/^BPAY_NEXT_[A-Z_]+$/.test(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null});}
+  }catch(e){const safe=typeof e?.code==='string'&&/^BPAY_NEXT_[A-Z_]+$/.test(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null},readKind);}
   finally{if(timer!==undefined)clearTimeout(timer);}
 }

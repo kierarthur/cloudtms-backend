@@ -1,0 +1,37 @@
+{
+  "item": "WB-10",
+  "sequence": 58,
+  "migration": "supabase/migrations/10102026_1634_banking_pay_next_workbench_read_indexes_v1.sql",
+  "repeatable": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+  "sha256": {
+    "migration": "886cdd1d4333b05ec92ff6cf39b775bfe0a9f3225b02a8da2e237673b794b4b2",
+    "repeatable": "391f32cbecaf4b32a311931d69ed7cbdb0dd85c0bae11a2cdf6a3a07a2e9c02d"
+  },
+  "retained": [
+    "04102026_0580 factual current work",
+    "10102026_1252 maintained summary economics",
+    "10102026_1601 issue amount provenance"
+  ],
+  "readerDefinitions": 12,
+  "indexes": 23,
+  "frontendCommit": "9b6e37852553f3caf65a8b41747a143ac1d7a9d6",
+  "publicDefinerCatalogue": "831|76|0|ffcd8688816814f70392fd43a6c91c83",
+  "checks": {
+    "dbCheck": "324 migrations /848 repeatables PASS",
+    "localPg17": "1 migration /4 final closures PASS",
+    "sourceGates": "9/9 PASS",
+    "syntax": "PASS",
+    "contractSeal": "c34bd534e275362c3cb79584106be945eae04ce4f5d98678c4ce807773ca90d1",
+    "coupling": "PASS"
+  },
+  "historicalEvidence": {
+    "state": "OWNER_REPORTED_LOCAL_DB_ONLY_RECEIPT_UNLOCATED",
+    "reportedDraftSeconds": 1.1,
+    "reportedDetailSeconds": 1.8,
+    "newProofGate": false
+  },
+  "latency": "NOT_RUN",
+  "timingCheck": "Moved to TEST after installation (owner10/10/2026)",
+  "deployment": "COMMITTED_NOT_INSTALLED",
+  "releasePrerequisite": "Verify effective agency PostgREST14 db-hoisted-tx-settings includes statement_timeout and reload schema cache before claiming actual top-level5s bound"
+}

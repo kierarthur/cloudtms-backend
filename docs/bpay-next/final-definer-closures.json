@@ -13612,162 +13612,197 @@
     },
     {
       "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
+    },
+    {
+      "signature": "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-13 issue amount provenance successor of WB09; later B9.3a kinds merge full current helper"
-    },
-    {
-      "signature": "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "allowedPhysical": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
-      ],
-      "predecessors": [],
-      "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
-      ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_blocked_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_issue_detail_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_candidate_groups_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_group_lines_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_pick_candidates_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_pick_clients_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+      "finalPhysical": "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql"
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql"
       ],
-      "owner": "WB-09 closed maintained Workbench read; later kinds follow B9.3a"
+      "owner": "WB-10 exact indexes and5s read limits; retains WB09 kinds and WB13 issue fields; later screen sort additions follow own reader"
     }
   ],
   "editorChains": [

@@ -1,0 +1,128 @@
+{
+  "item": "WB-10",
+  "migration": "supabase/migrations/10102026_1634_banking_pay_next_workbench_read_indexes_v1.sql",
+  "definitions": [
+    {
+      "name": "bpay_next_wb10_item_section_candidate_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,candidate_id,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_candidate_week_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "candidate_id,section,week_ending_date,work_id,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_client_section_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "client_id,section,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_channel_section_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "target_pay_channel,section,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_reason_candidate_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,reason_code,candidate_id,work_id,id"
+    },
+    {
+      "name": "bpay_next_wb10_candidate_name_idx",
+      "table": "private.bpay_next_workbench_candidate_summary",
+      "keys": "section,pay_channel,client_scope,candidate_sort_name collate \"C\",(tms_ref is null),(coalesce(tms_ref,'') collate \"C\"),candidate_id"
+    },
+    {
+      "name": "bpay_next_wb10_candidate_amount_idx",
+      "table": "private.bpay_next_workbench_candidate_summary",
+      "keys": "section,pay_channel,client_scope,(unknown_amount_count>0),(case when unknown_amount_count=0 then amount else 0 end),candidate_id"
+    },
+    {
+      "name": "bpay_next_wb10_candidate_deductions_idx",
+      "table": "private.bpay_next_workbench_candidate_summary",
+      "keys": "section,pay_channel,client_scope,(deduction_item_count>0),candidate_sort_name collate \"C\",(tms_ref is null),(coalesce(tms_ref,'') collate \"C\"),candidate_id"
+    },
+    {
+      "name": "bpay_next_wb10_candidate_name_prefix_idx",
+      "table": "private.bpay_next_workbench_candidate_summary",
+      "keys": "section,pay_channel,client_scope,candidate_sort_name text_pattern_ops,candidate_id"
+    },
+    {
+      "name": "bpay_next_wb10_candidate_ref_prefix_idx",
+      "table": "private.bpay_next_workbench_candidate_summary",
+      "keys": "section,pay_channel,client_scope,tms_ref text_pattern_ops,candidate_id"
+    },
+    {
+      "name": "bpay_next_wb10_item_name_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,(coalesce(candidate_display_name,'') collate \"C\"),candidate_id,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_payment_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,(coalesce(timesheet_reference,'') collate \"C\"),id"
+    },
+    {
+      "name": "bpay_next_wb10_item_amount_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,(nominal_source_ex_vat is null),(coalesce(nominal_source_ex_vat,0)),id"
+    },
+    {
+      "name": "bpay_next_wb10_item_name_prefix_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,candidate_display_name text_pattern_ops,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_ref_prefix_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,candidate_reference text_pattern_ops,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_ts_prefix_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,timesheet_reference text_pattern_ops,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_group_page_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "group_key,section,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_group_all_page_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "group_key,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_section_page_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_candidate_page_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "candidate_id,section,id"
+    },
+    {
+      "name": "bpay_next_wb10_item_reason_page_idx",
+      "table": "private.bpay_next_workbench_item",
+      "keys": "section,reason_code,id"
+    },
+    {
+      "name": "bpay_next_wb10_group_week_idx",
+      "table": "private.bpay_next_workbench_group",
+      "keys": "candidate_id,(week_ending_date is null),(coalesce(week_ending_date,date '0001-01-01')),group_kind collate \"C\",(coalesce(work_id,case_id))"
+    },
+    {
+      "name": "bpay_next_wb10_scope_client_page_idx",
+      "table": "private.bpay_next_workbench_scope_summary",
+      "keys": "section,pay_channel,client_scope collate \"C\""
+    }
+  ],
+  "reused": [
+    "1252 item_future_idx",
+    "1100 snooze_due_idx",
+    "1429 finite seed/task/metadata/due",
+    "native item/group/summary PKs"
+  ],
+  "physicalLatencies": "NOT_RUN"
+}

@@ -15433,14 +15433,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_action_required_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "5398fb70021869f5fca4cf05bbc98df3e3d152994b000d2778cbf40fe7a49922"
+      "definition_sha256": "634bf1d9c1bb34e5cc62aa77d5add24c3ae7f535f78486a867835a0ff7775524"
     },
     {
       "acl": [
@@ -15471,14 +15472,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_blocked_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "44e019c8ec50f95903a51e6418b704b16fa50ea7694de4a161d81916ed46ef16"
+      "definition_sha256": "45151ef836c1eda7e370d6c3ecf5e130c6b447e02d905bb97a06bf3d08b6de2b"
     },
     {
       "acl": [
@@ -15490,14 +15492,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_candidate_groups_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "2e657cb2ad68e6ed739790c68c3fd03a8409a2c456213cc19016584c7c2d2f27"
+      "definition_sha256": "82016b9fc82a28810b41b54f142c5287349cc4f58b4b8f2d91bff0fff1baa419"
     },
     {
       "acl": [
@@ -15528,14 +15531,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_candidates_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "91ab78bade5a402db15a1eb586a58e92262d41fc1e9c12207e666a152fe90667"
+      "definition_sha256": "15cbd5ebedea58b7fd42ca9bae8989514f8af3065e1f24622964703b7b53234f"
     },
     {
       "acl": [
@@ -15585,14 +15589,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_export_rows_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "065ab9d3e771f7bacc40d98d6da3274dd108ece02056a91833e94186b7120a34"
+      "definition_sha256": "65a762bc7520cfe0576563e570e080f8d844d58e3c0f2546c5db75a0370f48bc"
     },
     {
       "acl": [
@@ -15642,14 +15647,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_group_lines_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "e03b0df7e4fcabe08d4cf96a8c89bab8802675b27e8d96725e5de9eedf438cdc"
+      "definition_sha256": "8fadff4789ff24ef14918f57cc243dab40f76fee7c72921a491999d31c35eb4f"
     },
     {
       "acl": [
@@ -15661,14 +15667,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_header_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "f59574bc95918be792c2087559f78e615cfb36d50113d112386a580723699cc3"
+      "definition_sha256": "42924afdc32d9a9fa22ccbb4a73b450f2b175737d9f947f64c546d6cf1458017"
     },
     {
       "acl": [
@@ -15680,14 +15687,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_issue_detail_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "b20d1673e0f12be5e65c536650dd24a0912ebb45c2afb03ff44ee4bd1dce4dbf"
+      "definition_sha256": "dbf53c39678bf7854e964c58dc08f166a0daa88e252528d5643f325538734639"
     },
     {
       "acl": [
@@ -15699,14 +15707,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private, public"
+        "search_path=pg_catalog, private, public",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_kind_page_v1(p_kind text, p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "79507b15fc503ec7abe3e8dccc1b4b4e85f13bc8aa2aa644160dd5143b2e87f5"
+      "definition_sha256": "f13ecfc63700389198328990b5ab66258d37e7bc9c817563649b98be53914398"
     },
     {
       "acl": [
@@ -15756,14 +15765,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_pick_candidates_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "7f45108cc24950b56dff3deac823a1204b2c280da6ad7af8b81b8509d6524e14"
+      "definition_sha256": "9522e69b77ad6acec7e7e5bf3a44b8e31f4042f51f92dde3cef70b3f4e5a54da"
     },
     {
       "acl": [
@@ -15775,14 +15785,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private"
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
       ],
       "schema": "private",
       "identity": "bpay_next_workbench_pick_clients_page_v1(p_scope jsonb, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "a87213c3fc522819e0438822567a6f612aa196ae355633cfe01269e06e304b56"
+      "definition_sha256": "b56060e16b696c59414b976bf77280d801b926f3128098c143f0629b5b37cb46"
     },
     {
       "acl": [
@@ -31239,14 +31250,15 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, private, public"
+        "search_path=pg_catalog, private, public",
+        "statement_timeout=5s"
       ],
       "schema": "public",
       "identity": "bpay_next_workbench_page_v1(p_request jsonb)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "27c76a0b8b9826869b422b42617dc3c1842b323229cf45ee0085328878e86179"
+      "definition_sha256": "e3caf7edeff262bb80237da8c49c5230fbdf3f097c023f76f22d0dcf3620cfa1"
     },
     {
       "acl": [
@@ -112785,6 +112797,26 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_wb10_candidate_amount_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_candidate_amount_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, ((unknown_amount_count > 0)), (\nCASE\n    WHEN (unknown_amount_count = 0) THEN (amount)::numeric\n    ELSE (0)::numeric\nEND), candidate_id)"
+        },
+        {
+          "name": "bpay_next_wb10_candidate_deductions_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_candidate_deductions_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, ((deduction_item_count > 0)), candidate_sort_name COLLATE \"C\", ((tms_ref IS NULL)), COALESCE(tms_ref, ''::text) COLLATE \"C\", candidate_id)"
+        },
+        {
+          "name": "bpay_next_wb10_candidate_name_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_candidate_name_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, candidate_sort_name COLLATE \"C\", ((tms_ref IS NULL)), COALESCE(tms_ref, ''::text) COLLATE \"C\", candidate_id)"
+        },
+        {
+          "name": "bpay_next_wb10_candidate_name_prefix_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_candidate_name_prefix_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, candidate_sort_name text_pattern_ops, candidate_id)"
+        },
+        {
+          "name": "bpay_next_wb10_candidate_ref_prefix_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_candidate_ref_prefix_idx ON private.bpay_next_workbench_candidate_summary USING btree (section, pay_channel, client_scope, tms_ref text_pattern_ops, candidate_id)"
+        },
+        {
           "name": "bpay_next_workbench_candidate_metadata_page_idx",
           "definition": "CREATE INDEX bpay_next_workbench_candidate_metadata_page_idx ON private.bpay_next_workbench_candidate_summary USING btree (candidate_id, (((((client_scope || ':'::text) || pay_channel) || ':'::text) || section)) COLLATE \"C\")"
         },
@@ -113254,6 +113286,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_wb10_group_week_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_group_week_idx ON private.bpay_next_workbench_group USING btree (candidate_id, ((week_ending_date IS NULL)), COALESCE(week_ending_date, '0001-01-01'::date), group_kind COLLATE \"C\", COALESCE(work_id, case_id))"
+        },
         {
           "name": "bpay_next_workbench_group_candidate_idx",
           "definition": "CREATE INDEX bpay_next_workbench_group_candidate_idx ON private.bpay_next_workbench_group USING btree (candidate_id, group_key)"
@@ -114120,6 +114156,70 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_wb10_item_amount_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_amount_idx ON private.bpay_next_workbench_item USING btree (section, ((nominal_source_ex_vat IS NULL)), COALESCE((nominal_source_ex_vat)::numeric, (0)::numeric), id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_candidate_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_candidate_page_idx ON private.bpay_next_workbench_item USING btree (candidate_id, section, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_candidate_week_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_candidate_week_idx ON private.bpay_next_workbench_item USING btree (candidate_id, section, week_ending_date, work_id, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_channel_section_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_channel_section_idx ON private.bpay_next_workbench_item USING btree (target_pay_channel, section, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_client_section_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_client_section_idx ON private.bpay_next_workbench_item USING btree (client_id, section, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_group_all_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_group_all_page_idx ON private.bpay_next_workbench_item USING btree (group_key, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_group_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_group_page_idx ON private.bpay_next_workbench_item USING btree (group_key, section, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_name_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_name_idx ON private.bpay_next_workbench_item USING btree (section, COALESCE(candidate_display_name, ''::text) COLLATE \"C\", candidate_id, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_name_prefix_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_name_prefix_idx ON private.bpay_next_workbench_item USING btree (section, candidate_display_name text_pattern_ops, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_payment_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_payment_idx ON private.bpay_next_workbench_item USING btree (section, COALESCE(timesheet_reference, ''::text) COLLATE \"C\", id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_reason_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_reason_candidate_idx ON private.bpay_next_workbench_item USING btree (section, reason_code, candidate_id, work_id, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_reason_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_reason_page_idx ON private.bpay_next_workbench_item USING btree (section, reason_code, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_ref_prefix_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_ref_prefix_idx ON private.bpay_next_workbench_item USING btree (section, candidate_reference text_pattern_ops, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_section_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_section_candidate_idx ON private.bpay_next_workbench_item USING btree (section, candidate_id, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_section_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_section_page_idx ON private.bpay_next_workbench_item USING btree (section, id)"
+        },
+        {
+          "name": "bpay_next_wb10_item_ts_prefix_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_item_ts_prefix_idx ON private.bpay_next_workbench_item USING btree (section, timesheet_reference text_pattern_ops, id)"
+        },
         {
           "name": "bpay_next_workbench_item_candidate_idx",
           "definition": "CREATE INDEX bpay_next_workbench_item_candidate_idx ON private.bpay_next_workbench_item USING btree (candidate_id, section, group_key, component_key, member_kind, member_key, portion_kind)"
@@ -115132,6 +115232,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_wb10_scope_client_page_idx",
+          "definition": "CREATE INDEX bpay_next_wb10_scope_client_page_idx ON private.bpay_next_workbench_scope_summary USING btree (section, pay_channel, client_scope COLLATE \"C\")"
+        },
         {
           "name": "bpay_next_workbench_scope_summary_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_workbench_scope_summary_pkey ON private.bpay_next_workbench_scope_summary USING btree (client_scope, pay_channel, section)"
