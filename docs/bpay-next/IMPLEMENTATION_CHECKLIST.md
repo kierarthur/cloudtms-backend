@@ -1835,8 +1835,8 @@ Dependencies: WB-15, F-16; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-16-D02 | REPEATABLE: private.bpay_next_current_case_component_page_v1(p_candidate_id uuid, p_case_id uuid, p_after_component_ordinal bigint, p_limit integer) | INSTALLED_ON_TEST | Reuse actual current component page, not credit-snooze or maintained group implementation; preserve exact case owner. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-16-D03 | REPEATABLE: public.bpay_next_preparation_page_v1(p_actor_user_id uuid, p_kind text, p_args jsonb) | INSTALLED_ON_TEST | Existing COMPONENTS/SHIFTS/BREAKS/RATES are genuine pre-Draft work/revision/line readers without run_id. Preserve them; new GROUP_LINES adds maintained eligibility/badges, not duplicate factual RPC. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-16-D02 | REPEATABLE: private.bpay_next_current_case_component_page_v1(p_candidate_id uuid, p_case_id uuid, p_after_component_ordinal bigint, p_limit integer) | INSTALLED_ON_TEST | Reuse actual current component page, not credit-snooze or maintained group implementation; preserve exact case owner. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-16-D03 | REPEATABLE: public.bpay_next_preparation_page_v1(p_actor_user_id uuid, p_kind text, p_args jsonb) | INSTALLED_ON_TEST | Existing COMPONENTS/SHIFTS/BREAKS/RATES are genuine pre-Draft work/revision/line readers without run_id. Preserve them; new GROUP_LINES adds maintained eligibility/badges, not duplicate factual RPC. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-16-D07 | SCREEN: GROUP_LINES Timesheet expand in js/bpay-next-workbench.js | MISSING | Reuse true pre-Draft factual kinds; add maintained group/control/resolution badges, exact component/bucket/segment identities, OR-40 exact approved segment membership, independently eligible siblings, no policy hold. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
@@ -1859,6 +1859,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A deduction row shows "Due GBP 40.00" and its cap reason, and its recoverable amount appears only after Show estimate (RQ-019).
   - A correction carrier shows its original reference and a "Correction" badge (RQ-020, RQ-021, LUI-033); the component table shows suggested rate and margin from the server (RQ-056); a row with deduction evidence sets the Deductions marker (RQ-014).
   - Nothing else on the screen reloads.
+
+WB16 available-slice receipt: D02/D03 factual readers BUILT/REVIEWED at BE79383afb83042f6e46ecba871e6f92409a6794d2, FE4cfdbbe67a406e34c5dc18594282c14797ffd127. Compile/source checks PASS; first-use and joined app NOT_RUN. Actual SCR10 thirteen local screenshots independently approved38PASS/0FAIL/4NA. D07/ITEM PARTLY_BUILT and unticked pending WB25/WB38/WB27/WB29/WB45/WB17 ordered joins. Whole51/288 counts unchanged.
 
 ## WB-17 — Open the Timesheet (and its source evidence) without losing scope
 
