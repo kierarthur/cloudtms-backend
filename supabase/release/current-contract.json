@@ -10577,7 +10577,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a3d783228b741739a5283192c770de70d7ccace417934cf0dff149cfd058aafb"
+      "definition_sha256": "1f62b031c990309ed275973f58f99d5342bd0eb02496d353bb87f84004f648b9"
     },
     {
       "acl": [
@@ -12591,7 +12591,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cbb1263760eca78e3df6779a977dcca4baa0a2b294927342494e76de52cc0bf6"
+      "definition_sha256": "224e0426cc69d1723bdc698290df9b963df632158556f533ba02adf8ca20e203"
     },
     {
       "acl": [
@@ -13199,7 +13199,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2737926beaa9263f539da8d539a0b84f4c1db62218832bddf755266e900f6ac4"
+      "definition_sha256": "ba4b37adf8b37893edca3cecc289b93225255dec804f896559cc824c8963ccf9"
     },
     {
       "acl": [
@@ -13218,7 +13218,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "69751c88bef32e68c8205909a393ae11e55b9199b3edfac674b92f1e0709f72f"
+      "definition_sha256": "d28d17aa591edecef4462feea4a3d50a70b8a19a4d8671ef55ccc1fc3781e192"
     },
     {
       "acl": [
@@ -13313,7 +13313,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5f0d93d3a09a5a3d7f85a5db8fe0b9fa4013856ca556651503797e16a4c66db2"
+      "definition_sha256": "f5bc2dea78749c56ac963e0e1ca2ace6e8d146c838414155c6a7dc0d8b74aa52"
     },
     {
       "acl": [
@@ -13332,7 +13332,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "704d6e72303361eb0930d6e58e712777731392b6f21dfa5a4c22493693ef2069"
+      "definition_sha256": "156569ce5330ed1538ff47b9872d4c2f507fa56f7cb081f11f03c7fa5385d566"
     },
     {
       "acl": [
@@ -13427,7 +13427,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "4f894481b18e53fc6738ad16a17d1392b03382d1f8f087de6e9e8e8199a2fcc5"
+      "definition_sha256": "68c89bc0e5bab623c7ae99f6fe8ecf346a88451e7aa8661dd5f40034d2262dc9"
     },
     {
       "acl": [
@@ -13446,7 +13446,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2f172d6661a247ba8a642eae34d87b43344c19ec5fe0837237883121e31f2077"
+      "definition_sha256": "4ecd929b912d5d3af0ee82a45784de17291660af794db013c552f72dc2b3d9c8"
     },
     {
       "acl": [
@@ -14273,7 +14273,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "97bf565798adad0c991494736e6c04fd8626e181cf6f99ac9cc11dbf1f30c5dd"
+      "definition_sha256": "208a34d79020ac755a8da8e0fbe1eaf5c6d5f46de67178a480d2d3210549c7bd"
     },
     {
       "acl": [
@@ -14307,6 +14307,44 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_prepare_attention_page_v1(p_run_id uuid, p_after_candidate uuid, p_limit integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "b7b4166ef623d7adc905c20c18b8fecaff987fb117b9f8778c943d8eebb69942"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_attention_v1(p_job_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "f34a6e1158349d61700be4df81d8d311b8f225cef6678057a6d7ed33cc26e513"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_prepare_case_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_cursor bigint, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
@@ -14326,11 +14364,30 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_prepare_failure_v1(p_job_id uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "a25e73a784f0a807cb2524b6e967961acba90283a558462c1421ecd3267e140b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_prepare_job_active_v1(p_job_id uuid)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "934182b7b176c6c36884f585210b9a03369174f5effc96d5e82c6b442fe0394e"
+      "definition_sha256": "7ee201426a2356c842a8e55248cdfffb3196a57028d00ac88a23e8e0905d6eaa"
     },
     {
       "acl": [
@@ -14368,7 +14425,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dd25d9091c70f55a6191e9a8a9bf03df20fdbb3f08f725cfdde85417da617720"
+      "definition_sha256": "4e1484afca6a75994cd6e37a29da97e8b6bfa57826b889331b0fba20ced93dd6"
     },
     {
       "acl": [
@@ -14388,6 +14445,44 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "faeaa7b6a52a8bf5cea9f2aff6e023bdd5df62eb4f40843aabc15e8c73dab267"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_retry_admit_v1(p_job_id uuid, p_action text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "2317eff62b72a82fbf8882ba50c5870a903604cdfb2b41bf191053cf809516e1"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_retry_handoff_v1(p_job_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "7159b62c20f502fe83849b5fa879902f850e7859b68eb12b2f8e947a4a62c8d8"
     },
     {
       "acl": [
@@ -15033,7 +15128,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b541cf11cb100af01ae47a53946d68e0cba797bef222685ae40ebfd83b90f4b2"
+      "definition_sha256": "b7fc51d8e6dfb3c1a770868b401866230072284581d16be717bb5f79cbedc04d"
     },
     {
       "acl": [
@@ -15159,6 +15254,44 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_retry_execution_v1(p_job_id uuid, p_worker_id uuid, p_original_revision bigint)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a2bc1e00b7e22eb1b698f4f01cd215e89a3c8f7b9f557ebf0b1195672143471f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_retry_prepare_job_v1(p_actor uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "0ea26631f910e575434f21d95ab8f85e0c11aae1a5b882669a492402fc5c2b63"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -15166,7 +15299,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7192f919d36dd3fa05f4909033ae3ae5d4d2b3ddf5fb95a8e21c50ff37220c67"
+      "definition_sha256": "fc57906c075e1f40f581594eb98c9464faf2d2f3df8754b3d3c006091da91621"
     },
     {
       "acl": [
@@ -15204,7 +15337,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5c329388ca0d97badedb3aef6cbee2b9ece2f70709e807ce88b4193e4becc833"
+      "definition_sha256": "5c2f415511c65eca6c49edbdd1fdbe330a8810a69a0f7e9498af0a76acf463eb"
     },
     {
       "acl": [
@@ -18123,7 +18256,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "1277ec9ac5782569338ac2d4b8d9bfc7483e7688371011db65a82a8387f3c980"
+      "definition_sha256": "6be84fa6135743e8b70f793bc9b90d02a965aebfbfff778dfef713d11fcd3aa4"
     },
     {
       "acl": [
@@ -33059,7 +33192,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dac3f11c784222f282b2d3fc97837b18729dfe6833196843d2df3d1100a4e871"
+      "definition_sha256": "ef0a3e85deebf23e782097d3c98f90934b1b0d456ec618c631db14c1944f0f22"
     },
     {
       "acl": [
@@ -33107,7 +33240,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ff258bd89abedbe737b356b96fa2135fd722448291bf01f3bc02d93c0593b1cf"
+      "definition_sha256": "4c7a1277df08b747bbe032efd74c39ef273b651f864908a4109912ddb5913193"
     },
     {
       "acl": [
@@ -33349,7 +33482,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7c07bf1d062627aca2f6fcc56e5c87294e8cb27c5e9d54d97cd0aad1fc3c5e17"
+      "definition_sha256": "9bf22ede73a62aed6661c018042c1b81ad49c5e937336a5c89c7c124bf012f94"
     },
     {
       "acl": [
@@ -93474,6 +93607,14 @@
           "generated": ""
         },
         {
+          "name": "last_retry_owner_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "lease_nonce",
           "type": "uuid",
           "default": null,
@@ -93495,6 +93636,22 @@
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "needs_attention",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "next_retry_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -93570,6 +93727,54 @@
           "generated": ""
         },
         {
+          "name": "retry_count",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "retry_execution_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_prior_issue_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_prior_issue_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "started_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -93616,6 +93821,14 @@
           "definition": "CREATE INDEX bpay_next_job_ready_idx ON private.bpay_next_job USING btree (status, available_at_utc, command_sequence, id) WHERE (status = ANY (ARRAY['READY'::text, 'BLOCKED'::text]))"
         },
         {
+          "name": "bpay_next_job_retry_due_idx",
+          "definition": "CREATE INDEX bpay_next_job_retry_due_idx ON private.bpay_next_job USING btree (GREATEST(queue_wake_after_utc, next_retry_at_utc), command_sequence, id) WHERE ((NOT needs_attention) AND (status = ANY (ARRAY['READY'::text, 'BLOCKED'::text])))"
+        },
+        {
+          "name": "bpay_next_job_retry_expired_idx",
+          "definition": "CREATE INDEX bpay_next_job_retry_expired_idx ON private.bpay_next_job USING btree (GREATEST(queue_wake_after_utc, lease_until_utc, next_retry_at_utc), command_sequence, id) WHERE ((NOT needs_attention) AND (status = 'LEASED'::text))"
+        },
+        {
           "name": "bpay_next_job_worker_order_idx",
           "definition": "CREATE INDEX bpay_next_job_worker_order_idx ON private.bpay_next_job USING btree (candidate_id, command_sequence, id) WHERE (status <> 'DONE'::text)"
         },
@@ -93630,6 +93843,10 @@
         {
           "name": "bpay_next_position_job_pending_seek_idx",
           "definition": "CREATE INDEX bpay_next_position_job_pending_seek_idx ON private.bpay_next_job USING btree (module_epoch, command_sequence, id) WHERE ((job_kind = 'POSITION_APPLY'::text) AND (status <> 'DONE'::text))"
+        },
+        {
+          "name": "bpay_next_prepare_attention_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_prepare_attention_candidate_idx ON private.bpay_next_job USING btree (retry_run_id, candidate_id, id) WHERE ((job_kind = 'PREPARE'::text) AND needs_attention)"
         },
         {
           "name": "bpay_next_prepare_job_open_command_idx",
@@ -93732,6 +93949,14 @@
           "definition": "CHECK (octet_length(first_recorded_error_code) <= 256)"
         },
         {
+          "name": "bpay_next_job_last_retry_owner_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (last_retry_owner_epoch > 0)"
+        },
+        {
           "name": "bpay_next_job_module_epoch_check",
           "type": "c",
           "deferred": false,
@@ -93770,6 +93995,46 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (retained_prepare_phase = ANY (ARRAY['NEW'::text, 'PINNING'::text, 'RESERVE'::text, 'ALLOCATE'::text, 'FINANCE_ALLOCATE'::text]))"
+        },
+        {
+          "name": "bpay_next_job_retry_attention_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (NOT needs_attention OR job_kind = 'PREPARE'::text AND retry_count = 5 AND status = 'READY'::text AND lease_nonce IS NULL AND lease_until_utc IS NULL)"
+        },
+        {
+          "name": "bpay_next_job_retry_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retry_count >= 0 AND retry_count <= 5)"
+        },
+        {
+          "name": "bpay_next_job_retry_execution_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((retry_execution_revision IS NULL) = (retry_request_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_job_retry_execution_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retry_execution_revision > 1)"
+        },
+        {
+          "name": "bpay_next_job_retry_prior_issue_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(retry_prior_issue_code) <= 256)"
         },
         {
           "name": "bpay_next_job_status_check",
@@ -109609,7 +109874,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (review_issue_code IS NULL AND review_issue_work_id IS NULL OR (review_issue_code = ANY (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text])) AND review_issue_work_id IS NULL OR review_issue_code IS NOT NULL AND (review_issue_code <> ALL (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text])) AND review_issue_work_id IS NOT NULL)"
+          "definition": "CHECK (review_issue_code IS NULL AND review_issue_work_id IS NULL OR (review_issue_code = ANY (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text, 'PF08_NEEDS_ATTENTION'::text])) AND review_issue_work_id IS NULL OR review_issue_code IS NOT NULL AND (review_issue_code <> ALL (ARRAY['CASE_SELECTION_REQUIRED'::text, 'CASE_TARGET_UNSUPPORTED'::text, 'CASE_INPUT_UNBOUND'::text, 'CASE_WEEK_BASIS_UNBOUND'::text, 'CASE_RETURN_FLOOR_UNBOUND'::text, 'CASE_NO_PAYABLE_AMOUNT'::text, 'PF08_NEEDS_ATTENTION'::text])) AND review_issue_work_id IS NOT NULL)"
         },
         {
           "name": "bpay_next_worker_managed_capture_count_check",
@@ -122884,11 +123149,51 @@
           "generated": ""
         },
         {
+          "name": "retry_captured_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_expected_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_input_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retry_target_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "work_id",
           "type": "uuid",
           "default": null,
           "identity": "",
-          "not_null": true,
+          "not_null": false,
           "generated": ""
         }
       ],
@@ -122956,6 +123261,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_workbench_retry_execution_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retry_run_worker_id IS NULL AND retry_input_job_id IS NULL AND retry_captured_revision IS NULL AND retry_expected_revision IS NULL AND retry_target_revision IS NULL OR num_nonnulls(retry_run_worker_id, retry_input_job_id, retry_captured_revision, retry_expected_revision, retry_target_revision) = 5 AND retry_captured_revision > 0 AND retry_expected_revision > 0 AND retry_target_revision::numeric = (retry_expected_revision::numeric + 1::numeric) AND retry_captured_revision <= retry_expected_revision)"
+        },
+        {
+          "name": "bpay_next_workbench_retry_work_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (work_id IS NOT NULL OR NOT (result ->> 'retry_kind'::text) IS DISTINCT FROM 'PREPARE'::text)"
         }
       ],
       "view_definition_sha256": null

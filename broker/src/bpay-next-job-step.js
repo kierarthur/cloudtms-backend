@@ -93,9 +93,9 @@ const OUTPUTS = Object.freeze({
 // Expiry can retire a PREPARE that was never claimed and has no worker.
 // This separate schema must not weaken any ordinary PREPARE receipt.
 const EXPIRED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'expiredPhase',
-  run_worker_id: 'uuid?', worker_status: 'workerStatus?' };
+  run_worker_id: 'uuid?', worker_status: 'workerStatus?', issue_code:'retiredPrepareIssue?' };
 const DISCARDED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'discardedPhase',
-  run_worker_id: 'uuid?', worker_status: 'workerStatus?' };
+  run_worker_id: 'uuid?', worker_status: 'workerStatus?', issue_code:'retiredPrepareIssue?' };
 const CASE_NET_OUTPUT = { ...COMMON, phase: 'caseNetPhase', projection_id: 'uuid?',
   cursor: 'positive?', rows_visited: 'pageCount', run_worker_id: 'uuid', issue_code: 'caseNetIssue?' };
 const CLAIM_OUTPUT = { job_id: 'uuid', job_kind: 'kind', phase: 'claimPhase', lease_nonce: 'uuid', owner_epoch: 'positive', lease_until_utc: 'timestamp', cursor: 'positive?' };
@@ -144,6 +144,7 @@ function field(value, type) {
     case 'discardedPhase': return value === 'DISCARDED';
     case 'expiredPhase': return value === 'EXPIRED';
     case 'prepareIssue': return PREPARE_ISSUES.includes(value);
+    case 'retiredPrepareIssue': return value==='PF08_NEEDS_ATTENTION'||PREPARE_ISSUES.includes(value);
     case 'workerStatus': return ['PREPARING', 'READY', 'REVIEW', 'DRAFT', 'ISSUED', 'COMPLETE', 'CANCELLING', 'CANCELLED'].includes(value);
     case 'netPhase': return value === 'PROJECTED';
     case 'caseNetPhase': return ['FINANCE_ALLOCATE', 'PROJECTED', 'REVIEW'].includes(value);
@@ -276,6 +277,7 @@ function resultInput(payload, call, unknown) {
     || (payload.phase === 'BLOCKED' && (payload.work_released !== '0' || payload.case_holds_released !== '0'))
     || (payload.replay && (payload.work_released !== '0' || payload.case_holds_released !== '0')))) invalid();
   if (call.jobKind === 'PREPARE') {
+    if((discardedPrepare||expiredPrepare)&&payload.issue_code==='PF08_NEEDS_ATTENTION'&&payload.issue_work_id!==null)invalid();
     if (discardedPrepare) {
       if (!payload.done || !payload.replay || payload.rows_visited !== '0'
         || (payload.work_cursor === null) !== (payload.component_cursor === null)
@@ -405,7 +407,7 @@ function dependencyError(error, attempted, action) {
 export async function stepBpayNextFinancialJob(input, dependencies = {}) {
   let call, controller, timer;
   let attempted = false;
-  let started, payQueryBusy = false, definitePositionCause = null;
+  let started, payQueryBusy = false, definitePositionCause = null, rollbackConfirmed=false;
   const measurement = { rows: null, bytes: null };
   const observeBusy = (error) => {
     const db = error?.json ?? error;
@@ -433,6 +435,8 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
       if (!(response instanceof Response)) throw unknown('BPAY_NEXT_JOB_RESPONSE_INVALID');
       const payload = await limitedJson(response, controller.signal, unknown, measurement);
       if (!response.ok) {
+        if(call.action==='STEP'&&call.jobKind==='PREPARE'
+          &&['40001','40P01','55P03','57014','23514','23503','23505','55000','22023','22003','22P02','P0002'].includes(payload?.code))rollbackConfirmed=true;
         observeBusy(payload);
         // Internal provenance only, never arbitrary DB text or lease logs.
         // A parsed SQL rejection of this exact STEP proves rollback; normal
@@ -449,6 +453,13 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
         if (definitePositionCause && payload.code === '23503') throw fault('BPAY_NEXT_JOB_CONFLICT');
         throw dependencyError({ status: response.status, json: payload }, true, call.action);
       }
+      if(call.jobKind==='PREPARE'&&payload?.deferred===true){
+        const keys=['job_id','job_kind','deferred','needs_attention','next_retry_at_utc'];
+        if(!record(payload)||Object.keys(payload).length!==keys.length||keys.some(k=>!Object.hasOwn(payload,k))
+          ||payload.job_id!==call.jobId||payload.job_kind!=='PREPARE'||typeof payload.needs_attention!=='boolean'
+          ||payload.next_retry_at_utc!==null&&(typeof payload.next_retry_at_utc!=='string'||!Number.isFinite(Date.parse(payload.next_retry_at_utc))))throw unknown('BPAY_NEXT_JOB_RESPONSE_INVALID');
+        return {ok:false,error_code:'BPAY_NEXT_PREPARE_RETRY_DEFERRED',retryable:false,outcome_unknown:false,recovery:'NONE',durable_deferred:true};
+      }
       const result = resultInput(payload, call, unknown);
       // Only the validated owner's per-call visited count has this meaning.
       // CLAIM/single-step receipts and unknown outcomes have no such count.
@@ -461,7 +472,8 @@ export async function stepBpayNextFinancialJob(input, dependencies = {}) {
     const safe = dependencyError(error, attempted, call?.action);
     return { ok: false, error_code: safe.code, retryable: safe.retryable,
       outcome_unknown: safe.unknown, recovery: safe.recovery,
-      ...(definitePositionCause && !safe.retryable && !safe.unknown ? { definite_position_cause: definitePositionCause } : {}) };
+      ...(definitePositionCause && !safe.retryable && !safe.unknown ? { definite_position_cause: definitePositionCause } : {}),
+      ...(rollbackConfirmed&&!safe.unknown?{rollback_confirmed:true}:{}) };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
     if (attempted && typeof dependencies.onStepMeasurement === 'function') {

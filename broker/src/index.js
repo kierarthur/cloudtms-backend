@@ -53,7 +53,7 @@ import { isBpayNextLegacyFinancialEmail } from './bpay-next-legacy-email.js';
 import { bpayNextCapabilities, bpayNextEnvironmentFailure } from './bpay-next-environment.js';
 import { createBpayNextRuntimeRpc } from './bpay-next-runtime-rpc.js';
 import { createBpayNextPreparationExpiryRpc } from './bpay-next-preparation-expiry-rpc.js';
-import { createBpayNextFinancialJobRpc } from './bpay-next-job-rpc.js';
+import { createBpayNextFinancialJobRpc, recordBpayNextPrepareFailure } from './bpay-next-job-rpc.js';
 import { handleBpayNextBackgroundMessage, runBpayNextRecoveryTick } from './bpay-next-background.js';
 import { classifyBpayNextContinuation, createBpayNextLegacyRetirement } from './bpay-next-legacy-retirement.js';
 import { createWeeklySourceC1RawRpc } from './banking-pay/weekly-source-c1-raw-rpc.mjs';
@@ -41007,6 +41007,7 @@ function bpayNextBackgroundDependencies(env) {
     },
     queue: env.BANKING_PAY_CONTINUATION_QUEUE,
     onFailure: async (failure, evidence) => {
+      if(evidence?.job_kind==='PREPARE')return await recordBpayNextPrepareFailure(createBpayNextFinancialJobRpc(config),evidence)?'ACK_RECORDED':'RETRY';
       if (evidence && await createBpayNextWorkJobFailureRpc(config)(evidence)) return 'ACK_RECORDED';
       console.warn('[banking-pay-next] recoverable delivery refusal', {
         code: failure.error_code, recovery: failure.recovery

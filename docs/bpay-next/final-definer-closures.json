@@ -3211,27 +3211,30 @@
     },
     {
       "signature": "private.bpay_next_claim_prepare_job_v1(uuid,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql"
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release",
+      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3697,22 +3700,25 @@
     },
     {
       "signature": "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners; DR-05 retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3731,43 +3737,49 @@
     },
     {
       "signature": "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
         "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
         "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
-        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql"
+        "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR11seq86; early DR37D18 and owedDR08 assertion",
+      "owner": "DR11seq86; early DR37D18 and owedDR08 assertion; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "private.bpay_next_expired_prepare_receipt_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql"
+        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4538,20 +4550,23 @@
     },
     {
       "signature": "private.bpay_next_review_simple_run_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql"
+        "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7524,9 +7539,18 @@
     },
     {
       "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
@@ -7534,17 +7558,11 @@
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "FC-10 sequence108 native ordered recovery status; BD120",
+      "owner": "FC-10 sequence108 native ordered recovery status; BD120; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7566,16 +7584,20 @@
     },
     {
       "signature": "public.bpay_next_job_wake_page_v1(text,integer)",
-      "finalRoot": "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql"
+        "supabase/repeatable/04102026_0560_banking_pay_next_queue_recovery_service_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "F-04 baseline census; exact feature successor follows master editor chain; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7679,9 +7701,26 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7697,25 +7736,11 @@
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14363,19 +14388,22 @@
     },
     {
       "signature": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
-      "finalRoot": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
         "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql"
+        "supabase/repeatable/10102026_2207_banking_pay_next_workbench_retry_enrollment_guard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner"
+      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner; PF08 BD124 bounded recovery/exact execution retry"
     },
     {
       "signature": "public.bpay_next_workbench_command_v1(jsonb)",
@@ -14745,38 +14773,44 @@
     },
     {
       "signature": "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "dd6853c68576ae94cbad2e2e5d0206dae75a5903"
     },
     {
       "signature": "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -14829,16 +14863,20 @@
     },
     {
       "signature": "private.bpay_next_prepare_job_active_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR-05 finite private retained-input execution/release",
+      "owner": "DR-05 finite private retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -14957,16 +14995,20 @@
     },
     {
       "signature": "private.bpay_next_worker_execution_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR-05 finite private retained-input execution/release",
+      "owner": "DR-05 finite private retained-input execution/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -15016,21 +15058,24 @@
     },
     {
       "signature": "private.bpay_next_preparation_progress_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
         "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15091,19 +15136,22 @@
     },
     {
       "signature": "private.bpay_next_enroll_preparation_discard_one_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -15125,19 +15173,22 @@
     },
     {
       "signature": "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -15170,19 +15221,22 @@
     },
     {
       "signature": "private.bpay_next_discarded_prepare_receipt_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "DR09 seq85 separately typed preparation discard/release; PF08 BD124 bounded recovery/exact execution retry",
       "baselineSource": null
     },
     {
@@ -15833,16 +15887,20 @@
     },
     {
       "signature": "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
-      "predecessors": [],
-      "allowedPhysical": [
+      "predecessors": [
         "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
       ],
-      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
-      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121; PF08 BD124 bounded recovery/exact execution retry"
     },
     {
       "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
@@ -15934,6 +15992,97 @@
         "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
       ],
       "owner": "SP14 / BD122 exact pre-cut Source segment exclusion reader; no producer change"
+    },
+    {
+      "signature": "private.bpay_next_retry_execution_v1(uuid,uuid,bigint)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_prepare_attention_v1(uuid)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_prepare_retry_handoff_v1(uuid)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_prepare_retry_admit_v1(uuid,text,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_prepare_failure_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
+    },
+    {
+      "signature": "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
+      "finalRoot": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2259_banking_pay_next_prepare_retry_v1.sql"
+      ],
+      "owner": "PF08 / BD124 bounded original PREPARE operational recovery"
     }
   ],
   "editorChains": [

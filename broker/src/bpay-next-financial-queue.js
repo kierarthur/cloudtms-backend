@@ -65,10 +65,18 @@ function retry(message, result) {
 }
 
 async function failure(message, call, result, dependencies) {
-  if (result.retryable || result.outcome_unknown) return retry(message, result);
+  const prepare=call?.action==='STEP'&&call.job_kind==='PREPARE'
+    &&['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(call.expected_phase)
+    &&(result.outcome_unknown||result.rollback_confirmed===true);
+  if ((result.retryable || result.outcome_unknown)&&!prepare) return retry(message, result);
   if (typeof dependencies.onFailure !== 'function') return retry(message, result);
   try {
-    const evidence = call?.action === 'STEP' && call.job_kind === 'POSITION_APPLY'
+    const evidence = prepare?Object.freeze({action:'STEP',job_id:call.job_id,job_kind:'PREPARE',
+      lease_nonce:call.lease_nonce,owner_epoch:call.owner_epoch,expected_phase:call.expected_phase,
+      expected_cursor:call.expected_cursor??null,expected_work_cursor:call.expected_work_cursor??null,
+      expected_component_cursor:call.expected_component_cursor??null,error_code:result.error_code,
+      outcome_unknown:result.outcome_unknown,rollback_confirmed:result.rollback_confirmed===true&&!result.outcome_unknown})
+      :call?.action === 'STEP' && call.job_kind === 'POSITION_APPLY'
       && typeof result.definite_position_cause === 'string'
       ? Object.freeze({job_id:call.job_id,lease_nonce:call.lease_nonce,owner_epoch:call.owner_epoch,
         expected_phase:call.expected_phase,expected_cursor:call.expected_cursor,error_code:result.definite_position_cause}) : null;
@@ -157,6 +165,7 @@ export async function handleBpayNextFinancialQueueMessage(message, dependencies 
   const adapter = {financialJobRpc:dependencies.financialJobRpc,onStepMeasurement:dependencies.onStepMeasurement};
   const claimed = await stepBpayNextFinancialJob(claim, adapter);
   if (!claimed.ok) {
+    if(claimed.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}
     if (claimed.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
       message.ack(); return {disposition:'ACK',reason:'TERMINAL'};
     }
@@ -165,7 +174,7 @@ export async function handleBpayNextFinancialQueueMessage(message, dependencies 
   const call = continuation(claim, claimed.result);
   if (!call) return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
   const outcome = await stepBpayNextFinancialJob(call,adapter);
-  if (!outcome.ok) return failure(message,call,outcome,dependencies);
+  if (!outcome.ok) {if(outcome.durable_deferred===true){message.ack();return {disposition:'ACK',reason:'DURABLE_RECOVERY'};}return failure(message,call,outcome,dependencies);}
   if (outcome.result.done) {message.ack();return {disposition:'ACK',reason:'DONE'};}
   if (!continuation(call,outcome.result)) {
     return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));

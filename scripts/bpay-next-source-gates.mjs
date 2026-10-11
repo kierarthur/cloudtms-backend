@@ -46,6 +46,13 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
+  "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)",
+  "private.bpay_next_prepare_failure_v1(uuid,jsonb)",
+  "private.bpay_next_prepare_retry_admit_v1(uuid,text,jsonb)",
+  "private.bpay_next_prepare_retry_handoff_v1(uuid)",
+  "private.bpay_next_prepare_attention_v1(uuid)",
+  "private.bpay_next_retry_execution_v1(uuid,uuid,bigint)",
   "private.bpay_next_assert_candidate_financial_fence_v1(uuid,uuid,uuid,bigint)",
   // DR09 finite discard and native release continuation owners.
   "private.bpay_next_preparation_discard_fenced_v1(uuid,uuid)",
@@ -197,6 +204,26 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": ["private.bpay_next_retry_execution_v1","private.bpay_next_prepare_attention_v1"],
+  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_discarded_prepare_receipt_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_expired_prepare_receipt_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_review_simple_run_v1(uuid)": ["private.bpay_next_prepare_attention_v1"],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_prepare_attention_page_v1"],
+  "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)": ["private.bpay_next_prepare_retry_admit_v1","private.bpay_next_prepare_failure_v1"],
+  "private.bpay_next_worker_execution_guard_v1()": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_prepare_job_active_v1(uuid)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)": ["private.bpay_next_retry_execution_v1"],
+  "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)": ["private.bpay_next_prepare_job_active_v1","jsonb_build_object","btrim","concat_ws","left","statement_timestamp","octet_length","jsonb_build_array"],
+  "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)": ["private.bpay_next_prepare_job_run_v1","jsonb_build_object","clock_timestamp","private.bpay_next_prepare_job_active_v1"],
+  "private.bpay_next_prepare_failure_v1(uuid,jsonb)": ["jsonb_typeof","octet_length","jsonb_object_keys","private.bpay_next_prepare_job_run_v1","clock_timestamp","private.bpay_next_prepare_job_active_v1","jsonb_build_object","least","make_interval","private.bpay_next_prepare_retry_handoff_v1"],
+  "private.bpay_next_prepare_retry_admit_v1(uuid,text,jsonb)": ["clock_timestamp","private.bpay_next_prepare_job_run_v1","private.bpay_next_prepare_retry_handoff_v1","jsonb_build_object"],
+  "private.bpay_next_prepare_retry_handoff_v1(uuid)": ["clock_timestamp","private.bpay_next_review_simple_run_v1"],
+  "private.bpay_next_prepare_attention_v1(uuid)": ["private.bpay_next_prepare_job_active_v1"],
+  "private.bpay_next_retry_execution_v1(uuid,uuid,bigint)": ["private.bpay_next_prepare_job_run_v1"],
   'private.bpay_next_snooze_many_v1(uuid,text,jsonb,boolean)':['current_setting','octet_length','length','clock_timestamp','jsonb_object_keys','jsonb_array_elements_text','private.bpay_next_workbench_require_next_v1','private.bpay_next_snooze_context_v1','private.bpay_next_receive_command_v1','private.bpay_next_snooze_scope_at_cut_v1','private.bpay_next_line_pay_basis_v1','private.bpay_next_snooze_action_v1','array_agg','to_jsonb','initcap','distinct'],
   'private.bpay_next_snooze_scope_at_cut_v1(uuid,text,text,bigint)':[],
   'private.bpay_next_snooze_many_guard_v1()':['current_setting','to_jsonb','private.bpay_next_line_pay_basis_v1'],
@@ -204,7 +231,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'public.bpay_next_workbench_week_rollover_page_v1(jsonb)':['lateral','by','private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','substring'],
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
   'private.bpay_next_case_allocation_plan_v1(jsonb)':['private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
-  "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
+  "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_retry_prepare_job_v1","private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
   "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
   "private.bpay_next_workbench_job_progress_v1(jsonb,jsonb,integer)": ["octet_length","statement_timestamp","floor","jsonb_object_keys","by","loop"],
@@ -271,7 +298,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.transaction_timestamp"
   ],
   "private.bpay_next_begin_prepare_projection_v1(uuid,uuid,bigint,integer)": ["pg_catalog.jsonb_build_object"],
-  "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)": ["max","private.bpay_next_preparation_expiry_fenced_v1","private.bpay_next_workbench_refresh_many_v1","private.bpay_next_review_simple_run_v1","pg_catalog.clock_timestamp","pg_catalog.array_agg","pg_catalog.jsonb_build_object"],
+  "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)": ["private.bpay_next_retry_execution_v1","max","private.bpay_next_preparation_expiry_fenced_v1","private.bpay_next_workbench_refresh_many_v1","private.bpay_next_review_simple_run_v1","pg_catalog.clock_timestamp","pg_catalog.array_agg","pg_catalog.jsonb_build_object"],
   "private.bpay_next_claim_prepare_job_v1(uuid,integer)": [
     "pg_catalog.clock_timestamp",
     "pg_catalog.gen_random_uuid",
@@ -565,7 +592,7 @@ const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,
 const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
 // Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
 const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
-  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'review_revision',v_run.review_revision::text,'discard_phase',v_discard.status, 'discard_actor_display_name',v_discard_actor,'discarded_at_utc',v_discard.finished_at_utc, 'discard_removed_candidates',coalesce(v_discard.removed_candidate_count,0)::text, 'discard_already_removed_candidates',coalesce(v_discard.already_removed_candidate_count,0)::text, 'discard_blocked_candidates',coalesce(v_discard.blocked_candidate_count,0)::text, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"],
+  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('needs_attention',exists(select 1 from private.bpay_next_job j join private.bpay_next_run_worker w on w.run_id=v_run.id and w.candidate_id=j.candidate_id and w.active_prepare_job_id=j.id where j.retry_run_id=v_run.id and j.job_kind='PREPARE' and j.needs_attention), 'run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'review_revision',v_run.review_revision::text,'discard_phase',v_discard.status, 'discard_actor_display_name',v_discard_actor,'discarded_at_utc',v_discard.finished_at_utc, 'discard_removed_candidates',coalesce(v_discard.removed_candidate_count,0)::text, 'discard_already_removed_candidates',coalesce(v_discard.already_removed_candidate_count,0)::text, 'discard_blocked_candidates',coalesce(v_discard.blocked_candidate_count,0)::text, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"],
   "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',false,'throttled',true)", "pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',true,'throttled',false)"],
 
   "private.bpay_next_advice_work_v1(uuid)": [
@@ -762,14 +789,14 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_prepare_job_run_v1(uuid)": [
     "lateral"
   ],
-  "private.bpay_next_prepare_job_active_v1(uuid)": [
+  "private.bpay_next_prepare_job_active_v1(uuid)": ["private.bpay_next_retry_execution_v1",
     "private.bpay_next_prepare_job_run_v1"
   ],
   "private.bpay_next_worker_action_receipt_v1(uuid,uuid,bigint,boolean)": [
     "pg_catalog.jsonb_build_object",
     "private.bpay_next_preparation_expiry_fenced_v1"
   ],
-  "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": [
+  "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": ["private.bpay_next_retry_execution_v1","private.bpay_next_prepare_attention_v1",
     "pg_catalog.clock_timestamp",
     "pg_catalog.hashtextextended",
     "pg_catalog.pg_advisory_xact_lock",
@@ -999,7 +1026,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_case_instruction_insert_guard_v1()": [
     "private.bpay_next_prepare_job_active_v1"
   ],
-  "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": [
+  "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1",
     "pg_catalog.clock_timestamp",
     "pg_catalog.jsonb_build_object",
     "private.bpay_next_apply_expired_week_v1",
@@ -1095,7 +1122,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_selection_page_authority_v1",
     "private.weekly_source_pay_query_admit_v2"
   ],
-  "private.bpay_next_review_simple_run_v1(uuid)": [
+  "private.bpay_next_review_simple_run_v1(uuid)": ["private.bpay_next_prepare_attention_v1",
     "pg_catalog.jsonb_build_object"
   ],
   "private.bpay_next_confirm_simple_run_v1(uuid,bigint)": [
@@ -1161,7 +1188,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.pg_advisory_xact_lock",
     "private.bpay_next_receive_command_v1"
   ],
-  "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)": [
+  "private.bpay_next_enroll_preparation_expiry_one_v1(uuid)": ["private.bpay_next_retry_execution_v1",
     "pg_catalog.clock_timestamp",
     "private.bpay_next_preparation_expiry_fenced_v1",
     "private.bpay_next_worker_release_complete_v1"
@@ -1175,12 +1202,12 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.clock_timestamp",
     "private.bpay_next_prepare_job_run_v1"
   ],
-  "private.bpay_next_expired_prepare_receipt_v1(uuid)": [
+  "private.bpay_next_expired_prepare_receipt_v1(uuid)": ["private.bpay_next_retry_execution_v1",
     "pg_catalog.jsonb_build_object",
     "private.bpay_next_preparation_expiry_fenced_v1",
     "private.bpay_next_prepare_job_run_v1"
   ],
-  "private.bpay_next_worker_execution_guard_v1()": []
+  "private.bpay_next_worker_execution_guard_v1()": ["private.bpay_next_retry_execution_v1",]
 });
 
 // DR09 exact reviewed native call edges; no dynamic closure admission.
@@ -1194,7 +1221,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.pg_advisory_xact_lock",
     "private.bpay_next_receive_command_v1"
   ],
-  "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": [
+  "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": ["private.bpay_next_retry_execution_v1",
     "pg_catalog.clock_timestamp",
     "private.bpay_next_preparation_discard_fenced_v1",
     "private.bpay_next_worker_release_complete_v1"
@@ -1204,7 +1231,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.gen_random_uuid",
     "pg_catalog.make_interval"
   ],
-  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": [
+  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1",
     "array_agg",
     "cardinality",
     "max",
@@ -1228,7 +1255,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_discarded_work_collection_scope_v1",
     "private.bpay_next_reconcile_work_collection_v1"
   ],
-  "private.bpay_next_discarded_prepare_receipt_v1(uuid)": [
+  "private.bpay_next_discarded_prepare_receipt_v1(uuid)": ["private.bpay_next_retry_execution_v1",
     "pg_catalog.jsonb_build_object",
     "private.bpay_next_preparation_discard_fenced_v1",
     "private.bpay_next_prepare_job_run_v1"

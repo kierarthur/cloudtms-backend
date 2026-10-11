@@ -1,0 +1,193 @@
+{
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "WORKERS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/workbench-command",
+      "kind": null,
+      "body": "{\"action\":\"RETRY_WORK_JOB\",\"readback\":false,\"request_id\":\"6eba4d9f-e03b-41c7-9a9b-242e1c7e4b42\",\"candidate_id\":\"55555555-5555-4555-8555-555555555555\",\"work_id\":null,\"job_id\":\"66666666-6666-4666-8666-666666666666\",\"module_epoch\":\"1\",\"expected_owner_epoch\":\"5\",\"expected_phase\":\"PINNING\",\"expected_cursor\":null}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "PROGRESS",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "WORKERS",
+      "body": null
+    }
+  ],
+  "responses": [
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "needs_attention": true,
+          "run_id": "33333333-3333-4333-8333-333333333333",
+          "status": "PREPARING",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T21:20:14.000Z",
+          "expires_at_utc": "2026-10-14T21:20:14.000Z",
+          "selected_candidates": "6",
+          "ready": "2",
+          "review": "1",
+          "pending": "3",
+          "preparing": "3",
+          "removed": "0",
+          "enrolled_candidates": "6",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "8",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "WORKERS",
+      "rows": [
+        {
+          "run_worker_id": "44444444-4444-4444-8444-444444444444",
+          "candidate_id": "55555555-5555-4555-8555-555555555555",
+          "candidate_display_name": "Amelia Bennett",
+          "pay_channel": "PAYE",
+          "worker_status": "REVIEW",
+          "job_id": "66666666-6666-4666-8666-666666666666",
+          "work_id": null,
+          "module_epoch": "1",
+          "owner_epoch": "5",
+          "phase": "PINNING",
+          "cursor": null,
+          "retry_count": "5",
+          "last_error_code": "BPAY_NEXT_JOB_UNAVAILABLE",
+          "retry_eligible": true
+        },
+        {
+          "run_worker_id": "77777777-7777-4777-8777-777777777777",
+          "candidate_id": "88888888-8888-4888-8888-888888888888",
+          "candidate_display_name": "Daniel Clarke",
+          "pay_channel": "UMBRELLA",
+          "worker_status": "READY",
+          "job_id": "99999999-9999-4999-8999-999999999999",
+          "work_id": null,
+          "module_epoch": "1",
+          "owner_epoch": "5",
+          "phase": "WORKBENCH_CASE",
+          "cursor": null,
+          "retry_count": "5",
+          "last_error_code": "BPAY_NEXT_JOB_UNAVAILABLE",
+          "retry_eligible": true
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "action": "RETRY_WORK_JOB",
+      "receipt": {
+        "request_id": "6eba4d9f-e03b-41c7-9a9b-242e1c7e4b42",
+        "candidate_id": "55555555-5555-4555-8555-555555555555",
+        "work_id": null,
+        "job_id": "66666666-6666-4666-8666-666666666666",
+        "received": true,
+        "replay": false,
+        "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "command_sequence": "9",
+        "module_epoch": "1",
+        "owner_epoch": "5",
+        "status": "READY",
+        "phase": "PINNING",
+        "cursor": null,
+        "first_recorded_error_code": "BPAY_NEXT_JOB_UNAVAILABLE",
+        "last_error_code": "BPAY_NEXT_JOB_UNAVAILABLE",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "repaired": false,
+        "captured_at_utc": "2026-10-11T22:35:00.000Z",
+        "retry_kind": "PREPARE",
+        "run_id": "33333333-3333-4333-8333-333333333333",
+        "run_worker_id": "44444444-4444-4444-8444-444444444444",
+        "preparation_revision": "2",
+        "captured_preparation_revision": "1"
+      }
+    },
+    {
+      "ok": true,
+      "kind": "PROGRESS",
+      "rows": [
+        {
+          "needs_attention": true,
+          "run_id": "33333333-3333-4333-8333-333333333333",
+          "status": "PREPARING",
+          "actor_display_name": "Sarah Lewis",
+          "started_at_utc": "2026-10-11T21:20:14.000Z",
+          "expires_at_utc": "2026-10-14T21:20:14.000Z",
+          "selected_candidates": "6",
+          "ready": "2",
+          "review": "0",
+          "pending": "4",
+          "preparing": "4",
+          "removed": "0",
+          "enrolled_candidates": "6",
+          "enrolment_complete": true,
+          "enrolment_failed": false,
+          "safe_to_close": true,
+          "expired_at_utc": null,
+          "review_revision": "9",
+          "discard_phase": null,
+          "discard_actor_display_name": null,
+          "discarded_at_utc": null,
+          "discard_removed_candidates": "0",
+          "discard_already_removed_candidates": "0",
+          "discard_blocked_candidates": "0"
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    },
+    {
+      "ok": true,
+      "kind": "WORKERS",
+      "rows": [
+        {
+          "run_worker_id": "77777777-7777-4777-8777-777777777777",
+          "candidate_id": "88888888-8888-4888-8888-888888888888",
+          "candidate_display_name": "Daniel Clarke",
+          "pay_channel": "UMBRELLA",
+          "worker_status": "READY",
+          "job_id": "99999999-9999-4999-8999-999999999999",
+          "work_id": null,
+          "module_epoch": "1",
+          "owner_epoch": "5",
+          "phase": "WORKBENCH_CASE",
+          "cursor": null,
+          "retry_count": "5",
+          "last_error_code": "BPAY_NEXT_JOB_UNAVAILABLE",
+          "retry_eligible": true
+        }
+      ],
+      "complete": true,
+      "next_cursor": null
+    }
+  ]
+}

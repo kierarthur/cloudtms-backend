@@ -789,26 +789,27 @@ export async function handleBpayNextWorkbenchExport(request,dependencies={}){
 
 
 // WB19 W2: administrative resume only. Original job inputs never expand.
-const WORK_RETRY_ARGS={request_id:'uuid',candidate_id:'uuid',work_id:'uuid',job_id:'uuid',
+const WORK_RETRY_ARGS={request_id:'uuid',candidate_id:'uuid',work_id:'uuid?',job_id:'uuid',
  module_epoch:'positive',expected_owner_epoch:'positive',expected_phase:'phase',expected_cursor:'checkpoint?'};
 const RETRY_REFUSALS=['BPAY_NEXT_WORKBENCH_COMMAND_INPUT_INVALID','BPAY_NEXT_WORKBENCH_COMMAND_REPLAY_CONFLICT',
  'BPAY_NEXT_WORKBENCH_COMMAND_EPOCH_STALE','BPAY_NEXT_WORK_JOB_REPAIR_REQUIRED',
  'BPAY_NEXT_WORK_JOB_STATE_CHANGED','BPAY_NEXT_WORK_JOB_NOT_DEFINITELY_FAILED',
  'BPAY_NEXT_COMMAND_FORBIDDEN','BPAY_NEXT_MODULE_NOT_ACTIVE'];
-function retryField(v,type){return type==='phase'?typeof v==='string'&&ENCODER.encode(v).byteLength>=1&&ENCODER.encode(v).byteLength<=64
+function retryField(v,type){return type==='null'?v===null:type==='prepareKind'?v==='PREPARE':type==='phase'?typeof v==='string'&&ENCODER.encode(v).byteLength>=1&&ENCODER.encode(v).byteLength<=64
  :type==='checkpoint?'?v===null||typeof v==='string'&&ENCODER.encode(v).byteLength<=512
  :type==='jobStatus'?['READY','DONE'].includes(v):type==='error?'?v===null||typeof v==='string'&&/^BPAY_NEXT_[A-Z0-9_]{1,240}$/.test(v)
  :type==='timestamp'?typeof v==='string'&&v.length<=40&&Number.isFinite(Date.parse(v)):field(v,type);}
 export function validateWorkbenchCommandReceipt(r,args){
- const absent={request_id:'uuid',candidate_id:'uuid',work_id:'uuid',job_id:'uuid',received:'boolean',replay:'boolean'};
+ const prepare=args.work_id===null,absent={request_id:'uuid',candidate_id:'uuid',work_id:prepare?'null':'uuid',job_id:'uuid',received:'boolean',replay:'boolean'};
  const schema=r?.received===false?absent:{...absent,command_id:'uuid',command_sequence:'positive',module_epoch:'positive',
   owner_epoch:'positive',status:'jobStatus',phase:'phase',cursor:'checkpoint?',first_recorded_error_code:'error?',
-  last_error_code:'error?',workbench_revision:'integer',adoption_revision:'integer',repaired:'boolean',captured_at_utc:'timestamp'};
+  last_error_code:'error?',workbench_revision:'integer',adoption_revision:'integer',repaired:'boolean',captured_at_utc:'timestamp',...(prepare?{retry_kind:'prepareKind',run_id:'uuid',run_worker_id:'uuid',preparation_revision:'positive',captured_preparation_revision:'positive'}:{})};
  if(!exact(r,Object.keys(schema))||Object.entries(schema).some(([k,t])=>!retryField(r[k],t))
   ||['request_id','candidate_id','work_id','job_id'].some(k=>r[k]!==args[k])
   ||r.received&&(r.module_epoch!==args.module_epoch||r.owner_epoch!==args.expected_owner_epoch
     ||r.status==='DONE'&&(r.phase!=='DONE'||r.cursor!==null)
-    ||r.status==='READY'&&(!['NEW','REMOVED'].includes(r.phase)||!r.repaired&&(r.phase!==args.expected_phase||r.cursor!==args.expected_cursor)))
+    ||r.status==='READY'&&(!(prepare?['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE']:['NEW','REMOVED']).includes(r.phase)||!r.repaired&&(r.phase!==args.expected_phase||r.cursor!==args.expected_cursor)))
+  ||prepare&&r.received&&(r.status!=='READY'||r.repaired||BigInt(r.captured_preparation_revision)>BigInt(r.preparation_revision))
   ||!r.received&&r.replay)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
  return r;
 }

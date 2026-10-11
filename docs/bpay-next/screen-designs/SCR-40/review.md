@@ -146,3 +146,7 @@ Every file below belongs to this actual local capture family; fixed replies are 
 | DR06-unknown-phone-dark.png | f70601c6ec3f09412bff3a3cc5ad36a051207bcfe92ddff8f8505d5857c44a61 |
 
 Related source/contract boundaries: [DR-06-completion.md](../../design/DR-06-completion.md), [DR-06-office-transport-review.md](../../reviews/DR-06-office-transport-review.md). Consolidated current independent receipt: [DR-06-screen-review.md](../../reviews/DR-06-screen-review.md). P01/P02/P03/D01 are closed there; no reported visual finding remains open.
+
+## PF-08 current independent A4 checkpoint — 11 October 2026
+
+**PENDING final corrected captures.** Prior DR-06 receipt above is preserved. Initial actual PF08 images were independently compared with supplied B4 SCR-40 dark/phone PNGs; fixes were sent promptly to the root product author. Current findings: P08-01 Pay method must read Pay channel; P08-02 native Failed badge/sub-line separation and scoped attention-table geometry/tokens; P08-03 new busy/loading lines must be live status and definite errors alert. Root is correcting/replacing the actual images. No final A4 or business acceptance claimed at this checkpoint.
