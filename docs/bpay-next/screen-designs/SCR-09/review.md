@@ -75,3 +75,14 @@ The previous tab-state, missing-sort-line and Include-result problems are indepe
 Source boundary: FE Workbench `0d6c5cb787e0d98d26b991698b5b4e9a5458ace3428983f99f1d7968c688580c`; CSS `eba4f5c63967eea2b12ea90b628c9dbb15d372f01b505fbbc5243c1471eaee18`; Office `8e6ba73244cf62fca4ad5c6d271cd60aecf3f9d0e47cc7916829f05f64561309`; UI adapter `e72d3c6280cd44dfb34346613724f05e0e44f2c4bcf33cdc174862834295ecc5`.
 
 Policy source SHA `8bc212b174469236f2b46dbf70eadc3664a946636458321cd3c77b7146323de5`; policy.json SHA `45036d841d4568aa2d4d7adf4f063d6d17b70288e289ee0b285068797a87369d`. Actual application/DB/hosted/business acceptance remains NOT RUN. Full card is OPEN.
+
+
+---
+
+## Additive WB-24 D04 A4 approval — 11 October 2026
+
+**Latest scoped result: 39 PASS / 0 FAIL / 3 N/A; WB-24 D04 A4 PASS.** The detailed [WB-24 review](WB24-review.md) records all 42 policy/user-eyes results, current source/sample/image SHA-256 identities and scope limits. The joined [Ready main-list receipt](../SCR-04/WB24-review.md) covers the other screen in this same selection slice.
+
+All 42 actual local captures were inspected in dark, device-light and 390px phone. The original None capture mismatch (D24-01) is closed with actual unchecked rows and No payments included. The disabled parent global controls after Candidate return (D24-02) are closed by the local Ready control refresh; all six corrected return images show enabled Select all/Clear all and the mixed Candidate tick. No open A4 finding remains in this slice.
+
+Whole-card application first-use, large/unloaded membership runtime, WB-27 estimate and later financial actions remain outside this screen receipt. Manual item 16 was reviewed directly against policy.json; item 25 and readerAdditions within item 26 remain owner-authorized N/A. This additive approval preserves the entire historic body and its earlier owners/scopes. The preceding 9772 bytes had SHA-256 `b9ca0dcf1802dd98eb5e78869624ed042306d18da5a325a7ad539eeb02090801`; byte-prefix preservation is verified during append.

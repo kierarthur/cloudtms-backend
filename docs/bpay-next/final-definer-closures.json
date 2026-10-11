@@ -14211,16 +14211,19 @@
     },
     {
       "signature": "private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+        "supabase/repeatable/11102026_0135_banking_pay_next_selection_complete_counts_v1.sql"
       ],
-      "owner": "WB-22 finite two-table native choice memory support"
+      "owner": "WB-24 complete native selection counts"
     },
     {
       "signature": "private.bpay_next_selection_memory_guard_v1()",

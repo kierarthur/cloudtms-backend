@@ -190,3 +190,14 @@ The actual images show one Candidate and local global-selection states. They do 
 The accompanying source review is docs/bpay-next/reviews/WB-23-ui-review.md. Separate detailed receipt: SCR-04/WB23-review.md. Earlier SCR-04/review.md bytes before this additive section had SHA-256 **4f1a227a5e27947ad4ff50b7fb3f2437fb3d405b6f30fddc78d8da69c97855c6**; byte-prefix preservation is verified during the documentation-only append.
 
 **Final current slice verdict: SOURCE PASS and A4 PASS; no open finding in this reviewed slice.**
+
+
+---
+
+## Additive WB-24 D04 A4 approval — 11 October 2026
+
+**Latest scoped result: 39 PASS / 0 FAIL / 3 N/A; WB-24 D04 A4 PASS.** The detailed [WB-24 review](WB24-review.md) records all 42 policy/user-eyes results, current source/sample/image SHA-256 identities and scope limits. The joined [Candidate Banking receipt](../SCR-09/WB24-review.md) covers the other screen in this same selection slice.
+
+All 42 actual local captures were inspected in dark, device-light and 390px phone. The original None capture mismatch (D24-01) is closed with actual unchecked rows and No payments included. The disabled parent global controls after Candidate return (D24-02) are closed by the local Ready control refresh; all six corrected return images show enabled Select all/Clear all and the mixed Candidate tick. No open A4 finding remains in this slice.
+
+Whole-card application first-use, large/unloaded membership runtime, WB-27 estimate and later financial actions remain outside this screen receipt. Manual item 16 was reviewed directly against policy.json; item 25 and readerAdditions within item 26 remain owner-authorized N/A. This additive approval preserves the entire historic body and its earlier owners/scopes. The preceding 21650 bytes had SHA-256 `1c10578ede4cc965221b4c18e66abf47fd2e49f992af1eb12225e92197d99efc`; byte-prefix preservation is verified during append.

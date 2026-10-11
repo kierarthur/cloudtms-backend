@@ -401,6 +401,7 @@ const MEMORY_ROWS={default_selected:'boolean',selection_eligible:'boolean',new_c
 Object.assign(ROWS.HEADER,{selection_memory:'selectionMemory',selection_mode:'memoryMode',remembered_intent:'choiceIntent?'});
 Object.assign(ROWS.EXPORT_ROWS,{candidate_default_pay_selected:'boolean'});
 for(const kind of ['CANDIDATES','CANDIDATE_GROUPS','GROUP_LINES','EXPORT_ROWS'])Object.assign(ROWS[kind],MEMORY_ROWS);
+for(const kind of ['CANDIDATES','CANDIDATE_GROUPS'])Object.assign(ROWS[kind],{selectable_item_count:'integer',selectable_case_component_count:'integer'});
 const MEMORY_BASIS={
  WORK:{kind:'memoryWork',work_id:'uuid',revision_id:'uuid?',applied_revision_id:'uuid?',position_count:'integer',position_updated_at_utc:'jobTime?',approved_source_ex_vat:'decimal?',realised_source_ex_vat:'decimal?',held_source_ex_vat:'decimal?',source_book_revision:'integer',target_pay_channel:'channel?',target_umbrella_id:'uuid?',target_umbrella_vat_chargeable:'boolean?',min_take_home_wtd:'decimal?',control_sequence:'integer'},
  PARENT:{kind:'memoryParent',financial_view_revision:'integer'},
@@ -567,6 +568,7 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     if(kind==='HEADER'&&(!same(row.selection_memory,context.selection_memory)||row.remembered_intent!==null&&row.remembered_intent.mode!==row.selection_mode))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
     if(Object.hasOwn(row,'choice_member_count')){
       const total=BigInt(row.choice_member_count),selected=BigInt(row.choice_selected_count),basis=row.selection_basis;
+      if(Object.hasOwn(row,'selectable_item_count')&&BigInt(row.selectable_item_count)+BigInt(row.selectable_case_component_count)!==total)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
       if(selected>total||row.default_selected!==(total>0n&&selected===total)||total===0n&&(row.selection_eligible||row.new_changed))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
       if(basis!==null){
         const expected=kind==='CANDIDATES'?'PARENT':kind==='CANDIDATE_GROUPS'?row.group_kind==='WORK'?'WORK':row.group_kind==='ROW'?'CASE':null:row.work_id!==null?'COMPONENT':row.case_component_id!==null?'CASE':null;
