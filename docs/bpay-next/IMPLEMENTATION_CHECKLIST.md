@@ -2136,7 +2136,7 @@ WB24 ITEM [x] Built [x] Reviewed; exact D04 complete, shared WB21/WB22 owners re
 
 ## WB-27 — On-demand estimate for one Candidate (no per-click recalculation)
 
-Seq 73; Workbench · WB-S; reviewer R2; current requested-feature status PARTLY_DONE.
+Seq 73; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: One allocation kernel; consistent finite estimate pagination, no browser headroom; Draft uses boundary.
 
@@ -2144,11 +2144,11 @@ Dependencies: WB-15, WB-26, F-06, F-16; successor positions: `private.bpay_next_
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-27-D03 | REPEATABLE: private.bpay_next_case_allocation_row_v1(p_case_kind text, p_nominal_due numeric, p_usable_capacity numeric, p_channel_headroom numeric, p_worker_take_home numeric, p_minimum_earnings_threshold numeric, p_take_home_floor_override numeric, p_captured_default_floor numeric) | INSTALLED_ON_TEST | Retain one immutable allocation row kernel; read-only plan extraction cannot create a competing headroom formula. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-27-D04 | DOC: private.pay_finance_selected_quote_v1 | LOCAL_ONLY | Use real pure shared quote and mode validation; F06 registers reviewed current source before install. No duplicated calculator; quote full units is not residual attribution. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-27-D07 | REPEATABLE: private.bpay_next_case_allocation_plan_v1 | MISSING | Extract real instruction+allocation once, STABLE no writes; trusted continuation/headroom and immutable estimate/freeze scope. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-27-D08 | DOC: 06102026_1157 shared quote — WB45 exact residual consumption contract | MISSING | One shared quote consuming exact remaining bucket owned basis; typed ambiguity refusal. Do not copy full-component saved quote or invent pro-rata. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-27-D09 | SCREEN: On-demand estimate controls in js/bpay-next-workbench.js | MISSING | Single shared allocation plan, immutable bounded estimate continuation and server headroom; stale marks on tick without network. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-27-D03 | REPEATABLE: private.bpay_next_case_allocation_row_v1(p_case_kind text, p_nominal_due numeric, p_usable_capacity numeric, p_channel_headroom numeric, p_worker_take_home numeric, p_minimum_earnings_threshold numeric, p_take_home_floor_override numeric, p_captured_default_floor numeric) | BUILT_REVIEWED | Retain one immutable allocation row kernel; read-only plan extraction cannot create a competing headroom formula. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-27-D04 | DOC: private.pay_finance_selected_quote_v1 | BUILT_REVIEWED | Use real pure shared quote and mode validation; F06 registers reviewed current source before install. No duplicated calculator; quote full units is not residual attribution. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-27-D07 | REPEATABLE: private.bpay_next_case_allocation_plan_v1 | BUILT_REVIEWED | Extract real instruction+allocation once, STABLE no writes; trusted continuation/headroom and immutable estimate/freeze scope. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-27-D08 | DOC: 06102026_1157 shared quote — WB45 exact residual consumption contract | BUILT_REVIEWED | One shared quote consuming exact remaining bucket owned basis; typed ambiguity refusal. Do not copy full-component saved quote or invent pro-rata. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-27-D09 | SCREEN: On-demand estimate controls in js/bpay-next-workbench.js | BUILT_REVIEWED | Single shared allocation plan, immutable bounded estimate continuation and server headroom; stale marks on tick without network. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2163,6 +2163,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 DRP P05: with two GBP 80 repayments and GBP 100 capacity, unticking the first and pressing Show estimate shows the second recovering GBP 80 (RQ-040, J2d). Ticking anything afterwards shows "Outdated" without a network request (RQ-242). No hold row exists after the estimate. Repeating the estimate at page sizes 1, 17 and 100 gives the same figures. Creating drafts with the same ticks then reserves exactly the estimated GBP 80 (the Draft and the estimate use the same plan).
+
+WB27 ITEM [x] Built [x] Reviewed; exact D03/D04/D07/D08/D09 complete. Implementation BE b4cb63d98eb266b5d3ccfbe3b775b90bdf22979c, FE 03a42dff7113909b92e68ed9dab6a77bab4d666d. Original0290/1157 and current writable locks retained.333/872 db:check,9/9 source gates, sole PG17 compile/seal/coupling PASS. Actual27 SCR12/SCR11 screenshots39PASS/0FAIL/3NA. Joined app authored/NOT_RUN; installation unchecked. Whole57/288 BUILT57/288 REVIEWED.
 
 ## WB-37 — Snooze due wake-up and week-rollover jobs
 

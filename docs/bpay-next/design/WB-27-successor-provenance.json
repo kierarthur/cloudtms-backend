@@ -74,5 +74,7 @@
   },
   "joinedAppAcceptance": "AUTHORED / NOT_RUN: DRP P05, page-size1/17/100 equality, no-holds estimate and joined Draft hold equality",
   "deployment": "NOT_INSTALLED",
-  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)"
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "backendCommit": "b4cb63d98eb266b5d3ccfbe3b775b90bdf22979c",
+  "frontendCommit": "03a42dff7113909b92e68ed9dab6a77bab4d666d"
 }
