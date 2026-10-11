@@ -1,0 +1,18 @@
+{
+  "item": "SP-16",
+  "decision": "BD126",
+  "productChanges": [],
+  "reusedCatalogue": "design/SP-16-current-owner-catalogue.json",
+  "review": {
+    "path": "reviews/SP-16-source-review.md",
+    "sha256": "dfb1a900cc30c04607988f0f47bf253c45a355af9f846ee86a8e06677e747e7d"
+  },
+  "checks": {
+    "localLoad": "0changed migrations/closures",
+    "dbCheck": "358/920PASS",
+    "sourceGates": "12/12PASS",
+    "contract": "30b4121d3e8ce535ca074943eb686fb00aec217b151986811c65fdb536e3a04d sealed/coupledPASS",
+    "catalogue": "9exactcurrentmatches",
+    "joined": "AUTHORED_NOT_RUN"
+  }
+}
