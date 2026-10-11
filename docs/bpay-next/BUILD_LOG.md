@@ -883,3 +883,9 @@ Checks PASS336/882 db:check before sole localPG17 load1migration/6repeatableclos
 WB40 completion11/10/2026: localBE e3b380e196e7d614be072d8cbee61da54483d795; exact D08/D09/D10 and ITEM BUILT/REVIEWED. IndependentDB/Worker PASS; schema/source/contract/catalogue PASS. Whole60/288 BUILT60/288 REVIEWED; joined application/installation NOT_RUN. NextCM01seq77 thenCM04seq78; plan order unchanged.
 
 WB40 verifier closure: full existing22082026_1302 general browser isolation read-onlyDO passes on sole localhost PG17; no constants/publicSECDEF membership change. MD D10 status aligned with CSV BUILT_REVIEWED; app/install remainNOT_RUN.
+
+### CM-01 sequence77 / BD086 — 11 October 2026
+
+Exact objects before build: D01 `design/CM-01_LIFECYCLE_V5_ADDENDUM.md`; D02 future joined in-app checklist. Full card, checklist, B5, binding answers and start-sheet AUTH-CM01 read. No DB, Worker or screen objects belong to this item. Eight numbered sections cite the financial/lifecycle source lines; the note has no self-hash and changes no business rule. B5 working supplement records OR-CM-01 and the approved bytes; subsequent CM completion notes cite it. Independent review is recorded separately. D02 is authored/NOT_RUN with the B17/own-B17-paid15/A−3 residual1 joined journey; no fixtures or runtime checks were run.
+
+BD086: record the already granted AUTH-CM01 approval in the build's B5 supplement, preserving the approved plan source pack. The current owner's direction pre-answers the note approval as written subject to card/ruling compliance. No new approval request or two-chat hash agreement is needed. Cursor-read full history is reached by continuous scrolling under owner A3d. Database compile/contract/security and screen checks are N/A for this paper-only item; source references and note hash are checked.
