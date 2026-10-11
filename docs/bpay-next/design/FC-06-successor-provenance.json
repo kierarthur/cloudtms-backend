@@ -2,7 +2,7 @@
   "item": "FC-06",
   "sequence": 106,
   "decision": "BD118",
-  "status": "SOURCE_A4_BUILT_PENDING_COMMIT_RECEIPT",
+  "status": "BUILT_REVIEWED",
   "deliverables": [
     "FC-06-D03",
     "FC-06-D04"
@@ -81,5 +81,8 @@
   ],
   "screenshots": "57 actual native local variants:18 states dark/device-light/phone plus3upperphone",
   "retained": "Current terms/context/apply/14argwrapper/publicintake/page/money/queue untouched; no new table/index/publicdefiner/producer/trigger/command/reader/framework",
-  "futureHost": "FC02seq117 Case page consumes saved original reference; targeted native onCaseCreated receipt ready"
+  "futureHost": "FC02seq117 Case page consumes saved original reference; targeted native onCaseCreated receipt ready",
+  "implementationCommit": "e4c24479974abb35d16067035a54c05ce2bbe58e",
+  "frontendCommit": "9030058703330f4707f20229c5db4fc50b32067a",
+  "screen": "Independent A4 PASS;57actual native captures/full42policy, differences/control purposes reviewed"
 }

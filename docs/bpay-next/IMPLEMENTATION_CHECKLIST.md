@@ -3140,8 +3140,8 @@ Dependencies: FC-03, WB-08, F-16; successor positions: none. Design note: requir
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| FC-06-D03 | DOC: CASE_CREATE (FC-06) | MISSING | Reuse typed MANUAL_DEBT creator, mandatory original-liability reference, tax choice/schedule/threshold/floor guards. Add exact allowed intake/UI fields and immutable note/provenance. Do not manufacture a negative Timesheet or reinterpret imported underpayment as new debt. Complete DB ownership, exact Worker allow-list and UI receipt together; baseline route existence does not mean this contract exists. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| FC-06-D04 | SCREEN: FC-06 — "New Manual Debt" window mirroring LUI-083 fields; Preview/Apply. | MISSING | Reuse typed MANUAL_DEBT creator, mandatory original-liability reference, tax choice/schedule/threshold/floor guards. Add exact allowed intake/UI fields and immutable note/provenance. Do not manufacture a negative Timesheet or reinterpret imported underpayment as new debt. Build the exact named user surface/controls in F-16's NEXT Office host; existing thin Sheet controls do not prove this full feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| FC-06-D03 | DOC: CASE_CREATE (FC-06) | BUILT_REVIEWED | Reuse typed MANUAL_DEBT creator, mandatory original-liability reference, tax choice/schedule/threshold/floor guards. Add exact allowed intake/UI fields and immutable note/provenance. Do not manufacture a negative Timesheet or reinterpret imported underpayment as new debt. Complete DB ownership, exact Worker allow-list and UI receipt together; baseline route existence does not mean this contract exists. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| FC-06-D04 | SCREEN: FC-06 — "New Manual Debt" window mirroring LUI-083 fields; Preview/Apply. | BUILT_REVIEWED | Reuse typed MANUAL_DEBT creator, mandatory original-liability reference, tax choice/schedule/threshold/floor guards. Add exact allowed intake/UI fields and immutable note/provenance. Do not manufacture a negative Timesheet or reinterpret imported underpayment as new debt. Build the exact named user surface/controls in F-16's NEXT Office host; existing thin Sheet controls do not prove this full feature. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3154,6 +3154,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows FC
 **Later in-app acceptance — not run:**
 
 Create a GBP 120 taxable debt over 4 weeks with original liability reference "INV-2291": for a PAYE Candidate GBP 30 weekly appears in the next Draft as a gross-stage deduction (gross to payroll reduced by GBP 30) and the reference shows on the case (RQ-088, LUI-083, LSV-051 replaced).
+
+FC06 ITEM/D03/D04 BUILT/REVIEWED. BE e4c24479974abb35d16067035a54c05ce2bbe58e; FE 9030058703330f4707f20229c5db4fc50b32067a; design/FC-06-completion.md; design/FC-06-case-create-contract.json; design/FC-06-successor-provenance.json; design/FC-06-current-owner-catalogue.json; design/FC-06-local-metadata.json; design/FC-06-design-review.md; reviews/FC-06-sql-review.md; reviews/FC-06-source-review.md; screen-designs/SCR-119/review.md. Context preserved.57actual native captures/full42policy SOURCE/A4PASS;351/914/source12/syntax/managedlocalPG17/10bodies/isolation83976zero/seal-coupling0a96f9c1PASS. Joined checks AUTHORED_NOT_RUN. Whole 87/288 BUILT 87/288 REVIEWED; nextFC09seq107.
 
 ## FC-09 — Edit a case before any activity
 
