@@ -2275,7 +2275,7 @@ WB40 ITEM [x] Built [x] Reviewed; exact D08/D09/D10 native current hold seam com
 
 ## CM-01 — Lifecycle amendment design note for Contract moves (the builder writes it; the owner approves it)
 
-Seq 77; Contract move · D5-CM; reviewer R6; current requested-feature status PACK_ONLY.
+Seq 77; Contract move · D5-CM; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Write the short lifecycle note from already binding rulings; AUTH-CM01 approves the written implementation note, not unresolved OD01/02/03 policy or obsolete cross-chat hash gates.
 
@@ -2283,8 +2283,8 @@ Dependencies: none; successor positions: none. Design note: required; exact note
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| CM-01-D01 | DOC: docs/bpay-next/design/CM-01_LIFECYCLE_V5_ADDENDUM.md | MISSING | Implement the exact doc target after its existing dependencies. Write the short lifecycle note from already binding rulings; AUTH-CM01 approves the written implementation note, not unresolved OD01/02/03 policy or obsolete cross-chat hash gates. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| CM-01-D02 | CHECK: CM-01 future joined in-app TEST checklist | MISSING | Owner scrutinises the written note; later app checks approve B at17, retain own-B approved N17/paid15 (+2), offset A−3 to outstanding1. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| CM-01-D01 | DOC: docs/bpay-next/design/CM-01_LIFECYCLE_V5_ADDENDUM.md | BUILT_REVIEWED | Implement the exact doc target after its existing dependencies. Write the short lifecycle note from already binding rulings; AUTH-CM01 approves the written implementation note, not unresolved OD01/02/03 policy or obsolete cross-chat hash gates. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| CM-01-D02 | CHECK: CM-01 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Owner scrutinises the written note; later app checks approve B at17, retain own-B approved N17/paid15 (+2), offset A−3 to outstanding1. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows CM-01-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2294,6 +2294,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows CM
   - §3-§5 state the OD-01, OD-02 and OD-03 answers and the OR-37 statement, citing 09_OWNER_ANSWERS_BINDING.md and the code lines it names.
   - B5 has row `OR-CM-01` recording the owner's approval and the approved file's SHA-256, and every later CM item cites it. The note is presented for AUTH-CM01 as soon as it is written (straight after its Build Order position), so the gated CM chain is not held by a late approval. No two-chat agreement is asked for or recorded.
   - Joined future check: Owner scrutinises the written note; later app checks approve B at17, retain own-B approved N17/paid15 (+2), offset A−3 to outstanding1. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+CM01 ITEM [x] Built [x] Reviewed; D01 complete, D02 AUTHORED/NOT_RUN. Implementation BE 11b03be30e1f094f588a95f640aca8eb9b5cbb38. Independent lifecycle review PASS; B5 OR-CM-01 records approved note SHA. No SQL/Worker/screen checks apply. Whole61/288 BUILT61/288 REVIEWED; joined app/install unchecked.
 
 ## CM-04 — One shared calculator for every channel conversion and destination repricing
 
