@@ -59,5 +59,7 @@
       "path": "reviews/SP-20-sql-review.md",
       "sha256": "29606d6255c4ab44d2ce74f8592d7fd4d9a1250b77637d0b8851420c0c66a532"
     }
-  ]
+  ],
+  "implementationCommit": "71c3baf05725be5a9ed2d012ecb0087962b12ed0",
+  "status": "BUILT_REVIEWED"
 }

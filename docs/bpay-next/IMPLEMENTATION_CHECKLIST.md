@@ -3381,7 +3381,7 @@ SP16 ITEM/D01–D02 BUILT/REVIEWED with exact verify-only implementation 36ada9a
 
 ## SP-20 — Source component tax classification for NEXT capture
 
-Seq 115; Publication to Banking · SP-G; reviewer R5; current requested-feature status MISSING.
+Seq 115; Publication to Banking · SP-G; reviewer R5; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only SP-20's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -3389,9 +3389,9 @@ Dependencies: F-05, F-06, SP-14; successor positions: `03102026_1610` position c
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-20-D01 | REPEATABLE: 03102026_1550_banking_pay_next_source_stage_v1.sql component tax/classification successor | MISSING | Stage answered Additional/expense/mileage/fixed-expense kinds from existing canonical classification; no repricing/conversion/new identity. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-20-D02 | REPEATABLE: 03102026_1610_banking_pay_next_position_capture_v1.sql Source kind/channel guard successor | MISSING | Remove only specified taxable Source channel binding/Umbrella and answered component restrictions after SP-14; keep every other refusal/no valuation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-20-D03 | REPEATABLE: 03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql Source-book/target guard successor | MISSING | Keep existing single valuer; allow answered tax/channel cases only, line's own tax classification; no reimbursement conversion. Preserve later WB29/DR38 chains. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-20-D01 | REPEATABLE: 03102026_1550_banking_pay_next_source_stage_v1.sql component tax/classification successor | BUILT_REVIEWED | Stage answered Additional/expense/mileage/fixed-expense kinds from existing canonical classification; no repricing/conversion/new identity. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-20-D02 | REPEATABLE: 03102026_1610_banking_pay_next_position_capture_v1.sql Source kind/channel guard successor | BUILT_REVIEWED | Remove only specified taxable Source channel binding/Umbrella and answered component restrictions after SP-14; keep every other refusal/no valuation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-20-D03 | REPEATABLE: 03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql Source-book/target guard successor | BUILT_REVIEWED | Keep existing single valuer; allow answered tax/channel cases only, line's own tax classification; no reimbursement conversion. Preserve later WB29/DR38 chains. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3402,6 +3402,8 @@ Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, a PAYE Source week with 37.5 h, a £40 Additional payment and £25 mileage is captured with the £40 as taxable pay and the £25 as a non-taxable reimbursement; a £20 expense is a non-taxable reimbursement with no ERNI conversion. For a PAYE Contract worked by an Umbrella-target Candidate, the 37.5 h and the £40 Additional are converted via `_pay_convert_paye_to_umbrella` and the £25 mileage is carried unchanged; on a same-channel Contract nothing is converted. A PAYE Candidate on an Umbrella-rate Source week is captured (converted via `_pay_convert_umbrella_to_paye_ex`), not held in REVIEW. A Source fixed expense is classified as BUILD_LOG records. No Source Additional, expense or mileage component, and no channel-different Source WORK, ends in REVIEW with `SOURCE_BOOK_APPROVAL_UNBOUND` or `UMBRELLA_WORK_EXECUTION_UNSUPPORTED` any more (an unbound Source book still does). A converted Source line's paid-evidence row on the Source Timesheet shows "Payment evidence does not yet provide a reliable paid-hours figure." (the `05102026_1112:357` qualification requires PAYE→PAYE, so it is `QUANTITY_MAPPING_UNSUPPORTED`), never a converted hours figure. The PAYE→Umbrella Source week is transferred and settled by CSV with the converted amounts (no `BPAY_NEXT_SOURCE_BOOK_CAPTURE_CHANGED` or `BPAY_NEXT_UMBRELLA_WORK_EXECUTION_UNSUPPORTED`), and the conversion is applied once (the Draft amount equals one `_pay_convert_paye_to_umbrella` of the approved amount). Covers observed: SRQ-159 → all the checks above.
+
+SP20 ITEM/D01–D03 BUILT/REVIEWED with exact implementation 71c3baf05725be5a9ed2d012ecb0087962b12ed0; design/SP-20-completion.md; design/SP-20-successor-provenance.json; design/SP-20-current-owner-catalogue.json; reviews/SP-20-design-review.md; reviews/SP-20-sql-review.md; reviews/SP-20-boundary-review.md. D04 remains DR38-owned context; general ordinary/transfer/settlement application acceptance BLOCKED_ON_DR38 / AUTHORED_NOT_RUN. Whole 96/288 BUILT/REVIEWED; nextownerA2WB44 required correction thenWB39seq116.
 
 ## WB-39 — Payment Advances / Snoozes: Timesheet snooze reader, indefinite management, finance-case snooze actions
 
