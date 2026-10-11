@@ -2946,7 +2946,7 @@ Implementation 7cbb6c5d7f7145a0800dda54ed24fa9cd47a5f2f; D09 frontend 30f0c6defc
 
 ## FC-16 — Case-change guard for reserved Draft slices
 
-Seq 100; Finance cases · D2-G; reviewer R3; current requested-feature status PARTLY_DONE.
+Seq 100; Finance cases · D2-G; reviewer R3; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Protect accepted PREPARING case inputs before any hold as well as READY/DRAFT holds. Case changes may affect only future unreserved authority; explicitly changing a protected slice requires ordered eligible whole-Candidate release/cancel/new intent. Use paged reserved-slice reader and small exact guard summary, not unbounded protected[] JSON.0310 shape guard alone does not enforce aggregate capacity or intercept every case writer; census and wire each actual owner.
 
@@ -2954,9 +2954,9 @@ Dependencies: DR-05, F-05; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| FC-16-D04 | REPEATABLE: banking_pay_next_case_change_guard_v1 | MISSING | Scaffold and implement exact card contract in approved successor order; no file/body/installation has been produced by this review. Protect accepted PREPARING case inputs before any hold as well as READY/DRAFT holds. Case changes may affect only future unreserved authority; explicitly changing a protected slice requires ordered eligible whole-Candidate release/cancel/new intent. Use paged reserved-slice reader and small exact guard summary, not unbounded protected[] JSON.0310 shape guard alone does not enforce aggregate capacity or intercept every case writer; census and wire each actual owner. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| FC-16-D05 | DOC: WORKER_RELEASE (FC-16) | MISSING | Protect accepted PREPARING case inputs before any hold as well as READY/DRAFT holds. Case changes may affect only future unreserved authority; explicitly changing a protected slice requires ordered eligible whole-Candidate release/cancel/new intent. Use paged reserved-slice reader and small exact guard summary, not unbounded protected[] JSON.0310 shape guard alone does not enforce aggregate capacity or intercept every case writer; census and wire each actual owner. Complete DB ownership, exact Worker allow-list and UI receipt together; baseline route existence does not mean this contract exists. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| FC-16-D08 | REPEATABLE: private.bpay_next_case_reserved_slices_v1 | MISSING | Bounded exact accepted-PREPARING input and READY/DRAFT hold scopes, indexed pages with run/channel references; no unbounded protected[] JSON or current-history guess. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| FC-16-D04 | REPEATABLE: banking_pay_next_case_change_guard_v1 | BUILT_REVIEWED | Scaffold and implement exact card contract in approved successor order; no file/body/installation has been produced by this review. Protect accepted PREPARING case inputs before any hold as well as READY/DRAFT holds. Case changes may affect only future unreserved authority; explicitly changing a protected slice requires ordered eligible whole-Candidate release/cancel/new intent. Use paged reserved-slice reader and small exact guard summary, not unbounded protected[] JSON.0310 shape guard alone does not enforce aggregate capacity or intercept every case writer; census and wire each actual owner. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| FC-16-D05 | DOC: WORKER_RELEASE (FC-16) | BUILT_REVIEWED | Protect accepted PREPARING case inputs before any hold as well as READY/DRAFT holds. Case changes may affect only future unreserved authority; explicitly changing a protected slice requires ordered eligible whole-Candidate release/cancel/new intent. Use paged reserved-slice reader and small exact guard summary, not unbounded protected[] JSON.0310 shape guard alone does not enforce aggregate capacity or intercept every case writer; census and wire each actual owner. Complete DB ownership, exact Worker allow-list and UI receipt together; baseline route existence does not mean this contract exists. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| FC-16-D08 | REPEATABLE: private.bpay_next_case_reserved_slices_v1 | BUILT_REVIEWED | Bounded exact accepted-PREPARING input and READY/DRAFT hold scopes, indexed pages with run/channel references; no unbounded protected[] JSON or current-history guess. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2972,6 +2972,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows FC
 **Later in-app acceptance — not run:**
 
 Pausing a Payment Advance with GBP 30 reserved in a READY preparation reports "GBP 30.00 reserved in a preparation by <name> — remove that Candidate or discard the preparation to change it"; choosing "Remove that Candidate" releases the hold and the run must be re-reviewed (RQ-311). Pausing a Payment Advance with GBP 30 in a confirmed Draft reports "GBP 30.00 protected in PAYE Draft 10/10/2026 — only cancelling the Candidate's payment frees it" and the Draft still deducts GBP 30. In both cases the pause applies to future weeks; no capacity is changed behind the guard (NX-038).
+
+Implementation 1cc1c3e218a382d4c431dd580c7c16f9923a6120; design/FC-16-completion.md; design/FC-16-current-owner-catalogue.json; design/FC-16-successor-provenance.json; design/FC-16-design-review.md; design/FC-16-binding-review.md; design/FC-16-writer-census.md. ITEM/D04/D05/D08 BUILT/REVIEWED; context rows retained (card assertion physically installed here for later FC09 owner).348/910/source12/syntax/localPG17/four exact owners/current indices/CHECK/isolation verifiers/seal-coupling6be64875 PASS. No direct screen. Joined acceptance authoredNOT_RUN. Whole82/288 BUILT82/288 REVIEWED; nextFC03seq101.
 
 ## FC-03 — Finance-case command intake, consequence preview and notes
 

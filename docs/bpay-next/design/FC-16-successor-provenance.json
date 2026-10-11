@@ -2,7 +2,7 @@
   "item": "FC-16",
   "sequence": 100,
   "decision": "BD112",
-  "status": "SOURCE_REVIEWED_PENDING_LOCAL_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/migrations/11102026_1509_banking_pay_next_case_protection_lookup_indexes.sql",
@@ -39,5 +39,6 @@
     "nodeSyntax": "both changed Worker files PASS"
   },
   "screen": "NOT_APPLICABLE — no direct FC16 screen",
-  "futureJoined": "AUTHORED_NOT_RUN"
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "implementationCommit": "1cc1c3e218a382d4c431dd580c7c16f9923a6120"
 }

@@ -27,3 +27,5 @@ Future joined checks are authored NOT_RUN below. Timing check moved to TEST afte
 | Per-Candidate completed discard/expiry clears that exact binding while siblings finish; blocked siblings remain protected. | AUTHORED_NOT_RUN |
 | Concurrent Create and write-off serialize at original component lock; stale revision refuses before event/counter changes. | AUTHORED_NOT_RUN |
 | Cursor reaches every reference including old nullable-component holds; unknown fields stay absent and response bounds hold. | AUTHORED_NOT_RUN |
+
+Product commit 1cc1c3e218a382d4c431dd580c7c16f9923a6120. ITEM/D04/D05/D08 BUILT/REVIEWED. The card-required assertion is physically present; checklist context ownership preserved. Local source approval; TEST/app outcomes unchecked.
