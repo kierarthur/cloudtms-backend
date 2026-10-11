@@ -58,4 +58,3 @@ D04 remains future joined NOT_RUN: permitted pre-capture rotation keeps booking/
 | 11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql | 4a21ab611b90ed39fed312a5d8aaa0754e72f980da9c621ee815ec1f611c6c1a |
 
 **Verdict: BD104 is the smallest correct scope, conditional on the concrete implementation checks above; no product/app/database acceptance claimed.**
-

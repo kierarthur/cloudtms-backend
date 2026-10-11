@@ -56,4 +56,3 @@ Current native Candidate policy is expressly WEEKLY-only PAPER/QR and DAILY phon
 ## Boundaries
 
 This design changes no Source producer/query admission, money owner, F25 parked resolver, channel/floor pricing, provider, command or browser route. The accepted financial fact is the existing original Rule-B Work choice; no new acceptance object is needed. All original sticky retention facts must remain classified, and no financial-history sum is needed. Normal source/ACL/compile checks and the card’s joined app checks remain root work; reviewer execution remains NOT_RUN.
-

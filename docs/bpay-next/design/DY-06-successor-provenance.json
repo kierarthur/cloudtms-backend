@@ -2,7 +2,7 @@
   "item": "DY-06",
   "sequence": 93,
   "decision": "BD104",
-  "status": "CHECKED_PENDING_COMPLETION_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
@@ -79,5 +79,6 @@
     "publicMembershipDelta": 0,
     "actualBrowserVerifier": "DO PASS"
   },
-  "futureJoined": "AUTHORED_NOT_RUN"
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "implementationCommit": "3686c92bdf0704720a9e7cd4d8c44af20caedf24"
 }
