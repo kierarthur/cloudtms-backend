@@ -1,6 +1,6 @@
 # DR-08 — expiry projection closure, sequence83
 
-11 October 2026. IN_PROGRESS; no item completion or runtime claim.
+11 October 2026. BUILT_REVIEWED for current card scope; no joined runtime claim.
 
 Exact checklist objects: D01 existing public expiry due0520, D02 accept0559, D03 enroll0559, D04 claim0510, D06 guard0559, D07 existing review/progress screen, D09 expiry page0559. D05/D08 are context. Full card224–247/checklist/dependencies/master successor chain and saved independent investigations read before implementation. Correct due/accept/enroll/claim/deadline/financial release owners are reused, not replaced.
 
@@ -19,3 +19,5 @@ Fresh sole local PG17 census before migration: zero nonterminal expiry bindings.
 Normal checks PASS:340 migrations/889 repeatables db:check before sole local PG17 changed load (one migration/four closures). Installed0746 is locked and immutable. Worker/Office/source syntax and12/12 source gates PASS; contract export/seal/coupling1b4369bca1b5462353db360f8037cf7b546577b34045178470ea01ad8a013261 PASS. Five-definition final ownership recorded; membership delta0 retains835/76/0/d5226315 browser verifier constants. SQL, projection and transport reviews SOURCE PASS. Twelve actual local dark/device-light/phone captures supplied for scoped A4; two wording defects fixed and affected states recaptured.
 
 FE implementation45af941fe78a349621b69be6785d53c8bc6139b4. Joined72h cleanup, Confirm race, stale child, week-later confirmed run, released Ready items and native ORIGIN queue journeys are AUTHORED_NOT_RUN. No business rows, fixtures, timing programme, hosted installation or external action.
+
+Completion receipt: BE 9b36b740440360ca2f6195774d98775eb26487c0; FE 6ce81d34941e09e05b4045ce550c16cc0f96123c. Four42-row A4 receipts independently compare all12 actual captures beside supplied B4 designs. Current expiry/header controls PASS; phone Close44px correction and factual actor/start header are included. The existing partial Draft review still carries full person identity to DR15; no unexplained current expiry difference remains. DR05 correction provenance is separately retained in its own successor note.

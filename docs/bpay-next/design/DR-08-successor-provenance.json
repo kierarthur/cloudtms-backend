@@ -20,7 +20,7 @@
   "target": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
   "item": "DR-08",
   "sequence": 83,
-  "status": "SOURCE_REVIEWED_A4_RECEIPT_PENDING",
+  "status": "BUILT_REVIEWED",
   "builderDecisions": [
     "BD094"
   ],
@@ -30,7 +30,7 @@
     "broker/src/bpay-next-preparation.js": "a909572670ff2c1ef40e0c6f4202a0a99112b2a2457acb5a27f4f4bb18e9e451",
     "scripts/bpay-next-source-gates.mjs": "0b4aed37f833b04a23d721a6cc0c8b1e1699b791b3feb7e148660f7448151227"
   },
-  "frontendCommit": "45af941fe78a349621b69be6785d53c8bc6139b4",
+  "frontendCommit": "6ce81d34941e09e05b4045ce550c16cc0f96123c",
   "normalChecks": {
     "dbCheck": "340/889 PASS",
     "localPG17": "1 additive migration/4 closures compiled;0746 immutable",
@@ -49,5 +49,12 @@
     "reviews/DR-08-transport-office-review.md",
     "reviews/DR-08-screen-review.md"
   ],
-  "caseReleaseCorrection": "DR05 helper RECORD missing id; only exact point SELECT corrected in DR08 successor"
+  "caseReleaseCorrection": "DR05 helper RECORD missing id; only exact point SELECT corrected in DR08 successor",
+  "implementationCommits": {
+    "backend": "9b36b740440360ca2f6195774d98775eb26487c0",
+    "frontend": "6ce81d34941e09e05b4045ce550c16cc0f96123c",
+    "frontendInitial": "45af941fe78a349621b69be6785d53c8bc6139b4",
+    "frontendHeader": "a5c44ec4a0baabd9b124a025e2dc0fe3f72228c5"
+  },
+  "screenReview": "PASS current expiry scope; 12 actual dark/device-light/phone captures/four42-row receipts; DR15 full identity DEFERRED"
 }

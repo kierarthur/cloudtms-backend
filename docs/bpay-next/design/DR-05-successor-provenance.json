@@ -245,5 +245,16 @@
     ],
     "review": "reviews/DR-05-screen-review.md",
     "approval": "SCOPED_CONTROL_PASS_FULL_IDENTITY_OPEN_DR15"
-  }
+  },
+  "laterCorrections": [
+    {
+      "foundBy": "DR-08",
+      "owner": "DR-05",
+      "backendCommit": "9b36b740440360ca2f6195774d98775eb26487c0",
+      "path": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "signature": "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
+      "change": "Add missing id to existing instruction RECORD point SELECT; money formulas/lock/release owner unchanged",
+      "checks": "Compile/source reviews PASS; joined first-use AUTHORED_NOT_RUN"
+    }
+  ]
 }

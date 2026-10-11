@@ -258,3 +258,7 @@ DR04/0533 +0541/+0542 -> DR05/0559 is the current installed local retained-input
 ## DR-06 sequence82 — factual progress
 
 Public preparation_page0113 ->0708; preparation_intake0559 ->0708. Two private scalar helpers progress/wake are also0708. All other0559 economic/retry/release owners retained. DR08 merges progress/page onto0708 and expiry/guard onto0559. Native stored counters, original actor/immutable deadline and bounded wake reuse original authority; no producer or parked F25 object.
+
+## DR-08 sequence83 — original-membership expiry projection
+
+Expiry0510 -> DR05/0559 -> DR08/0746 -> FC15 -> CM13a -> CM15. Expiry page/guard are0746; due0520/accept0559/enroll0559/claim0510 remain unchanged. Private progress0708 ->0746; public PAGE0708 reused unchanged. Confirm0559 ->0746 preserves the actual72h/run-lock fence and gives the exact expiry refusal. Shared Case-release0559 ->0746 is a DR05 correction found by DR08: missing RECORD id only. Later merges retain this corrected current parent; no producer or parkedF25 object.

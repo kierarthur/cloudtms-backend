@@ -28,7 +28,7 @@ Current starter/start/deadline, stored progress and original-request recovery ha
 
 ## Final full42 checklist and exact evidence
 
-Current progress scope: **31 PASS /0 FAIL /8 N/A /3 DEFERRED**. Terminal SCR40c/40d have32 N/A for absent attention rows: **31 PASS /0 FAIL /9 N/A /2 DEFERRED**. All42 decisions are recorded in each of the five per-folder receipts. Items25 and readerAdditions26 N/A follow owner authority; item16 is manual word-list review, no pack/program invocation. Named later owners remain deferred rather than false whole-screen approval.
+Current progress scope: **31 PASS /0 FAIL /8 N/A /3 DEFERRED**. Terminal SCR40c/40d mark item32 N/A for absent attention rows: **31 PASS /0 FAIL /9 N/A /2 DEFERRED**. All42 decisions are recorded in each of the five per-folder receipts. Items25 and readerAdditions26 N/A follow owner authority; item16 is manual word-list review, no pack/program invocation. Named later owners remain deferred rather than false whole-screen approval.
 
 | Final finding | Closure evidence |
 | --- | --- |
