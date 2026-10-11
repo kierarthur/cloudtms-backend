@@ -11384,6 +11384,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_allocation_plan_v1(p_scope jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "554c2401df945fed45573597af4013110339fa23afe35c93091d28aa394604bc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog"
       ],
       "schema": "private",
@@ -13130,7 +13149,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "1d3b2c5bf159d94003e62e14da542ce52b247fce9af9a6a7780ca0dd6fec7bb1"
+      "definition_sha256": "406b5aa5f05d70f8d986ce1a66eff909c876304cbc0cd0f62377fb5e607978b2"
     },
     {
       "acl": [
@@ -31827,7 +31846,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "b7b6107c230b3ff0df68ebb3044c219f92b021d27bf48113a506f64b1891d17e"
+      "definition_sha256": "8597b239266799940444c5f79f2f33fe9283ecb4af67638b51d7e61616d4bb84"
     },
     {
       "acl": [

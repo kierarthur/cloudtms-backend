@@ -1,0 +1,78 @@
+{
+  "item": "WB-27",
+  "sequence": 73,
+  "state": "BUILT_REVIEWED",
+  "exactDeliverables": [
+    "WB-27-D03",
+    "WB-27-D04",
+    "WB-27-D07",
+    "WB-27-D08",
+    "WB-27-D09"
+  ],
+  "builderDecisions": [
+    "BD081",
+    "BD082"
+  ],
+  "sourceFiles": {
+    "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql": "2eeaafb8f14444715c30e13dc898f9b35614de1f53920344913f2986e09d6b0c",
+    "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql": "d7bafb5c0c9aade50a3779ccb26dabe2dbf2a6c38e78fd379d82da25babffba5",
+    "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql": "012e5f783ca046a3d2bea5a3041be51772c14089d27f2cdb1fb2503cd37720b4",
+    "broker/src/bpay-next-workbench.js": "2d4e3fd2e11ae5c4853531e82c27fd7ea194a2f8f73b4d777a5e34a1ed00ac66",
+    "scripts/bpay-next-source-gates.mjs": "1894a7f627b4600f10ad7e4dd8e62dcf145c27796473dd70ce2e1f6efa1bb622"
+  },
+  "frontendFiles": {
+    "js/bpay-next-workbench.js": "de6c0f9e5c7aa21b719ccc6253465e8139376d855f1a986a45109fac3c6faeba",
+    "js/modal-modernisation.js": "e139276a83a7d354f032dec73dc39159b0555e808cf9d3eb0f04f775912c204f",
+    "css/bpay-next-office.css": "b721383ec8cc401f7f64e1402230e676313257525f6cbec849fff0668f1e840e"
+  },
+  "retainedOwners": {
+    "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql": "400e854bfd5619f7bd004e9e922d4681a673216ee001dd1a7cbd81ecf6d20ac6",
+    "supabase/repeatable/06102026_1157_banking_pay_shared_selected_quote_v1.sql": "ad1c7a92754f2937edb642dd5ee387f62761ef241cef77d3b792185b2eb22f3c"
+  },
+  "successors": [
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "finalPhysical": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "change": "One STABLE instruction/allocation plan extracted from current writable owner; original0290 and1157 retained"
+    },
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "finalPhysical": "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+      "change": "Original lock/write/job/cursor owner consumes one plan; no competing money formula"
+    },
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "finalPhysical": "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
+      "change": "Card-named explicit Candidate estimate with complete bounded native input qualification and terminal same-reader rederivation"
+    }
+  ],
+  "checks": {
+    "dbCheck": "333 migrations/872 repeatables PASS",
+    "localPg17": "0 migrations/6 repeatable closures; sole local PG17 schema compile, no business data",
+    "syntax": "Changed BE/FE JS PASS",
+    "sourceGates": "Existing9/9 PASS",
+    "seal": "127a0966744b3907bf62659eb7f20d49655a6f82b37d1cd096c8da8a0a6d9307",
+    "coupling": "PASS",
+    "publicCatalogue": "833|76|0||01ac3d90c572327934daabf869623c85 unchanged"
+  },
+  "reviews": [
+    "reviews/WB-27-plan-prepare-review.md",
+    "reviews/WB-27-estimate-reader-review.md",
+    "reviews/WB-27-transport-review.md",
+    "reviews/WB-27-owner-screen-source-review.md",
+    "screen-designs/SCR-12/review.md",
+    "screen-designs/SCR-11/owner-20261011-review.md"
+  ],
+  "screens": {
+    "count": 27,
+    "ids": [
+      "SCR-12",
+      "SCR-11"
+    ],
+    "method": "Actual saved Office + smallest local fixed read responses, dark/device-light/390px, no DB rows or hosted traffic",
+    "verdict": "39 PASS / 0 FAIL / 3 N/A"
+  },
+  "joinedAppAcceptance": "AUTHORED / NOT_RUN: DRP P05, page-size1/17/100 equality, no-holds estimate and joined Draft hold equality",
+  "deployment": "NOT_INSTALLED",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)"
+}

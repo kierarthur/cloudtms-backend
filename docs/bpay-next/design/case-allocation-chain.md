@@ -226,3 +226,7 @@ All59 exact ALTER statements and their source/owner are retained individually in
 ## STATUS successor ownership
 
 `0580 -> PS-14 (0639) -> DR-37`. Current private.bpay_next_worker_status_page_v1(uuid,uuid,integer,integer) final is supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql. DR-37 merges onto 0639 and retains PS-14 obligation/remaining-leg reservation fields. Early phase3 DR-37 is D14/D18 only; no early D12 or D17. F-26 remains unbuilt until sequence280.
+
+## WB-27 plan boundary — sequence73,11October2026
+
+Current writable predecessor is0102, preservingWB26 Rule-B captured Case rule/status/due and selection_candidate floor. New0204 named plan owns exact instruction derivation and ordered allocation; preparation successor retains original locks and all writes. DERIVE returns prospective period/resolution/instruction operands, including original narrow funding-only qualification; ALLOCATE consumes frozen instructions and original server-owned E/H/cursor. Original0290 and1157 remain calculators. Estimate uses current native inputs; Draft uses accepted cut plus live locked balances. Exact version continuation/budgets and residual-consumption contract are WB-27-build-scope.md/BD081. Later master-chain editors merge their branch into this plan and writable owner without duplicating formulas. Original0549 stays reference only, parkedF25 files stay parked.

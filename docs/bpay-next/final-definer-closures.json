@@ -3950,23 +3950,25 @@
     },
     {
       "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
         "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
         "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
-        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql"
       ],
-      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
+      "owner": "WB-27 shared pure Case plan and explicit Candidate estimate",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "chosenReferenceBase": {
         "item": "CM-02a",
@@ -13882,9 +13884,23 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+        "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
+        "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
         "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
@@ -13897,22 +13913,10 @@
         "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
         "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
-        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
-        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
-        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
-        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql"
+        "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql"
       ],
-      "owner": "WB-25 native component-only selection support; original Create/count owners"
+      "owner": "WB-27 shared pure Case plan and explicit Candidate estimate"
     },
     {
       "signature": "private.bpay_next_accepted_choice_guard_v1()",
@@ -14250,6 +14254,19 @@
         "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
       ],
       "owner": "WB-26 bounded retained Case choice input support"
+    },
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
+      ],
+      "owner": "WB-27 shared pure Case plan and explicit Candidate estimate"
     }
   ],
   "editorChains": [

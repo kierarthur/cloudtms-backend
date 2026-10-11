@@ -160,3 +160,13 @@ Files live beside this review. All 33 PNGs were inspected; `fixed-read-responses
 ## Acceptance boundary
 
 The changed visual/source slice passes A4 with no unresolved policy failure. Prepared money is not recomputed on ticks, unallocated recovery is not presented as zero or collected, remembered choices repaint in place, and paused remains in Waiting without selection. This receipt authorises only the local screen review outcome. Full first-use acceptance, allocation correctness/capacity examples, application journeys, installed runtime and App tested are NOT_RUN and require their own authorised stage/evidence.
+
+## Latest owner screen correction — 11 October 2026
+
+The WB-26 body above is preserved as historical evidence for its original source/captures. The latest owner direction replaces its prior visible Expand/Collapse and Show estimate amount-placeholder presentation with payment-name carets only where allowed, no repeated singleton child payment, factual Due/Weekly limit, This Draft after an estimate, and unknown —.
+
+Current independent A4 receipt: [owner-20261011-review.md](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-11/owner-20261011-review.md>) — **39 PASS, 0 FAIL, 3 N/A**, all nine final owner-20261011 PNGs opened, SHA-256 `d8fac90971a0bead8150c404375775f9b95458086126ccbd1177770482cf3995`. The consolidated [SCR-12/review.md](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-12/review.md>) covers all 27 current captures, every policy row, paired supplied/actual PNG comparison, every observed difference and each retained control's payroll need; SHA-256 `5f0f2d132827cb885ea54e30aa9c9c1fd5ec7861afc50fe7ffba1ecf8b364e63`.
+
+Current source commit `03a42dff7113909b92e68ed9dab6a77bab4d666d` and final source/image hashes are recorded in those receipts. The paused Waiting include control is hidden, CSV secondary, and the exact factual Due/Weekly limit/Original/Outstanding boundary is verified at saved-source/pixel level. Existing WB-26 history is not rewritten or claimed recaptured. Financial/application first-use remains NOT_RUN.
+
+Historical prefix before this additive pointer: SHA-256 `45bcfb64db02b95cd981e94ce9cbc54b984a2557b7cb2a9de8a779eb95b63e97`.

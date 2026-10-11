@@ -40,6 +40,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)',
   'private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)',
   'private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)',
+  'private.bpay_next_case_allocation_plan_v1(jsonb)',
   'private.bpay_next_confirm_simple_run_v1(uuid,bigint)',
   'private.bpay_next_begin_simple_transfer_v1(uuid,uuid)',
   'private.bpay_next_claim_simple_transfer_job_v1(uuid,integer)',
@@ -116,6 +117,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  'private.bpay_next_case_allocation_plan_v1(jsonb)':['isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
   "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
@@ -126,7 +128,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_selection_memory_leaves_v1(jsonb)': [],
   'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)': ['private.bpay_next_selection_memory_leaves_v1','bool_or','lateral'],
   'private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)': ['private.bpay_next_selection_memory_choices_v1','jsonb_set','split_part','max','sum','filter','octet_length'],
-  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
+  "public.bpay_next_workbench_page_v1(jsonb)": ["lateral","generate_subscripts","private.bpay_next_case_allocation_plan_v1","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_source_command_id_v1","private.weekly_source_sha256_jsonb_v1","to_jsonb","jsonb_agg","array_agg","cardinality","max","sum","filter","distinct","date","private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
@@ -221,6 +223,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.transaction_timestamp"
   ],
   "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_case_allocation_plan_v1","to_jsonb","jsonb_populate_record","jsonb_agg","jsonb_set","substring",
     "private.bpay_next_capture_instruction_destination_v1",
     "private.bpay_next_case_allocation_row_v1",
     "private.bpay_next_complete_no_case_worker_v1",
@@ -664,7 +667,7 @@ export function assertRoutineHistoryPoints(source,file,signature){
   }
   let code=body.replace(/\s+/g,' ').trim().toLowerCase();
   const exact=[];
-  if(signature.startsWith('private.bpay_next_prepare_case_page_v1('))exact.push(
+  if(signature.startsWith('private.bpay_next_prepare_case_page_v1(')||signature==='private.bpay_next_case_allocation_plan_v1(jsonb)')exact.push(
     "select 1 from private.bpay_next_case_event e where e.id=v_rule.original_funding_event_id and e.case_id=v_case.id and e.event_kind='funded' and e.occurred_at_utc=v_rule.original_funded_at_utc)");
   if(signature.startsWith('private.bpay_next_source_book_seed_proof_v1('))exact.push(
     'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_seed_effect_id;');
