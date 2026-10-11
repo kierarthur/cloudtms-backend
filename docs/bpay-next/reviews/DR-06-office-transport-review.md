@@ -71,3 +71,9 @@ Latest inspected SHA-256 supersedes the earlier presentation hashes:
 | `css/bpay-next-office.css` | `44DAAB79C1AB05067DD473C157BDA99BB21F2870A825867E42DDF67030667885` |
 
 No essential source defect remains in this amendment. Native interaction, installed queue/WAKE processing, two-second end-to-end timings, browser-close/login recovery, screenshots and joined application acceptance remain **NOT_RUN by this reviewer**. Root's separate A4 screen evidence does not establish those application journeys.
+
+## Final committed frontend checkpoint
+
+The current local frontend HEAD is verified as `c059f3078c4cb8124492bd9ea22dfbbd5da993d5`. The final small change displays More only for a factual PREPARING run without read error or unknown pending request; WAKE closes its popup before dispatch (`Office:1078,1125`). Header invalidation still hides and clears actor/start (`:1096`). These presentation gates preserve the reviewed exact submission/WAKE journal and read-only polling paths; source PASS remains.
+
+Final frontend saved SHA-256: Office `28EBFFC719FB87EA5D10AB9CDB9EC1694A9F9681A72A7D5DD6E1E3604BF5C621`; native UI adapter `A4AE919379621A21E68EF9955BC4A8CEBB5E37F20EDE56691EEF7A16B60D0EE5`; Office CSS `A38E4C1F6D0463F616A2E61B355DAA9D46C928B387F622FFAF6A2207AEB61355`. This records the local source commit and current bytes only; no remote publication or installation is inferred. The application/runtime acceptance boundaries above remain unchanged.

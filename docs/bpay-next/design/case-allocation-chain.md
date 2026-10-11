@@ -254,3 +254,7 @@ Case prepare0205 -> DR04/0533 -> DR04 independent count correction0542 -> DR11 -
 ## DR-05 local early owner completion — approved sequence84
 
 DR04/0533 +0541/+0542 -> DR05/0559 is the current installed local retained-input execution/release closure.37 exact predecessors and16 private supporting definitions are enumerated in DR-05-successor-provenance.json. Original financial formulas are retained; active execution revision and captured economic revision are separated. Every later owner merges onto the registry0559 bodies, including DR06 intake, DR08 expiry, and DR11/DR12 Case preparation. Expiry0510 ->0559 -> DR08 -> FC15 -> CM13a -> CM15 now preserves the already-added typed release/retained retry delta while applying the card's own change. This records actual local provenance, not permission to change plan order. DR06=82 and DR08=83 are the earliest unfinished cards; DR05=84 remains screen-identity open. No parkedF25 resolver or producer becomes an owner.
+
+## DR-06 sequence82 — factual progress
+
+Public preparation_page0113 ->0708; preparation_intake0559 ->0708. Two private scalar helpers progress/wake are also0708. All other0559 economic/retry/release owners retained. DR08 merges progress/page onto0708 and expiry/guard onto0559. Native stored counters, original actor/immutable deadline and bounded wake reuse original authority; no producer or parked F25 object.

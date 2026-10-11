@@ -1,7 +1,7 @@
 {
   "item": "DR-06",
   "sequence": 82,
-  "status": "SOURCE_REVIEWED_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "builderDecisions": [
     "BD093"
   ],
@@ -56,5 +56,10 @@
     "SCR-40d",
     "SCR-40e"
   ],
-  "screenScreenshots": 39
+  "screenScreenshots": 39,
+  "implementationCommits": {
+    "backend": "2f1c308cfae6a0352fc33c1078b4e0b99edf0666",
+    "frontend": "c059f3078c4cb8124492bd9ea22dfbbd5da993d5"
+  },
+  "screenReview": "PASS current card scope, 39 actual captures; composite later-owner additions DEFERRED"
 }
