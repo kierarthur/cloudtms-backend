@@ -86,7 +86,7 @@ The source and every capture/fixed-response byte are sealed below by SHA-256. Re
 
 Item16 was checked manually against the actual tools/policy.json lists and limits. No displayed neverShow/chatter term, public UUID/code, forbidden preparation/run language, overlong sentence or non-UK format remains. The decorative ! glyph is aria-hidden, matches the reference and is not an exclamatory prose message. Required cutoff copy contains two short sentences; support instruction is one sentence. No check-wording/render/spec generator was run.
 
-Main Ready to pay/row amount → HEADER.amount / CANDIDATES.amount; Candidate/section counts → HEADER.candidate_count and native section counts; payment items → HEADER.payable_count; name/ref/deductions/status → CANDIDATES display_name/tms_ref/has_deduction/row_status native projection; permission → HEADER.can_create_draft. Confirmation Candidate count → WB12 countSelection result candidate_count derived from HEADER.selected_candidate_count, not a loaded-row sum. Channel → native context scope.channel; All except N and checkbox state → card-owned local choice intent/exclusions. Updated → existing native successful local read-completion timestamp. Creating/refused/unknown/started text → actual submission stage/typed certainty or card temporary opener, with original run identity internal. readerAdditions is N/A; no new reader/field/data was invented.
+Main Ready to pay/row amount → HEADER.amount / CANDIDATES.amount; Candidate/section counts → HEADER.candidate_count and native section counts; payment items → HEADER.payable_count; name/ref/deductions → CANDIDATES.candidate_sort_name/tms_ref/has_deduction; Ready status → CANDIDATES.payable_count (zero gives the existing Nothing to pay state); permission → HEADER.can_create_draft. Confirmation Candidate count → WB12 countSelection result candidate_count derived from HEADER.selected_candidate_count, not a loaded-row sum. Channel → native context scope.channel; All except N and checkbox state → card-owned local choice intent/exclusions. Updated → existing native successful local read-completion timestamp. Creating/refused/unknown/started text → actual submission stage/typed certainty or card temporary opener, with original run identity internal. readerAdditions is N/A; no new reader/field/data was invented.
 
 ### Full 42-row policy and user-eyes review
 
@@ -139,6 +139,8 @@ PASS means the named actual screen/source scope with the evidence limits stated 
 
 ### Final evidence SHA-256 manifest
 
+Approved DR02 frontend identity: a5ea292b4586f1e8669d9e65c608c6bdb17e5f6d. Office is hashed directly from that Git blob because the builder advanced to DR03 after these captures. The prior saved-disk read checkpoint was 161020 bytes / 40f197579c5dce720e43e69a912818728fa38911add853f0c531b4fc291e8a4d; the Git blob uses Git's normalized EOL bytes. The current Office delta against this approved revision is exactly the separate nine-line DR03 removal, excluded from DR02. Other source entries are the saved capture checkpoint; no later product delta is attributed to these images.
+
 | Area / file | Bytes | SHA-256 |
 | --- | --- | --- |
 | BE docs/bpay-next/screen-designs/SCR-160/DR02-count-failed-dark.png | 381141 | `f4e56f726d1902127204e2d35bc4c9efb35752e2e1dcdf41632f380c1258f75d` |
@@ -182,7 +184,7 @@ PASS means the named actual screen/source scope with the evidence limits stated 
 | BE docs/bpay-next/screen-designs/SCR-38/DR02-unknown-device-light.png | 370345 | `09092184b616549504eb699b30c680ccf3dee7ed76004699f5d0d2370eb1218c` |
 | BE docs/bpay-next/screen-designs/SCR-38/DR02-unknown-fixed-responses.json | 42181 | `0d06e50afae406cc148cd90becf89ecd729267b2b9468d7410c1b2cccb7a5de9` |
 | BE docs/bpay-next/screen-designs/SCR-38/DR02-unknown-phone-dark.png | 77654 | `6734715617b2508928c9b68a79f0cb2d62a7e1ee8ced0fdad5f55d778b7ceaf2` |
-| FE js/bpay-next-office.js | 161020 | `40f197579c5dce720e43e69a912818728fa38911add853f0c531b4fc291e8a4d` |
+| FE git show a5ea292:js/bpay-next-office.js | 161019 | `83f8a9c8e358afa0c22734a15fa97cfde3dba5cf5040d6e9d9bbb11627404d69` |
 | FE js/bpay-next-workbench.js | 240905 | `f01b5540b281e9ee30b45098811f6ec7c8067ddad93f9247faa4bea760990e3e` |
 | FE js/bpay-next-ui.js | 6353 | `e72d3c6280cd44dfb34346613724f05e0e44f2c4bcf33cdc174862834295ecc5` |
 | FE css/bpay-next-office.css | 40296 | `b7ff3d6203ba883518938055fc92700895bedb3fabbfa1662d78d78d4dad67a6` |

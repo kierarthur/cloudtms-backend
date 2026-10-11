@@ -57,6 +57,8 @@ Approval is actual local source/render evidence only. No database/runtime/queue/
 
 ## Current folder and source SHA-256 manifest
 
+Office source is the approved DR02 Git blob at a5ea292b4586f1e8669d9e65c608c6bdb17e5f6d, not the later DR03 working file. Saved-disk/EOL checkpoint and the exact separate nine-line DR03 delta are recorded in the consolidated receipt.
+
 | Area / file | Bytes | SHA-256 |
 | --- | --- | --- |
 | BE docs/bpay-next/screen-designs/SCR-160/DR02-count-failed-dark.png | 381141 | `f4e56f726d1902127204e2d35bc4c9efb35752e2e1dcdf41632f380c1258f75d` |
@@ -76,7 +78,7 @@ Approval is actual local source/render evidence only. No database/runtime/queue/
 | BE docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-device-light.png | 383541 | `1b1794f66e52dbe5712f797281b80eea15d989b484c034ebd96d555a582bc792` |
 | BE docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-fixed-responses.json | 42049 | `c11a58133c6e21af1a65460f99371bb098a2e94c1120d67fbe9bdc1dcc2951b1` |
 | BE docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-phone-dark.png | 84134 | `90ba5a293da0926d3da928013e330f9aabe6e785d933955c38eaba45af829fab` |
-| FE js/bpay-next-office.js | 161020 | `40f197579c5dce720e43e69a912818728fa38911add853f0c531b4fc291e8a4d` |
+| FE git show a5ea292:js/bpay-next-office.js | 161019 | `83f8a9c8e358afa0c22734a15fa97cfde3dba5cf5040d6e9d9bbb11627404d69` |
 | FE js/bpay-next-workbench.js | 240905 | `f01b5540b281e9ee30b45098811f6ec7c8067ddad93f9247faa4bea760990e3e` |
 | FE js/bpay-next-ui.js | 6353 | `e72d3c6280cd44dfb34346613724f05e0e44f2c4bcf33cdc174862834295ecc5` |
 | FE css/bpay-next-office.css | 40296 | `b7ff3d6203ba883518938055fc92700895bedb3fabbfa1662d78d78d4dad67a6` |
