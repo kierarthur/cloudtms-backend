@@ -1,0 +1,102 @@
+{
+  "item": "DR-02",
+  "sequence": 79,
+  "date": "2026-10-11",
+  "status": "BUILT_REVIEWED",
+  "exactRows": [
+    "D03",
+    "D05",
+    "D06",
+    "D07",
+    "D09",
+    "D10",
+    "D11"
+  ],
+  "successor": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+  "successorFunctions": [
+    "private.bpay_next_append_selection_page_v1",
+    "private.bpay_next_append_work_choices_v1",
+    "private.bpay_next_append_component_selection_page_v1",
+    "private.bpay_next_seal_component_selection_v1",
+    "private.bpay_next_append_case_selection_page_v1",
+    "private.bpay_next_seal_case_selection_v1",
+    "private.bpay_next_exclusion_page_v1",
+    "public.bpay_next_preparation_intake_v1",
+    "public.bpay_next_workbench_page_v1"
+  ],
+  "retainedOwners": {
+    "seal": "2306",
+    "enqueue": "1832",
+    "enroller": "0316",
+    "claimPin": "0151",
+    "create": "0426"
+  },
+  "backendFiles": {
+    "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql": "d40cc95cb6675f09b1fe06a87801e42a6a28ca1f02a563534ae5e1a65263b5cb",
+    "broker/src/bpay-next-preparation.js": "594e62ce0cc860853e8a9462a7d901afc456c9c7ebba732a40d580e00fb65760",
+    "broker/src/bpay-next-workbench.js": "af15952439c88ff1f6f3e0df1bd5d4083da83dffa85c459c378873a96e586447",
+    "scripts/bpay-next-source-gates.mjs": "b28b0dd82d47d5c6922fae179d21aa22db2879468daf545347da342b03fbb4ec",
+    "docs/bpay-next/final-definer-closures.json": "f4a828d00297e745123124f0d8ad2a71f1568e420060cd8779a1a01e8555ff96",
+    "supabase/release/current-contract.json": "5bf18c9acd95a70ac115013f0b02ddd1f070c22e7922a3567b8e79c29f1c8e26"
+  },
+  "frontendFiles": {
+    "js/bpay-next-office.js": "40f197579c5dce720e43e69a912818728fa38911add853f0c531b4fc291e8a4d",
+    "js/bpay-next-workbench.js": "f01b5540b281e9ee30b45098811f6ec7c8067ddad93f9247faa4bea760990e3e",
+    "css/bpay-next-office.css": "b7ff3d6203ba883518938055fc92700895bedb3fabbfa1662d78d78d4dad67a6"
+  },
+  "contractHash": "7632010fd5996fe031550ff1ad9c3437d390718a9bdb6ea8d7e1277549f13ee7",
+  "localChecks": "PASS;336/883;0 migrations/4 closures;11 source gates;catalogue835/76/0/d5226315e5b17afc9e5a588a432b73ca",
+  "appAcceptance": "AUTHORED_NOT_RUN",
+  "hostedInstallation": "NOT_RUN",
+  "builderDecisions": [
+    "BD088"
+  ],
+  "reviews": [
+    "reviews/DR-02-manifest-review.md",
+    "reviews/DR-02-submission-review.md",
+    "reviews/DR-02-screen-review.md"
+  ],
+  "screenEvidence": [
+    "screen-designs/SCR-160/review.md",
+    "screen-designs/SCR-38/review.md"
+  ],
+  "frontendCommit": "a5ea292b4586f1e8669d9e65c608c6bdb17e5f6d",
+  "sourceReview": "PASS",
+  "screenReview": "PASS",
+  "frontendCommits": [
+    "569e9ce8689b8ff12d439d6c6ecf969abb9880ab",
+    "a5ea292b4586f1e8669d9e65c608c6bdb17e5f6d"
+  ],
+  "screenshots": {
+    "docs/bpay-next/screen-designs/SCR-38/DR02-main-dark.png": "a5476d8b82c0ba13d47dcfa40399e9b48c8246da18f7a53f668256ae5ab56a32",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-main-device-light.png": "c8bc240b119ccffaac9da267f5d27ada81c563c2603f62d7940f2083fd7f6f06",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-main-phone-dark.png": "68d380c41977e84da9679cff2d3804ca70bb6f4667d0bd0cb8fe0d4e6cde42ea",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-permission-dark.png": "8ac91ed2b6345b292877caae13b16737107526ca715d9ce06f4dab51fd66d37b",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-permission-device-light.png": "178389a17e4b75ea94279408b4c66ef599080f702d781b03ba5bdb8fba2e62c8",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-permission-phone-dark.png": "2c56ac9c242c8e2c417d36f4dd7f3a024d4fdfed96243e456e1331c85f1e32b3",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-refused-dark.png": "4f4ac28e51464fa7413c51b511174100f84a4ced5b2eeef7f3544cc45f6a9768",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-refused-device-light.png": "4f4ac28e51464fa7413c51b511174100f84a4ced5b2eeef7f3544cc45f6a9768",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-refused-phone-dark.png": "c074397a9901b179603833f4800db5aea87ef961161a9ce84fc69ac1a5543511",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-sending-dark.png": "707b7c969ac98683bf739f059f7b482ce1726164e7788d3a17d3c214cb5dfee2",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-sending-device-light.png": "707b7c969ac98683bf739f059f7b482ce1726164e7788d3a17d3c214cb5dfee2",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-sending-phone-dark.png": "2b2ee25b83fc38e46b63e2e75d02d9389132a611add8c5ade4c057a9e9d31fe4",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-started-dark.png": "bd246eb260ca414c3d87256df99e5eb1b89b53faa845e83095a19cb1d810a0ca",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-started-device-light.png": "bd246eb260ca414c3d87256df99e5eb1b89b53faa845e83095a19cb1d810a0ca",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-started-phone-dark.png": "670cebf6f40093dbd93c812aca073e0ce5c9429ad6538b7bc897c40856e73f58",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-unknown-dark.png": "09092184b616549504eb699b30c680ccf3dee7ed76004699f5d0d2370eb1218c",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-unknown-device-light.png": "09092184b616549504eb699b30c680ccf3dee7ed76004699f5d0d2370eb1218c",
+    "docs/bpay-next/screen-designs/SCR-38/DR02-unknown-phone-dark.png": "6734715617b2508928c9b68a79f0cb2d62a7e1ee8ced0fdad5f55d778b7ceaf2",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-count-failed-dark.png": "f4e56f726d1902127204e2d35bc4c9efb35752e2e1dcdf41632f380c1258f75d",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-count-failed-device-light.png": "f4e56f726d1902127204e2d35bc4c9efb35752e2e1dcdf41632f380c1258f75d",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-count-failed-phone-dark.png": "5e74fb1b02e4d876dbfabaa88184a42048eafcb1425242121a648070d90004af",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counted-dark.png": "401c0bda5e97e98dfe52ffb6b600509e499951fcd1e47375bbb829ac7aaedea9",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counted-device-light.png": "401c0bda5e97e98dfe52ffb6b600509e499951fcd1e47375bbb829ac7aaedea9",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counted-phone-dark.png": "bfb7b5924482893c57b2db9d92ad5e14cded67bd2d501490aa59d8979f9b8bbf",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counting-dark.png": "7c36e2dd50d0804edbd819f4e4368c40845208f019fb3b0f08f8e240d034020e",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counting-device-light.png": "7c36e2dd50d0804edbd819f4e4368c40845208f019fb3b0f08f8e240d034020e",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-counting-phone-dark.png": "67ca1d46d2a6e60586b10a5e4c4885d3e0468e78d93dc668918cccacdc554861",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-dark.png": "1b1794f66e52dbe5712f797281b80eea15d989b484c034ebd96d555a582bc792",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-device-light.png": "1b1794f66e52dbe5712f797281b80eea15d989b484c034ebd96d555a582bc792",
+    "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-phone-dark.png": "90ba5a293da0926d3da928013e330f9aabe6e785d933955c38eaba45af829fab"
+  }
+}

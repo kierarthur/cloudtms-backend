@@ -58,7 +58,7 @@ const OUTPUTS={
   SEGMENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',sealed:'true',segment_count:'integer',replay:'boolean'},
   CASE_PAGE:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',page_no:'positive',item_count:'positive',replay:'boolean'},
   CASE_SEAL:{run_id:'uuid',candidate_id:'uuid',selection_revision:'positive',sealed:'true',selected_count:'integer',excluded_count:'integer',replay:'boolean'},
-  SEAL_ENQUEUE:{run_id:'uuid',command_id:'uuid',agency_sequence:'positive',replay:'boolean'},
+  SEAL_ENQUEUE:{run_id:'uuid',command_id:'uuid',agency_sequence:'positive',selection_count:'integer',replay:'boolean'},
   REVIEW:{run_id:'uuid',phase:'reviewPhase',reason:'reviewReason?',review_revision:'integer',all_ready:'boolean?',replay:'boolean'},
   CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean',drafts:'drafts'}
 };
@@ -298,6 +298,7 @@ function result(payload,call,mutation){
       if(positions.some((n,i)=>n<0||(i>0&&n<=positions[i-1])))bad();
     }
     if(call.action==='REVIEW'&&((payload.phase==='PREPARING')!==(payload.reason!==null)))bad();
+    if(call.action==='SEAL_ENQUEUE'&&payload.selection_count!==call.args.expected_count)bad();
     if(call.action==='COMPONENT_SEAL'&&payload.component_count!==call.args.expected_count)bad();
     if(call.action==='SEGMENT_SEAL'&&payload.segment_count!==call.args.expected_count)bad();
     if(call.action==='CONFIRM'&&(payload.review_revision!==call.args.review_revision||payload.drafts.some(d=>d.run_id!==call.args.run_id)))bad();
@@ -464,6 +465,10 @@ function result(payload,call,mutation){
 function safeError(e,attempted,mutation,action=null,args=null){
   if(e instanceof PreparationError)return e;
   const db=e?.json??e;
+  const manifestConflicts=['BPAY_NEXT_SELECTION_PAGE_CONFLICT','BPAY_NEXT_SELECTION_PAGE_REPLAY_CONFLICT','BPAY_NEXT_CHOICE_REPLAY_CONFLICT','BPAY_NEXT_CASE_SELECTION_REPLAY_CONFLICT'];
+  if(mutation&&((db?.code==='23514'&&manifestConflicts.includes(db.message))
+    ||(db?.code==='55000'&&db.message==='BPAY_NEXT_SELECTION_ALREADY_SEALED')))
+    return new PreparationError(db.message,409,false,false);
   if(mutation&&action==='SEAL_ENQUEUE'&&typeof db?.details==='string'&&ENCODER.encode(db.details).byteLength<=1024){
     let refusal;try{refusal=JSON.parse(db.details);}catch{}
     const reasons={EARLIER_ECONOMIC_PENDING:true,QUERY_UNAVAILABLE:true,QUERY_BLOCKED:false,QUERY_BUSY:true,INPUT_UNAVAILABLE:false,SELECTION_INCOMPLETE:false,ORIGIN_UNAVAILABLE:false,TRANSACTION_NOT_FRESH:false};

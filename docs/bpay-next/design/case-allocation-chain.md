@@ -236,3 +236,13 @@ Current writable predecessor is0102, preservingWB26 Rule-B captured Case rule/st
 ## WB-40 current hold boundary — sequence76,11October2026
 
 Classifier1946 -> WB40 core0426 -> WB41 -> WB29; wrapper1438 is retained. Accepted CREATE0005 and append skip1832 -> WB40 accepted-choice0426; current choice guard1236 -> WB40 accepted-choice0426. These are exact current successors, not a return to historical1600/0570. Original choice construction captures control version/time and canonical identity on the existing Rule B work_choice; original run_choice_member skip acknowledgements replay the cut. Capture/PIN remain unchanged under owner E1/E3. The named native hold hook stores current control fields on Work and refreshes only the current contribution. WB41 merges onto0426 and keeps positive-offer-only hold/gap precedence and existing H/R facts; its Case WAIT branch belongs in the shared allocation plan0204 as the master table specifies.
+
+## DR-02 sequence79 — manifest-only current successors
+
+- private.bpay_next_append_selection_page_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
+- private.bpay_next_append_work_choices_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
+- private.bpay_next_seal_component_selection_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
+- private.bpay_next_append_case_selection_page_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
+- private.bpay_next_seal_case_selection_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
+
+Seal2306 and enqueue1832 remain final unchanged; enroller0316 and CLAIM/PIN0151 remain unchanged. DR10 inserts the real conditional GUARD decision into the original WB21 hand-off; DR06 replaces only its factual progress opener. No parkedF25 objects reactivated.

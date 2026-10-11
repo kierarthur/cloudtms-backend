@@ -12,6 +12,7 @@ export const BPAY_NEXT_WORKBENCH_PAGE_INPUTS=Object.freeze(Object.fromEntries(KI
 export const ROWS=Object.freeze({
   CANDIDATE_ESTIMATE:{case_id:'uuid',case_component_id:'uuid',age_key:'integer',component_ordinal:'positive',recoverable_this_run:'decimal',cap_reason:'code?',affordability_reason:'code?',capacity_reason:'code?',payroll_stage:'stage'},
   "HEADER": {
+    "can_create_draft": "boolean",
     "candidate_count": "integer",
     "selectable_member_count": "integer?",
     "selected_candidate_count": "integer?",
