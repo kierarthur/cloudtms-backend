@@ -2,7 +2,7 @@
   "item": "PF-07",
   "sequence": 111,
   "decision": "BD123",
-  "status": "SOURCE_REVIEWED",
+  "status": "BUILT_REVIEWED",
   "productDelta": false,
   "existingOwners": [
     {
@@ -52,5 +52,6 @@
     "sha256": "3db2636170afe7b45400ffcc7eac32a8d08adb26f3c91ea430ac6cb5d8c0ae87"
   },
   "normalChecks": "PASS db356/918; source12/12; fourWorkerSyntax; solePG17load0/0; seal-coupling98ea49ac",
-  "joinedAcceptance": "AUTHORED_NOT_RUN"
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "8dd70fc0ebb5b3816e53250934562e1ffda7da21"
 }
