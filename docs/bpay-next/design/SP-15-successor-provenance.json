@@ -123,5 +123,7 @@
     "policy": "Scoped SP15 A4 33 PASS / 0 FAIL / 9 N/A",
     "deferred": "Full DR15 human identity/composition remains required at DR15; actual Timesheet child journey AUTHORED_NOT_RUN",
     "link": "Qualified callback arguments only"
-  }
+  },
+  "implementationCommit": "e0772c5282d0b7e1127971e6214127ffcdbd0d8d",
+  "status": "BUILT_REVIEWED"
 }

@@ -3332,7 +3332,7 @@ PF08 ITEM/D01–D03 BUILT/REVIEWED; D04 authoredNOT_RUN. BEimplementation 352f3a
 
 ## SP-15 — Pay Query in Office: open, block, remedy, receipts and the red row
 
-Seq 113; Pay Query, Office screens · SP-E; reviewer R5; current requested-feature status PARTLY_DONE.
+Seq 113; Pay Query, Office screens · SP-E; reviewer R5; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only SP-15's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -3340,11 +3340,11 @@ Dependencies: F-16, SP-12, SP-13, SP-14, WB-02, WB-05, WB-07, WB-08; successor p
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-15-D01 | REPEATABLE: SP-12 gate-input writer final-definer Workbench-refresh hooks | MISSING | Add only NEXT in-transaction private.bpay_next_workbench_refresh_work_v1 calls after actual admitted business writes, ≤affected works; append exact writer/lock rows to SP-12 census. Candidate-response STOP-CHECK. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-15-D02 | DOC: docs/bpay-next/design/SP-15-refresh-hook.md | MISSING | Record WB-08 interface file/commit, each exact gate-input hook owner/gating/lock order and latest merged predecessor. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-15-D03 | WORKER ROUTE: S/broker/src/weekly-source/routes.js manual review/query/resolve commands | PARTLY_DONE | Existing real query remedy routes reusable; verify actual open writes no money/invoice and clear only genuine current event CAS; runtime/install version not inferred from DB. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-15-D04 | SCREEN: NEXT_OFFICE/js/bpay-next-office.js closed Pay Query code table and Open Timesheet link | MISSING | Implement SOURCE_PAY_QUERY_OPEN/_EVIDENCE_UNAVAILABLE safe messages and real review_issue_work_id opener through shared DR-15 table; preserve closed code ownership. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-15-D05 | SCREEN: O/js/weekly-source/workspace-actions.js OPEN/RESOLVE manual query command_id retention | PARTLY_DONE | Confirm current modal retry preserves command_id and genuine relevant-query hide/remedies; future full query acceptance remains NOT_RUN. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-15-D01 | REPEATABLE: SP-12 gate-input writer final-definer Workbench-refresh hooks | BUILT_REVIEWED | Add only NEXT in-transaction private.bpay_next_workbench_refresh_work_v1 calls after actual admitted business writes, ≤affected works; append exact writer/lock rows to SP-12 census. Candidate-response STOP-CHECK. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-15-D02 | DOC: docs/bpay-next/design/SP-15-refresh-hook.md | BUILT_REVIEWED | Record WB-08 interface file/commit, each exact gate-input hook owner/gating/lock order and latest merged predecessor. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-15-D03 | WORKER ROUTE: S/broker/src/weekly-source/routes.js manual review/query/resolve commands | BUILT_REVIEWED | Existing real query remedy routes reusable; verify actual open writes no money/invoice and clear only genuine current event CAS; runtime/install version not inferred from DB. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-15-D04 | SCREEN: NEXT_OFFICE/js/bpay-next-office.js closed Pay Query code table and Open Timesheet link | BUILT_REVIEWED | Implement SOURCE_PAY_QUERY_OPEN/_EVIDENCE_UNAVAILABLE safe messages and real review_issue_work_id opener through shared DR-15 table; preserve closed code ownership. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-15-D05 | SCREEN: O/js/weekly-source/workspace-actions.js OPEN/RESOLVE manual query command_id retention | BUILT_REVIEWED | Confirm current modal retry preserves command_id and genuine relevant-query hide/remedies; future full query acceptance remains NOT_RUN. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3355,6 +3355,8 @@ Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP
 **Later in-app acceptance — not run:**
 
 Sending a paid £100 shift to Pay Queries shows the red row (reason, user, DD/MM/YYYY hh:mm:ss) and leaves pay at £100 with no debt; the NEXT preparation for that Candidate shows "Pay Query open…" with a working link; accepting current Source hours clears the row; a lost reply retried with the same command returns the original result. With WB-07 built: opening a query on a paid £100 Source shift whose later Final adds £20 moves the £20 in Banking Pay NEXT to Action Required "Pay Query open" straight away (targeted refresh, no full rebuild); resolving it moves the £20 to Ready; a later Final for a different event leaves the £20 blocked, and a later Final containing the same event clears it (SRQ-071). The SP-12 census shows the refresh hook after the admission key. Observed by: SRQ-068, SRQ-089, SRQ-199, RQ-258, SCX-045, SCX-046, SCX-047, SCX-048, SCX-114 → the red row and hidden action; SRQ-069, RQ-259 → pay stays £100 with no debt; SRQ-070, SRQ-105, RQ-260 and SCX-005 → accepting Source hours or saving protected pay clears the row; SRQ-084, SRQ-085, SRQ-302, SRQ-317, RQ-266 and SCX-115 → the lost-reply retry; SCX-050 → the plain-English NEXT reason with a working link. With WB-07 built, accepting a Candidate's hours response or a protected WAIT receipt also updates Banking Pay NEXT straight away (hook on every census writer), and the Banking item detail shows the query's reason, user and DD/MM/YYYY hh:mm:ss from the Source review row. Covers observed: RQ-078 → note only: the query pauses no recovery (the WAIT pause is WB-41's check).
+
+SP15 ITEM/D01–D05 BUILT/REVIEWED, D06 superseded context. BE e0772c5282d0b7e1127971e6214127ffcdbd0d8d; FE2afd650b672780e88c2e03b462e1fa2efd553ca1. design/SP-15-completion.md; design/SP-15-successor-provenance.json; design/SP-15-current-owner-catalogue.json; reviews/SP-15-boundary-review.md; reviews/SP-15-source-hook-review.md; reviews/SP-15-office-source-review.md; screen-designs/SCR-45/review.md. Whole 94/288 BUILT/REVIEWED; nextSP16seq114. All joined business/child/queue acceptance NOT_RUN; full DR15 composition remains its required later scope.
 
 ## SP-16 — Certified absence and protection removal
 

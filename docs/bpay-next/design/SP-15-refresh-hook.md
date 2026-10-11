@@ -13,3 +13,5 @@ BD125 applies the narrowest complete reading of this card. The older whole-Candi
 Candidate STOP-CHECK is covered by the start sheet's preapproval, five unchanged protected file hashes and semantic review of original session, actor, workflow, generation, current comparison, request/replay and signatures. No public trigger, new command/route, producer evidence, certificate, witness, digest or parked F-25 object is authorised.
 
 Source/application/queue/contention acceptance is AUTHORED_NOT_RUN. Normal permitted compilation/source/catalogue/contract checks and local fixed-response native screen review are recorded separately.
+
+Implementation commit: e0772c5282d0b7e1127971e6214127ffcdbd0d8d; frontend2afd650b672780e88c2e03b462e1fa2efd553ca1. Exact hook/lock rows: SP-12-census.md final SP15 table.
