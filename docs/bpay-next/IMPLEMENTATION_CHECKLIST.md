@@ -2641,7 +2641,7 @@ D01 implementation 7148471fdb409eca8073a1e484b2c6e9fa569f10; design/DY-02-comple
 
 ## DY-03 — Daily WORK identity: `origin_kind`, `origin_work_date` and the NULL-Contract rule
 
-Seq 89; Daily · D5-DY; reviewer R6; current requested-feature status PACK_ONLY.
+Seq 89; Daily · D5-DY; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Keep WORK kind ORDINARY. Allow NULL Contract only for explicit DAILY plus ordinary dated evidence; bind retained physical UUID/version. Add only justified conditional identity fields, not duplicate Client or fictitious Contract.
 
@@ -2649,10 +2649,10 @@ Dependencies: F-06; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| DY-03-D01 | MIGRATION: bpay_next_work nullable contract/origin_kind/origin_work_date conditional CHECKs; revision Daily evidence (proposed) | PACK_ONLY | Compose/promote only this card's assigned final pack owner, retaining existing successor edits. Keep WORK kind ORDINARY. Allow NULL Contract only for explicit DAILY plus ordinary dated evidence; bind retained physical UUID/version. Add only justified conditional identity fields, not duplicate Client or fictitious Contract. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-03-D02 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) — pack variant of RESET 07102026_0018:229 (see DY-02-D01) | LOCAL_ONLY | Compose/promote only this card's assigned final pack owner, retaining existing successor edits. Keep WORK kind ORDINARY. Allow NULL Contract only for explicit DAILY plus ordinary dated evidence; bind retained physical UUID/version. Add only justified conditional identity fields, not duplicate Client or fictitious Contract. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-03-D01 | MIGRATION: bpay_next_work nullable contract/origin_kind/origin_work_date conditional CHECKs; revision Daily evidence (proposed) | BUILT_REVIEWED | Compose/promote only this card's assigned final pack owner, retaining existing successor edits. Keep WORK kind ORDINARY. Allow NULL Contract only for explicit DAILY plus ordinary dated evidence; bind retained physical UUID/version. Add only justified conditional identity fields, not duplicate Client or fictitious Contract. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-03-D02 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) — pack variant of RESET 07102026_0018:229 (see DY-02-D01) | BUILT_REVIEWED | Compose/promote only this card's assigned final pack owner, retaining existing successor edits. Keep WORK kind ORDINARY. Allow NULL Contract only for explicit DAILY plus ordinary dated evidence; bind retained physical UUID/version. Add only justified conditional identity fields, not duplicate Client or fictitious Contract. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 | DY-03-D03 | MIGRATION: Recorded TEST release unit supabase/migrations/03102026_1324_banking_pay_next_core.sql (existing receipt, not current target successor) | INSTALLED_ON_TEST | Do not reinstall or overwrite this baseline blindly. Compare the exact current final defining object and compose this card’s remaining successor before any later authorised release. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-03-D04 | CHECK: DY-03 future joined in-app TEST checklist | MISSING | Null Contract DAILY accepted, null Contract weekly/source refused; retained worked-date/booking/physical version immutable across allowed unpaid rotation; replay creates no second WORK. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-03-D04 | CHECK: DY-03 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Null Contract DAILY accepted, null Contract weekly/source refused; retained worked-date/booking/physical version immutable across allowed unpaid rotation; replay creates no second WORK. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY-03-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2662,6 +2662,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY
   - Existing rows read `origin_kind` CONTRACT; an UPDATE of `origin_work_date` is refused; a NULL-Contract row that is not DAILY+ORDINARY is refused by the CHECK (SRQ-117).
   - The completion note records that `origin_work_date` is kept as part of the WORK identity, citing `contractless-late.sql:471-480` (T-23, SRQ C24).
   - Joined future check: Null Contract DAILY accepted, null Contract weekly/source refused; retained worked-date/booking/physical version immutable across allowed unpaid rotation; replay creates no second WORK. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Implementation 7e20bdd0bc46d506203761f4e0fb97a9e0bb8220; D02correctexistinghelper 7148471fdb409eca8073a1e484b2c6e9fa569f10. design/DY-03-completion.md; design/DY-03-current-investigation.md; design/DY-03-successor-provenance.json; reviews/DY-03-source-review.md. ITEM/D01/D02BUILT_REVIEWED; D03historicalcore retainedunticked; D04authored/NOT_RUN, boxesunticked. Normal343/895/source12/12-beforeload/localPG17/catalogue/syntax/seal/couplingea85c74e/verifierPASS. FullphysicalDailyadmission remainsDY04; whole71/288 BUILT71/288 REVIEWED; nextDY04seq90designfirst.
 
 ## DY-04 — Routing, publisher and guard successors for Contractless Daily (`1450`, `1530`, `1342`)
 

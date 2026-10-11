@@ -1,7 +1,7 @@
 {
   "item": "DY-03",
   "sequence": 89,
-  "status": "NORMAL_CHECKS_SOURCE_REVIEW_PASS",
+  "status": "BUILT_REVIEWED",
   "decision": "BD099",
   "sources": [
     {
@@ -28,5 +28,7 @@
   "contractHash": "ea85c74e06fc85c10e4cfe6b1a42182e478b5d721bfed7f3b9527192851d835d",
   "checks": "343/895; source12/12 beforeload; localPG17changedcompile/catalogue; syntax; seal/coupling; verifierDO PASS",
   "runtime": "AUTHORED_NOT_RUN",
-  "scope": "Storage shape plus immutableWorkorigin only; full physicalDaily qualification/route/publisher is DY04"
+  "scope": "Storage shape plus immutableWorkorigin only; full physicalDaily qualification/route/publisher is DY04",
+  "implementationCommit": "7e20bdd0bc46d506203761f4e0fb97a9e0bb8220",
+  "helperReusedCommit": "7148471fdb409eca8073a1e484b2c6e9fa569f10"
 }
