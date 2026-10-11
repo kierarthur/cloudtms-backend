@@ -487,8 +487,12 @@ begin
   -- bigint,text,text,text). Fresh sole local PG17 catalogue:
   -- 833/76/0/01ac3d90c572327934daabf869623c85. Browser execution stays zero;
   -- the pre-existing 76 service omissions remain unchanged.
-  if v_count<>833 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'01ac3d90c572327934daabf869623c85' then
+  -- WB-37 adds the exact service-only snooze_due_page_v1(jsonb) and
+  -- workbench_week_rollover_page_v1(jsonb) entry points. Fresh sole local
+  -- PG17 catalogue:835/76/0/d5226315e5b17afc9e5a588a432b73ca.
+  -- Browser executable identities are empty; existing 76 omissions unchanged.
+  if v_count<>835 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'d5226315e5b17afc9e5a588a432b73ca' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

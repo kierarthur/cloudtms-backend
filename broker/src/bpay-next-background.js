@@ -8,13 +8,13 @@
  * completed financial operation. Actual Worker wiring supplies fresh ownership.
  */
 import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows,
-  readBpayNextWorkbenchWakePage,recoverBpayNextWorkbenchDuePage,claimBpayNextWorkbenchTask,stepBpayNextWorkbenchTask } from './bpay-next-runtime-rpc.js';
+  readBpayNextWorkbenchWakePage,recoverBpayNextSnoozeDuePage,recoverBpayNextWeekRolloverPage,claimBpayNextWorkbenchTask,stepBpayNextWorkbenchTask } from './bpay-next-runtime-rpc.js';
 import { receiveBpayNextPreparationExpiry } from './bpay-next-preparation-expiry-rpc.js';
 import { handleBpayNextFinancialQueueMessage } from './bpay-next-financial-queue.js';
 
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ENROLL=Object.freeze({version:1,runtime_action:'ENROLL'});
-export const BPAY_NEXT_BACKGROUND_LIMITS=Object.freeze({pageRows:100,retrySeconds:30,leaseSeconds:120});
+export const BPAY_NEXT_BACKGROUND_LIMITS=Object.freeze({pageRows:100,retrySeconds:30,leaseSeconds:120,duePages:2});
 function exact(value,keys) {
   if(value===null||typeof value!=='object'||Array.isArray(value)
     ||![Object.prototype,null].includes(Object.getPrototypeOf(value))) return false;
@@ -153,10 +153,18 @@ export async function runBpayNextRecoveryTick(deps) {
     const outcome=await cleanupBpayNextTerminalRows({limit:100},{runtimeRpc:deps.runtimeRpc});
     return outcome.ok?{ok:true,published:0}:outcome;
   });
-  await lane('WORKBENCH_DUE',async()=>{
-    const outcome=await recoverBpayNextWorkbenchDuePage({limit:100},{runtimeRpc:deps.runtimeRpc});
-    return outcome.ok?{ok:true,published:0}:outcome;
-  });
+  // Each lane has its own retained SQL seek. A lost reply waits for native
+  // recovery, and a busy/failing lane cannot suppress the other lane's turn.
+  for(const [name,page] of [['SNOOZE_DUE',recoverBpayNextSnoozeDuePage],['WEEK_ROLLOVER',recoverBpayNextWeekRolloverPage]]) {
+    await lane(name,async()=>{
+      for(let n=0;n<BPAY_NEXT_BACKGROUND_LIMITS.duePages;n+=1) {
+        const outcome=await page({limit:100},{runtimeRpc:deps.runtimeRpc});
+        if(!outcome.ok) return outcome;
+        if(outcome.result.complete) break;
+      }
+      return {ok:true,published:0};
+    });
+  }
   await lane('WORKBENCH',async()=>{
     const outcome=await readBpayNextWorkbenchWakePage({limit:100},{runtimeRpc:deps.runtimeRpc});
     if(!outcome.ok) return outcome;

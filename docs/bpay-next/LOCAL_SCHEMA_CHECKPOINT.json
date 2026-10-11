@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "b6940759edfb493e011440c3f5eea863c9055aed",
-  "compiledAtUtc": "2026-10-11T01:27:37.413Z",
+  "sourceCommit": "0a00d3a5704c2a01338d208b94d6fbb49fd9c9c8",
+  "compiledAtUtc": "2026-10-11T02:03:59.122Z",
   "inventory": {
     "migrations": [
       {
@@ -1340,6 +1340,10 @@
       {
         "path": "supabase/migrations/11102026_0125_banking_pay_next_case_choice_control_point_index_v1.sql",
         "sha256": "bc435d55856b9a9ab8752032849a81cc72299ab02484efc7f9f3e00a37f2b217"
+      },
+      {
+        "path": "supabase/migrations/11102026_0255_banking_pay_next_due_recovery_metadata.sql",
+        "sha256": "77a34e965cef7d9fd59b9a19a25efedf09efe33ba086883ae18b1e10a57a9632"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -7859,6 +7863,27 @@
         "sha256": "8f47397bdac690c5e6c8647bbeef8bd21844c9703c9115b2cf98ae01c8eaa9f6"
       },
       {
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql"
+        ],
+        "sha256": "b7e567940faffc277172533d5cd44232c3ed4fad056d845b85eeb78f61614541"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql"
+        ],
+        "sha256": "15af6fd1c4bee8f505a0fc6f5b56f641787db6af0869d2bac2ce9d9a01e66750"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql"
+        ],
+        "sha256": "221d55266718326ee58dd67af161a0f3aeff8858cd11bbed60370cfa64c33435"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7868,7 +7893,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/11102026_0255_banking_pay_next_due_recovery_metadata.sql",
+        "sha256": "77a34e965cef7d9fd59b9a19a25efedf09efe33ba086883ae18b1e10a57a9632"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -7892,25 +7922,25 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql"
         ],
-        "sha256": "d0f140fa55393e7d5a92ddf59a6920ae4021cf5b1e8dd750e203af22a4dd41c6"
+        "sha256": "b7e567940faffc277172533d5cd44232c3ed4fad056d845b85eeb78f61614541"
       },
       {
-        "path": "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql"
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql"
         ],
-        "sha256": "b0c30f93c56478f33aea205ce34b3b687cbee4b0577e035137383b517f5b124d"
+        "sha256": "15af6fd1c4bee8f505a0fc6f5b56f641787db6af0869d2bac2ce9d9a01e66750"
       },
       {
-        "path": "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
+        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql"
+          "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql"
         ],
-        "sha256": "8f47397bdac690c5e6c8647bbeef8bd21844c9703c9115b2cf98ae01c8eaa9f6"
+        "sha256": "221d55266718326ee58dd67af161a0f3aeff8858cd11bbed60370cfa64c33435"
       }
     ]
   },

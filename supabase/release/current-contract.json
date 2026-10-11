@@ -12417,7 +12417,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "76b2645be706bde5586ffbe798ad0652f496126d90101331b57d72e3c06edc3e"
+      "definition_sha256": "7943c1fe21032e12e2ad767a1054c82c2fad78d193ff963af11e4d0eddc5084d"
     },
     {
       "acl": [
@@ -14779,11 +14779,30 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_snooze_due_receipt_valid_v1(p_request_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e137ee8d8422edb652379e757b31d918e8c0e9480fce2d69dc2f119ce9589447"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_snooze_metadata_guard_v1()",
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "84a67f3509d307319a5360ed6b9a471afc088dfd5f3edeb2a513a57687a393de"
+      "definition_sha256": "adbc0377c00cc71cbf4d4154e4d653e20850eae1261b3a03cbcbd6f1ab2a7998"
     },
     {
       "acl": [
@@ -14802,7 +14821,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "99e20e804df595ab897812e6e2603adb469e2cc834faa146e180c7b86d48cfd7"
+      "definition_sha256": "49bdc930d4034bfd122d02dc91ffcde36ee76b72e91e808cad6f4ac1c17e1cc3"
     },
     {
       "acl": [
@@ -31718,6 +31737,31 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_snooze_due_page_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f1b6340103e9ee019ca4738fc771b515dac5fcab5885d83126ec5d75bc8a22fa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "public",
@@ -31871,6 +31915,31 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "872e55097271e016aa0688cb0c3d61f22f4a1239b48b13c54727eee9e069c451"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_workbench_week_rollover_page_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "5e1905e173685cc89884527a7c494542785f39daebcb34dda185be49587f9dc6"
     },
     {
       "acl": [
@@ -105183,6 +105252,14 @@
           "generated": ""
         },
         {
+          "name": "cleared_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "component_key",
           "type": "text",
           "default": null,
@@ -105537,6 +105614,14 @@
           "definition": "FOREIGN KEY (created_by) REFERENCES tms_users(id)"
         },
         {
+          "name": "bpay_next_snooze_due_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (cleared_reason IS NULL OR cleared_reason = 'DUE'::text AND NOT active AND until_date IS NOT NULL)"
+        },
+        {
           "name": "bpay_next_snooze_expected_revision_id_fkey",
           "type": "f",
           "deferred": false,
@@ -105813,6 +105898,10 @@
         {
           "name": "bpay_next_snooze_event_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_snooze_event_pkey ON private.bpay_next_snooze_event USING btree (id)"
+        },
+        {
+          "name": "bpay_next_snooze_event_request_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_event_request_idx ON private.bpay_next_snooze_event USING btree (request_id, id)"
         },
         {
           "name": "bpay_next_snooze_event_snooze_id_version_key",
@@ -117575,11 +117664,43 @@
           "generated": ""
         },
         {
+          "name": "snooze_due_seek_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "snooze_due_seek_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "updated_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "week_rollover_seek_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "week_rollover_seek_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -117600,6 +117721,22 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_next_snooze_due_seek_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((snooze_due_seek_date IS NULL) = (snooze_due_seek_id IS NULL))"
+        },
+        {
+          "name": "bpay_next_week_rollover_seek_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((week_rollover_seek_date IS NULL) = (week_rollover_seek_id IS NULL))"
+        },
         {
           "name": "bpay_next_workbench_revision_adoption_revision_check",
           "type": "c",

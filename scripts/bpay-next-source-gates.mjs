@@ -20,6 +20,10 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // WB37 native indexed recovery only; existing refresh/money owners retained.
+  'public.bpay_next_snooze_due_page_v1(jsonb)',
+  'public.bpay_next_workbench_week_rollover_page_v1(jsonb)',
+  'private.bpay_next_snooze_due_receipt_valid_v1(uuid)',
   // WB22 finite read-only memory helper closure; write owners remain separate.
   'private.bpay_next_selection_memory_intent_valid_v1(jsonb)',
   'private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)',
@@ -117,6 +121,9 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  'public.bpay_next_snooze_due_page_v1(jsonb)':['by','private.bpay_next_workbench_require_next_v1','private.bpay_next_receive_command_v1','private.bpay_next_snooze_due_receipt_valid_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','gen_random_uuid','to_jsonb'],
+  'public.bpay_next_workbench_week_rollover_page_v1(jsonb)':['lateral','by','private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','substring'],
+  'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
   'private.bpay_next_case_allocation_plan_v1(jsonb)':['isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
   "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys"],

@@ -16,6 +16,7 @@ export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
 ]);
 const RPCS = Object.freeze({ ENROLL: 'bpay_next_enroll_service_v1', WAKE_PAGE: 'bpay_next_job_wake_page_v1',
   EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1',
+  SNOOZE_DUE:'bpay_next_snooze_due_page_v1',WEEK_ROLLOVER:'bpay_next_workbench_week_rollover_page_v1',
   WORKBENCH_DUE_PAGE:'bpay_next_workbench_runtime_service_v1',WORKBENCH_WAKE_PAGE:'bpay_next_workbench_runtime_service_v1',
   WORKBENCH_CLAIM:'bpay_next_workbench_runtime_service_v1',WORKBENCH_STEP:'bpay_next_workbench_runtime_service_v1' });
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -166,7 +167,10 @@ export function createBpayNextRuntimeRpc(config) {
     try {
       if (values.length !== 3 || typeof action !== 'string' || !Object.hasOwn(RPCS, action)
           || !exact(options, ['signal']) || !(options.signal instanceof AbortSignal)) throw new Error();
-      if(action.startsWith('WORKBENCH_')) {
+      if(['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)) {
+        if(!exact(args,['p_request'])) throw new Error();
+        expiryInput(args.p_request);
+      } else if(action.startsWith('WORKBENCH_')) {
         if(!exact(args,['p_action','p_task_id','p_args'])||args.p_action!==action.slice('WORKBENCH_'.length)) throw new Error();
         const normalized=workbenchInput(action,['WORKBENCH_WAKE_PAGE','WORKBENCH_DUE_PAGE'].includes(action)?args.p_args:{task_id:args.p_task_id,...args.p_args});
         if(args.p_task_id!==(normalized.task_id??null)) throw new Error();
@@ -269,6 +273,14 @@ function cleanupResult(value, call) {
       || (value.busy ? value.lane !== null || value.rows_visited !== '0' : !['SELECTION','JOB'].includes(value.lane))) throw new Error();
   return Object.freeze({ ...value });
 }
+function dueResult(value,input) {
+  if(!exact(value,['rows_visited','rows_changed','rows_deferred','complete'])
+    ||typeof value.complete!=='boolean'
+    ||![value.rows_visited,value.rows_changed,value.rows_deferred].every(v=>integer(v)&&BigInt(v)<=BigInt(input.limit))
+    ||BigInt(value.rows_changed)+BigInt(value.rows_deferred)!==BigInt(value.rows_visited)
+    ||value.complete!==(BigInt(value.rows_visited)<BigInt(input.limit))) throw new Error();
+  return Object.freeze({...value});
+}
 class RuntimeError extends Error {
   constructor(code, retryable = false, known = false) {
     super(code); this.code = code; this.retryable = retryable; this.known = known;
@@ -317,7 +329,7 @@ async function call(action, input, dependencies) {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > BPAY_NEXT_RUNTIME_LIMITS.timeoutMs) {
       throw new RuntimeError('BPAY_NEXT_RUNTIME_REQUEST_INVALID', false, true);
     }
-    const args = Object.freeze(action.startsWith('WORKBENCH_')?workbenchArgs(action,normalized):action === 'ENROLL' ? {} : action === 'WAKE_PAGE'
+    const args = Object.freeze(['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)?{p_request:normalized}:action.startsWith('WORKBENCH_')?workbenchArgs(action,normalized):action === 'ENROLL' ? {} : action === 'WAKE_PAGE'
       ? { p_lane: normalized.lane, p_limit: normalized.limit } : { p_limit: normalized.limit });
     controller = new AbortController();
     const deadline = new Promise((_, reject) => {
@@ -363,7 +375,7 @@ async function call(action, input, dependencies) {
     if (!response.ok) throw sqlFailure(payload) || new RuntimeError('BPAY_NEXT_RUNTIME_TRANSPORT_FAILED', true);
     if (response.status !== 200) throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true);
     let result;
-    try { result = action.startsWith('WORKBENCH_')?workbenchResult(payload,action,normalized):action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
+    try { result = ['SNOOZE_DUE','WEEK_ROLLOVER'].includes(action)?dueResult(payload,normalized):action.startsWith('WORKBENCH_')?workbenchResult(payload,action,normalized):action === 'ENROLL' ? enrollmentResult(payload) : action === 'WAKE_PAGE'
       ? pageResult(payload, normalized) : action === 'CLEANUP' ? cleanupResult(payload, normalized) : expiryResult(payload, normalized); }
     catch { throw new RuntimeError('BPAY_NEXT_RUNTIME_RESPONSE_INVALID', true); }
     return Object.freeze({ ok: true, action, result });
@@ -392,5 +404,7 @@ export function readBpayNextExpiryDispatchPage(...args) { return call('EXPIRY_PA
 export function cleanupBpayNextTerminalRows(...args) { return call('CLEANUP', args.length === 2 ? args[0] : null, args[1]); }
 export function readBpayNextWorkbenchWakePage(...args) {return call('WORKBENCH_WAKE_PAGE',args.length===2?args[0]:null,args[1]);}
 export function recoverBpayNextWorkbenchDuePage(...args) {return call('WORKBENCH_DUE_PAGE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextSnoozeDuePage(...args) {return call('SNOOZE_DUE',args.length===2?args[0]:null,args[1]);}
+export function recoverBpayNextWeekRolloverPage(...args) {return call('WEEK_ROLLOVER',args.length===2?args[0]:null,args[1]);}
 export function claimBpayNextWorkbenchTask(...args) {return call('WORKBENCH_CLAIM',args.length===2?args[0]:null,args[1]);}
 export function stepBpayNextWorkbenchTask(...args) {return call('WORKBENCH_STEP',args.length===2?args[0]:null,args[1]);}
