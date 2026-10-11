@@ -2029,7 +2029,7 @@ WB22 ITEM [x] Built [x] Reviewed; D02/D03/D04 built and independently reviewed; 
 
 ## WB-25 — Timesheet, day and expense/Additional line ticks (component subsets)
 
-Seq 70; Workbench · WB-S; reviewer R2; current requested-feature status PARTLY_DONE.
+Seq 70; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only WB-25's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -2037,7 +2037,7 @@ Dependencies: WB-16, WB-21, F-16, F-25; successor positions: `0570` selection ap
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-25-D12 | SCREEN: Exact WORK/SUBSET selection controls in js/bpay-next-workbench.js | MISSING | Preserve real line-ID/page owner; complete all-but-one intent and boundary validation without browser-wide lists. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-25-D12 | SCREEN: Exact WORK/SUBSET selection controls in js/bpay-next-workbench.js | BUILT_REVIEWED | Preserve real line-ID/page owner; complete all-but-one intent and boundary validation without browser-wide lists. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2062,6 +2062,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Unticking the whole Timesheet leaves it out of the Draft with its balance unchanged (RQ-033, LUI-034, LSV-009, LSV-019).
   - Unticking one GBP 45 mileage line leaves the claim approved in the Timesheet screen (RQ-035, LUI-028).
   - Re-approval accepted before Create is applied first: include its bindable approved position, or return REVIEW for an unbindable requested subset. Re-approval after accepted Create leaves this frozen Draft unchanged and appears for the next Draft; delayed capture is not a second cutoff (OR-44, RQ-105).
+
+WB25 ITEM [x] Built [x] Reviewed; exact D12 built and independently reviewed; context owners reused. Implementation BE 209df956090dc7ac051fd523a165872bb201db5e, FE ec065427b7078e5a79cc1ff5bdcbf6b0107fbe8e. Source9/9, sole PG17 compile, seal/coupling PASS. Actual24 SCR10 captures39PASS/0FAIL/3NA. Four joined in-app journeys authored/NOT_RUN; installation unchecked. Whole54/288 BUILT54/288 REVIEWED.
 
 ## WB-26 — Repayment, recovery and stand-alone line ticks
 
