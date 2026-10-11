@@ -10418,6 +10418,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accept_case_pause_v1(p_actor_user_id uuid, p_action text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "082a38dfba1744d3321e77d4b8733ac336f4f998eac74ebc2da636fffa97a3f6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -10977,6 +10996,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "4cea675a3184ef9b56b3f9ca4204b766ddff1e03ba4296bac17989aa39e7bb19"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_apply_case_pause_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "432a28ea691f28b0548275060e3dba0b94bedd2f388208117cde29f601e4022e"
     },
     {
       "acl": [
@@ -12017,6 +12055,44 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_case_pause_receipt_v1(p_command_id uuid, p_case_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "cec43794086103711a45c21b2d9b967fea490bd4880b612090752731dd6c9e56"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_pause_state_v1(p_case_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "b405985cb0e618184d602b009a6fc7371cf1b4c7a98226ee8f08e284708ef250"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_case_protected_bindings_v1(p_case_id uuid, p_after jsonb, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
@@ -12307,6 +12383,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "6ae8adf9ebdae3519637a4b5e8cbe139eda147d7269dc9d1eb2a108beaac4080"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_claim_case_pause_job_v1(p_job_id uuid, p_lease_seconds integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "890ef0ce416985dc4ac773c8b1a498085e169f119ea8540c59f0a5e5100e135d"
     },
     {
       "acl": [
@@ -12705,7 +12800,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e2c866d1ef074d1afa12e39f8e0e156669ad427a0a60e6146bc0c3eabb19542f"
+      "definition_sha256": "8b24a06fa3233c716d5baa6eee7bf4d4575b5c5c32b22aad35ce927a3ca2b72e"
     },
     {
       "acl": [
@@ -13085,7 +13180,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8ccfc856484b973dfc2448b401109327b83748316a2987d01fad5386a3b812a1"
+      "definition_sha256": "28f53609fa6cd21da2eb600f62d7fe30b531afffd27414e4738bf6090f34bbc3"
     },
     {
       "acl": [
@@ -32788,7 +32883,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7089038003e4c486b876c7dd79f21646704973b4cd105f84f844e9442ba4a436"
+      "definition_sha256": "689e4de371a3c8fe145a48b4c9ed4a86a93c6cfead390dfecba4f092b27887b6"
     },
     {
       "acl": [
@@ -32812,7 +32907,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dcce20e97fe402b6cec8c45cc1bd659521ae1b83cdc71e2b0cfc0d8433bf65cd"
+      "definition_sha256": "dac3f11c784222f282b2d3fc97837b18729dfe6833196843d2df3d1100a4e871"
     },
     {
       "acl": [
@@ -33102,7 +33197,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e09feaa9ce09b24f6532aa341fb6d28e3a2d194976c68051849a0c5878a52878"
+      "definition_sha256": "73fb7a243c20032a738c4e40c7dc7852ba5a1e541924df27e3a65b87cd7d16e8"
     },
     {
       "acl": [
@@ -54392,6 +54487,34 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_recovery_reservation AFTER INSERT ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_recovery_reservation_v1()"
+    },
+    {
+      "name": "bpay_next_case_pause_outcome_immutable_v1",
+      "table": "bpay_next_case_pause_outcome",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_pause_outcome_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_pause_outcome FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_pause_outcome_truncate_v1",
+      "table": "bpay_next_case_pause_outcome",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_pause_outcome_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_pause_outcome FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_pause_request_immutable_v1",
+      "table": "bpay_next_case_pause_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_pause_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_pause_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_pause_request_truncate_v1",
+      "table": "bpay_next_case_pause_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_pause_request_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_pause_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
       "name": "bpay_next_case_list_native_changed",
@@ -84793,6 +84916,542 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (case_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_case_pause_outcome",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "applied_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "applied_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "first_protection",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "issue_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "protection_summary",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_pause_outcome_case_idx",
+          "definition": "CREATE INDEX bpay_next_case_pause_outcome_case_idx ON private.bpay_next_case_pause_outcome USING btree (case_id, candidate_id, completed_at_utc, command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_job_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_pause_outcome_job_id_key ON private.bpay_next_case_pause_outcome USING btree (job_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_pause_outcome_pkey ON private.bpay_next_case_pause_outcome USING btree (command_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_pause_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = 'APPLIED'::text AND issue_code IS NULL AND applied_case_revision IS NOT NULL AND applied_case_revision > 0 AND applied_status IS NOT NULL AND applied_status =\nCASE action\n    WHEN 'CASE_PAUSE'::text THEN 'PAUSED'::text\n    ELSE 'OPEN'::text\nEND OR outcome = 'BLOCKED'::text AND applied_status IS NULL AND applied_case_revision IS NULL AND issue_code IS NOT NULL AND (issue_code = ANY (ARRAY['BPAY_NEXT_CASE_PROTECTION_CHANGED'::text, 'BPAY_NEXT_CASE_PAUSE_UNSUPPORTED'::text, 'BPAY_NEXT_CASE_PAUSE_STATE_CHANGED'::text, 'BPAY_NEXT_CASE_PROTECTION_PENDING'::text, 'BPAY_NEXT_CASE_PROTECTED_SLICE'::text, 'BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'::text])))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_command_id_candidate_id_actio_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id, action) REFERENCES private.bpay_next_job(command_id, candidate_id, job_kind) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_command_id_case_id_candidate__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id, action) REFERENCES private.bpay_next_case_pause_request(command_id, case_id, candidate_id, action) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_completed_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_first_protection_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (first_protection IS NULL OR jsonb_typeof(first_protection) = 'object'::text AND octet_length(first_protection::text) <= 4096)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_job_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (job_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['APPLIED'::text, 'BLOCKED'::text]))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_protection_summary_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (protection_summary IS NULL OR jsonb_typeof(protection_summary) = 'object'::text AND octet_length(protection_summary::text) <= 4096)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "bpay_next_case_pause_request",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_sequence",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_args",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "prior_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "target_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_pause_actor_idx",
+          "definition": "CREATE INDEX bpay_next_case_pause_actor_idx ON private.bpay_next_case_pause_request USING btree (actor_user_id, command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_candidate_idx",
+          "definition": "CREATE INDEX bpay_next_case_pause_candidate_idx ON private.bpay_next_case_pause_request USING btree (candidate_id, case_id, command_sequence)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_case_id_candidate_i_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_pause_request_command_id_case_id_candidate_i_key ON private.bpay_next_case_pause_request USING btree (command_id, case_id, candidate_id, action)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_pause_request_pkey ON private.bpay_next_case_pause_request USING btree (command_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_pause_request_accepted_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['CASE_PAUSE'::text, 'CASE_RESUME'::text]))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_case_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = 'CASE_PAUSE'::text AND prior_status = 'OPEN'::text AND target_status = 'PAUSED'::text OR action = 'CASE_RESUME'::text AND prior_status = 'PAUSED'::text AND target_status = 'OPEN'::text)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_case_id_candidate_i_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (command_id, case_id, candidate_id, action)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_command_sequence_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, command_sequence) REFERENCES private.bpay_next_command(id, agency_sequence) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_sequence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (command_sequence > 0)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_expected_case_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_case_revision > 0 AND expected_case_revision < '9223372036854775807'::bigint)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_original_args_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(original_args) = 'object'::text AND octet_length(original_args::text) <= 16384)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason IS NULL OR length(btrim(reason)) > 0 AND octet_length(reason) <= 2048)"
         }
       ],
       "view_definition_sha256": null

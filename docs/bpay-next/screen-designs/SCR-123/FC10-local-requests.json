@@ -1,0 +1,656 @@
+[
+  {
+    "id": "SCR-123",
+    "file": "FC10-pause-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 121.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 119.390625,
+          "height": 44
+        }
+      ],
+      "focus": ""
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-unfunded-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts do not pay out or collect this Payment Advance until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £0.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 121.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 119.390625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep collecting"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-load-error-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nCould not load this Case; refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-uncertain-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nThe result is not known yet.\n\nClose\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Try again",
+          "width": 83.9375,
+          "height": 44
+        }
+      ],
+      "focus": "\n  \n    \n      \n    \n    \n    Weekly source queries \n      Signed out\n      Logout\n    \n  \n\n  \n    \n      Actions & filters\n      \n      \n    \n\n    \n      \n        Loading…\n        \n        \n        Columns\n      \n      \n    \n   \n\n   \n  \n    \n      \n      \n    \n  \n\n\n  \n  \n  \n\n    \n      Pause recovery\n      \n      \n      Related\n      Payment history\n      Close\n    \n    \n      form\n      ?Pause recovery for this Case?New Drafts take no repayments until you resume it.Bethany ClarkeReasonThe result is not known yet.\n    \n    \n      \n      \n      \n      \n      DeleteAdd missing weeksUnassign all\n    Modify\n    \n      Extend to new contract\n      Duplicate contract\n    Edit\n      AuthoriseUnauthoriseProcess TimesheetUnprocess TimesheetArchive TimesheetUnarchive TimesheetDelete timesheetSave\n    CloseTry again\n  \n\n  \n  \n\n  \n    \n      Password reset\n      \n        \n        \n        \n          Enter your account email\n          \n        \n        \n          Back to login\n          Send reset email\n        \n      \n    \n  \n\n  \n  \n    \n      Verification code\n      \n        \n        \n\n        \n          Enter the 6-digit code we emailed you\n          \n        \n\n        \n          Back to login\n          \n            Resend code\n            Verify\n          \n        \n      \n    \n  \n\n  \n    \n      Set a new password\n      \n        \n        \n        \n          New password\n          \n            \n            show\n          \n        \n        \n          Confirm new password\n          \n            \n            show\n          \n        \n        \n          Back to login\n          Update password\n        \n      \n    \n  \n\n  \n  \n\n\n  \n\n \n \n \n \n \n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n\n \n\n\n\n\n\n\n\n\n  \n\n\n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n\n\n"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-accepted-pending-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nYour request is being prepared.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-stale-state-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe Case has changed. Refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-pause-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 121.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 119.390625,
+          "height": 44
+        }
+      ],
+      "focus": ""
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-unfunded-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts do not pay out or collect this Payment Advance until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £0.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 551,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 121.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 119.390625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep collecting"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-load-error-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nCould not load this Case; refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-uncertain-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nThe result is not known yet.\n\nClose\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Try again",
+          "width": 83.9375,
+          "height": 44
+        }
+      ],
+      "focus": "\n  \n    \n      \n    \n    \n    Weekly source queries \n      Signed out\n      Logout\n    \n  \n\n  \n    \n      Actions & filters\n      \n      \n    \n\n    \n      \n        Loading…\n        \n        \n        Columns\n      \n      \n    \n   \n\n   \n  \n    \n      \n      \n    \n  \n\n\n  \n  \n  \n\n    \n      Pause recovery\n      \n      \n      Related\n      Payment history\n      Close\n    \n    \n      form\n      ?Pause recovery for this Case?New Drafts take no repayments until you resume it.Bethany ClarkeReasonThe result is not known yet.\n    \n    \n      \n      \n      \n      \n      DeleteAdd missing weeksUnassign all\n    Modify\n    \n      Extend to new contract\n      Duplicate contract\n    Edit\n      AuthoriseUnauthoriseProcess TimesheetUnprocess TimesheetArchive TimesheetUnarchive TimesheetDelete timesheetSave\n    CloseTry again\n  \n\n  \n  \n\n  \n    \n      Password reset\n      \n        \n        \n        \n          Enter your account email\n          \n        \n        \n          Back to login\n          Send reset email\n        \n      \n    \n  \n\n  \n  \n    \n      Verification code\n      \n        \n        \n\n        \n          Enter the 6-digit code we emailed you\n          \n        \n\n        \n          Back to login\n          \n            Resend code\n            Verify\n          \n        \n      \n    \n  \n\n  \n    \n      Set a new password\n      \n        \n        \n        \n          New password\n          \n            \n            show\n          \n        \n        \n          Confirm new password\n          \n            \n            show\n          \n        \n        \n          Back to login\n          Update password\n        \n      \n    \n  \n\n  \n  \n\n\n  \n\n \n \n \n \n \n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n\n \n\n\n\n\n\n\n\n\n  \n\n\n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n\n\n"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-accepted-pending-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nYour request is being prepared.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-stale-state-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe Case has changed. Refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-pause-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 328,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 115.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 113.390625,
+          "height": 44
+        }
+      ],
+      "focus": ""
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-unfunded-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts do not pay out or collect this Payment Advance until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £0.00\n\nReason\nKeep collecting\nPause recovery",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "",
+          "width": 328,
+          "height": 82.890625
+        },
+        {
+          "text": "Keep collecting",
+          "width": 115.5,
+          "height": 44
+        },
+        {
+          "text": "Pause recovery",
+          "width": 113.390625,
+          "height": 44
+        }
+      ],
+      "focus": "Keep collecting"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-load-error-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nCould not load this Case; refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-uncertain-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Case?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke\n\nThe result is not known yet.\n\nClose\nTry again",
+    "requests": [],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Try again",
+          "width": 77.9375,
+          "height": 44
+        }
+      ],
+      "focus": "\n  \n    \n      \n    \n    \n    Weekly source queries \n      Signed out\n      Logout\n    \n  \n\n  \n    \n      Actions & filters\n      \n      \n    \n\n    \n      \n        Loading…\n        \n        \n        Columns\n      \n      \n    \n   \n\n   \n  \n    \n      \n      \n    \n  \n\n\n  \n  \n  \n\n    \n      Pause recovery\n      \n      \n      Related\n      Payment history\n      Close\n    \n    \n      form\n      ?Pause recovery for this Case?New Drafts take no repayments until you resume it.Bethany ClarkeReasonThe result is not known yet.\n    \n    \n      \n      \n      \n      \n      DeleteAdd missing weeksUnassign all\n    Modify\n    \n      Extend to new contract\n      Duplicate contract\n    Edit\n      AuthoriseUnauthoriseProcess TimesheetUnprocess TimesheetArchive TimesheetUnarchive TimesheetDelete timesheetSave\n    CloseTry again\n  \n\n  \n  \n\n  \n    \n      Password reset\n      \n        \n        \n        \n          Enter your account email\n          \n        \n        \n          Back to login\n          Send reset email\n        \n      \n    \n  \n\n  \n  \n    \n      Verification code\n      \n        \n        \n\n        \n          Enter the 6-digit code we emailed you\n          \n        \n\n        \n          Back to login\n          \n            Resend code\n            Verify\n          \n        \n      \n    \n  \n\n  \n    \n      Set a new password\n      \n        \n        \n        \n          New password\n          \n            \n            show\n          \n        \n        \n          Confirm new password\n          \n            \n            show\n          \n        \n        \n          Back to login\n          Update password\n        \n      \n    \n  \n\n  \n  \n\n\n  \n\n \n \n \n \n \n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n \n\n \n\n\n\n\n\n\n\n\n  \n\n\n \n \n \n \n\n \n \n \n \n \n \n \n \n \n \n\n\n"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-accepted-pending-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nYour request is being prepared.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123",
+    "file": "FC10-stale-state-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe Case has changed. Refresh and try again.\n\nClose\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  }
+]

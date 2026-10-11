@@ -1,0 +1,587 @@
+[
+  {
+    "id": "SCR-123b",
+    "file": "FC10-protected-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£150.00 is already in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-multiple-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£300.00 is already in Drafts.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-unknown-protection-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\nThis Case is already being prepared in a Draft.\n\nRemove the Candidate from its Draft or discard the Draft before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-applied-dark.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nPaused — not collected.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-blocked-dark.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nThis Case cannot be changed.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe request was refused because this Case was in a Draft.\n\nAt the request, £150.00 was in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-protected-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£150.00 is already in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-multiple-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£300.00 is already in Drafts.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-unknown-protection-device-light.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\nThis Case is already being prepared in a Draft.\n\nRemove the Candidate from its Draft or discard the Draft before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-applied-device-light.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nPaused — not collected.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-blocked-device-light.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nThis Case cannot be changed.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe request was refused because this Case was in a Draft.\n\nAt the request, £150.00 was in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Open Draft",
+          "width": 96.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 73.875,
+          "height": 38
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-protected-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£150.00 is already in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-multiple-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\n£300.00 is already in Drafts.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-unknown-protection-phone-dark.png",
+    "errors": [],
+    "copy": "?\nPause recovery for this Payment Advance?\n\nNew Drafts take no repayments until you resume it.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThis Case cannot be changed while it is in a Draft.\n\nThis Case is already being prepared in a Draft.\n\nRemove the Candidate from its Draft or discard the Draft before trying again.\n\nOpen Draft\nRefresh\nClose",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        },
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-applied-phone-dark.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nPaused — not collected.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        }
+      ],
+      "focus": "Close"
+    },
+    "pauseFailure": null
+  },
+  {
+    "id": "SCR-123b",
+    "file": "FC10-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "Pause recovery\nClose\nThis Case cannot be changed.\n\nBethany Clarke · £150.00 weekly · Outstanding £600.00\n\nThe request was refused because this Case was in a Draft.\n\nAt the request, £150.00 was in a Draft.\n\nCancel the Candidate payment before trying again.\n\nOpen Draft\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "pause_command_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Open Draft",
+          "width": 90.203125,
+          "height": 44
+        },
+        {
+          "text": "Refresh",
+          "width": 67.875,
+          "height": 44
+        }
+      ],
+      "focus": "Refresh"
+    },
+    "pauseFailure": null
+  }
+]

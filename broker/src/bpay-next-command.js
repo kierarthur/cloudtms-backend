@@ -17,12 +17,13 @@
  * retry occurs here. Accepted commands still need the separate worker drain.
  */
 
-import {CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,equal} from './bpay-next-case-contract.js';
+import {CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,pauseReason,equal} from './bpay-next-case-contract.js';
 
 export const BPAY_NEXT_COMMAND_LIMITS = Object.freeze({
   requestBytes: 2048,
   caseCreateRequestBytes: 32768,
   caseEditRequestBytes: 49152,
+  casePauseRequestBytes: 16384,
   responseBytes: 128 * 1024,
   timeoutMs: 8000
 });
@@ -56,6 +57,8 @@ const TRANSFER_PHASES = ['BUILDING', 'MEMBERS_READY', 'DRAFT', 'SCHEDULED', 'ISS
   'SUBMITTED', 'UNKNOWN', 'SETTLED', 'RETURNED', 'REFUSED', 'CANCELLED', 'INTERNAL_PROCESSING', 'INTERNAL_SETTLED'];
 const INPUTS = Object.freeze({
   CASE_CREATE: {command_id:'uuid',...CASE_INPUT_SCHEMA,preview_token:'caseToken'},
+  CASE_PAUSE: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',reason:'pauseReason'},
+  CASE_RESUME: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',reason:'pauseReason'},
   CASE_EDIT: {command_id:'uuid',case_id:'uuid',expected_case_revision:'positiveBigint',...CASE_INPUT_SCHEMA,preview_token:'caseEditToken'},
   BIND_STORED_CREDIT: { command_id: 'uuid', legacy_case_id: 'uuid' },
   WRITE_OFF: { command_id: 'uuid', case_component_id: 'uuid', expected_component_revision: 'positiveBigint', scope: 'writeOffScope', reason: 'writeOffReason' },
@@ -73,6 +76,8 @@ const INPUTS = Object.freeze({
 });
 const OUTPUTS = Object.freeze({
   CASE_CREATE: {case_id:'uuid',command_id:'uuid',sequence:'positiveBigint',phase:'storedCreditPhase',replay:'boolean'},
+  CASE_PAUSE: {case_id:'uuid',candidate_id:'uuid',command_id:'uuid',action:'pauseAction',sequence:'positiveBigint',expected_case_revision:'positiveBigint',phase:'pauseAdmissionPhase',replay:'boolean'},
+  CASE_RESUME: {case_id:'uuid',candidate_id:'uuid',command_id:'uuid',action:'pauseAction',sequence:'positiveBigint',expected_case_revision:'positiveBigint',phase:'pauseAdmissionPhase',replay:'boolean'},
   CASE_EDIT: {case_id:'uuid',command_id:'uuid',sequence:'positiveBigint',case_revision:'positiveBigint',rule_id:'uuid',phase:'caseEditPhase',replay:'boolean'},
   BIND_STORED_CREDIT: { case_id: 'uuid', command_id: 'uuid', sequence: 'positiveBigint', phase: 'storedCreditPhase', replay: 'boolean' },
   WRITE_OFF: { command_id: 'uuid', case_id: 'uuid', case_component_id: 'uuid', sequence: 'positiveBigint', phase: 'writeOffPhase',
@@ -123,6 +128,9 @@ function bigint(value, positive = false) {
 }
 function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
+  if(type==='pauseReason')return pauseReason(value);
+  if(type==='pauseAction')return ['CASE_PAUSE','CASE_RESUME'].includes(value);
+  if(type==='pauseAdmissionPhase')return value==='ACCEPTED_PENDING_STATUS';
   if(type==='caseToken')return caseToken(value);
   if(type==='caseEditToken')return caseEditToken(value);
   if(type==='caseEditPhase')return value==='ACCEPTED_PENDING_EDIT';
@@ -228,8 +236,9 @@ function commandCall(body) {
     || Object.keys(body).some((key) => key !== 'action' && key !== 'reauth_token' && !Object.hasOwn(schema, key))
     || keys.some((key) => !Object.hasOwn(body, key) || (!['CASE_CREATE','CASE_EDIT'].includes(body.action)&&!field(body[key], schema[key])))) invalid();
   const args = Object.fromEntries(keys.map((key) => [key, body[key]]));
-  if(ENCODER.encode(JSON.stringify(body)).byteLength>(body.action==='CASE_EDIT'?49152:body.action==='CASE_CREATE'?BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes:BPAY_NEXT_COMMAND_LIMITS.requestBytes))throw fault('BPAY_NEXT_COMMAND_REQUEST_TOO_LARGE',413);
+  if(ENCODER.encode(JSON.stringify(body)).byteLength>(['CASE_PAUSE','CASE_RESUME'].includes(body.action)?16384:body.action==='CASE_EDIT'?49152:body.action==='CASE_CREATE'?BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes:BPAY_NEXT_COMMAND_LIMITS.requestBytes))throw fault('BPAY_NEXT_COMMAND_REQUEST_TOO_LARGE',413);
   if(body.action==='CASE_CREATE'){const {command_id,preview_token,...input}=args;if(!field(command_id,'uuid')||!caseInput(input)||!caseToken(preview_token)||!equal(preview_token.input,input))invalid();}
+  if(['CASE_PAUSE','CASE_RESUME'].includes(body.action)&&BigInt(args.expected_case_revision)>=9223372036854775807n)invalid();
   if(body.action==='CASE_EDIT'){const {command_id,case_id,expected_case_revision,preview_token,...input}=args;
     if(!field(command_id,'uuid')||!field(case_id,'uuid')||!field(expected_case_revision,'positiveBigint')||!caseInput(input)
       ||!caseEditToken(preview_token,{case_id,expected_case_revision})||!equal(preview_token.input,input))invalid();}
@@ -325,6 +334,7 @@ function commandResult(payload, call) {
   }
   if (['BIND_STORED_CREDIT','CASE_CREATE'].includes(call.action)
     && payload.case_id.toLowerCase() !== call.args.command_id.toLowerCase()) invalid();
+  if(['CASE_PAUSE','CASE_RESUME'].includes(call.action)&&(payload.action!==call.action||payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()||payload.expected_case_revision!==call.args.expected_case_revision))invalid();
   if(call.action==='CASE_EDIT'&&(payload.case_id.toLowerCase()!==call.args.case_id.toLowerCase()
     ||payload.rule_id.toLowerCase()!==call.args.command_id.toLowerCase()
     ||BigInt(payload.case_revision)!==BigInt(call.args.expected_case_revision)+1n))invalid();
@@ -365,6 +375,7 @@ function dependencyError(error, attempted = false, action = null) {
   if (error instanceof CommandError) return error;
   const db = error?.json ?? error;
   if(action==='CASE_CREATE'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')return fault(db.message,409);
+  if(['CASE_PAUSE','CASE_RESUME'].includes(action)&&['BPAY_NEXT_CASE_PAUSE_UNSUPPORTED','BPAY_NEXT_CASE_PAUSE_STATE_CHANGED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID','BPAY_NEXT_CASE_PAUSE_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
   if(action==='CASE_EDIT'&&['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED',
     'BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID','BPAY_NEXT_CASE_EDIT_REPLAY_CONFLICT'].includes(db?.message))return fault(db.message,409);
   if (db?.message === 'BPAY_NEXT_REAUTH_REQUIRED' || db?.code === 'BPAY_NEXT_REAUTH_REQUIRED') return fault('BPAY_NEXT_REAUTH_REQUIRED',403);

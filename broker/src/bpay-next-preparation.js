@@ -1,4 +1,4 @@
-import {caseInput,casePreview,caseEditState,caseEditReceipt} from './bpay-next-case-contract.js';
+import {caseInput,casePreview,caseEditState,caseEditReceipt,casePauseState,casePauseReceipt} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
  * injected; SQL rechecks service JWT/active admin. No economics, legacy session,
@@ -112,7 +112,7 @@ const ROWS={
   CASE_COMPONENTS:{case_component_id:'uuid',case_id:'uuid',candidate_id:'uuid',component_ordinal:'positive',component_revision:'positive',
     case_kind:'caseKind',case_subtype:'caseSubtype',tax_treatment:'taxTreatment',instruction_kind:'instructionKind',direction:'direction',
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
-    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?',edit_state:'caseEditState',edit_receipt:'caseEditReceipt?'}
+    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?',edit_state:'caseEditState',edit_receipt:'caseEditReceipt?',pause_state:'casePauseState',pause_receipt:'casePauseReceipt?'}
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
@@ -169,6 +169,8 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='casePauseState')return casePauseState(v);
+  if(t==='casePauseReceipt')return casePauseReceipt(v);
   if(t==='caseEditState')return caseEditState(v);
   if(t==='caseEditReceipt')return caseEditReceipt(v);
   if(t==='caseReference')return typeof v==='string'&&v.trim().length>0&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=2048;
@@ -465,7 +467,7 @@ function caseListResult(payload,call,bad){
 function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
-  const kind=url.searchParams.get('kind'),schema=kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'&&url.searchParams.has('edit_command_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,edit_command_id:'uuid'}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const kind=url.searchParams.get('kind'),schema=kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
@@ -714,6 +716,9 @@ function result(payload,call,mutation){
     if(storedCreditPage&&row.legacy_case_id>payload.scan_cursor)bad();
     if(call.kind==='CASE_COMPONENTS'&&row.case_id!==call.args.case_id)bad();
     if(call.kind==='CASE_COMPONENTS'){
+      if(row.pause_state.case_id!==row.case_id||row.pause_state.candidate_id!==row.candidate_id
+        ||(row.pause_receipt!==null&&(row.pause_receipt.case_id!==row.case_id||row.pause_receipt.candidate_id!==row.candidate_id||row.pause_receipt.command_id!==call.args.pause_command_id))
+        ||(Object.hasOwn(call.args,'pause_command_id')?(row.pause_receipt===null):row.pause_receipt!==null))bad();
       if(row.edit_state.case_id!==row.case_id||row.edit_state.candidate_id!==row.candidate_id
         ||(row.edit_receipt!==null&&(row.edit_receipt.case_id!==row.case_id||row.edit_receipt.candidate_id!==row.candidate_id||row.edit_receipt.command_id!==call.args.edit_command_id))
         ||(Object.hasOwn(call.args,'edit_command_id')?(row.edit_receipt===null):row.edit_receipt!==null))bad();

@@ -1,0 +1,138 @@
+{
+  "item": "FC-10",
+  "sequence": 108,
+  "decision": "BD120",
+  "status": "SOURCE_BUILT_A4_PENDING",
+  "deliverables": [
+    "FC-10-D02",
+    "FC-10-D03",
+    "FC-10-D04",
+    "FC-10-D06",
+    "FC-10-D07"
+  ],
+  "signatures": [
+    "private.bpay_next_case_pause_state_v1(uuid,uuid)",
+    "private.bpay_next_case_pause_receipt_v1(uuid,uuid,uuid)",
+    "private.bpay_next_accept_case_pause_v1(uuid,text,jsonb)",
+    "private.bpay_next_apply_case_pause_v1(uuid,uuid,bigint)",
+    "private.bpay_next_claim_case_pause_job_v1(uuid,integer)",
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_enroll_one_v1()",
+    "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/11102026_2041_banking_pay_next_case_pause_request.sql",
+      "sha256": "07cea164d11df092fb5fc18edc581ef4e5ee4776a3d0d27167f07bdb531dc344"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "sha256": "80675b1f77af852977da427d0ce0702bfb2a2da6fafcea2a5e05b731810de44b"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-case-contract.js",
+      "sha256": "41f21248a3044b88840537419d2571d7e23c1b04f15f3dfadb3a21925b2505df"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "daacf7eb1b47b28a66cbc81d44557b6824b0a0b52453e8c0218de1fe96594e85"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "5e9126530f6e4d3e28f49a3bf2c40096c40b83e6f0d43195ec312ebeed2df85f"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "19f08cbdd3ba40b9439b99cc274d7fa48b98daed82bbd31207ca58c5c638cd68"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "sha256": "65454073073b13c740db5557a9a84a3cd6f64ef71f8493b2ef8a1fbfae7f5b26"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "d1a1349423ff00c7ed2713ea053e7d334c2015eeb250e8f2a33aa8aa42b07608"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "ccb6ef70bf87f5a6bef6ccf0482a5f30c34db75b4b20b2a00b4c4da7c73f9db2"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "55e682eb8421314ab603c13d5913d365cfe90dcb0399a83167d01dd7a7aa232c"
+    },
+    {
+      "repository": "BE",
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "932f68a5aa713473cefe68fdbea7e07cb9b89d5046fb787fbe18c5f53aa3cb55"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "c4c498e15da29443c51341a37e0184e2f98c8ba7b035fc75e2bf195986aeeb0a"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/design/FC-10-case-pause-contract.json",
+      "sha256": "93e9aafe977100ef29c7ca6451c60717ea280491b2e4352cd92665ffc7d1b2aa"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-pause.js",
+      "sha256": "13fe962671b3cd1aa2af07e258b380e43f18b3aece0c4e1a5094d85226a198a8"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-preview.js",
+      "sha256": "dac5dbf44b4dcbbd9825412239d312750409cf63d0a9658965093f6df6837226"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "ebf5237c32438a7ff3b1e94944d0c07221bc7391b027621ecd473a8fc8e433eb"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-ui.js",
+      "sha256": "f535e7e75579428ca7b97b57d406ccaeadaebbf0fe15e5935574f435b772248d"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "cb156512ef05e0d85d05edd7f599cad6fa415c170f3b2834d28b415cead6b2bc"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "06e91fbb64e5327e3845e53aaf451dffab3fe689526f53ad9a74a6f1fb9af61e"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "3dcfa6ed5a90854c457301f75c453e971c54fe163d6345088d7f06a9da08a7ac"
+    }
+  ],
+  "checks": {
+    "integrity": "354migrations/916repeatables PASS",
+    "sourceGates": "Final existing12/12PASS",
+    "syntax": "All finalaffectedWorker/Office/main PASS",
+    "local": "Changed-only managed solePG17 load,10exactinstalledbody/config/ACLmatches,2immutabletables/4guards/3pointindices, existingGeneral/CandidateDO PASS",
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; membershipdelta0",
+    "contract": "047dbf643a0ad905204d166eea243dcd0671f6b8b5ebb6c7caf1ad811b4ed150 export/seal/coupling PASS",
+    "a4": "33finalactualPNG, fixedlocalGETsamples, reviewerfinalpending",
+    "joined": "AUTHORED_NOT_RUN"
+  },
+  "retained": "1939allocation/prepare acceptedstatus/rule/period facts andPAUSEDskip,1509FC16assertion,0904earlyfence,0559Caseprojection, original1536/1910creator and0410funding."
+}

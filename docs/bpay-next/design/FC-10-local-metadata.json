@@ -1,0 +1,281 @@
+{
+  "source": "Sole local PG17 catalogue and existing isolation DO verifiers only; no business rows/RPC/fixtures.",
+  "tables": [
+    {
+      "name": "bpay_next_case_pause_outcome",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "applied_status",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "applied_case_revision",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "issue_code",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "protection_summary",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "first_protection",
+          "type": "jsonb",
+          "nullable": true
+        },
+        {
+          "name": "completed_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_pause_outcome_check",
+          "definition": "CHECK ((((outcome = 'APPLIED'::text) AND (issue_code IS NULL) AND (applied_case_revision IS NOT NULL) AND (applied_case_revision > 0) AND (applied_status IS NOT NULL) AND (applied_status =\nCASE action\n    WHEN 'CASE_PAUSE'::text THEN 'PAUSED'::text\n    ELSE 'OPEN'::text\nEND)) OR ((outcome = 'BLOCKED'::text) AND (applied_status IS NULL) AND (applied_case_revision IS NULL) AND (issue_code IS NOT NULL) AND (issue_code = ANY (ARRAY['BPAY_NEXT_CASE_PROTECTION_CHANGED'::text, 'BPAY_NEXT_CASE_PAUSE_UNSUPPORTED'::text, 'BPAY_NEXT_CASE_PAUSE_STATE_CHANGED'::text, 'BPAY_NEXT_CASE_PROTECTION_PENDING'::text, 'BPAY_NEXT_CASE_PROTECTED_SLICE'::text, 'BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'::text])))))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_command_id_candidate_id_actio_fkey",
+          "definition": "FOREIGN KEY (command_id, candidate_id, action) REFERENCES private.bpay_next_job(command_id, candidate_id, job_kind) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_command_id_case_id_candidate__fkey",
+          "definition": "FOREIGN KEY (command_id, case_id, candidate_id, action) REFERENCES private.bpay_next_case_pause_request(command_id, case_id, candidate_id, action) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_completed_at_utc_check",
+          "definition": "CHECK (isfinite(completed_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_first_protection_check",
+          "definition": "CHECK (((first_protection IS NULL) OR ((jsonb_typeof(first_protection) = 'object'::text) AND (octet_length((first_protection)::text) <= 4096))))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_job_id_fkey",
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_job_id_key",
+          "definition": "UNIQUE (job_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_outcome_check",
+          "definition": "CHECK ((outcome = ANY (ARRAY['APPLIED'::text, 'BLOCKED'::text])))"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_outcome_protection_summary_check",
+          "definition": "CHECK (((protection_summary IS NULL) OR ((jsonb_typeof(protection_summary) = 'object'::text) AND (octet_length((protection_summary)::text) <= 4096))))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_pause_outcome_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_pause_outcome FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_pause_outcome_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_pause_outcome FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    },
+    {
+      "name": "bpay_next_case_pause_request",
+      "owner": "cloudtms_bpay_local_owner",
+      "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "nullable": false
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "command_sequence",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "expected_case_revision",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "prior_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "target_status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "original_args",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "bpay_next_case_pause_request_accepted_at_utc_check",
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_action_check",
+          "definition": "CHECK ((action = ANY (ARRAY['CASE_PAUSE'::text, 'CASE_RESUME'::text])))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_actor_user_id_fkey",
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_case_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_check",
+          "definition": "CHECK ((((action = 'CASE_PAUSE'::text) AND (prior_status = 'OPEN'::text) AND (target_status = 'PAUSED'::text)) OR ((action = 'CASE_RESUME'::text) AND (prior_status = 'PAUSED'::text) AND (target_status = 'OPEN'::text))))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_candidate_id_fkey",
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_case_id_candidate_i_key",
+          "definition": "UNIQUE (command_id, case_id, candidate_id, action)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_id_command_sequence_fkey",
+          "definition": "FOREIGN KEY (command_id, command_sequence) REFERENCES private.bpay_next_command(id, agency_sequence) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_pause_request_command_sequence_check",
+          "definition": "CHECK ((command_sequence > 0))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_expected_case_revision_check",
+          "definition": "CHECK (((expected_case_revision > 0) AND (expected_case_revision < '9223372036854775807'::bigint)))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_module_epoch_check",
+          "definition": "CHECK ((module_epoch > 0))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_original_args_check",
+          "definition": "CHECK (((jsonb_typeof(original_args) = 'object'::text) AND (octet_length((original_args)::text) <= 16384)))"
+        },
+        {
+          "name": "bpay_next_case_pause_request_pkey",
+          "definition": "PRIMARY KEY (command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_request_reason_check",
+          "definition": "CHECK (((reason IS NULL) OR ((length(btrim(reason)) > 0) AND (octet_length(reason) <= 2048))))"
+        }
+      ],
+      "triggers": [
+        "CREATE TRIGGER bpay_next_case_pause_request_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_pause_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+        "CREATE TRIGGER bpay_next_case_pause_request_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_pause_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+      ]
+    }
+  ],
+  "indices": [
+    {
+      "name": "bpay_next_case_pause_actor_idx",
+      "definition": "CREATE INDEX bpay_next_case_pause_actor_idx ON private.bpay_next_case_pause_request USING btree (actor_user_id, command_id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_pause_candidate_idx",
+      "definition": "CREATE INDEX bpay_next_case_pause_candidate_idx ON private.bpay_next_case_pause_request USING btree (candidate_id, case_id, command_sequence)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_pause_outcome_case_idx",
+      "definition": "CREATE INDEX bpay_next_case_pause_outcome_case_idx ON private.bpay_next_case_pause_outcome USING btree (case_id, candidate_id, completed_at_utc, command_id)",
+      "valid": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "item": "FC-10",
+  "sequence": 108,
+  "decision": "BD120",
+  "deliverables": [
+    "FC-10-D02",
+    "FC-10-D03",
+    "FC-10-D04",
+    "FC-10-D06",
+    "FC-10-D07"
+  ],
+  "dependencies": [
+    "FC-03",
+    "FC-16",
+    "WB-08",
+    "F-16",
+    "WB-27",
+    "DR-12"
+  ],
+  "command": {
+    "actions": [
+      "CASE_PAUSE",
+      "CASE_RESUME"
+    ],
+    "method": "POST",
+    "args": [
+      "command_id",
+      "case_id",
+      "expected_case_revision",
+      "reason"
+    ],
+    "reason": "Required nullable; nonblank optional reason at most2048 UTF8 bytes, no NUL.",
+    "limitBytes": 16384,
+    "admission": "Ordered PENDING request only. Original Case/Candidate/member/action/sequence/epoch/args are immutable; no status change on acceptance.",
+    "replay": "Exact original bytes/identity, including nullable reason; original command receipt."
+  },
+  "apply": {
+    "fence": "Original0904 early Candidate financial fence with this own job/lease/epoch, before status change. Different owner55P03 retains retry.",
+    "protection": "FC16 WHOLE_CASE assertion under module->Candidate/control->ownjob/request->Case->orderedcomponents locks. Any accepted PREPARING or ACTIVE protected slice refuses; original captured inputs/reservations stay unchanged.",
+    "change": "Only OPEN<->PAUSED plus Case/financial-view revisions and targeted WB08 refresh in same transaction.",
+    "unchanged": "Principal, economic age, Rule, periods, original creation/amendment/funding, accepted instructions/results/holds, live balances, formulas and money events.",
+    "refusal": "Immutable BLOCKED original outcome with issue and exact native protection summary/first reference; no applied status/revision."
+  },
+  "readback": {
+    "kind": "CASE_COMPONENTS",
+    "args": "Original Candidate/Case; optional exact pause_command_id; original complete ordinal cursor page.",
+    "state": "Current pause_state recovery eligibility/status/revision and FC16 unknown-safe protection.",
+    "receipt": "Original command/Case/Candidate/action/sequence/expectedrevision/job/outcome; PENDING, CASE_PAUSED, CASE_RESUMED or BLOCKED. Terminal lower-current-revision refuses; newer current status remains truthful."
+  },
+  "journal": {
+    "version": 7,
+    "key": ".case-pause.<Candidate>.<Case>",
+    "unknown": "Explicit Try again repeats original bytes only; no automatic mutation retry.",
+    "accepted": "Refresh reads exact original immutable outcome before clearing journal; actor/owner/window/Case/Candidate containment retained."
+  },
+  "screens": {
+    "ids": [
+      "SCR-123",
+      "SCR-123b",
+      "SCR-123c"
+    ],
+    "entry": "Existing confirmBankingFinanceCasePause/Resume callable native Case+Candidate seed, fresh owner qualification before legacy lookup.",
+    "deferred": "Existing legacy DOM markup is not native Case/Candidate authority; native FC02 Cases renderer owns its later callsite. Legacy DOM NEXT journey NOT_RUN; no early Cases page/reader invented.",
+    "protection": "Genuine first native Open Draft through existing FC09 adapter; multiple bindings described as Drafts, unknown amount stays unknown. No fabricated PBreference/paydate/second viewer.",
+    "controls": "Optional Reason only on fresh eligible confirmation; one footer primary, genuine terminal result ordinary dialog with header Close only, BLOCKED manual Refresh. Phone controls44px.",
+    "differences": "Revised R3 requires protected whole-Case refusal instead of supplied SCR123b Paused-with-held slice; resume promises collection eligibility rather than exact next Draft amount. FutureFC02 background omitted; card-required pending/refusal/recovery/unknown/unfunded whole-Case behavior uses policy style."
+  },
+  "scope": "One additive locked migration/two immutable typed status tables, five private helpers/five exact existing successor definitions, two original action maps/queue support, native confirmation module/sharedV7journal and native caller/support. No public definer membership addition, page/route/kind outside named two actions, money owner rewrite, producer/protocol/public trigger/framework.",
+  "acceptance": {
+    "status": "AUTHORED_NOT_RUN",
+    "cases": [
+      "Unprotected PaymentAdvance30/week Pause withHardship and subsequent resume",
+      "Protected accepted PREPARING/ACTIVE/frozen30 deduction remains and wholeCase request refuses truthfully",
+      "AutomaticOverpayment/nativeRecovery and zero-outstanding unfundedAdvance eligibility",
+      "Original exact replay/unknown/accepted/BLOCKED terminal job readback and later current revision",
+      "Own early financial fence, lock order, targeted Candidate refresh, future paused allocation retained",
+      "Native FC02 callable entry and genuine protected Draft link, actor/parent containment"
+    ],
+    "boundary": "Source gates/localPG17 compile/catalogue/A4 fixed local GET samples only. No business data/RPC/auth/queue/payment/timing/hosted actions."
+  }
+}

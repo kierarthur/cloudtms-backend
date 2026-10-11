@@ -1,3 +1,4 @@
+import {PAUSE_RECEIPT_SCHEMA,pauseValue,casePauseReceipt} from './bpay-next-case-contract.js';
 /**
  * INTERNAL one-call financial job adapter. This is not a Request handler,
  * Office route, job discovery/enrollment API, queue binding or Candidate drain.
@@ -26,9 +27,9 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
   requestBytes: 2048, responseBytes: 128 * 1024, timeoutMs: 8000, pageRows: 100
 });
 
-/** @typedef {'PAYE_NET_ENTRY'|'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'CSV_RETURN'|'CASH_REISSUE'|'SIMPLE_CANCEL'|'POSITION_APPLY'|'PREPARE'|'REISSUE_CANCEL'|'INTERNAL_SETTLEMENT'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD'|'CASE_CREATE'|'CASE_EDIT'|'CASE_WRITE_OFF'} FinancialJobKind */
+/** @typedef {'PAYE_NET_ENTRY'|'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'CSV_RETURN'|'CASH_REISSUE'|'SIMPLE_CANCEL'|'POSITION_APPLY'|'PREPARE'|'REISSUE_CANCEL'|'INTERNAL_SETTLEMENT'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD'|'CASE_CREATE'|'CASE_EDIT'|'CASE_PAUSE'|'CASE_RESUME'|'CASE_WRITE_OFF'} FinancialJobKind */
 /** @typedef {{action:'CLAIM',job_id:string,job_kind:FinancialJobKind,lease_seconds:number}} FinancialJobClaim */
-/** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY'|'CSV_RETURN'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CASE_CREATE'|'CASE_EDIT'|'CASE_WRITE_OFF',lease_nonce:string,owner_epoch:string}} FinancialJobSingleStep */
+/** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY'|'CSV_RETURN'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CASE_CREATE'|'CASE_EDIT'|'CASE_PAUSE'|'CASE_RESUME'|'CASE_WRITE_OFF',lease_nonce:string,owner_epoch:string}} FinancialJobSingleStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'INTERNAL_SETTLEMENT'|'SIMPLE_CANCEL'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD',lease_nonce:string,owner_epoch:string,expected_cursor:string|null,limit:number}} FinancialJobPageStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'PINNING',expected_cursor:string|null}} FinancialJobPinStep */
@@ -60,7 +61,7 @@ const PREPARE_ISSUES = ['SELECTED_WORK_NOT_APPROVED', 'SELECTED_WORK_POSITION_PE
 const CLAIM_PHASES = Object.freeze({
   PAYE_NET_ENTRY: ['NEW', 'FINANCE_ALLOCATE'], TRANSFER_BUILD: ['WORK'], CSV_SETTLEMENT: ['MEMBERS'], INTERNAL_SETTLEMENT: ['MEMBERS'],
   CSV_RETURN: ['MEMBERS'], CASH_REISSUE: ['MEMBERS'], SIMPLE_CANCEL: ['NEW', 'RELEASE'],
-  POSITION_APPLY: ['NEW', 'REMOVED'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], PREPARATION_DISCARD: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_EDIT: ['NEW'], CASE_WRITE_OFF: ['NEW']
+  POSITION_APPLY: ['NEW', 'REMOVED'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], PREPARATION_DISCARD: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_EDIT: ['NEW'], CASE_PAUSE: ['NEW'], CASE_RESUME: ['NEW'], CASE_WRITE_OFF: ['NEW']
 });
 const COMMON = { job_id: 'uuid', job_kind: 'kind', owner_epoch: 'positive', lease_until_utc: 'timestamp?', done: 'boolean', replay: 'boolean' };
 const { replay: unusedPositionReplay, ...POSITION_COMMON } = COMMON;
@@ -72,6 +73,8 @@ const OUTPUTS = Object.freeze({
   CSV_RETURN: { ...COMMON, phase: 'completePhase', return_cash_id: 'uuid' },
   CASH_REISSUE: { ...COMMON, phase: 'completePhase', transfer_id: 'uuid' },
   CASE_CREATE: { ...COMMON, phase: 'caseCreatedPhase', case_id: 'uuid' },
+  CASE_PAUSE: {...COMMON,...PAUSE_RECEIPT_SCHEMA},
+  CASE_RESUME: {...COMMON,...PAUSE_RECEIPT_SCHEMA},
   CASE_EDIT: {...COMMON,phase:'caseEditPhase',case_id:'uuid',case_revision:'positive',rule_id:'uuid',issue_code:'caseEditIssue?'},
   CASE_WRITE_OFF: { ...COMMON, phase: 'writeOffPhase', case_id: 'uuid', case_component_id: 'uuid',
     applied_amount: 'caseMoney', remaining_amount: 'caseMoney', protected_amount: 'caseMoney', event_id: 'uuid?', issue_code: 'writeOffIssue?' },
@@ -116,6 +119,7 @@ function integer(value, positive = false) {
     && BigInt(value) <= 9223372036854775807n && (!positive || value !== '0');
 }
 function field(value, type) {
+  if(type.startsWith('pause'))return pauseValue(value,type);
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
   switch (type) {
     case 'uuid': return typeof value === 'string' && UUID.test(value);
@@ -227,7 +231,8 @@ function resultInput(payload, call, unknown) {
   }
   if (payload.lease_until_utc !== null
     || (!payload.done && payload.owner_epoch !== call.args.owner_epoch)) invalid();
-  if (['PAYE_NET_ENTRY', 'CSV_RETURN', 'CASH_REISSUE', 'REISSUE_CANCEL', 'CASE_CREATE', 'CASE_EDIT', 'CASE_WRITE_OFF'].includes(call.jobKind) && !caseNet && !payload.done) invalid();
+  if (['PAYE_NET_ENTRY', 'CSV_RETURN', 'CASH_REISSUE', 'REISSUE_CANCEL', 'CASE_CREATE', 'CASE_EDIT', 'CASE_PAUSE', 'CASE_RESUME', 'CASE_WRITE_OFF'].includes(call.jobKind) && !caseNet && !payload.done) invalid();
+  if(['CASE_PAUSE','CASE_RESUME'].includes(call.jobKind)&&(payload.phase==='PENDING'||!casePauseReceipt(Object.fromEntries(Object.keys(PAUSE_RECEIPT_SCHEMA).map(k=>[k,payload[k]])))||payload.action!==call.jobKind))invalid();
   if(call.jobKind==='CASE_EDIT'&&((payload.phase==='BLOCKED')!==(payload.issue_code!==null)))invalid();
   if (call.jobKind === 'CASE_WRITE_OFF') {
     if (payload.case_id.toLowerCase() !== payload.case_component_id.toLowerCase()

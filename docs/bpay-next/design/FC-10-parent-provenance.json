@@ -1,0 +1,32 @@
+{
+  "item": "FC-10",
+  "decision": "BD120",
+  "successor": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+  "parents": [
+    {
+      "path": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "sha256": "7b723a61096ac50853dbc609acbba6437b403f11aa796a6f77e39a78b8308f66"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql",
+      "sha256": "087c3c5d3ae9cfaa94b66ea58b338358d0236f2b4953be5ee6adf7e3dfc60fd4"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+      "sha256": "fa3c73a83075f67246e62adea7ba1467c019bada601d3db880ec51b48cdd1a9e"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_case_pause_state_v1(uuid,uuid)",
+    "private.bpay_next_case_pause_receipt_v1(uuid,uuid,uuid)",
+    "private.bpay_next_accept_case_pause_v1(uuid,text,jsonb)",
+    "private.bpay_next_apply_case_pause_v1(uuid,uuid,bigint)",
+    "private.bpay_next_claim_case_pause_job_v1(uuid,integer)",
+    "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
+    "private.bpay_next_enroll_one_v1()",
+    "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)"
+  ],
+  "completeMerge": "Five existing1939 definitions compared by independent reviewer; all unrelated branches retained. Five private status owners only."
+}

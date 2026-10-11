@@ -12,7 +12,7 @@ export const BPAY_NEXT_RUNTIME_LIMITS = Object.freeze({
 export const BPAY_NEXT_RUNTIME_JOB_KINDS = Object.freeze([
   'PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE',
   'SIMPLE_CANCEL', 'POSITION_APPLY', 'PREPARE', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT',
-  'PREPARATION_EXPIRY','PREPARATION_DISCARD', 'CASE_CREATE','CASE_EDIT', 'CASE_WRITE_OFF'
+  'PREPARATION_EXPIRY','PREPARATION_DISCARD', 'CASE_CREATE','CASE_EDIT','CASE_PAUSE','CASE_RESUME', 'CASE_WRITE_OFF'
 ]);
 const RPCS = Object.freeze({ ENROLL: 'bpay_next_enroll_service_v1', WAKE_PAGE: 'bpay_next_job_wake_page_v1',
   EXPIRY_PAGE: 'bpay_next_expiry_dispatch_page_v1', CLEANUP: 'bpay_next_terminal_cleanup_service_v1',
