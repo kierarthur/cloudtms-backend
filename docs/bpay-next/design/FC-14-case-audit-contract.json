@@ -1,0 +1,105 @@
+{
+  "item": "FC-14",
+  "sequence": 109,
+  "decision": "BD121",
+  "deliverables": [
+    "D01",
+    "D02",
+    "D03",
+    "D05",
+    "D06"
+  ],
+  "dependencies": [
+    "FC-03",
+    "F-16"
+  ],
+  "readKinds": {
+    "CASE_AUDIT": {
+      "args": [
+        "candidate_id",
+        "case_id",
+        "sort",
+        "direction",
+        "limit",
+        "after",
+        "include_count"
+      ],
+      "sorts": [
+        "WHEN",
+        "EVENT",
+        "WHO",
+        "SOURCE",
+        "AMOUNT",
+        "REASON",
+        "DETAILS"
+      ],
+      "sources": [
+        "CREATE_REQUEST",
+        "EDIT_REQUEST",
+        "PAUSE_REQUEST",
+        "PAUSE_OUTCOME",
+        "WRITE_OFF_REQUEST",
+        "CASE_EVENT",
+        "NET_REQUEST",
+        "HOLD_TRANSITION",
+        "FINANCIAL_EFFECT",
+        "SNOOZE_EVENT"
+      ],
+      "identity": "Actual source UUID/event ordinal, native occurred_at, actor evidence, literal source/target amounts, reason/details. Accepted requests distinct from applied events. Negative recovered display_amount is the AMOUNT sort value.",
+      "retention": "Append-only stored request/event/effect/hold/snooze receipts survive later resolution clearing; no invented current-hold history."
+    },
+    "CANDIDATE_CASE_REPORT": {
+      "args": [
+        "candidate_id",
+        "active_only",
+        "sort",
+        "direction",
+        "limit",
+        "after",
+        "include_count"
+      ],
+      "sorts": [
+        "ITEM",
+        "CLIENT",
+        "ORIGINAL",
+        "OUTSTANDING",
+        "WEEKLY_AMOUNT",
+        "NEXT_DATE",
+        "SNOOZED_UNTIL",
+        "STATUS",
+        "NOTES"
+      ],
+      "facts": "Native maintained approved/funded/recovered/writeoff/reserved/remaining; selected row uses existing1939 Case qualification. No history-based balance sums. Fixed seven business sections. Active-only initially true.",
+      "summary": "Three explicit whole-scope server facts, including nullable snoozed count when bounded component membership is unsupported. Aggregate-money exact decimal text independently bounded.",
+      "notes": "Exact current approved rule/edit Note including deliberate NULL; original funding event/instruction follows native funding successor, no latest-history guess."
+    }
+  },
+  "limits": {
+    "rows": 100,
+    "requestBytes": 32768,
+    "responseBytes": 120000,
+    "cursorBytes": 16384,
+    "textBytes": 8192,
+    "sortKeyBytes": 16384
+  },
+  "cursor": "Native typed scalar key plus section/source/id/ordinal tie, binds own context/kind/Candidate/Case/filter/sort/direction. Full-scope ordering before selected DTO packing. No browser loaded-row sort, snapshot certificate or new stored read session.",
+  "holding": "One additive immutable private transition table; recorder appends only after six actual mutations in five complete current money bodies, exactly inverse-matching predecessors. Initial/terminal ordinals1/2; exact own job/action/actor and amount evidence. No economic change.",
+  "transport": "Existing GET preparation-page and existing service-only public signature, exact closed typed Worker/Office decoder, canonical lowercase IDs, native string-money keys and byte refusal. No new publicSECDEF/route/command/financial job.",
+  "native": "One Case audit and one shared Candidate report; fresh NEXT owner/actor/parent before legacy reader/cache. Native report Case rows open exact Audit; real Timesheet opener reused; legacy kept only after fresh genuineLEGACY. Continuous scroll, server headers/phone sorter, highlight/doubleEnter/phoneOpen, Arrow/Home/End, Close/Escape and covered-parent lifecycle. User Retry restarts a known stale cursor, no automatic command retry.",
+  "later": "FC02 reuses exact native Audit launcher in its Cases list; FC12/13 add their actual restructure receipts when built; EX50 extends the same Candidate report. No future feature counted as built.",
+  "signatures": [
+    "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
+    "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_post_case_transfer_member_v1(uuid,uuid,bigint)",
+    "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
+    "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+    "private.bpay_next_case_audit_row_v1(text,uuid,smallint,uuid,uuid)",
+    "private.bpay_next_candidate_case_report_sources_v1(uuid,jsonb,boolean)",
+    "private.bpay_next_case_finance_sort_key_v1(text,text,jsonb)",
+    "private.bpay_next_case_finance_page_v1(uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_candidate_case_report_row_v1(uuid,jsonb,boolean,text,uuid)"
+  ]
+}

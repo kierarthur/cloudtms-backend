@@ -11033,7 +11033,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8dc18bedce64382cef0a0f6c2157905b93a5018cc2598dd4fa7d90d54f7a75ee"
+      "definition_sha256": "2143b7cd02b52db979d7f8e0263832a11129eae2eb56b287645b0a332c9f7974"
     },
     {
       "acl": [
@@ -11489,7 +11489,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "054bd17adb865df1ea2a8d5cf787b4bcae9ef34ac6e69a23bfb44f7bf753c758"
+      "definition_sha256": "02313996a1b18bb25c2686343a738e707604522f8c284cd3aa462cbb693804b4"
     },
     {
       "acl": [
@@ -11509,6 +11509,44 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "be3cc004b18c9cb6c58267c8ee1ea6032dff9428ddeff51363aecca7d2423419"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_candidate_case_report_row_v1(p_candidate_id uuid, p_context jsonb, p_active_only boolean, p_source text, p_row_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "a3b0c74a8cdbfa3c236d7360b9fc7104847dbfe7f5552ce3bc3aaff2951490d7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_candidate_case_report_sources_v1(p_candidate_id uuid, p_context jsonb, p_active_only boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "62126e62eaff6d15b9e9137a9a321fc270f357b7c0cdbe3dd80fbe1fd87f4d57"
     },
     {
       "acl": [
@@ -11661,6 +11699,44 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "8dbba2d513f5ea77f74c0d80ad3b6dd884915b569be0e5804af0e33956b5c9ad"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_audit_row_v1(p_source text, p_source_id uuid, p_event_ordinal smallint, p_case_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "dfa16013c5fb242b7be94bfb26d311cb238eda9afe3e4f12f16d76cef05e7978"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_audit_sources_v1(p_case_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "ec9b5701b703c21eb036d2ba9ed3a661a8d967599cd33042d96d3754edd66962"
     },
     {
       "acl": [
@@ -11908,6 +11984,44 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "6667552dd2e6f47c776ddddfd97d20779f08daec33486adcd4890c85ff417638"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_finance_page_v1(p_actor_user_id uuid, p_kind text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "e376fa92d54bc90e2d7b723bea52c1a0fcd44a7e5c98a12d6b580e33eec25a03"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_finance_sort_key_v1(p_kind text, p_sort text, p_row jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "3b312fe239c7f9824b8667a46dd4c8e60941b174195b99b30c18817f49304b63"
     },
     {
       "acl": [
@@ -13988,7 +14102,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b5da83f0327f3c87b93eb39261f7a8b1b00a4036eec6811a697f5eddc3ecdbae"
+      "definition_sha256": "36ba293a62d0acfd6853ce3b7f8f1f50e2c08ecc9055cb545cd34d8173666c15"
     },
     {
       "acl": [
@@ -14197,7 +14311,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2bdaea55971a62353965140e562c2f076bd590e9cf08980d3d2e4c0e5ac8d784"
+      "definition_sha256": "45f65600921d3941b04304f0f1b0e45a93d5d5eb702618a962b4596c88b263d0"
     },
     {
       "acl": [
@@ -14912,6 +15026,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_record_case_hold_transition_v1(p_job_id uuid, p_hold_id uuid, p_transition text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "b541cf11cb100af01ae47a53946d68e0cba797bef222685ae40ebfd83b90f4b2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -14995,7 +15128,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "19ccad8410fc5cd47b727e3f83f665d85db6d07e416e76ee13b0ca30844e1f12"
+      "definition_sha256": "57b499d9c5b974d2b03dd94e3f7a3d2659b72950ca63e32df3d9ed3b219b536a"
     },
     {
       "acl": [
@@ -33197,7 +33330,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "73fb7a243c20032a738c4e40c7dc7852ba5a1e541924df27e3a65b87cd7d16e8"
+      "definition_sha256": "7c07bf1d062627aca2f6fcc56e5c87294e8cb27c5e9d54d97cd0aad1fc3c5e17"
     },
     {
       "acl": [
@@ -54487,6 +54620,20 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_recovery_reservation AFTER INSERT ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_recovery_reservation_v1()"
+    },
+    {
+      "name": "bpay_next_case_hold_transition_immutable_v1",
+      "table": "bpay_next_case_hold_transition",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_hold_transition_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_hold_transition FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_hold_transition_truncate_v1",
+      "table": "bpay_next_case_hold_transition",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_case_hold_transition_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_hold_transition FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
     },
     {
       "name": "bpay_next_case_pause_outcome_immutable_v1",
@@ -83544,6 +83691,10 @@
           "definition": "CREATE INDEX bpay_next_case_edit_actor_idx ON private.bpay_next_case_edit_request USING btree (actor_user_id, command_id)"
         },
         {
+          "name": "bpay_next_case_edit_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_edit_audit_idx ON private.bpay_next_case_edit_request USING btree (case_id, candidate_id, accepted_at_utc, command_id)"
+        },
+        {
           "name": "bpay_next_case_edit_candidate_idx",
           "definition": "CREATE INDEX bpay_next_case_edit_candidate_idx ON private.bpay_next_case_edit_request USING btree (candidate_id, case_id, command_id)"
         },
@@ -84667,6 +84818,392 @@
       ],
       "rls": true,
       "kind": "r",
+      "name": "bpay_next_case_hold_transition",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "allocation_result_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_component_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "cause_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "event_ordinal",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hold_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "instruction_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "occurred_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_amount_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_amount_ex_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_amount_inc_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_amount_vat",
+          "type": "numeric(18,2)",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "transition",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_hold_transition_case_time_idx",
+          "definition": "CREATE INDEX bpay_next_case_hold_transition_case_time_idx ON private.bpay_next_case_hold_transition USING btree (case_id, candidate_id, occurred_at_utc, hold_id, event_ordinal)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_hold_transition_pkey ON private.bpay_next_case_hold_transition USING btree (hold_id, event_ordinal)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_case_hold_transitio_case_component_id_case_id_ca_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_actor_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_kind = ANY (ARRAY['HUMAN'::text, 'SYSTEM'::text, 'UNKNOWN'::text]))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_allocation_result_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (allocation_result_id) REFERENCES private.bpay_next_case_allocation_result(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_cause_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (cause_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_ordinal = 1 AND transition = 'ACTIVE'::text OR event_ordinal = 2 AND (transition = ANY (ARRAY['RELEASED'::text, 'REALISED'::text])))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((actor_kind = 'HUMAN'::text) = (actor_user_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_amount_inc_vat = (target_amount_ex_vat + target_amount_vat))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_event_ordinal_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (event_ordinal = ANY (ARRAY[1, 2]))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_hold_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_instruction_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (instruction_id) REFERENCES private.bpay_next_run_case_instruction(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_occurred_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(occurred_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (hold_id, event_ordinal)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_reason_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason IS NULL OR octet_length(reason) <= 4096)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_run_worker_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_worker_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_source_amount_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_amount_ex_vat > 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_target_amount_ex_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_amount_ex_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_target_amount_vat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_amount_vat >= 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_hold_transition_transition_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (transition = ANY (ARRAY['ACTIVE'::text, 'RELEASED'::text, 'REALISED'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
       "name": "bpay_next_case_list_key",
       "owner": "postgres",
       "schema": "private",
@@ -85324,6 +85861,10 @@
         {
           "name": "bpay_next_case_pause_actor_idx",
           "definition": "CREATE INDEX bpay_next_case_pause_actor_idx ON private.bpay_next_case_pause_request USING btree (actor_user_id, command_id)"
+        },
+        {
+          "name": "bpay_next_case_pause_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_pause_audit_idx ON private.bpay_next_case_pause_request USING btree (case_id, candidate_id, accepted_at_utc, command_id)"
         },
         {
           "name": "bpay_next_case_pause_candidate_idx",
@@ -91306,6 +91847,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_case_effect_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_effect_audit_idx ON private.bpay_next_financial_effect USING btree (case_id, occurred_at_utc, id) WHERE (case_id IS NOT NULL)"
+        },
+        {
           "name": "bpay_next_effect_source_book_identity_uq",
           "definition": "CREATE UNIQUE INDEX bpay_next_effect_source_book_identity_uq ON private.bpay_next_financial_effect USING btree (id, work_id, component_key)"
         },
@@ -96093,6 +96638,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_case_net_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_net_audit_idx ON private.bpay_next_paye_net_request USING btree (case_draft_state_id, accepted_at_utc, command_id)"
+        },
         {
           "name": "bpay_next_paye_net_request_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_paye_net_request_pkey ON private.bpay_next_paye_net_request USING btree (command_id)"
@@ -104946,6 +105495,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_case_instruction_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_instruction_audit_idx ON private.bpay_next_run_case_instruction USING btree (case_id, candidate_id, run_worker_id, preparation_revision, selection_revision, id)"
+        },
+        {
           "name": "bpay_next_case_instruction_component_idx",
           "definition": "CREATE INDEX bpay_next_case_instruction_component_idx ON private.bpay_next_run_case_instruction USING btree (case_component_id, pay_week_start, id)"
         },
@@ -111925,6 +112478,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_case_snooze_audit_idx",
+          "definition": "CREATE INDEX bpay_next_case_snooze_audit_idx ON private.bpay_next_snooze_event USING btree (((after_state ->> 'case_id'::text)), candidate_id, occurred_at_utc, id) WHERE ((after_state ->> 'scope_kind'::text) = 'CASE'::text)"
+        },
         {
           "name": "bpay_next_snooze_event_cut_idx",
           "definition": "CREATE INDEX bpay_next_snooze_event_cut_idx ON private.bpay_next_snooze_event USING btree (snooze_id, control_sequence DESC)"

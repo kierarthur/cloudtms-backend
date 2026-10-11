@@ -2519,20 +2519,21 @@
     },
     {
       "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0390_banking_pay_next_case_paye_net_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2837,20 +2838,21 @@
     },
     {
       "signature": "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0460_banking_pay_next_case_cancel_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3987,16 +3989,19 @@
     },
     {
       "signature": "private.bpay_next_post_case_transfer_member_v1(uuid,uuid,bigint)",
-      "finalRoot": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4110,9 +4115,22 @@
     },
     {
       "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
         "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
@@ -4124,21 +4142,10 @@
         "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
-        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
-        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
-        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "chosenReferenceBase": {
         "item": "CM-02a",
@@ -7663,9 +7670,25 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7680,24 +7703,10 @@
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
         "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "owner": "FC-10 sequence108 native ordered recovery status; BD120",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14852,21 +14861,23 @@
     },
     {
       "signature": "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121",
       "baselineSource": null
     },
     {
@@ -15788,6 +15799,97 @@
       "finalPhysical": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
       "finalRoot": "supabase/repeatable/11102026_2041_banking_pay_next_case_pause_v1.sql",
       "owner": "FC-10 sequence108 native ordered recovery status; BD120"
+    },
+    {
+      "signature": "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_case_audit_row_v1(text,uuid,smallint,uuid,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_candidate_case_report_sources_v1(uuid,jsonb,boolean)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_case_finance_sort_key_v1(text,text,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_case_finance_page_v1(uuid,text,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
+    },
+    {
+      "signature": "private.bpay_next_candidate_case_report_row_v1(uuid,jsonb,boolean,text,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "owner": "FC-14 sequence109 exact immutable Case audit / Candidate report; BD121"
     }
   ],
   "editorChains": [

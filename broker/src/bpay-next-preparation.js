@@ -1,3 +1,4 @@
+import {caseFinanceQuery,caseFinanceResult} from './bpay-next-case-audit-contract.js';
 import {caseInput,casePreview,caseEditState,caseEditReceipt,casePauseState,casePauseReceipt} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
@@ -31,6 +32,8 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  CASE_AUDIT:{candidate_id:"uuid",case_id:"uuid",sort:"caseFinanceSort",direction:"caseFinanceDirection",limit:"limit",after:"caseFinanceCursor?",include_count:"boolean"},
+  CANDIDATE_CASE_REPORT:{candidate_id:"uuid",active_only:"boolean",sort:"caseFinanceSort",direction:"caseFinanceDirection",limit:"limit",after:"caseFinanceCursor?",include_count:"boolean"},
   CASE_LIST:{filters:'caseListFilters',after:'caseListCursor?',sort:'caseListSort',limit:'caseListLimit'},
   CASE_SUMMARY:{filters:'caseListFilters',after:'caseListCursor?'},
   CASE_PREVIEW:{input:'caseInput'},
@@ -467,7 +470,9 @@ function caseListResult(payload,call,bad){
 function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
-  const kind=url.searchParams.get('kind'),schema=kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const kind=url.searchParams.get('kind');
+  if(['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(kind)){try{return caseFinanceQuery(kind,url.searchParams);}catch{throw fault('REQUEST_INVALID',400);}}
+  const schema=kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
@@ -496,6 +501,7 @@ async function limitedJson(input,maximum,request,signal,mutation){
 }
 function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
+  if(!mutation&&['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)){try{return caseFinanceResult(payload,call.kind,call.args,call.actorUserId);}catch{bad();}}
   if(!mutation&&(call.kind==='CASE_LIST'||call.kind==='CASE_SUMMARY'))return caseListResult(payload,call,bad);
   if(mutation){
     const schema=OUTPUTS[call.action];
@@ -739,6 +745,8 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(action==='CASE_PREVIEW'&&['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'].includes(db?.message))return fault(db.message,409);
   if(['CASE_PREVIEW','CASE_CREATE'].includes(action)&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')
     return new PreparationError(db.message,409,false,false);
+  if(['BPAY_NEXT_CASE_FINANCE_CONTEXT_CHANGED','BPAY_NEXT_CASE_FINANCE_NOT_FOUND','BPAY_NEXT_CASE_FINANCE_REQUEST_INVALID','BPAY_NEXT_CASE_FINANCE_ROW_TOO_LARGE'].includes(db?.message))
+    return new PreparationError(db.message,db.code==='P0002'?404:db.code==='22023'?400:409,false,false);
   if(db?.code==='55000'&&['BPAY_NEXT_CASE_LIST_CONTEXT_CHANGED','BPAY_NEXT_CASE_LIST_DATE_UNAVAILABLE','BPAY_NEXT_WORKBENCH_PROJECTION_NOT_CURRENT'].includes(db.message))
     return new PreparationError(db.message,409,false,false);
   if(['BPAY_NEXT_CHOICE_CONTEXT_CHANGED','BPAY_NEXT_PAYE_GUARD_CHANGED','BPAY_NEXT_PAYE_SAME_WEEK_GUARD_UNRESOLVED','BPAY_NEXT_PAYE_SAME_WEEK_GUARD_UNEXECUTED','BPAY_NEXT_PAYE_GUARD_FACTS_UNAVAILABLE','BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(db?.message))
@@ -794,7 +802,7 @@ async function handle(request,dependencies,mutation){
     if(typeof rpc!=='function')throw fault('DEPENDENCY_UNAVAILABLE',503,true);
     controller=new AbortController();
     const timeoutMs=!mutation&&['PROGRESS','CASE_LIST','CASE_SUMMARY'].includes(call.kind)?2000:BPAY_NEXT_PREPARATION_LIMITS.timeoutMs;
-    const maxResponseBytes=!mutation&&['CASE_LIST','CASE_SUMMARY'].includes(call.kind)?120000:BPAY_NEXT_PREPARATION_LIMITS.responseBytes;
+    const maxResponseBytes=!mutation&&['CASE_LIST','CASE_SUMMARY','CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)?120000:BPAY_NEXT_PREPARATION_LIMITS.responseBytes;
     const timeout=new Promise((resolve,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fault('DEPENDENCY_TIMEOUT',503,true,attempted&&mutation));},timeoutMs);});
     const send=async()=>{
       let args=call.args;

@@ -13,3 +13,5 @@ WB-23: preparation_intake1832 ->2232 adds only EXCLUSION_PAGE/MATCHING_PAGE and 
 FC09seq107: financialIntake1536, enrollOne0847 andfinancialJob0814 ->11102026_1939 add only the named CASE_EDIT ordered immutable request/job/apply branch and retain every earlier kind. PreparationPage1738 ->1939 extends originalCASE_PREVIEW with closed editCase/revision operands and originalCASE_COMPONENTS with optional exact edit_command_id/readback; no new page kind/route. Current1910component/list metadata and0204plan/0904prepare are1939; laterFC10 merges these17registry owners.
 
 FC10seq108:financialIntake/enrollOne/financialJob1939->11102026_2041 addonlytwo namedorderedstatusactions andoriginaljobreceipt; preparationPage/componentPage1939->2041 nullablepause_state/pause_receipt andoptionalexactpause_command_id. No newreaderroute/pagekind/protocol; allcomplete1939parentsretained.
+
+FC14seq109 BD121: original publicpreparationPage2041->2129 CASE_AUDIT/CANDIDATE_CASE_REPORT read-only branches, identical service/admin/NEXT gates. No financialIntake/enroller/financialJob/Worker route/command addition. Existing helper permissions remain owner-only; publicSECDEFmembershipdelta0.

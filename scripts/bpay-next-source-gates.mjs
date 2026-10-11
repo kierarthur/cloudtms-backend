@@ -310,7 +310,8 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object",
     "pg_catalog.transaction_timestamp"
   ],
-  "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_begin_prepare_projection_v1",
+  "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_record_case_hold_transition_v1","private.bpay_next_begin_prepare_projection_v1",
     "private.bpay_next_case_allocation_plan_v1","to_jsonb","jsonb_populate_record","jsonb_agg","jsonb_set","substring",
     "private.bpay_next_capture_instruction_destination_v1",
     "private.bpay_next_case_allocation_row_v1",
@@ -757,7 +758,7 @@ export function assertTypedFinancialProjection(source,file,signature){
 const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.btrim","pg_catalog.left","pg_catalog.jsonb_build_object"],
   "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.clock_timestamp","pg_catalog.jsonb_build_object"],
-  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_preparation_progress_v1","pg_catalog.jsonb_build_array"],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_case_finance_page_v1","private.bpay_next_preparation_progress_v1","pg_catalog.jsonb_build_array"],
   "private.bpay_next_prepare_job_run_v1(uuid)": [
     "lateral"
   ],
@@ -801,6 +802,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_worker_released_collection_scope_v1"
   ],
   "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)": [
+    "private.bpay_next_record_case_hold_transition_v1",
     "pg_catalog.isfinite",
     "private.bpay_next_prepare_release_scope_v1",
     "private.bpay_next_reconcile_expired_work_collection_v1",
@@ -932,6 +934,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_receive_command_v1"
   ],
   "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_record_case_hold_transition_v1",
     "pg_catalog.clock_timestamp",
     "pg_catalog.jsonb_build_object",
     "pg_catalog.transaction_timestamp",
@@ -966,6 +969,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_receive_command_v1"
   ],
   "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "private.bpay_next_record_case_hold_transition_v1",
     "pg_catalog.clock_timestamp",
     "pg_catalog.jsonb_build_object",
     "pg_catalog.make_interval",
@@ -1930,6 +1934,9 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     // Rule-B snapshot's exact two additive guards reuse the unchanged callback.
     if(/^create trigger bpay_next_run_work_query_snapshot_immutable before update or delete on private\.bpay_next_run_work_query_snapshot for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
       ||/^create trigger bpay_next_run_work_query_snapshot_no_truncate before truncate on private\.bpay_next_run_work_query_snapshot for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
+    // FC14 exact new immutable hold-transition attachments, unchanged generic callback.
+    if(/^create trigger bpay_next_case_hold_transition_immutable_v1 before update or delete on private\.bpay_next_case_hold_transition for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
+      ||/^create trigger bpay_next_case_hold_transition_truncate_v1 before truncate on private\.bpay_next_case_hold_transition for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
     // FC10 only its two new private audit attachments; no existing guard edit.
     if(/^create trigger bpay_next_case_pause_(request|outcome)_immutable_v1 before update or delete on private\.bpay_next_case_pause_\1 for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
       ||/^create trigger bpay_next_case_pause_(request|outcome)_truncate_v1 before truncate on private\.bpay_next_case_pause_\1 for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;

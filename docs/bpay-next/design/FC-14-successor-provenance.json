@@ -1,0 +1,135 @@
+{
+  "item": "FC-14",
+  "destination": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+  "sixCalls": 6,
+  "fiveWriters": [
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "parent": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "parentSha256": "7b723a61096ac50853dbc609acbba6437b403f11aa796a6f77e39a78b8308f66",
+      "change": "append exact hold-transition call only; original body inverse match checked",
+      "inverseMatches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "parent": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "parentSha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "change": "append exact hold-transition call only; original body inverse match checked",
+      "inverseMatches": true
+    },
+    {
+      "signature": "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "parent": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "parentSha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "change": "append exact hold-transition call only; original body inverse match checked",
+      "inverseMatches": true
+    },
+    {
+      "signature": "private.bpay_next_post_case_transfer_member_v1(uuid,uuid,bigint)",
+      "parent": "supabase/repeatable/04102026_0410_banking_pay_next_case_transfer_post_v1.sql",
+      "parentSha256": "f56898dc7e992fc271d2a90c0c7fdb85d77dde4bac5e8b852e008c0da90793d8",
+      "change": "append exact hold-transition call only; original body inverse match checked",
+      "inverseMatches": true
+    },
+    {
+      "signature": "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
+      "parent": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "parentSha256": "29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c",
+      "change": "append exact hold-transition call only; original body inverse match checked",
+      "inverseMatches": true
+    }
+  ],
+  "status": "SOURCE_BUILT_A4_PENDING",
+  "sequence": 109,
+  "decision": "BD121",
+  "signatures": [
+    "private.bpay_next_record_case_hold_transition_v1(uuid,uuid,text)",
+    "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_apply_case_paye_net_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_cancel_case_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_post_case_transfer_member_v1(uuid,uuid,bigint)",
+    "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
+    "private.bpay_next_case_audit_sources_v1(uuid,uuid)",
+    "private.bpay_next_case_audit_row_v1(text,uuid,smallint,uuid,uuid)",
+    "private.bpay_next_candidate_case_report_sources_v1(uuid,jsonb,boolean)",
+    "private.bpay_next_case_finance_sort_key_v1(text,text,jsonb)",
+    "private.bpay_next_case_finance_page_v1(uuid,text,jsonb)",
+    "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+    "private.bpay_next_candidate_case_report_row_v1(uuid,jsonb,boolean,text,uuid)"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/11102026_2129_banking_pay_next_case_hold_audit.sql",
+      "sha256": "e6cb93b8f55ee253ff9fdfe9f3eb025448fa4128fcefbcee1c50d09fe48a8fd1"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+      "sha256": "cdfd284bf1026875c30b8b472719dc31650e5a4f783e50ce9e241024407c84a8"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-case-audit-contract.js",
+      "sha256": "1798d3a1622b68efe4e89d2a1e3b527642ca92513f72e03c62ddce364e907fa1"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "3773d8bd0bf0c659ba4aced7f0a66440d228ec4fbcde7cdf6b07b51e67892c26"
+    },
+    {
+      "repository": "BE",
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "9c9c0a1f6d7ac24df9ef63ab4ea5764375d8c3fa354781bb3f7620192f130991"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/release/current-contract.json",
+      "sha256": "4056f2e2c2af1f567a3570bf839dec4a611fc44bd26e91a8f8f4084867ff49f8"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "337d9895e0579ea306c5279d8706b42209e372771e8014a094e9b65055c6b365"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-audit.js",
+      "sha256": "ecc2f2c7c6512cb4696fc4a7f9d46af9f2467f2596d3ea7b1f742cd664af9bf5"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-audit-contract.js",
+      "sha256": "145ce37b807cc31cf6d2e3f2b6e5672a4110a61c59615562d8966484943a8eff"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "2a53ec2adb75c94e9aea95321b8f372882142db0b948bee2f0f535a48f650314"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "358b817d22ca9b0affaeb210486d655600595e60628afdbf967ccf0cedc072e8"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "ce94fea2bed38497172819488f0346c59adeba2e03ddc303b6122bbfab858d1d"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "8f4561ad8b84ae49be7793662bbe8e2e4480bc0aaa49bba64dc74eaefa68913f"
+    }
+  ],
+  "checks": {
+    "integrity": "355 migrations/917 repeatables PASS",
+    "source": "Existing12gates PASS; final syntax PASS",
+    "local": "Sole PG17 changed-only compile;13 body/owner/ACL/config matches; one immutable table/2guards/7indices; General/CandidateDO PASS; publicSECDEF membershipdelta0",
+    "contract": "1ae82216e2d1e6dfa12b9c9f71706ba9c024e8572dfefe9a532c028a4ef9cb00 export; final seal/coupling pending",
+    "a4": "36 actual GET-only local fixed-response captures; independent final pending",
+    "joined": "AUTHORED_NOT_RUN"
+  }
+}

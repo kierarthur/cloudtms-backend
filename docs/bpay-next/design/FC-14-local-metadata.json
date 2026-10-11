@@ -1,0 +1,84 @@
+{
+  "source": "Fresh sole local PG17 catalogue and existing isolation DO verifiers only; no business rows/RPC.",
+  "table": {
+    "name": "bpay_next_case_hold_transition",
+    "owner": "cloudtms_bpay_local_owner",
+    "acl": "{cloudtms_bpay_local_owner=arwdDxtm/cloudtms_bpay_local_owner}",
+    "rls": true,
+    "constraints": [
+      "FOREIGN KEY (case_component_id, case_id, candidate_id) REFERENCES private.bpay_next_case_component(id, case_id, candidate_id) ON DELETE RESTRICT",
+      "CHECK ((actor_kind = ANY (ARRAY['HUMAN'::text, 'SYSTEM'::text, 'UNKNOWN'::text])))",
+      "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT",
+      "FOREIGN KEY (allocation_result_id) REFERENCES private.bpay_next_case_allocation_result(id) ON DELETE RESTRICT",
+      "FOREIGN KEY (cause_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT",
+      "CHECK ((((event_ordinal = 1) AND (transition = 'ACTIVE'::text)) OR ((event_ordinal = 2) AND (transition = ANY (ARRAY['RELEASED'::text, 'REALISED'::text])))))",
+      "CHECK (((actor_kind = 'HUMAN'::text) = (actor_user_id IS NOT NULL)))",
+      "CHECK ((target_amount_inc_vat = (target_amount_ex_vat + target_amount_vat)))",
+      "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT",
+      "CHECK ((event_ordinal = ANY (ARRAY[1, 2])))",
+      "FOREIGN KEY (hold_id) REFERENCES private.bpay_next_case_hold(id) ON DELETE RESTRICT",
+      "FOREIGN KEY (instruction_id) REFERENCES private.bpay_next_run_case_instruction(id) ON DELETE RESTRICT",
+      "CHECK (isfinite(occurred_at_utc))",
+      "PRIMARY KEY (hold_id, event_ordinal)",
+      "CHECK (((reason IS NULL) OR (octet_length(reason) <= 4096)))",
+      "FOREIGN KEY (run_worker_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, candidate_id) ON DELETE RESTRICT",
+      "CHECK ((source_amount_ex_vat > (0)::numeric))",
+      "CHECK ((target_amount_ex_vat >= (0)::numeric))",
+      "CHECK ((target_amount_vat >= (0)::numeric))",
+      "CHECK ((transition = ANY (ARRAY['ACTIVE'::text, 'RELEASED'::text, 'REALISED'::text])))"
+    ],
+    "triggers": [
+      "CREATE TRIGGER bpay_next_case_hold_transition_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_hold_transition FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()",
+      "CREATE TRIGGER bpay_next_case_hold_transition_truncate_v1 BEFORE TRUNCATE ON private.bpay_next_case_hold_transition FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    ]
+  },
+  "indices": [
+    {
+      "name": "bpay_next_case_edit_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_edit_audit_idx ON private.bpay_next_case_edit_request USING btree (case_id, candidate_id, accepted_at_utc, command_id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_effect_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_effect_audit_idx ON private.bpay_next_financial_effect USING btree (case_id, occurred_at_utc, id) WHERE (case_id IS NOT NULL)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_hold_transition_case_time_idx",
+      "definition": "CREATE INDEX bpay_next_case_hold_transition_case_time_idx ON private.bpay_next_case_hold_transition USING btree (case_id, candidate_id, occurred_at_utc, hold_id, event_ordinal)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_instruction_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_instruction_audit_idx ON private.bpay_next_run_case_instruction USING btree (case_id, candidate_id, run_worker_id, preparation_revision, selection_revision, id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_net_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_net_audit_idx ON private.bpay_next_paye_net_request USING btree (case_draft_state_id, accepted_at_utc, command_id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_pause_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_pause_audit_idx ON private.bpay_next_case_pause_request USING btree (case_id, candidate_id, accepted_at_utc, command_id)",
+      "valid": true
+    },
+    {
+      "name": "bpay_next_case_snooze_audit_idx",
+      "definition": "CREATE INDEX bpay_next_case_snooze_audit_idx ON private.bpay_next_snooze_event USING btree (((after_state ->> 'case_id'::text)), candidate_id, occurred_at_utc, id) WHERE ((after_state ->> 'scope_kind'::text) = 'CASE'::text)",
+      "valid": true
+    }
+  ],
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}
