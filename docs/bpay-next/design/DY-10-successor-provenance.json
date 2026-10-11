@@ -2,7 +2,7 @@
   "item": "DY-10",
   "sequence": 97,
   "decision": "BD109",
-  "status": "REVIEWED_PENDING_LOCAL_RECEIPT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
@@ -91,5 +91,6 @@
   "screenReview": "screen-designs/SCR-156/review.md",
   "futureJoined": "AUTHORED_NOT_RUN",
   "frontendCommit": "9ff07fd9d4d793c632ce5f1cfd48207b2d099e50",
-  "screenPolicy": "32 PASS /0 FAIL /10 N/A,54 actual native captures"
+  "screenPolicy": "32 PASS /0 FAIL /10 N/A,54 actual native captures",
+  "implementationCommit": "fb0e5a383304916d20c4a45c5b7555dd398780c6"
 }
