@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import './bpay-next-shared-calculator.test.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';

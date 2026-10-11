@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "b2f5acc18a39b62cf98f6b333253e3b5990e38f4",
-  "compiledAtUtc": "2026-10-11T03:30:54.392Z",
+  "sourceCommit": "4818756b3b96c9c5bd300b86e154f64b2225f6c6",
+  "compiledAtUtc": "2026-10-11T03:46:06.586Z",
   "inventory": {
     "migrations": [
       {
@@ -7950,56 +7950,8 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/11102026_0426_banking_pay_next_pay_hold_control_fields.sql",
-        "sha256": "3bbe10c7fc86b1aaf5da291f75aa3bd4ab340140a81bdce34d4d7581458f3fb0"
-      }
-    ],
-    "repeatables": [
-      {
-        "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
-        "paths": [
-          "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql"
-        ],
-        "sha256": "7b18a47de4bfbcf47b16a468ba852cd87236f947abbb80ca1982b9412d8928a1"
-      },
-      {
-        "path": "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql",
-        "paths": [
-          "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql"
-        ],
-        "sha256": "a02548e2e4ddd4f01fe6c8540df252ecdad7d0479c59320ca8c7a03ce4255c33"
-      },
-      {
-        "path": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
-        "paths": [
-          "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
-        ],
-        "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
-      },
-      {
-        "path": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
-        ],
-        "sha256": "11a6eecd0795889a603fd228dd6c7092aa9c90e19abc864fdece8bf47b5df7b0"
-      },
-      {
-        "path": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql"
-        ],
-        "sha256": "1f244025d8165ee44710b4a3d54694260ccf635c7ee0cafa5f66785cc60889b7"
-      },
-      {
-        "path": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql"
-        ],
-        "sha256": "b0ba7155837caf0f55d1522e061a3861d1e0b91f45baf21c5b5ef9079cb36873"
-      }
-    ]
+    "migrations": [],
+    "repeatables": []
   },
   "fullProtectedVerification": "PENDING"
 }

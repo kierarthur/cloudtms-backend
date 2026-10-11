@@ -828,7 +828,7 @@ export function assertSqlWriteBoundaries(source,file){
   }
 }
 
-function executableParts(source,file){
+export function executableParts(source,file){
   source=source.replaceAll('\r\n','\n');
   return scanManagedSql(source).statements.flatMap(row=>{
     const text=source.slice(row.start,row.end),signature=routineDefinitions(text,file)[0]??`outer:${file}`;
