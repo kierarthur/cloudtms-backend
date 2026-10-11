@@ -1359,6 +1359,10 @@
       "sha256": "ee695d33bc9408260c9a0f438eadd9961d7c462e86bd7d73ffcc5514a599ca2f"
     },
     {
+      "path": "supabase/migrations/11102026_0904_banking_pay_next_early_candidate_financial_fence.sql",
+      "sha256": "fbcd4a69aac8e14389c371313e25e2e8839e152603f7e30522a0a129740f145b"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

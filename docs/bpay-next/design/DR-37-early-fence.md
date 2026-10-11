@@ -69,6 +69,8 @@ Each actual next successor inserts one assertion after its native replay/order/l
 
 ## Read receipts
 
-core1324 SHA256 f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c; case0300 04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e; case0380 9b750149eb86e7ddd6cff218783cbff2674c64abf3a117f20e66579d5f3d291e. Current NET0390 physical SHA256 9622c5b9259f80e69a4fb661425c0016a4f3ee69ee8b02fcb3a7baa7ba389fbb; current PS14 STATUS0639 15c88f4c45051087976ed9187a741da494c69a052611c2a41892417f9665a22d.
+core1324 SHA256 f38878c7b09e3fbac2d21acbf96c4e88bdac1d4c32abac7ee98d2672df7ba52c; case0300 04b44425d288e714037012c3b4eb4d27679137905e1c380682812cc8273ad40e; case0380 9b750149eb86e7ddd6cff218783cbff2674c64abf3a117f20e66579d5f3d291e. Current NET parent0559 physical SHA256 514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6; current PS14 STATUS0639 15c88f4c45051087976ed9187a741da494c69a052611c2a41892417f9665a22d.
 
 This is a revised design only. It makes no migration installation, early writer-hook completion, replacement/cancellation implementation or application-acceptance claim.
+
+11October2026 implementation boundary: early D14/D18 only built under BD096/DR11; current Caseprepare0904 and owedDR08expiry0904→0910 assertion installed solely in localPG17. FullNET/status/replacement/acquisition/cancel/handoff/other-writer delivery stays with later owning cards. Independent design/source reviews preserved.

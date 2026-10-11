@@ -1,10 +1,19 @@
 # Case and allocation successor chain
 
+## DR11 mandatory allocation order and approved successor map
+
+Debt age is original funded_at_utc where present, otherwise immutable case.created_at_utc; stored-credit origin keeps its original creator time (current0204:306–314). All selected recovery kinds share one order: (age_key,case_id,component_ordinal,case_component_id), with no automatic/manual tier (0204:372; original0559:2225–2231, retained0904:450–452). Excluded members never enter instructions or spend E/H. One whole-worker captured pay basis and carried E/H are persisted across pages; no page reinitialisation or new calculator.0290:72–113 is the unchanged row kernel;0204:383–394 is its shared pure plan caller. Frozen accepted rules/floor and original membership coexist with live Case/component/period money locks.
+
+Approved editor order: F25 captured RuleB floor/rule facts → CM02a ordinary comparison-free basis → WB27 shared plan → DR04 signed capture → DR11 verified allocation/current0904 fence assertion → DR12 same-Candidate offset → FC10 future-effective pause/amendment → WB41 origin WAIT → CM13a ordinary channel conversion → CM02 genuine comparison → CM10/CM12/CM13 move branches. Current plan remains11102026_0204 and kernel04102026_0290. Current Case page0559 → DR11/0904; DR08 expiry0746 → early D18/0904 → alias-only0910 → later FC15/CM13a/CM15. Later writers merge their exact registered physical parent. CaseRelease remainsDR09/0814; no expiry/NET/projection family is restored from old raw files.
+
+OriginalNET current0559 owns its later fullDR37 successor; early D14/D18 binds immutable request/job/NET state and Candidate/week without D12/D17, acquisition/cancel delegation or F26. WholeDR37 remains unbuilt. Rules B and E2 mean changed work is held back by automatic Candidate release before confirmation, never repriced; parked2153/effective-cut resolver is not accepted-input authority.
+
+
 CM lifecycle approval: OR-CM-01 in `../B5_OWNER_APPROVALS.md` records the owner start-sheet approval of `CM-01_LIFECYCLE_V5_ADDENDUM.md` (SHA-256 `a2d0febe10fef5698a4beda9825cc9827ba272b090ded56960a30115e23bf08e`). Every later CM item cites that note; this is a design approval, not installed comparison authority.
 
 The master chain is controlling: F-25 → CM-02a → WB-27 → DR-04 → DR-11 → DR-12 → FC-10 → WB-41 → CM-13a → CM-02 → CM-10 → CM-12 → CM-13. Each item rereads the current final successor and adds only its branch, preserving every earlier branch. From WB-27 the shared STABLE write-free allocation plan owns nominal due, purpose, threshold/floor inputs, target value and sort fields. Show estimate uses that same instruction derivation. Freeze remains Create Draft accepted input authority (OR-44/OR-47); post-cut changes belong to the next Draft.
 
-Branches added: none (foundation census only).
+Foundation census retained; later item sections below record each actual current successor.
 
 ## CM-02a chosen base, 10 October2026
 
@@ -14,7 +23,7 @@ Chosen reference `supabase/repeatable/08102026_0549_banking_pay_next_overpayment
 
 Final reference capacity proof: `private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)`, raw0549:706–863, including full instruction-count NOT_AFFECTED at758–763. Earlier0157:213 and0241:5 are superseded, never promoted by CM02. The genuine typed receipt/mappings/planner support is CM02; certified book/carry/expiry support CM09; ordinary Umbrella selected-slice/projection support CM13a. See CM-02a-build.md exact dependencies. The chosen body is reference-only until genuine support closure exists; no dummy rowtypes, new ledger, calculator, producer or SQL belongs to CM02a.
 
-RuleB accepted input means work_choice.expected_revision_id, captured selection_candidate columns, run_work_query_snapshot and existing run_work_query_pin_v2. Parked2153 objects and seal_effective_work_cut_v1 are not authority. Case balances stay live under money locks; postclick revision change stays REVIEW. Every next editor rereads actual saved final and merges only its named branch. FromWB27 the shared STABLE write-free plan owns the same instruction derivation. DR11 and ordinary CM13a proceed without CM01 approval.
+RuleB accepted input means work_choice.expected_revision_id, captured selection_candidate columns, run_work_query_snapshot and existing run_work_query_pin_v2. Parked2153 objects and seal_effective_work_cut_v1 are not authority. Case balances stay live under money locks; postclick revision change follows owner E2 automatic Candidate release before confirmation, never repriced. Every next editor rereads actual saved final and merges only its named branch. FromWB27 the shared STABLE write-free plan owns the same instruction derivation. DR11 and ordinary CM13a proceed without CM01 approval.
 
 ## One owner per UMM2 object
 

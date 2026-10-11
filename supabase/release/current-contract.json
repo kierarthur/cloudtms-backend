@@ -466,6 +466,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "bpay_next_candidate_financial_fence_owner",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_candidate_week_commit_fence",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_next_local_detail_seam_owner_all",
       "check": "true",
       "roles": [
@@ -11045,6 +11057,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_assert_candidate_financial_fence_v1(p_candidate_id uuid, p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4671d7b56959d122a0010fa2433a7279059807aef46af35c1a4b67cc99833207"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_assert_legacy_writer_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -12702,7 +12733,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a2c015db43ae53e5ac87f7f8d91e2558c846a3854d19bc6a194099b018a92403"
+      "definition_sha256": "4f894481b18e53fc6738ad16a17d1392b03382d1f8f087de6e9e8e8199a2fcc5"
     },
     {
       "acl": [
@@ -13472,7 +13503,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "bc664c587a0e228d1d0a1f6aeee1b948906d0564b52d29660198bd3d7b433ecf"
+      "definition_sha256": "1b3d06927a6ad2901422d0fe2b226ba89fc6548a0cbeea880b4d6d7022d64d63"
     },
     {
       "acl": [
@@ -78686,6 +78717,256 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (variant = ANY (ARRAY['DIRECT_MATERIALISE'::text, 'SELF_SUBMIT'::text, 'APP_RECEIPT_ATTACH'::text]))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_candidate_week_commit_fence",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "allocation_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_week_start",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "stage",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_candidate_financial_fence_active_idx",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_financial_fence_active_idx ON private.bpay_next_candidate_week_commit_fence USING btree (candidate_id) WHERE (stage = ANY (ARRAY['STAGING'::text, 'COMMITTING'::text, 'CANCEL_REQUESTED'::text, 'CANCELLING'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_candidate_week_commit_fence_pkey ON private.bpay_next_candidate_week_commit_fence USING btree (candidate_id, pay_week_start)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_candidate_week_comm_original_job_id_command_id_c_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_job_id, command_id, candidate_id, module_epoch) REFERENCES private.bpay_next_job(id, command_id, candidate_id, module_epoch) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_week_commi_candidate_id_pay_week_start_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id, pay_week_start) REFERENCES private.bpay_next_worker_week(candidate_id, pay_week_start) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fe_command_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_allocation_state_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (allocation_state_id) REFERENCES private.bpay_next_case_allocation_state(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (updated_at_utc >= created_at_utc)"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_paye_net_request(command_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_created_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(created_at_utc))"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_pay_week_start_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(pay_week_start) AND EXTRACT(isodow FROM pay_week_start) = 1::numeric)"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (candidate_id, pay_week_start)"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_stage_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage = ANY (ARRAY['STAGING'::text, 'COMMITTING'::text, 'CANCEL_REQUESTED'::text, 'CANCELLING'::text, 'COMPLETE'::text, 'REFUSED'::text, 'CANCELLED'::text]))"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_fence_updated_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(updated_at_utc))"
+        },
+        {
+          "name": "bpay_next_candidate_week_commit_run_worker_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_worker_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, candidate_id) ON DELETE RESTRICT"
         }
       ],
       "view_definition_sha256": null

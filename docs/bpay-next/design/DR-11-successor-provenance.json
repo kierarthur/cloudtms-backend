@@ -1,0 +1,63 @@
+{
+  "item": "DR-11",
+  "sequence": 86,
+  "status": "NORMAL_CHECKS_PASS_INDEPENDENT_SOURCE_PASS",
+  "prerequisiteDeliverables": [
+    "DR-37-D14",
+    "DR-37-D18"
+  ],
+  "migration": {
+    "path": "supabase/migrations/11102026_0904_banking_pay_next_early_candidate_financial_fence.sql",
+    "sha256": "fbcd4a69aac8e14389c371313e25e2e8839e152603f7e30522a0a129740f145b"
+  },
+  "target": {
+    "path": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+    "sha256": "fa3c73a83075f67246e62adea7ba1467c019bada601d3db880ec51b48cdd1a9e",
+    "installedLocal": true
+  },
+  "parents": [
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "change": "One assertion after native replay/cursor proof; native pre-admission NOWAIT locks"
+    },
+    {
+      "signature": "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "path": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "sha256": "f1e6505c4f0ce89be8da8090dbc30467ef0ec50518536eb797f11dab37d152e6",
+      "change": "One assertion after native replay/cursor proof; native pre-admission NOWAIT locks"
+    }
+  ],
+  "reused": [
+    {
+      "path": "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+      "sha256": "400e854bfd5619f7bd004e9e922d4681a673216ee001dd1a7cbd81ecf6d20ac6"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "sha256": "2eeaafb8f14444715c30e13dc898f9b35614de1f53920344913f2986e09d6b0c"
+    }
+  ],
+  "publicSecurityDefinerMembershipDelta": 0,
+  "joinedRuntime": "AUTHORED_NOT_RUN",
+  "correction": {
+    "prior": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+    "target": "supabase/repeatable/11102026_0910_banking_pay_next_fence_expiry_row_projection_v1.sql",
+    "signature": "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "sourceHash": "fa3c73a83075f67246e62adea7ba1467c019bada601d3db880ec51b48cdd1a9e",
+    "changed": 5,
+    "sha256": "14803cd993ef6bb7e3c11835e73ad2219520ce5f1dcf55b0dabdb74088d9c654",
+    "installedLocal": true,
+    "change": "Exactly five explicit native row aliases only; installed0904 retained byte-for-byte"
+  },
+  "contractHash": "95ead45af83d7ace7f3cb4731b676df70d53bfe89dbedc0e6f33ea1710e89e73",
+  "checks": {
+    "integrity": "342 migrations/893 repeatables PASS",
+    "localPg17": "changed compile only PASS",
+    "syntax": "source-gate module PASS",
+    "sourceGates": "12/12 PASS",
+    "sealCoupling": "PASS",
+    "publicCatalogue": "835/76service-missing/0browser/d5226315e5b17afc9e5a588a432b73ca; verifierDO PASS"
+  }
+}
