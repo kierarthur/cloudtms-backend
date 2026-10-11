@@ -47,5 +47,6 @@
     "DR03-main-dark.png": "06713ee5659db106c487746af94a90f5a1f968acf7c072c14638130947bb75d5",
     "DR03-main-device-light.png": "06713ee5659db106c487746af94a90f5a1f968acf7c072c14638130947bb75d5",
     "DR03-main-phone-dark.png": "538b8b292e10b3ce6aa0500e4c77758cf7b38313f9fc205e9f8cb37cdfd05cc8"
-  }
+  },
+  "backendCommit": "14631ff3c65626ced77984885e055a1c84e45acd"
 }
