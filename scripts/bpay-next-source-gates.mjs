@@ -106,6 +106,11 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'public.bpay_next_snooze_due_page_v1(jsonb)',
   'public.bpay_next_workbench_week_rollover_page_v1(jsonb)',
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)',
+  // WB36/WB44 A2: exact existing guard and native cancellation points.
+  "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)",
+  "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)",
+  "private.bpay_next_snooze_metadata_guard_v1()",
+  "private.bpay_next_snooze_receipt_guard_v1()",
   // WB22 finite read-only memory helper closure; write owners remain separate.
   'private.bpay_next_selection_memory_intent_valid_v1(jsonb)',
   'private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)',
@@ -205,6 +210,10 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_snooze_receipt_guard_v1()": ["upper","to_jsonb","jsonb_set","private.bpay_next_snooze_due_receipt_valid_v1","private.bpay_next_snooze_publication_cancel_valid_v1"],
+  "private.bpay_next_snooze_metadata_guard_v1()": ["jsonb_strip_nulls","to_jsonb","jsonb_set","clock_timestamp","current_setting","octet_length","private.bpay_next_snooze_publication_cancel_valid_v1","private.bpay_next_snooze_context_v1"],
+  "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)": ["current_setting","private.bpay_next_snooze_revision_basis_v1"],
+  "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)": ["octet_length","private.bpay_next_segment_pay_basis_v1","private.bpay_next_line_pay_basis_v1"],
   "private.bpay_next_source_query_refresh_v1(uuid,uuid)": ["array_agg","cardinality","private.bpay_next_workbench_refresh_work_v1"],
   "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": ["private.bpay_next_retry_execution_v1","private.bpay_next_prepare_attention_v1"],
   "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1"],
@@ -293,6 +302,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_workbench_set_bank_warning_v1(uuid,text)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","transaction_timestamp"],
   "private.bpay_next_workbench_candidate_name_trigger_v1()": ["private.bpay_next_workbench_metadata_changed_v1","concat_ws"],
   "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)": [
+    "private.bpay_next_snooze_revision_basis_v1","to_jsonb",
     "private.bpay_next_workbench_mark_processing_v1",
     "private.bpay_next_workbench_refresh_many_v1",
     "private.bpay_next_reconcile_work_collection_v1",

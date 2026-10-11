@@ -808,7 +808,8 @@ export function validateWorkbenchCommandReceipt(r,args){
   ||['request_id','candidate_id','work_id','job_id'].some(k=>r[k]!==args[k])
   ||r.received&&(r.module_epoch!==args.module_epoch||r.owner_epoch!==args.expected_owner_epoch
     ||r.status==='DONE'&&(r.phase!=='DONE'||r.cursor!==null)
-    ||r.status==='READY'&&(!(prepare?['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE']:['NEW','REMOVED']).includes(r.phase)||!r.repaired&&(r.phase!==args.expected_phase||r.cursor!==args.expected_cursor)))
+    ||r.status==='READY'&&(!(prepare?['NEW','PINNING','RESERVE','ALLOCATE','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE']:['NEW','REMOVED','SNOOZE']).includes(r.phase)||!r.repaired&&(r.phase!==args.expected_phase||r.cursor!==args.expected_cursor)))
+  ||!prepare&&r.received&&r.phase==='SNOOZE'&&r.cursor!==null&&!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(r.cursor)
   ||prepare&&r.received&&(r.status!=='READY'||r.repaired||BigInt(r.captured_preparation_revision)>BigInt(r.preparation_revision))
   ||!r.received&&r.replay)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
  return r;

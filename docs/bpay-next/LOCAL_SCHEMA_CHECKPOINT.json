@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "409ddd282332dcae28461679ff4184e047c47893",
-  "compiledAtUtc": "2026-10-11T23:05:49.662Z",
+  "sourceCommit": "dde1b7da53fcf8d88c1607e5876186f3f5750211",
+  "compiledAtUtc": "2026-10-11T23:21:36.035Z",
   "inventory": {
     "migrations": [
       {
@@ -1440,6 +1440,10 @@
       {
         "path": "supabase/migrations/11102026_2311_banking_pay_next_prepare_retry_receipt_null_guard.sql",
         "sha256": "5db2d3bb2522a1352fb45e5f25dd6d0f85c651d45c0df6179bf581dd1ce48f61"
+      },
+      {
+        "path": "supabase/migrations/12102026_0016_banking_pay_next_stale_snooze_continuation.sql",
+        "sha256": "d837eccb1f0a98a4fff446c98461f46f250b078bb63b2f85fd91882ba9f2fc42"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8302,6 +8306,13 @@
         "sha256": "462ddc928e049dca0a243bb0b78da0c80c121045a6756f67f3d555e41a642373"
       },
       {
+        "path": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql"
+        ],
+        "sha256": "3737df86f2e462f9a336b7964b0c8f851f0cc41137d0b771ffe9889916d0f04a"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8311,7 +8322,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/12102026_0016_banking_pay_next_stale_snooze_continuation.sql",
+        "sha256": "d837eccb1f0a98a4fff446c98461f46f250b078bb63b2f85fd91882ba9f2fc42"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8335,11 +8351,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+        "path": "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+          "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql"
         ],
-        "sha256": "462ddc928e049dca0a243bb0b78da0c80c121045a6756f67f3d555e41a642373"
+        "sha256": "3737df86f2e462f9a336b7964b0c8f851f0cc41137d0b771ffe9889916d0f04a"
       }
     ]
   },

@@ -11090,7 +11090,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e4e9e33f51917a99d96771f20e0f46fab6245166659af6eaa029b6ff794ddaff"
+      "definition_sha256": "8d33ba65aa4d869a2032f8a00ab1d17bc56ae5c8c853adb0cd688422319278a0"
     },
     {
       "acl": [
@@ -15299,7 +15299,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fc57906c075e1f40f581594eb98c9464faf2d2f3df8754b3d3c006091da91621"
+      "definition_sha256": "38a97c688e0c3fc4cef927561df0970aae6e80fe2cdb7af511152640bb3e50e0"
     },
     {
       "acl": [
@@ -16364,7 +16364,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "adbc0377c00cc71cbf4d4154e4d653e20850eae1261b3a03cbcbd6f1ab2a7998"
+      "definition_sha256": "b574f826f947f92d3230bd6d9b31cd879458c07eeecf19a2f4f6fdff36c580f8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_publication_cancel_valid_v1(p_before jsonb, p_after jsonb, p_checkpoint boolean, p_occurred_at timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "cd9c106df01e0711602485b46c1e2148eedb266cc9077a2fd9988eefbe291aa2"
     },
     {
       "acl": [
@@ -16383,7 +16402,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "49bdc930d4034bfd122d02dc91ffcde36ee76b72e91e808cad6f4ac1c17e1cc3"
+      "definition_sha256": "27210867fb713bcb076cb50a8670328eaa46641fe7a1d5eef6995ccc0304d557"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_revision_basis_v1(p_revision_id uuid, p_scope text, p_key text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "1cba446dc253c6518b0c53100040a0781a91091fc293382fdb03fe2956d2715d"
     },
     {
       "acl": [
@@ -33211,7 +33249,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ef0a3e85deebf23e782097d3c98f90934b1b0d456ec618c631db14c1944f0f22"
+      "definition_sha256": "b8b5866171f57a596a90184511836e0fb5eb67a7760692c92be50acd1815ae28"
     },
     {
       "acl": [
@@ -100577,7 +100615,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (phase = ANY (ARRAY['NEW'::text, 'REMOVED'::text, 'DONE'::text]))"
+          "definition": "CHECK (phase = ANY (ARRAY['NEW'::text, 'REMOVED'::text, 'SNOOZE'::text, 'DONE'::text]))"
         },
         {
           "name": "bpay_next_publication_pkey",
@@ -112342,6 +112380,10 @@
         {
           "name": "bpay_next_snooze_active_work_idx",
           "definition": "CREATE INDEX bpay_next_snooze_active_work_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, segment_key, component_key) WHERE active"
+        },
+        {
+          "name": "bpay_next_snooze_active_work_uuid_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_active_work_uuid_idx ON private.bpay_next_snooze USING btree (work_id, id) WHERE (active AND (work_id IS NOT NULL))"
         },
         {
           "name": "bpay_next_snooze_case_control_point_idx",

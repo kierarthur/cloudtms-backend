@@ -31,7 +31,7 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
 /** @typedef {{action:'CLAIM',job_id:string,job_kind:FinancialJobKind,lease_seconds:number}} FinancialJobClaim */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY'|'CSV_RETURN'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CASE_CREATE'|'CASE_EDIT'|'CASE_PAUSE'|'CASE_RESUME'|'CASE_WRITE_OFF',lease_nonce:string,owner_epoch:string}} FinancialJobSingleStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'INTERNAL_SETTLEMENT'|'SIMPLE_CANCEL'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD',lease_nonce:string,owner_epoch:string,expected_cursor:string|null,limit:number}} FinancialJobPageStep */
-/** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
+/** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED'|'SNOOZE',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'PINNING',expected_cursor:string|null}} FinancialJobPinStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'RESERVE'|'ALLOCATE',expected_work_cursor:string|null,expected_component_cursor:string|null,limit:number}} FinancialJobPreparePageStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE'|'WORKBENCH_WORK'|'WORKBENCH_CASE'|'WORKER_RELEASE_WORK'|'WORKER_RELEASE_CASE'|'WORKER_RELEASE_FINAL',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
@@ -61,7 +61,7 @@ const PREPARE_ISSUES = ['SELECTED_WORK_NOT_APPROVED', 'SELECTED_WORK_POSITION_PE
 const CLAIM_PHASES = Object.freeze({
   PAYE_NET_ENTRY: ['NEW', 'FINANCE_ALLOCATE'], TRANSFER_BUILD: ['WORK'], CSV_SETTLEMENT: ['MEMBERS'], INTERNAL_SETTLEMENT: ['MEMBERS'],
   CSV_RETURN: ['MEMBERS'], CASH_REISSUE: ['MEMBERS'], SIMPLE_CANCEL: ['NEW', 'RELEASE'],
-  POSITION_APPLY: ['NEW', 'REMOVED'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], PREPARATION_DISCARD: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_EDIT: ['NEW'], CASE_PAUSE: ['NEW'], CASE_RESUME: ['NEW'], CASE_WRITE_OFF: ['NEW']
+  POSITION_APPLY: ['NEW', 'REMOVED', 'SNOOZE'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], PREPARATION_DISCARD: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_EDIT: ['NEW'], CASE_PAUSE: ['NEW'], CASE_RESUME: ['NEW'], CASE_WRITE_OFF: ['NEW']
 });
 const COMMON = { job_id: 'uuid', job_kind: 'kind', owner_epoch: 'positive', lease_until_utc: 'timestamp?', done: 'boolean', replay: 'boolean' };
 const { replay: unusedPositionReplay, ...POSITION_COMMON } = COMMON;
@@ -123,6 +123,7 @@ function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
   switch (type) {
     case 'uuid': return typeof value === 'string' && UUID.test(value);
+    case 'snoozeCursor': return typeof value === 'string' && UUID.test(value) && value === value.toLowerCase();
     case 'kind': return typeof value === 'string' && Object.hasOwn(CLAIM_PHASES, value);
     case 'positive': return integer(value, true);
     case 'integer': return integer(value);
@@ -135,9 +136,9 @@ function field(value, type) {
       && new Date(`${value.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) === value.slice(0, 10);
     case 'code': return typeof value === 'string' && /^BPAY_NEXT_[A-Z0-9_]{1,246}$/.test(value);
     case 'claimPhase': return ['NEW', 'WORK', 'MEMBERS', 'RELEASE', 'FINANCE_ALLOCATE'].includes(value);
-    case 'positionClaimPhase': return ['NEW', 'REMOVED'].includes(value);
+    case 'positionClaimPhase': return ['NEW', 'REMOVED', 'SNOOZE'].includes(value);
     case 'prepareClaimPhase': return PREPARE_PHASES.includes(value);
-    case 'positionPhase': return ['NEW', 'REMOVED', 'DONE'].includes(value);
+    case 'positionPhase': return ['NEW', 'REMOVED', 'SNOOZE', 'DONE'].includes(value);
     case 'preparePhase': return [...PREPARE_PHASES, 'READY', 'REVIEW', 'CANCELLED'].includes(value);
     case 'expiryPhase': return ['RELEASE', 'EXPIRED'].includes(value);
     case 'discardStepPhase': return ['RELEASE','DISCARDED','BLOCKED'].includes(value);
@@ -196,7 +197,7 @@ function callInput(input) {
     if (PAGED.includes(input.job_kind) && (!field(input.expected_cursor, 'positive?')
       || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) invalid();
     if (input.job_kind === 'POSITION_APPLY' && (!field(input.expected_phase, 'positionClaimPhase')
-      || !field(input.expected_cursor, 'component?') || !Number.isInteger(input.limit)
+      || !field(input.expected_cursor, input.expected_phase === 'SNOOZE' ? 'snoozeCursor?' : 'component?') || !Number.isInteger(input.limit)
       || input.limit < 1 || input.limit > 100)) invalid();
     if (input.job_kind === 'PREPARE') {
       if (!PREPARE_PHASES.includes(input.expected_phase)) invalid();
@@ -227,6 +228,7 @@ function resultInput(payload, call, unknown) {
     if (!CLAIM_PHASES[call.jobKind].includes(payload.phase)
       || (!PAGED.includes(call.jobKind) && !['POSITION_APPLY', 'PREPARE'].includes(call.jobKind)
         && !(call.jobKind === 'PAYE_NET_ENTRY' && payload.phase === 'FINANCE_ALLOCATE') && payload.cursor !== null)) invalid();
+    if (call.jobKind === 'POSITION_APPLY' && payload.phase === 'SNOOZE' && !field(payload.cursor, 'snoozeCursor?')) invalid();
     if (call.jobKind === 'PREPARE' && !prepareCheckpoint(payload)) invalid();
     return payload;
   }
@@ -263,7 +265,8 @@ function resultInput(payload, call, unknown) {
       || (payload.phase === 'REQUESTED' && (payload.released_line_count !== '0' || payload.holds_released !== '0'))
       || BigInt(payload.holds_released) > BigInt(payload.rows_visited)) invalid();
   }
-  if (call.jobKind === 'POSITION_APPLY' && (payload.done !== (payload.phase === 'DONE')
+  if (call.jobKind === 'POSITION_APPLY' && ((payload.phase === 'SNOOZE' && !field(payload.cursor, 'snoozeCursor?'))
+    || payload.done !== (payload.phase === 'DONE')
     || (payload.done && payload.cursor !== null) || BigInt(payload.rows_visited) > BigInt(call.args.limit))) invalid();
   if (call.jobKind === 'PREPARATION_EXPIRY' && (payload.done !== (payload.phase === 'EXPIRED')
     || (!payload.done && payload.cursor === null)

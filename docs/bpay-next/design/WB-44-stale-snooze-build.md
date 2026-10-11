@@ -1,0 +1,11 @@
+# WB36/WB44 owner A2 correction — BD128
+
+12 October 2026, before WB39 sequence116. Full WB36/WB44 cards, checklist scopes and R2 sections1/5 read. Exact named owner: apply_position_page1346; owner A2 requires real CANCELLED audit before WB39. Retain all completed producers and money formulas.
+
+BUILDER DECISION BD128: continue the original POSITION_APPLY through bounded SNOOZE UUID pages after REMOVED. One additive publication phase CHECK and active(work_id,id) partial index; existing cursor only. Necessary complete-current successors: apply1346, two existing snooze guards0255, financial_job2259 and retry_work_job2259. Two narrow private helpers reuse immutable existing worker bases and validate only the exact cancellation before/after/native publication point. No new command, job, table, trigger, clock, envelope, financial basis or protocol. BE job-step and BE/FE Workbench retry decoders admit only the additional native phase with UUID cursor. No visible screen change.
+
+Cancel only earlier active Work controls (old sequence < original publication sequence) with different sealed worker basis or positively removed stable membership. Use original command UUID/sequence; keep historical human columns, cleared_reason NULL, financial/scope/date/note fields. Append CANCELLED/system actor NULL/WORKER_PAY_CHANGED with exact preceding and resulting snapshots. Equal worker basis and later controls remain active; CASE untouched; frozen RuleB controls remain immutable.
+
+Immediate mutation validates original SEALED command, APPLYING/SNOOZE publication, own LEASED job and predecessor pointer. Deferred receipt checks each event separately against its native twin checkpoint. Reviewer correction: public financial_job yields a validated intermediate page to READY and clears its lease before deferred triggers fire. Admit that exact READY/SNOOZE tuple, or direct native LEASED with valid event-time lease; final requires COMPLETE/APPLIED/DONE and new applied pointer. No all-events aggregate or synthetic receipt. Preserve original lock order, count, replay, projection barrier and terminal writes.
+
+Normal source/compile/catalogue/contracts only. Charge-only, stale membership, >100 scope, later controls and replay application journeys AUTHORED_NOT_RUN. Independent design/diff review before closure; actual commit recorded after product commit.

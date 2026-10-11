@@ -1,0 +1,126 @@
+{
+  "source": "Fresh sole local PG17 catalogue/isolation DO only; no business calls or rows.",
+  "rows": [
+    {
+      "signature": "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)",
+      "sourceMd5": "e6f9ca16792c6a85d7e7e6bc40b9dcf4",
+      "installed": {
+        "bodyMd5": "e6f9ca16792c6a85d7e7e6bc40b9dcf4",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "s"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)",
+      "sourceMd5": "df70f065e947bb5669553dbdf68a54bb",
+      "installed": {
+        "bodyMd5": "df70f065e947bb5669553dbdf68a54bb",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
+      "sourceMd5": "12a08afbab971a588494eef975019667",
+      "installed": {
+        "bodyMd5": "12a08afbab971a588494eef975019667",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_snooze_metadata_guard_v1()",
+      "sourceMd5": "d3073871fa3f3c75b053dafb7511c447",
+      "installed": {
+        "bodyMd5": "d3073871fa3f3c75b053dafb7511c447",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_snooze_receipt_guard_v1()",
+      "sourceMd5": "b8d48bff3e856798b233d80385f5f0a3",
+      "installed": {
+        "bodyMd5": "b8d48bff3e856798b233d80385f5f0a3",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)",
+      "sourceMd5": "04bd890d74dfdecf10fb53131a76bbed",
+      "installed": {
+        "bodyMd5": "04bd890d74dfdecf10fb53131a76bbed",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    },
+    {
+      "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+      "sourceMd5": "dc4833539555238c3b4c3037e1b71102",
+      "installed": {
+        "bodyMd5": "dc4833539555238c3b4c3037e1b71102",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner,service_role=X/cloudtms_bpay_local_owner}",
+        "configuration": [
+          "search_path=pg_catalog, private, public"
+        ],
+        "volatility": "v"
+      },
+      "matches": true
+    }
+  ],
+  "schema": {
+    "phaseCheck": "CHECK ((phase = ANY (ARRAY['NEW'::text, 'REMOVED'::text, 'SNOOZE'::text, 'DONE'::text])))",
+    "activeUuidIndex": "CREATE INDEX bpay_next_snooze_active_work_uuid_idx ON private.bpay_next_snooze USING btree (work_id, id) WHERE (active AND (work_id IS NOT NULL))"
+  },
+  "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+  "publicSecurityDefinerMembershipDelta": 0,
+  "verifiers": [
+    {
+      "file": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "result": "DO"
+    },
+    {
+      "file": "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+      "result": "DO\r\nDO\r\nDO"
+    }
+  ]
+}
