@@ -14307,8 +14307,8 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
@@ -14323,7 +14323,9 @@
         "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
         "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
         "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
-        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql"
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
@@ -14338,12 +14340,16 @@
         "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
         "supabase/repeatable/11102026_0008_banking_pay_next_component_count_scope_v1.sql",
         "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
-        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql"
+        "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql"
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
       ],
-      "owner": "DR-02 seq79; complete latest predecessor retained, manifest/receipt/HEADER only"
+      "owner": "DR-02 seq79; complete latest predecessor retained, manifest/receipt/HEADER only; WB39 BD129"
     },
     {
       "signature": "private.bpay_next_accepted_choice_guard_v1()",
@@ -16216,6 +16222,42 @@
         "supabase/repeatable/12102026_0016_banking_pay_next_stale_snooze_publication_v1.sql"
       ],
       "owner": "WB36/WB44 owner A2 BD128 exact supporting cancellation point",
+      "baselineSource": "new"
+    },
+    {
+      "signature": "private.bpay_next_snooze_management_row_v1(uuid)",
+      "finalRoot": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+      ],
+      "owner": "WB39 BD129 native reader support",
+      "baselineSource": "new"
+    },
+    {
+      "signature": "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+      ],
+      "predecessors": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+      ],
+      "owner": "WB39 BD129 native reader support",
       "baselineSource": "new"
     }
   ],

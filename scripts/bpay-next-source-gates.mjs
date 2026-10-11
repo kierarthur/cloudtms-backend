@@ -106,6 +106,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   'public.bpay_next_snooze_due_page_v1(jsonb)',
   'public.bpay_next_workbench_week_rollover_page_v1(jsonb)',
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)',
+  "private.bpay_next_snooze_management_row_v1(uuid)",
+  "private.bpay_next_snooze_management_page_v1(uuid,jsonb)",
   // WB36/WB44 A2: exact existing guard and native cancellation points.
   "private.bpay_next_snooze_revision_basis_v1(uuid,text,text)",
   "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)",
@@ -210,6 +212,8 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_snooze_management_page_v1(uuid,jsonb)": ["all","to_char","jsonb_object_keys","octet_length","jsonb_typeof","jsonb_build_object","jsonb_build_array","jsonb_array_length","unnest","isfinite","private.bpay_next_snooze_management_row_v1"],
+  "private.bpay_next_snooze_management_row_v1(uuid)": ["to_char","private.bpay_next_snooze_revision_basis_v1"],
   "private.bpay_next_snooze_receipt_guard_v1()": ["upper","to_jsonb","jsonb_set","private.bpay_next_snooze_due_receipt_valid_v1","private.bpay_next_snooze_publication_cancel_valid_v1"],
   "private.bpay_next_snooze_metadata_guard_v1()": ["jsonb_strip_nulls","to_jsonb","jsonb_set","clock_timestamp","current_setting","octet_length","private.bpay_next_snooze_publication_cancel_valid_v1","private.bpay_next_snooze_context_v1"],
   "private.bpay_next_snooze_publication_cancel_valid_v1(jsonb,jsonb,boolean,timestamp with time zone)": ["current_setting","private.bpay_next_snooze_revision_basis_v1"],
@@ -252,7 +256,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_selection_memory_leaves_v1(jsonb)': [],
   'private.bpay_next_selection_memory_choices_v1(jsonb,uuid,jsonb)': ['private.bpay_next_selection_memory_leaves_v1','bool_or','lateral'],
   'private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)': ['private.bpay_next_selection_memory_choices_v1','jsonb_set','split_part','max','sum','filter','octet_length'],
-  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_snooze_context_v1","lateral","generate_subscripts","private.bpay_next_case_allocation_plan_v1","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_source_command_id_v1","private.weekly_source_sha256_jsonb_v1","to_jsonb","jsonb_agg","array_agg","cardinality","max","sum","filter","distinct","date","private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
+  "public.bpay_next_workbench_page_v1(jsonb)": ["private.bpay_next_snooze_management_page_v1","private.bpay_next_snooze_context_v1","lateral","generate_subscripts","private.bpay_next_case_allocation_plan_v1","private.bpay_next_selection_memory_choices_v1","private.bpay_next_selection_memory_leaves_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_source_command_id_v1","private.weekly_source_sha256_jsonb_v1","to_jsonb","jsonb_agg","array_agg","cardinality","max","sum","filter","distinct","date","private.bpay_next_selection_memory_intent_valid_v1","private.bpay_next_selection_memory_resolve_v1","unnest","private.bpay_next_workbench_job_progress_v1","public.pay_banking_official_date_context_v1","private.bpay_next_workbench_header_page_v1","private.bpay_next_workbench_candidates_page_v1","private.bpay_next_workbench_action_required_page_v1","private.bpay_next_workbench_blocked_page_v1","private.bpay_next_workbench_issue_detail_page_v1","private.bpay_next_workbench_candidate_groups_page_v1","private.bpay_next_workbench_group_lines_page_v1","private.bpay_next_workbench_pick_candidates_page_v1","private.bpay_next_workbench_pick_clients_page_v1","private.bpay_next_workbench_export_rows_page_v1","pg_catalog.current_setting","octet_length","jsonb_object_keys","jsonb_set","length"],
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   "private.bpay_next_workbench_action_required_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],

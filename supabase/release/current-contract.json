@@ -16321,6 +16321,44 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_snooze_management_page_v1(p_actor uuid, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "e37ee9504a7ab16891e4c7d25f439a98d79449088865747e42dd0a52c558a086"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_management_row_v1(p_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "26e5fbcdfda881505dec002ffb5012687a50c383d378754a39d80f5d619b4ed4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_snooze_many_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -33757,7 +33795,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "f66ee3fa5038e2e2bd2c7efc79ba4a93b2bf88845d53b17c5e35a8992ed47fb6"
+      "definition_sha256": "e79403a5058c6787bd2b36561cfdbce6ffeddca56155c486d6ed5f82912d35ec"
     },
     {
       "acl": [
@@ -112386,8 +112424,20 @@
           "definition": "CREATE INDEX bpay_next_snooze_active_work_uuid_idx ON private.bpay_next_snooze USING btree (work_id, id) WHERE (active AND (work_id IS NOT NULL))"
         },
         {
+          "name": "bpay_next_snooze_candidate_created_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_candidate_created_idx ON private.bpay_next_snooze USING btree (candidate_id, created_at_utc DESC, id) WHERE active"
+        },
+        {
           "name": "bpay_next_snooze_case_control_point_idx",
           "definition": "CREATE INDEX bpay_next_snooze_case_control_point_idx ON private.bpay_next_snooze USING btree (case_component_id, control_sequence DESC) WHERE (case_component_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_snooze_created_asc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_created_asc_idx ON private.bpay_next_snooze USING btree (created_at_utc, id) WHERE active"
+        },
+        {
+          "name": "bpay_next_snooze_created_desc_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_created_desc_idx ON private.bpay_next_snooze USING btree (created_at_utc DESC, id) WHERE active"
         },
         {
           "name": "bpay_next_snooze_due_idx",
