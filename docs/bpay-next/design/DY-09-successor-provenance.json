@@ -2,7 +2,7 @@
   "item": "DY-09",
   "sequence": 96,
   "decision": "BD108",
-  "status": "REVIEWED_PENDING_LOCAL_RECEIPT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
@@ -69,5 +69,6 @@
   "screenReview": "screen-designs/SCR-47/review.md",
   "futureJoined": "AUTHORED_NOT_RUN",
   "frontendCommit": "b28dd501b5acc896f658eb79226cdb4e6bf576c7",
-  "screenPolicy": "33 PASS / 0 FAIL / 9 N/A,21 actual native captures"
+  "screenPolicy": "33 PASS / 0 FAIL / 9 N/A,21 actual native captures",
+  "implementationCommit": "869b40e5b9cf5a18d0a77c66bc7c2b2818f0530c"
 }

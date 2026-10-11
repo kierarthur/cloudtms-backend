@@ -1090,3 +1090,5 @@ Recorded design difference: four money facts are required by D02 and supplied by
 Normal345/903 integrity, source12/12, syntax, fresh local metadata, export/seal/coupling3a024451 PASS. No SQL delta/business rows/hosted/app/queue/payment/timing programme; D05 authored NOT_RUN. Local receipt follows source and A4 passes. A5 completion document corrects the previously mistyped full commit using fresh Git evidence; no amend. Next DY-10 sequence97.
 
 DY09 independent SOURCE and A4 PASS:21 actual current captures, all42 policy rows33Pass/0Fail/9N/A and every visible design difference/control purpose recorded. FE product b28dd501b5acc896f658eb79226cdb4e6bf576c7. Joined D05 remains authored NOT_RUN.
+
+DY09 completion BE869b40e5b9cf5a18d0a77c66bc7c2b2818f0530c FEb28dd501b5acc896f658eb79226cdb4e6bf576c7: ITEM/D01/D02 BUILT/REVIEWED. Source and scoped A4 PASS;345/903/source12/syntax/seven current local bodies/ACLs/seal-coupling3a024451 PASS. D05 authoredNOT_RUN; no SQL/product rows/payment/hosted/timing actions. Whole78/288 BUILT78/288 REVIEWED; WB44 ownerA2 remains open. Plan continues DY10 sequence97.

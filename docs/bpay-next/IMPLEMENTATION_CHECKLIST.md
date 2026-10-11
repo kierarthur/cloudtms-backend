@@ -2824,7 +2824,7 @@ Implementation BE88c09f038f5a4f159ef02d37f27a2d051648a923; FE38b8ed2d82000867026
 
 ## DY-09 — Umbrella cash and settlement for Daily
 
-Seq 96; Daily · D5-DY; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 96; Daily · D5-DY; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Reuse ordinary Umbrella per-Candidate path, conditional NULL-safe Daily joins and original captured umbrella identity. Current0130 supports only same-channel taxable WORK with no Case selection; CM13a/DR38 complete other paths. No Daily formula or live Candidate umbrella after click.
 
@@ -2832,9 +2832,9 @@ Dependencies: F-05, DY-04, DY-05, PS-01; successor positions: `04102026_0130` tr
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| DY-09-D01 | REPEATABLE: 04102026_0130_banking_pay_next_simple_transfer_members_v1.sql — scoped successor (private.bpay_next_claim_simple_transfer_job_v1; private.bpay_next_build_simple_transfer_page_v1) | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Reuse ordinary Umbrella per-Candidate path, conditional NULL-safe Daily joins and original captured umbrella identity. Current0130 supports only same-channel taxable WORK with no Case selection; CM13a/DR38 complete other paths. No Daily formula or live Candidate umbrella after click. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-09-D02 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: per-Candidate Umbrella Daily frozen cash/detail | MISSING | Implement the exact screen target after its existing dependencies. Reuse ordinary Umbrella per-Candidate path, conditional NULL-safe Daily joins and original captured umbrella identity. Current0130 supports only same-channel taxable WORK with no Case selection; CM13a/DR38 complete other paths. No Daily formula or live Candidate umbrella after click. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-09-D05 | CHECK: DY-09 future joined in-app TEST checklist | MISSING | Contractless UM Daily with other ordinary/Source work reconciles ex/VAT/inc/cash and one Candidate leg; later umbrella/channel edit after click leaves Draft unchanged; zero/internal and Case-adjusted remain explicit until integrated. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-09-D01 | REPEATABLE: 04102026_0130_banking_pay_next_simple_transfer_members_v1.sql — scoped successor (private.bpay_next_claim_simple_transfer_job_v1; private.bpay_next_build_simple_transfer_page_v1) | BUILT_REVIEWED | Preserve the positively evidenced baseline and complete only the exact remaining target change. Reuse ordinary Umbrella per-Candidate path, conditional NULL-safe Daily joins and original captured umbrella identity. Current0130 supports only same-channel taxable WORK with no Case selection; CM13a/DR38 complete other paths. No Daily formula or live Candidate umbrella after click. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| DY-09-D02 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: per-Candidate Umbrella Daily frozen cash/detail | BUILT_REVIEWED | Implement the exact screen target after its existing dependencies. Reuse ordinary Umbrella per-Candidate path, conditional NULL-safe Daily joins and original captured umbrella identity. Current0130 supports only same-channel taxable WORK with no Case selection; CM13a/DR38 complete other paths. No Daily formula or live Candidate umbrella after click. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| DY-09-D05 | CHECK: DY-09 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Contractless UM Daily with other ordinary/Source work reconciles ex/VAT/inc/cash and one Candidate leg; later umbrella/channel edit after click leaves Draft unchanged; zero/internal and Case-adjusted remain explicit until integrated. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2848,6 +2848,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY
 - An Umbrella Candidate with one weekly Timesheet and one Daily gets one Umbrella transfer whose members are the two lines, and whose stored bridge balances (SRQ-122 Umbrella part, RQ-162, RQ-277).
   - Settlement of that transfer completes both the weekly and the Daily work (RQ-230 Umbrella part).
   - Joined future check: Contractless UM Daily with other ordinary/Source work reconciles ex/VAT/inc/cash and one Candidate leg; later umbrella/channel edit after click leaves Draft unchanged; zero/internal and Case-adjusted remain explicit until integrated. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Implementation 869b40e5b9cf5a18d0a77c66bc7c2b2818f0530c; D02 frontend b28dd501b5acc896f658eb79226cdb4e6bf576c7; design/DY-09-completion.md; design/DY-09-current-owner-catalogue.json; design/DY-09-successor-provenance.json; reviews/DY-09-source-review.md; screen-designs/SCR-47/review.md. ITEM/D01/D02 BUILT/REVIEWED; D03/D04 historical context preserved; D05 authored/NOT_RUN, unticked. Source and scoped A4 PASS; normal345/903/source12/syntax/local catalogue/seal-coupling3a024451 PASS. Whole78/288 BUILT78/288 REVIEWED; nextDY10seq97.
 
 ## DY-10 — Genuine zero hours, removal and the TSFIN failure path for Daily
 
