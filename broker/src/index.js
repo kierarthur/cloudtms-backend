@@ -1,3 +1,4 @@
+import { handleBpayNextPayMethodChange, createBpayNextPayMethodChangeRpc } from './bpay-next-pay-method-change.js';
 /**
  * CloudTMS Broker (Cloudflare Worker) — Auth + Timesheets API (no Google Sheets) HELLO WORLD
  *
@@ -159340,6 +159341,21 @@ async function collectOutstandingWeeksByContract(env, contractIds, cutoffYmd = n
 // ─────────────────────────────────────────────────────────────────────────────
 
 
+async function bpayNextPayMethodChangeRoute(env, req, user, candidateId) {
+  try {
+    const owner = await bpayNextOwnerStatusRpc(env)();
+    if (owner.active_owner === 'LEGACY') return null;
+    if (owner.active_owner !== 'NEXT') return new Response(JSON.stringify({ok:false,error_code:'BPAY_NEXT_MODULE_NOT_ACTIVE',operation_id:null,unknown_outcome:false}),{status:409,headers:{'content-type':'application/json','cache-control':'no-store'}});
+    return await handleBpayNextPayMethodChange(req, {
+      actor: String(user.id).toLowerCase(), candidate: String(candidateId).toLowerCase(),
+      rpc: createBpayNextPayMethodChangeRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)}),
+      wake: async body => { await env.BANKING_PAY_CONTINUATION_QUEUE.send(body); }
+    });
+  } catch {
+    return new Response(JSON.stringify({ok:false,error_code:'BPAY_NEXT_PAY_METHOD_UNAVAILABLE',operation_id:null,unknown_outcome:false}),{status:503,headers:{'content-type':'application/json','cache-control':'no-store'}});
+  }
+}
+
 async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized('Unauthorized'));
@@ -159376,6 +159392,9 @@ async function handleCandidatePayMethodChangePreview(env, req, candidateId) {
     return parsed;
   };
   if (!uuidRe.test(String(candidateId))) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  // EX-08: fresh exact ownership; NEXT never enters the legacy history refresh.
+  const nextResponse = await bpayNextPayMethodChangeRoute(env, req, user, candidateId);
+  if (nextResponse) return withCORS(env, req, nextResponse);
   const urlObj = new URL(req.url);
   const rawNewMethod = String(urlObj.searchParams.get('new_method') || '').trim().toUpperCase();
   const newMethod = (rawNewMethod === 'PAYE' || rawNewMethod === 'UMBRELLA') ? rawNewMethod : null;
@@ -159648,6 +159667,9 @@ async function handleCandidatePayMethodChange(env, req, candidateId) {
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(String(candidateId))) return withCORS(env, req, badRequest('candidate_id must be a valid UUID'));
+  // EX-08: fresh exact ownership; NEXT never enters the legacy history refresh.
+  const nextResponse = await bpayNextPayMethodChangeRoute(env, req, user, candidateId);
+  if (nextResponse) return withCORS(env, req, nextResponse);
   const jsonResponse = (status, payload) => withCORS(
     env,
     req,

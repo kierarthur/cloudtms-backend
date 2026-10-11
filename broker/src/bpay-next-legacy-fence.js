@@ -164,6 +164,9 @@ export function isBpayNextLegacyFinancialRoute(method, pathname) {
   // The retained matchPath router ignores empty slash segments. Use the SAME
   // segmentation here so a doubled-slash alias cannot bypass retirement.
   pathname = '/' + pathname.split('/').filter(Boolean).join('/');
+  // EX-08 exact exemptions: the existing handler freshly qualifies the owner.
+  if ((method === 'GET' && /^\/api\/candidates\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/pay-method-change-preview$/i.test(pathname))
+      || (method === 'POST' && /^\/api\/candidates\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/pay-method-change$/i.test(pathname))) return false;
   // EX-01 exact exemptions: actual handlers qualify BPAY_NEXT_ACTION/NEXT.
   if (method === 'POST' && ['/auth/reauth/start', '/auth/reauth/verify'].includes(pathname)) return false;
   if ((method === 'POST' && pathname === '/api/banking/pay/next/command')

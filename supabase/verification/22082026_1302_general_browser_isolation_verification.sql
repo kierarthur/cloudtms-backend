@@ -490,12 +490,12 @@ begin
   -- WB-37 adds the exact service-only snooze_due_page_v1(jsonb) and
   -- workbench_week_rollover_page_v1(jsonb) entry points. Fresh sole local
   -- EX-01 adds exactly two service-only proof record/finite preview entrypoints.
-  -- Fresh local PG17 catalogue:837/76/0/d695f2f10d6576d8a3b69f1fe263b297.
+  -- Fresh local PG17 catalogue:839/76/0/338226c4e9b878c5aa92fc8e319dd7bf; EX-08 adds exactly two service-only readers/writers.
   -- DR-10 rederived the same catalogue after its existing public intake/page
   -- successors: no public definer added/removed and no browser grant changed.
   -- Browser executable identities are empty; existing 76 omissions unchanged.
-  if v_count<>837 or v_service_missing<>76 or v_browser_executable<>0
-     or v_hash<>'d695f2f10d6576d8a3b69f1fe263b297' then
+  if v_count<>839 or v_service_missing<>76 or v_browser_executable<>0
+     or v_hash<>'338226c4e9b878c5aa92fc8e319dd7bf' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

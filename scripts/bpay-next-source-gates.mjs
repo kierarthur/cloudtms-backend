@@ -1736,6 +1736,12 @@ function closedExpiryWorkerShapeUpgrade(part,file){
   return file==='supabase/migrations/11102026_0559_banking_pay_next_worker_reprepare.sql'
     && part.signature===`outer:${file}` && part.text.trim()==="declare v_constraint text;v_count integer;\nbegin\n  select min(conname),count(*) into v_constraint,v_count from pg_catalog.pg_constraint\n    where conrelid='private.bpay_next_preparation_expiry_worker'::regclass and contype='c'\n      and pg_catalog.regexp_replace(pg_catalog.pg_get_expr(conbin,conrelid),'\\s','','g')=\n        pg_catalog.regexp_replace($shape$(((run_worker_id IS NULL) AND (original_worker_status IS NULL) AND (preparation_revision IS NULL) AND (selection_revision IS NULL) AND (draft_state_id IS NULL) AND (expected_work_count = 0) AND (expected_case_hold_count = 0) AND (original_review_issue_code IS NULL) AND (original_review_issue_work_id IS NULL)) OR ((run_worker_id IS NOT NULL) AND (original_worker_status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text, 'READY'::text])) AND (preparation_revision IS NOT NULL) AND (selection_revision IS NOT NULL)))$shape$,'\\s','','g');\n  if v_count<>1 then raise exception using errcode='23514',message='BPAY_NEXT_EXPIRY_ORIGINAL_WORKER_SHAPE_UNRECOGNISED';end if;\n  execute pg_catalog.format('alter table private.bpay_next_preparation_expiry_worker drop constraint %I',v_constraint);\nend";
 }
+// EX-08: one immutable migration's exact private receipt ACL/guards only.
+// Literal-body admission cannot escape to a caller table, role or financial write.
+function closedPayMethodReceiptAcl(part,file){
+ return file==="supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql" && part.signature==='outer:'+file
+  && part.text.trim()==="declare v_name text;\nbegin\n foreach v_name in array array['bpay_next_pay_method_change_receipt','bpay_next_pay_method_change_member'] loop\n  execute format('alter table private.%I owner to postgres',v_name);\n  execute format('alter table private.%I enable row level security',v_name);\n  execute format('alter table private.%I force row level security',v_name);\n  execute format('revoke all on private.%I from public,anon,authenticated,service_role',v_name);\n  execute format('create policy cloudtms_miget_service_owner_all on private.%I to postgres using(true) with check(true)',v_name);\n  execute format('create trigger %I before update or delete on private.%I for each row execute function private.bpay_next_protected_source_receipt_immutable_v1()',v_name||'_immutable',v_name);\n  execute format('create trigger %I before truncate on private.%I for each statement execute function private.bpay_next_protected_source_receipt_immutable_v1()',v_name||'_no_truncate',v_name);\n end loop;\nend";
+}
 export function specialConstructViolations(source,file,columnTypes=new Map()){
   const result=[];
   for(const part of executableParts(source,file)){
@@ -1745,6 +1751,7 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
     // this classifies types, without allowing an unclassified SQL construct.
     const nativeColumns=new Map(columnTypes);
     const expiryShapeUpgrade=closedExpiryWorkerShapeUpgrade(part,file);
+    const payMethodReceiptAcl=closedPayMethodReceiptAcl(part,file);
     if(expiryShapeUpgrade)nativeColumns.set('CONNAME','TEXT');
     if(part.signature==='private.bpay_next_selection_memory_row_v1(text,jsonb,jsonb,uuid)'){
       const position=fs.readFileSync(path.join(repoRoot,'supabase/migrations/03102026_1324_banking_pay_next_core.sql'),'utf8').match(/create table private\.bpay_next_position\s*\(([\s\S]*?)\n\);/i)?.[1]??'';
@@ -1797,7 +1804,7 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
       const catalogAssertion=!dynamic&&t.filter(token=>token==='<BODY>').length===1&&/^\s*(?:begin\s+)?if\s+\(select\s+pg_catalog\.pg_get_constraintdef\(c\.oid\)\s+from\s+pg_catalog\.pg_constraint\s+c\s+where\s+c\.conrelid='private\.[a-z_][a-z0-9_]*'::pg_catalog\.regclass\s+and\s+c\.conname='[a-z_][a-z0-9_]*'\)\s+is\s+distinct\s+from\s+\$([a-z_][a-z0-9_]*)\$[\s\S]*?\$\1\$\s+then\s+raise\s+exception\s+using\s+errcode='23514',\s*message='BPAY_NEXT_[A-Z0-9_]+';\s*$/i.test(statement);
       const workbenchExecution=workbenchTemplates&&t.filter(token=>token==='EXECUTE').length===1&&closedWorkbenchExecution(statement);
       const workbenchProjection=workbenchTemplates&&['V_PROJECTION','V_WHERE'].some(token=>t.includes(token))&&t.includes('<BODY>');
-      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution&&!workbenchExecution&&!expiryShapeUpgrade)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion&&!workbenchProjection&&!expiryShapeUpgrade))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
+      if((dynamic&&!ownerPolicy&&!schemaFormat&&!queryExecution&&!historyExecution&&!workbenchExecution&&!expiryShapeUpgrade&&!payMethodReceiptAcl)||(t.includes('<BODY>')&&!queryLiteral&&!historyConstant&&!catalogAssertion&&!workbenchProjection&&!expiryShapeUpgrade&&!payMethodReceiptAcl))hazards.add('DYNAMIC_SQL_UNCLASSIFIED');
       if(/\bPG_CATALOG \. (?:COALESCE|NULLIF|LEAST|GREATEST) \(/.test(text))hazards.add('SPECIAL_QUALIFIER');
       const intoAt=t.indexOf('INTO'),selectAt=intoAt>=0?t.lastIndexOf('SELECT',intoAt):t.indexOf('SELECT');
       if(selectAt>=0&&intoAt>selectAt){

@@ -1,0 +1,99 @@
+{
+  "item": "EX-08",
+  "sequence": 102,
+  "decision": "BD114",
+  "status": "CHECKED_REVIEWED_PENDING_LOCAL_COMMIT",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql",
+      "sha256": "d7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "sha256": "e05d8b9a751f83c6485a0e5d00826489d777483e0332a7fa50fcb6e18aab2c4e"
+    },
+    {
+      "path": "broker/src/bpay-next-pay-method-change.js",
+      "sha256": "4a09461f35b62c1cc0c2c05b5d974e408ffd076e60199fa3ac7beee03e153432"
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "sha256": "0a7e0f87af882e1d0d39a98498fed7814bbdad77c444ac9b0f9058bc4c5f24b8"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "96e6692e52fc85ceb6fb60646bd5e369865dd6e6975d15dd002ac77574c4f3b0"
+    },
+    {
+      "path": "scripts/cloudtms-db-release-lib.mjs",
+      "sha256": "22b3a5cd4ab5ca93f59f891c03187a6f5214e6f4bb99381e203700c52b413bbf"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "3f5491c0d2b746077c6e5a0c363ab65bbf3b487ce197d01f42693b9033762403"
+    },
+    {
+      "path": "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+      "sha256": "8472fc528142c1d7e7fbc5683dada25b527c7d4796cbac3249f3b0e451fa1810"
+    }
+  ],
+  "frontend": [
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/main.js",
+      "sha256": "35073a4ed6ca21d8dbc7bdf40d6970f175656f258567282a57eebbd106bfc243"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-pay-method-change.js",
+      "sha256": "4bf56a3f87aa85d5c9ac762923dbb20639549fce49a202d4afd9a38ee9fbba99"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "css/bpay-next-office.css",
+      "sha256": "63144a3f4f13b617dca0d057126def00bc402573c5cbebb1941c99c8041b804c"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "index.html",
+      "sha256": "4b919e4cc1e55eb77f56a1860239ce5cbd24c5f49507b9be8d9999b452b99e7c"
+    }
+  ],
+  "retainedOwners": [
+    "0426 Work core",
+    "1438 refresh wrapper/many",
+    "0559 Case classifier",
+    "1429 metadata trigger and METADATA_GROUP",
+    "1157 shared calculator",
+    "F16 legacy fence",
+    "original queue",
+    "F25 rule-B captures"
+  ],
+  "futureConsumers": [
+    "WB-29",
+    "WB-45",
+    "CM-11"
+  ],
+  "checks": {
+    "integrity": "350 migrations /912 repeatables",
+    "sourceGates": "12/12 PASS before first load and corrected mapping retry; final12/12 PASS",
+    "localPG": "one locked additive migration/four repeatable closures compiled; four current owner signatures/body/configuration/ACL matches",
+    "contractHash": "911ac2caf91138da0dd77d64ee0b42aa703a0e44d104188c95857244dc3d29b2",
+    "export": "PASS",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "general": "839/76/0/338226c4e9b878c5aa92fc8e319dd7bf",
+    "publicMembershipDelta": 2,
+    "isolationVerifiers": "General/Candidate DO PASS",
+    "nodeSyntax": "five BE scripts plus Office/main PASS",
+    "screen": "27 actual native local captures; independent A4 PASS37/0FAIL/5N/A, all13 findings closed"
+  },
+  "reviews": [
+    "design/EX-08-design-review.md",
+    "reviews/EX-08-core-review.md",
+    "reviews/EX-08-office-source-review.md",
+    "screen-designs/SCR-74/review.md"
+  ],
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "9bedcbf2d04c161a3b91080156a6c2b8509ef5ec"
+}

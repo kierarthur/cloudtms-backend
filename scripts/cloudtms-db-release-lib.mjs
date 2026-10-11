@@ -336,6 +336,13 @@ export function executableSqlSource(file, canonical = false) {
 // repository path and complete LF-canonical source bytes; never rewrite an
 // arbitrary function body or alter the canonical migration/closure locks.
 const DYNAMIC_LOGICAL_OWNER_SOURCES = new Map([
+  ['supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql', {
+    sha256: 'd7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb',
+    literal: "'alter table private.%I owner to postgres'",
+    replacement: "'alter table private.%I owner to CURRENT_USER'",
+    policyLiteral: "'create policy cloudtms_miget_service_owner_all on private.%I to postgres using(true) with check(true)'",
+    policyReplacement: "'create policy cloudtms_miget_service_owner_all on private.%I to CURRENT_USER using(true) with check(true)'",
+  }],
   ['supabase/migrations/09102026_2153_banking_pay_next_accepted_input_v1.sql', {
     sha256: '0289b53ad745d5ff5c3a3130ce596e0b5a155e3645a84f1c57b154f8774a5182',
     literal: "'alter table private.%I owner to postgres'",
@@ -362,6 +369,7 @@ export function logicalPostgresExecutablePolicy() {
     dynamicSources: [...DYNAMIC_LOGICAL_OWNER_SOURCES].map(([file, authority]) => ({
       path: file, canonicalSourceSha256: authority.sha256,
       literal: authority.literal, replacement: authority.replacement,
+      ...(authority.policyLiteral ? {policyLiteral: authority.policyLiteral, policyReplacement: authority.policyReplacement} : {}),
     })),
   };
 }
@@ -382,7 +390,14 @@ export function mapExecutableSqlSource(text,file) {
   if (original.split(authority.literal).length !== 2 || mapped.split(authority.literal).length !== 2) {
     throw new Error(`DYNAMIC_LOGICAL_OWNER_LITERAL_MISMATCH: ${relative}`);
   }
-  return mapped.replace(authority.literal, authority.replacement);
+  mapped = mapped.replace(authority.literal, authority.replacement);
+  if (authority.policyLiteral) {
+    if (original.split(authority.policyLiteral).length !== 2 || mapped.split(authority.policyLiteral).length !== 2) {
+      throw new Error(`DYNAMIC_LOGICAL_OWNER_LITERAL_MISMATCH: ${relative}`);
+    }
+    mapped = mapped.replace(authority.policyLiteral, authority.policyReplacement);
+  }
+  return mapped;
 }
 
 const managedExecutableRoots = new Map();

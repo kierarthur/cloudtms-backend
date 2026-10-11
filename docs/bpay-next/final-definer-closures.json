@@ -15440,6 +15440,62 @@
       ],
       "owner": "FC-03 sequence101 bounded terms/context/preview or atomic creation overload",
       "baselineSource": "LOCAL_FC03_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_pay_method_change_context_v1(uuid,uuid,text,uuid)",
+      "finalRoot": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "owner": "EX-08 sequence102 BD114 exact future-current-fact preview/apply; WB29/WB45/CM11 consume immutable operation/member evidence later",
+      "baselineSource": "LOCAL_EX08_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_pay_method_change_scope_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "owner": "EX-08 sequence102 BD114 exact future-current-fact preview/apply; WB29/WB45/CM11 consume immutable operation/member evidence later",
+      "baselineSource": "LOCAL_EX08_ADDITIVE"
+    },
+    {
+      "signature": "public.bpay_next_pay_method_change_preview_v1(uuid,uuid,text,uuid,jsonb,integer)",
+      "finalRoot": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "owner": "EX-08 sequence102 BD114 exact future-current-fact preview/apply; WB29/WB45/CM11 consume immutable operation/member evidence later",
+      "baselineSource": "LOCAL_EX08_ADDITIVE"
+    },
+    {
+      "signature": "public.bpay_next_pay_method_change_apply_v1(uuid,uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+      ],
+      "owner": "EX-08 sequence102 BD114 exact future-current-fact preview/apply; WB29/WB45/CM11 consume immutable operation/member evidence later",
+      "baselineSource": "LOCAL_EX08_ADDITIVE"
     }
   ],
   "editorChains": [
