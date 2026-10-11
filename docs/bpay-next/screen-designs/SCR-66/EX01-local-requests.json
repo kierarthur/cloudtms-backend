@@ -1,0 +1,875 @@
+[
+  {
+    "file": "EX01-password-cancel-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-csv-dark.png",
+    "errors": [],
+    "copy": "Create Bank CSV · Mary Evans\n\n£252.00\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CSV_ISSUE",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-only-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-wrong-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nThat password is wrong; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-empty-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nEnter your password.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-wrong-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code is wrong; check the email and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-expired-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code has expired; send a new code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-empty-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nEnter the six-digit code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-resend-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nA new code has been sent.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-start-unavailable-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nCould not confirm it is you; close and try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-unavailable-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nCould not confirm it is you; close and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-password-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\nChecking…",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-code-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nChecking…\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-progress-code-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-cancel-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-csv-device-light.png",
+    "errors": [],
+    "copy": "Create Bank CSV · Mary Evans\n\n£252.00\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CSV_ISSUE",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-only-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-wrong-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nThat password is wrong; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-empty-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nEnter your password.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-wrong-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code is wrong; check the email and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-expired-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code has expired; send a new code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-empty-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nEnter the six-digit code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-resend-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nA new code has been sent.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-start-unavailable-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nCould not confirm it is you; close and try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-unavailable-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nCould not confirm it is you; close and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-password-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\nChecking…",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-code-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nChecking…\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-progress-code-device-light.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-cancel-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-csv-phone-dark.png",
+    "errors": [],
+    "copy": "Create Bank CSV · Mary Evans\n\n£252.00\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CSV_ISSUE",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-only-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-wrong-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nThat password is wrong; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-password-empty-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nEnter your password.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-wrong-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code is wrong; check the email and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-expired-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nThat code has expired; send a new code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-empty-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nEnter the six-digit code.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-resend-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nA new code has been sent.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-start-unavailable-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\n!\nCould not confirm it is you; close and try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-code-unavailable-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\n!\nCould not confirm it is you; close and try again.\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-password-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nPassword\n\nChecking…",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  },
+  {
+    "file": "EX01-busy-code-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\n\nChecking…\n\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      },
+      {
+        "path": "/auth/reauth/verify",
+        "action": null,
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": false
+      }
+    ]
+  },
+  {
+    "file": "EX01-progress-code-phone-dark.png",
+    "errors": [],
+    "copy": "Cancel payment · Mary Evans\n\n£252.00 · Draft gross\n\nEmail code\nSend a new code",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview",
+        "action": "CANCEL_REQUEST",
+        "purpose": null,
+        "hasExpectedScope": false
+      },
+      {
+        "path": "/auth/reauth/start",
+        "action": "CANCEL_REQUEST",
+        "purpose": "BPAY_NEXT_ACTION",
+        "hasExpectedScope": true
+      }
+    ]
+  }
+]

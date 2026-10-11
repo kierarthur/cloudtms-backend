@@ -23,6 +23,14 @@ export const BPAY_NEXT_COMMAND_LIMITS = Object.freeze({
   timeoutMs: 8000
 });
 
+// EX-01 owns this finite registry. Later cards supply their actual native
+// scope/acceptance seams; a registry entry alone does not install an action.
+export const BPAY_NEXT_PROTECTED_ACTIONS = Object.freeze(['EXECUTE_REQUEST','EXECUTION_APPROVE',
+  'CSV_FILE_ISSUE','CSV_ISSUE','CSV_DISPOSITION','CANCEL_SELECTION','CANCEL_REQUEST',
+  'RELEASE_REFUSED','CASH_REISSUE','REISSUE_CANCEL','RETURN_SELECTION','CSV_RETURN',
+  'OUTCOME_REVIEW_RESOLVE','WRITE_OFF','PAYE_SAME_WEEK_OVERRIDE']);
+const protectedAction = (action) => BPAY_NEXT_PROTECTED_ACTIONS.includes(action);
+
 /** @typedef {'PAYE_NET'|'CASE_PAYOUT'|'TRANSFER_BEGIN'|'CANCEL_REQUEST'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CSV_ISSUE'|'CSV_SETTLEMENT'|'CSV_RETURN'|'INTERNAL_SETTLE'|'PREPARATION_EXPIRE'|'WRITE_OFF'|'BIND_STORED_CREDIT'} FinancialAction */
 /** @typedef {{id: string, role: string}} ValidatedOfficeUser */
 /** @typedef {{actorUserId: string, signal: AbortSignal, timeoutMs: number, maxResponseBytes: number, routeClass: 'OPERATION_NUDGE'}} FinancialRpcOptions */
@@ -201,12 +209,71 @@ function commandCall(body) {
     ? { ...INPUTS.PAYE_NET, expected_projection_revision: 'projectionRevision' }
     : body.action === 'WRITE_OFF' && body.scope === 'AMOUNT'
       ? { ...INPUTS.WRITE_OFF, amount: 'positiveCaseMoney' } : INPUTS[body.action];
+  const tokenPresent = Object.hasOwn(body, 'reauth_token');
+  if (tokenPresent && (!protectedAction(body.action) || typeof body.reauth_token !== 'string'
+    || !body.reauth_token || ENCODER.encode(body.reauth_token).byteLength > 1536)) invalid();
   const keys = Object.keys(schema);
-  if (Object.keys(body).length !== keys.length + 1
-    || Object.keys(body).some((key) => key !== 'action' && !Object.hasOwn(schema, key))
+  if (Object.keys(body).length !== keys.length + 1 + Number(tokenPresent)
+    || Object.keys(body).some((key) => key !== 'action' && key !== 'reauth_token' && !Object.hasOwn(schema, key))
     || keys.some((key) => !Object.hasOwn(body, key) || !field(body[key], schema[key]))) invalid();
   const args = Object.fromEntries(keys.map((key) => [key, body[key]]));
-  return { action: body.action, args: Object.freeze(args) };
+  return { action: body.action, args: Object.freeze(args), token: tokenPresent ? body.reauth_token : null };
+}
+
+export function qualifyBpayNextReauthIntent(body) {
+  const call = commandCall(body);
+  if (!protectedAction(call.action) || call.token !== null) throw fault('BPAY_NEXT_REAUTH_REQUEST_INVALID',400);
+  return call;
+}
+
+export async function readBpayNextReauthJson(response, signal) {
+  if (!(response instanceof Response)) throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503);
+  let payload;
+  try { payload = await limitedJson(response,BPAY_NEXT_COMMAND_LIMITS.responseBytes,false,signal); }
+  catch (error) {
+    const safe = dependencyError(error);
+    // Preview and proof recording precede the financial RPC.
+    throw fault(safe.code,safe.status,safe.retryable,false);
+  }
+  if (!response.ok) throw dependencyError({status:response.status,json:payload});
+  return payload;
+}
+
+export function qualifyBpayNextReauthPreview(payload,action) {
+  const keys=['action_kind','action_label','candidate_count','candidate_name','total_amount','amount_basis','scope_sha256','accepted'];
+  if (!record(payload) || Object.keys(payload).length!==keys.length || keys.some(k=>!Object.hasOwn(payload,k))
+    || payload.action_kind!==action || !protectedAction(action) || typeof payload.action_label!=='string'
+    || !payload.action_label || payload.action_label.length>80 || payload.candidate_count!==1
+    || typeof payload.candidate_name!=='string' || !payload.candidate_name || payload.candidate_name.length>512
+    || !field(payload.total_amount,'caseMoney') || !['CASH','DRAFT_GROSS'].includes(payload.amount_basis)
+    || typeof payload.accepted!=='boolean'
+    || !(field(payload.scope_sha256,'sha256') || (payload.accepted && action==='CSV_ISSUE' && payload.scope_sha256===null))) {
+    throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503);
+  }
+  return payload;
+}
+
+export async function handleBpayNextReauthPreview(request,dependencies={}) {
+  if(request.method!=='POST')return json(405,{ok:false,error_code:'BPAY_NEXT_COMMAND_METHOD_NOT_ALLOWED'});
+  let timer,controller;
+  try {
+    const user=await dependencies.requireOfficeUser?.(request,['admin']);
+    if(!user || !field(user.id,'uuid'))throw fault('BPAY_NEXT_COMMAND_UNAUTHORIZED',401);
+    if(user.role!=='admin')throw fault('BPAY_NEXT_COMMAND_FORBIDDEN',403);
+    const call=qualifyBpayNextReauthIntent(await limitedJson(request,2048,true));
+    controller=new AbortController();
+    const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fault('BPAY_NEXT_COMMAND_DEPENDENCY_TIMEOUT',503,true));},8000);});
+    const read=async()=>{
+      const payload=qualifyBpayNextReauthPreview(await readBpayNextReauthJson(await dependencies.reauthPreviewRpc(call.action,call.args,
+        {actorUserId:user.id,signal:controller.signal}),controller.signal),call.action);
+      const policy=await dependencies.secondFactorRequired();
+      if(typeof policy!=='boolean' || controller.signal.aborted)throw fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE',503,true);
+      return {ok:true,preview:{...payload,second_factor_required:policy}};
+    };
+    return json(200,await Promise.race([read(),timeout]));
+  } catch(error) {
+    const safe=dependencyError(error);return json(safe.status,{ok:false,error_code:safe.code,retryable:safe.retryable,outcome_unknown:false});
+  } finally {if(timer!==undefined)clearTimeout(timer);}
 }
 
 function commandResult(payload, call) {
@@ -222,7 +289,7 @@ function commandResult(payload, call) {
   if (call.args.command_id && payload.command_id.toLowerCase() !== call.args.command_id.toLowerCase()) {
     // Existing evidence owners replay the original receipt's command identity,
     // even if the caller supplied a different command ID for that same receipt.
-    if (!['CSV_SETTLEMENT', 'CSV_RETURN'].includes(call.action) || !payload.replay) invalid();
+    if (call.action !== 'CSV_SETTLEMENT' || !payload.replay) invalid();
   }
   if (call.action === 'BIND_STORED_CREDIT'
     && payload.case_id.toLowerCase() !== call.args.command_id.toLowerCase()) invalid();
@@ -262,6 +329,8 @@ function pennies(value) {
 function dependencyError(error, attempted = false) {
   if (error instanceof CommandError) return error;
   const db = error?.json ?? error;
+  if (db?.message === 'BPAY_NEXT_REAUTH_REQUIRED' || db?.code === 'BPAY_NEXT_REAUTH_REQUIRED') return fault('BPAY_NEXT_REAUTH_REQUIRED',403);
+  if (db?.message === 'BPAY_NEXT_REAUTH_STALE' || db?.code === 'BPAY_NEXT_REAUTH_STALE') return fault('BPAY_NEXT_REAUTH_STALE',403);
   if (db?.code === 'PGRST202') return fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE', 503, true);
   if (db?.code === '42501' || [401, 403].includes(error?.status)) return fault('BPAY_NEXT_COMMAND_FORBIDDEN', 403);
   if (db?.code === 'P0002') return fault('BPAY_NEXT_COMMAND_SCOPE_NOT_FOUND', 404);
@@ -305,12 +374,37 @@ export async function handleBpayNextCommand(request, dependencies = {}) {
     const timeout = new Promise((resolve, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        reject(fault('BPAY_NEXT_COMMAND_DEPENDENCY_TIMEOUT', 503, true, true));
+        reject(fault('BPAY_NEXT_COMMAND_DEPENDENCY_TIMEOUT', 503, true, attempted));
       }, BPAY_NEXT_COMMAND_LIMITS.timeoutMs);
     });
     const send = async () => {
+      let args=call.args;
+      if(protectedAction(call.action)) {
+        // No token can first issue a CSV. The SQL owner permits only an exact
+        // already-issued instruction readback on this explicit exception.
+        if(!call.token && call.action!=='CSV_ISSUE')throw fault('BPAY_NEXT_REAUTH_REQUIRED',403);
+        if(call.token) {
+          if(typeof dependencies.verifyBpayNextActionReauth!=='function' || typeof dependencies.reauthRecordRpc!=='function') {
+            throw fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE',503,true);
+          }
+          const verified=await dependencies.verifyBpayNextActionReauth(call.token,user,call.action);
+          if(!verified)throw fault('BPAY_NEXT_REAUTH_REQUIRED',403);
+          const proof=await readBpayNextReauthJson(await dependencies.reauthRecordRpc(verified,
+            {actorUserId:user.id,signal:controller.signal}),controller.signal);
+          const nativeId=call.args.command_id || call.args.instruction_id;
+          if(!record(proof) || Object.keys(proof).length!==2 || !field(proof.reauth_proof_id,'uuid')
+            || !field(proof.consumed_command_id,'uuid?'))throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503,true);
+          if(proof.consumed_command_id!==null && proof.consumed_command_id.toLowerCase()!==nativeId.toLowerCase())throw fault('BPAY_NEXT_REAUTH_REQUIRED',403);
+          if(proof.consumed_command_id===null && verified.second_factor_used===false) {
+            const required=await dependencies.secondFactorRequired?.();
+            if(typeof required!=='boolean' || required)throw fault('BPAY_NEXT_REAUTH_REQUIRED',403);
+          }
+          args=Object.freeze({...call.args,reauth_proof_id:proof.reauth_proof_id});
+        }
+      }
+      if(controller.signal.aborted)throw fault('BPAY_NEXT_COMMAND_DEPENDENCY_TIMEOUT',503,true);
       attempted = true;
-      const response = await dependencies.financialCommandRpc(call.action, call.args, {
+      const response = await dependencies.financialCommandRpc(call.action, args, {
         actorUserId: user.id, signal: controller.signal,
         timeoutMs: BPAY_NEXT_COMMAND_LIMITS.timeoutMs,
         maxResponseBytes: BPAY_NEXT_COMMAND_LIMITS.responseBytes,

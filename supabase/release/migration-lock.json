@@ -1375,6 +1375,10 @@
       "sha256": "4cc1fcb40abe6545465625e1ff0f34559de76fba5b151a617c0de0557e6e5324"
     },
     {
+      "path": "supabase/migrations/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "sha256": "e44001b0de6bcc49384027d93a9dde8fc8711b9ba996b4d4836ee734f0b68b30"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

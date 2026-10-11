@@ -1,0 +1,85 @@
+{
+  "item": "EX-01",
+  "sequence": 98,
+  "decision": "BD110",
+  "status": "REVIEWED_PENDING_LOCAL_RECEIPT",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "sha256": "e44001b0de6bcc49384027d93a9dde8fc8711b9ba996b4d4836ee734f0b68b30"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "sha256": "4e01bfb59bd7d414a79e12822649a06412aee0d3313199539fef9fce944ffce8"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+      "sha256": "6c94fe2563f53edbfc77f61529ff8172215844c07f9ad3ca812abfe7623de3d5"
+    }
+  ],
+  "worker": [
+    {
+      "path": "broker/src/index.js",
+      "sha256": "bd4116b59f2c01383ae1a047da233731111e8ac2b15a82656e32eee221635b64"
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "3edf996af78ae7d6f5c6b775eccf1add0cce92f3c072281b3f77137e969e3ed0"
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "d692d96b5cb667c31c4d08ba1d789c9aa74351965c319c6cf594c12f5f3bdf6a"
+    },
+    {
+      "path": "broker/src/bpay-next-legacy-fence.js",
+      "sha256": "9572aaee4287ca1594cd72a3323b6cb805c133e8b4e09f31f860922922033e9d"
+    }
+  ],
+  "frontend": [
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-office.js",
+      "sha256": "529d851a64a2a5d2155a89d5c34492b95984c27d5998dd54b4127e62753ee137"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/main.js",
+      "sha256": "dc1c700c19aa0dbbf0ffc06f01d985bfe1909a94430fef2963d1b29028ab8669"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/modal-modernisation.js",
+      "sha256": "c07b220d3a58415b55b8bee1a1dcca0df7c0153d562056cfbcbb6f026eb99779"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "css/bpay-next-office.css",
+      "sha256": "b7d5c114d5a44d4c5ce3dc76aabab7f07ae0d3c0d5b932479dc15b781d016b9d"
+    }
+  ],
+  "chain": "0270 -> WB-19 2150 -> EX-01 11102026_1306; later editors merge current native proof branch",
+  "registry": "design/EX-01-proof-consumption-registry.md",
+  "catalogue": "design/EX-01-current-owner-catalogue.json",
+  "checks": {
+    "integrity": "346 migrations /905 repeatables",
+    "sourceGates": "12/12 PASS",
+    "syntax": "Worker/Office/main/moderniser PASS",
+    "localPG": "one additive migration/five repeatable closures compiled; five final bodies/signatures/ACLs match",
+    "contractHash": "2a43ad4a244faf8c71ab7613e068447993f9a002cebb17dbb15211b0ea9cd161",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "generalCatalogue": "837 public SECURITY DEFINER /76 service missing /0 browser executable /d695f2f10d6576d8a3b69f1fe263b297",
+    "verifiers": "General/Candidate isolation/current named v3 all DO PASS",
+    "publicMembershipDelta": 2
+  },
+  "screenshots": 45,
+  "sourceReview": [
+    "reviews/EX-01-sql-source-review.md",
+    "reviews/EX-01-worker-source-review.md",
+    "reviews/EX-01-office-source-review.md"
+  ],
+  "screenReview": "screen-designs/SCR-66/review.md",
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "594313136491a70c61580288917f001514a58210",
+  "screenPolicy": "Desktop32 PASS /0 FAIL /10 N/A; phone30 PASS /0 FAIL /12 N/A;45 actual final captures"
+}

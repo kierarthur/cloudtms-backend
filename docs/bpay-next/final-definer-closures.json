@@ -7458,21 +7458,23 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
       ],
-      "owner": "WB-19 exact administrative work retry/immutable receipt and HEADER-only bounded status; no new economic owner",
+      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15201,6 +15203,62 @@
       ],
       "owner": "DY07 complete native Office adapter, finalise/replay via current single-flight",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_reauth_scope_v1(uuid,text,jsonb,boolean)",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "predecessors": [],
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "finalRoot": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained"
+    },
+    {
+      "signature": "public.bpay_next_reauth_preview_v1(uuid,text,jsonb)",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "predecessors": [],
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "finalRoot": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained"
+    },
+    {
+      "signature": "public.bpay_next_reauth_record_v1(jsonb)",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "predecessors": [],
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "finalRoot": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained"
+    },
+    {
+      "signature": "private.bpay_next_reauth_consume_v1(uuid,uuid,text,text,uuid)",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "predecessors": [],
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
+      "finalRoot": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
+      "finalClosures": [
+        "supabase/repeatable/11102026_1302_banking_pay_next_reauth_proof_v1.sql"
+      ],
+      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained"
     }
   ],
   "editorChains": [

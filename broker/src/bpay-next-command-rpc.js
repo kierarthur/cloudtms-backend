@@ -32,3 +32,21 @@ export function createBpayNextFinancialCommandRpc({ baseUrl, headers, fetchImpl=
     });
   };
 }
+
+// EX-01's two fixed service authorities. Caller cannot select an RPC name.
+export function createBpayNextReauthRpc({baseUrl,headers,fetchImpl=fetch}) {
+  const root=String(baseUrl || '').replace(/\/+$/,'');
+  const preview=new URL(`${root}/rest/v1/rpc/bpay_next_reauth_preview_v1`);
+  const record=new URL(`${root}/rest/v1/rpc/bpay_next_reauth_record_v1`);
+  if(!['http:','https:'].includes(preview.protocol) || preview.username || preview.password)throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+  const send=(endpoint,body,options)=>{
+    if(!options?.signal || !UUID.test(options.actorUserId))throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+    const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');
+    h.set('X-CloudTMS-Banking-Pay-Route-Class','OPERATION_NUDGE');
+    return fetchImpl(endpoint.href,{method:'POST',headers:h,body:JSON.stringify(body),signal:options.signal,redirect:'error'});
+  };
+  return Object.freeze({preview:(action,args,options)=>{
+    if(!ACTIONS.has(action))throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+    return send(preview,{p_actor_user_id:options.actorUserId,p_action:action,p_args:args},options);
+  },record:(verified,options)=>send(record,{p_request:verified},options)});
+}

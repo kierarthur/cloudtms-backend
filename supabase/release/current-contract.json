@@ -490,6 +490,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_reauth_proof",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "service_owner",
       "check": "true",
       "roles": [
@@ -13998,6 +14010,44 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "e3eb4ad7c5202d69d6abebc11f0f4d4b09047966ed43c5fb6cf01a89cf1e39cb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_reauth_consume_v1(p_proof_id uuid, p_actor uuid, p_action text, p_scope_sha256 text, p_command_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4d5fe37b9a0652a2e14d0a7d4434a3d3ed025cc7011b5d1f21cbe0d88592d826"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_reauth_scope_v1(p_actor uuid, p_action text, p_args jsonb, p_lock boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "9a40b9dbcd14b4dc79038dd8ece20ba4f84e4d6b53f9c2add68361130e3ce1d2"
     },
     {
       "acl": [
@@ -32189,7 +32239,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "fbcc3f6546cf2771e94d40d252947708e3416e04e7f68cc903d8d18622173180"
+      "definition_sha256": "221688704978e8cb31bc5e19aeeeb63f6ea07a9c3887f6dd38b130f8ec31338e"
     },
     {
       "acl": [
@@ -32456,6 +32506,54 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "603e3ee7cda4e3a56ddc933c4eec02b52759d60852162f75da5e7e0e8323499f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_reauth_preview_v1(p_actor_user_id uuid, p_action text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "83887ba06d61136b05227906d976bd7474c6c9e628c3869fe4a2edd1fd388069"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "public",
+      "identity": "bpay_next_reauth_record_v1(p_request jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "c0e81d2be8a083ac67e9c7cb912e84ba9dd3cd4d801bee215da7d1ef62e153ca"
     },
     {
       "acl": [
@@ -100027,6 +100125,212 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (unit_label IS NULL OR octet_length(unit_label) <= 512)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_reauth_proof",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "action_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "consumed_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expires_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "scope_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "second_factor_used",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "token_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "verified_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_reauth_proof_consumed_command_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_reauth_proof_consumed_command_id_key ON private.bpay_next_reauth_proof USING btree (consumed_command_id)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_reauth_proof_pkey ON private.bpay_next_reauth_proof USING btree (id)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_token_sha256_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_reauth_proof_token_sha256_key ON private.bpay_next_reauth_proof USING btree (token_sha256)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_reauth_proof_action_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action_kind = ANY (ARRAY['EXECUTE_REQUEST'::text, 'EXECUTION_APPROVE'::text, 'CSV_FILE_ISSUE'::text, 'CSV_ISSUE'::text, 'CSV_DISPOSITION'::text, 'CANCEL_SELECTION'::text, 'CANCEL_REQUEST'::text, 'RELEASE_REFUSED'::text, 'CASH_REISSUE'::text, 'REISSUE_CANCEL'::text, 'RETURN_SELECTION'::text, 'CSV_RETURN'::text, 'OUTCOME_REVIEW_RESOLVE'::text, 'WRITE_OFF'::text, 'PAYE_SAME_WEEK_OVERRIDE'::text]))"
+        },
+        {
+          "name": "bpay_next_reauth_proof_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_reauth_proof_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(verified_at_utc) AND isfinite(expires_at_utc) AND expires_at_utc > verified_at_utc AND expires_at_utc <= (verified_at_utc + '00:05:00'::interval))"
+        },
+        {
+          "name": "bpay_next_reauth_proof_consumed_command_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (consumed_command_id)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_scope_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (scope_sha256 ~ '^[0-9a-f]{64}$'::text)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_token_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (token_sha256 ~ '^[0-9a-f]{64}$'::text)"
+        },
+        {
+          "name": "bpay_next_reauth_proof_token_sha256_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (token_sha256)"
         }
       ],
       "view_definition_sha256": null
@@ -190328,6 +190632,14 @@
       "schema": "public",
       "columns": [
         {
+          "name": "action_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "attempt_count",
           "type": "integer",
           "default": "0",
@@ -190408,6 +190720,14 @@
           "generated": ""
         },
         {
+          "name": "scope_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "used_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -190450,6 +190770,14 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "tms_login_2fa_challenges_next_scope_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (purpose <> 'BPAY_NEXT_ACTION'::text AND action_kind IS NULL AND scope_sha256 IS NULL OR purpose = 'BPAY_NEXT_ACTION'::text AND action_kind IS NOT NULL AND scope_sha256 IS NOT NULL AND scope_sha256 ~ '^[0-9a-f]{64}$'::text AND (action_kind = ANY (ARRAY['EXECUTE_REQUEST'::text, 'EXECUTION_APPROVE'::text, 'CSV_FILE_ISSUE'::text, 'CSV_ISSUE'::text, 'CSV_DISPOSITION'::text, 'CANCEL_SELECTION'::text, 'CANCEL_REQUEST'::text, 'RELEASE_REFUSED'::text, 'CASH_REISSUE'::text, 'REISSUE_CANCEL'::text, 'RETURN_SELECTION'::text, 'CSV_RETURN'::text, 'OUTCOME_REVIEW_RESOLVE'::text, 'WRITE_OFF'::text, 'PAYE_SAME_WEEK_OVERRIDE'::text])))"
+        },
+        {
           "name": "tms_login_2fa_challenges_pkey",
           "type": "p",
           "deferred": false,
@@ -190463,7 +190791,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (purpose = ANY (ARRAY['PAYMENT_SCHEDULE'::text, 'PAYMENT_REVERSAL'::text, 'PAYE_SAME_WEEK_OVERRIDE'::text]))"
+          "definition": "CHECK (purpose = ANY (ARRAY['PAYMENT_SCHEDULE'::text, 'PAYMENT_REVERSAL'::text, 'PAYE_SAME_WEEK_OVERRIDE'::text, 'BPAY_NEXT_ACTION'::text]))"
         },
         {
           "name": "tms_login_2fa_challenges_user_id_fkey",

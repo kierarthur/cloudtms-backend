@@ -42,8 +42,8 @@ import { handleBpayNextHistoryRead, createBpayNextHistoryRpc } from './bpay-next
 import { createBpayNextFrozenPageRpc } from './bpay-next-frozen-rpc.js';
 import { renderBpayNextFrozenAdvice } from './bpay-next-frozen-advice.js';
 import { createBpayNextFrozenAdvicePageRpc } from './bpay-next-frozen-advice-rpc.js';
-import { handleBpayNextCommand } from './bpay-next-command.js';
-import { createBpayNextFinancialCommandRpc } from './bpay-next-command-rpc.js';
+import { handleBpayNextCommand, handleBpayNextReauthPreview, BPAY_NEXT_PROTECTED_ACTIONS, qualifyBpayNextReauthIntent, qualifyBpayNextReauthPreview, readBpayNextReauthJson } from './bpay-next-command.js';
+import { createBpayNextFinancialCommandRpc, createBpayNextReauthRpc } from './bpay-next-command-rpc.js';
 import { handleBpayNextPreparationCommand, handleBpayNextPreparationPage } from './bpay-next-preparation.js';
 import { handleBpayNextWorkbenchPage, handleBpayNextWorkbenchExport, createBpayNextWorkbenchRpc, handleBpayNextWorkbenchCommand, createBpayNextWorkbenchCommandRpc, createBpayNextWorkJobFailureRpc } from './bpay-next-workbench.js';
 import { createBpayNextPreparationRpc, createBpayNextPreparationPageRpc } from './bpay-next-preparation-rpc.js';
@@ -44800,6 +44800,47 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
 
 
+
+async function bpayNextSecondFactorRequired(env) {
+  const settings=await loadSettingsDefaults(env);
+  const required=settings?.importConfig?.auth_effective?.tfa_enabled;
+  if(typeof required!=='boolean')throw Object.assign(new Error('BPAY_NEXT_REAUTH_REQUIRED'),{code:'BPAY_NEXT_REAUTH_REQUIRED'});
+  return required;
+}
+
+async function loadBpayNextReauthScope(env,user,intent) {
+  if(user?.role!=='admin')throw Object.assign(new Error('BPAY_NEXT_REAUTH_REQUIRED'),{code:'BPAY_NEXT_REAUTH_REQUIRED'});
+  const call=qualifyBpayNextReauthIntent(intent),controller=new AbortController();
+  let timer;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('BPAY_NEXT_REAUTH_REQUIRED'));},8000);});
+  try {
+    const rpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    const read=async()=>qualifyBpayNextReauthPreview(await readBpayNextReauthJson(await rpc.preview(call.action,call.args,
+      {actorUserId:user.id,signal:controller.signal}),controller.signal),call.action);
+    return await Promise.race([read(),timeout]);
+  } finally {clearTimeout(timer);}
+}
+
+async function verifyBpayNextActionReauth(env,token,user,action) {
+  // Signature and exact claim shape are checked here. Expired first use is
+  // refused by SQL; only a consumed exact native receipt may survive expiry.
+  try {
+    if(typeof token!=='string' || new TextEncoder().encode(token).byteLength>1536) return null;
+    const parts=token.split('.');
+    if(parts.length!==2 || parts.some(p=>!p || !/^[A-Za-z0-9_-]+$/.test(p)))return null;
+    if(!await hmacVerify(sessionSecret(env),parts[0],parts[1]))return null;
+    const c=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(base64UrlToUint8(parts[0])));
+    const keys=['typ','sub','purpose','action_kind','scope_sha256','second_factor_used','iat','exp'];
+    if(!c || typeof c!=='object' || Array.isArray(c) || Object.keys(c).length!==keys.length || keys.some(k=>!Object.hasOwn(c,k))
+      || c.typ!=='reauth' || c.purpose!=='BPAY_NEXT_ACTION' || c.sub!==user.id || c.action_kind!==action
+      || !BPAY_NEXT_PROTECTED_ACTIONS.includes(action) || typeof c.scope_sha256!=='string' || !/^[0-9a-f]{64}$/.test(c.scope_sha256)
+      || typeof c.second_factor_used!=='boolean' || !Number.isSafeInteger(c.iat) || !Number.isSafeInteger(c.exp)
+      || c.iat<0 || c.exp<=c.iat || c.exp-c.iat>300 || c.iat>Math.floor(Date.now()/1000)+5)return null;
+    const tokenHash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+    return {actor_user_id:user.id,action_kind:action,scope_sha256:c.scope_sha256,token_sha256:tokenHash,
+      second_factor_used:c.second_factor_used,verified_at_utc:new Date(c.iat*1000).toISOString(),expires_at_utc:new Date(c.exp*1000).toISOString()};
+  } catch {return null;}
+}
 
 async function verifyPaymentScheduleReauth(env, user, reauthToken, options = {}) {
   const token = String(reauthToken || '').trim();
@@ -138508,7 +138549,7 @@ async function handleAuthReauthVerify(env, req) {
   }
   if (!/^\d{6}$/.test(code)) return badRequest('invalid_code_format');
 
-  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL','BPAY_NEXT_ACTION']);
   const requestedPurposeRaw = (body.purpose !== undefined && body.purpose !== null)
     ? body.purpose
     : ((body.reauth_purpose !== undefined && body.reauth_purpose !== null) ? body.reauth_purpose : null);
@@ -138540,7 +138581,7 @@ async function handleAuthReauthVerify(env, req) {
       env,
       `${env.SUPABASE_URL}/rest/v1/tms_login_2fa_challenges` +
         `?id=eq.${encodeURIComponent(challengeId)}` +
-        `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,purpose` +
+        `&select=id,user_id,ip_address,code_salt,code_hash,expires_at_utc,used_at_utc,attempt_count,purpose,action_kind,scope_sha256` +
         `&limit=1`
     );
     ch = (rows && rows[0]) ? rows[0] : null;
@@ -138557,6 +138598,13 @@ async function handleAuthReauthVerify(env, req) {
 
   if (requestedPurpose && requestedPurpose !== challengePurpose) {
     return unauthorized('Invalid code');
+  }
+
+  if(challengePurpose==='BPAY_NEXT_ACTION') {
+    if(u.role!=='admin' || !BPAY_NEXT_PROTECTED_ACTIONS.includes(ch.action_kind) || !/^[0-9a-f]{64}$/.test(ch.scope_sha256 || '')
+      || Object.keys(body).some(k=>!['challenge_id','code','purpose'].includes(k)) || body.purpose!=='BPAY_NEXT_ACTION')return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');
+    try {const owner=await bpayNextOwnerStatusRpc(env)();if(owner.active_owner!=='NEXT')return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
+    catch {return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
   }
 
   // Must match current logged-in user
@@ -138591,7 +138639,25 @@ async function handleAuthReauthVerify(env, req) {
   if (!match) {
     // increment attempt_count
     try {
-      await sbPatch2faChallengeById(env, challengeId, { attempt_count: attempts + 1 });
+      if(challengePurpose==='BPAY_NEXT_ACTION') {
+        // Compare-and-set retains every recorded count rather than overwriting
+        // another verifier. Excess contention closes this challenge safely.
+        let count=attempts,recorded=false;
+        for(let retry=0;retry<10 && count<tfaMaxAttempts;retry++) {
+          const url=env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)
+            +'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null&attempt_count=eq.'+count;
+          const res=await fetch(url,{method:'PATCH',headers:{...sbAuthHeaders(env),Prefer:'return=representation'},body:JSON.stringify({attempt_count:count+1})});
+          if(!res.ok)return unauthorized('invalid_or_expired_code');
+          const changed=await res.json();
+          if(Array.isArray(changed)&&changed.length===1){recorded=true;break;}
+          const fresh=await sbFetch(env,env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&select=attempt_count,used_at_utc&limit=1');
+          const latest=fresh.rows?.[0];
+          if(!latest||latest.used_at_utc||!Number.isSafeInteger(latest.attempt_count))return unauthorized('invalid_or_expired_code');
+          count=latest.attempt_count;
+        }
+        if(!recorded && count<tfaMaxAttempts)await fetch(env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null',
+          {method:'PATCH',headers:sbAuthHeaders(env),body:JSON.stringify({used_at_utc:new Date().toISOString()})});
+      } else await sbPatch2faChallengeById(env, challengeId, { attempt_count: attempts + 1 });
     } catch (e) {
       return serverError(e?.message || String(e));
     }
@@ -138602,7 +138668,14 @@ async function handleAuthReauthVerify(env, req) {
 
   // Mark challenge used
   try {
-    await sbPatch2faChallengeById(env, challengeId, { used_at_utc: nowIso });
+    if(challengePurpose==='BPAY_NEXT_ACTION') {
+      // Conditional claim: two concurrent correct verifies cannot both mint.
+      const res=await fetch(env.SUPABASE_URL+'/rest/v1/tms_login_2fa_challenges?id=eq.'+encodeURIComponent(challengeId)+'&user_id=eq.'+encodeURIComponent(u.id)+'&purpose=eq.BPAY_NEXT_ACTION&used_at_utc=is.null&expires_at_utc=gt.'+encodeURIComponent(nowIso)+'&and='+encodeURIComponent('(attempt_count.eq.'+attempts+',attempt_count.lt.'+tfaMaxAttempts+')'),
+        {method:'PATCH',headers:{...sbAuthHeaders(env),Prefer:'return=representation'},body:JSON.stringify({used_at_utc:nowIso})});
+      if(!res.ok)return unauthorized('invalid_or_expired_code');
+      const claimed=await res.json();
+      if(!Array.isArray(claimed) || claimed.length!==1 || String(claimed[0]?.id||'').toLowerCase()!==challengeId.toLowerCase())return unauthorized('invalid_or_expired_code');
+    } else await sbPatch2faChallengeById(env, challengeId, { used_at_utc: nowIso });
   } catch (e) {
     return serverError(e?.message || String(e));
   }
@@ -138620,6 +138693,7 @@ async function handleAuthReauthVerify(env, req) {
     typ: 'reauth',
     sub: String(u.id),
     purpose: challengePurpose,
+    ...(challengePurpose==='BPAY_NEXT_ACTION' ? {action_kind:ch.action_kind,scope_sha256:ch.scope_sha256,second_factor_used:true} : {}),
     iat,
     exp
   };
@@ -138775,7 +138849,7 @@ async function handleAuthReauthStart(env, req) {
   if (!password) return badRequest('password_required');
 
   const requestedPurpose = String(body.purpose || 'PAYMENT_SCHEDULE').trim().toUpperCase();
-  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
+  const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL','BPAY_NEXT_ACTION']);
   if (!allowedPurposes.has(requestedPurpose)) return badRequest('invalid_reauth_purpose');
   const requestedExecutionMode = String(body.execution_mode || body.executionMode || '').trim().toUpperCase();
   const requestedScheduleKind = String(body.schedule_kind || body.scheduleKind || '').trim().toUpperCase();
@@ -138788,6 +138862,28 @@ async function handleAuthReauthStart(env, req) {
   const okPw = await pbkdf2Verify(password, userRow.password_hash || '');
   if (!okPw) return unauthorized('Invalid credentials');
 
+  let nextScope=null;
+  if(requestedPurpose==='BPAY_NEXT_ACTION') {
+    if(Object.keys(body).length!==4 || !Object.hasOwn(body,'intent') || !Object.hasOwn(body,'purpose') || !Object.hasOwn(body,'password')
+      || typeof body.expected_scope_sha256!=='string' || !/^[0-9a-f]{64}$/.test(body.expected_scope_sha256))return badRequest('BPAY_NEXT_REAUTH_REQUEST_INVALID');
+    try {
+      nextScope=await loadBpayNextReauthScope(env,u,body.intent);
+      // Display concurrency check only: the browser never supplies the hash
+      // that is signed; the native resolver independently computes it.
+      if(nextScope.scope_sha256!==body.expected_scope_sha256)return unauthorized('BPAY_NEXT_REAUTH_STALE');
+      if(nextScope.accepted || !nextScope.scope_sha256)return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');
+      const required=await bpayNextSecondFactorRequired(env);
+      if(!required) {
+        const iat=Math.floor(Date.now()/1000),ttlSec=300;
+        const token=await createToken(sessionSecret(env),{typ:'reauth',sub:String(u.id),purpose:'BPAY_NEXT_ACTION',
+          action_kind:nextScope.action_kind,scope_sha256:nextScope.scope_sha256,second_factor_used:false,iat,exp:iat+ttlSec});
+        return new Response(JSON.stringify({ok:true,tfa_required:false,purpose:'BPAY_NEXT_ACTION',reauth_token:token,expires_in:ttlSec}),{status:200,headers:JSON_HEADERS});
+      }
+    } catch {return unauthorized('BPAY_NEXT_REAUTH_REQUIRED');}
+  }
+
+  // NEXT never enters any old TEST second-factor override.
+  if(requestedPurpose!=='BPAY_NEXT_ACTION') {
   const testCsvBypass = evaluateTestCsvExecutionBypass({
     env,
     user: userRow,
@@ -138937,6 +139033,8 @@ async function handleAuthReauthStart(env, req) {
     }), { status: 200, headers: JSON_HEADERS });
   }
 
+  }
+
   // Load auth policy (reuse same policy source as login 2FA)
   let authEffective = null;
   try {
@@ -138972,7 +139070,8 @@ async function handleAuthReauthStart(env, req) {
         code_salt: String(salt),
         code_hash: String(codeHash),
         expires_at_utc: String(expiresAtIso),
-        purpose: requestedPurpose
+        purpose: requestedPurpose,
+        ...(nextScope ? {action_kind:nextScope.action_kind,scope_sha256:nextScope.scope_sha256} : {})
       })
     });
 
@@ -198855,7 +198954,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
   const nextAdviceMatch = /^\/api\/banking\/pay\/next\/advice\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(nextPath);
   const nextOfficeRoute = (req.method === 'POST' && [
     '/api/banking/pay/next/history-page', '/api/banking/pay/next/frozen-detail',
-    '/api/banking/pay/next/preparation', '/api/banking/pay/next/command', '/api/banking/pay/next/workbench-export', '/api/banking/pay/next/workbench-command'
+    '/api/banking/pay/next/preparation', '/api/banking/pay/next/command','/api/banking/pay/next/reauth-preview', '/api/banking/pay/next/workbench-export', '/api/banking/pay/next/workbench-command'
   ].includes(nextPath)) || (req.method === 'GET' && (nextPath === '/api/banking/pay/next/preparation-page' || nextPath === '/api/banking/pay/next/workbench-page' || nextPath === '/api/banking/pay/next/owner-status' || nextAdviceMatch));
   if (nextOfficeRoute) {
     const user = await requireUser(env, req);
@@ -198974,8 +199073,18 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
     return withCORS(env,req,response);
   }
 
+  if(req.method==='POST' && nextPath==='/api/banking/pay/next/reauth-preview') {
+    const rpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
+    return withCORS(env,req,await handleBpayNextReauthPreview(req,{requireOfficeUser:async()=>user,
+      reauthPreviewRpc:rpc.preview,secondFactorRequired:()=>bpayNextSecondFactorRequired(env)}));
+  }
+
   if (req.method === 'POST' && nextPath === '/api/banking/pay/next/command') {
+    const reauthRpc=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
     const commandResponse = await handleBpayNextCommand(req, {
+      verifyBpayNextActionReauth:(token,actor,action)=>verifyBpayNextActionReauth(env,token,actor,action),
+      reauthRecordRpc:reauthRpc.record,
+      secondFactorRequired:()=>bpayNextSecondFactorRequired(env),
       requireOfficeUser: async () => user,
       financialCommandRpc: createBpayNextFinancialCommandRpc({
         baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)
