@@ -1,0 +1,27 @@
+{
+  "item": "DY-02",
+  "sequence": 88,
+  "status": "D01_SOURCE_COMPLETE_D02_OPEN_DEPENDENCY_DY04",
+  "decision": "BD098",
+  "sources": [
+    {
+      "path": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "sha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+      "sha256": "39c1a1f69fc5c9a5152aa08ca037e295e6e08b64bbd0651177556fa6fe52c99a"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "sha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d"
+    },
+    {
+      "path": "supabase/repeatable/10102026_1009_banking_pay_next_canonical_rate_rows_v1.sql",
+      "sha256": "07843dcef992a74c2dd2c8c40185d17ce70aba9c33c1c53db5bbcbf6d6952fe2"
+    }
+  ],
+  "contractHash": "3db35884949d094bb5417be89f74f5fabbb8c382eafabd486d71bb66b81922c6",
+  "joinedApp": "AUTHORED_NOT_RUN",
+  "openClause": "Named missing used-rate bucket through existing Authorise path and full contractless publication; DY04 assigned closure"
+}

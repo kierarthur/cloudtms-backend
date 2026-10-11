@@ -12380,16 +12380,19 @@
     },
     {
       "signature": "private.bpay_next_daily_approval_evidence_v1(uuid)",
-      "finalRoot": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
-      "finalPhysical": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+        "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql"
       ],
-      "owner": "F-06 reviewed carried foundation source",
+      "owner": "DY-02 sequence88; DY-08 next editor",
       "baselineSourceHash": "77e6c0d5996902dc886a479f84448e8dd89bcb76d9be566328ab11af4d242fea"
     },
     {
