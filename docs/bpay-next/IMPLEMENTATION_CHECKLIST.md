@@ -2247,7 +2247,7 @@ Dependencies: WB-08, WB-36, DR-01, F-05, F-16; successor positions: `1600` accep
 | --- | --- | --- | --- | --- |
 | WB-40-D08 | REPEATABLE: private.bpay_next_pay_hold_control_trigger_v1 | BUILT_REVIEWED | Genuine INSERT/UPDATE/current rotation, booking canonical row, exact ordered control; accepted boundary vs later change, no Draft reservation table misuse. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 | WB-40-D09 | SCREEN: NEXT hold projection/admission join for existing Timesheet pay-hold controls | BUILT_REVIEWED | Existing controls/route unchanged; new booking/current INSERT/rotation/control projection and Create-boundary intake join. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
-| WB-40-D10 | WORKER ROUTE: PATCH /api/timesheets/:id/pay-hold | PARTLY_DONE | Preserve working retained upstream source/LEGACY semantics; verify exact final runtime route/fence winner and NEXT publication/control join. No full Worker→consumer→minute stored projection test run; source is not fresh runtime installation proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-40-D10 | WORKER ROUTE: PATCH /api/timesheets/:id/pay-hold | BUILT_REVIEWED | Preserve working retained upstream source/LEGACY semantics; verify exact final runtime route/fence winner and NEXT publication/control join. No full Worker→consumer→minute stored projection test run; source is not fresh runtime installation proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 

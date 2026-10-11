@@ -43,7 +43,8 @@
     "publicDefiners": 835,
     "serviceMissing": 76,
     "browserExecutable": 0,
-    "catalogueHash": "d5226315e5b17afc9e5a588a432b73ca"
+    "catalogueHash": "d5226315e5b17afc9e5a588a432b73ca",
+    "catalogueVerifier": "PASS_FULL_READ_ONLY_DO"
   },
   "reviews": [
     "reviews/WB-40-database-review.md",
