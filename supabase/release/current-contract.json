@@ -11622,7 +11622,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "286e63c812985ef834622eee6608a389fc4163214df51ae89a29a98b3f77109e"
+      "definition_sha256": "b9d80081abda4b95b952ad55defcf92b2abd3aa2696abd8468adc37aac86a694"
     },
     {
       "acl": [
@@ -13541,7 +13541,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "1a54fb83ea40ea5e5c576c6fcbfeac6d388be5bd9bc1cbea026e5cfaf4207e6a"
+      "definition_sha256": "a4a60e9b2029adcd589e125a8dd0958fc133f1f0da7b1fcce3057cf5c0d3d731"
     },
     {
       "acl": [
@@ -13598,7 +13598,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "309124462fee3e73b23676e938324915ded93e065ed407605b7ece6eb4466e39"
+      "definition_sha256": "1817368196c6f5d8dd171d1cd923cef5f3c37bf76a027d9ec64180e4079f4a37"
     },
     {
       "acl": [
@@ -17200,7 +17200,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c06a9636dce5f331972c33fea898d6bada7f8bb97291c17ad1330710f3cabb34"
+      "definition_sha256": "63bba428c689b5c7d48af3a2998d6c284e010b895653696667bf38b604aa056b"
     },
     {
       "acl": [

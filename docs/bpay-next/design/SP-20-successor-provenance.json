@@ -1,0 +1,63 @@
+{
+  "item": "SP-20",
+  "decision": "BD127",
+  "destination": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+  "sourceSha256": "df49b9fc467ae9806effb19ec3b39820059fa46980a2f761f62c3f2ef8a96111",
+  "successors": [
+    {
+      "signature": "private.bpay_next_stage_source_current_v1(uuid,uuid,uuid)",
+      "parent": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "parentSha256": "f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d",
+      "parentBodySha256": "b468c3f9f16247dd73c64824bdc1ea9f9727f8605b34dd351789968eb90a218a",
+      "sourceBodySha256": "04e43f6cebd86a992118911a0df1dd9cd72694958b16807effadad20e3103ec1"
+    },
+    {
+      "signature": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
+      "parent": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "parentSha256": "fa256bfa14b93321e1749c7cbee2505baca4f4da2eef5d11ea6457bdfae120e2",
+      "parentBodySha256": "86a61e6f27b3a05cb24b1beec6c9dbd1ed8fbb2a0bd76bc1bdb778e21cce5d6b",
+      "sourceBodySha256": "e1e14ecf1dbc3d55d55dbc8a0c7a480e87ef46d9342240a03a948165879910d6"
+    },
+    {
+      "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "parent": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "parentSha256": "b3d7b39a31d35f573dbcc4ea21e9fc0015c801d09a02f1508fe8c9b3ed4535dd",
+      "parentBodySha256": "a090cf1a6d6b0950ec3827eb8d7b48aafbcf77eb3963fb6f1d2f2873f71b5566",
+      "sourceBodySha256": "19cdb49fbe49b2ac478d649813ad222c15121ad56e06297014805f265aee5a0c"
+    },
+    {
+      "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
+      "parent": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "parentSha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "parentBodySha256": "3ffb9926fb811814031abbc8dd214711661061a63cb18f8cac43a91bf910939b",
+      "sourceBodySha256": "002af3cc945edd8daea2b3ca5bd74b830dd40ba514dd018d626988f6e8817170"
+    }
+  ],
+  "delegatedAcceptance": "BLOCKED_ON_DR38 / AUTHORED_NOT_RUN",
+  "publicSecurityDefinerDelta": 0,
+  "checks": {
+    "dbCheck": "358migrations/921repeatablesPASS",
+    "localLoad": "0migrations/4closuresPASS",
+    "catalogue": "4exactbody/config/owner/ACLmatches",
+    "browser": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both DO PASS; membershipdelta0",
+    "sourceGates": "12/12PASS after exact round/VAT helper edges added to original finite gate",
+    "syntax": "Worker jobstep/Source routes/existing gate/Office/main PASS",
+    "contract": "742443901acebbfe0227342e8e6fb82bc68ce7438eff10a9e2c8cddb9333aa81 export/seal/couplingPASS",
+    "application": "AUTHORED_NOT_RUN",
+    "timing": "Moved to TEST after installation (owner10Oct)"
+  },
+  "reviews": [
+    {
+      "path": "reviews/SP-20-design-review.md",
+      "sha256": "1c76b1615995fb37707e6c98f6b2460f4b520099ecffb24d537b1fe11dfce596"
+    },
+    {
+      "path": "reviews/SP-20-boundary-review.md",
+      "sha256": "5c351a71136e846ba390ee77e3d57697dc959331500abb17f734b5bb6605f23e"
+    },
+    {
+      "path": "reviews/SP-20-sql-review.md",
+      "sha256": "29606d6255c4ab44d2ce74f8592d7fd4d9a1250b77637d0b8851420c0c66a532"
+    }
+  ]
+}

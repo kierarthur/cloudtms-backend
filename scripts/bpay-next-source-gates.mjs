@@ -332,7 +332,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_build_object",
     "pg_catalog.octet_length"
   ],
-  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["private.bpay_next_begin_prepare_projection_v1","private.bpay_next_record_work_segment_origin_shares_v1","private.bpay_next_bound_source_snapshot_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_workbench_refresh_many_v1","array_append","pg_catalog.clock_timestamp","pg_catalog.jsonb_build_object","pg_catalog.transaction_timestamp"],
+  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["pg_catalog.round","public._pay_umbrella_vat_calc","private.bpay_next_begin_prepare_projection_v1","private.bpay_next_record_work_segment_origin_shares_v1","private.bpay_next_bound_source_snapshot_v1","private.bpay_next_value_source_for_target_v1","private.bpay_next_workbench_refresh_many_v1","array_append","pg_catalog.clock_timestamp","pg_catalog.jsonb_build_object","pg_catalog.transaction_timestamp"],
   "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)": ["private.bpay_next_begin_prepare_projection_v1",
     "private.bpay_next_publish_no_case_week_fact_v1",
     "pg_catalog.clock_timestamp",
@@ -890,7 +890,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_source_disposition_seed_v1",
     "private.bpay_next_work_collection_origin_v1"
   ],
-  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+  "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["pg_catalog.round","public._pay_umbrella_vat_calc",
     "array_append",
     "pg_catalog.clock_timestamp",
     "pg_catalog.jsonb_build_object",

@@ -2916,8 +2916,8 @@
     },
     {
       "signature": "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
@@ -2925,7 +2925,8 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql",
@@ -2933,15 +2934,17 @@
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+        "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission",
+      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; SP14 BD122 owner11Oct retained shift query exclusion and A3 narrow Authorise admission; SP20 BD127 answered Source tax/target guards",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3816,8 +3819,8 @@
     },
     {
       "signature": "private.bpay_next_hold_fresh_position_page_v1(uuid,uuid,bigint,uuid,text,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
@@ -3825,7 +3828,8 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_1620_banking_pay_next_fresh_positive_hold_v1.sql",
@@ -3833,14 +3837,16 @@
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql"
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
       "finalClosures": [
         "supabase/repeatable/10102026_1438_banking_pay_next_hold_workbench_projection_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release",
+      "owner": "DR-04 native preparation; master successor chain retained; DR-05 retained-input execution/release; SP20 BD127 answered Source tax/target guards",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5280,21 +5286,24 @@
     },
     {
       "signature": "private.bpay_next_stage_source_current_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1550_banking_pay_next_source_stage_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; SP20 BD127 answered Source tax/target guards",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -12469,16 +12478,20 @@
     },
     {
       "signature": "private.bpay_next_initial_tsfin_certificate_v1(uuid)",
-      "finalRoot": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
-      "finalPhysical": "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql"
+        "supabase/repeatable/07102026_0018_banking_pay_next_initial_tsfin_daily_evidence_v1.sql",
+        "supabase/repeatable/12102026_0005_banking_pay_next_source_tax_classification_v1.sql"
       ],
-      "owner": "F-06 reviewed carried foundation source",
+      "owner": "F-06 reviewed carried foundation source; SP20 BD127 answered Source tax/target guards",
       "baselineSourceHash": "77e6c0d5996902dc886a479f84448e8dd89bcb76d9be566328ab11af4d242fea"
     },
     {

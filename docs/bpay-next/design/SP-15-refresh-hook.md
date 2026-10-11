@@ -15,3 +15,5 @@ Candidate STOP-CHECK is covered by the start sheet's preapproval, five unchanged
 Source/application/queue/contention acceptance is AUTHORED_NOT_RUN. Normal permitted compilation/source/catalogue/contract checks and local fixed-response native screen review are recorded separately.
 
 Implementation commit: e0772c5282d0b7e1127971e6214127ffcdbd0d8d; frontend2afd650b672780e88c2e03b462e1fa2efd553ca1. Exact hook/lock rows: SP-12-census.md final SP15 table.
+
+WB08 retained refresh_work interface provenance: 10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql, actual local implementation commit a33796fd020da858b2e855278278280e3cb42050. This is D02 provenance only; no finished Source product is reopened.
