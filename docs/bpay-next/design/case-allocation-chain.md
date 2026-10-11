@@ -275,3 +275,9 @@ Expiry0510 -> DR05/0559 -> DR08/0746 -> FC15 -> CM13a -> CM15. Expiry page/guard
 ## DR09 sequence85 — separately typed discard / running Candidate release
 
 Current0559/0708/0746 ->0814; ten explicit native row-projection corrections ->0847. See DR-09-successor-provenance.json and final-definer registry for each exact signature. Later DR/FC/CM merges retain the current physical parent per signature. Shared Case release0746 ->0814, unchanged money kernel; expiry page0746 retained, headerguard0746 ->0814 ->0847, due0520/dispatch0560 ->0814 bounded skip only. No producer or parkedF25 object.
+
+## DR12 sequence87 — same-Candidate selected PAYE offset / BD097
+
+Current0904/0204/0290 verified and retained; no successor needed.0204 derives full remaining automatic liability with capacity net of disjoint prior reservations, and unchanged0290 uses one Candidate's selected PAYE E without overpayment floor.0904 result/ACTIVE hold/use/counters record this Draft's offset and shortage before confirmation; principal/realised recovery remain separate until settlement0316.100/30 implies gross70;100/130 implies gross0 and shortfall30; these are source deductions, app NOT_RUN. Shortfall must not be relabelled as global unreserved balance when another hold exists. Managed negative Work becomes exactly one Case liability, never a second negative Work line; genuine positive segment pay remains.
+
+Legacy1360 selected-only READY filtering and1300 selected OVERPAYMENT_RECOVERY previews establish no forced automatic-overpayment exclusion difference. NEXT0454 explicit false remains supported underRQ037; no B10 follow-up or WB26 seal change. Original principal creation/Source eligibility/conversion stays with current1519/1236 and laterCM13a/CM13 owners, never a new record-at-Draft principal writer. DR16 exposes the offset; Worker/screen:none.

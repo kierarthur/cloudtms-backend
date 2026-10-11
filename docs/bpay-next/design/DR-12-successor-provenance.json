@@ -1,0 +1,37 @@
+{
+  "item": "DR-12",
+  "sequence": 87,
+  "status": "SOURCE_REVIEW_PENDING",
+  "builderDecision": "BD097",
+  "delivery": "Required source confirmation/shared chain only; no proved SQL delta",
+  "reusedSources": [
+    {
+      "path": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+      "sha256": "fa3c73a83075f67246e62adea7ba1467c019bada601d3db880ec51b48cdd1a9e"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "sha256": "2eeaafb8f14444715c30e13dc898f9b35614de1f53920344913f2986e09d6b0c"
+    },
+    {
+      "path": "supabase/repeatable/04102026_0290_banking_pay_next_case_allocation_row_v1.sql",
+      "sha256": "400e854bfd5619f7bd004e9e922d4681a673216ee001dd1a7cbd81ecf6d20ac6"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1360_banking_pay_manual_carry_forward_allocation_seed_v8.sql",
+      "sha256": "16332530b5df11dcd93d205280e1a253b689a3c32f42157bc69d194223ec7bea"
+    },
+    {
+      "path": "supabase/repeatable/04092026_1300_banking_pay_draft_mixed_recovery_partial_link_v8.sql",
+      "sha256": "e865ff094a7cff296a8be9dbe827448aa19bb338b367296ba02380727c5d51d4"
+    }
+  ],
+  "currentRegistry": "Case0904/plan0204/kernel0290",
+  "contractHash": "95ead45af83d7ace7f3cb4731b676df70d53bfe89dbedc0e6f33ea1710e89e73",
+  "normalEvidence": "Immediately preceding DR11 unchanged sources; docs-only no changedSQL",
+  "joinedRuntime": "AUTHORED_NOT_RUN"
+}
