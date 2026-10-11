@@ -591,6 +591,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('header',v_header,'rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
   "public.bpay_next_financial_intake_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('case_id',v_result->'case_id','command_id',v_result->'command_id', 'sequence',v_result->'sequence','phase',v_result->'phase','replay',v_result->'replay')",
     "jsonb_build_object('action',p_action,'result', private.bpay_next_retry_work_job_v1(p_actor_user_id,p_args,false))",
     "pg_catalog.jsonb_build_object('command_id',v_result->>'command_id', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase','requested_scope',v_result->>'requested_scope', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id', 'issue_code',v_result->>'issue_code','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object( 'command_id',v_result->>'command_id','run_id',v_result->>'run_id', 'sequence',v_result->>'sequence','phase',v_result->>'phase', 'expected_candidates',v_result->>'expected_candidates', 'completed_candidates',v_result->>'completed_candidates', 'replay',v_result->'replay')",
@@ -651,6 +652,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_case_create_preview_v1(p_actor_user_id,p_args->'input')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_paye_guard_page_v1(p_actor_user_id,(p_args->>'run_id')::uuid,p_args->'descriptor')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(v_progress),'complete',true)",
     "pg_catalog.jsonb_build_object( 'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind, 'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text, 'unit_label',l.unit_label,'approved_quantity',l.approved_quantity::text, 'approved_unit_rate',l.approved_unit_rate::text, 'job_title',r.job_title,'band_label',r.band_label, 'original_work_ref',parent.reference_number,'original_timesheet_id',parent.timesheet_id, 'is_adjustment',ts.is_adjustment,'correction_kind',ts.correction_kind, 'associated_rate_schedule_id',rs.id,'associated_rate_family',rs.rate_family,'associated_rate_code',rs.rate_code, 'available_paye_rate',rs.paye_rate::text,'available_umbrella_rate',rs.umbrella_rate::text, 'available_charge_rate',rs.charge_rate::text,'approved_charge_rate',rs.approved_charge_rate::text, 'standard_rate_schedule',case when l.component_kind in ('WORK','PROTECTED_WORK') then (select coalesce(jsonb_agg(snapshot.value order by snapshot.bucket_order),'[]'::jsonb) from ( select jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text) value, case sr.rate_code when 'DAY' then 1 when 'NIGHT' then 2 when 'SAT' then 3 when 'SUN' then 4 when 'BH' then 5 end bucket_order from private.bpay_next_rate_schedule sr where sr.revision_id=v_revision and sr.rate_family='STANDARD' and sr.rate_code in ('DAY','NIGHT','SAT','SUN','BH') order by bucket_order limit 5 ) snapshot) else '[]'::jsonb end, 'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text, 'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text, 'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false))",
@@ -1259,6 +1261,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
     "pg_catalog.current_setting",
+    "private.bpay_next_case_create_preview_v1",
     "pg_catalog.jsonb_typeof",
     "private.bpay_next_paye_guard_page_v1",
     "array",

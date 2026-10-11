@@ -2234,16 +2234,19 @@
     },
     {
       "signature": "private.bpay_next_accept_case_create_v1(uuid,uuid,uuid,text,text,text,numeric,date,date,numeric,bigint,numeric,numeric,text)",
-      "finalRoot": "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "FC-03 sequence101 exact creation/intake/page successor; retain complete current parents and Rule B",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -2499,16 +2502,19 @@
     },
     {
       "signature": "private.bpay_next_apply_case_create_v1(uuid,uuid,bigint)",
-      "finalRoot": "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0330_banking_pay_next_case_creation_selection_v1.sql"
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "FC-03 sequence101 exact creation/intake/page successor; retain complete current parents and Rule B",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7463,23 +7469,25 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
         "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
       ],
-      "owner": "EX-01 BD110 finite proof/scope and protected intake; native money owners retained",
+      "owner": "FC-03 sequence101 exact creation/intake/page successor; retain complete current parents and Rule B",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7635,9 +7643,21 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7648,20 +7668,10 @@
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql"
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
       ],
-      "owner": "DR-10 same-week policy; later successor cards merge this exact final owner",
+      "owner": "FC-03 sequence101 exact creation/intake/page successor; retain complete current parents and Rule B",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15374,6 +15384,62 @@
       ],
       "owner": "FC-16 sequence100 native protection helper/reader/assertion",
       "baselineSource": "LOCAL_FC16_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_case_create_terms_v1(jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "owner": "FC-03 sequence101 bounded terms/context/preview or atomic creation overload",
+      "baselineSource": "LOCAL_FC03_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_case_create_context_v1(uuid,uuid)",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "owner": "FC-03 sequence101 bounded terms/context/preview or atomic creation overload",
+      "baselineSource": "LOCAL_FC03_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_case_create_preview_v1(uuid,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "owner": "FC-03 sequence101 bounded terms/context/preview or atomic creation overload",
+      "baselineSource": "LOCAL_FC03_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_accept_case_create_v1(uuid,uuid,uuid,text,text,text,numeric,date,date,numeric,bigint,numeric,numeric,text,text,text,jsonb)",
+      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+      ],
+      "owner": "FC-03 sequence101 bounded terms/context/preview or atomic creation overload",
+      "baselineSource": "LOCAL_FC03_ADDITIVE"
     }
   ],
   "editorChains": [

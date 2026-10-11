@@ -1,3 +1,4 @@
+import {caseInput,casePreview} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
  * injected; SQL rechecks service JWT/active admin. No economics, legacy session,
@@ -30,6 +31,7 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   REVIEW:{run_id:'uuid'},CONFIRM:{run_id:'uuid',review_revision:'positive'}
 });
 export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
+  CASE_PREVIEW:{input:'caseInput'},
   GUARD:{run_id:'uuid'},
   PROGRESS:{run_id:'uuid'},
   ACCEPTED_CANDIDATES:{run_id:'uuid',after_candidate_id:'uuid?',limit:'limit'},
@@ -303,12 +305,12 @@ function pageCall(request){
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);if(key==='descriptor'){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='accepted_inputs'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
+    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='accepted_inputs'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
-    if(!field(v,type))throw fault('REQUEST_INVALID',400);args[key]=v;
+    if(!(type==='caseInput'?caseInput(v):field(v,type)))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
   if(kind==='CURRENT_WORK'&&(args.after_week===null)!==(args.after_work_id===null))throw fault('REQUEST_INVALID',400);
-  return {kind,args:normalized(args)};
+  return {kind,args:kind==='CASE_PREVIEW'?Object.freeze(args):normalized(args)};
 }
 async function limitedJson(input,maximum,request,signal,mutation){
   const bad=()=>fault(request?'REQUEST_INVALID':'RESPONSE_INVALID',request?400:503,!request,!request&&mutation);
@@ -367,6 +369,11 @@ function result(payload,call,mutation){
       if(payload.item_count!==String(n))bad();
     }
     return payload;
+  }
+  if(call.kind==='CASE_PREVIEW'){
+    if(!record(payload)||Object.keys(payload).sort().join()!=='complete,rows'||payload.complete!==true
+      ||!Array.isArray(payload.rows)||payload.rows.length!==1||!casePreview(payload.rows[0],call.args.input))bad();
+    return {rows:payload.rows,complete:true,next_cursor:null};
   }
   if(call.kind==='GUARD'){
     if(!exact(payload,{rows:'guardRows',complete:'true'}))bad();

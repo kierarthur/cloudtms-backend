@@ -17,8 +17,11 @@
  * retry occurs here. Accepted commands still need the separate worker drain.
  */
 
+import {CASE_INPUT_SCHEMA,caseInput,caseToken,equal} from './bpay-next-case-contract.js';
+
 export const BPAY_NEXT_COMMAND_LIMITS = Object.freeze({
   requestBytes: 2048,
+  caseCreateRequestBytes: 32768,
   responseBytes: 128 * 1024,
   timeoutMs: 8000
 });
@@ -31,7 +34,7 @@ export const BPAY_NEXT_PROTECTED_ACTIONS = Object.freeze(['EXECUTE_REQUEST','EXE
   'OUTCOME_REVIEW_RESOLVE','WRITE_OFF','PAYE_SAME_WEEK_OVERRIDE']);
 const protectedAction = (action) => BPAY_NEXT_PROTECTED_ACTIONS.includes(action);
 
-/** @typedef {'PAYE_NET'|'CASE_PAYOUT'|'TRANSFER_BEGIN'|'CANCEL_REQUEST'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CSV_ISSUE'|'CSV_SETTLEMENT'|'CSV_RETURN'|'INTERNAL_SETTLE'|'PREPARATION_EXPIRE'|'WRITE_OFF'|'BIND_STORED_CREDIT'} FinancialAction */
+/** @typedef {'CASE_CREATE'|'PAYE_NET'|'CASE_PAYOUT'|'TRANSFER_BEGIN'|'CANCEL_REQUEST'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CSV_ISSUE'|'CSV_SETTLEMENT'|'CSV_RETURN'|'INTERNAL_SETTLE'|'PREPARATION_EXPIRE'|'WRITE_OFF'|'BIND_STORED_CREDIT'} FinancialAction */
 /** @typedef {{id: string, role: string}} ValidatedOfficeUser */
 /** @typedef {{actorUserId: string, signal: AbortSignal, timeoutMs: number, maxResponseBytes: number, routeClass: 'OPERATION_NUDGE'}} FinancialRpcOptions */
 /**
@@ -51,6 +54,7 @@ const ENCODER = new TextEncoder();
 const TRANSFER_PHASES = ['BUILDING', 'MEMBERS_READY', 'DRAFT', 'SCHEDULED', 'ISSUED_CSV',
   'SUBMITTED', 'UNKNOWN', 'SETTLED', 'RETURNED', 'REFUSED', 'CANCELLED', 'INTERNAL_PROCESSING', 'INTERNAL_SETTLED'];
 const INPUTS = Object.freeze({
+  CASE_CREATE: {command_id:'uuid',...CASE_INPUT_SCHEMA,preview_token:'caseToken'},
   BIND_STORED_CREDIT: { command_id: 'uuid', legacy_case_id: 'uuid' },
   WRITE_OFF: { command_id: 'uuid', case_component_id: 'uuid', expected_component_revision: 'positiveBigint', scope: 'writeOffScope', reason: 'writeOffReason' },
   PAYE_NET: { command_id: 'uuid', run_worker_id: 'uuid', entered_paye_net: 'money' },
@@ -66,6 +70,7 @@ const INPUTS = Object.freeze({
   CSV_RETURN: { command_id: 'uuid', transfer_id: 'uuid', receipt_id: 'receipt', amount: 'positiveMoney', occurred_at: 'timestamp' }
 });
 const OUTPUTS = Object.freeze({
+  CASE_CREATE: {case_id:'uuid',command_id:'uuid',sequence:'positiveBigint',phase:'storedCreditPhase',replay:'boolean'},
   BIND_STORED_CREDIT: { case_id: 'uuid', command_id: 'uuid', sequence: 'positiveBigint', phase: 'storedCreditPhase', replay: 'boolean' },
   WRITE_OFF: { command_id: 'uuid', case_id: 'uuid', case_component_id: 'uuid', sequence: 'positiveBigint', phase: 'writeOffPhase',
     requested_scope: 'writeOffScope', applied_amount: 'caseMoney?', remaining_amount: 'caseMoney?', protected_amount: 'caseMoney?',
@@ -115,6 +120,7 @@ function bigint(value, positive = false) {
 }
 function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
+  if(type==='caseToken')return caseToken(value);
   switch (type) {
     case 'uuid': return typeof value === 'string' && UUID.test(value);
     case 'payChannel': return ['PAYE','UMBRELLA'].includes(value);
@@ -215,8 +221,10 @@ function commandCall(body) {
   const keys = Object.keys(schema);
   if (Object.keys(body).length !== keys.length + 1 + Number(tokenPresent)
     || Object.keys(body).some((key) => key !== 'action' && key !== 'reauth_token' && !Object.hasOwn(schema, key))
-    || keys.some((key) => !Object.hasOwn(body, key) || !field(body[key], schema[key]))) invalid();
+    || keys.some((key) => !Object.hasOwn(body, key) || (body.action!=='CASE_CREATE'&&!field(body[key], schema[key])))) invalid();
   const args = Object.fromEntries(keys.map((key) => [key, body[key]]));
+  if(ENCODER.encode(JSON.stringify(body)).byteLength>(body.action==='CASE_CREATE'?BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes:BPAY_NEXT_COMMAND_LIMITS.requestBytes))throw fault('BPAY_NEXT_COMMAND_REQUEST_TOO_LARGE',413);
+  if(body.action==='CASE_CREATE'){const {command_id,preview_token,...input}=args;if(!field(command_id,'uuid')||!caseInput(input)||!caseToken(preview_token)||!equal(preview_token.input,input))invalid();}
   return { action: body.action, args: Object.freeze(args), token: tokenPresent ? body.reauth_token : null };
 }
 
@@ -307,7 +315,7 @@ function commandResult(payload, call) {
     // even if the caller supplied a different command ID for that same receipt.
     if (call.action !== 'CSV_SETTLEMENT' || !payload.replay) invalid();
   }
-  if (call.action === 'BIND_STORED_CREDIT'
+  if (['BIND_STORED_CREDIT','CASE_CREATE'].includes(call.action)
     && payload.case_id.toLowerCase() !== call.args.command_id.toLowerCase()) invalid();
   if (call.action === 'CASH_REISSUE'
     && payload.phase !== (payload.transfer_id === null ? 'ACCEPTED_PENDING_BUILD' : 'TRANSFER_CREATED')) invalid();
@@ -347,6 +355,7 @@ function dependencyError(error, attempted = false) {
   const db = error?.json ?? error;
   if (db?.message === 'BPAY_NEXT_REAUTH_REQUIRED' || db?.code === 'BPAY_NEXT_REAUTH_REQUIRED') return fault('BPAY_NEXT_REAUTH_REQUIRED',403);
   if (db?.message === 'BPAY_NEXT_REAUTH_STALE' || db?.code === 'BPAY_NEXT_REAUTH_STALE') return fault('BPAY_NEXT_REAUTH_STALE',403);
+  if(db?.message==='BPAY_NEXT_CASE_PREVIEW_CHANGED')return fault('BPAY_NEXT_CASE_PREVIEW_CHANGED',409);
   if (db?.code === 'PGRST202') return fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE', 503, true);
   if (db?.code === '42501' || [401, 403].includes(error?.status)) return fault('BPAY_NEXT_COMMAND_FORBIDDEN', 403);
   if (db?.code === 'P0002') return fault('BPAY_NEXT_COMMAND_SCOPE_NOT_FOUND', 404);
@@ -384,7 +393,7 @@ export async function handleBpayNextCommand(request, dependencies = {}) {
     const user = await dependencies.requireOfficeUser(request, ['admin']);
     if (!user || !field(user.id, 'uuid')) throw fault('BPAY_NEXT_COMMAND_UNAUTHORIZED', 401);
     if (user.role !== 'admin') throw fault('BPAY_NEXT_COMMAND_FORBIDDEN', 403);
-    const call = commandCall(await limitedJson(request, BPAY_NEXT_COMMAND_LIMITS.requestBytes, true));
+    const call = commandCall(await limitedJson(request, BPAY_NEXT_COMMAND_LIMITS.caseCreateRequestBytes, true));
     if (typeof dependencies.financialCommandRpc !== 'function') throw fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE', 503, true);
     controller = new AbortController();
     const timeout = new Promise((resolve, reject) => {

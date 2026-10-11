@@ -10313,7 +10313,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "f3469cca87f7123b621f66b57178eda9eb2fb566024c7fea29fe747d16bd08be"
+      "definition_sha256": "bed23351a6ea6bb5ad60a8479f7bd62f7fde34e21f616f66ede3a31625b1c924"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accept_case_create_v1(p_command_id uuid, p_candidate_id uuid, p_actor_user_id uuid, p_case_kind text, p_case_subtype text, p_tax_treatment text, p_principal numeric, p_due_date date, p_start_monday date, p_weekly_due numeric, p_week_count bigint, p_minimum_earnings_threshold numeric, p_take_home_floor_override numeric, p_reason text, p_note text, p_original_liability_reference text, p_preview_token jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "1682d853a414c5e9918c8456bdfe874209d10209809ca2cfff47b1e6925f1280"
     },
     {
       "acl": [
@@ -10883,7 +10902,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a4d8809eb6f74815e2da6932bfdb54ba93ad6985ca89b0b2707063510154bfd2"
+      "definition_sha256": "6be44384809dd154afd3de8e122ec8b2be77bcbcd127a3b61436b049d5bec720"
     },
     {
       "acl": [
@@ -11587,6 +11606,63 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "b07d8a1cbd282e1d995d18aeea5e74954be055125d73052b5e59e54e06bea7a4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_create_context_v1(p_actor_user_id uuid, p_candidate_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "79034fcd70117bc16dbdb675690c2dce0698978cba95b83679d1c77fe62cd733"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_create_preview_v1(p_actor_user_id uuid, p_input jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "b3db2813e3ffb6cd39058cd395d56ebd4ffa70bc1c6ab3b79649e5509f8464de"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_create_terms_v1(p_input jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "8f4e774d3c54f418ecdacecf2ea5f25cb6c91a0b5c36a282ad49dc5e79ef6709"
     },
     {
       "acl": [
@@ -32372,7 +32448,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "221688704978e8cb31bc5e19aeeeb63f6ea07a9c3887f6dd38b130f8ec31338e"
+      "definition_sha256": "76349757953b632334f55e958e1ffad59173838c39614f2950591e37cf0ea07f"
     },
     {
       "acl": [
@@ -32638,7 +32714,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a6287838fc81c45fb477d71070104647a3220f8dda4b27c7a21d4e3781ea58f8"
+      "definition_sha256": "cfd4e3e2ec4e4a642b779f31bbca30a6f489f96a1d23cbf3eb001c2a633b9c04"
     },
     {
       "acl": [
@@ -82274,11 +82350,35 @@
           "generated": ""
         },
         {
+          "name": "note",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "opening_pay_week_start",
           "type": "date",
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_liability_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "preview_token",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -82399,6 +82499,30 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_case_create_liability_reference_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_liability_reference IS NULL OR case_kind = 'MANUAL_DEBT'::text AND octet_length(original_liability_reference) >= 1 AND octet_length(original_liability_reference) <= 2048 AND btrim(original_liability_reference) <> ''::text)"
+        },
+        {
+          "name": "bpay_next_case_create_note_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (note IS NULL OR octet_length(note) <= 2048)"
+        },
+        {
+          "name": "bpay_next_case_create_preview_token_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preview_token IS NULL OR jsonb_typeof(preview_token) = 'object'::text AND octet_length(preview_token::text) <= 24576)"
+        },
         {
           "name": "bpay_next_case_create_request_accepted_at_utc_check",
           "type": "c",
