@@ -1,6 +1,6 @@
 # FC-10 independent native source review
 
-Source verdict: PASS for the callable native Case/Candidate entry, closed V7 journal and exact status readback. Read-only review of the actual FC-10 native module, main caller qualification, Office V7 journal and shared validators against the full card/ITEM/D01–D10, BD120, native investigation and supplied SCR-123/123b/123c. All five source findings below are closed or explicitly bounded. A4 remains PENDING; joined acceptance is NOT_RUN. This source pass does not approve the initial duplicate footer Close or CSS-prefix presentation finding already sent to root.
+Source verdict: PASS for the callable native Case/Candidate entry, closed V7 journal and exact status readback. Read-only review of the actual FC-10 native module, main caller qualification, Office V7 journal and shared validators against the full card/ITEM/D01–D10, BD120, native investigation and supplied SCR-123/123b/123c. All five source findings below are closed or explicitly bounded. Final A4 is APPROVED for the actual36-PNG callable confirmation/result family: 34 PASS / 0 FAIL / 8 N/A, all42 items, recorded in the three SCR folders. Joined acceptance and legacy DOM interaction are NOT_RUN. Initial footer, CSS prefix and later visual findings are closed in those receipts.
 
 ## Essential findings
 
@@ -39,5 +39,19 @@ Final source closure: O04's terminal refusal now says the request was refused be
 | js/bpay-next-ui.js, concurrently changed adapter | F535E7E75579428CA7B97B57D406CCAEADAEBBF0FE15E5935574F435B772248D |
 | css/bpay-next-office.css, presentation still being corrected | A6D4BF4DFF90FB957AF88009DA03C39291C74C5BF3EFB9B55A8EE0DCA61EF39D |
 | index.html | 3DCFA6ED5A90854C457301F75C453E971C54FE163D6345088D7F06A9DA08A7AC |
+
+## Final saved-source closure
+
+The final module re-read confirms that the qualified Candidate subject remains visible when the current page is unavailable, while type/amount are not fabricated. Reason is hidden for loading, pending, accepted, terminal, unsupported, protected and changed-status states. Existing dynamic paragraphs retain data-next-live-copy; exact money retains data-next-formatted-money. Refusal/read failures use the native ws-notice--danger and role=alert; changed-status explicitly sets that same danger class after choosing the notice. Safe Close precedes primary Refresh for unavailable/changed state. Applied success hides the footer and uses native header Close; terminal blocked keeps only manual secondary Refresh in its footer. All new FC-10 selectors are prefixed #modal.ctms-modern-modal.ctms-kind-bpay-next-read, including hidden footer and44px phone controls; no !important is added. These changes do not alter original command bytes, journal sequencing or money ownership. The earlier checkpoint hashes remain historical; current reviewed bytes are:
+
+| Saved frontend source | SHA-256 |
+|---|---|
+| js/bpay-next-case-pause.js | 194471fc32e43fdb63cf97c0cbe7bced7643fe8b0573e1767f2a748af24e1be0 |
+| js/bpay-next-case-preview.js | dac5dbf44b4dcbbd9825412239d312750409cf63d0a9658965093f6df6837226 |
+| js/bpay-next-office.js | ebf5237c32438a7ff3b1e94944d0c07221bc7391b027621ecd473a8fc8e433eb |
+| js/bpay-next-ui.js | f535e7e75579428ca7b97b57d406ccaeadaebbf0fe15e5935574f435b772248d |
+| js/main.js | cb156512ef05e0d85d05edd7f599cad6fa415c170f3b2834d28b415cead6b2bc |
+| css/bpay-next-office.css | 06e91fbb64e5327e3845e53aaf451dffab3fe689526f53ad9a74a6f1fb9af61e |
+| index.html | 3dcfa6ed5a90854c457301f75c453e971c54fe163d6345088d7f06a9da08a7ac |
 
 No product, screen rendering, fixture, database, test, hosted or business action was performed. These source observations are not a runtime/financial acceptance claim.
