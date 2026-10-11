@@ -87,7 +87,10 @@
         "path": "css/bpay-next-office.css",
         "sha256": "dc976dd81d95e7fac3555a1a9c2470782c4ab84c61c16e22aa4b6cb619d6feb4"
       },
-      "evidence": "SCR117 unselected phone main+top recaptured only; original remaining pixels retained; original A4 manifest remains historical except2 new PNGs"
+      "evidence": "SCR117 unselected phone main+top recaptured only; original remaining pixels retained; original A4 manifest remains historical except2 new PNGs",
+      "implementationCommit": "df544a35d2b7d7d281692ed0966e4081d7627f1e",
+      "frontendCommit": "eb4ef182b1548b4b0b86052a96bcbd09131382da",
+      "review": "SCR117 review additive2phonePASS receipt"
     }
   ]
 }

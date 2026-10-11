@@ -2,7 +2,7 @@
   "item": "FC-05",
   "sequence": 105,
   "decision": "BD117",
-  "status": "SOURCE_BUILT_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "deliverables": [
     "FC-05-D03",
     "FC-05-D04"
@@ -53,5 +53,8 @@
   "ownersRetained": "1536 creator/context/preview/intake,1738 current page, original Worker/ledger/queue/funding; no SQL/Worker/public definer change",
   "screenshots": "45 actual native local variants:14states dark/device-light/phone plus3 upper phone captures",
   "futureHost": "FC02 sequence117 supplies Cases page; targeted native Case callback ready",
-  "sharedStyleCorrection": "FC04: when native creation styles next touched, phone Close/Preview/Apply now44px even without mounted case-actions; no active controls hidden"
+  "sharedStyleCorrection": "FC04: when native creation styles next touched, phone Close/Preview/Apply now44px even without mounted case-actions; no active controls hidden",
+  "implementationCommit": "df544a35d2b7d7d281692ed0966e4081d7627f1e",
+  "frontendCommit": "eb4ef182b1548b4b0b86052a96bcbd09131382da",
+  "screen": "A4 PASS:45 actual captures,42policy33PASS/0FAIL/9N_A; all findings and differences/control purpose closed"
 }
