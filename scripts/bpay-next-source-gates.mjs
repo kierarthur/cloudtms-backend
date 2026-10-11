@@ -10,6 +10,22 @@ import { changedSourcePaths, routineDefinitions, definerInventory, verifyFinalDe
 export const FROZEN_BASE='a6f7423eb71e6e7cd173e705c2290e5408a1d077';
 const FOUNDATION_RECONCILED='3c91e5e6ce35b5833a5c218b77b741261eeebafa';
 const DAILY_IDENTITY_GUARD='supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql';
+const DAILY_PUBLICATION_GUARDS="supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql";
+// DY04 finite card-required additions; complete frozen parent is compared below.
+const DAILY_GUARD_ADDITIONS=Object.freeze({
+  "private.bpay_next_revision_guard_v1()": {
+    "declaration": "  v_daily_work private.bpay_next_work%rowtype;\n",
+    "declAnchor": "  v_total_source_ex numeric;\n",
+    "block": "  select w.* into strict v_daily_work from private.bpay_next_work w where w.id=new.work_id;\n  if v_daily_work.origin_kind='DAILY' then\n    if new.source_kind is distinct from 'ORDINARY' or new.financial_snapshot_id is null\n       or jsonb_typeof(new.daily_approval_evidence_json) is distinct from 'object'\n       or new.daily_approval_evidence_json->>'contract_version' is distinct from 'BPAY_NEXT_DAILY_APPROVAL_EVIDENCE_V1'\n       or new.daily_approval_evidence_json->>'timesheet_id' is distinct from new.physical_timesheet_id::text\n       or new.daily_approval_evidence_json->>'timesheet_version' is distinct from new.physical_timesheet_version::text\n       or new.daily_approval_evidence_json->>'financial_id' is distinct from new.financial_snapshot_id::text\n       or new.daily_approval_evidence_json->>'candidate_id' is distinct from v_daily_work.candidate_id::text\n       or new.daily_approval_evidence_json->>'booking_id' is distinct from v_daily_work.booking_id\n       or new.daily_approval_evidence_json->>'work_date' is distinct from v_daily_work.origin_work_date::text then\n      raise exception using errcode='23514',message='BPAY_NEXT_DAILY_REVISION_EVIDENCE_REQUIRED';\n    end if;\n  elsif new.daily_approval_evidence_json is not null then\n    raise exception using errcode='23514',message='BPAY_NEXT_CONTRACT_REVISION_DAILY_EVIDENCE_FORBIDDEN';\n  end if;\n",
+    "blockEnd": "  if new.detail_kind='SHIFT' then"
+  },
+  "private.bpay_next_work_insert_guard_v1()": {
+    "declaration": "  v_original public.timesheets%rowtype;\n",
+    "declAnchor": "  v_booking_id text;\n",
+    "block": "  if new.origin_kind='DAILY' then\n    select t.* into strict v_original from public.timesheets t where t.timesheet_id=new.original_timesheet_id;\n    if v_original.contract_id is not null or v_original.sheet_scope is distinct from 'DAILY'::public.timesheet_scope_enum\n       or v_original.line_type::text is distinct from 'HOURS'\n       or (v_original.worked_start_iso at time zone 'Europe/London')::date is distinct from new.origin_work_date\n       or not exists (select 1 from public.timesheets_financials tf\n         where tf.timesheet_id=v_original.timesheet_id and tf.timesheet_version=v_original.version\n           and tf.candidate_id=new.candidate_id and tf.is_current is true and tf.is_stale is false\n           and tf.authorised_at_utc is not null and tf.basis::text='SELF_REPORTED') then\n      raise exception using errcode='23514',message='BPAY_NEXT_DAILY_ORIGINAL_IDENTITY_REQUIRED';\n    end if;\n  end if;\n",
+    "blockEnd": "  return new;"
+  }
+});
 export const FROZEN_FILES=Object.freeze([
   'supabase/migrations/03102026_1324_banking_pay_next_core.sql',
   'supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql',
@@ -1892,6 +1908,10 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     if(file===DAILY_IDENTITY_GUARD&&(
       /^revoke\s+all\s+on\s+function\s+private\.bpay_next_work_pointer_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
       ||/^alter\s+function\s+private\.bpay_next_work_pointer_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
+    // Existing guard owners and owner-only ACLs, no attachment or family waiver.
+    if(file===DAILY_PUBLICATION_GUARDS&&(
+      /^revoke\s+all\s+on\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
+      ||/^alter\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
     if(competing&&!baseline.includes(statement))throw Error(`BPAY_NEXT_FROZEN_COMPETING_AUTHORITY: ${file}`);
   }
 }
@@ -1953,6 +1973,16 @@ export function verifyBpayNextSourceGates(){
           expected=expected.replace(anchor,`${prefix}.work_kind,${prefix}.week_ending_date,${prefix}.origin_kind,${prefix}.origin_work_date)`);
         }
         if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_IDENTITY_GUARD_CHANGED');
+        continue;
+      }
+      if(definition.physical===DAILY_PUBLICATION_GUARDS&&Object.hasOwn(DAILY_GUARD_ADDITIONS,signature)){
+        const parent=frozenSources.get(file).replaceAll('\r\n','\n'),addition=DAILY_GUARD_ADDITIONS[signature];
+        const rows=scanManagedSql(parent).statements.filter(row=>routineDefinitions(parent.slice(row.start,row.end),file).includes(signature));
+        if(rows.length!==1||exact.length!==1)throw Error('BPAY_NEXT_DAILY_PUBLICATION_GUARD_SHAPE');
+        let expected=parent.slice(rows[0].start,rows[0].end);
+        if(expected.split(addition.declAnchor).length!==2||expected.split(addition.blockEnd).length!==2)throw Error('BPAY_NEXT_DAILY_PUBLICATION_PARENT_SHAPE');
+        expected=expected.replace(addition.declAnchor,()=>addition.declAnchor+addition.declaration).replace(addition.blockEnd,()=>addition.block+addition.blockEnd);
+        if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_PUBLICATION_GUARD_CHANGED');
         continue;
       }
       if(previous.status!==0||exact.some(text=>!previous.stdout.replaceAll('\r\n','\n').includes(text)))throw Error(`BPAY_NEXT_FROZEN_COMPETING_DEFINER: ${signature}`);

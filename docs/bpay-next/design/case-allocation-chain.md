@@ -289,3 +289,7 @@ Legacy1360 selected-only READY filtering and1300 selected OVERPAYMENT_RECOVERY p
 ## DY-03 sequence89 — native Daily identity / BD099
 
 Schema0928 adds only justified originKind/date and revisionDaily evidence, exactconditionalNULLContract shape, preserving allnativeFKs/bookingkey and CONTRACThistory. Pointerguard1342->0928 adds only originKind/date to both NULL-safe immutabletuples; DY04merges onto0928 and retains wholebody. Existingwhole-row revisionguard already protects addedJSON, correctedDailyhelper0925 retained. FullphysicalDaily insertion/revision qualification belongsDY04 before routing is enabled. No Source/query/financial owner rewritten.
+
+## DY-04 sequence90 — complete Daily joint authority / BD100
+
+Route1450 ->0939 ->DY01; Publisher1530 current1236 ->DY04/0939 ->DY06 ->DY10 ->DR38; DY05/DY09/DR18 consume or change only their explicitly named owners. Trigger1332 ->0939 retains withdrawal refresh. Revision/insert guards1342 ->0939 retain all frozen branches; pointer0928 and helper0925 remain current, with helper later DY08. Generic Authorise0931 ->0939 is one readonly missing-bucket qualification only, complete predecessor otherwise exact. No Source/query producer definition changes or parked F25 owner. All later merges use actual per-signature final registry.

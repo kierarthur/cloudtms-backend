@@ -2644,16 +2644,19 @@
     },
     {
       "signature": "private.bpay_next_approval_route_v1(uuid)",
-      "finalRoot": "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql"
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3907,19 +3910,21 @@
     },
     {
       "signature": "private.bpay_next_ordinary_authorisation_trigger_v1()",
-      "finalRoot": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
         "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1332_banking_pay_next_withdrawal_projection_v1.sql"
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "owner": "WB-02 retained native withdrawal display and exact stored WAIT boundary; final apply hook WB06, recovery classification/allocation WB41",
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4252,25 +4257,27 @@
     },
     {
       "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4528,16 +4535,19 @@
     },
     {
       "signature": "private.bpay_next_revision_guard_v1()",
-      "finalRoot": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5408,16 +5418,19 @@
     },
     {
       "signature": "private.bpay_next_work_insert_guard_v1()",
-      "finalRoot": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -11240,14 +11253,15 @@
     },
     {
       "signature": "public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamp with time zone,text)",
-      "finalRoot": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/21072026_1235_31_timesheet_authorise_generic_atomic.sql",
         "supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql",
         "supabase/repeatable/26092026_0202_banking_pay_stage2_source_authorisation_v1.sql",
         "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
-        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql"
+        "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/21072026_1235_31_timesheet_authorise_generic_atomic.sql",
@@ -11260,8 +11274,10 @@
         "supabase/repeatable/03102026_0500_h1h2_successor_authorities_after_retry.sql",
         "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql"
       ],
-      "finalClosures": [],
-      "owner": "SP-12 actual first locking entry; NEXT admission only, original owner retained",
+      "finalClosures": [
+        "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql"
+      ],
+      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

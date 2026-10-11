@@ -93953,9 +93953,25 @@ function bpayNextOrdinaryMissingRateRefusal(rawCode, original, originalMessage =
       .some(value => value === expected)) return null;
   const bucket = detail.bucket ?? payload.bucket;
   const contractId = detail.contract_id ?? payload.contract_id;
-  if (typeof bucket !== 'string' || !bucket.length || bucket.length > 245
-      || typeof contractId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contractId)) return null;
+  if (typeof bucket !== 'string' || !bucket.length || bucket.length > 245) return null;
   const labels = { DAY: 'Day', NIGHT: 'Night', SAT: 'Saturday', SUN: 'Sunday', BH: 'Bank Holiday', MILE: 'Mileage' };
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  if (detail.rate_authority === 'DAILY_DATED' && detail.sheet_scope === 'DAILY'
+      && detail.line_type === 'HOURS' && ['DAY', 'NIGHT', 'SAT', 'SUN', 'BH'].includes(bucket)
+      && uuid(detail.timesheet_id) && uuid(detail.candidate_id) && uuid(detail.client_id)
+      && (detail.contract_id === null || uuid(detail.contract_id))
+      && typeof detail.work_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(detail.work_date)
+      && ['PAYE', 'UMBRELLA'].includes(detail.pay_channel) && ['PAY', 'CHARGE'].includes(detail.rate_field)) {
+    return { code: expected, error: expected, error_code: expected, bucket,
+      contract_id: detail.contract_id, timesheet_id: detail.timesheet_id,
+      rate_authority: 'DAILY_DATED', sheet_scope: 'DAILY', line_type: 'HOURS',
+      candidate_id: detail.candidate_id, client_id: detail.client_id,
+      work_date: detail.work_date, pay_channel: detail.pay_channel, rate_field: detail.rate_field,
+      message: (detail.rate_field === 'PAY' ? 'Pay' : 'Charge') + ' rate missing for ' + labels[bucket]
+        + '; set the Candidate override or Client default, then authorise again.',
+      refresh_required: false, retryable: false };
+  }
+  if (!uuid(contractId)) return null;
   return { code: expected, error: expected, error_code: expected, bucket, contract_id: contractId,
     message: 'Pay rate missing for ' + (Object.prototype.hasOwnProperty.call(labels, bucket) ? labels[bucket] : bucket) + '; set the rate on the Contract, then authorise again.',
     refresh_required: false, retryable: false };
