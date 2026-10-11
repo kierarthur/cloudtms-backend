@@ -1,0 +1,65 @@
+{
+  "source": "fresh sole local PostgreSQL17 catalogue; read-only metadata only; no business invocation",
+  "rows": [
+    {
+      "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
+      "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "sourceMd5": "637ee13b9da35a92ee89a3bf54037ba1",
+      "installed": {
+        "bodyMd5": "637ee13b9da35a92ee89a3bf54037ba1",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_daily_approval_evidence_v1(uuid)",
+      "path": "supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql",
+      "sourceMd5": "c8dbebe97376fe7db8a691fe236d9214",
+      "installed": {
+        "bodyMd5": "c8dbebe97376fe7db8a691fe236d9214",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_ordinary_authorisation_trigger_v1()",
+      "path": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "sourceMd5": "665367b7388f01054fd930e539874abc",
+      "installed": {
+        "bodyMd5": "665367b7388f01054fd930e539874abc",
+        "securityDefiner": true,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_apply_position_page_v1(uuid,uuid,bigint,text,text,integer)",
+      "path": "supabase/repeatable/10102026_1346_banking_pay_next_position_projection_boundary_v1.sql",
+      "sourceMd5": "322a91141f13770d4dd4d7b0aa3d9154",
+      "installed": {
+        "bodyMd5": "322a91141f13770d4dd4d7b0aa3d9154",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+      },
+      "matches": true
+    },
+    {
+      "signature": "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+      "path": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "sourceMd5": "d391a1cb5f74ee4cd97ed6ddeb1b55de",
+      "installed": {
+        "bodyMd5": "d391a1cb5f74ee4cd97ed6ddeb1b55de",
+        "securityDefiner": false,
+        "owner": "cloudtms_bpay_local_owner",
+        "acl": "{cloudtms_bpay_local_owner=X/cloudtms_bpay_local_owner}"
+      },
+      "matches": true
+    }
+  ]
+}

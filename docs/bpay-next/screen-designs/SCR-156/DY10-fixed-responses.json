@@ -1,0 +1,32 @@
+{
+  "actor": "00000156-1111-4111-8111-111111111111",
+  "timesheet": "00000156-2222-4222-8222-222222222222",
+  "candidate": "00000156-3333-4333-8333-333333333333",
+  "client": "00000156-4444-4444-8444-444444444444",
+  "timesheetFields": {
+    "sheet_scope": "DAILY",
+    "version": 1,
+    "is_current": true,
+    "status": "STORED",
+    "week_ending_date": "2026-10-11",
+    "worked_start_iso": "2026-10-09T08:00:00Z",
+    "worked_end_iso": "2026-10-09T16:00:00Z",
+    "submission_mode": "ELECTRONIC",
+    "authorised_at_server": null,
+    "revoked_at": null,
+    "archived_at_utc": null
+  },
+  "tfFields": {
+    "id": "00000156-5555-4555-8555-555555555555",
+    "timesheet_version": 1,
+    "is_current": true,
+    "is_stale": false,
+    "processing_status": "PENDING_AUTH",
+    "has_rate_issue": false,
+    "has_pay_channel_issue": false,
+    "total_hours": "8.00",
+    "total_pay_ex_vat": "252.00",
+    "authorised_at_utc": null
+  },
+  "note": "Minimal fixed native reader replies for actual DY10 screenshots only; no database rows or reusable test tool; cancellation is not invented."
+}

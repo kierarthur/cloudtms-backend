@@ -1,0 +1,878 @@
+[
+  {
+    "file": "DY10-failed-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pending-dark.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unprepared-dark.png",
+    "notice": "Pay for this Daily shift has not been worked out yet.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-not-authorised-dark.png",
+    "notice": "Not authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-rate-missing-dark.png",
+    "notice": "The rate needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-damaged-dark.png",
+    "notice": "This Daily Timesheet needs to be checked.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unavailable-dark.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-zero-hours-dark.png",
+    "notice": "Authorised · 0.00 hours",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-positive-hours-zero-money-dark.png",
+    "notice": "Authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-withdrawn-dark.png",
+    "notice": "Authorisation withdrawn.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retained-approval-failed-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-acknowledged-dark.png",
+    "notice": "Updating…\nRefresh\nProcessing requested.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-unknown-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not confirm the processing request; refresh before trying again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-identity-mismatch-dark.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pay-channel-missing-dark.png",
+    "notice": "The pay channel needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-failed-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not refresh this Daily Timesheet.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-recovered-dark.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-unknown-recovered-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-failed-device-light.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pending-device-light.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unprepared-device-light.png",
+    "notice": "Pay for this Daily shift has not been worked out yet.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-not-authorised-device-light.png",
+    "notice": "Not authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-rate-missing-device-light.png",
+    "notice": "The rate needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-damaged-device-light.png",
+    "notice": "This Daily Timesheet needs to be checked.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unavailable-device-light.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-zero-hours-device-light.png",
+    "notice": "Authorised · 0.00 hours",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-positive-hours-zero-money-device-light.png",
+    "notice": "Authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-withdrawn-device-light.png",
+    "notice": "Authorisation withdrawn.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retained-approval-failed-device-light.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-acknowledged-device-light.png",
+    "notice": "Updating…\nRefresh\nProcessing requested.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-unknown-device-light.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not confirm the processing request; refresh before trying again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-identity-mismatch-device-light.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pay-channel-missing-device-light.png",
+    "notice": "The pay channel needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-failed-device-light.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not refresh this Daily Timesheet.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-recovered-device-light.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-unknown-recovered-device-light.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-failed-phone-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pending-phone-dark.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unprepared-phone-dark.png",
+    "notice": "Pay for this Daily shift has not been worked out yet.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-not-authorised-phone-dark.png",
+    "notice": "Not authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-rate-missing-phone-dark.png",
+    "notice": "The rate needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-damaged-phone-dark.png",
+    "notice": "This Daily Timesheet needs to be checked.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-unavailable-phone-dark.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-zero-hours-phone-dark.png",
+    "notice": "Authorised · 0.00 hours",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-positive-hours-zero-money-phone-dark.png",
+    "notice": "Authorised.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-withdrawn-phone-dark.png",
+    "notice": "Authorisation withdrawn.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retained-approval-failed-phone-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-acknowledged-phone-dark.png",
+    "notice": "Updating…\nRefresh\nProcessing requested.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-retry-unknown-phone-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not confirm the processing request; refresh before trying again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-identity-mismatch-phone-dark.png",
+    "notice": "Could not check this Daily Timesheet.\n—\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-pay-channel-missing-phone-dark.png",
+    "notice": "The pay channel needs to be set before authorisation.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-failed-phone-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRefresh\nCould not refresh this Daily Timesheet.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      }
+    ]
+  },
+  {
+    "file": "DY10-refresh-recovered-phone-dark.png",
+    "notice": "Updating…\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  },
+  {
+    "file": "DY10-unknown-recovered-phone-dark.png",
+    "notice": "Failed\nPay for this Daily shift could not be worked out.\n—\nRetry",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/owner-status",
+        "body": null
+      },
+      {
+        "path": "/api/tsfin/recompute",
+        "body": "{\"timesheet_ids\":[\"00000156-2222-4222-8222-222222222222\"]}"
+      },
+      {
+        "path": "/api/timesheets/00000156-2222-4222-8222-222222222222/details",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/related/timesheet/00000156-2222-4222-8222-222222222222/counts",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/timesheets/summary",
+        "body": null
+      },
+      {
+        "path": "/api/summary-membership/timesheets",
+        "body": "{\"section\":\"timesheets\",\"dataset_key\":\"{\\\"section\\\":\\\"timesheets\\\",\\\"filters\\\":{}}\",\"effective_filters\":{},\"include_ids\":false,\"explicit_full_membership\":false,\"membership_mode\":\"deferred\"}"
+      }
+    ]
+  }
+]

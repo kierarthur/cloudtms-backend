@@ -74626,6 +74626,34 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       supportsElectronicSubmission &&
       !isAdjustment;
 
+    // DY-10: original current-Daily processing evidence, also before NEXT Work exists.
+    // Seven unique native reasons plus one sentinel; no raw error leaves this reader.
+    let dailyProcessing = null;
+    if (String(ts.sheet_scope || '').toUpperCase() === 'DAILY') {
+      dailyProcessing = { timesheet_id: currentTimesheetId, current_version: ts.version, status: 'UNAVAILABLE' };
+      try {
+        if (ts.is_current !== true || String(ts.timesheet_id).toLowerCase() !== String(currentTimesheetId).toLowerCase()
+            || !Number.isSafeInteger(ts.version) || ts.version < 1 || Number(resolved.current_version) !== ts.version) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+        const { rows: pendingRows } = await sbFetch(env, env.SUPABASE_URL + '/rest/v1/ts_financials_outbox?timesheet_id=eq.' + enc(currentTimesheetId) + '&select=reason,attempt_count,next_attempt_at,last_error&order=reason.asc&limit=8');
+        const reasons = new Set(['NEW_AUTHORISED','VERSION_ROTATED','REVOKED','RATE_CHANGED','POLICY_CHANGED','CONTEXT_CHANGED','MANUAL']), seen = new Set();
+        if (!Array.isArray(pendingRows) || pendingRows.length > reasons.size) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+        let failed = false;
+        for (const pending of pendingRows) {
+          if (!pending || !reasons.has(pending.reason) || seen.has(pending.reason)
+              || !Number.isSafeInteger(pending.attempt_count) || pending.attempt_count < 0
+              || pending.next_attempt_at !== null && (typeof pending.next_attempt_at !== 'string' || !Number.isFinite(Date.parse(pending.next_attempt_at)))
+              || pending.last_error !== null && typeof pending.last_error !== 'string') throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+          seen.add(pending.reason);
+          const hasError = typeof pending.last_error === 'string' && pending.last_error.trim().length > 0;
+          if (hasError && pending.attempt_count === 0) throw new Error('DAILY_CONTEXT_UNAVAILABLE');
+          if (hasError) failed = true;
+        }
+        dailyProcessing.status = failed ? 'FAILED' : pendingRows.length ? 'PENDING' : 'NONE';
+      } catch {
+        // Unavailable evidence cannot become no work, approval or zero pay.
+      }
+    }
+
     // Shape TS + TSFIN for FE
     const timesheetOut = {
       ...ts,
@@ -74820,6 +74848,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
 
       timesheet: timesheetOut,
       tsfin: tsfinOut,
+      daily_processing: dailyProcessing,
 
       invoiceBreakdown,
       isSegmentsMode,
@@ -165578,7 +165607,8 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
     try {
       for (const idsChunk of chunk(noopOutboxIds, 200)) {
         const cleared = await sbRpc(env, 'tsfin_work_success_bulk', { p_ids: idsChunk });
-        noopCleared += Number(cleared || 0) || 0;
+        if (!Number.isSafeInteger(cleared) || cleared !== idsChunk.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+        noopCleared += cleared;
       }
       _tsfinRpcLog('tsfin_write_snapshots_and_complete -> noop-cleared', { count: noopCleared });
     } catch (e) {
@@ -165613,11 +165643,26 @@ async function rpcTsfinWriteSnapshotsAndComplete(env, { rows = [] } = {}) {
   try {
     const res = await sbRpcRecordingGuardRefusal(env, 'tsfin_write_snapshots_and_complete', args);
     // PostgREST returns table results as an array of rows (usually 1 row here).
-    const out = Array.isArray(res) ? (res[0] || null) : res;
-
-    const ok_count = (Number(out?.ok_count || 0) || 0) + noopCleared;
-    const fail_count = Number(out?.fail_count || 0) || 0;
-    const errors = out?.errors ?? [];
+    if (Array.isArray(res) && res.length !== 1) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const out = Array.isArray(res) ? res[0] : res;
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value :
+      typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    const writtenOk = count(out?.ok_count), fail_count = count(out?.fail_count);
+    let errors = out?.errors;
+    if (typeof errors === 'string') { try { errors = JSON.parse(errors); } catch { errors = null; } }
+    if (!isPlainObject(out) || writtenOk === null || fail_count === null || writtenOk + fail_count !== rowsToWrite.length
+        || !Array.isArray(errors) || errors.length !== fail_count) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    const written = new Map(rowsToWrite.map(row => [String(row.outbox_id).toLowerCase(), String(row.timesheet_id).toLowerCase()])), failed = new Set();
+    if (written.size !== rowsToWrite.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+    for (const error of errors) {
+      if (!isPlainObject(error) || Object.keys(error).sort().join(',') !== 'error,outbox_id,timesheet_id'
+          || typeof error.outbox_id !== 'string' || typeof error.timesheet_id !== 'string' || typeof error.error !== 'string' || !error.error.trim()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      const id = error.outbox_id.toLowerCase();
+      if (failed.has(id) || !written.has(id) || written.get(id) !== error.timesheet_id.toLowerCase()) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
+      failed.add(id);
+    }
+    const ok_count = writtenOk + noopCleared;
+    if (ok_count + fail_count !== rows.length) throw new Error('TSFIN_WRITE_RECEIPT_UNCONFIRMED');
 
     _tsfinRpcLog('tsfin_write_snapshots_and_complete -> ok', { ok_count, fail_count, noop_cleared: noopCleared });
     return { ok_count, fail_count, errors };
@@ -166985,9 +167030,12 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
 
   let ok = 0, fail = 0;
   const completedTimesheetIds = new Set();
+  const completedPrimaryOutboxSet = new Set();
   const markTimesheetComplete = (effectiveId) => {
     const eff = String(effectiveId || '').trim().toLowerCase();
     if (!eff) return;
+    const primary = effToPrimary.get(effectiveId) || effToPrimary.get(String(effectiveId));
+    if (primary) completedPrimaryOutboxSet.add(String(primary).toLowerCase());
     completedTimesheetIds.add(eff);
     for (const originalId of (effToOriginalIds.get(effectiveId) || effToOriginalIds.get(String(effectiveId)) || [])) {
       const original = String(originalId || '').trim().toLowerCase();
@@ -167119,6 +167167,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
         isCorrectionTs: dailyContext.isCorrectionTimesheet,
       });
     } catch (e) {
+      if (primaryOutboxId) preFailPrimaryOutboxSet.add(String(primaryOutboxId));
       for (const ob of outboxIds) {
         await sbRpc(env, "tsfin_work_fail", { p_id: ob, p_error: String(e?.message || e) });
         fail++;
@@ -167738,6 +167787,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
           ok++;
           markTimesheetComplete(effId);
         } catch (e) {
+          preFailPrimaryOutboxSet.add(String(outbox_id));
           await sbRpc(env, "tsfin_work_fail", { p_id: outbox_id, p_error: String(e?.message || e) });
           fail++;
         }
@@ -167751,6 +167801,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
         is_correction_ts: isCorrectionTs
       });
     } catch (e) {
+      preFailPrimaryOutboxSet.add(String(w.outbox_id));
       const allObs = [w.outbox_id, ...(w.extra_outbox_ids || [])].filter(Boolean);
       for (const ob of allObs) {
         await sbRpc(env, "tsfin_work_fail", { p_id: ob, p_error: String(e?.message || e) });
@@ -167768,25 +167819,11 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     ok += Number(wr?.ok_count || 0) || 0;
     fail += Number(wr?.fail_count || 0) || 0;
 
-    try {
-      let errs = wr?.errors;
-      if (typeof errs === 'string') {
-        try { errs = JSON.parse(errs); } catch { errs = null; }
-      }
-      if (Array.isArray(errs)) {
-        for (const e of errs) {
-          const ob = e?.outbox_id ? String(e.outbox_id) : '';
-          if (ob) failOutboxSet.add(ob);
-        }
-      }
-    } catch {
-      failOutboxSet = new Set();
-    }
+    // The existing helper validates native counts and exact failed input tuples.
+    failOutboxSet = new Set(wr.errors.map(error => error.outbox_id.toLowerCase()));
     for (const row of rowsToWriteAll) {
-      const outboxId = String(row?.outbox_id || '');
-      if (Number(wr?.fail_count || 0) === 0 && outboxId && !failOutboxSet.has(outboxId) && !preFailPrimaryOutboxSet.has(outboxId)) {
-        markTimesheetComplete(row?.timesheet_id);
-      }
+      const outboxId = String(row?.outbox_id || '').toLowerCase();
+      if (outboxId && !failOutboxSet.has(outboxId) && !preFailPrimaryOutboxSet.has(outboxId)) markTimesheetComplete(row.timesheet_id);
     }
   }
 
@@ -167798,6 +167835,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
     if (preFailPrimaryOutboxSet.has(p)) continue;
+    if (!completedPrimaryOutboxSet.has(p.toLowerCase())) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
@@ -167808,6 +167846,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null, fo
     if (!p) continue;
     if (failOutboxSet.has(p)) continue;
     if (preFailPrimaryOutboxSet.has(p)) continue;
+    if (!completedPrimaryOutboxSet.has(p.toLowerCase())) continue;
     for (const ob of (w.extra_outbox_ids || [])) {
       if (ob) extrasToClear.push(ob);
     }
@@ -172476,17 +172515,15 @@ async function tsfinTargetedDrainNow(env, {
   try { cfg = await loadSettingsDefaults(env); } catch {}
   const tsfinCfg = cfg?.importConfig?.tsfin || {};
 
-  const maxInlineItems =
-    Number(tsfinCfg.maxInlineItems || 0) > 0 ? Number(tsfinCfg.maxInlineItems) : 3;
-
-  const maxLoopsCfg =
-    Number(tsfinCfg.maxDrainLoops || 0) > 0 ? Number(tsfinCfg.maxDrainLoops) : null;
-
-  const drainLimitCfg =
-    Number(tsfinCfg.drainLimit || 0) > 0 ? Number(tsfinCfg.drainLimit) : null;
-
-  const effectiveMaxLoops = drainAll ? (maxLoopsCfg ?? maxLoops ?? 60) : 0;
-  const effectiveDrainLimit = drainAll ? (drainLimitCfg ?? drainLimit ?? 50) : 0;
+  const boundedPositive = (value, fallback, maximum) => {
+    const number = typeof value === 'number' || typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(number) && number > 0 ? Math.min(maximum, Math.max(1, Math.floor(number))) : fallback;
+  };
+  const maxInlineItems = boundedPositive(tsfinCfg.maxInlineItems, 3, 500);
+  const maxLoopsCfg = boundedPositive(tsfinCfg.maxDrainLoops, null, 60);
+  const drainLimitCfg = boundedPositive(tsfinCfg.drainLimit, null, 500);
+  const effectiveMaxLoops = drainAll ? (maxLoopsCfg ?? boundedPositive(maxLoops, 60, 60)) : 0;
+  const effectiveDrainLimit = drainAll ? (drainLimitCfg ?? boundedPositive(drainLimit, 50, 500)) : 0;
 
   // Dedupe and normalize input ids
   const uniq = Array.from(new Set((timesheetIds || [])
@@ -172537,8 +172574,8 @@ async function tsfinTargetedDrainNow(env, {
   let fail = 0;
   let loops = 0;
 
-  let pendingTotal = 0;
-  let pendingReady = 0;
+  let pendingTotal = null;
+  let pendingReady = null;
   let pendingNextAttemptAtMin = null;
 
   // Enqueue all IDs (priority enqueue), chunked
@@ -172580,13 +172617,11 @@ async function tsfinTargetedDrainNow(env, {
       p_timesheet_ids: uniq
     });
     const payload = unwrapRpcJsonb(raw, 'tsfin_outbox_pending_summary');
-    const total = Number(payload?.total ?? 0);
-    const ready = Number(payload?.ready ?? 0);
-    return {
-      total: Number.isFinite(total) ? total : 0,
-      ready: Number.isFinite(ready) ? ready : 0,
-      next_attempt_at_min: payload?.next_attempt_at_min ?? null
-    };
+    const count = value => Number.isSafeInteger(value) && value >= 0 ? value :
+      typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    const total = count(payload?.total), ready = count(payload?.ready);
+    if (total === null || ready === null || ready > total) throw new Error('TSFIN_PENDING_SUMMARY_UNAVAILABLE');
+    return { total, ready, next_attempt_at_min: payload.next_attempt_at_min ?? null };
   };
 
   // Drain mode A (legacy): drain only inlineIds once
@@ -172684,6 +172719,9 @@ async function tsfinTargetedDrainNow(env, {
     const msg = String(e?.message || e || '');
     console.warn('[TSFIN][TARGET] drainAll loop exception', msg);
     L('DRAIN_ALL_EXCEPTION', { err: msg });
+    pendingTotal = null;
+    pendingReady = null;
+    pendingNextAttemptAtMin = null;
     done = false;
   }
 
