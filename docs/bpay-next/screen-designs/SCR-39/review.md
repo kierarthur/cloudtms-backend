@@ -140,5 +140,3 @@ Each row names files `DR10-<state>-dark.png`, `DR10-<state>-device-light.png` an
 | guard-error | 3BBB0FD46AEBC6B3D2066679527EF52ACF08D7297875136DF4EA33182B5D241A | D9E9A5E077E7F70404EED6CB7A01D228638E0AD4ABFA92463939D00A40D5A49B | 0BC1B62A76C19A5FAB8F007FA7884179F3F2BD9E605F8A0E637B3790F5B5D119 |
 
 Final source/A4 findings are closed. Owner/card-required departures above need BUILD_LOG justification, with no supplied pack edits. Real Create/decision/auth submission, expired-proof replay, concurrent same-week submissions, legacy census, browser keyboard interaction and queue/payment acceptance remain NOT_RUN.
-
-

@@ -43,4 +43,3 @@ The existing WB21 journal retains original IDs, descriptor, policy and exact pen
 ## Review boundary
 
 Current parent sources are Create0426, accepted choice/ACK/enqueue1832, seal2306, manifest0454, public intake/page0814, proof1302 and current closed Worker/Office/WB12 modules, as listed in the saved investigation. The design adds only the necessary guard/action/closed policy proof/channel audit support and unchanged money-owner call plumbing. No essential architecture replacement, new table, week lock, financial command kind, producer rewrite or public financial exposure is required.
-

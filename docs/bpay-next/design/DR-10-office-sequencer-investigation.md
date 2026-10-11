@@ -63,4 +63,3 @@ Required differences: sample PB references/Paid/date/148+79 counts must become o
 ## 7. Source receipt and remaining checks
 
 Read source SHA256: Office529D851A64A2A5D2155A89D5C34492B95984C27D5998DD54B4127E62753EE137; Workbench7FAD175A5DADA59A04EA5967D203CBB5E6D6A078F83C8DE9B4CCF54507459178; preparation18574B10D874F31AEC53A4855FE5BF740CCDD022E092EDE61961D873A53B3548; command3EDF996AF78AE7D6F5C6B775ECCF1ADD0CCE92F3C072281B3F77137E969E3ED0. These are pre-build saved-source facts. No product is marked built/reviewed/installed/app-tested here. Required implementation checks are precisely original unknown replay versus definite pre-admission refusal, old v1 journal decoding, new Create-producing receipt transition, stale-before-acceptance Refresh, Verify proof mapping, original post-Case guard/seal/readback and exact permission/actor/epoch isolation. No broad money-owner or queue work is proposed.
-

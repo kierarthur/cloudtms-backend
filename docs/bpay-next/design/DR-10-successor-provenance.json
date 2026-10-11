@@ -2,7 +2,7 @@
   "item": "DR-10",
   "sequence": 99,
   "decision": "BD111",
-  "status": "SOURCE_AND_A4_PASS_PENDING_LOCAL_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/migrations/11102026_1358_banking_pay_next_paye_same_week_guard.sql",
@@ -90,5 +90,7 @@
     "fail": 0,
     "total": 42,
     "captures": 24
-  }
+  },
+  "implementationCommit": "7cbb6c5d7f7145a0800dda54ed24fa9cd47a5f2f",
+  "frontendCommit": "30f0c6defc5733d3cd6331a8d8452c0e8ae5bebb"
 }
