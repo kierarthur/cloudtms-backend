@@ -199031,7 +199031,11 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
   }
 
   if (req.method === 'POST' && nextPath === '/api/banking/pay/next/preparation') {
+    const preparationReauth=createBpayNextReauthRpc({baseUrl:env.SUPABASE_URL,headers:sbHeaders(env)});
     const preparationResponse = await handleBpayNextPreparationCommand(req, {
+      verifyBpayNextActionReauth:(token,actor,action)=>verifyBpayNextActionReauth(env,token,actor,action),
+      reauthRecordRpc:preparationReauth.record,
+      secondFactorRequired:()=>bpayNextSecondFactorRequired(env),
       requireOfficeUser: async () => user,
       preparationRpc: createBpayNextPreparationRpc({
         baseUrl: env.SUPABASE_URL, headers: sbHeaders(env)

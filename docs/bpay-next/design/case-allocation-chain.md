@@ -307,3 +307,9 @@ DY07seq94/BD105: publicOfficeCandidateadapter1832 ->11102026_1119_banking_pay_ne
 DY08seq95/BD106: privateDailyApprovalEvidence0925 ->11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql (eight exact ancillary predicates into dedicated qualified23514 branch). All remaining evidence/refusals/rates/ACLs unchanged; current1001 publisher callers retained.
 
 DY-09 sequence96 / BD108: 0130 CLAIM retained; PS-01 BUILD/guard0533 -> DY-09 exact reuse -> DR-38 -> DR-22 -> CM-13a. Seven fresh local owner bodies/ACLs match. No SQL successor, Contract join or current-after-click identity lookup was needed. Existing STATUS0639 supplies the four frozen Umbrella detail facts; future DR-37 still merges STATUS0639.
+
+## Owner A6 correction / DR-10 current successors — 11 October 2026
+
+CM-02 installs private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text) from the chosen raw0549 reference, before CM-12. CM-02a selected its reference only and installs no SQL; 0241 is superseded. FC-15 / SP-09 / CM-13a collection-function edits merge onto11102026_0559_banking_pay_next_worker_reprepare_v1.sql for their current1519 signatures; use each exact final-definer registry entry.
+
+DR-10 merges current Create0426, intake/page0814, seal2306, EX-01 reauth scope1302 and private accepted-choice guard1832 onto11102026_1358 respective successors. New guard helpers and six-argument private Create carry only the required original-cut policy. No allocation, query, Source producer or original money owner changes. Later intake/seal/proof/choice-guard editors preserve1358 policy and original descriptor replay; registry is authoritative by signature.

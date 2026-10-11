@@ -221,12 +221,25 @@ function commandCall(body) {
 }
 
 export function qualifyBpayNextReauthIntent(body) {
+  if(body?.action==='PAYE_SAME_WEEK_OVERRIDE'){
+    const {action,...args}=body,c=args.context,n=c?.namespace;
+    const closed=(x,keys)=>record(x)&&Object.keys(x).length===keys.length&&keys.every(k=>Object.hasOwn(x,k));
+    if(!closed(args,['run_id','command_id','decision','reason','context'])||!field(args.run_id,'uuid')||!field(args.command_id,'uuid')
+      ||!['VERIFY_BOTH','VERIFY_PAYE'].includes(args.decision)||typeof args.reason!=='string'||!args.reason.trim()
+      ||args.reason.includes('\0')||ENCODER.encode(args.reason).byteLength>500
+      ||!closed(c,['namespace','workbench_revision','adoption_revision'])||!field(c.workbench_revision,'bigint')||!field(c.adoption_revision,'bigint')
+      ||!closed(n,['agency_id','owner_epoch','actor_user_id','official_pay_date','scope'])||!field(n.agency_id,'uuid')||!field(n.actor_user_id,'uuid')
+      ||!field(n.owner_epoch,'positiveBigint')||!(typeof n.official_pay_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(n.official_pay_date)&&date(n.official_pay_date))||!closed(n.scope,['candidate_id','client_id','channel'])
+      ||!field(n.scope.candidate_id,'uuid?')||!field(n.scope.client_id,'uuid?')||!['ALL','PAYE','UMBRELLA'].includes(n.scope.channel)
+      ||ENCODER.encode(JSON.stringify(body)).byteLength>2048)throw fault('BPAY_NEXT_REAUTH_REQUEST_INVALID',400);
+    return {action,args:Object.freeze(args),token:null};
+  }
   const call = commandCall(body);
   if (!protectedAction(call.action) || call.token !== null) throw fault('BPAY_NEXT_REAUTH_REQUEST_INVALID',400);
   return call;
 }
 
-export async function readBpayNextReauthJson(response, signal) {
+export async function readBpayNextReauthJson(response, signal, action = null) {
   if (!(response instanceof Response)) throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503);
   let payload;
   try { payload = await limitedJson(response,BPAY_NEXT_COMMAND_LIMITS.responseBytes,false,signal); }
@@ -235,6 +248,8 @@ export async function readBpayNextReauthJson(response, signal) {
     // Preview and proof recording precede the financial RPC.
     throw fault(safe.code,safe.status,safe.retryable,false);
   }
+  if (!response.ok && action==='PAYE_SAME_WEEK_OVERRIDE' && payload?.code==='23514'
+    && payload?.message==='BPAY_NEXT_CHOICE_CONTEXT_CHANGED') throw fault('BPAY_NEXT_CHOICE_CONTEXT_CHANGED',409);
   if (!response.ok) throw dependencyError({status:response.status,json:payload});
   return payload;
 }
@@ -243,9 +258,10 @@ export function qualifyBpayNextReauthPreview(payload,action) {
   const keys=['action_kind','action_label','candidate_count','candidate_name','total_amount','amount_basis','scope_sha256','accepted'];
   if (!record(payload) || Object.keys(payload).length!==keys.length || keys.some(k=>!Object.hasOwn(payload,k))
     || payload.action_kind!==action || !protectedAction(action) || typeof payload.action_label!=='string'
-    || !payload.action_label || payload.action_label.length>80 || payload.candidate_count!==1
+    || !payload.action_label || payload.action_label.length>80 || (action==='PAYE_SAME_WEEK_OVERRIDE'?payload.candidate_count!==null:payload.candidate_count!==1)
     || typeof payload.candidate_name!=='string' || !payload.candidate_name || payload.candidate_name.length>512
-    || !field(payload.total_amount,'caseMoney') || !['CASH','DRAFT_GROSS'].includes(payload.amount_basis)
+    || (action==='PAYE_SAME_WEEK_OVERRIDE'?(payload.total_amount!==null||payload.amount_basis!=='PAYE_POLICY')
+      :(!field(payload.total_amount,'caseMoney') || !['CASH','DRAFT_GROSS'].includes(payload.amount_basis)))
     || typeof payload.accepted!=='boolean'
     || !(field(payload.scope_sha256,'sha256') || (payload.accepted && action==='CSV_ISSUE' && payload.scope_sha256===null))) {
     throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID',503);
@@ -265,7 +281,7 @@ export async function handleBpayNextReauthPreview(request,dependencies={}) {
     const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fault('BPAY_NEXT_COMMAND_DEPENDENCY_TIMEOUT',503,true));},8000);});
     const read=async()=>{
       const payload=qualifyBpayNextReauthPreview(await readBpayNextReauthJson(await dependencies.reauthPreviewRpc(call.action,call.args,
-        {actorUserId:user.id,signal:controller.signal}),controller.signal),call.action);
+        {actorUserId:user.id,signal:controller.signal}),controller.signal,call.action),call.action);
       const policy=await dependencies.secondFactorRequired();
       if(typeof policy!=='boolean' || controller.signal.aborted)throw fault('BPAY_NEXT_COMMAND_DEPENDENCY_UNAVAILABLE',503,true);
       return {ok:true,preview:{...payload,second_factor_required:policy}};

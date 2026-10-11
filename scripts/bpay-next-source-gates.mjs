@@ -642,8 +642,8 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
   "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
-    "pg_catalog.jsonb_build_object('run_id',v_run,'status',v_result->>'status', 'selection_state',v_result->>'selection_state','selection_count',v_header.selection_count::text, 'selected_candidate_count',v_header.selected_candidate_count::text,'official_pay_date',v_header.pay_date::text)",
-    "jsonb_build_object('command_id',v_result->>'command_id', 'agency_sequence',v_result->'agency_sequence','choice_work_count',v_result->>'choice_work_count', 'choice_case_count',v_result->>'choice_case_count','empty',v_result->'empty','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('run_id',v_run,'status',v_result->>'status', 'selection_state',v_result->>'selection_state','selection_count',v_header.selection_count::text, 'selected_candidate_count',v_header.selected_candidate_count::text,'official_pay_date',v_header.pay_date::text, 'command_id',v_result->>'command_id','agency_sequence',v_result->'agency_sequence', 'choice_work_count',v_result->>'choice_work_count','choice_case_count',v_result->>'choice_case_count', 'empty',v_result->'empty','replay',v_result->'replay')",
+    "pg_catalog.jsonb_build_object('decision',v_header.paye_guard_decision,'channel_scope',v_header.channel_scope)",
     "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',p_args->>'selection_revision','page_no',v_result->>'page_no', 'item_count',v_result->>'item_count','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('run_id',v_run,'candidate_id',v_candidate, 'selection_revision',v_result->>'selection_revision','sealed',v_result->'sealed', 'selected_count',v_result->>'selected_count','excluded_count',v_result->>'excluded_count','replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('run_id',v_run,'command_id',v_result->>'command_id', 'agency_sequence',v_result->>'agency_sequence','selection_count',v_seal->>'selection_count','replay',v_result->'replay')",
@@ -651,6 +651,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_paye_guard_page_v1(p_actor_user_id,(p_args->>'run_id')::uuid,p_args->'descriptor')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(v_progress),'complete',true)",
     "pg_catalog.jsonb_build_object( 'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind, 'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text, 'unit_label',l.unit_label,'approved_quantity',l.approved_quantity::text, 'approved_unit_rate',l.approved_unit_rate::text, 'job_title',r.job_title,'band_label',r.band_label, 'original_work_ref',parent.reference_number,'original_timesheet_id',parent.timesheet_id, 'is_adjustment',ts.is_adjustment,'correction_kind',ts.correction_kind, 'associated_rate_schedule_id',rs.id,'associated_rate_family',rs.rate_family,'associated_rate_code',rs.rate_code, 'available_paye_rate',rs.paye_rate::text,'available_umbrella_rate',rs.umbrella_rate::text, 'available_charge_rate',rs.charge_rate::text,'approved_charge_rate',rs.approved_charge_rate::text, 'standard_rate_schedule',case when l.component_kind in ('WORK','PROTECTED_WORK') then (select coalesce(jsonb_agg(snapshot.value order by snapshot.bucket_order),'[]'::jsonb) from ( select jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text) value, case sr.rate_code when 'DAY' then 1 when 'NIGHT' then 2 when 'SAT' then 3 when 'SUN' then 4 when 'BH' then 5 end bucket_order from private.bpay_next_rate_schedule sr where sr.revision_id=v_revision and sr.rate_family='STANDARD' and sr.rate_code in ('DAY','NIGHT','SAT','SUN','BH') order by bucket_order limit 5 ) snapshot) else '[]'::jsonb end, 'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text, 'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text, 'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false))",
     "jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text)",
@@ -1242,6 +1243,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_preparation_discard_fenced_v1"
   ],
   "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
+    "pg_catalog.current_setting",
     "cardinality",
     "pg_catalog.jsonb_object_keys",
     "private.bpay_next_accept_preparation_discard_v1"
@@ -1256,6 +1258,9 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "left"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "pg_catalog.current_setting",
+    "pg_catalog.jsonb_typeof",
+    "private.bpay_next_paye_guard_page_v1",
     "array",
     "array_remove",
     "jsonb_agg",
@@ -1948,7 +1953,7 @@ export function verifyBpayNextSourceGates(){
   const current=inventory(),changed=changedSourcePaths();
   const {routines,migrationRoots}=definerInventory(current),protectedSignatures=new Map(),frozenSources=new Map();
   // Owner A1: every current Create/append skip literal must fit the member CHECK.
-  {const memberChecks=read('supabase/migrations/11102026_1048_banking_pay_next_held_choice_skip_check_v1.sql'),checkSets=[...memberChecks.matchAll(/check\s*\(skip_code\s+in\s*\(([^)]*)\)\)/gi)].map(m=>new Set([...m[1].matchAll(/'([A-Z0-9_]+)'/g)].map(v=>v[1])));for(const [signature,definitions] of routines){if(!/^private\.bpay_next_(?:create|append)_/.test(signature))continue;const final=definitions.at(-1),source=read(final.physical).replaceAll('\r\n','\n'),body=scanManagedSql(source).statements.filter(row=>routineDefinitions(source.slice(row.start,row.end),final.physical).includes(signature)).map(row=>source.slice(row.start,row.end)).join('\n');for(const match of body.matchAll(/(?:v_(?:skip_)?code\s*:=|return)\s*'((?:BPAY_NEXT_(?:WORK_WEEK|SELECTION_)|SOURCE_PAY_QUERY_|PAYE_EXCLUDED_)[A-Z0-9_]+)'/gi))if(checkSets.length!==2||checkSets.some(allowed=>!allowed.has(match[1]))||match[1]==='BPAY_NEXT_SELECTION_PAY_ON_HOLD')throw Error('BPAY_NEXT_MEMBER_SKIP_CHECK_MISSING: '+signature+' '+match[1]);}}
+  {const memberChecks=read('supabase/migrations/11102026_1358_banking_pay_next_paye_same_week_guard.sql'),checkSets=[...memberChecks.matchAll(/check\s*\(skip_code\s+in\s*\(([^)]*)\)\)/gi)].map(m=>new Set([...m[1].matchAll(/'([A-Z0-9_]+)'/g)].map(v=>v[1])));for(const [signature,definitions] of routines){if(!/^private\.bpay_next_(?:create|append)_/.test(signature))continue;const final=definitions.at(-1),source=read(final.physical).replaceAll('\r\n','\n'),body=scanManagedSql(source).statements.filter(row=>routineDefinitions(source.slice(row.start,row.end),final.physical).includes(signature)).map(row=>source.slice(row.start,row.end)).join('\n');for(const match of body.matchAll(/(?:v_(?:skip_)?code\s*:=|return)\s*'((?:BPAY_NEXT_(?:WORK_WEEK|SELECTION_)|SOURCE_PAY_QUERY_|PAYE_EXCLUDED_)[A-Z0-9_]+)'/gi))if(checkSets.length!==2||checkSets.some(allowed=>!allowed.has(match[1]))||match[1]==='BPAY_NEXT_SELECTION_PAY_ON_HOLD')throw Error('BPAY_NEXT_MEMBER_SKIP_CHECK_MISSING: '+signature+' '+match[1]);}}
   for(const signature of new Set([...ROUTINE_WORK_SIGNATURES,...TYPED_TRANSPORT_SIGNATURES])){
     const final=routines.get(signature)?.at(-1);
     if(!final)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);

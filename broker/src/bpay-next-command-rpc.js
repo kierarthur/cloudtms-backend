@@ -46,7 +46,7 @@ export function createBpayNextReauthRpc({baseUrl,headers,fetchImpl=fetch}) {
     return fetchImpl(endpoint.href,{method:'POST',headers:h,body:JSON.stringify(body),signal:options.signal,redirect:'error'});
   };
   return Object.freeze({preview:(action,args,options)=>{
-    if(!ACTIONS.has(action))throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
+    if(!ACTIONS.has(action)&&action!=='PAYE_SAME_WEEK_OVERRIDE')throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
     return send(preview,{p_actor_user_id:options.actorUserId,p_action:action,p_args:args},options);
   },record:(verified,options)=>send(record,{p_request:verified},options)});
 }

@@ -1,0 +1,94 @@
+{
+  "item": "DR-10",
+  "sequence": 99,
+  "decision": "BD111",
+  "status": "SOURCE_AND_A4_PASS_PENDING_LOCAL_COMMIT",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1358_banking_pay_next_paye_same_week_guard.sql",
+      "sha256": "b74faed7a411d96b5df3685181efa692f5cb64b33fb014639d1182a9b2cbe247"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_same_week_guard_v1.sql",
+      "sha256": "5982feb781685d84929f15403dcace89e7ad02bc22131fc96d823615986a2a23"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+      "sha256": "6d13cd0a482be586e49aaeb2fb67bca82613aa092657cbcc208e6f012acbc0a6"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+      "sha256": "5777b06b24a9aa1dedad608926a6481665c02043652a842f3af4ab6a48e4750d"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_override_reauth_v1.sql",
+      "sha256": "1ea45b445cf57e2f2111e231e53e6e334539d76ce84281460c9b5257340855ac"
+    }
+  ],
+  "worker": [
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "d5c3b15437494a287ec38db7f8776a9cf708b72e77f69e5a6ca31046e9eea5b3"
+    },
+    {
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "2cca59a13f87fb4eef36d3ac2ad021568306cb698cd1c573398b3ef22115cfa8"
+    },
+    {
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "d8e678c400a4ea39a63cd67a75f16562116b70babbcf748435aa2b7ac2e072b7"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "f497b65f0ea0c8285c5daa251695a373febcb5e9119b7630570c0f62b6dc6437"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "adc099141fc57f0ab97058eea716744dc76068ce2244f24a234ae4f6b3c3745b"
+    }
+  ],
+  "frontend": [
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-office.js",
+      "sha256": "9791dbe4268ecdb63f0de7dacaf0dce929ead441b6cedd0bab181b450f2e6b1f"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-workbench.js",
+      "sha256": "d36fac111cd39abcda1aa5c694fdfc3bbd238270003b796a31d22b92e97b8909"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "css/bpay-next-office.css",
+      "sha256": "7029eeac8a49dcc025a4f036840543d2f1ec495ceb15436a02ef192c552f27eb"
+    }
+  ],
+  "checks": {
+    "integrity": "347 migrations /909 repeatables",
+    "sourceGates": "12/12 PASS",
+    "localPG": "one locked migration/seven repeatable closures; ten current bodies/signatures/ACLs matched",
+    "catalogue": "design/DR-10-current-owner-catalogue.json",
+    "contractHash": "19b0fec9a113fe5c9440ecdd1c80eef432d3df1b77d156d9fc86a4cbb1aaaf19",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "general": "837/76/0/d695f2f10d6576d8a3b69f1fe263b297",
+    "verifiers": "General/Candidate/current-v3 DO PASS",
+    "publicMembershipDelta": 0
+  },
+  "screenshots": 24,
+  "sourceReview": [
+    "design/DR-10-guard-source-review.md",
+    "reviews/DR-10-core-source-review.md",
+    "reviews/DR-10-office-source-review.md"
+  ],
+  "screenReview": "screen-designs/SCR-39/review.md",
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "screenPolicy": {
+    "pass": 33,
+    "notApplicable": 9,
+    "fail": 0,
+    "total": 42,
+    "captures": 24
+  }
+}

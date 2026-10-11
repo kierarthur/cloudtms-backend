@@ -1,0 +1,194 @@
+[
+  {
+    "file": "DR10-guard-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-blocked-dark.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-umbrella-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-reason-confirm-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-password-cancel-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  },
+  {
+    "file": "DR10-stale-count-dark.png",
+    "errors": [],
+    "copy": "!\nCreate Draft?\n\nNothing was created. Your ticks are kept.\n\nThe list has changed. Refresh and try again.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-zero-umbrella-dark.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n0 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-guard-error-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week\n\nCould not verify this choice; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  },
+  {
+    "file": "DR10-guard-device-light.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-blocked-device-light.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-umbrella-device-light.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-reason-confirm-device-light.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-password-cancel-device-light.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  },
+  {
+    "file": "DR10-stale-count-device-light.png",
+    "errors": [],
+    "copy": "!\nCreate Draft?\n\nNothing was created. Your ticks are kept.\n\nThe list has changed. Refresh and try again.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-zero-umbrella-device-light.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n0 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-guard-error-device-light.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week\n\nCould not verify this choice; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  },
+  {
+    "file": "DR10-guard-phone-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-umbrella-phone-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-reason-confirm-phone-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-password-cancel-phone-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  },
+  {
+    "file": "DR10-stale-count-phone-dark.png",
+    "errors": [],
+    "copy": "!\nCreate Draft?\n\nNothing was created. Your ticks are kept.\n\nThe list has changed. Refresh and try again.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-zero-umbrella-phone-dark.png",
+    "errors": [],
+    "copy": "An unpaid PAYE Draft already exists for this pay week.\n\nPay or cancel that Draft first, or create the Umbrella Draft only.\n\nPAYE Draft\nNot paid yet\nWhat to create\nCreate Umbrella only\n0 Candidates. PAYE payments stay ticked.",
+    "requests": [],
+    "failure": null
+  },
+  {
+    "file": "DR10-guard-error-phone-dark.png",
+    "errors": [],
+    "copy": "A paid PAYE Draft already exists for this pay week.\n\nAnother PAYE Draft for the same week needs a verified override.\n\nPAYE Draft\nPaid\nWhat to create\nCreate Umbrella only\n79 Candidates. PAYE payments stay ticked.\nVerify and create PAYE + Umbrella\n148 PAYE and 79 Umbrella Candidates.\nVerify and create PAYE Draft\n148 Candidates.\nReason for the override\nI confirm a second PAYE Draft for this pay week\n\nCould not verify this choice; try again.",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/reauth-preview"
+      }
+    ],
+    "failure": null
+  }
+]

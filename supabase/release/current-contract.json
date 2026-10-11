@@ -10579,7 +10579,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a1d68ef1e8e2d00e5898ec96665ff1fac3fbf6ef7e2fdeba2d51c45f2adfd08f"
+      "definition_sha256": "cf371d995e9d99a1efd074bb63932faa842d1b6388c01e93d097c1378940b31a"
     },
     {
       "acl": [
@@ -12213,7 +12213,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ff4a016134020d71453be045a4fa600e25fba2080ea36b72721be221c61a9d3f"
+      "definition_sha256": "a31a58767a51e66591a983d3810277a466be775a8916ba8fd08dc4eeb9a979b6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_create_preparation_v1(p_run_id uuid, p_actor_user_id uuid, p_pay_date date, p_descriptor jsonb, p_command_id uuid, p_guard jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b90dd82fe18f06bcf90f6bddee53f22b519bce7ebd73ba2066dec78f184c3c87"
     },
     {
       "acl": [
@@ -13280,6 +13299,63 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_guard_context_v1(p_actor uuid, p_context jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a02f2ea991c2342e4263d2d7d01625e5083ff56d6f1cc0e6af80e938a8e43d01"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_guard_page_v1(p_actor uuid, p_run_id uuid, p_descriptor jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "4b87318d9cced24670cdf270b912a0db50f02b7d88379b4790d360c7eef494fe"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_paye_same_week_facts_v1(p_pay_date date, p_run_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "a0c380935d01124edac925e58a5e391cb726d00b893c514237a255154b3e9d81"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -14047,7 +14123,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "9a40b9dbcd14b4dc79038dd8ece20ba4f84e4d6b53f9c2add68361130e3ce1d2"
+      "definition_sha256": "37e78dbc5867f4c5928a355c2ee73b069fb57c45cf58a838e3886e73ecef6e76"
     },
     {
       "acl": [
@@ -14617,7 +14693,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b7d697e1fff5e2ed60d435d00a583b3e5d822be37d685b91c607d2ed8cebebdd"
+      "definition_sha256": "8b1e45601a3582f23d88a92010e317aa56575a40a92f3101ba2d329cb48628d1"
     },
     {
       "acl": [
@@ -32481,7 +32557,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b70e32d8bdda6bd97bf48b678ebf5c344b5d6ae257edfa1e01588c1dacd2878a"
+      "definition_sha256": "fbdc24c569ce29c7c710a9d4d9cbcec4df1e3bdff6c32060d4f4dacbaafe2a49"
     },
     {
       "acl": [
@@ -32505,7 +32581,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "603e3ee7cda4e3a56ddc933c4eec02b52759d60852162f75da5e7e0e8323499f"
+      "definition_sha256": "a6287838fc81c45fb477d71070104647a3220f8dda4b27c7a21d4e3781ea58f8"
     },
     {
       "acl": [
@@ -92337,6 +92413,14 @@
           "generated": ""
         },
         {
+          "name": "channel_scope",
+          "type": "text",
+          "default": "'ALL'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "confirmed_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -92377,6 +92461,38 @@
           "generated": ""
         },
         {
+          "name": "paye_guard_decision",
+          "type": "text",
+          "default": "'NONE'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "paye_guard_scope_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "paye_override_actor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "paye_override_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "preparation_expires_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -92406,6 +92522,14 @@
           "default": "0",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reauth_proof_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -92603,6 +92727,14 @@
           "definition": "CHECK (exclusion_page_count >= 0)"
         },
         {
+          "name": "bpay_next_pay_run_paye_override_actor_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (paye_override_actor) REFERENCES tms_users(id)"
+        },
+        {
           "name": "bpay_next_pay_run_pkey",
           "type": "p",
           "deferred": false,
@@ -92633,6 +92765,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (ready_candidate_count >= 0)"
+        },
+        {
+          "name": "bpay_next_pay_run_reauth_proof_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (reauth_proof_id) REFERENCES private.bpay_next_reauth_proof(id)"
         },
         {
           "name": "bpay_next_pay_run_review_candidate_count_check",
@@ -92729,6 +92869,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (preparation_expires_at_utc IS NULL OR isfinite(created_at_utc) AND isfinite(preparation_expires_at_utc) AND preparation_expires_at_utc = (created_at_utc + '72:00:00'::interval))"
+        },
+        {
+          "name": "bpay_next_run_paye_guard_decision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (paye_guard_decision = 'NONE'::text AND channel_scope = 'ALL'::text AND paye_override_reason IS NULL AND paye_override_actor IS NULL AND reauth_proof_id IS NULL AND paye_guard_scope_sha256 IS NULL OR paye_guard_decision = 'UMBRELLA_ONLY'::text AND channel_scope = 'UMBRELLA'::text AND paye_override_actor IS NOT NULL AND paye_override_reason IS NULL AND reauth_proof_id IS NULL AND paye_guard_scope_sha256 IS NULL OR (paye_guard_decision = ANY (ARRAY['VERIFY_BOTH'::text, 'VERIFY_PAYE'::text])) AND channel_scope =\nCASE paye_guard_decision\n    WHEN 'VERIFY_BOTH'::text THEN 'ALL'::text\n    ELSE 'PAYE'::text\nEND AND paye_override_actor IS NOT NULL AND reauth_proof_id IS NOT NULL AND paye_override_reason IS NOT NULL AND btrim(paye_override_reason) <> ''::text AND octet_length(paye_override_reason) >= 1 AND octet_length(paye_override_reason) <= 500 AND paye_guard_scope_sha256 IS NOT NULL AND paye_guard_scope_sha256 ~ '^[0-9a-f]{64}$'::text)"
         },
         {
           "name": "bpay_next_run_status_ck",
@@ -102456,7 +102604,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (skip_code = ANY (ARRAY['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE'::text, 'BPAY_NEXT_SELECTION_SNOOZED'::text, 'BPAY_NEXT_SELECTION_ON_HOLD'::text, 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED'::text, 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT'::text, 'BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text]))"
+          "definition": "CHECK (skip_code = ANY (ARRAY['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE'::text, 'BPAY_NEXT_SELECTION_SNOOZED'::text, 'BPAY_NEXT_SELECTION_ON_HOLD'::text, 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED'::text, 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT'::text, 'BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text, 'PAYE_EXCLUDED_BY_SAME_WEEK_GUARD'::text]))"
         },
         {
           "name": "bpay_next_run_choice_member_work_id_candidate_id_fkey",

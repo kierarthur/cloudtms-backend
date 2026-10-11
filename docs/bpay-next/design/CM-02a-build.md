@@ -229,7 +229,7 @@ This table routes exact latest reference objects and their bounded future hunks.
 | `private.bpay_next_source_comparison_case_basis_v2(uuid,text,boolean)` | CM-02 | `07102026_0157_bpay_next_source_comparison_full_v2.sql` |
 | `private.bpay_next_source_comparison_case_remainder_v2(private.bpay_next_source_comparison_receipt,text,uuid,numeric,numeric,jsonb)` | CM-02 | `07102026_0157_bpay_next_source_comparison_full_v2.sql` |
 | `private.bpay_next_source_comparison_case_reconcile_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid)` | CM-02 | `07102026_0157_bpay_next_source_comparison_full_v2.sql` |
-| `private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)` | CM-02a | `07102026_0241_source_comparison_review_credit_carry_v2.sql` |
+| `private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)` | CM-02 (installs chosen CM-02a reference) | `08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql` |
 | `private.bpay_next_source_comparison_operation_v2(uuid,text,uuid)` | CM-09 | `07102026_0157_bpay_next_source_comparison_full_v2.sql` |
 | `private.bpay_next_source_comparison_book_certified_v2(private.bpay_next_position)` | CM-09 | `07102026_0157_bpay_next_source_comparison_full_v2.sql` |
 | `private.bpay_next_source_comparison_guard_v2()` | CM-02 | `07102026_0241_source_comparison_review_credit_carry_v2.sql` |

@@ -1,0 +1,77 @@
+{
+  "authority": "Small fixed local presentation responses; no database rows, signed token or business action.",
+  "actor": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "run": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "command": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "descriptor": {
+    "namespace": {
+      "agency_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "owner_epoch": "1",
+      "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "official_pay_date": "2026-10-11",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL"
+      }
+    },
+    "intent": {
+      "mode": "ALL_MATCHING",
+      "candidates": [],
+      "works": [],
+      "components": [],
+      "cases": []
+    },
+    "revision": 1,
+    "workbench_revision": "1",
+    "adoption_revision": "1",
+    "memory_baseline_run_id": null
+  },
+  "guard": {
+    "run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "guard_applies": true,
+    "unexecuted": false,
+    "existing": [
+      {
+        "run_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "reference": null,
+        "legacy": false,
+        "unexecuted": false,
+        "status": "Paid"
+      }
+    ],
+    "paye_candidates": "148",
+    "umbrella_candidates": "79",
+    "context": {
+      "namespace": {
+        "agency_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "owner_epoch": "1",
+        "actor_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "official_pay_date": "2026-10-11",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "workbench_revision": "1",
+      "adoption_revision": "1"
+    },
+    "decision": "NONE",
+    "channel_scope": "ALL"
+  },
+  "preview": {
+    "ok": true,
+    "preview": {
+      "action_kind": "PAYE_SAME_WEEK_OVERRIDE",
+      "action_label": "Verify and create",
+      "candidate_count": null,
+      "candidate_name": "Selected payments",
+      "total_amount": null,
+      "amount_basis": "PAYE_POLICY",
+      "scope_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "accepted": false,
+      "second_factor_required": true
+    }
+  }
+}
