@@ -478,6 +478,18 @@
       "permissive": "PERMISSIVE"
     },
     {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres"
+      ],
+      "table": "bpay_next_case_list_key",
+      "using": "true",
+      "schema": "private",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
       "name": "bpay_next_local_detail_seam_owner_all",
       "check": "true",
       "roles": [
@@ -11744,6 +11756,101 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "e509b9d281eb6b0b52a68b0ab32a66954dbe85874aa2fcb40ffd9c0c9cdb0fb8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_list_context_v1(p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "f6ca42a9f4c95edd6270463ab20e20d81fdc99ed8530b04bca92f94bf53db391"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_list_native_changed_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b01c7e9064fe511fd4306fe24a87298c0ea5cba1c101c5bd6de2839efb11364f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_list_page_v1(p_actor_user_id uuid, p_kind text, p_args jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "445e554550f65c61b588bcd273c9fad211c59f4ac065382271150dea0876b18c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_list_refresh_key_v1(p_case_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "034701a4b82ca07b969cbf8bcf638179d9018b2d5d6feb09817c878da2d51f66"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_list_row_v1(p_case_id uuid, p_context jsonb)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "54be2479711ecb665a553e47312403b992fe3ef4e574d6234c541d06258c17b9"
     },
     {
       "acl": [
@@ -32824,7 +32931,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cfd4e3e2ec4e4a642b779f31bbca30a6f489f96a1d23cbf3eb001c2a633b9c04"
+      "definition_sha256": "9a16ff4723fd61edf2d770c4cc4654ca26e258478927dcd869f67b2dd43cdec5"
     },
     {
       "acl": [
@@ -54025,6 +54132,13 @@
       "definition": "CREATE TRIGGER bpay_next_case_capacity_use_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_case_capacity_use FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_capacity_use_guard_v1()"
     },
     {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_case_component",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_component DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
       "name": "bpay_next_work_collection_component_identity_guard_v1",
       "table": "bpay_next_case_component",
       "schema": "private",
@@ -54102,6 +54216,13 @@
       "definition": "CREATE TRIGGER bpay_next_segment_recovery_reservation AFTER INSERT ON private.bpay_next_case_hold FOR EACH ROW EXECUTE FUNCTION private.bpay_next_segment_recovery_reservation_v1()"
     },
     {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_case_period",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_period DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
       "name": "bpay_next_work_collection_period_guard_v1",
       "table": "bpay_next_case_period",
       "schema": "private",
@@ -54114,6 +54235,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_case_fact_immutable_v1 BEFORE DELETE OR UPDATE ON private.bpay_next_case_rule FOR EACH ROW EXECUTE FUNCTION private.bpay_next_effect_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_case_rule",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_case_rule DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
     },
     {
       "name": "bpay_next_case_rule_insert_v1",
@@ -54247,6 +54375,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_effective_work_cut_no_truncate BEFORE TRUNCATE ON private.bpay_next_effective_work_cut FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_accepted_evidence_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_finance_case",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_finance_case DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
     },
     {
       "name": "bpay_next_work_collection_case_identity_guard_v1",
@@ -54949,6 +55084,13 @@
       "definition": "CREATE TRIGGER bpay_next_detail_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_shift_detail FOR EACH ROW EXECUTE FUNCTION private.bpay_next_revision_child_guard_v1()"
     },
     {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_snooze",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
       "name": "bpay_next_snooze_guard",
       "table": "bpay_next_snooze",
       "schema": "private",
@@ -55236,6 +55378,13 @@
       "definition": "CREATE TRIGGER bpay_next_work_choice_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_work_choice FOR EACH ROW EXECUTE FUNCTION private.bpay_next_work_choice_guard_v1()"
     },
     {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_work_collection",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_work_collection DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
+    },
+    {
       "name": "bpay_next_work_collection_guard_v1",
       "table": "bpay_next_work_collection",
       "schema": "private",
@@ -55367,6 +55516,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_segment_negative_truncate_guard BEFORE TRUNCATE ON private.bpay_next_work_segment_write_off_share FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_negative_fact_guard_v1()"
+    },
+    {
+      "name": "bpay_next_case_list_native_changed",
+      "table": "bpay_next_workbench_candidate_metadata",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE CONSTRAINT TRIGGER bpay_next_case_list_native_changed AFTER INSERT OR DELETE OR UPDATE ON private.bpay_next_workbench_candidate_metadata DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.bpay_next_case_list_native_changed_v1()"
     },
     {
       "name": "bpay_next_workbench_receipt_immutable",
@@ -82322,6 +82478,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (case_kind <> 'CREDIT'::text OR recovered_source_ex_vat::numeric = 0::numeric AND active_recovery_source_ex_vat::numeric = 0::numeric)"
+        },
+        {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
         }
       ],
       "view_definition_sha256": null
@@ -83811,6 +83975,304 @@
           "privilege": "UPDATE"
         }
       ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_case_list_key",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "candidate_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_reference",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_sort_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_subtype",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "case_type_label",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_association",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "client_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "client_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_case_list_candidate_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_candidate_asc_idx ON private.bpay_next_case_list_key USING btree (\"left\"(candidate_sort_name, 512), ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_candidate_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_candidate_desc_idx ON private.bpay_next_case_list_key USING btree (\"left\"(candidate_sort_name, 512) DESC, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_candidate_scope_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_candidate_scope_idx ON private.bpay_next_case_list_key USING btree (candidate_id, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_client_scope_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_client_scope_idx ON private.bpay_next_case_list_key USING btree (client_id, case_id) WHERE (client_id IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_case_list_created_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_created_asc_idx ON private.bpay_next_case_list_key USING btree (((created_at_utc IS NULL)), created_at_utc, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_created_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_created_desc_idx ON private.bpay_next_case_list_key USING btree (((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_key_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_case_list_key_pkey ON private.bpay_next_case_list_key USING btree (case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_subtype_scope_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_subtype_scope_idx ON private.bpay_next_case_list_key USING btree (case_subtype, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_type_asc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_type_asc_idx ON private.bpay_next_case_list_key USING btree (case_type_label, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        },
+        {
+          "name": "bpay_next_case_list_type_desc_idx",
+          "definition": "CREATE INDEX bpay_next_case_list_type_desc_idx ON private.bpay_next_case_list_key USING btree (case_type_label DESC, ((created_at_utc IS NULL)), created_at_utc DESC NULLS LAST, case_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "bpay_next_case_list_key_candidate_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_list_key_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_list_key_candidate_reference_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_reference) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_list_key_candidate_sort_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_sort_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_list_key_case_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id, candidate_id) REFERENCES private.bpay_next_finance_case(id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_list_key_case_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (case_id) REFERENCES private.bpay_next_finance_case(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_list_key_case_subtype_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(case_subtype) <= 64)"
+        },
+        {
+          "name": "bpay_next_case_list_key_case_type_label_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(case_type_label) <= 64)"
+        },
+        {
+          "name": "bpay_next_case_list_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((client_association = 'FROZEN'::text) = (client_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_case_list_key_client_association_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (client_association = ANY (ARRAY['FROZEN'::text, 'UNASSOCIATED'::text, 'UNKNOWN'::text]))"
+        },
+        {
+          "name": "bpay_next_case_list_key_client_display_name_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(client_display_name) <= 8192)"
+        },
+        {
+          "name": "bpay_next_case_list_key_client_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_case_list_key_created_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (created_at_utc IS NULL OR isfinite(created_at_utc))"
+        },
+        {
+          "name": "bpay_next_case_list_key_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (case_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
       "rls": false,
       "kind": "r",
       "name": "bpay_next_case_payout_basis",
@@ -84250,6 +84712,14 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
           "name": "bpay_next_case_period_active_payout_source_ex_vat_check",
           "type": "c",
           "deferred": false,
@@ -84591,6 +85061,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
         {
           "name": "bpay_next_case_rule_case_created_at_utc_check",
           "type": "c",
@@ -88940,6 +89418,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (id, candidate_id, case_kind)"
+        },
+        {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
         },
         {
           "name": "bpay_next_case_principal_balance",
@@ -109474,6 +109960,14 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
           "name": "bpay_next_snooze_approved_segment_id_fkey",
           "type": "f",
           "deferred": false,
@@ -117590,6 +118084,14 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
+        {
           "name": "bpay_next_collection_case_candidate_unique",
           "type": "u",
           "deferred": false,
@@ -119483,6 +119985,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "bpay_next_case_list_native_changed",
+          "type": "t",
+          "deferred": true,
+          "validated": true,
+          "deferrable": true,
+          "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+        },
         {
           "name": "bpay_next_workbench_candidate_me_adopted_metadata_version_check",
           "type": "c",

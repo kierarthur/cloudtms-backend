@@ -1,0 +1,24 @@
+{
+  "item": "FC-01",
+  "sequence": 103,
+  "route": "Existing GET NEXT preparation-page route",
+  "rpc": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+  "authority": "Existing service JWT, active admin and active NEXT owner; plain read only",
+  "kinds": {
+    "CASE_LIST": {"arguments": ["filters","after","sort","limit"], "defaultLimit": 10, "limits": [5,10,20,50], "sorts": ["CREATED_ASC","CREATED_DESC","CANDIDATE_ASC","CANDIDATE_DESC","TYPE_ASC","TYPE_DESC"], "defaultSort": "CREATED_DESC"},
+    "CASE_SUMMARY": {"arguments": ["filters","after"], "rawCaseWindow": 100, "sort": "CASE_ID_ASC", "countsAre": "Filtered chunk deltas; publish final totals only after every chunk completes in one unchanged context"}
+  },
+  "filters": {"candidate_id": null,"client_id": null,"case_subtype": "ALL","view": "ALL","snooze": "ALL","hide_completed": true},
+  "subtypes": ["ALL","LOAN","PAYMENT_ADVANCE","OVERPAYMENT","UNDERPAYMENT","MANUAL_CREDIT","MANUAL_DEBT","UNMAPPED"],
+  "views": ["ALL","ACTIVE","SNOOZED","HISTORY"],
+  "snoozeFilters": ["ALL","FINITE","INDEFINITE"],
+  "cursor": {"keys": ["context","filters","sort","last"], "contextKeys": ["agency_id","actor_user_id","owner_epoch","local_date","official_pay_date","pay_week_start","workbench_revision","adoption_revision","valuation_policy_id"], "lastKeys": ["case_id","created_at_utc","sort_value"], "sortValueEncoding": "Canonical Base64 UTF-8 only in cursor; row sort_key retains exact raw text", "maximumBytes": 16384},
+  "summaryCategories": ["payment_advances_active_count","overpayments_active_count","underpayments_active_count","manual_debt_adjustments_active_count","manual_credit_adjustments_count","mixed_finance_cases_count","unresolved_finance_cases_count","stale_finance_cases_count","finance_cases_with_active_snooze_count"],
+  "bounds": {"requestBytes":32768,"replyBytes":120000,"nativeReplyBytes":119936,"rowBytes":90000,"timeoutMs":2000},
+  "continuation": "Advance over raw excluded Case keys, including zero-match chunks; no offset, capped register or automatic changed-context retry",
+  "amounts": "Native Case/component/current-period facts only; exact decimal text, absent due/recoverable/resolution facts stay null",
+  "gaps": "Unsupported type, missing original provenance/valuation and unsupported native component membership are explicit; missing current period leaves due unknown; never infer non-taxable",
+  "currentness": "Existing adoption CURRENT and zero dirty/pending gate; deferred private native input invalidation advances the existing Workbench revision; fresh post-read comparison",
+  "notRun": ["230-Case app journey","whole-list order/count/runtime checks","timing"],
+  "screenOwner": "FC-02 sequence117; FC-01-D08 and ITEM remain open"
+}

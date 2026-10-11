@@ -1261,6 +1261,7 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
     "pg_catalog.current_setting",
+    "private.bpay_next_case_list_page_v1",
     "private.bpay_next_case_create_preview_v1",
     "pg_catalog.jsonb_typeof",
     "private.bpay_next_paye_guard_page_v1",

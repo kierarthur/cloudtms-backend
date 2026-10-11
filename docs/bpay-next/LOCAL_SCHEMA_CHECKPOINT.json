@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "8c7860a249d106b5653856331602acd15834523f",
-  "compiledAtUtc": "2026-10-11T15:58:20.099Z",
+  "sourceCommit": "6525b831846ee36204f65d65a0b5d39547bee81f",
+  "compiledAtUtc": "2026-10-11T17:14:51.750Z",
   "inventory": {
     "migrations": [
       {
@@ -1408,6 +1408,10 @@
       {
         "path": "supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql",
         "sha256": "d7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb"
+      },
+      {
+        "path": "supabase/migrations/11102026_1738_banking_pay_next_case_list_indexes.sql",
+        "sha256": "3b1cb7e77fb2e271dd5e4b28cfcc4bca15cf5c9d413c19085cee578af6efae30"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8207,6 +8211,13 @@
         "sha256": "1447cd3714904ba9b99c323b7a6a14a8d88827b2f70177da10c563e6bbe329f1"
       },
       {
+        "path": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        ],
+        "sha256": "680d5d2e38b46fa4196538aad19333bb2aade1bd5de5e4c3293b9352a507c456"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8216,12 +8227,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql",
-        "sha256": "d7d5203449912201df726bff02b81d00c219e75f9acc90104150cca32cc19bdb"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8245,11 +8251,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql",
+        "path": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_1624_banking_pay_next_pay_method_change_v1.sql"
+          "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
         ],
-        "sha256": "1447cd3714904ba9b99c323b7a6a14a8d88827b2f70177da10c563e6bbe329f1"
+        "sha256": "680d5d2e38b46fa4196538aad19333bb2aade1bd5de5e4c3293b9352a507c456"
       }
     ]
   },
