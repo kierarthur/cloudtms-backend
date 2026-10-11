@@ -231,5 +231,19 @@
     "screen": "33 local PNGs; identity A4 OPEN"
   },
   "evidenceLimit": "Joined app, queue, financial first-use, expiry races and installation AUTHORED_NOT_RUN; no business rows or provider actions",
-  "laterOwner": "DR15 factual frozen labels and full A4; DR06 progress reader follows plan order now"
+  "laterOwner": "DR15 factual frozen labels and full A4; DR06 progress reader follows plan order now",
+  "implementationCommits": {
+    "backend": "2ef1ccce30b10bee4f7457b1c870180ffb0742d2",
+    "frontend": "e2c7ae2221bdffa6ee696a6c8279cbf5aa14b9c3"
+  },
+  "screenEvidence": {
+    "screenshots": 33,
+    "folders": [
+      "SCR-43",
+      "SCR-43b",
+      "SCR-43c"
+    ],
+    "review": "reviews/DR-05-screen-review.md",
+    "approval": "SCOPED_CONTROL_PASS_FULL_IDENTITY_OPEN_DR15"
+  }
 }
