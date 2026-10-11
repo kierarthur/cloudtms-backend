@@ -9,6 +9,7 @@ import { changedSourcePaths, routineDefinitions, definerInventory, verifyFinalDe
 
 export const FROZEN_BASE='a6f7423eb71e6e7cd173e705c2290e5408a1d077';
 const FOUNDATION_RECONCILED='3c91e5e6ce35b5833a5c218b77b741261eeebafa';
+const DAILY_IDENTITY_GUARD='supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql';
 export const FROZEN_FILES=Object.freeze([
   'supabase/migrations/03102026_1324_banking_pay_next_core.sql',
   'supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql',
@@ -1887,6 +1888,10 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     if(/^drop\s+table\b/.test(code)&&[...flat.matchAll(/\b(?:private|public)\.\w+\b/g)].some(m=>protectedTables.has(m[0])))competing=true;
     if(/^(?:alter|drop|grant|revoke)\b/.test(code)&&/\b(?:function|procedure|routine)\b/.test(code)&&[...policy.routines].some(name=>flat.includes(name+'(')||flat.includes(name+' (')))competing=true;
     if(/^drop\s+schema\s+(?:if\s+exists\s+)?(?:private|public)\b/.test(code)||/^alter\s+schema\s+(?:private|public)\s+rename\b/.test(code))competing=true;
+    // DY03 retains the exact owner-only ACL on its one existing guard OID.
+    if(file===DAILY_IDENTITY_GUARD&&(
+      /^revoke\s+all\s+on\s+function\s+private\.bpay_next_work_pointer_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
+      ||/^alter\s+function\s+private\.bpay_next_work_pointer_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
     if(competing&&!baseline.includes(statement))throw Error(`BPAY_NEXT_FROZEN_COMPETING_AUTHORITY: ${file}`);
   }
 }
@@ -1934,6 +1939,22 @@ export function verifyBpayNextSourceGates(){
       const previous=spawnSync('git',['show',`${FROZEN_BASE}:${definition.physical}`],{cwd:repoRoot,encoding:'utf8',maxBuffer:64*1024*1024,windowsHide:true});
       const currentSource=read(definition.physical).replaceAll('\r\n','\n');
       const exact=scanManagedSql(currentSource).statements.filter(row=>routineDefinitions(currentSource.slice(row.start,row.end),definition.physical).includes(signature)).map(row=>currentSource.slice(row.start,row.end).replaceAll('\r\n','\n'));
+      // DY03's card extends only the NULL-safe immutable Work identity tuple.
+      // Compare the entire statement to the frozen parent with exactly two
+      // field-list extensions; every other guard branch remains byte-exact.
+      if(signature==='private.bpay_next_work_pointer_guard_v1()'&&definition.physical===DAILY_IDENTITY_GUARD){
+        const parent=frozenSources.get(file).replaceAll('\r\n','\n');
+        const rows=scanManagedSql(parent).statements.filter(row=>routineDefinitions(parent.slice(row.start,row.end),file).includes(signature));
+        if(rows.length!==1||exact.length!==1)throw Error('BPAY_NEXT_DAILY_IDENTITY_GUARD_SHAPE');
+        let expected=parent.slice(rows[0].start,rows[0].end);
+        for(const prefix of ['new','old']){
+          const anchor=`${prefix}.work_kind,${prefix}.week_ending_date)`;
+          if(expected.split(anchor).length!==2)throw Error('BPAY_NEXT_DAILY_IDENTITY_PARENT_SHAPE');
+          expected=expected.replace(anchor,`${prefix}.work_kind,${prefix}.week_ending_date,${prefix}.origin_kind,${prefix}.origin_work_date)`);
+        }
+        if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_IDENTITY_GUARD_CHANGED');
+        continue;
+      }
       if(previous.status!==0||exact.some(text=>!previous.stdout.replaceAll('\r\n','\n').includes(text)))throw Error(`BPAY_NEXT_FROZEN_COMPETING_DEFINER: ${signature}`);
     }
   }

@@ -16430,7 +16430,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b218e20737f09ab34367785aeba5aec68a136b667e39c496bc2621e51fda0ee0"
+      "definition_sha256": "d77a516939ec67a60fcce40f723403f53234f0e444e7a4a634ff1d29d6d008a7"
     },
     {
       "acl": [
@@ -115099,7 +115099,7 @@
           "type": "uuid",
           "default": null,
           "identity": "",
-          "not_null": true,
+          "not_null": false,
           "generated": ""
         },
         {
@@ -115132,6 +115132,22 @@
           "default": "gen_random_uuid()",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "default": "'CONTRACT'::text",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "origin_work_date",
+          "type": "date",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -115343,6 +115359,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (id, original_timesheet_id)"
+        },
+        {
+          "name": "bpay_next_work_origin_identity_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (origin_kind = 'CONTRACT'::text AND contract_id IS NOT NULL AND origin_work_date IS NULL OR origin_kind = 'DAILY'::text AND contract_id IS NULL AND work_kind = 'ORDINARY'::text AND origin_work_date IS NOT NULL)"
         },
         {
           "name": "bpay_next_work_original_timesheet_id_fkey",
@@ -116385,6 +116409,14 @@
           "generated": ""
         },
         {
+          "name": "daily_approval_evidence_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "detail_kind",
           "type": "text",
           "default": null,
@@ -116598,6 +116630,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_revision_daily_evidence_shape_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (daily_approval_evidence_json IS NULL OR jsonb_typeof(daily_approval_evidence_json) = 'object'::text)"
+        },
         {
           "name": "bpay_next_revision_source_inventory_digest_check",
           "type": "c",

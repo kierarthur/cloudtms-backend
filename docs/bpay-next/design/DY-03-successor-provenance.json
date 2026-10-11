@@ -1,0 +1,32 @@
+{
+  "item": "DY-03",
+  "sequence": 89,
+  "status": "NORMAL_CHECKS_SOURCE_REVIEW_PASS",
+  "decision": "BD099",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_0928_banking_pay_next_daily_work_origin_identity.sql",
+      "sha256": "d1bcf9d1c3fb0c7d3abd396727982eae0b9db5e8f3fb634c81ba33cf47ebdc85"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
+      "sha256": "2a7a8cb0d64c8e56404b1889b8e5f5bbb6bae7ac49700342fa3e81b315a8a7f3"
+    },
+    {
+      "path": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+      "sha256": "d29decd59c88c2620fe658b5d96f0deace19063cd0eaddf150ea7cf09c7b60af"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+      "sha256": "39c1a1f69fc5c9a5152aa08ca037e295e6e08b64bbd0651177556fa6fe52c99a"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "4d7cba89c1f8608078c09c51e5f7cff4067e9a8e39fff7af4c0c3f4907c96544"
+    }
+  ],
+  "contractHash": "ea85c74e06fc85c10e4cfe6b1a42182e478b5d721bfed7f3b9527192851d835d",
+  "checks": "343/895; source12/12 beforeload; localPG17changedcompile/catalogue; syntax; seal/coupling; verifierDO PASS",
+  "runtime": "AUTHORED_NOT_RUN",
+  "scope": "Storage shape plus immutableWorkorigin only; full physicalDaily qualification/route/publisher is DY04"
+}

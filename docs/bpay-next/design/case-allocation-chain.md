@@ -285,3 +285,7 @@ Legacy1360 selected-only READY filtering and1300 selected OVERPAYMENT_RECOVERY p
 ## DY-02 sequence88 — Daily captured-rate helper / BD098
 
 0018 ->0925 ->DY08. Full current owner-only helper retains all five Standard rows/all fifteen dated cells, preserving NULL and all approved TF provenance; only wholly-NULL bucket filter removed. Current1236/1009 already persist five captured rows, retained unchanged. DY02D02/ITEM explicitly carry named missing-rate Authorise and full contractless closure to scheduledDY04; no false missing-as-zero or generic refusal acceptance. DY03 schema comes next.
+
+## DY-03 sequence89 — native Daily identity / BD099
+
+Schema0928 adds only justified originKind/date and revisionDaily evidence, exactconditionalNULLContract shape, preserving allnativeFKs/bookingkey and CONTRACThistory. Pointerguard1342->0928 adds only originKind/date to both NULL-safe immutabletuples; DY04merges onto0928 and retains wholebody. Existingwhole-row revisionguard already protects addedJSON, correctedDailyhelper0925 retained. FullphysicalDaily insertion/revision qualification belongsDY04 before routing is enabled. No Source/query/financial owner rewritten.

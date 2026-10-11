@@ -5436,16 +5436,19 @@
     },
     {
       "signature": "private.bpay_next_work_pointer_guard_v1()",
-      "finalRoot": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+        "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
+        "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY-03 immutable origin prerequisite; DY-04 retains this current pointer guard",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

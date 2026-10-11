@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "eb29ba6a199b81315dc01c4f537b5335bc029ceb",
-  "compiledAtUtc": "2026-10-11T08:26:20.841Z",
+  "sourceCommit": "9f17688f3dec94a3b69730bd101f5dcd69b612c8",
+  "compiledAtUtc": "2026-10-11T08:32:04.803Z",
   "inventory": {
     "migrations": [
       {
@@ -1376,6 +1376,10 @@
       {
         "path": "supabase/migrations/11102026_0904_banking_pay_next_early_candidate_financial_fence.sql",
         "sha256": "fbcd4a69aac8e14389c371313e25e2e8839e152603f7e30522a0a129740f145b"
+      },
+      {
+        "path": "supabase/migrations/11102026_0928_banking_pay_next_daily_work_origin_identity.sql",
+        "sha256": "d1bcf9d1c3fb0c7d3abd396727982eae0b9db5e8f3fb634c81ba33cf47ebdc85"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8049,6 +8053,13 @@
         "sha256": "2c74ba6fef5a5994f9efa5ee6cbadc4054d1b40bd318086191c6da019accdb3b"
       },
       {
+        "path": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql"
+        ],
+        "sha256": "c5e4e4b535bab650a8c566cbdd25db4a7867f74a5a0e14f071c712ca65564dc7"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8058,7 +8069,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/11102026_0928_banking_pay_next_daily_work_origin_identity.sql",
+        "sha256": "d1bcf9d1c3fb0c7d3abd396727982eae0b9db5e8f3fb634c81ba33cf47ebdc85"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8082,11 +8098,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+        "path": "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql"
+          "supabase/repeatable/11102026_0928_banking_pay_next_daily_work_identity_guard_v1.sql"
         ],
-        "sha256": "2c74ba6fef5a5994f9efa5ee6cbadc4054d1b40bd318086191c6da019accdb3b"
+        "sha256": "c5e4e4b535bab650a8c566cbdd25db4a7867f74a5a0e14f071c712ca65564dc7"
       }
     ]
   },
