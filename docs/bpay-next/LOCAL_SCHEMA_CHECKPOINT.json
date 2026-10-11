@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "d10db6aee008817b6ea66d3f58ad4dc8f7de93b4",
-  "compiledAtUtc": "2026-10-11T21:36:12.038Z",
+  "sourceCommit": "22d6bbc354b2cde12f4043d955fc87a470e0b7d1",
+  "compiledAtUtc": "2026-10-11T21:42:29.755Z",
   "inventory": {
     "migrations": [
       {
@@ -8283,36 +8283,7 @@
   },
   "selected": {
     "migrations": [],
-    "repeatables": [
-      {
-        "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
-        "paths": [
-          "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql"
-        ],
-        "sha256": "7b18a47de4bfbcf47b16a468ba852cd87236f947abbb80ca1982b9412d8928a1"
-      },
-      {
-        "path": "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql",
-        "paths": [
-          "supabase/repeatable/26082026_0230_general_security_definer_browser_isolation_v2.sql"
-        ],
-        "sha256": "a02548e2e4ddd4f01fe6c8540df252ecdad7d0479c59320ca8c7a03ce4255c33"
-      },
-      {
-        "path": "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql",
-        "paths": [
-          "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
-        ],
-        "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
-      },
-      {
-        "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
-        ],
-        "sha256": "051d550d953ee4ca96297aeadc647fae9097df807abbfc56b827dae23363b82d"
-      }
-    ]
+    "repeatables": []
   },
   "fullProtectedVerification": "PENDING"
 }
