@@ -98,5 +98,6 @@
     "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-dark.png": "1b1794f66e52dbe5712f797281b80eea15d989b484c034ebd96d555a582bc792",
     "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-device-light.png": "1b1794f66e52dbe5712f797281b80eea15d989b484c034ebd96d555a582bc792",
     "docs/bpay-next/screen-designs/SCR-160/DR02-zero-count-phone-dark.png": "90ba5a293da0926d3da928013e330f9aabe6e785d933955c38eaba45af829fab"
-  }
+  },
+  "backendCommit": "317634ce8205a73695ad56a272f6f771281044bb"
 }

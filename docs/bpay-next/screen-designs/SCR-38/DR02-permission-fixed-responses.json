@@ -1,0 +1,1317 @@
+[
+  {
+    "ok": true,
+    "scope": "NEXT",
+    "worker_environment": "TEST",
+    "requested_environment": "TEST",
+    "environment_ready": true,
+    "test_mode": true,
+    "env_mismatch": false,
+    "cop_available": false,
+    "provider_status": "DISABLED",
+    "funding_status": "UNAVAILABLE",
+    "csv_available": true
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "READY",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "1",
+        "item_count": "9",
+        "contribution_count": "7",
+        "segment_count": "6",
+        "payable_count": "7",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "395.00",
+        "waiting_amount": "40.00",
+        "ready_net_add_amount": "0.00",
+        "waiting_net_add_amount": "0.00",
+        "gross_deduction_balance": "0.00",
+        "net_deduction_balance": "0.00",
+        "approved_amount": "435.00",
+        "paid_credit_amount": "0.00",
+        "reserved_amount": "0.00",
+        "excluded_amount": "0.00",
+        "recovery_amount": "0.00",
+        "selected_amount": "0.00",
+        "has_deduction": false,
+        "selectable_member_count": "7",
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "READY",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "ACTION",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "0",
+        "item_count": "0",
+        "contribution_count": "0",
+        "segment_count": "0",
+        "payable_count": "0",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "0",
+        "waiting_amount": "0",
+        "ready_net_add_amount": "0",
+        "waiting_net_add_amount": "0",
+        "gross_deduction_balance": "0",
+        "net_deduction_balance": "0",
+        "approved_amount": "0",
+        "paid_credit_amount": "0",
+        "reserved_amount": "0",
+        "excluded_amount": "0",
+        "recovery_amount": "0",
+        "selected_amount": "0",
+        "has_deduction": false,
+        "selectable_member_count": null,
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "ACTION",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "BLOCKED",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "0",
+        "item_count": "0",
+        "contribution_count": "0",
+        "segment_count": "0",
+        "payable_count": "0",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "0",
+        "waiting_amount": "0",
+        "ready_net_add_amount": "0",
+        "waiting_net_add_amount": "0",
+        "gross_deduction_balance": "0",
+        "net_deduction_balance": "0",
+        "approved_amount": "0",
+        "paid_credit_amount": "0",
+        "reserved_amount": "0",
+        "excluded_amount": "0",
+        "recovery_amount": "0",
+        "selected_amount": "0",
+        "has_deduction": false,
+        "selectable_member_count": null,
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "BLOCKED",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "PAYE",
+        "section": "READY",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "PAYE"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "1",
+        "item_count": "9",
+        "contribution_count": "7",
+        "segment_count": "6",
+        "payable_count": "7",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "395.00",
+        "waiting_amount": "40.00",
+        "ready_net_add_amount": "0.00",
+        "waiting_net_add_amount": "0.00",
+        "gross_deduction_balance": "0.00",
+        "net_deduction_balance": "0.00",
+        "approved_amount": "435.00",
+        "paid_credit_amount": "0.00",
+        "reserved_amount": "0.00",
+        "excluded_amount": "0.00",
+        "recovery_amount": "0.00",
+        "selected_amount": "0.00",
+        "has_deduction": false,
+        "selectable_member_count": "7",
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "PAYE"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "PAYE",
+          "section": "READY",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "PAYE"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "PAYE"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "UMBRELLA",
+        "section": "READY",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "UMBRELLA"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "1",
+        "item_count": "9",
+        "contribution_count": "7",
+        "segment_count": "6",
+        "payable_count": "7",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "395.00",
+        "waiting_amount": "40.00",
+        "ready_net_add_amount": "0.00",
+        "waiting_net_add_amount": "0.00",
+        "gross_deduction_balance": "0.00",
+        "net_deduction_balance": "0.00",
+        "approved_amount": "435.00",
+        "paid_credit_amount": "0.00",
+        "reserved_amount": "0.00",
+        "excluded_amount": "0.00",
+        "recovery_amount": "0.00",
+        "selected_amount": "0.00",
+        "has_deduction": false,
+        "selectable_member_count": "7",
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "UMBRELLA"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "UMBRELLA",
+          "section": "READY",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "UMBRELLA"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "UMBRELLA"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "CANDIDATES",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "CANDIDATES",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "READY",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "item_count": "9",
+        "contribution_count": "7",
+        "segment_count": "6",
+        "payable_count": "7",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "395.00",
+        "waiting_amount": "40.00",
+        "ready_net_add_amount": "0.00",
+        "waiting_net_add_amount": "0.00",
+        "gross_deduction_balance": "0.00",
+        "net_deduction_balance": "0.00",
+        "approved_amount": "435.00",
+        "paid_credit_amount": "0.00",
+        "reserved_amount": "0.00",
+        "excluded_amount": "0.00",
+        "recovery_amount": "0.00",
+        "selected_amount": "0.00",
+        "has_deduction": false,
+        "candidate_id": "20000000-0000-0000-0000-000000000001",
+        "candidate_sort_name": "Amelia Hughes",
+        "tms_ref": "10421",
+        "bank_warning_code": null,
+        "metadata_version": "1",
+        "projection_revision": "1",
+        "default_selected": true,
+        "selection_eligible": true,
+        "new_changed": false,
+        "choice_member_count": "7",
+        "choice_selected_count": "7",
+        "selectable_item_count": "7",
+        "selectable_case_component_count": "0",
+        "selection_basis": {
+          "kind": "PARENT",
+          "financial_view_revision": "1"
+        }
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "CANDIDATES",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "READY",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": [
+        "Amelia Hughes",
+        false,
+        "10421",
+        "20000000-0000-0000-0000-000000000001"
+      ],
+      "row_count": "1"
+    },
+    "affected_candidate_count": null
+  },
+  {
+    "ok": true,
+    "kind": "ACTION_REQUIRED",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "ACTION_REQUIRED",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "ACTION",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "ACTION_REQUIRED",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "ACTION",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "0"
+    },
+    "affected_candidate_count": null
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "READY",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "1",
+        "item_count": "9",
+        "contribution_count": "7",
+        "segment_count": "6",
+        "payable_count": "7",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "395.00",
+        "waiting_amount": "40.00",
+        "ready_net_add_amount": "0.00",
+        "waiting_net_add_amount": "0.00",
+        "gross_deduction_balance": "0.00",
+        "net_deduction_balance": "0.00",
+        "approved_amount": "435.00",
+        "paid_credit_amount": "0.00",
+        "reserved_amount": "0.00",
+        "excluded_amount": "0.00",
+        "recovery_amount": "0.00",
+        "selected_amount": "0.00",
+        "has_deduction": false,
+        "selectable_member_count": "7",
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "READY",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "ACTION",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "0",
+        "item_count": "0",
+        "contribution_count": "0",
+        "segment_count": "0",
+        "payable_count": "0",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "0",
+        "waiting_amount": "0",
+        "ready_net_add_amount": "0",
+        "waiting_net_add_amount": "0",
+        "gross_deduction_balance": "0",
+        "net_deduction_balance": "0",
+        "approved_amount": "0",
+        "paid_credit_amount": "0",
+        "reserved_amount": "0",
+        "excluded_amount": "0",
+        "recovery_amount": "0",
+        "selected_amount": "0",
+        "has_deduction": false,
+        "selectable_member_count": null,
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "ACTION",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  },
+  {
+    "ok": true,
+    "kind": "HEADER",
+    "workbench_revision": "1",
+    "complete": true,
+    "context": {
+      "agency_id": "10000000-0000-0000-0000-000000000002",
+      "actor_user_id": "10000000-0000-0000-0000-000000000001",
+      "owner_epoch": "1",
+      "official_pay_date": "2026-10-16",
+      "workbench_revision": "1",
+      "adoption_revision": "1",
+      "kind": "HEADER",
+      "scope": {
+        "candidate_id": null,
+        "client_id": null,
+        "channel": "ALL",
+        "section": "BLOCKED",
+        "search": "",
+        "sort": "NAME_ASC",
+        "group_key": null,
+        "item_id": null,
+        "reason_code": null,
+        "count_selection": null,
+        "selection_memory": null
+      },
+      "selection_memory": {
+        "run_id": null,
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      }
+    },
+    "rows": [
+      {
+        "candidate_count": "0",
+        "item_count": "0",
+        "contribution_count": "0",
+        "segment_count": "0",
+        "payable_count": "0",
+        "selected_count": "0",
+        "snoozed_count": "0",
+        "held_count": "0",
+        "queried_count": "0",
+        "blocked_count": "0",
+        "deduction_item_count": "0",
+        "unknown_amount_count": "0",
+        "unknown_selected_amount_count": "0",
+        "amount": "0",
+        "waiting_amount": "0",
+        "ready_net_add_amount": "0",
+        "waiting_net_add_amount": "0",
+        "gross_deduction_balance": "0",
+        "net_deduction_balance": "0",
+        "approved_amount": "0",
+        "paid_credit_amount": "0",
+        "reserved_amount": "0",
+        "excluded_amount": "0",
+        "recovery_amount": "0",
+        "selected_amount": "0",
+        "has_deduction": false,
+        "selectable_member_count": null,
+        "selected_candidate_count": null,
+        "selected_member_count": null,
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        },
+        "selection_mode": "ALL_MATCHING",
+        "remembered_intent": null,
+        "oldest_pending_age_seconds": null,
+        "can_create_draft": false
+      }
+    ],
+    "next_cursor": null,
+    "page_receipt": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "HEADER",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL",
+          "section": "BLOCKED",
+          "search": "",
+          "sort": "NAME_ASC",
+          "group_key": null,
+          "item_id": null,
+          "reason_code": null,
+          "count_selection": null,
+          "selection_memory": null
+        },
+        "selection_memory": {
+          "run_id": null,
+          "scope": {
+            "candidate_id": null,
+            "client_id": null,
+            "channel": "ALL"
+          }
+        }
+      },
+      "start_key": null,
+      "end_key": null,
+      "row_count": "1"
+    },
+    "affected_candidate_count": null,
+    "job_progress": {
+      "context": {
+        "agency_id": "10000000-0000-0000-0000-000000000002",
+        "actor_user_id": "10000000-0000-0000-0000-000000000001",
+        "owner_epoch": "1",
+        "official_pay_date": "2026-10-16",
+        "workbench_revision": "1",
+        "adoption_revision": "1",
+        "kind": "WORK_JOB_PROGRESS",
+        "scope": {
+          "candidate_id": null,
+          "client_id": null,
+          "channel": "ALL"
+        }
+      },
+      "rows": [],
+      "complete": true,
+      "next_cursor": null,
+      "oldest_pending_age_seconds": null
+    }
+  }
+]
