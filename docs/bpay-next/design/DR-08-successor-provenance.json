@@ -1,0 +1,53 @@
+{
+  "predecessors": [
+    {
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6"
+    },
+    {
+      "path": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "sha256": "2494774c07a27861f05e32015e9de26e81a91942a04cc8d211dac149744bbbf8"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+    "private.bpay_next_preparation_expiry_guard_v1()",
+    "private.bpay_next_preparation_progress_v1(uuid)",
+    "private.bpay_next_confirm_simple_run_v1(uuid,bigint)",
+    "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)"
+  ],
+  "migration": "supabase/migrations/11102026_0746_banking_pay_next_expiry_projection.sql",
+  "target": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+  "item": "DR-08",
+  "sequence": 83,
+  "status": "SOURCE_REVIEWED_A4_RECEIPT_PENDING",
+  "builderDecisions": [
+    "BD094"
+  ],
+  "files": {
+    "supabase/migrations/11102026_0746_banking_pay_next_expiry_projection.sql": "80236b7da5a4ba0971624dc6816be98e4436589ab85b505e22476d51becad935",
+    "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql": "f1e6505c4f0ce89be8da8090dbc30467ef0ec50518536eb797f11dab37d152e6",
+    "broker/src/bpay-next-preparation.js": "a909572670ff2c1ef40e0c6f4202a0a99112b2a2457acb5a27f4f4bb18e9e451",
+    "scripts/bpay-next-source-gates.mjs": "0b4aed37f833b04a23d721a6cc0c8b1e1699b791b3feb7e148660f7448151227"
+  },
+  "frontendCommit": "45af941fe78a349621b69be6785d53c8bc6139b4",
+  "normalChecks": {
+    "dbCheck": "340/889 PASS",
+    "localPG17": "1 additive migration/4 closures compiled;0746 immutable",
+    "sourceGates": "12/12 PASS",
+    "nodeCheck": "PASS",
+    "contract": "1b4369bca1b5462353db360f8037cf7b546577b34045178470ea01ad8a013261",
+    "exportSealCoupling": "PASS",
+    "publicDefinerMembershipDelta": 0,
+    "nonterminalExpiryBindingsBeforeLoad": "0",
+    "joinedApp": "AUTHORED_NOT_RUN",
+    "hostedInstallation": "NOT_RUN"
+  },
+  "reviews": [
+    "reviews/DR-08-sql-review.md",
+    "reviews/DR-08-projection-review.md",
+    "reviews/DR-08-transport-office-review.md",
+    "reviews/DR-08-screen-review.md"
+  ],
+  "caseReleaseCorrection": "DR05 helper RECORD missing id; only exact point SELECT corrected in DR08 successor"
+}

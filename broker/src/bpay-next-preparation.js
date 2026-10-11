@@ -70,7 +70,7 @@ const OUTPUTS={
   CONFIRM:{run_id:'uuid',phase:'draft',review_revision:'positive',replay:'boolean',drafts:'drafts'}
 };
 const ROWS={
-  PROGRESS:{run_id:'uuid',status:'runStatus',actor_display_name:'label',started_at_utc:'timestamp',expires_at_utc:'timestamp',selected_candidates:'integer',ready:'integer',review:'integer',pending:'integer',preparing:'integer',removed:'integer',enrolled_candidates:'integer',enrolment_complete:'boolean',enrolment_failed:'boolean',safe_to_close:'true'},
+  PROGRESS:{run_id:'uuid',status:'runStatus',actor_display_name:'label',started_at_utc:'timestamp',expires_at_utc:'timestamp',selected_candidates:'integer',ready:'integer',review:'integer',pending:'integer',preparing:'integer',removed:'integer',enrolled_candidates:'integer',enrolment_complete:'boolean',enrolment_failed:'boolean',safe_to_close:'true',expired_at_utc:'timestamp?'},
   ACCEPTED_CANDIDATES:{candidate_id:'uuid',accepted_input_id:'uuid',module_epoch:'positive',target_pay_channel:'channel',target_umbrella_id:'uuid?',pay_week_start:'date',case_scope:'acceptedCaseScope',case_selection_revision:'positive?',settings_witness_kind:'settingsWitness',input_evidence_sha256:'sha',prepare_job_id:'uuid?',prepare_job_status:'prepareJobStatus?',prepare_job_phase:'prepareJobPhase?',run_worker_id:'uuid?',worker_status:'workerStatus?',has_unsealed_work:'boolean',waiting_command_id:'uuid?',waiting_command_sequence:'positive?',progress_state:'acceptedProgress',progress_code:'acceptedProgressCode?',review_issue_code:'issue?'},
   ACCEPTED_WORK:{candidate_id:'uuid',accepted_input_id:'uuid',accepted_work_input_id:'uuid',work_id:'uuid',original_revision_id:'uuid',effective_revision_id:'uuid',selection_mode:'mode',selected_line_count:'integer',publication_command_id:'uuid',predecessor_sequence:'positive',source_kind:'acceptedSourceKind',query_disposition:'acceptedQuery?',query_state_sha256:'sha?',input_evidence_sha256:'sha',effective_cut_id:'uuid?',cut_state:'acceptedCutState'},
   CHANNEL_WORKERS:{run_worker_id:'uuid',candidate_id:'uuid',pay_channel:'channel',worker_status:'workerStatus',frozen_ex_vat:'money',frozen_vat:'money',frozen_inc_vat:'money',review_issue_code:'issue?'},
@@ -330,7 +330,9 @@ function result(payload,call,mutation){
       ||n('ready')+n('review')+n('pending')+n('removed')!==n('selected_candidates')
       ||n('preparing')>n('pending')||n('enrolled_candidates')>n('selected_candidates')
       ||(p.enrolment_complete&&n('enrolled_candidates')!==n('selected_candidates'))
-      ||Date.parse(p.expires_at_utc)-Date.parse(p.started_at_utc)!==72*60*60*1000)bad();
+      ||Date.parse(p.expires_at_utc)-Date.parse(p.started_at_utc)!==72*60*60*1000
+      ||(p.expired_at_utc!==null&&(p.status!=='CANCELLED'||n('pending')!==0n||n('preparing')!==0n
+        ||Date.parse(p.expired_at_utc)<Date.parse(p.expires_at_utc))))bad();
     return {rows:payload.rows,complete:true,next_cursor:null};
   }
   if(['ACCEPTED_CANDIDATES','ACCEPTED_WORK'].includes(call.kind)){
@@ -515,6 +517,8 @@ function safeError(e,attempted,mutation,action=null,args=null){
     return new PreparationError('BPAY_NEXT_PAY_DATE_NOT_OFFICIAL',400,false,false);
   if(['22023','22003','22007','22008','22P02'].includes(db?.code))return fault('REQUEST_INVALID',400);
   if(['23514','23505','23503'].includes(db?.code))return fault('CONFLICT',409);
+  if(mutation&&action==='CONFIRM'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CONFIRM_PREPARATION_EXPIRED_OR_UNBOUND')
+    return new PreparationError('BPAY_NEXT_CONFIRM_PREPARATION_EXPIRED_OR_UNBOUND',409,false,false);
   if(db?.code==='55000')return db.message==='BPAY_NEXT_MODULE_NOT_ACTIVE'?fault('MODULE_NOT_ACTIVE',503):fault('NOT_ELIGIBLE',409);
   if(db?.code==='54000')return fault('RESPONSE_TOO_LARGE',503,true);
   if(e?.name==='AbortError'||e?.status===408)return fault('DEPENDENCY_TIMEOUT',503,true,attempted&&mutation);

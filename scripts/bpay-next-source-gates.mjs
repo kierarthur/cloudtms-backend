@@ -506,7 +506,7 @@ const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,
 const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
 // Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
 const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
-  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true)"],
+  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"],
   "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',false,'throttled',true)", "pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',true,'throttled',false)"],
 
   "private.bpay_next_advice_work_v1(uuid)": [
@@ -936,7 +936,10 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_release_prepare_case_hold_v1",
     "private.bpay_next_release_prepare_work_hold_v1",
     "private.bpay_next_worker_release_complete_v1"
-  ],
+    ,"private.bpay_next_work_wait_state_v1"
+  ,"private.bpay_next_workbench_queue_origin_v1"
+  ,"private.bpay_next_workbench_refresh_many_v1"
+],
   "private.bpay_next_apply_expired_week_v1(uuid)": [
     "pg_catalog.clock_timestamp",
     "private.bpay_next_exclude_preparation_week_v1"

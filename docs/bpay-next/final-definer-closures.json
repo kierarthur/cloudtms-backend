@@ -2938,7 +2938,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3352,22 +3352,23 @@
     },
     {
       "signature": "private.bpay_next_confirm_simple_run_v1(uuid,bigint)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/03102026_2359_banking_pay_next_simple_review_confirm_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-05 reviewed RESET delta; next editor follows master chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
+      ],
+      "owner": "DR08 seq83 expiry projection/completion",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3691,20 +3692,21 @@
     },
     {
       "signature": "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
       ],
       "predecessors": [
-        "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
+      ],
+      "owner": "DR08 seq83 expiry projection/completion",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4043,22 +4045,23 @@
     },
     {
       "signature": "private.bpay_next_preparation_expiry_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/04102026_0510_banking_pay_next_preparation_expiry_v1.sql",
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-21 exact retained choice cut and existing manifest/queue/expiry seams; preserve original money, Rule B, source and ACL owners; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
+      ],
+      "owner": "DR08 seq83 expiry projection/completion",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4250,7 +4253,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4414,7 +4417,7 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5187,7 +5190,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5206,7 +5209,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5326,7 +5329,7 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5362,7 +5365,7 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload; DR-05 retained-input execution/release",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -5381,7 +5384,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-36 R2 Â§1 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14714,16 +14717,19 @@
     },
     {
       "signature": "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
       ],
-      "owner": "DR-05 finite private retained-input execution/release",
+      "owner": "DR08 seq83 expiry projection/completion",
       "baselineSource": null
     },
     {
@@ -14826,16 +14832,19 @@
     },
     {
       "signature": "private.bpay_next_preparation_progress_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+        "supabase/repeatable/11102026_0746_banking_pay_next_expiry_projection_v1.sql"
       ],
-      "owner": "DR06 seq82 stored progress/WAKE",
+      "owner": "DR08 seq83 expiry projection/completion",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14856,18 +14865,18 @@
   "editorChains": [
     {
       "family": "`0570` selection append / seal / work-choice guard",
-      "orderedEditors": "WB-36 \u00e2\u2020\u2019 WB-25",
-      "design": "Adds selected-segment seal: 0570 append:201, seal:264, guard:7\u00e2\u20ac\u201c35; preserve work-choice parent identity."
+      "orderedEditors": "WB-36 â†’ WB-25",
+      "design": "Adds selected-segment seal: 0570 append:201, seal:264, guard:7â€“35; preserve work-choice parent identity."
     },
     {
       "family": "`1600` accepted cut",
-      "orderedEditors": "F-05 \u00e2\u2020\u2019 F-25 \u00e2\u2020\u2019 WB-36 \u00e2\u2020\u2019 WB-40",
+      "orderedEditors": "F-05 â†’ F-25 â†’ WB-36 â†’ WB-40",
       "design": "One accepted-input authority; later work uses it."
     },
     {
       "family": "`private.bpay_next_prepare_case_page_v1` (definers `04102026_0360`, `08102026_0549`, E `08102026_0510`) and, from WB-27, its allocation plan `private.bpay_next_case_allocation_plan_v1`",
-      "orderedEditors": "F-25 \u00e2\u2020\u2019 CM-02a \u00e2\u2020\u2019 WB-27 \u00e2\u2020\u2019 DR-04 \u00e2\u2020\u2019 DR-11 \u00e2\u2020\u2019 DR-12 \u00e2\u2020\u2019 FC-10 \u00e2\u2020\u2019 WB-41 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-02 \u00e2\u2020\u2019 CM-10 \u00e2\u2020\u2019 CM-12 \u00e2\u2020\u2019 CM-13",
-      "design": "`docs/bpay-next/design/case-allocation-chain.md` (one note for the whole chain); CM-02a chosen0549 reference; executable ordinary1958\u00e2\u2020\u2019RuleB0151 retained; no comparison promotion",
+      "orderedEditors": "F-25 â†’ CM-02a â†’ WB-27 â†’ DR-04 â†’ DR-11 â†’ DR-12 â†’ FC-10 â†’ WB-41 â†’ CM-13a â†’ CM-02 â†’ CM-10 â†’ CM-12 â†’ CM-13",
+      "design": "`docs/bpay-next/design/case-allocation-chain.md` (one note for the whole chain); CM-02a chosen0549 reference; executable ordinary1958â†’RuleB0151 retained; no comparison promotion",
       "chosenReferenceBase": "supabase/repeatable/08102026_0549_banking_pay_next_overpayment_week_applicability_v1.sql",
       "capacityProofReference": {
         "signature": "private.bpay_next_source_comparison_case_capacity_proof_v2(private.bpay_next_source_comparison_receipt,uuid,uuid,text)",
@@ -14883,168 +14892,168 @@
     },
     {
       "family": "`04102026_0140` bind destination",
-      "orderedEditors": "EX-06 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-13",
+      "orderedEditors": "EX-06 â†’ CM-13a â†’ CM-13",
       "design": "the EX-06 design note"
     },
     {
       "family": "`04102026_0145` transfer transition guard",
-      "orderedEditors": "EX-17 \u00e2\u2020\u2019 EX-15 \u00e2\u2020\u2019 EX-13",
+      "orderedEditors": "EX-17 â†’ EX-15 â†’ EX-13",
       "design": "the EX-15 design note"
     },
     {
       "family": "`04102026_0150` issue CSV",
-      "orderedEditors": "EX-11 \u00e2\u2020\u2019 EX-32 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-13",
+      "orderedEditors": "EX-11 â†’ EX-32 â†’ CM-13a â†’ CM-13",
       "design": "the EX-10 design note"
     },
     {
       "family": "`04102026_0200` settlement posting",
-      "orderedEditors": "DR-38 \u00e2\u2020\u2019 EX-14 \u00e2\u2020\u2019 EX-15 \u00e2\u2020\u2019 EX-19 \u00e2\u2020\u2019 EX-22 \u00e2\u2020\u2019 EX-25 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 SP-29 \u00e2\u2020\u2019 CM-13",
+      "orderedEditors": "DR-38 â†’ EX-14 â†’ EX-15 â†’ EX-19 â†’ EX-22 â†’ EX-25 â†’ CM-13a â†’ SP-29 â†’ CM-13",
       "design": "the EX-14 design note"
     },
     {
       "family": "`04102026_0230` return owners",
-      "orderedEditors": "EX-31 \u00e2\u2020\u2019 EX-25",
+      "orderedEditors": "EX-31 â†’ EX-25",
       "design": "the EX-31 design note"
     },
     {
       "family": "`04102026_0240` reissue",
-      "orderedEditors": "EX-32 \u00e2\u2020\u2019 PS-10",
+      "orderedEditors": "EX-32 â†’ PS-10",
       "design": "the EX-32 design note"
     },
     {
       "family": "`04102026_0260` simple cancel",
-      "orderedEditors": "EX-27 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 EX-23 \u00e2\u2020\u2019 CM-15",
+      "orderedEditors": "EX-27 â†’ EX-13 â†’ EX-23 â†’ CM-15",
       "design": "the EX-13 design note"
     },
     {
       "family": "`04102026_0430` week lifecycle (`bpay_next_apply_cancelled_week_v1`, `bpay_next_apply_week_outcome_v1`)",
-      "orderedEditors": "EX-27 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 EX-23 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-14",
+      "orderedEditors": "EX-27 â†’ EX-13 â†’ EX-23 â†’ CM-13a â†’ CM-14",
       "design": "the EX-13 design note"
     },
     {
       "family": "`04102026_0460` case cancellation",
-      "orderedEditors": "EX-27 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 EX-23 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-14",
+      "orderedEditors": "EX-27 â†’ EX-13 â†’ EX-23 â†’ CM-13a â†’ CM-14",
       "design": "the EX-13 design note"
     },
     {
       "family": "`04102026_2102` destination cancel",
-      "orderedEditors": "EX-27 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 EX-23",
+      "orderedEditors": "EX-27 â†’ EX-13 â†’ EX-23",
       "design": "the EX-13 design note"
     },
     {
       "family": "PS_C02 cancel-fact owners (`bpay_next_record_bank_cancel_transition_v1`, `bpay_next_cancel_outcome_insert_guard_v1`; repeatable `banking_pay_next_cancel_fact_v1`)",
-      "orderedEditors": "EX-27 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 EX-33",
+      "orderedEditors": "EX-27 â†’ EX-13 â†’ EX-33",
       "design": "the EX-13 design note; EX-33 completes the cash-only scheduled/non-uploaded reissue branch without releasing original work"
     },
     {
       "family": "`06102026_1157` shared selected quote",
-      "orderedEditors": "CM-04 \u00e2\u2020\u2019 CM-13a",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "CM-04 â†’ CM-13a",
+      "design": "â€”"
     },
     {
       "family": "Workbench classifier `private.bpay_next_workbench_refresh_work_v1` / `_refresh_case_v1`",
-      "orderedEditors": "WB-36 \u00e2\u2020\u2019 WB-08 \u00e2\u2020\u2019 WB-02 \u00e2\u2020\u2019 WB-07 \u00e2\u2020\u2019 WB-40 \u00e2\u2020\u2019 WB-41 \u00e2\u2020\u2019 WB-29",
+      "orderedEditors": "WB-36 â†’ WB-08 â†’ WB-02 â†’ WB-07 â†’ WB-40 â†’ WB-41 â†’ WB-29",
       "design": "the WB-08 design note"
     },
     {
       "family": "selection append `bpay_next_append_selection_page_v1` / `_append_work_choices_v1`",
-      "orderedEditors": "WB-36 \u00e2\u2020\u2019 DR-01 \u00e2\u2020\u2019 WB-40",
+      "orderedEditors": "WB-36 â†’ DR-01 â†’ WB-40",
       "design": "the WB-36 design note"
     },
     {
       "family": "`04102026_0490` internal (zero-cash) settlement",
-      "orderedEditors": "EX-34 \u00e2\u2020\u2019 CM-13a",
+      "orderedEditors": "EX-34 â†’ CM-13a",
       "design": "the EX-34 design note"
     },
     {
       "family": "`04102026_0510` expiry",
-      "orderedEditors": "DR-08 \u00e2\u2020\u2019 DR-05 \u00e2\u2020\u2019 FC-15 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-15",
+      "orderedEditors": "DR-08 â†’ DR-05 â†’ FC-15 â†’ CM-13a â†’ CM-15",
       "design": "the DR-08 design note"
     },
     {
       "family": "`04102026_0120` begin simple transfer",
-      "orderedEditors": "DR-23 \u00e2\u2020\u2019 DR-22 \u00e2\u2020\u2019 DR-26",
+      "orderedEditors": "DR-23 â†’ DR-22 â†’ DR-26",
       "design": "the DR-22 design note"
     },
     {
       "family": "`04102026_0390` case PAYE net",
-      "orderedEditors": "DR-37 \u00e2\u2020\u2019 DR-23 \u00e2\u2020\u2019 DR-22 \u00e2\u2020\u2019 EX-13 \u00e2\u2020\u2019 CM-13a",
+      "orderedEditors": "DR-37 â†’ DR-23 â†’ DR-22 â†’ EX-13 â†’ CM-13a",
       "design": "the DR-37 design note"
     },
     {
       "family": "`04102026_0410` case transfer",
-      "orderedEditors": "DR-23 \u00e2\u2020\u2019 DR-22 \u00e2\u2020\u2019 DR-26 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-13",
+      "orderedEditors": "DR-23 â†’ DR-22 â†’ DR-26 â†’ CM-13a â†’ CM-13",
       "design": "the DR-22 design note"
     },
     {
       "family": "`04102026_0130` transfer members",
-      "orderedEditors": "PS-01 \u00e2\u2020\u2019 DY-09 \u00e2\u2020\u2019 DR-38 \u00e2\u2020\u2019 DR-22 \u00e2\u2020\u2019 CM-13a",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "PS-01 â†’ DY-09 â†’ DR-38 â†’ DR-22 â†’ CM-13a",
+      "design": "â€”"
     },
     {
       "family": "`04102026_1519` work collection and capture guard",
-      "orderedEditors": "FC-15 \u00e2\u2020\u2019 SP-09 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-13 \u00e2\u2020\u2019 CM-21",
+      "orderedEditors": "FC-15 â†’ SP-09 â†’ CM-13a â†’ CM-13 â†’ CM-21",
       "design": "the CM-21 design note"
     },
     {
       "family": "`03102026_1610` position capture",
-      "orderedEditors": "F-25 \u00e2\u2020\u2019 WB-36 \u00e2\u2020\u2019 SP-14 \u00e2\u2020\u2019 SP-20 \u00e2\u2020\u2019 DR-38 \u00e2\u2020\u2019 CM-13a \u00e2\u2020\u2019 CM-03 \u00e2\u2020\u2019 CM-10",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "F-25 â†’ WB-36 â†’ SP-14 â†’ SP-20 â†’ DR-38 â†’ CM-13a â†’ CM-03 â†’ CM-10",
+      "design": "â€”"
     },
     {
       "family": "`03102026_1620` fresh positive hold (single conversion through the valuer)",
-      "orderedEditors": "F-25 \u00e2\u2020\u2019 WB-36 \u00e2\u2020\u2019 SP-20 \u00e2\u2020\u2019 DR-38 \u00e2\u2020\u2019 WB-29 \u00e2\u2020\u2019 CM-03 \u00e2\u2020\u2019 CM-19",
+      "orderedEditors": "F-25 â†’ WB-36 â†’ SP-20 â†’ DR-38 â†’ WB-29 â†’ CM-03 â†’ CM-19",
       "design": "the WB-29 design note"
     },
     {
       "family": "`03102026_1530` approval",
-      "orderedEditors": "WB-01 \u00e2\u2020\u2019 WB-36 \u00e2\u2020\u2019 WB-02 \u00e2\u2020\u2019 DY-04 \u00e2\u2020\u2019 DY-06 \u00e2\u2020\u2019 DY-10 \u00e2\u2020\u2019 DR-38",
+      "orderedEditors": "WB-01 â†’ WB-36 â†’ WB-02 â†’ DY-04 â†’ DY-06 â†’ DY-10 â†’ DR-38",
       "design": "WB-36 persists ordinary segment keys only; no snooze or pricing branch in approval."
     },
     {
       "family": "`03102026_1430` position writer",
-      "orderedEditors": "WB-06 \u00e2\u2020\u2019 CM-10",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "WB-06 â†’ CM-10",
+      "design": "â€”"
     },
     {
       "family": "`07102026_0018` Daily evidence",
-      "orderedEditors": "DY-02 \u00e2\u2020\u2019 DY-08",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "DY-02 â†’ DY-08",
+      "design": "â€”"
     },
     {
       "family": "`bpay_next_approval_route_v1`",
-      "orderedEditors": "WB-03 \u00e2\u2020\u2019 DY-04",
+      "orderedEditors": "WB-03 â†’ DY-04",
       "design": "the WB-03 design note"
     },
     {
       "family": "`06102026_1206` payment history page",
-      "orderedEditors": "PS-07 \u00e2\u2020\u2019 EX-41 \u00e2\u2020\u2019 CM-18",
+      "orderedEditors": "PS-07 â†’ EX-41 â†’ CM-18",
       "design": "the PS-07 design note"
     },
     {
       "family": "Source gate-input writers (`0557`, `1257`, `1534`, `04102026_0345`, query owners, Candidate submit/materialise)",
-      "orderedEditors": "SP-12 \u00e2\u2020\u2019 SP-07 \u00e2\u2020\u2019 WB-02 \u00e2\u2020\u2019 WB-05 \u00e2\u2020\u2019 SP-15 \u00e2\u2020\u2019 SP-09 \u00e2\u2020\u2019 SP-28",
+      "orderedEditors": "SP-12 â†’ SP-07 â†’ WB-02 â†’ WB-05 â†’ SP-15 â†’ SP-09 â†’ SP-28",
       "design": "the SP-12 design note"
     },
     {
       "family": "`17092026_1200` Source audit and export",
-      "orderedEditors": "SP-25 \u00e2\u2020\u2019 SP-27 \u00e2\u2020\u2019 SP-28",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "SP-25 â†’ SP-27 â†’ SP-28",
+      "design": "â€”"
     },
     {
       "family": "`05102026_0512` classifier",
-      "orderedEditors": "SP-17 \u00e2\u2020\u2019 SP-34",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "SP-17 â†’ SP-34",
+      "design": "â€”"
     },
     {
       "family": "`broker/src/weekly-source/routes.js` `handleCommand`",
-      "orderedEditors": "SP-10 \u00e2\u2020\u2019 CM-08",
-      "design": "\u00e2\u20ac\u201d"
+      "orderedEditors": "SP-10 â†’ CM-08",
+      "design": "â€”"
     },
     {
       "family": "`04102026_0310` case guards (CM-13a), `04102026_0355` reissue cancel (EX-33), `04102026_2120` approval basis (SP-11), `04102026_0580` STATUS reader (DR-37), `0100` / `0110` / `0420` PAYE-net owners (DR-22)",
       "orderedEditors": "one editor each; no chain",
-      "design": "\u00e2\u20ac\u201d"
+      "design": "â€”"
     },
     {
       "family": "Intake files `04102026_0270` (financial intake) and `04102026_0575` (preparation service), about 20 items",

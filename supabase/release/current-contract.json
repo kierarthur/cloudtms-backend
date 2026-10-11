@@ -12075,7 +12075,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f3be92fc31038c3f0976638e4493405c2cbef965c1742eb84ad06135c2c4dd08"
+      "definition_sha256": "f1a61b8ce17cb367220f15842bd9ae5660eae5e560959765c3aa7a9aea334d7a"
     },
     {
       "acl": [
@@ -12588,7 +12588,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "2fca310fb9ec5a3a186884a487ae23d34d77e7750e6cc8a760a97e3e0066d4d9"
+      "definition_sha256": "a2c015db43ae53e5ac87f7f8d91e2558c846a3854d19bc6a194099b018a92403"
     },
     {
       "acl": [
@@ -13244,7 +13244,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a6239ef74603a1b9cbe439925493f039008d9e1effe7523bdb5d04db18897d82"
+      "definition_sha256": "bc9cb926bdd29f5bf0e82dfccb796d8e349f13c66bb78f99bda5488c0c5fd52f"
     },
     {
       "acl": [
@@ -13263,7 +13263,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "d749c6d6dfc7959b74561c9bbaefae28cea5579f04575f5a5cdfc8cd687b1e04"
+      "definition_sha256": "079e47b80c1b8ed1e9dfbb3a71bcb978781f468fafcabadb69c5ec9e15c3af58"
     },
     {
       "acl": [
@@ -14023,7 +14023,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "d1693df8a25c29c95bdcdd26d15d4beff1d2291abed91584cd4d4507f95173de"
+      "definition_sha256": "13b8262ec6f2be8dc7eac079ac7d2ffc16349cb27d25f468cc350b5932a5ff2d"
     },
     {
       "acl": [
@@ -93631,7 +93631,31 @@
           "generated": ""
         },
         {
+          "name": "pending_work_ids",
+          "type": "uuid[]",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "projection_case_cursor",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "projection_work_cursor",
           "type": "bigint",
           "default": null,
           "identity": "",
@@ -93733,6 +93757,22 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "bpay_next_expiry_projection_shape_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (status = 'READY'::text AND stage = 'NEW'::text AND checkpoint = 0 AND started_at_utc IS NULL AND finished_at_utc IS NULL AND projection_work_cursor IS NULL AND projection_case_cursor IS NULL AND pending_work_ids IS NULL OR status = 'RELEASING'::text AND (stage = ANY (ARRAY['WORK'::text, 'CASE'::text, 'PROJECT_WORK'::text, 'PROJECT_CASE'::text, 'FINAL'::text])) AND started_at_utc IS NOT NULL AND finished_at_utc IS NULL OR status = 'EXPIRED'::text AND stage = 'COMPLETE'::text AND started_at_utc IS NOT NULL AND finished_at_utc IS NOT NULL AND released_work_count = expected_work_count AND released_case_hold_count = expected_case_hold_count AND pending_work_ids IS NULL)"
+        },
+        {
+          "name": "bpay_next_expiry_projection_stage_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage = ANY (ARRAY['NEW'::text, 'WORK'::text, 'CASE'::text, 'PROJECT_WORK'::text, 'PROJECT_CASE'::text, 'FINAL'::text, 'COMPLETE'::text]))"
+        },
+        {
           "name": "bpay_next_expiry_worker_shape_v2_ck",
           "type": "c",
           "deferred": false,
@@ -93821,6 +93861,22 @@
           "definition": "FOREIGN KEY (command_id, candidate_id) REFERENCES private.bpay_next_command_member(command_id, candidate_id) ON DELETE RESTRICT"
         },
         {
+          "name": "bpay_next_preparation_expiry_worke_projection_case_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (projection_case_cursor > 0)"
+        },
+        {
+          "name": "bpay_next_preparation_expiry_worke_projection_work_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (projection_work_cursor > 0)"
+        },
+        {
           "name": "bpay_next_preparation_expiry_worker_check",
           "type": "c",
           "deferred": false,
@@ -93835,14 +93891,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (original_job_id IS NULL AND original_job_status IS NULL AND original_job_phase IS NULL AND original_job_cursor IS NULL AND original_position_work_cursor IS NULL AND original_position_component_cursor IS NULL AND original_applied_line_count IS NULL OR original_job_id IS NOT NULL AND original_job_status IS NOT NULL AND original_job_phase IS NOT NULL AND original_applied_line_count IS NOT NULL)"
-        },
-        {
-          "name": "bpay_next_preparation_expiry_worker_check3",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (status = 'READY'::text AND stage = 'NEW'::text AND checkpoint = 0 AND started_at_utc IS NULL AND finished_at_utc IS NULL OR status = 'RELEASING'::text AND (stage = ANY (ARRAY['WORK'::text, 'CASE'::text, 'FINAL'::text])) AND started_at_utc IS NOT NULL AND finished_at_utc IS NULL OR status = 'EXPIRED'::text AND stage = 'COMPLETE'::text AND started_at_utc IS NOT NULL AND finished_at_utc IS NOT NULL AND released_work_count = expected_work_count AND released_case_hold_count = expected_case_hold_count)"
         },
         {
           "name": "bpay_next_preparation_expiry_worker_check4",
@@ -93933,6 +93981,14 @@
           "definition": "CHECK (octet_length(original_job_phase) <= 64)"
         },
         {
+          "name": "bpay_next_preparation_expiry_worker_pending_work_ids_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pending_work_ids IS NULL OR cardinality(pending_work_ids) >= 1 AND cardinality(pending_work_ids) <= 100 AND array_ndims(pending_work_ids) = 1 AND array_position(pending_work_ids, NULL::uuid) IS NULL AND pg_column_size(pending_work_ids) <= 16384)"
+        },
+        {
           "name": "bpay_next_preparation_expiry_worker_pkey",
           "type": "p",
           "deferred": false,
@@ -93971,14 +94027,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (selection_revision >= 0)"
-        },
-        {
-          "name": "bpay_next_preparation_expiry_worker_stage_check",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (stage = ANY (ARRAY['NEW'::text, 'WORK'::text, 'CASE'::text, 'FINAL'::text, 'COMPLETE'::text]))"
         },
         {
           "name": "bpay_next_preparation_expiry_worker_status_check",
