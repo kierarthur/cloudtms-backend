@@ -202,8 +202,10 @@
     },
     {
       "path": "screen-designs/SCR-40/review.md",
-      "sha256": "837ccc365ef378540bed183adc9c47c19019d8d50a012d9631197c84a0179ec9"
+      "sha256": "d6491944a26427f0021ae2e0b10799841b3489cab70a5f06d9d70c6831d15bbe"
     }
   ],
-  "screenEvidence": "27 actual local PNGs; eight fixed-response states in dark/device-light/phone plus three phone scrolled messages; independent A4 36 PASS/0 FAIL/6 N/A"
+  "screenEvidence": "27 actual local PNGs; eight fixed-response states in dark/device-light/phone plus three phone scrolled messages; independent A4 36 PASS/0 FAIL/6 N/A",
+  "implementationCommit": "352f3af4185d0f5bd83c907d5744dde98ea97fc1",
+  "status": "BUILT_REVIEWED"
 }

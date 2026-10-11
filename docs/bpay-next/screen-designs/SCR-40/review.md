@@ -147,6 +147,147 @@ Every file below belongs to this actual local capture family; fixed replies are 
 
 Related source/contract boundaries: [DR-06-completion.md](../../design/DR-06-completion.md), [DR-06-office-transport-review.md](../../reviews/DR-06-office-transport-review.md). Consolidated current independent receipt: [DR-06-screen-review.md](../../reviews/DR-06-screen-review.md). P01/P02/P03/D01 are closed there; no reported visual finding remains open.
 
-## PF-08 current independent A4 checkpoint — 11 October 2026
+## PF-08 final independent A4 receipt — 11 October 2026
 
-**PENDING final corrected captures.** Prior DR-06 receipt above is preserved. Initial actual PF08 images were independently compared with supplied B4 SCR-40 dark/phone PNGs; fixes were sent promptly to the root product author. Current findings: P08-01 Pay method must read Pay channel; P08-02 native Failed badge/sub-line separation and scoped attention-table geometry/tokens; P08-03 new busy/loading lines must be live status and definite errors alert. Root is correcting/replacing the actual images. No final A4 or business acceptance claimed at this checkpoint.
+**APPROVED for PF-08-D03: 36 PASS / 0 FAIL / 6 N/A across all 42 policy items.** All **27 final actual native PNGs** were independently opened: eight states in dark/device-light/390px phone, plus sending/unknown/refused phone scroll views. Supplied B4 SCR-40 dark/phone PNGs were opened alongside the actual captures; the spec, full policy, manual wording lists and owning PF-08 card/checklist were read. This current receipt supersedes the PF-08 checkpoint only; the historical DR-06 evidence above is preserved.
+
+P08-01 Pay channel wording; P08-02 separate native Failed badges/reasons and scoped table tokens/sticky headings; P08-03 busy status/error alert roles; P08-04 truthful Ready counts and singular grammar are **closed** in final pixels/source. Continuous-scroll copy now uses Loading more… after retained rows. The three additional phone views show complete Sending request… / uncertain-result / refusal text and reachable row/footer controls. No remaining essential PF-08 appearance finding.
+
+**Boundary:** actual local fixed-response Office presentation and read-only source inspection. No reviewer product edit, render/tool generation, fixture, SQL/business call, hosted action, test or commit. Joined same-job retry/unknown recovery, the 299-other-Candidate isolation/queue path and payment outcomes remain **NOT_RUN**. Later DR-14 Waiting and DR-15 full Review/composite/exclusion-detail approval remains **DEFERRED** to those cards; this is not approval of their absent fields.
+
+### Every visible supplied-design difference and its required basis
+
+| Region / difference | Required basis and disposition |
+|---|---|
+| Native blurred Office background, 980px frame placement/height, 20px corners, focused Close outline; phone 44px controls, padding and footer wrapping differ from static pack placement | Existing real modal/adapters and keyboard/touch policy; no second frame or layout framework. Standard dark native tokens retained; no overflow. |
+| Factual sample is six Candidates with Amelia Bennett/Daniel Clarke and current actor/start/expiry/Updated dates instead of illustrated 225/Grace/Harry/Ethan/TMS references | Actual bounded reader values only. No invented reference/person/date. Updated is the existing successful read time; capture clock is fixed only for repeatable local evidence. |
+| No illustrated four-Timesheet/two-Candidate Not in this Draft block/button | Current sample removed=0; reader has no full Timesheet count/list and later exclusion-detail owner is not built. No fake capability added to fill the picture. |
+| Needs attention heading, padded native card/table host and What happened / Action labels instead of unheaded table / What is happening / Actions | PF-08 expressly requires visible operational attention/reason/action; compact plain labels. Native card13px/line tokens, sticky headings and phone labelled cards verified. |
+| Only actual operational failures shown; no illustrated Waiting or generic To review composite row | PF-08 attention_only reader; later DR-14/DR-15 composite stays deferred. READY projection failure keeps its own short updating reason; economic failure has prepare reason. |
+| No TMS reference subline, three-attention/sorted caption, active sort arrow or phone Sort by | Current own reader supplies real Candidate name/channel but no human reference or whole-attention total. Native Candidate-ordered result table is SDP-34 dialog/result exemption; no new sort/data contract inferred. |
+| Failed badge followed by separate short reason; Try again quiet beside that Candidate | Native danger badge communicates failed processing, without claiming permanent financial failure. PF-08 phase-specific plain reasons and owner A3g one-sentence copy replace longer illustrated examples. |
+| Sending/accepted/unknown/refused/read-failed/recovered states and feedback are added | Required recoverable states. Accepted says Processing requested, not Prepared/Paid; unknown retains original request. Failed read gives its own inline error/read Try again, not zero/fictional rows. Successful read removes obsolete attention. |
+| Ready sample shows green readiness notice and 5 Done + 1 To review + 0 Still to do; primary enabled | Actual current REVIEW state; only retained economic attention Amelia. Review is available while Confirm still requires resolution; no unfinished projection is represented as completed. |
+| Updated line, progress/counter spacing, footer hint placement, left outlined Discard and larger phone footer differ | Existing DR-06/DR-09 native host. One primary, Refresh/More, destructive separated left; touch/focus policy. Disable hint is plain. Safe-close copy says keeps building only in PREPARING. |
+| Body is scrollable on phone; some row facts/feedback need scrolling while footer remains reachable | Required native phone cards and persistent primary/footer. Three final scroll views independently show the complete retry feedback; no horizontal scroll or clipped text. |
+| No pack explanatory bottom strip, pay date, UUID/software error/phase/revision or amount invented | Strip is design commentary; fields outside the owning screen/card are not product copy. PF-08 is operational retry, not a new monetary review. |
+
+These scoped differences were sent to the root author for BD124/BUILD_LOG recording. No unexplained visible difference is accepted.
+
+### Every control and its payroll purpose
+
+| Control | Purpose / observed or source boundary |
+|---|---|
+| Header Close | Safely leave and reopen the same background Draft; native focused button, no duplicate footer Close. |
+| Candidate row Try again | Retry only that stopped original job with retained inputs/request identity. Quiet secondary near name/channel/Failed reason; Sending request disables concurrent actions. Unknown offers the same request again. Source journal/controller inspected; actual business retry NOT_RUN. |
+| Attention-read Try again | Recover only the failed read; no processing or zero-count claim. Inline beside failed-read reason. |
+| Refresh | Read current Draft/attention truth after a refusal or while processing; retains native pending-request guard. |
+| More | Existing lower-priority Continue processing / Review payment issue controls, guarded by current reader state; no new PF-08 menu capability. Their menu path is source/earlier owner evidence, not a new PF-08 menu capture claim. |
+| Discard this Draft | Existing DR-09 destructive cancellation, outlined/left, protected by its native confirmation/receipt; no PF-08 single-click irreversible action. |
+| Continue to review | Single primary; disabled with reason during building/pending request, enabled in the truthful REVIEW sample. Opens existing qualified Review host; later full DR-15 content remains deferred. |
+
+### Full policy checklist
+
+| # | Result | Evidence / scoped applicability |
+|---:|---|---|
+| 1 | PASS | PF-08 attention reason and same-job Try again reachable in existing progress host; runtime outcome separate. |
+| 2 | PASS | LSV-153 stranded-recovery capability retained through visible finite recovery/current journal. |
+| 3 | PASS | Needs attention, Try again, Pay channel and plain recoverable wording. |
+| 4 | PASS | Current counts/background Draft/retained inputs; no per-tick money or premature paid claim. |
+| 5 | PASS | Native frame/title/actor-start subtitle; Close only in header. |
+| 6 | PASS | No tab row added. |
+| 7 | PASS | Notices, subject, figures, attention, safe-close and native footer; one attention card/table host. |
+| 8 | PASS | Native table/labelled phone cards; sticky source headings; no monetary column in this task. |
+| 9 | PASS | Danger Failed text, green ready and cyan information; no colour-only meaning. |
+| 10 | PASS | One Continue primary, Refresh/More, left separated destructive Discard; quiet row retry. |
+| 11 | PASS | Named modern-modal scope, native line/panel/card13px tokens; no new important override. |
+| 12 | PASS | Bounded page reader/observer continuous scroll; Loading more… status after retained rows; no paging button. |
+| 13 | N/A | SDP-34 progress/dialog result-table sorting exemption; no arrow or phone Sort by. |
+| 14 | N/A | Post-Create operational progress; no selection/tick list. |
+| 15 | PASS | Full-scope selected/removed/ready/review/pending fields; no loaded-row count presented as total. |
+| 16 | PASS | Manually checked policy.json neverShow/chatter/UK/length lists; no pack wording tool run. Errors one plain sentence, at most20 words. |
+| 17 | PASS | Row error beside its action; read error inline with read Try again; next step stated. |
+| 18 | N/A | PF-08 retry adds no confirmation; unchanged Discard confirmation belongs DR-09 receipt. |
+| 19 | PASS | Sending/read failure/current recovery; no fabricated zero or fake Candidate after failed read. |
+| 20 | PASS | No loan, code, UUID, job/phase/revision/software label shown. |
+| 21 | PASS | DD/MM/YYYY24-hour timestamps; Pay channel plain values; amounts outside PF-08 scope omitted. |
+| 22 | PASS | Native buttons/continuity focus; sending/loading status and errors alert inspected; no irrelevant aria-sort/ticks. Keyboard joined execution NOT_RUN. |
+| 23 | PASS | Actual390px cards, no sideways overflow, native44px controls/primary/footer reachable; sort exemption above. |
+| 24 | PASS | All eight device-light images independently viewed and byte-identical to their dark counterparts. |
+| 25 | N/A | Owner supplies readonly specs/PNGs; actual product captures saved, no spec/page/tool generation. |
+| 26 | N/A | Owner readerAdditions mechanism not used; actual-field mapping recorded below, no invented value. |
+| 27 | PASS | Start/expiry/read time only; no pay date before execution. |
+| 28 | PASS | Plain payroll vocabulary and visibly labelled counts/channel. |
+| 29 | PASS | Retry beside affected Candidate/reason; read retry beside failed-read message. |
+| 30 | PASS | Try again for the failed Candidate, Refresh after refusal, Continue when Ready; disabled reason visible. |
+| 31 | PASS | PF-08 asks who stopped, why and how to recover; real name/channel/reason/action answer it. Monetary/full Review remains DR-15 scope. |
+| 32 | PASS | Single plain prepare/updating reason followed by Try again; uncertain/refused next step beside action. |
+| 33 | PASS | Sending, Processing requested, uncertain/refusal and recovered truth visible in current window. |
+| 34 | PASS | Operational facts/control only; no extra monetary/reference/future composite UI. |
+| 35 | PASS | Candidate, Draft, Banking Pay, Pay channel, Try again consistently named. |
+| 36 | PASS | No processing acceptance presented as paid; pending request retained; existing Discard protected/left. |
+| 37 | PASS | Header Close/back-to-Banking-Pay guidance; no destructive default. |
+| 38 | PASS | One inline retry without detour/new screen. |
+| 39 | PASS | Visible6 total: initial2+1+3, accepted2+0+4, recovered3+0+3, ready5+1+0; progress Done+To review. |
+| 40 | N/A | This is after Create Draft. |
+| 41 | PASS | Local busy/unknown/refused/failed-read/recovered/phone states and bounded scrolling source covered; hundreds-row/queue joined acceptance NOT_RUN. |
+| 42 | PASS | Draft title, actor/start, expiry/read time, current figures/reasons and persistent next actions orient return. |
+
+Reader mapping: PROGRESS actor_display_name/started_at_utc/expires_at_utc/status/selected_candidates/removed/ready/review/pending/needs_attention; current successful read timestamp for Updated. WORKERS attention variant candidate_display_name/pay_channel/phase/retry_eligible and native job/identity operands are internal only. Plain Failed and phase-specific reason describe operational attention; original retry receipt/journal yields Processing requested or retained uncertainty. No row-array sum, new money field, human reference or later composite field.
+
+### Reviewed source and supplied evidence
+
+| File | SHA-256 |
+|---|---|
+| FE js/bpay-next-office.js | 64f8eafd29c1eb002a8f445860282f61eaf9c314f1c292a2dd862203aca2798d |
+| FE css/bpay-next-office.css | 1c8f3ab6da7971c4dcdfcd126fdb01afb9673906b10a7998323a554162223e00 |
+| FE js/bpay-next-workbench.js | 499e2c2fd3468c8801c86c1a1ab409792b19be47390c069a2f73fb62de0061cb |
+| FE js/modal-modernisation.js | 0cdb7f981c039afd8b86c14124d728cd1ad824cefd18cb294a313393112f642b |
+| FE index.html | 8f4561ad8b84ae49be7793662bbe8e2e4480bc0aaa49bba64dc74eaefa68913f |
+| Pack SCREEN_DESIGN_POLICY.md | 8bc212b174469236f2b46dbf70eadc3664a946636458321cd3c77b7146323de5 |
+| Pack tools/policy.json | 45036d841d4568aa2d4d7adf4f063d6d17b70288e289ee0b285068797a87369d |
+| Pack B4/specs/SCR-40_draft_progress.json | f25cbb54c53551ce5a56e75c1bb48bcf07f6180e8d9cc16443dbfd38f927730d |
+| Pack B4/png/SCR-40_draft_progress_dark.png | 01b663672caece7f9411b40329630988976dbfdb820ff3f7bd726fdfcf75ecff |
+| Pack B4/png/SCR-40_draft_progress_phone_dark.png | 31c394b7f980d886a1737d8e2191109e0f721760ca946215d12d32228a9f1f6b |
+
+Final per-file actual capture/response SHA-256 manifest follows.
+
+
+| Actual local file | SHA-256 |
+|---|---|
+| PF08-accepted-dark.png | 2951238c404ff272b0f89ea4623aeeecaa7c7c72624ab340924a739da1707c88 |
+| PF08-accepted-device-light.png | 2951238c404ff272b0f89ea4623aeeecaa7c7c72624ab340924a739da1707c88 |
+| PF08-accepted-fixed-responses.json | 6312722fc4f31fc06044079ea4f7cd01caac3816dcbb06e74bd6df1a4d8e4e56 |
+| PF08-accepted-phone-dark.png | 67289677ae7daf866e8160c1442fbe999292f1f39c9775a0b016670b82b5c529 |
+| PF08-attention-dark.png | 7dc0971ae86b69b21f10b3a78fee9b001decf265c89c1819e3d795bc0b8b822b |
+| PF08-attention-device-light.png | 7dc0971ae86b69b21f10b3a78fee9b001decf265c89c1819e3d795bc0b8b822b |
+| PF08-attention-fixed-responses.json | ad63b4cace367cf2c14b037f5a5e93910bd181ebb7db5e0b7dfdf748c218ab58 |
+| PF08-attention-phone-dark.png | 241b51b33f9edb72d9462007e37e2770b90dcd44e95cbe909f84416e324e17ce |
+| PF08-failed-attention-read-dark.png | 7b1403e145d21a101acc1ccf670a2ebc11cd5c5ed06fafa2bee031731e976f4d |
+| PF08-failed-attention-read-device-light.png | 7b1403e145d21a101acc1ccf670a2ebc11cd5c5ed06fafa2bee031731e976f4d |
+| PF08-failed-attention-read-fixed-responses.json | 176c3b80f9f14d7daf3824510e65a64b5599aeb62b8642c25ddb2c791f678f89 |
+| PF08-failed-attention-read-phone-dark.png | 8da87e98b08a43b5ac497377e3a98d0714387a7bf5a62084e6d2544aab297900 |
+| PF08-fixed-responses.json | 21d7ceb9467d43e596ab8fd8814053e320b71d9f6328f408421a6c0b8a208b99 |
+| PF08-ready-dark.png | 70db40e02cfd4063c94ec395583ecceeb88e2c52431a8453a4fec60901e34b43 |
+| PF08-ready-device-light.png | 70db40e02cfd4063c94ec395583ecceeb88e2c52431a8453a4fec60901e34b43 |
+| PF08-ready-fixed-responses.json | 1b83acc03c5bb14958f35e21f708570b5afdb1b242e9755685130f303e70b4ff |
+| PF08-ready-phone-dark.png | c237f0f46295693b7c0b66d1bc82bb994d76ff78ca76a32e6e57b6606da369e5 |
+| PF08-recovered-dark.png | 6e3a0fd3b4d904d47217ccd28c75233c4d8b28c7fcb49bbf508462764631c49e |
+| PF08-recovered-device-light.png | 6e3a0fd3b4d904d47217ccd28c75233c4d8b28c7fcb49bbf508462764631c49e |
+| PF08-recovered-fixed-responses.json | 000c83c8241fd4d4fd7f7f297928650d361bdeb1f51f6c2a06c25659c7cf1b3e |
+| PF08-recovered-phone-dark.png | 3f8284ff1cd0659cac8b068336001f3aac7ec954f1d61766894fe6e5cb3f4046 |
+| PF08-refused-dark.png | 6d3016cfb31002200684e167a5dae394780978b4c62ffc77a6a2d5b836c0d3c2 |
+| PF08-refused-device-light.png | 6d3016cfb31002200684e167a5dae394780978b4c62ffc77a6a2d5b836c0d3c2 |
+| PF08-refused-fixed-responses.json | 1b30953ac4a8da8e056ba7c0ebf1b63ce7c5765ccf9de9b0c7d1bdaeaaa43d9a |
+| PF08-refused-phone-dark-scrolled.png | c2692279accb54c2ad45204b2a3b61b01270a5c46eed381b2097383d506b0181 |
+| PF08-refused-phone-dark.png | 71f26943a0e4a8ede29305af6ff48b952313bcff56a07dafae50dd568356deb0 |
+| PF08-sending-dark.png | e29291d5216d6f5e259738add4f2d1f04244af800eef49aceab765c5c13636c0 |
+| PF08-sending-device-light.png | e29291d5216d6f5e259738add4f2d1f04244af800eef49aceab765c5c13636c0 |
+| PF08-sending-fixed-responses.json | 2ad4b17fbb3a87dc0dfda27861acf620469b45f96edb8b48f1f7749413cfb1d2 |
+| PF08-sending-phone-dark-scrolled.png | 8800e43dbe1a91f32b2715b36bf3a1a6d764591f1b7adcbaf7dd6c27e77ef487 |
+| PF08-sending-phone-dark.png | 2b3080a2eb28314be1e0fac0475272f4421cfc2f844b3c89a21c6ad1ab492d4a |
+| PF08-unknown-dark.png | 977189dd008e3710fe66f86734cecf279ae505662cb7fcb3d60c42978f5fb24f |
+| PF08-unknown-device-light.png | 977189dd008e3710fe66f86734cecf279ae505662cb7fcb3d60c42978f5fb24f |
+| PF08-unknown-fixed-responses.json | 4f4540a54f2a5bbbc3adec8ae13e4ffd126dc989589e33eeef2672ef68ed3f28 |
+| PF08-unknown-phone-dark-scrolled.png | faaf3bbeb3cce22927660901c24c53c5a85785cd014d4a1bfe6c4534d3541941 |
+| PF08-unknown-phone-dark.png | 433d3386c4b3e361933bd4d7bdda36bce2e983365cbf3deb767e7a097e8bcdf8 |

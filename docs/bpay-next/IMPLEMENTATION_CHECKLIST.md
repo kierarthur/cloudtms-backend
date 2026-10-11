@@ -3308,7 +3308,7 @@ PF07 ITEM/D01–D04/D06 source BUILT/REVIEWED; D05 future authoredNOT_RUN. Commi
 
 ## PF-08 — No permanent error state: bounded retry and per-Candidate isolation
 
-Seq 112; Cross-cutting · D5-PF; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 112; Cross-cutting · D5-PF; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation.
 
@@ -3316,10 +3316,10 @@ Dependencies: PF-07, F-16; successor positions: none. Design note: required; exa
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| PF-08-D01 | MIGRATION: retry/next-due state and durable needs-attention handoff | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-08-D02 | QUEUE-CRON: broker/src/index.js :: onFailure durable handoff and due-index retry | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-08-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: DR-06 Needs attention/Retry action | MISSING | Implement the exact screen target after its existing dependencies. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| PF-08-D04 | CHECK: PF-08 future joined in-app TEST checklist | MISSING | Future repeated failures reach visible recoverable state and retry same identity once; another Candidate finishes. Retry ceiling is operational design, not monetary policy. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| PF-08-D01 | MIGRATION: retry/next-due state and durable needs-attention handoff | BUILT_REVIEWED | Preserve the positively evidenced baseline and complete only the exact remaining target change. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-08-D02 | QUEUE-CRON: broker/src/index.js :: onFailure durable handoff and due-index retry | BUILT_REVIEWED | Preserve the positively evidenced baseline and complete only the exact remaining target change. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-08-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: DR-06 Needs attention/Retry action | BUILT_REVIEWED | Implement the exact screen target after its existing dependencies. Failure callback logs/RETRY; ten queue retries plus DLQ are not durable visible finite recovery. Complete bounded backoff and needs-attention handoff/retry via existing owner; preserve unknown-outcome lookup and Candidate isolation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| PF-08-D04 | CHECK: PF-08 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Future repeated failures reach visible recoverable state and retry same identity once; another Candidate finishes. Retry ceiling is operational design, not monetary policy. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF-08-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -3327,6 +3327,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows PF
 
 Forcing one Candidate's step to fail leaves the other 299 prepared; the failed one retries and then shows a retry button with the reason. (RQ-326, RQ-250)
   - Joined future check: Future repeated failures reach visible recoverable state and retry same identity once; another Candidate finishes. Retry ceiling is operational design, not monetary policy. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+PF08 ITEM/D01–D03 BUILT/REVIEWED; D04 authoredNOT_RUN. BEimplementation 352f3af4185d0f5bd83c907d5744dde98ea97fc1; FE824f58b81dd60e6e3031ad32508708e83e1363b6; design/PF-08-completion.md; design/PF-08-successor-provenance.json; design/PF-08-current-owner-catalogue.json; reviews/PF-08-sql-review.md; reviews/PF-08-worker-contract-review.md; screen-designs/SCR-40/review.md. NormalchecksPASS and actualA4 36PASS/0FAIL/6NA. Whole 93/288 BUILT/REVIEWED; nextSP15seq113.
 
 ## SP-15 — Pay Query in Office: open, block, remedy, receipts and the red row
 
