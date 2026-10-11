@@ -2,7 +2,7 @@
   "item": "FC-09",
   "sequence": 107,
   "decision": "BD119",
-  "status": "SOURCE_BUILT_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "deliverables": [
     "FC-09-D02",
     "FC-09-D03",
@@ -85,7 +85,7 @@
     {
       "repository": "FE",
       "path": "js/bpay-next-case-preview.js",
-      "sha256": "36fb31a3403e99b726f9330aa34ef2e572b88eb88ba8c731e10ff7af8770738e"
+      "sha256": "1eae57dfb80af14aa18417a4ac52dc14a03508fad9b457d2b4e826c6541998dd"
     },
     {
       "repository": "FE",
@@ -95,17 +95,17 @@
     {
       "repository": "FE",
       "path": "js/bpay-next-payment-advance.js",
-      "sha256": "6074e95557b2197fade86958393eee6d4368e0465e4b05918d906168c8647c28"
+      "sha256": "1dc1ba07601dccfe40bc01379b8836e1fa566cf5c1a19c6b5089b818e36e4a72"
     },
     {
       "repository": "FE",
       "path": "js/bpay-next-manual-credit.js",
-      "sha256": "23505cb844f4691a66595172d478a991232a38ad7b6ab8c1a04036064c6a2c74"
+      "sha256": "af17077388eadfb05d86d7c39d9837390ba06a928745c371dd18c80b49072a8f"
     },
     {
       "repository": "FE",
       "path": "js/bpay-next-manual-debt.js",
-      "sha256": "25f68670229d13cedf69f7cbf05b3ab2c2e45d1483e80a69f290d7129015a28a"
+      "sha256": "e6cc21ba641be995542de481d22f06236c371cca5f2ded8f9210a5ca1418c8ad"
     },
     {
       "repository": "FE",
@@ -120,18 +120,18 @@
     {
       "repository": "FE",
       "path": "index.html",
-      "sha256": "946d7c49baa4f662b6c53e5b9e53cf5e702c8ca87af7dc863bed6cf79c6e4c43"
+      "sha256": "7d5efbac432b2790e22d66bc330365e94c7865264ad4d253ecd140a9c5dcc0c3"
     }
   ],
   "parents": "FC-09-parent-provenance.json",
   "checks": {
     "integrity": "353 migrations/915repeatables PASS",
-    "sourceGates": "Existing12/12PASS on final functional source; later scoped CSS touch target only",
-    "syntax": "All affected Worker/Office/main finalsyntax PASS",
+    "sourceGates": "Final existing12/12PASS after accessibility correction",
+    "syntax": "All final affected Worker/Office/main PASS",
     "local": "Managed PG17 load;17exact function-body matches;2immutable tables/4native activity indexes;logical owner/configuration/grants checked",
     "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; public membership delta0; currentGeneral/Candidate isolationDO PASS",
     "contract": "51247ba8a12eec470379b4c87a6911195384b63767258f8ff31f704d37a13ad2; export/seal/coupling PASS",
-    "a4": "Final reviewer pending;36state/mode captures plus phone-bottom views, fixed local GET responses only",
+    "a4": "Independent APPROVED,41actual PNG/full42policy34PASS0FAIL8N_A in eachscreenreceipt; all8findings fixed; joinedchecksAUTHORED_NOT_RUN",
     "joined": "AUTHORED_NOT_RUN",
     "screenCounts": {
       "SCR-122": {
@@ -145,5 +145,8 @@
     }
   },
   "requiredSupport": "9private edit helpers +8existing successor definitions;2immutable native tables,4activity point indexes plus theirnative FK lookup indexes, closed existing financial job/page/readback maps and same-host reader-qualified Draft navigation.",
-  "unchanged": "OriginalCASE_CREATE/0410funding/ledger/money equations/Source/payquery/transfer/settlement owners; F25parkedfiles untouched."
+  "unchanged": "OriginalCASE_CREATE/0410funding/ledger/money equations/Source/payquery/transfer/settlement owners; F25parkedfiles untouched.",
+  "implementationCommit": "1e3aa57887e97ca1a6d2866599bb199acd739ff5",
+  "frontendCommit": "b0be40bb7e42395a7d4ff6df202d1d625c6ad1ef",
+  "frontendBaseCommit": "0d690cc8764b1808452ece02c67b03f73afe799f"
 }

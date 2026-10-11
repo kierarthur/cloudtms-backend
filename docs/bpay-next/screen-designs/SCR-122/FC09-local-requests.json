@@ -1,0 +1,845 @@
+[
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-first-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-preview-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\nPREVIEW\nUp to £75.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-first-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-preview-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£35.00 credit\nTotal\n£35.00\nTax\nNot taxable\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-first-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-preview-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-blocked-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nBatch blocked: PAYE Draft · £300.00Open Draft\n\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nIn a Draft\nPayout\nWith the next Draft\nRepayments\nNot started\n\nThis Case is in a Draft and cannot be changed.\n\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-load-error-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nCould not load this Case; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-pending-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-accepted-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\n\nChanges are being saved.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-stale-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nThis Case has changed; refresh and try again.\n\nRefresh\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-first-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-preview-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\nPREVIEW\nUp to £75.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-first-device-light.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-preview-device-light.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£35.00 credit\nTotal\n£35.00\nTax\nNot taxable\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-first-device-light.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-preview-device-light.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-blocked-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nBatch blocked: PAYE Draft · £300.00Open Draft\n\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nIn a Draft\nPayout\nWith the next Draft\nRepayments\nNot started\n\nThis Case is in a Draft and cannot be changed.\n\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-load-error-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nCould not load this Case; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-pending-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-accepted-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\n\nChanges are being saved.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-stale-device-light.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nThis Case has changed; refresh and try again.\n\nRefresh\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 598,
+      "scrollWidth": 598,
+      "bodyWidth": 587,
+      "bodyScrollWidth": 587,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-first-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\nPREVIEW\nUp to £75.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£300.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-first-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-credit-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Credit\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nDue once\nCredit\nWith the next Draft\nAmount\n£\nTax\nTaxable\nAdded to PAYE gross\nNot taxable\nAdded after PAYE net\nComment\nNote\nPREVIEW\n£35.00 credit\nTotal\n£35.00\nTax\nNot taxable\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-first-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\n\nPreview first.\n\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-debt-preview-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Manual Debt\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nRepayments not started\nRepayments\nNot started\nAmount\n£\nTax\nTaxable\nTaken from PAYE gross\nNot taxable\nTaken after PAYE net\nComment\nOriginal reference\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nNote\nPREVIEW\nUp to £30.00 a week for 4 weeks\nFirst due\nMon 12/10/2026\nLast due\nMon 02/11/2026\nTotal\n£120.00\nMinimum earnings threshold\nNone\nTake-home floor\nCandidate default\nPreview\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-load-error-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nCould not load this Case; refresh and try again.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-pending-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nCould not confirm the result; try again.\n\nTry again",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-accepted-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\n\nChanges are being saved.\n\nRefresh",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-stale-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nNot paid out yet\nPayout\nWith the next Draft\nRepayments\nNot started\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote\n\nThis Case has changed; refresh and try again.\n\nRefresh\nSave changes",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      },
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_PREVIEW",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 1
+    },
+    "editFailure": null
+  },
+  {
+    "id": "SCR-122",
+    "file": "FC09-advance-blocked-phone-dark.png",
+    "errors": [],
+    "copy": "Edit Payment Advance\nBethany Clarke · TMS 10502 · PAYE\nClose\n\nBatch blocked: PAYE Draft · £300.00Open Draft\n\nCandidate\nBethany Clarke · TMS 10502\nPay channel\nPAYE\nStatus\nIn a Draft\nPayout\nWith the next Draft\nRepayments\nNot started\n\nThis Case is in a Draft and cannot be changed.\n\nAmount\n£\nRepay\nBy number of weeks\nBy weekly amount\nNumber of weeks\nStart week\nMust be a Monday.\nAffordability\nMinimum earnings threshold\n£0.00 is allowed.\nTake-home floor\nReason\nNote",
+    "requests": [
+      {
+        "path": "/api/banking/pay/next/preparation-page",
+        "kind": "CASE_COMPONENTS",
+        "method": "GET",
+        "case_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "edit_command_id": null
+      }
+    ],
+    "geometry": {
+      "width": 364,
+      "scrollWidth": 364,
+      "bodyWidth": 364,
+      "bodyScrollWidth": 364,
+      "primaryCount": 0
+    },
+    "editFailure": null
+  }
+]
