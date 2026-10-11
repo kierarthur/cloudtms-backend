@@ -2823,7 +2823,7 @@
       "finalClosures": [
         "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql"
       ],
-      "owner": "PS-01 stored ordinary Umbrella bridge; next DY-09 follows master0130 chain",
+      "owner": "PS-01 stored ordinary Umbrella bridge; DY-09 verified exact reuse; next DR-38 -> DR-22 -> CM-13a",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3287,7 +3287,7 @@
       "finalClosures": [
         "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY-09 verified ordinary Umbrella/null-Contract Daily exact baseline reuse; next DR-38 -> DR-22 -> CM-13a",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {

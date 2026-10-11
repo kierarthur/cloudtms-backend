@@ -305,3 +305,5 @@ DY06seq93/BD104: reuseOLDwithdrawal0939 andDailycapturedpublisher1001. Private r
 DY07seq94/BD105: publicOfficeCandidateadapter1832 ->11102026_1119_banking_pay_next_daily_single_flight_adapter_v1.sql (onlyexistingfinalise/replaycallee). CurrentSP12singleflight0931 retainedunchanged; indexDailyseam/nativenarrowOfficeRPCfunnel propagate20s; no newCandidate signature or Source/queryowner. Lateradaptercardsmerge1119.
 
 DY08seq95/BD106: privateDailyApprovalEvidence0925 ->11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql (eight exact ancillary predicates into dedicated qualified23514 branch). All remaining evidence/refusals/rates/ACLs unchanged; current1001 publisher callers retained.
+
+DY-09 sequence96 / BD108: 0130 CLAIM retained; PS-01 BUILD/guard0533 -> DY-09 exact reuse -> DR-38 -> DR-22 -> CM-13a. Seven fresh local owner bodies/ACLs match. No SQL successor, Contract join or current-after-click identity lookup was needed. Existing STATUS0639 supplies the four frozen Umbrella detail facts; future DR-37 still merges STATUS0639.

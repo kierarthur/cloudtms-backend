@@ -1,0 +1,73 @@
+{
+  "item": "DY-09",
+  "sequence": 96,
+  "decision": "BD108",
+  "status": "REVIEWED_PENDING_LOCAL_RECEIPT",
+  "sources": [
+    {
+      "path": "supabase/repeatable/04102026_0130_banking_pay_next_simple_transfer_members_v1.sql",
+      "sha256": "763176b54482954adf8c07e7415a86e005baae71848d03bba3245ee8c385907a",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/10102026_0533_banking_pay_next_ps_c01_simple_transfer_bridge_v1.sql",
+      "sha256": "a7175c21cac86b372ad59c3a114dce69c9298708154898955848877b020fb314",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+      "sha256": "7433ac2a1ccfe64613666eed4ff672e81c67a36bb8c9abbc6585833b9dcbe09b",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "sha256": "514fb6a069dfe860d06c76d98302554bf3ed93e8e027cdbac460bf8cea7da9a6",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "sha256": "b5f2f9ec742a11a88ede05ae0eb433725b410907827bf10300b3540824a92a72",
+      "reused": true
+    },
+    {
+      "path": "supabase/repeatable/10102026_0639_banking_pay_next_ps_c15_reservation_status_v1.sql",
+      "sha256": "15c88f4c45051087976ed9187a741da494c69a052611c2a41892417f9665a22d",
+      "reused": true
+    }
+  ],
+  "frontend": [
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-office.js",
+      "sha256": "b70ba97d9ae8f70298121e851f71512948cccf2f271e2c8b4f554ded457bddbb"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "css/bpay-next-office.css",
+      "sha256": "c93e02a13dc6b53f553a04078eb63b5b2de5c32f58c4cd63508e1986fc63c1b4"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "index.html",
+      "sha256": "ae526887a3d301a5157a82f29b0a825e4d4e57e69e10b84f8ee626ebabac886e"
+    }
+  ],
+  "chain": "0130 -> PS-01 BUILD0533 -> DY-09 exact reuse -> DR-38 -> DR-22 -> CM-13a",
+  "catalogue": "design/DY-09-current-owner-catalogue.json",
+  "checks": {
+    "integrity": "345 migrations /903 repeatables",
+    "sourceGates": "12/12 PASS",
+    "syntax": "Office PASS",
+    "localPG": "seven fresh current installed bodies/ACLs match; no SQL delta",
+    "contractHash": "3a0244519e91d9554be7d7499a29173a08786d78806f2ff203acbb55296c4fbe",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "publicMembershipDelta": 0
+  },
+  "screenshots": 21,
+  "sourceReview": "reviews/DY-09-source-review.md",
+  "screenReview": "screen-designs/SCR-47/review.md",
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "b28dd501b5acc896f658eb79226cdb4e6bf576c7",
+  "screenPolicy": "33 PASS / 0 FAIL / 9 N/A,21 actual native captures"
+}

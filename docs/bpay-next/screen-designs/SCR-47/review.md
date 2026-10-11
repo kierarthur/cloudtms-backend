@@ -135,3 +135,152 @@ All filenames below are relative to this review's SCR-47 folder. Current31 PNGs 
 | DY05-Used-rates-phone-dark.png | 7f7278fb1d705c942816d2ac4d7c549d17976e1e65d57a878203ab2badfe8787 |
 
 **Final verdict: scoped SOURCE and A4 PASS; no remaining Fail in applicable child-screen rows.**
+
+---
+
+# DY-09 / SCR47 current scoped A4 review
+
+11 October 2026. **Scoped A4 PASS — 33 Pass, 0 Fail, 9 Not applicable across all42 rows. All21 current DY09 PNGs were opened individually beside the matching supplied B4 design images. No remaining essential pixel finding.** The DY05 receipt above is preserved as historical evidence; its source/image hashes are not relabelled as current DY09 bytes.
+
+This approval covers DY09 D02's existing read-only Umbrella Draft-detail money strip, unavailable/accepted cash, independent totals/detail failure recovery, and retained native Shift facts. It does not approve full DR15 parent identity/totals, later shared SCR47/DR17 delivery, payment execution, settlement or genuine multi-Candidate/weekly-Daily financial journeys. D05 joined acceptance remains AUTHORED / NOT_RUN. This reviewer performed saved-source/image reads and documentation only: no product, pack/spec/tool/render, browser, database, hosted action, fixture, test or commit.
+
+## Actual comparison and every visible difference
+
+Read the full policy, its42-row checklist, current BD108, independent design review, actual fixed replies/native request log, current Office/CSS/native adapter and the source-review final closure. Viewed supplied `batches/B4/png/SCR-47_draft_detail_lines_dark.png`, its phone design and `SCR-47b_draft_detail_shifts_dark.png` together with the actual corresponding images. The seven current states are not-accepted, accepted, failed, recovered, shifts, failed-both and totals-recovered-detail-failed, each dark/device-light/390px-phone. Device-light images were independently opened; each equals its corresponding dark file byte-for-byte.
+
+| Visible difference from supplied SCR47/SCR47b | Card/reader reason and disposition |
+| --- | --- |
+| Carol Price · TMS10421 · Daily10/10/2026 · Umbrella instead of illustrative Bethany/PAYE/weekly sample | Small local closed responses use existing captured Candidate/reference/Timesheet and channel facts. No invented person/company field or paid outcome. |
+| Two native Timesheet lines, one selected Daily Shift, smaller dynamic-height window | Exact minimal reply membership/content; original medium980px native frame. The reference's six mixed Source/Protected/ancillary lines and nine Shifts are illustrative, not this card's admission expansion. |
+| Subtitle names the selected captured Daily rather than Started timestamp | Existing frozen origin supplies that identity; the child has no start-time field. Parent actor/start/deadline belongs to its existing owner. No timestamp is inferred. |
+| Payment/Date/Amount ex VAT/Actions instead of Timesheet/line/approved hours/rate | LINES has component kind, date and frozen amount, but not complete approved hours/rate/Client for each line. Those actual facts remain in the existing child readers. Later full shared layout is not approved by this slice. |
+| Quiet per-line Open button and native selected-line bar | Open selects that exact captured line and its Shifts, also available via double-click/Enter. The phone button is the required reachable alternative. |
+| No Lines approved-hours caption | The Lines table exposes no hours; the exact caption remains where hours appear on Shifts. No irrelevant duplicated copy. |
+| Four values below Lines replace the reference's single Gross strip | DY09 D02 expressly requires per-Candidate frozen money/cash. Existing STATUS supplies Pay ex VAT, VAT, Pay inc VAT and Bank amount; BD108 records this required difference. No new reader or browser line sum. |
+| Bank amount “—” before native accepted projection; £593.56 after projection | Literal nullable STATUS cash, distinct from frozen inc VAT. No zero/default, gross-to-cash calculation, paid/settled label or execution promise. |
+| Two-column phone totals strip | Same four facts wrap inside390px without clipping/sideways scroll; not a second card nested in a card. |
+| One selected Daily Shift07:30–15:30/7.50, captured Riverside/No Contract (Daily)/Care Assistant/Band3 | Exact SHIFTS and origin facts. No live Client/Contract lookup. The supplied mixed-family Shift sample's dates/clocks/badges differ because membership differs. |
+| Shifts omits inline Break and Rate columns | Its current reader supplies neither an aggregate break nor a used rate. Breaks/Used rates keep their existing exact readers/tabs; no inferred total or substituted available rate. This inherited shared-layout difference remains scoped as in DY05. |
+| No arrows, Sort by, whole-line count or Sorted by footer | SDP34 expressly exempts dialogs/fixed business order. Preserve native cursor order; do not invent whole-list count, sort capability or browser aggregate. |
+| Native outlined tab buttons, one complete wrapping tablist | Existing native components retain one selected indigo/cyan state. All five full labels are visible on phone with44px targets. No extra navigation tier. |
+| Right/tabular row money, native responsive labelled cards; summary facts use definition-list alignment | Native universal table plus policy-shaped totals strip. On phone the row values remain right-aligned and labels readable; four named totals are not table cells. |
+| Read errors replace only the unavailable fact area with plain danger notices/Refresh | Totals failure sits at its affected summary area below Lines. Detail failure retains its own notice above detail. Both failures show both retries; successful totals retry leaves the original detail error/retry. This is required recovery, not success chatter. |
+| On initial detail failure, unavailable origin subtitle is omitted and dependent fact tabs disabled | No guessed human identity from UUIDs. The visible detail error and Refresh explain the missing context; full parent identity remains DR15. Already returned money is displayed only from its independently validated STATUS read. |
+| Empty native footer, header Close only, no primary/payment action | Read-only detail has no financial next step. Safe Close and fact navigation suffice; no duplicate Close or artificial primary. |
+| Product background/frame placement differs; no white design-note banner | Actual native Office backdrop/layout. The reference's annotation is design material, not a payroll control. |
+
+The retained Breaks/Used rates/Available rates facts/layout are unchanged from the historical DY05 receipt; this DY09 batch does not claim newly captured approval of those three tabs. Their controls remain reachable in the current source. Every visible difference in the actual DY09 states is accounted for above; full shared-screen delivery is explicitly separate.
+
+## Every visible control: payroll purpose
+
+| Control | Needed purpose / boundary |
+| --- | --- |
+| Header Close | Safely return to the native parent; no mutation or dirty prompt. Only Close shown. |
+| Lines | Inspect original included money and the four Candidate totals. |
+| Shifts | Inspect selected approved date, Client/Contract, role/band, actual clocks and hours. |
+| Breaks | Inspect the selected real Shift's recorded breaks through the existing reader. |
+| Used rates | Inspect the rate used for the captured approved quantities. |
+| Available rates | Inspect the original five Standard rate rows, with unavailable rates distinct from zero. |
+| Open on each Lines row / row Enter or double-click | Choose that exact included line and view its immutable Shifts. Single click only selects/focuses. |
+| Detail Refresh | Retry the original failed LINES/frozen-detail request/cursor; not a repricing or new approval. |
+| Totals Refresh | Repeat only the exact STATUS run/worker request; keep the independent detail error/retry. |
+
+There is no unnecessary estimate, sorting/tick form, company selector, payment action, confirmation or success button. Disabled dependent tabs are accompanied by the visible failed-detail reason in the captured failure states; the common read-only task is Open/choose tab/Close.
+
+## Full42 policy results
+
+| # | Status | Evidence / precise current scope |
+| --- | --- | --- |
+|1|Pass|D02 reachable native detail now has all four provided Candidate money facts; joined cash/settlement D05 NOT_RUN.|
+|2|Pass|Original five fact tabs/detail controls retained; no required native capability removed. Full later shared delivery remains separate.|
+|3|Pass|Draft detail, Umbrella Draft, No Contract (Daily), Approved hours not paid hours, plain money labels.|
+|4|Pass|Read prepared/captured facts only; no tick calculation, live settings, payment or inferred cash.|
+|5|Pass|Native medium frame, factual subtitle when supplied, header-only Close44px on phone.|
+|6|Pass|One native five-tab list, full phone wrap, no second navigation tier.|
+|7|Pass|Fact table then four-value totals; independent inline errors at affected detail/summary; no nested bordered facts card.|
+|8|Pass|Native universal/sticky table, right/tabular numeric columns and readable phone labels.|
+|9|Not applicable|No outcome/status badge in this child; danger notices remain text plus colour.|
+|10|Not applicable|Read-only detail has no primary financial step/footer actions; needed quiet controls only.|
+|11|Pass|Existing native frame/tables/notices/tokens; narrowly scoped totals styles, no !important.|
+|12|Pass|Existing continuous native chunks/Loading more and bounded history remain; no paging controls. New batch is small, not hundreds-row runtime proof.|
+|13|Not applicable|SDP34 dialog/fixed-order exemption; no sort promise/new protocol.|
+|14|Not applicable|No selection ticks in captured read-only detail.|
+|15|Pass|Four whole-Candidate totals are literal STATUS header fields, independent of bounded LINES pages.|
+|16|Pass|Manual actual-copy audit against policy.json neverShow/chatter/formatRules/20-word/two-sentence limits. No spec/tool execution claimed.|
+|17|Pass|Plain specific failure sentence plus explicit scoped Refresh; independent errors remain visible after totals retry.|
+|18|Not applicable|No confirmation or mutation in this window.|
+|19|Pass|Unavailable cash is dash; read failure is explicit, never fake empty-success/zero. Existing loading/empty detail remains source-defined.|
+|20|Pass|No codes, UUIDs, technical frozen/projection/Worker terms or loan wording visible.|
+|21|Pass|UK dates,07:30–15:30,7.50 hours and two-decimal pounds; NULL cash dash.|
+|22|Pass|Source preserves tab/button keyboard controls, selected row Enter, labelled tablist/scroll regions, alerts/focus continuity; exhaustive keyboard execution not claimed.|
+|23|Pass|All seven390px states contain full tabs/cards/totals/Refresh/Close with44px targets and no sideways content; sort/primary exemptions apply.|
+|24|Pass|All seven device-light images individually viewed and byte-identical to corresponding dark images.|
+|25|Not applicable|Owner-directed actual product workflow; reuse supplied pack, no new spec/page/generation. PNG/fixed-reply/request evidence retained here.|
+|26|Not applicable|Owner direction for readerAdditions: no new reader fields. Exact existing field map below; no invented value.|
+|27|Pass|Only worked Daily/line/Shift dates appear; no pre-execution pay date.|
+|28|Pass|Plain payroll labels separate ex VAT/VAT/inc VAT/bank amount; dash preserves unavailable value, no technical explanation.|
+|29|Pass|Open is on its line; tabs above facts; each Refresh beside its failure; Close in header.|
+|30|Pass|Read facts, choose tab or safely Close. No artificial primary/payment step.|
+|31|Pass|Successful child names supplied Candidate/ref/channel and four money facts. Failed origin is explicitly unavailable with Refresh, no guessed identity; full parent identity remains DR15.|
+|32|Not applicable|No Waiting/Blocked/Action required child rows.|
+|33|Pass|Actual recovered totals shown; combined-failure captures retain separate detail error/retry after totals success.|
+|34|Pass|Only needed immutable identity/line/Shift facts, four card-required money values and navigation/recovery controls.|
+|35|Pass|Same Draft/Timesheet/tab names and consistent7.50/hour/£ formatting; Bank amount does not imply Paid.|
+|36|Pass|No irreversible action or editable money; missing values cannot become zero/calculated cash.|
+|37|Pass|Safe reachable header Close throughout all states; original native return behavior preserved.|
+|38|Pass|READY detail uses the existing window; money visible on Lines without detour/new screen/action.|
+|39|Pass|£194.63+£300.00=£494.63; £494.63+£98.93=£593.56; accepted literal bank amount£593.56, otherwise dash. Not a runtime conservation claim.|
+|40|Not applicable|This is already captured detail, not pre-Create selection.|
+|41|Pass|Actual phone/read failure/recovery/combined failure/Shift states and unchanged bounded source; full busy/empty/late/keyboard business acceptance not claimed.|
+|42|Pass|Draft title, factual subtitle/current tab, distinct failure notices and safe navigation show location/state.|
+
+## Literal field mapping and independent recovery evidence
+
+STATUS header `frozen_gross_ex_vat`, `frozen_gross_vat`, `frozen_gross_inc_vat`, `cash_amount` maps directly to Pay ex VAT/VAT/Pay inc VAT/Bank amount. All monetary cells use the existing exact decimal formatter and `data-next-formatted-money`. The source adopts the header only after current actor/owner/preparation namespace and exact accepted run/worker/Candidate match; no live Candidate/company lookup or line sum. LINES exposes `component_kind`, `work_date`, `frozen_ex_vat`; origin supplies captured Candidate/reference/Timesheet/Client/role/band/contract classification. SHIFTS supplies actual local clocks/date/approved hours. The unchanged other tab field mapping is retained in the DY05 section.
+
+Current source's summary-only Refresh calls `act` with `preserveDetailError=true`. In all three totals-recovered-detail-failed images, the original detail failure and its Refresh remain while the summary now shows literal money. The native local logs show STATUS limit1 at the same run/worker, LINES limit100, and summary recovery adding only that same STATUS request. This proves the saved local interaction shown, not a hosted/API/database journey. Existing source review's final P2 closure is consistent with the independently inspected final pixels.
+
+## Current source, supplied references and image hashes
+
+Raw SHA-256. FE source was saved/uncommitted at capture/review; baseline HEAD9d39ba39ff5cdefaa426663f864f4a10df97c34e does not itself contain this delta. The hashes below identify reviewed bytes without attributing later root edits to this receipt.
+
+| Source/reference | SHA-256 |
+| --- | --- |
+| FE js/bpay-next-office.js | `b70ba97d9ae8f70298121e851f71512948cccf2f271e2c8b4f554ded457bddbb` |
+| FE css/bpay-next-office.css | `c93e02a13dc6b53f553a04078eb63b5b2de5c32f58c4cd63508e1986fc63c1b4` |
+| Native js/bpay-next-ui.js | `a4ae919379621a21e68ef9955bc4a8cebb5e37f20ede56691eef7a16b60d0ee5` |
+| SCREEN_DESIGN_POLICY.md | `8bc212b174469236f2b46dbf70eadc3664a946636458321cd3c77b7146323de5` |
+| tools/policy.json | `45036d841d4568aa2d4d7adf4f063d6d17b70288e289ee0b285068797a87369d` |
+| Supplied SCR47 Lines dark | `86344f5b359b3eec4756cd54905273739a25039ce3be8f38b04ea5a8a5a770f6` |
+| Supplied SCR47 Lines phone | `e478702de4635867db052001092a5b61419bc178b19267ffd5b4381d5d07bdb4` |
+| Supplied SCR47b Shifts dark | `588929ee2eca5695d4f497b1db78986f2238db012b755d735b6f0f9c51d83456` |
+
+Current actual files below are relative to this SCR-47 folder. All21 PNGs were independently opened; source/schema/data/race/settlement acceptance is not inferred from them.
+
+| File | SHA-256 |
+| --- | --- |
+| DY09-accepted-dark.png | `b48ec4323640221682f67eabf0deb71a47ba11ee1cd98e8cfa5db60c330d46af` |
+| DY09-accepted-device-light.png | `b48ec4323640221682f67eabf0deb71a47ba11ee1cd98e8cfa5db60c330d46af` |
+| DY09-accepted-phone-dark.png | `56dd67148845cade92ddbaf1af01396ea1e28532fd538cff7cba0869a7014531` |
+| DY09-failed-both-dark.png | `b73e399553fba7e62242fb54d5009bfc3c85c6bc9191cac322a1e657646fd7b1` |
+| DY09-failed-both-device-light.png | `b73e399553fba7e62242fb54d5009bfc3c85c6bc9191cac322a1e657646fd7b1` |
+| DY09-failed-both-phone-dark.png | `4aad07144bf57ab4e6c6ee05e97c12d2e4ae0976487223dc8fcfb00b8a3033e5` |
+| DY09-failed-dark.png | `7f89740c1127812c6109d043aecb2d781937529479b3d809c1642b8f8e1a52a9` |
+| DY09-failed-device-light.png | `7f89740c1127812c6109d043aecb2d781937529479b3d809c1642b8f8e1a52a9` |
+| DY09-failed-phone-dark.png | `a341b2ebd9aabd6ede0b858c082ca36b385aa0a99ed2d3cf6de28682212c6bcd` |
+| DY09-not-accepted-dark.png | `c6ed8093489c5471ef46c909290a5de76cdb38b8b539e53c6a0216c9399e0729` |
+| DY09-not-accepted-device-light.png | `c6ed8093489c5471ef46c909290a5de76cdb38b8b539e53c6a0216c9399e0729` |
+| DY09-not-accepted-phone-dark.png | `65aad3b0060ee1bdb95b04fea0cb7b8203e3dc3a17b5e6c4dbad30c019be3166` |
+| DY09-recovered-dark.png | `c6ed8093489c5471ef46c909290a5de76cdb38b8b539e53c6a0216c9399e0729` |
+| DY09-recovered-device-light.png | `c6ed8093489c5471ef46c909290a5de76cdb38b8b539e53c6a0216c9399e0729` |
+| DY09-recovered-phone-dark.png | `65aad3b0060ee1bdb95b04fea0cb7b8203e3dc3a17b5e6c4dbad30c019be3166` |
+| DY09-shifts-dark.png | `a5b7d39790ce16f442852710db6599845cd6646c05a1352f04ecd1404d46e588` |
+| DY09-shifts-device-light.png | `a5b7d39790ce16f442852710db6599845cd6646c05a1352f04ecd1404d46e588` |
+| DY09-shifts-phone-dark.png | `b96dcfa82f908148bb7659148e63e41c9d1fdd82b3696cc18161657a697cfdf1` |
+| DY09-totals-recovered-detail-failed-dark.png | `e769b613e9b862937e5f958be16d70b44d7338fed3e997374b7c30f408d30996` |
+| DY09-totals-recovered-detail-failed-device-light.png | `e769b613e9b862937e5f958be16d70b44d7338fed3e997374b7c30f408d30996` |
+| DY09-totals-recovered-detail-failed-phone-dark.png | `9120c49588ee0d8e4de342fbb400e134f75ef0f61081139ffb857fbe51f29509` |
+| DY09-fixed-responses.json | `f1d53ed69afb3dcb0780311dc81dacddcd06179d479ae0456fe02e73d8716ac6` |
+| DY09-local-requests.json | `768f7cd82054126fe43e698ddae7fcf0abf3291d8b83c5516c32a60e9bbdc821` |
+
+**Final DY09 verdict: scoped A4 PASS; no remaining essential visual finding. Historical DY05 evidence and later-owner/joined limits remain explicit.**
