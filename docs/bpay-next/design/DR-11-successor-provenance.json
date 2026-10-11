@@ -1,7 +1,7 @@
 {
   "item": "DR-11",
   "sequence": 86,
-  "status": "NORMAL_CHECKS_PASS_INDEPENDENT_SOURCE_PASS",
+  "status": "BUILT_REVIEWED",
   "prerequisiteDeliverables": [
     "DR-37-D14",
     "DR-37-D18"
@@ -59,5 +59,6 @@
     "sourceGates": "12/12 PASS",
     "sealCoupling": "PASS",
     "publicCatalogue": "835/76service-missing/0browser/d5226315e5b17afc9e5a588a432b73ca; verifierDO PASS"
-  }
+  },
+  "implementationCommit": "c683f8c4a35e3b5fc1d85ea8d0a06a2218b0f9f9"
 }
