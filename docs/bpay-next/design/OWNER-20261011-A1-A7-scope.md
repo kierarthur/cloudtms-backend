@@ -1,0 +1,9 @@
+# Owner correction boundary A1/A7 — exact scope
+
+11October2026. Named objects only: run_choice_member.skip_code CHECK; existing create/append skip literals and two decoders; one existing source-gate membership assertion; earlyDR37 Candidate fence table/assertion and current DR08 expiry writer hook. No new command, counter, framework, financial calculation, table trigger or producer.
+
+BD103: preserve immutable installed predecessor migrations/repeatables. Current0426 create/append writers already use ON_HOLD and stay unchanged. A new migration replaces the exact named CHECK with ON_HOLD; historical PAY_ON_HOLD is allowed only if a stored row already uses it at installation. No stored row is rewritten. Remove the historical spelling from current Worker and Office finite decoders. The same source gate checks current registered create/append literal outputs against this closed CHECK; DR10 later adds its named PAYE exclusion to this CHECK when implemented.
+
+Fresh sole-local PG17 census: actual constraint bpay_next_run_choice_member_skip_code_check, old-literal rows0; PostgreSQL17.11/database banking_modal_v2_test. No business rows were created. The conditional legacy branch preserves possible installation data rather than assuming this local census is hosted evidence.
+
+A7 is reused, not rebuilt: D14 migration0904/D18 helper0904, and DR08 current expiry0910 already calls the exact native assertion after replay/lease/checkpoint admission and before the first financial mutation. Fresh installed local metadata confirms both objects and the call. Their implementation is c683f8c4a35e3b5fc1d85ea8d0a06a2218b0f9f9. FullDR37, D12/D17 and F26 remain unbuilt. Future DR11/FC10 ownership follows the same writer contract. Independent source investigation is reviews/OWNER-20261011-A1-A7-investigation.md; it labels root database evidence separately.

@@ -8352,3 +8352,5 @@ This is the R2 final plan acceptance checklist, not R9/R10 historical acceptance
 ## Legacy capability cross-check
 
 LEGACY_PARITY_ACCEPTANCE.md maps every retained staff capability and shared seam to its owning card. These are cross-check references, not duplicate implementation tasks. Use the final approved technical charts and card outcomes when collecting joined results. Installation/security permission checks remain separate from business testing.
+
+Owner11October boundary correction: WB44 ITEM/D12 BUILT/REVIEWED ticks withdrawn pending A2 stale worker-basis snooze CANCELLED audit. Previous a33796fd source retained. WB39 remains unfinished and cannot close before that successor. Whole74/288 BUILT74/288 REVIEWED after this owner-required reopening.

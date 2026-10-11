@@ -1947,6 +1947,8 @@ export function verifyBpayNextSourceGates(){
   git(['merge-base','--is-ancestor',FROZEN_BASE,'HEAD']);
   const current=inventory(),changed=changedSourcePaths();
   const {routines,migrationRoots}=definerInventory(current),protectedSignatures=new Map(),frozenSources=new Map();
+  // Owner A1: every current Create/append skip literal must fit the member CHECK.
+  {const memberChecks=read('supabase/migrations/11102026_1048_banking_pay_next_held_choice_skip_check_v1.sql'),checkSets=[...memberChecks.matchAll(/check\s*\(skip_code\s+in\s*\(([^)]*)\)\)/gi)].map(m=>new Set([...m[1].matchAll(/'([A-Z0-9_]+)'/g)].map(v=>v[1])));for(const [signature,definitions] of routines){if(!/^private\.bpay_next_(?:create|append)_/.test(signature))continue;const final=definitions.at(-1),source=read(final.physical).replaceAll('\r\n','\n'),body=scanManagedSql(source).statements.filter(row=>routineDefinitions(source.slice(row.start,row.end),final.physical).includes(signature)).map(row=>source.slice(row.start,row.end)).join('\n');for(const match of body.matchAll(/(?:v_(?:skip_)?code\s*:=|return)\s*'((?:BPAY_NEXT_(?:WORK_WEEK|SELECTION_)|SOURCE_PAY_QUERY_|PAYE_EXCLUDED_)[A-Z0-9_]+)'/gi))if(checkSets.length!==2||checkSets.some(allowed=>!allowed.has(match[1]))||match[1]==='BPAY_NEXT_SELECTION_PAY_ON_HOLD')throw Error('BPAY_NEXT_MEMBER_SKIP_CHECK_MISSING: '+signature+' '+match[1]);}}
   for(const signature of new Set([...ROUTINE_WORK_SIGNATURES,...TYPED_TRANSPORT_SIGNATURES])){
     const final=routines.get(signature)?.at(-1);
     if(!final)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);

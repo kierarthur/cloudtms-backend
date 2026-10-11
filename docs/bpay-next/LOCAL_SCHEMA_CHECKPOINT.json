@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "022f46414b1d98dd1247690ca47817a83e34c079",
-  "compiledAtUtc": "2026-10-11T09:31:41.958Z",
+  "sourceCommit": "3867273d663cb46a564ea5c01d5208416d799abb",
+  "compiledAtUtc": "2026-10-11T09:51:09.578Z",
   "inventory": {
     "migrations": [
       {
@@ -1380,6 +1380,10 @@
       {
         "path": "supabase/migrations/11102026_0928_banking_pay_next_daily_work_origin_identity.sql",
         "sha256": "d1bcf9d1c3fb0c7d3abd396727982eae0b9db5e8f3fb634c81ba33cf47ebdc85"
+      },
+      {
+        "path": "supabase/migrations/11102026_1048_banking_pay_next_held_choice_skip_check_v1.sql",
+        "sha256": "d4fe1898d84e17cdcc101896dc0c80580c64816e4840e525669c58b60cd000ce"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8104,7 +8108,12 @@
     ]
   },
   "selected": {
-    "migrations": [],
+    "migrations": [
+      {
+        "path": "supabase/migrations/11102026_1048_banking_pay_next_held_choice_skip_check_v1.sql",
+        "sha256": "d4fe1898d84e17cdcc101896dc0c80580c64816e4840e525669c58b60cd000ce"
+      }
+    ],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8126,20 +8135,6 @@
           "supabase/repeatable/15092026_1534_weekly_source_acl_contract_v1.sql"
         ],
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
-      },
-      {
-        "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
-        ],
-        "sha256": "c65a16f039ed9a5b06632a7776a5e4bc7d91c947a7d92f69bcef1d09767d9cd4"
-      },
-      {
-        "path": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql"
-        ],
-        "sha256": "485397e964769d714265cb7c0643a1c2f6c45b50f8dddb29451d4d4b7f680c4c"
       }
     ]
   },

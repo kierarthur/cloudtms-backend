@@ -1367,6 +1367,10 @@
       "sha256": "d1bcf9d1c3fb0c7d3abd396727982eae0b9db5e8f3fb634c81ba33cf47ebdc85"
     },
     {
+      "path": "supabase/migrations/11102026_1048_banking_pay_next_held_choice_skip_check_v1.sql",
+      "sha256": "d4fe1898d84e17cdcc101896dc0c80580c64816e4840e525669c58b60cd000ce"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

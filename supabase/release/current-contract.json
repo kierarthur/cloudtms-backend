@@ -102133,7 +102133,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (skip_code = ANY (ARRAY['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE'::text, 'BPAY_NEXT_SELECTION_SNOOZED'::text, 'BPAY_NEXT_SELECTION_PAY_ON_HOLD'::text, 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED'::text, 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT'::text, 'BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text]))"
+          "definition": "CHECK (skip_code = ANY (ARRAY['BPAY_NEXT_WORK_WEEK_NOT_YET_PAYABLE'::text, 'BPAY_NEXT_SELECTION_SNOOZED'::text, 'BPAY_NEXT_SELECTION_ON_HOLD'::text, 'BPAY_NEXT_SELECTION_WORK_NOT_APPROVED'::text, 'BPAY_NEXT_SELECTION_REVISION_NOT_CURRENT'::text, 'BPAY_NEXT_SELECTION_SIGNED_LINE_NOT_ELIGIBLE'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text]))"
         },
         {
           "name": "bpay_next_run_choice_member_work_id_candidate_id_fkey",
