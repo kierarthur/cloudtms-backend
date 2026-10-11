@@ -2117,7 +2117,7 @@ Dependencies: WB-21, WB-23, WB-26, F-16; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-24-D04 | SCREEN: Complete Candidate/group NONE/SOME/ALL controls in js/bpay-next-workbench.js | MISSING | Complete across-page work/case membership, Candidate exclusion dominance; bounded exact override intent and server complete counters. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-24-D04 | SCREEN: Complete Candidate/group NONE/SOME/ALL controls in js/bpay-next-workbench.js | BUILT_REVIEWED | Complete across-page work/case membership, Candidate exclusion dominance; bounded exact override intent and server complete counters. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2131,6 +2131,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 A Candidate with 12 groups, 1 unticked on page 2, shows the indeterminate box in the list (RQ-032, LUI-027). Ticking it makes all 12 included, including the Payment Advance repayment row (RQ-032, LUI-029, J2d). Unticking the Candidate and pressing Create drafts seals none of that Candidate's works (LSV-017, LSV-019).
+
+WB24 ITEM [x] Built [x] Reviewed; exact D04 complete, shared WB21/WB22 owners retained. Implementation BE a471f5c9de483ccbc764a53ca8db6b7e68d9de83, FE b7adf9547fdfe1d06ecc2cf021f515c229f2fdd0. Source9/9, sole PG17 compile/contract/coupling PASS. Actual42 SCR04/SCR09 screenshots39PASS/0FAIL/3NA. Joined app authored/NOT_RUN; installation unchecked. Whole56/288 BUILT56/288 REVIEWED.
 
 ## WB-27 — On-demand estimate for one Candidate (no per-click recalculation)
 

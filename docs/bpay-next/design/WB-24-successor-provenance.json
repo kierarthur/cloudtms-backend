@@ -1,7 +1,7 @@
 {
   "item": "WB-24",
   "sequence": 72,
-  "state": "SOURCE_LOCAL_SCREEN_PASS",
+  "state": "BUILT_REVIEWED",
   "exactDeliverables": [
     "WB-24-D04"
   ],
@@ -58,5 +58,7 @@
   },
   "joinedAppAcceptance": "AUTHORED / NOT_RUN: 12 groups/page2 untick, Candidate all includes repayments, Candidate none seals no own Works",
   "deployment": "NOT_INSTALLED",
-  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)"
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "backendCommit": "a471f5c9de483ccbc764a53ca8db6b7e68d9de83",
+  "frontendCommit": "b7adf9547fdfe1d06ecc2cf021f515c229f2fdd0"
 }
