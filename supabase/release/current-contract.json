@@ -9398,7 +9398,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "ff390dc9fc238c264e095fcb84d804134bf88482c27dc23f3a4115f30433c00f"
+      "definition_sha256": "2abb25b9d28aca598431d2c27a0820cf93fdb626c1c0ed78f776b78526e1e018"
     },
     {
       "acl": [
@@ -12335,6 +12335,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "3a05faa9fa699e7f7bc8f0638c056aeb20eb2041d6d3ae3eaa36267d958864a4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_daily_pay_retention_v1(p_booking_id text, p_history jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "707886a4292529a84759f917de541f2aecbb08fdb41620e68e699267c5fc298d"
     },
     {
       "acl": [
@@ -48503,7 +48522,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "20de29a14e7c8609716b4aea1e706bbad4f8e9b79cae17243900a7ba103844b3"
+      "definition_sha256": "e59b8d32b61c4de758939813f81ee79adfd0fedcd620baef9cf87e8c3d9f1a82"
     },
     {
       "acl": [
@@ -48551,7 +48570,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7736a926bd3b68a477edd81574e0e175f1c00536ed7fbad953894b7e90c13e60"
+      "definition_sha256": "6e28810f18e83c568960eee21684e0bce20c3050a50d1c55e17640581b83da51"
     },
     {
       "acl": [
@@ -115624,6 +115643,10 @@
         {
           "name": "bpay_next_work_choice_run_id_work_id_expected_revision_id_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_work_choice_run_id_work_id_expected_revision_id_key ON private.bpay_next_work_choice USING btree (run_id, work_id, expected_revision_id)"
+        },
+        {
+          "name": "bpay_next_work_choice_work_run_idx",
+          "definition": "CREATE INDEX bpay_next_work_choice_work_run_idx ON private.bpay_next_work_choice USING btree (work_id, run_id)"
         }
       ],
       "options": [],
@@ -171409,6 +171432,10 @@
           "definition": "CREATE INDEX bpay_next_current_stored_credit_candidate_id ON public.pay_advances USING btree (candidate_id, id) WHERE ((case_type = 'MANUAL_CREDIT_ADJUSTMENT'::pay_finance_case_type_enum) AND (taxability = 'NON_TAXABLE'::pay_finance_taxability_enum) AND (routing_kind = 'ONE_OFF_SPECIFIED_BANK_ACCOUNT'::pay_finance_routing_kind_enum) AND (oneoff_bank_details_required IS TRUE) AND (status = 'ACTIVE'::pay_advance_status_enum) AND (payout_status = 'PENDING'::pay_advance_payout_status_enum))"
         },
         {
+          "name": "bpay_next_daily_retention_advance_ts_idx",
+          "definition": "CREATE INDEX bpay_next_daily_retention_advance_ts_idx ON public.pay_advances USING btree (linked_timesheet_id) WHERE (linked_timesheet_id IS NOT NULL)"
+        },
+        {
           "name": "idx_pay_advances_candidate_status",
           "definition": "CREATE INDEX idx_pay_advances_candidate_status ON public.pay_advances USING btree (candidate_id, status)"
         },
@@ -177834,6 +177861,10 @@
         }
       ],
       "indexes": [
+        {
+          "name": "bpay_next_daily_retention_carry_ts_idx",
+          "definition": "CREATE INDEX bpay_next_daily_retention_carry_ts_idx ON public.pay_manual_adjustment_carry_forwards USING btree (timesheet_id) WHERE (timesheet_id IS NOT NULL)"
+        },
         {
           "name": "idx_pay_manual_adjustment_carry_forwards_candidate_status_chann",
           "definition": "CREATE INDEX idx_pay_manual_adjustment_carry_forwards_candidate_status_chann ON public.pay_manual_adjustment_carry_forwards USING btree (candidate_id, status, pay_channel)"

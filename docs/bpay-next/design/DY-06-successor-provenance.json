@@ -1,0 +1,83 @@
+{
+  "item": "DY-06",
+  "sequence": 93,
+  "decision": "BD104",
+  "status": "CHECKED_PENDING_COMPLETION_COMMIT",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_1107_banking_pay_next_daily_route_retention_v1.sql",
+      "sha256": "f7964500c4c691390eb75a1150a634a7e73bd2918747ef57cb7ce81de139411f"
+    },
+    {
+      "path": "supabase/migrations/11102026_1107_banking_pay_next_daily_retention_point_indexes_v1.sql",
+      "sha256": "4cc1fcb40abe6545465625e1ff0f34559de76fba5b151a617c0de0557e6e5324"
+    }
+  ],
+  "parents": [
+    "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+    "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql"
+  ],
+  "reusedWithdrawal": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+  "retainedPublisher": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+  "worker": [
+    {
+      "path": "broker/src/index.js",
+      "sha256": "8decf8f784118c153e4e5d2db0848050812b8adab72e5b8b4a53a2e48f2358c0",
+      "change": "reused native integration"
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256": "162dc06cead09de49fc9d7b60f1189eac3c5420544f7872bb158a428f4e8379b",
+      "change": "reused native integration"
+    }
+  ],
+  "frontend": [
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "0dcf5fc982195684fc2001985bb258a6c9397b89b7c34f0888612860c0f77c15",
+      "change": "reused existing controls; card Screen none"
+    },
+    {
+      "path": "js/candidate-office-controller-v1.js",
+      "sha256": "189aef8b0b2da7994d601d28a14eae509a4c7d4e7f924fa21d23a97c4bc847a3",
+      "change": "reused existing controls; card Screen none"
+    },
+    {
+      "path": "js/candidate-office-api-v1.js",
+      "sha256": "bb1ae7966a5ebf6e5e719662e874dd2368d84420d92b3ac3c428362b57a8f21e",
+      "change": "reused existing controls; card Screen none"
+    },
+    {
+      "path": "js/candidate-office-bridge-v1.js",
+      "sha256": "73520a0019d0c00cbb4920cc4a8ca9bd57802d3b37fc234a47a54151349a451b",
+      "change": "reused existing controls; card Screen none"
+    },
+    {
+      "path": "js/candidate-office-ui-policy-v1.js",
+      "sha256": "471f0a0a040fae4718bcc59845823fbfb4cf60211eef4dc8581d3ac5ea9c867c",
+      "change": "reused existing controls; card Screen none"
+    },
+    {
+      "path": "js/candidate-route-warning-v1.js",
+      "sha256": "d1b6a44dd6522ed46302f7d062d07a18349f172bafe5d2dc41940bd56b669778",
+      "change": "reused existing controls; card Screen none"
+    }
+  ],
+  "checks": {
+    "integrity": "345 migrations / 901 repeatables",
+    "sourceGates": "12/12 before local load",
+    "syntax": "PASS",
+    "localPG": "17.11 sole localhost schema compile only",
+    "parentCatalogue": "three original prosrc hashes match saved exact parents",
+    "contractHash": "29aae8d73f0fe0bf312aef2d050b45b3bd0ed5d2b6602a7438ec985ad510de83",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "publicDefiners": 835,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "publicHash": "d5226315e5b17afc9e5a588a432b73ca",
+    "publicMembershipDelta": 0,
+    "actualBrowserVerifier": "DO PASS"
+  },
+  "futureJoined": "AUTHORED_NOT_RUN"
+}

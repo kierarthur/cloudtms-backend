@@ -1,0 +1,11 @@
+# DY-06 future joined in-app TEST checks — AUTHORED / NOT_RUN
+
+- Withdraw an actually paid Daily: its original Draft, effects, holds, receipts and history stay unchanged; no authorised zero or recovery appears. The next Workbench shows the genuine withdrawal.
+- Before the first accepted Draft, an authorised Daily shows the existing unauthorise-first warning. After genuine withdrawal, switch the Daily to Manual: new physical UUID/version, same booking/date and genuine NULL Contract, old workflow/artifacts retained and superseded through the existing route. The retained removal preview still offers Archive.
+- Accept a Draft with an eligible Daily, including a SUBSET whose choice is OPEN while preparation is PINNING. The original expected revision is retained immediately, before any run line. A later destructive route change is refused as financial history; the captured Draft never follows the new head or reprices.
+- Actual paid, invoice, legacy Draft/batch/settlement and historical financial artifacts still block route change. An approval-only Archive mark without those facts does not itself count as financial history. A skipped-only work-choice member is not a Draft capture.
+- Joined concurrent Create/rotation must preserve exact native Work serialization. A busy conflicting Work refuses and performs no supersession; the original preview/row/context reproof stays in force. No automatic stale-scope retry.
+- After a genuine permitted rotation, later valid authorisation publishes through ordinary NEXT ownership for the next Draft. After paid work, a genuine financial correction creates only its ordinary delta once.
+- LEGACY and unrelated scope behavior, Source/import admission and incompatible Daily paper/WEEKLY action refusals remain the existing behavior. The unused generic flag-off QR endpoint is outside this card's changes; no current Daily Office QR control is introduced.
+
+These are authored acceptance instructions, not BUILT/REVIEWED business receipts. Full Worker/queue/minute-tick, races, application rotation/withdrawal/removal, payment and hosted installation are NOT_RUN. No local data or rehearsal was created. Timing check moved to TEST after installation (owner 10/10/2026).

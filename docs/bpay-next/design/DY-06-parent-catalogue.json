@@ -1,0 +1,26 @@
+{
+  "source": "fresh sole local PG17 catalogue, read-only metadata; no business invocation",
+  "rows": [
+    {
+      "name": "private._timesheet_route_change_context_v1",
+      "path": "supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql",
+      "sourceMd5": "01bba07299a98c8587b8fc4d6e3b20be",
+      "localCatalogueMd5": "01bba07299a98c8587b8fc4d6e3b20be",
+      "matches": true
+    },
+    {
+      "name": "public.timesheet_route_version_rotate",
+      "path": "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql",
+      "sourceMd5": "b7f8f82fdd393cc3603a41bbeca9d6df",
+      "localCatalogueMd5": "b7f8f82fdd393cc3603a41bbeca9d6df",
+      "matches": true
+    },
+    {
+      "name": "public.timesheet_route_version_confirmed_v1",
+      "path": "supabase/repeatable/10102026_0922_weekly_source_pay_query_identity_admission_v1.sql",
+      "sourceMd5": "2e289eb70b398c59e141dafd94ab1c47",
+      "localCatalogueMd5": "2e289eb70b398c59e141dafd94ab1c47",
+      "matches": true
+    }
+  ]
+}
