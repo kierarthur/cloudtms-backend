@@ -110,4 +110,3 @@ Read-only supplied pack root: `C:\Users\KierArthur\OneDrive - Arthur Rai\Documen
 | specs/T02e_pay_lines.json | `afc0dc315dd3b08e24650869b1f80188971a79491beeee4a5276a686216d1614` |
 
 Actual database/hosted/full application acceptance remains NOT RUN. Four later WB25 in-app clauses remain separate: Friday's exact frozen subset, whole-Timesheet exclusion with unchanged balance, mileage claim approval retention, and before/after accepted Create re-approval binding. This A4 pass does not tick Installed or App tested.
-
