@@ -45,5 +45,8 @@
       "sourceBodySha256": "d5e434df38a85d49ed90161b771de68fb103d2143378690e602dbf901cfed569"
     }
   ],
-  "publicSecurityDefinerDelta": 0
+  "publicSecurityDefinerDelta": 0,
+  "implementationCommit": "954e23b85a1d62f4bd6e4204cd478921b9d06f17",
+  "frontendImplementationCommit": "04de470f6ceb1e4e863966e62779e49814c2d015",
+  "status": "BUILT_REVIEWED"
 }

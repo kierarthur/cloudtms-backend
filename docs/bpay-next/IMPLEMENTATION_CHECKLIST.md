@@ -1487,7 +1487,7 @@ WB07 ITEM source BUILT/REVIEWED at 8fe50630a2ad62b5a51a8ed7f560a6c8c1970bac. Fiv
 
 ## WB-44 — Complete maintained projection producer/seed contract
 
-Seq 54; Workbench/background · WB-C; reviewer R2; current requested-feature status MISSING.
+Seq 54; Workbench/background · WB-C; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Build the early prepared-state closure in addendum/R2_EXACT_CONNECTIONS.md §5: event-specific producers, existing prepared rows, trigger coverage and initial no-sweep barrier are ready before WB-09/DR-02. No dependency on optional F-19 adoption. Later FC/EX/SP/CM owners write their own transition hooks and final F-23 verifies their combined closure. Reuse WB-08's items projection instead of defining it again.
 
@@ -1495,7 +1495,7 @@ Dependencies: WB-01, WB-02, WB-03, WB-04, WB-05, WB-06, WB-07, WB-08, F-10, F-11
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-44-D12 | DOC: WB-44 final producer/seed/barrier contract | MISSING | Exact individually named producer hooks, finite old/new identities, final contribution atomicity/seed/barrier/current-scope continuation and full queue paths; no producer code existence→queue acceptance inference. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-44-D12 | DOC: WB-44 final producer/seed/barrier contract | BUILT_REVIEWED | Exact individually named producer hooks, finite old/new identities, final contribution atomicity/seed/barrier/current-scope continuation and full queue paths; no producer code existence→queue acceptance inference. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -1519,6 +1519,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 Every early ordinary/Source/protected publication has one durable wake-up and a current prepared result; first list/Draft never starts an agency sweep. Later event owners name their hook and final F-23 checks all. Adoption, if separately required, waits for this early closure, not vice versa.
 
 WB44 ITEM and D12 source BUILT/REVIEWED at a33796fd020da858b2e855278278280e3cb42050. Twelve context rows remain N/A. BD062 finite early producer/seed/barrier + actual metadata/due continuations; four independent reviews PASS, every finding closed. LocalPG17 compilation/source/contract/browser checks PASS. Hosted, first-use, real queue/minute/in-app/timing NOT_RUN; later event/render owners remain ordered.
+
+WB44 ITEM/D12 ownerA2 correction BUILT/REVIEWED; BE954e23b85a1d62f4bd6e4204cd478921b9d06f17; FE04de470f6ceb1e4e863966e62779e49814c2d015; design/WB-44-stale-snooze-completion.md; design/WB-44-stale-snooze-successor-provenance.json; design/WB-44-stale-snooze-current-owner-catalogue.json; reviews/WB-44-stale-snooze-design-review.md; reviews/WB-44-stale-snooze-sql-review.md; reviews/WB-44-stale-snooze-transport-review.md. Whole 97/288 BUILT/REVIEWED. NextWB39seq116. Actual source/compile/catalogue/contract checks PASS; full application/queue acceptance AUTHORED_NOT_RUN.
 
 ## WB-09 — Workbench read service and Worker route
 
