@@ -2695,7 +2695,7 @@ Completion 1552e0c97051b48becf4aeb58cd026f15d7792fc; design/DY-04-completion.md;
 
 ## DY-01 — NEXT admission guard for unresolved and resolution-pending Daily receipts
 
-Seq 91; Daily · D5-DY; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 91; Daily · D5-DY; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Real unresolved Daily receipts remain nonpayable, with no fabricated financial, Client, rate or HEAD authority. Current 1450 contracted routing cannot admit NULL-Contract Daily. Process/PENDING_AUTH then actual Office Authorise, not RECEIVED, publishes one ordinary WORK.
 
@@ -2703,9 +2703,9 @@ Dependencies: DY-04; successor positions: none. Design note: not required.
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| DY-01-D01 | REPEATABLE: private.bpay_next_approval_route_v1 unresolved Daily admission successor | PARTLY_DONE | Preserve the positively evidenced baseline and complete only the exact remaining target change. Real unresolved Daily receipts remain nonpayable, with no fabricated financial, Client, rate or HEAD authority. Current 1450 contracted routing cannot admit NULL-Contract Daily. Process/PENDING_AUTH then actual Office Authorise, not RECEIVED, publishes one ordinary WORK. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-01-D02 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: Daily awaiting resolution nonpayable blocker | MISSING | Implement the exact screen target after its existing dependencies. Real unresolved Daily receipts remain nonpayable, with no fabricated financial, Client, rate or HEAD authority. Current 1450 contracted routing cannot admit NULL-Contract Daily. Process/PENDING_AUTH then actual Office Authorise, not RECEIVED, publishes one ordinary WORK. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-01-D03 | CHECK: DY-01 future joined in-app TEST checklist | MISSING | Real contractless Rota receipt unresolved then Office resolved/processed/authorised; stored WB one ordinary WORK only after approval, no fake TSFIN or Source HEAD. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-01-D01 | REPEATABLE: private.bpay_next_approval_route_v1 unresolved Daily admission successor | BUILT_REVIEWED | Preserve the positively evidenced baseline and complete only the exact remaining target change. Real unresolved Daily receipts remain nonpayable, with no fabricated financial, Client, rate or HEAD authority. Current 1450 contracted routing cannot admit NULL-Contract Daily. Process/PENDING_AUTH then actual Office Authorise, not RECEIVED, publishes one ordinary WORK. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-01-D02 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: Daily awaiting resolution nonpayable blocker | BUILT_REVIEWED | Implement the exact screen target after its existing dependencies. Real unresolved Daily receipts remain nonpayable, with no fabricated financial, Client, rate or HEAD authority. Current 1450 contracted routing cannot admit NULL-Contract Daily. Process/PENDING_AUTH then actual Office Authorise, not RECEIVED, publishes one ordinary WORK. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-01-D03 | CHECK: DY-01 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Real contractless Rota receipt unresolved then Office resolved/processed/authorised; stored WB one ordinary WORK only after approval, no fake TSFIN or Source HEAD. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY-01-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2716,6 +2716,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY
   - The settings snapshot shows the processed Client and a NULL Contract, with the role from `RotaDay.job_title` (SRQ-115).
   - Weekly Source still declares Daily not applicable, the legacy HealthRoster Daily import is unchanged, and Candidate Daily receipts are untouched (SCX-059, SCX-060, SCX-061, seam S14).
   - Joined future check: Real contractless Rota receipt unresolved then Office resolved/processed/authorised; stored WB one ordinary WORK only after approval, no fake TSFIN or Source HEAD. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Implementation ad310e64fb74124e27ca48de57fe43ee4e165337; retained D02 frontend 5e319b2b1de66473cf4875cf0192de920b23f028; design/DY-01-completion.md; design/DY-01-scope.md; design/DY-01-successor-provenance.json; reviews/DY-01-source-review.md. ITEM/D01/D02 BUILT/REVIEWED; D02 existing blocker preserved under explicit Screen:none, not a new screen. Future D03 authored/NOT_RUN, unticked. Whole74/288 BUILT74/288 REVIEWED; next DY05seq92.
 
 ## DY-05 — Freezing Daily approved money, labels and Client identity; frozen detail
 

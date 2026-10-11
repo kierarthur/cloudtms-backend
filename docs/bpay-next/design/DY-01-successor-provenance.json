@@ -1,7 +1,7 @@
 {
   "item": "DY-01",
   "sequence": 91,
-  "status": "NORMAL_CHECKS_SOURCE_REVIEW_PENDING",
+  "status": "BUILT_REVIEWED",
   "decision": "BD101",
   "sources": [
     {
@@ -25,6 +25,8 @@
   "checks": "343/898; source12/12 beforeload; solelocalPG17compile/catalogue; syntax; export/seal/coupling; browserDO PASS",
   "publicMembershipDelta": 0,
   "joinedApp": "AUTHORED_NOT_RUN",
-  "implementationCommit": null,
-  "screen": "Existing Daily Client Required/Assign Client and NEXT unpublished exclusion retained under explicit card Screen:none; no new screen approval claimed"
+  "implementationCommit": "ad310e64fb74124e27ca48de57fe43ee4e165337",
+  "screen": "Existing Daily Client Required/Assign Client and NEXT unpublished exclusion retained under explicit card Screen:none; no new screen approval claimed",
+  "retainedFrontendCommit": "5e319b2b1de66473cf4875cf0192de920b23f028",
+  "review": "reviews/DY-01-source-review.md"
 }
