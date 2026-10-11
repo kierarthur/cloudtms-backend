@@ -11729,6 +11729,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_choice_inputs_page_v1(p_run_id uuid, p_after bigint, p_limit integer, p_member_kind text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "bd54d0b1e51759365cdaac1417912750c53ecfa2b7db0c79e99adc6260f9889f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_claim_case_create_job_v1(p_job_id uuid, p_lease_seconds integer)",
       "parallel": "u",
       "volatility": "v",
@@ -11961,7 +11980,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "740836037afcdd7bae9e04de12d798543390988fb24ddd626dcea16a58d6cd73"
+      "definition_sha256": "075e5da49b9bed066b25d3678094c7ad5a282893de7381b2d6796a9306c820ae"
     },
     {
       "acl": [
@@ -13111,7 +13130,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "0cc3200a403343ecec2a57c94e805c503d8eee1f9b67d1c293ebe2a27b57a0d4"
+      "definition_sha256": "1d3b2c5bf159d94003e62e14da542ce52b247fce9af9a6a7780ca0dd6fec7bb1"
     },
     {
       "acl": [
@@ -13282,7 +13301,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d3d4d1eae2a98b2b2ca92ae086db262154d1cb6a42bcb1bcf67c153a9e01f876"
+      "definition_sha256": "1aa56801b17f17ca44fdcf7f6268627196bd1592c50d7a679d4e83d011faae1f"
     },
     {
       "acl": [
@@ -14403,7 +14422,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "37c9d46280723289d49280ef0f36161f22cd235475786ad49ee3fc91f0e49814"
+      "definition_sha256": "2706a05ad62c4fbedbdbb9446576ef26af3f4e4fb1c412a9134d55b2b42d82c0"
     },
     {
       "acl": [
@@ -16179,7 +16198,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "25f6efc9a984dc8788045864b573e0ccd0a32df413e1a3678195317a25e92f37"
+      "definition_sha256": "1be7a40d5f45f24d30c0f9a99c7527393a0f484b207172c88efb04b3564ad147"
     },
     {
       "acl": [
@@ -31663,7 +31682,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3a942b482c4e20419cb8e2a174154e1d979ba47fb9d53c218bfa94eb56b79b35"
+      "definition_sha256": "4c48d88d9c0cfa100be5fee4e999556ce9d53941516fde4a55f12105540850be"
     },
     {
       "acl": [
@@ -105313,6 +105332,10 @@
         {
           "name": "bpay_next_snooze_active_work_idx",
           "definition": "CREATE INDEX bpay_next_snooze_active_work_idx ON private.bpay_next_snooze USING btree (work_id, scope_kind, segment_key, component_key) WHERE active"
+        },
+        {
+          "name": "bpay_next_snooze_case_control_point_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_case_control_point_idx ON private.bpay_next_snooze USING btree (case_component_id, control_sequence DESC) WHERE (case_component_id IS NOT NULL)"
         },
         {
           "name": "bpay_next_snooze_due_idx",

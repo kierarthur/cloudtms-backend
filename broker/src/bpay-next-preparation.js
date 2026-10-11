@@ -142,6 +142,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='choiceMember')return ['WORK','CASE_COMPONENT'].includes(v);
     if(t==='emptyIds')return Array.isArray(v)&&v.length<=100&&v.every(x=>field(x,'uuid'))&&new Set(v.map(x=>x.toLowerCase())).size===v.length;
   if(t==='null')return v===null;
   if(t==='unit')return typeof v==='string'&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=512;
@@ -253,7 +254,7 @@ function commandCall(body){
 function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>BPAY_NEXT_PREPARATION_LIMITS.requestBytes)throw fault('REQUEST_TOO_LARGE',413);
-  const kind=url.searchParams.get('kind'),schema=kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit'}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const kind=url.searchParams.get('kind'),schema=kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   const args={};
   for(const [key,type]of Object.entries(schema)){
@@ -343,6 +344,22 @@ function result(payload,call,mutation){
       }
     }
     return {header:h,rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{[inputKey]:previous}};
+  }
+  if(call.kind==='WORK_CHOICES'&&call.args.accepted_inputs===true&&call.args.member_kind==='CASE_COMPONENT'){
+    const schema={run_id:'uuid',candidate_id:'uuid?',selection_revision:'positive',selection_state:'selectionState',page_count:'integer',item_count:'integer',selected_count:'integer',excluded_count:'integer',expected_count:'integer',candidate_complete:'boolean'};
+    if(!record(payload)||Object.keys(payload).sort().join()!=='complete,header,rows'||!exact(payload.header,schema)
+      ||payload.header.run_id!==call.args.run_id||!Array.isArray(payload.rows)||payload.rows.length>call.args.limit
+      ||typeof payload.complete!=='boolean'||!payload.complete&&!payload.rows.length)bad();
+    const h=payload.header;let previous=BigInt(call.args.after_member_no??'0');const ids=new Set();
+    if(h.selection_revision!=='1'||BigInt(h.item_count)!==BigInt(h.selected_count)+BigInt(h.excluded_count)
+      ||BigInt(h.item_count)>BigInt(h.expected_count)||(h.page_count==='0')!==(h.item_count==='0')
+      ||h.selection_state==='SEALED'&&h.item_count!==h.expected_count
+      ||(h.candidate_id===null)!==(payload.rows.length===0)||h.candidate_id===null&&(!payload.complete||h.expected_count!=='0'||h.item_count!=='0'||!h.candidate_complete))bad();
+    for(const row of payload.rows){if(!exact(row,{member_no:'positive',candidate_id:'uuid',case_component_id:'uuid',selected:'boolean',uploaded:'boolean'})
+      ||row.candidate_id!==h.candidate_id||BigInt(row.member_no)!==previous+1n||ids.has(row.case_component_id)
+      ||h.selection_state==='SEALED'&&!row.uploaded)bad();previous=BigInt(row.member_no);ids.add(row.case_component_id);}
+    if(payload.complete&&!h.candidate_complete)bad();
+    return {header:h,rows:payload.rows,complete:payload.complete,next_cursor:payload.complete?null:{after_member_no:String(previous)}};
   }
   if(call.kind==='WORK_CHOICES'&&call.args.accepted_inputs===true){
     if(!record(payload)||Object.keys(payload).sort().join()!=='complete,header,rows'||!exact(payload.header,{run_id:'uuid',uploaded_choice_work_count:'integer',selection_page_count:'integer',selection_count:'integer',exclusion_page_count:'integer'})

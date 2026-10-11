@@ -1,0 +1,105 @@
+{
+  "item": "WB-26",
+  "sequence": 71,
+  "state": "BUILT_REVIEWED",
+  "exactDeliverables": [
+    "WB-26-D08",
+    "WB-26-D10",
+    "WB-26-D15"
+  ],
+  "builderDecision": "BD079",
+  "sourceFiles": {
+    "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql": "73e0973e434af78d75e539cbb12d135810aa3b294fbbaf53a8b327bb0cb3288b",
+    "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql": "7cbc3fb757e2fdb4493d50815e5f0c558c4882dcb5028b49f0f69d7fba9fb313",
+    "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql": "84525b52f7f9f9e7a511ac965db4c588e7db03bea1a6cd861ed5a892f702bdee",
+    "supabase/migrations/11102026_0125_banking_pay_next_case_choice_control_point_index_v1.sql": "bc435d55856b9a9ab8752032849a81cc72299ab02484efc7f9f3e00a37f2b217",
+    "broker/src/bpay-next-preparation.js": "a6d2e9c150b6b1830f2447d12ab2ce1df0ca17699bed76f6443d7af08b1e8186",
+    "broker/src/bpay-next-workbench.js": "5f69345977854c0223cb2b34572f9e099d525ee551a07069b8d5584020d6ba4a",
+    "scripts/bpay-next-source-gates.mjs": "e0e7b6dfb1310804eb3c41a91047bd1c9ae55d9847dc57f234969ae825d14583"
+  },
+  "successors": [
+    {
+      "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
+      "predecessor": "10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "change": "Exact retained immutable rule/status/due/non-money Case basis; captured floor and original live money locks/counters/kernel preserved"
+    },
+    {
+      "signature": "private.bpay_next_selection_memory_leaves_v1(jsonb)",
+      "predecessor": "10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "chain": [
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
+      "change": "Case-only captured identity/status/due/control; original Work basis unchanged; indexed per-component latest control"
+    },
+    {
+      "signature": "private.bpay_next_choice_inputs_page_v1(uuid,bigint,integer,text)",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "change": "One bounded retained native membership page with coherent original Case manifest counters; WORK delegates unchanged"
+    },
+    {
+      "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+      "predecessor": "10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "change": "Closed optional CASE_COMPONENT member kind only inside existing accepted WORK_CHOICES read"
+    },
+    {
+      "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
+      "predecessor": "10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "change": "Bounded Candidate groups add factual case_state only"
+    },
+    {
+      "signature": "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)",
+      "predecessor": "03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "change": "Exact accepted-empty Case membership with all original captured line/position/count fences"
+    },
+    {
+      "signature": "private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)",
+      "predecessor": "04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "change": "Accepted descriptor uses captured selection_candidate floor; legacy path preserved"
+    }
+  ],
+  "D10": "08102026_0549 is reconciliation reference only, not executable final. CM02a 0510 retains byte-identical original row kernel 0290; no plan extraction until named WB27 chain owner.",
+  "support": "Private latest-control seek index and narrow existing gate type evidence; no public signature addition/removal, producer, parked F25, protocol, public trigger, new command or second money kernel.",
+  "checks": {
+    "dbCheck": "333 migrations/868 repeatables PASS",
+    "localPg17": "Sole local PG17 compile0102+0113, then0121 successor, then0125 private index; no business rows or financial invocation",
+    "changedJsSyntax": "PASS",
+    "sourceGates": "9/9 PASS",
+    "contractSeal": "298aa03208512d1629963f5a3ed8a7c5a6a44152e9aed4c89ec6dbe9b291b82e",
+    "coupling": "PASS",
+    "diffCheck": "PASS"
+  },
+  "publicCatalogue": {
+    "count": 833,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "hash": "01ac3d90c572327934daabf869623c85",
+    "delta": "Fresh local exact verifier catalogue unchanged; no public SECDEF signature additions/removals"
+  },
+  "reviews": [
+    "reviews/WB-26-sql-review.md",
+    "reviews/WB-26-ui-source-review.md"
+  ],
+  "screens": {
+    "id": "SCR-11",
+    "screenshots": 33,
+    "review": "screen-designs/SCR-11/review.md",
+    "sample": "screen-designs/SCR-11/fixed-read-responses.json",
+    "method": "Actual Office smallest fixed local responses; dark/device-light/390px, no database rows",
+    "policyReview": {
+      "pass": 39,
+      "fail": 0,
+      "notApplicable": 3
+    }
+  },
+  "joinedAppAcceptance": "NOT_RUN; named card journeys authored",
+  "deployment": "NOT_INSTALLED",
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "frontendCommit": "49ebb10c2452519b34f1d41ddcf9b1d546d03a2a"
+}

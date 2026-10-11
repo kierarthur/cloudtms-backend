@@ -1033,6 +1033,17 @@ export function specialConstructViolations(source,file,columnTypes=new Map()){
       if(/\bupdated_at_utc timestamptz not null\b/i.test(position)&&/\bfrom private\.bpay_next_position pos where pos\.work_id=w\.id\b/i.test(part.text))nativeColumns.set('POS . UPDATED_AT_UTC','TIMESTAMPTZ');
       if(/\bcontrol_sequence bigint not null\b/i.test(snooze)&&/\bfrom private\.bpay_next_snooze sn where sn\.(?:work_id=w\.id|case_component_id=cc\.id)\b/i.test(part.text))nativeColumns.set('SN . CONTROL_SEQUENCE','BIGINT');
     }
+    // WB26's immutable Case-only supplement uses the same native BIGINT control field.
+    // This is type evidence for the installed predecessor, not an aggregate allowance.
+    if(part.signature==='private.bpay_next_selection_memory_leaves_v1(jsonb)'){
+      const snooze=fs.readFileSync(path.join(repoRoot,'supabase/migrations/10102026_1100_banking_pay_next_snooze.sql'),'utf8').match(/create table private\.bpay_next_snooze\s*\(([\s\S]*?)\n\);/i)?.[1]??'';
+      if(/\bcontrol_sequence bigint not null\b/i.test(snooze)&&/from private\.bpay_next_snooze sn where sn\.case_component_id=cc\.id\b/i.test(part.text))nativeColumns.set('SN . CONTROL_SEQUENCE','BIGINT');
+    }
+    if(part.signature==='private.bpay_next_choice_inputs_page_v1(uuid,bigint,integer,text)'){
+      const members=fs.readFileSync(path.join(repoRoot,'supabase/migrations/10102026_1832_banking_pay_next_accepted_choice_membership_v1.sql'),'utf8').match(/create table private\.bpay_next_run_choice_member\s*\(([\s\S]*?)\n\);/i)?.[1]??'';
+      if(/\bmember_no bigint not null\b/i.test(members)&&/from private\.bpay_next_run_choice_member member where member\.run_id=p_run_id/i.test(part.text)
+        &&/order by member\.member_no limit p_limit\) page/i.test(part.text))nativeColumns.set('MEMBER_NO','BIGINT');
+    }
     const rows=scanManagedSql(part.text).statements;
     const fixedQueries=fixedQueryLiterals(part.text,file);
     const historyTemplates=closedHistoryTemplates(part,file);

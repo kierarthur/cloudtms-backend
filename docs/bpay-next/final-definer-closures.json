@@ -3262,16 +3262,19 @@
     },
     {
       "signature": "private.bpay_next_complete_no_case_worker_v1(uuid,uuid,bigint)",
-      "finalRoot": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
-      "finalPhysical": "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/03102026_1630_banking_pay_next_no_case_completion_v1.sql"
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
       ],
-      "owner": "F-25 BD019 parked protocol; latest surviving original authority",
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3947,21 +3950,23 @@
     },
     {
       "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
         "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
-        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql"
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
       ],
-      "owner": "F-25 owner rule B minimal Create Draft snapshot; next master editor follows",
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "chosenReferenceBase": {
         "item": "CM-02a",
@@ -4086,16 +4091,19 @@
     },
     {
       "signature": "private.bpay_next_publish_no_case_week_fact_v1(uuid,uuid)",
-      "finalRoot": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0420_banking_pay_next_no_case_week_fact_v1.sql"
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
       ],
-      "owner": "F-25 BD019 parked protocol; latest surviving original authority",
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7396,25 +7404,27 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
         "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
         "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
       ],
-      "owner": "WB-23 finite retained selection pages; WB-22 merges this current intake; no financial or producer authority",
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13676,9 +13686,23 @@
     },
     {
       "signature": "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
-      "finalRoot": "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
+        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
+        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
+        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
+        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2105_banking_pay_next_exact_work_navigation_v1.sql",
+        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
@@ -13691,22 +13715,10 @@
         "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
         "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
-        "supabase/repeatable/10102026_1601_banking_pay_next_issue_amount_provenance_v1.sql",
-        "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
-        "supabase/repeatable/10102026_1743_banking_pay_next_ready_candidate_counts_v1.sql",
-        "supabase/repeatable/10102026_1806_banking_pay_next_issue_reason_reader_v1.sql",
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2105_banking_pay_next_exact_work_navigation_v1.sql",
-        "supabase/repeatable/10102026_2128_banking_pay_next_workbench_export_v1.sql",
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2340_banking_pay_next_selection_count_acceptance_v1.sql"
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
       ],
-      "owner": "WB-22 actor-scoped memory, exact current Create/seal/own-reader successors; no producer or money-owner replacement"
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained"
     },
     {
       "signature": "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
@@ -14129,16 +14141,21 @@
     },
     {
       "signature": "private.bpay_next_selection_memory_leaves_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql",
       "allowedPhysical": [
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql"
       ],
-      "predecessors": [],
+      "predecessors": [
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql"
+      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
+        "supabase/repeatable/11102026_0121_banking_pay_next_case_choice_control_point_v1.sql"
       ],
-      "owner": "WB-22 finite two-table native choice memory support"
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained"
     },
     {
       "signature": "private.bpay_next_selection_memory_resolve_v1(jsonb,jsonb)",
@@ -14217,6 +14234,19 @@
         "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
       ],
       "owner": "WB-22 finite two-table native choice memory support"
+    },
+    {
+      "signature": "private.bpay_next_choice_inputs_page_v1(uuid,bigint,integer,text)",
+      "finalRoot": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
+      ],
+      "owner": "WB-26 bounded retained Case choice input support"
     }
   ],
   "editorChains": [

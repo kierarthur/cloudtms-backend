@@ -349,6 +349,7 @@ export const ROWS=Object.freeze({
     "candidate_id": "uuid",
     "work_id": "uuid?",
     "case_id": "uuid?",
+    "case_state": "caseStatus?",
     "client_id": "uuid?",
     "contract_id": "uuid?",
     "physical_timesheet_id": "uuid?",
@@ -420,6 +421,7 @@ function exact(v,keys){return record(v)&&Reflect.ownKeys(v).length===keys.length
 const same=(a,b)=>a===b||(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,n)=>same(v,b[n])))||(record(a)&&record(b)&&exact(a,Object.keys(b))&&Object.keys(a).every(k=>same(a[k],b[k])));
 const enums={kind:KINDS,scopeChannel:['ALL','PAYE','UMBRELLA'],channel:['PAYE','UMBRELLA'],scopeSection:['ALL','READY','ACTION','BLOCKED','WAITING'],section:['READY','ACTION','BLOCKED','WAITING'],sort:[...EXPORT_SORTS,'NAME_ASC','NAME_DESC','AMOUNT_ASC','AMOUNT_DESC','DEDUCTIONS_ASC','DEDUCTIONS_DESC','PAYMENT_ASC','PAYMENT_DESC','STATUS_ASC','STATUS_DESC','REASON_ASC','REASON_DESC','CLIENT_ASC','CLIENT_DESC','CHANNEL_ASC','CHANNEL_DESC'],bank:['BANK_DETAILS_MISSING','BANK_DETAILS_CHANGED'],group:['WORK','CASE','ROW'],member:['WORK_COMPONENT','WORK_SEGMENT','CASE_COMPONENT','GROUP_EVIDENCE'],portion:['AVAILABLE','RESERVED','RECOVERY','ZERO','EVIDENCE','WITHDRAWN'],direction:['PAYMENT','DEDUCTION','INFORMATIONAL'],stage:['GROSS_ADD','GROSS_DEDUCT','NET_ADD','NET_DEDUCT'],query:['NOT_APPLICABLE','UNAVAILABLE','CLEAR','OPEN'],progress:['CURRENT','PROCESSING','UNAVAILABLE'],adoption:['UNSEEDED','SEEDING','CURRENT','ERROR']};
 function field(v,type){
+  if(type==='caseStatus')return ['OPEN','PAUSED','CLOSED','WRITTEN_OFF'].includes(v);
   if(type==='workJobProgressKind')return v==='WORK_JOB_PROGRESS';
   if(type==='workJobStatus')return ['READY','LEASED','BLOCKED','FAILED'].includes(v);
   if(type==='jobPhase')return typeof v==='string'&&ENCODER.encode(v).byteLength>=1&&ENCODER.encode(v).byteLength<=64;
