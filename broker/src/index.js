@@ -93938,6 +93938,29 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
   return { is_pair: true, preview, group, mutation };
 }
 
+// DY-08: preserve the exact definite integrity refusal; no substring or uncertain-outcome match.
+function bpayNextDailyHoursOnlyRefusal(rawCode, original, originalMessage = '') {
+  const expected = 'BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION';
+  const object = value => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string' || value.length > 4096) return null;
+    try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; }
+  };
+  const outer = object(original) || {};
+  const payload = object(outer.json) || object(outer.body) || outer;
+  const sanitised = [rawCode, payload.error_code, payload.error, payload.code].includes(expected);
+  const database = [rawCode, payload.code].includes('23514')
+    && [originalMessage, payload.message].includes(expected);
+  if (!sanitised && !database) return null;
+  return { code: expected, error: expected, error_code: expected,
+    message: 'This Daily Timesheet must contain hours only; correct it before authorising.',
+    refresh_required: false, retryable: false };
+}
+function bpayNextAuthoriseKnownRefusal(rawCode, original, originalMessage = '') {
+  return bpayNextDailyHoursOnlyRefusal(rawCode, original, originalMessage)
+    || bpayNextOrdinaryMissingRateRefusal(rawCode, original, originalMessage);
+}
+
 // WB-01: recognize only the original definite NEXT missing-rate refusal.
 function bpayNextOrdinaryMissingRateRefusal(rawCode, original, originalMessage = '') {
   const expected = 'BPAY_NEXT_ORDINARY_USED_RATE_MISSING';
@@ -94115,7 +94138,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
     stale: success ? false : lifecycleBulkIsStaleError(payload),
     error_code: success ? null : lifecycleBulkErrorCode(payload),
     ...(!success && action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(payload?.error_code, payload) ? {retryable: payload.retryable === true} : {}),
-    ...(!success && action === 'AUTHORISE' ? bpayNextOrdinaryMissingRateRefusal(payload?.error_code, payload) || {} : {}),
+    ...(!success && action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(payload?.error_code, payload) || {} : {}),
     message: success ? null : (payload?.message || payload?.error || 'Lifecycle action failed for this row.'),
     affected_rows: affectedRows,
     lifecycle_patch: payload?.lifecycle_patch || null,
@@ -94332,8 +94355,8 @@ function summarizeTimesheetLifecycleBulkOperation(operation, items) {
       error_code: result?.error_code || item.error_json?.error_code || null,
       message: result?.message || item.error_json?.message || null,
       ...(operation.action === 'AUTHORISE' && weeklySourceAuthoriseKnownRefusal(result?.error_code, result) ? {retryable: result.retryable === true} : {}),
-      ...(operation.action === 'AUTHORISE' ? bpayNextOrdinaryMissingRateRefusal(result?.error_code, result) ||
-        bpayNextOrdinaryMissingRateRefusal(item.error_json?.error_code, item.error_json) || {} : {}),
+      ...(operation.action === 'AUTHORISE' ? bpayNextAuthoriseKnownRefusal(result?.error_code, result) ||
+        bpayNextAuthoriseKnownRefusal(item.error_json?.error_code, item.error_json) || {} : {}),
       affected_rows: itemAffected,
       row_signature: result?.row_signature || null,
     });
@@ -94531,7 +94554,7 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
       }, { timeoutMs: 20000 });
     } catch (error) {
       const missingRate = action === 'AUTHORISE'
-        ? bpayNextOrdinaryMissingRateRefusal(error?.code, error, error?.message) : null;
+        ? bpayNextAuthoriseKnownRefusal(error?.code, error, error?.message) : null;
       if (!missingRate) throw error;
       return withCORS(env, req, lifecycleBulkJson(409, { ok: false, ...missingRate,
         atomic_pair_lifecycle: true, pair_lifecycle: pairPreview }));
@@ -95222,6 +95245,7 @@ async function callTimesheetLifecycleRpcWithTransientRetry(env, rpcFunctionName,
     'AUTHORISE_NOT_ALLOWED',
     'CONTRACT_WEEK_NOT_AUTHORISABLE',
     'BPAY_NEXT_ORDINARY_USED_RATE_MISSING',
+    'BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION',
     'ALREADY_AUTHORISED',
     'ALREADY_UNAUTHORISED',
     'AWAITING_SIGNED_QR',
@@ -95992,7 +96016,7 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row, factsMap)
     contract_week_id: rowContractWeekId || null,
     ok: false,
     status: 'FAILED',
-    ...(bpayNextOrdinaryMissingRateRefusal(payload.json?.error_code, payload.json) || {}),
+    ...(bpayNextAuthoriseKnownRefusal(payload.json?.error_code, payload.json) || {}),
     reason: buildFailureReason(payload.json, payload.text || 'Authorise failed'),
     warnings: Array.isArray(payload.json?.warnings) ? payload.json.warnings : []
   };
@@ -168109,7 +168133,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const code = firstString(detailObj?.error_code, detailObj?.error, detailObj?.code, rawCode, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
-    const missingRate = bpayNextOrdinaryMissingRateRefusal(rawCode, detailObj, options.message);
+    const missingRate = bpayNextAuthoriseKnownRefusal(rawCode, detailObj, options.message);
     if (missingRate) return withJson(409, { ...missingRate,
       current_timesheet_id: currentTimesheetId || null,
       affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId) });
@@ -168359,7 +168383,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       });
     }
   } catch (error) {
-    const pairRateRefusal = bpayNextOrdinaryMissingRateRefusal(error?.code, error, error?.message);
+    const pairRateRefusal = bpayNextAuthoriseKnownRefusal(error?.code, error, error?.message);
     if (pairRateRefusal) return withJson(409, pairRateRefusal);
     return withJson(409, {
       ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
@@ -168621,7 +168645,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       current_timesheet_id: detailObj?.current_timesheet_id || currentTimesheetId || null,
       contract_week_id: detailObj?.contract_week_id || null
     });
-    if (bpayNextOrdinaryMissingRateRefusal(rpcErr.code, detailObj, rpcErr.message)) {
+    if (bpayNextAuthoriseKnownRefusal(rpcErr.code, detailObj, rpcErr.message)) {
       return mutationErrorResponse(rpcErr.code, detailObj, { currentTimesheetId, message: rpcErr.message });
     }
     if (isUnknownLifecycleOutcomeError(err, rpcErr)) {

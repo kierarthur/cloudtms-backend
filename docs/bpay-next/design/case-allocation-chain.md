@@ -303,3 +303,5 @@ DY05seq92: publisher1530/current0939 ->1001 ->DY06 ->DY10 ->DR38; immutable revi
 DY06seq93/BD104: reuseOLDwithdrawal0939 andDailycapturedpublisher1001. Private routecontext2035 + publicrotate/confirmed current0922 ->11102026_1107_banking_pay_next_daily_route_retention_v1.sql; owner-only daily_pay_retention helper1107; exactthreepointindexes migration1107. Originalprivatecore/legacy/Sourceadmission/QRunchanged. Laterrouteowners mergeonto1107 actualregistry. DY07 usescurrentSP12singleflight0931 andnativeOfficeadaptercurrentowner, notthisroutefamily.
 
 DY07seq94/BD105: publicOfficeCandidateadapter1832 ->11102026_1119_banking_pay_next_daily_single_flight_adapter_v1.sql (onlyexistingfinalise/replaycallee). CurrentSP12singleflight0931 retainedunchanged; indexDailyseam/nativenarrowOfficeRPCfunnel propagate20s; no newCandidate signature or Source/queryowner. Lateradaptercardsmerge1119.
+
+DY08seq95/BD106: privateDailyApprovalEvidence0925 ->11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql (eight exact ancillary predicates into dedicated qualified23514 branch). All remaining evidence/refusals/rates/ACLs unchanged; current1001 publisher callers retained.

@@ -1,0 +1,44 @@
+{
+  "item": "DY-08",
+  "sequence": 95,
+  "decision": "BD106",
+  "status": "CHECKED_REVIEWED_PENDING_COMMIT",
+  "parent": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_1129_banking_pay_next_daily_hours_only_integrity_v1.sql",
+      "sha256": "8d9dfa131740391903d8aa68c6ce8a478f9a646b0f431ad43d30987a37b65911"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "020ba5667127beb0abfafa8f57b2e78bb2801d62878858e55b608c1452c45639"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/bpay-next-office.js",
+      "sha256": "e9030c493baa1709b6f5a20b41208a0931a7b634151e58e9cd78484ca32226ae"
+    },
+    {
+      "repository": "TEST-Frontend",
+      "path": "js/main.js",
+      "sha256": "50289381a37c18a5c157e73e66e791c342023d9280b1cf5d86d07805e11cb3bd"
+    }
+  ],
+  "checks": {
+    "integrity": "345 migrations /903 repeatables",
+    "sourceGates": "12/12 before load",
+    "syntax": "BEindex/FEOffice/main PASS",
+    "localPG": "solePG17 compile",
+    "contractHash": "3a0244519e91d9554be7d7499a29173a08786d78806f2ff203acbb55296c4fbe",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "publicMembershipDelta": 0,
+    "public": "835/76/0/d5226315e5b17afc9e5a588a432b73ca",
+    "generalVerifier": "DO PASS",
+    "candidateIsolationVerifier": "DO PASS",
+    "currentCandidateV3Verifier": "DO PASS"
+  },
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "frontendCommit": "38b8ed2d820008670265d27a221f879a80dd0330",
+  "review": "reviews/DY-08-source-review.md"
+}
