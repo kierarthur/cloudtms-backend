@@ -246,3 +246,7 @@ Classifier1946 -> WB40 core0426 -> WB41 -> WB29; wrapper1438 is retained. Accept
 - private.bpay_next_seal_case_selection_v1: current1832 -> DR02/0454; replay/original membership and existing money locks retained.
 
 Seal2306 and enqueue1832 remain final unchanged; enroller0316 and CLAIM/PIN0151 remain unchanged. DR10 inserts the real conditional GUARD decision into the original WB21 hand-off; DR06 replaces only its factual progress opener. No parkedF25 objects reactivated.
+
+## DR-04 sequence81 — bounded native preparation closure
+
+Case prepare0205 -> DR04/0533 -> DR04 independent count correction0542 -> DR11 -> DR12 -> FC10 -> WB41 -> CM13a -> CM02 -> CM10 -> CM12 -> CM13. Shared plan0204 and calculators0290/1157 unchanged. CLAIM/PIN0151, capture1236, hold1438, no-Case complete0102 and financial-job0280 -> DR04/0533. Enroll service0560 ->0533 -> epoch correction0541; enroller0316 and ordered intake unchanged. Both new bounded Workbench phases live in the existing PREPARE job; no new projection table/index/kind. Original rule-B query pin, channel/VAT/floor and expected revision remain controlling. DR05 follows immediately for owner E2 release/E5 Tryagain and active cancellation counter debits.

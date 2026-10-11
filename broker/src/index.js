@@ -41026,7 +41026,7 @@ async function bpayNextEnrollmentWake(env) {
     throw Object.assign(new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE'),
       { code: 'BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE' });
   }
-  await env.BANKING_PAY_CONTINUATION_QUEUE.send({ version: 1, runtime_action: 'ENROLL' });
+  await env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
   return { ok: true, skipped: false, enqueued: true, entered: false,
     code: 'BPAY_NEXT_ENROLLMENT_WAKE_QUEUED', wake_state: 'DURABLY_QUEUED',
     made_progress: false, more_due: false, claimed: 0, processed: 0 };
@@ -198868,7 +198868,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
         if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
           throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
         }
-        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ version: 1, runtime_action: 'ENROLL' });
+        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
       }).catch(() => console.warn('[banking-pay-next] accepted preparation awaits recovery', {
         error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
       }));
@@ -198888,7 +198888,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
       const result = await response.clone().json();
       if (result.receipt.received && result.receipt.status === 'READY') {
         const wake = Promise.resolve().then(() => env.BANKING_PAY_CONTINUATION_QUEUE.send({
-          version:1,action:'CLAIM',job_id:result.receipt.job_id,job_kind:'POSITION_APPLY',lease_seconds:120
+          id:result.receipt.job_id,kind:'POSITION_APPLY'
         })).catch(() => console.warn('[banking-pay-next] accepted work retry awaits recovery', {code:'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'}));
         if (typeof ctx?.waitUntil === 'function') { try {ctx.waitUntil(wake);} catch {await wake;} } else await wake;
       }
@@ -198910,7 +198910,7 @@ if (req.method === 'PATCH' && p === '/api/users/me/signature') {
         if (typeof env.BANKING_PAY_CONTINUATION_QUEUE?.send !== 'function') {
           throw new Error('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
         }
-        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ version: 1, runtime_action: 'ENROLL' });
+        return env.BANKING_PAY_CONTINUATION_QUEUE.send({ id: '1', kind: 'ENROLL' });
       }).catch(() => console.warn('[banking-pay-next] accepted command awaits recovery', {
         error_code: 'BPAY_NEXT_ENROLLMENT_WAKE_FAILED'
       }));

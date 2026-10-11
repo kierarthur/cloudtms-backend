@@ -8,9 +8,11 @@
  * only to the closed current job kinds, preserving scoped lease/replay
  * authority and lock order. Policy X: no live Timesheet/finance/history fallback.
  *
- * Persist the CLAIM receipt before STEP. A lost CLAIM response cannot expose
+ * Fresh CLAIM receipt stays invocation-local for the identity-wake consumer. A lost CLAIM response cannot expose
  * or adopt an active stored nonce: wait for lease expiry and claim afresh.
- * Unknown STEP outcome retries EXACT job/kind/nonce/epoch/cursor/page inputs.
+ * Unknown queue STEP outcome retries the native identity, waits for lease
+ * expiry and claims the current durable cursor. Direct retained STEP replay
+ * still uses exact original job/kind/nonce/epoch/cursor/page inputs.
  * A DONE claim is terminal, not an instruction to retry CLAIM indefinitely;
  * use the retained STEP input for the owner's completed replay when needed.
  * WAIT_FOR_PREDECESSOR is an ordered CLAIM deferral, not a failed job: let
@@ -31,7 +33,7 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
 /** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'PINNING',expected_cursor:string|null}} FinancialJobPinStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'RESERVE'|'ALLOCATE',expected_work_cursor:string|null,expected_component_cursor:string|null,limit:number}} FinancialJobPreparePageStep */
-/** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
+/** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE'|'WORKBENCH_WORK'|'WORKBENCH_CASE',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE',expected_cursor:string|null,limit:number}} FinancialJobCaseNetPageStep */
 /** @typedef {{signal:AbortSignal,timeoutMs:number,maxResponseBytes:number,routeClass:'OPERATION_NUDGE'}} FinancialJobRpcOptions */
 /** @typedef {{financialJobRpc?:(action:'CLAIM'|'STEP',jobId:string,jobKind:FinancialJobKind,args:Readonly<Record<string,string|number|null>>,options:FinancialJobRpcOptions)=>Promise<Response>,onStepMeasurement?:(measurement:Readonly<{job_id:string,kind:FinancialJobKind,step:string,rows:string|null,bytes:number|null,ms:number}>,payQueryBusy:boolean)=>void}} FinancialJobDependencies */
@@ -44,14 +46,16 @@ const WRITE_OFF_ISSUES = ['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY','BPAY_NEXT_WR
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?Z$/;
 const ENCODER = new TextEncoder();
 const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY'];
-const PREPARE_PHASES = ['NEW', 'PINNING', 'RESERVE', 'ALLOCATE', 'FINANCE_ALLOCATE'];
+const PREPARE_PHASES = ['NEW', 'PINNING', 'RESERVE', 'ALLOCATE', 'FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE'];
 const CASE_PREPARE_ISSUES = ['CASE_SELECTION_REQUIRED', 'CASE_TARGET_UNSUPPORTED', 'CASE_INPUT_UNBOUND',
   'CASE_WEEK_BASIS_UNBOUND', 'CASE_RETURN_FLOOR_UNBOUND', 'CASE_NO_PAYABLE_AMOUNT'];
 const PREPARE_ISSUES = ['SELECTED_WORK_NOT_APPROVED', 'SELECTED_WORK_POSITION_PENDING',
   'SELECTED_WORK_REVISION_CHANGED',
   'CAPTURE_POSITION_CHANGED', 'POSITION_COMPONENT_EVIDENCE_MISSING',
   'POSITION_APPROVAL_AMOUNT_MISMATCH', 'FINANCIAL_RESOLUTION_REQUIRED', 'TARGET_UMBRELLA_MISSING',
-  'SOURCE_PAY_QUERY_OPEN', 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE', ...CASE_PREPARE_ISSUES];
+  'SOURCE_PAY_QUERY_OPEN', 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE',
+  'UMBRELLA_WORK_EXECUTION_UNSUPPORTED', 'SOURCE_BOOK_APPROVAL_UNBOUND',
+  'SEGMENT_CREDIT_ATTRIBUTION_UNAVAILABLE', ...CASE_PREPARE_ISSUES];
 const CLAIM_PHASES = Object.freeze({
   PAYE_NET_ENTRY: ['NEW', 'FINANCE_ALLOCATE'], TRANSFER_BUILD: ['WORK'], CSV_SETTLEMENT: ['MEMBERS'], INTERNAL_SETTLEMENT: ['MEMBERS'],
   CSV_RETURN: ['MEMBERS'], CASH_REISSUE: ['MEMBERS'], SIMPLE_CANCEL: ['NEW', 'RELEASE'],
@@ -159,7 +163,7 @@ function callInput(input) {
       : input.job_kind === 'PREPARE' ? ['lease_nonce', 'owner_epoch', 'expected_phase',
         ...(['NEW', 'PINNING'].includes(input.expected_phase) ? ['expected_cursor']
           : ['RESERVE', 'ALLOCATE'].includes(input.expected_phase) ? ['expected_work_cursor', 'expected_component_cursor', 'limit']
-            : input.expected_phase === 'FINANCE_ALLOCATE' ? ['expected_cursor', 'limit'] : [])]
+            : ['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(input.expected_phase) ? ['expected_cursor', 'limit'] : [])]
         : input.job_kind === 'PAYE_NET_ENTRY' && Object.hasOwn(input, 'expected_phase')
           ? ['lease_nonce', 'owner_epoch', 'expected_phase', 'expected_cursor', 'limit']
         : PAGED.includes(input.job_kind) ? ['lease_nonce', 'owner_epoch', 'expected_cursor', 'limit']
@@ -186,7 +190,7 @@ function callInput(input) {
         || !field(input.expected_component_cursor, 'component?')
         || (input.expected_work_cursor === null) !== (input.expected_component_cursor === null)
         || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) invalid();
-      if (input.expected_phase === 'FINANCE_ALLOCATE' && (!field(input.expected_cursor, 'positive?')
+      if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(input.expected_phase) && (!field(input.expected_cursor, 'positive?')
         || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) invalid();
     }
   }
@@ -210,7 +214,7 @@ function resultInput(payload, call, unknown) {
     if (call.jobKind === 'PREPARE' && !prepareCheckpoint(payload)) invalid();
     return payload;
   }
-  if (payload.done !== (payload.lease_until_utc === null)
+  if (payload.lease_until_utc !== null
     || (!payload.done && payload.owner_epoch !== call.args.owner_epoch)) invalid();
   if (['PAYE_NET_ENTRY', 'CSV_RETURN', 'CASH_REISSUE', 'REISSUE_CANCEL', 'CASE_CREATE', 'CASE_WRITE_OFF'].includes(call.jobKind) && !caseNet && !payload.done) invalid();
   if (call.jobKind === 'CASE_WRITE_OFF') {
@@ -259,13 +263,16 @@ function resultInput(payload, call, unknown) {
         || (payload.run_worker_id === null && (payload.issue_code !== null || payload.issue_work_id !== null))) invalid();
       return payload;
     }
+    const projecting = ['WORKBENCH_WORK','WORKBENCH_CASE'].includes(payload.phase);
+    const reviewing = payload.phase === 'REVIEW' || (projecting && payload.worker_status === 'REVIEW');
     if (!prepareCheckpoint(payload) || payload.done !== ['READY', 'REVIEW'].includes(payload.phase)
-      || (payload.phase === 'REVIEW') !== (payload.issue_code !== null)
-      || (payload.phase === 'REVIEW' && (CASE_PREPARE_ISSUES.includes(payload.issue_code)
+      || reviewing !== (payload.issue_code !== null)
+      || (reviewing && (CASE_PREPARE_ISSUES.includes(payload.issue_code)
         ? payload.issue_work_id !== null : payload.issue_work_id === null))
-      || (payload.phase !== 'REVIEW' && payload.issue_work_id !== null)
+      || (!reviewing && payload.issue_work_id !== null)
       || (payload.phase === 'REVIEW' && payload.worker_status !== 'REVIEW')
-      || (!payload.done && payload.worker_status !== 'PREPARING')
+      || (projecting && !['READY','REVIEW'].includes(payload.worker_status))
+      || (!payload.done && !projecting && payload.worker_status !== 'PREPARING')
       || (payload.phase === 'READY' && !['READY', 'DRAFT', 'ISSUED', 'COMPLETE', 'CANCELLING', 'CANCELLED'].includes(payload.worker_status))
       || (payload.rows_visited !== null && BigInt(payload.rows_visited) > BigInt(call.args.limit ?? 1))
       || (payload.replay && payload.rows_visited !== null && payload.rows_visited !== '0')) invalid();
@@ -281,7 +288,7 @@ function pennies(value) {
 
 function prepareCheckpoint(payload) {
   if (['NEW', 'PINNING'].includes(payload.phase)) return payload.work_cursor === null && payload.component_cursor === null;
-  if (payload.phase === 'FINANCE_ALLOCATE') return payload.work_cursor === null && payload.component_cursor === null;
+  if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(payload.phase)) return payload.work_cursor === null && payload.component_cursor === null;
   if (['RESERVE', 'ALLOCATE'].includes(payload.phase)) return payload.cursor === null
     && (payload.work_cursor === null) === (payload.component_cursor === null);
   return payload.cursor === null && payload.work_cursor === null && payload.component_cursor === null;

@@ -1,0 +1,40 @@
+{
+  "item": "DR-04",
+  "sequence": 81,
+  "status": "BUILT_REVIEWED_SOURCE_COMPILE_ONLY",
+  "builderDecision": "BD090",
+  "files": {
+    "supabase/migrations/11102026_0537_banking_pay_next_prepare_completion_counts.sql": "d946f70166977ec4132d35c149f3bb7c7ad41660e36dc86b97ed2cd71510eb2f",
+    "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql": "3587b148012921abfc6f1117f0d2bb5691f7e181b049ecd46a46c9b833e71d60",
+    "supabase/repeatable/11102026_0541_banking_pay_next_enrollment_epoch_fence_v1.sql": "2854fd9f5f51d9654193c59d74258620afa8bdf020f45dfa8bfd78c3f47fc4b8",
+    "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql": "2a821faa47147de12e1005ac333c5df9249917ed03db35de069ece2a9045a4e1",
+    "broker/src/bpay-next-background.js": "0524712d1bf52209eea3a7f8846491bac4fc452b2ea593978c85162476049514",
+    "broker/src/bpay-next-financial-queue.js": "1311b89eb9b07b961140f64ee07b710170fdae975ea83e1718b72d020c6fc948",
+    "broker/src/bpay-next-job-step.js": "1ae85f5636a7a401f3d73dc288c39502a7160b1727a5b248b37db22b7f0d954c",
+    "broker/src/bpay-next-runtime-rpc.js": "d9a6688bd0187508eb3f3af8e84645e2cc50c96c1292e2c1be72c3f1bbb1f204",
+    "broker/src/bpay-next-legacy-retirement.js": "7850a2fc72c72c462b67fef51d29a8258904f4b605127cb2c3f1d2d6a0ad588a",
+    "broker/src/index.js": "5bc63c0e68c95913535e0a8947c0bbe25bfb899005ef15b811b4d14b798bf40d",
+    "scripts/bpay-next-source-gates.mjs": "016afe4b251e7c35f40427209f19cb7be21a5ad12a9b5eceaa308d8220815206",
+    "tests/bpay-next-source-gates.test.js": "a9c0e56b9eb8899068ff2625a3791580f084a9f34371c54fa93275fabac0d944"
+  },
+  "contract": "ba9327036c79004f2c90bc50443f1bc85d2a41d765deec903e64ee605a3d6a03",
+  "checks": {
+    "dbCheck": "337/886 PASS",
+    "localPG17": "PASS",
+    "syntax": "PASS",
+    "sourceGates": "12/12 PASS",
+    "browserIsolation": "DO PASS; publicmembership unchanged",
+    "sealCoupling": "PASS",
+    "screen": "N/A"
+  },
+  "reviews": [
+    "reviews/DR-04-queue-review.md",
+    "reviews/DR-04-projection-review.md",
+    "reviews/DR-04-parent-enrollment-review.md"
+  ],
+  "deferredOwners": {
+    "DR-05": "E2 system release/E5 sealed Tryagain; active exclusion/retry counters",
+    "DR-06": "Office progress counts/blocker display"
+  },
+  "appInstallationQueueMoneyFirstUse": "AUTHORED_NOT_RUN"
+}

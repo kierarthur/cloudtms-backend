@@ -2,7 +2,7 @@
  * Small metadata wakes for the NEXT owner. Database jobs/commands are durable
  * authority; the queue is transport only. No Candidate/history rebuild, inline
  * financial drain, provider action, caller clock, or batch-wide money payload.
- * One queue message executes one existing adapter call. Every continuation is
+ * One wake claims fresh metadata and executes at most one bounded page. Every continuation is
  * awaited before acknowledgement; missed messages are rediscovered by bounded
  * server recovery pages. Neither an uncertain send nor a lost SQL reply is a
  * completed financial operation. Actual Worker wiring supplies fresh ownership.
@@ -10,25 +10,14 @@
 import { enrollBpayNextOne, readBpayNextJobWakePage, readBpayNextExpiryDispatchPage, cleanupBpayNextTerminalRows,
   readBpayNextWorkbenchWakePage,recoverBpayNextSnoozeDuePage,recoverBpayNextWeekRolloverPage,claimBpayNextWorkbenchTask,stepBpayNextWorkbenchTask } from './bpay-next-runtime-rpc.js';
 import { receiveBpayNextPreparationExpiry } from './bpay-next-preparation-expiry-rpc.js';
-import { handleBpayNextFinancialQueueMessage } from './bpay-next-financial-queue.js';
+import { handleBpayNextFinancialQueueMessage,bpayNextQueueIdentity } from './bpay-next-financial-queue.js';
 
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const ENROLL=Object.freeze({version:1,runtime_action:'ENROLL'});
+const ENROLL=Object.freeze({id:'1',kind:'ENROLL'});
 export const BPAY_NEXT_BACKGROUND_LIMITS=Object.freeze({pageRows:100,retrySeconds:30,leaseSeconds:120,duePages:2});
-function exact(value,keys) {
-  if(value===null||typeof value!=='object'||Array.isArray(value)
-    ||![Object.prototype,null].includes(Object.getPrototypeOf(value))) return false;
-  const own=Reflect.ownKeys(value);
-  return own.length===keys.length&&own.every(key=>typeof key==='string'&&keys.includes(key)
-    &&Object.getOwnPropertyDescriptor(value,key)?.enumerable===true
-    &&Object.hasOwn(Object.getOwnPropertyDescriptor(value,key),'value'));
-}
-const claim=item=>Object.freeze({version:1,action:'CLAIM',job_id:item.job_id,job_kind:item.job_kind,lease_seconds:120});
-const expiry=item=>Object.freeze({version:1,runtime_action:'EXPIRY',run_id:item.run_id});
-const workbenchClaim=item=>Object.freeze({version:1,runtime_action:'WORKBENCH_CLAIM',task_id:item.task_id,lease_seconds:120});
-const workbenchStep=item=>Object.freeze({version:1,runtime_action:'WORKBENCH_STEP',task_id:item.task_id,
-  lease_nonce:item.lease_nonce,owner_epoch:item.owner_epoch,generation:item.generation,step_no:item.step_no,
-  phase:item.phase,cursor_key:item.cursor_key,limit:100});
+const claim=item=>Object.freeze({id:item.job_id,kind:item.job_kind});
+const expiry=item=>Object.freeze({id:item.run_id,kind:'EXPIRY'});
+const workbenchClaim=item=>Object.freeze({id:item.task_id,kind:'WORKBENCH'});
 function binding(deps) {
   if(!deps||typeof deps.runtimeRpc!=='function'||typeof deps.queue?.sendBatch!=='function') {
     throw new TypeError('BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
@@ -36,13 +25,14 @@ function binding(deps) {
 }
 async function publish(deps,messages) {
   if(messages.length===0) return;
-  if(messages.length>100) throw new TypeError('BPAY_NEXT_BACKGROUND_PAGE_INVALID');
+  if(messages.length>100||messages.some(body=>!bpayNextQueueIdentity(body))) throw new TypeError('BPAY_NEXT_BACKGROUND_PAGE_INVALID');
   // Cloudflare binding, not its control-plane API; closed small JSON envelopes.
   await deps.queue.sendBatch(messages.map(body=>({body,contentType:'json'})));
 }
 async function enroll(deps) {
   const outcome=await enrollBpayNextOne({runtimeRpc:deps.runtimeRpc});
   if(!outcome.ok) return outcome;
+  if(outcome.result.blocked_command_id!==null) return {ok:false,error_code:'BPAY_NEXT_ENROLLMENT_BLOCKED'};
   const messages=[];
   if(outcome.result.job_status==='READY') messages.push(claim(outcome.result));
   if(outcome.result.progressed) messages.push(ENROLL);
@@ -62,43 +52,32 @@ export async function handleBpayNextBackgroundMessage(message,deps) {
   try {
     binding(deps);
     const body=message.body;
-    // Only an explicit runtime discriminator selects metadata processing. All
-    // financial schemas retain the existing exact financial adapter/consumer.
-    if(body&&Object.hasOwn(body,'runtime_action')) {
-      if(['WORKBENCH_CLAIM','WORKBENCH_STEP'].includes(body.runtime_action)) {
-        const isClaim=body.runtime_action==='WORKBENCH_CLAIM';
-        const keys=isClaim?['version','runtime_action','task_id','lease_seconds']:
-          ['version','runtime_action','task_id','lease_nonce','owner_epoch','generation','step_no','phase','cursor_key','limit'];
-        if(!exact(body,keys)||body.version!==1) return retry(message,'BPAY_NEXT_BACKGROUND_ENVELOPE_INVALID');
-        const {version,runtime_action,...input}=body;
-        const outcome=await(isClaim?claimBpayNextWorkbenchTask:stepBpayNextWorkbenchTask)(input,{runtimeRpc:deps.runtimeRpc});
-        if(!outcome.ok) return retry(message,outcome.error_code);
-        const result=outcome.result;
-        if(result.status==='DONE') {message.ack();return {disposition:'ACK',reason:'WORKBENCH_TASK_FINISHED'};}
-        if(result.status==='ERROR'||result.status==='LEASED'&&(result.stale||!isClaim)) {
-          return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
-        }
-        // Fresh CLAIM alone exposes its nonce. A stale STEP only wakes the
-        // stored task; it never adopts another active lease or repeats a page.
-        if(isClaim&&result.status==='LEASED'&&!result.stale) await publish(deps,[workbenchStep(result)]);
-        else if(!isClaim&&result.status==='READY') await publish(deps,[workbenchClaim(result)]);
-        else return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
-        message.ack();return {disposition:'ACK',reason:'WORKBENCH_CONTINUATION_PERSISTED'};
-      }
-      if(exact(body,['version','runtime_action'])&&body.version===1&&body.runtime_action==='ENROLL') {
-        const outcome=await enroll(deps);
-        if(!outcome.ok) return retry(message,outcome.error_code);
-        message.ack();return {disposition:'ACK',reason:'ENROLLMENT_WAKE_PERSISTED'};
-      }
-      if(!exact(body,['version','runtime_action','run_id'])||body.version!==1
-        ||body.runtime_action!=='EXPIRY'||typeof body.run_id!=='string'||!UUID.test(body.run_id)) {
-        return retry(message,'BPAY_NEXT_BACKGROUND_ENVELOPE_INVALID');
-      }
+    const wake=bpayNextQueueIdentity(body);
+    if(!wake) return retry(message,'BPAY_NEXT_BACKGROUND_ENVELOPE_INVALID');
+    if(wake.kind==='WORKBENCH') {
+      const claimed=await claimBpayNextWorkbenchTask({task_id:wake.id,lease_seconds:120},{runtimeRpc:deps.runtimeRpc});
+      if(!claimed.ok) return retry(message,claimed.error_code);
+      const fresh=claimed.result;
+      if(fresh.status==='DONE') {message.ack();return {disposition:'ACK',reason:'WORKBENCH_TASK_FINISHED'};}
+      if(fresh.status!=='LEASED'||fresh.stale) return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
+      const outcome=await stepBpayNextWorkbenchTask({task_id:wake.id,lease_nonce:fresh.lease_nonce,
+        owner_epoch:fresh.owner_epoch,generation:fresh.generation,step_no:fresh.step_no,
+        phase:fresh.phase,cursor_key:fresh.cursor_key,limit:100},{runtimeRpc:deps.runtimeRpc});
+      if(!outcome.ok) return retry(message,outcome.error_code);
+      if(outcome.result.status==='DONE') {message.ack();return {disposition:'ACK',reason:'WORKBENCH_TASK_FINISHED'};}
+      if(outcome.result.status!=='READY'||outcome.result.stale) return retry(message,'BPAY_NEXT_BACKGROUND_WORKBENCH_PENDING');
+      await publish(deps,[wake]);
+      message.ack();return {disposition:'ACK',reason:'WORKBENCH_CONTINUATION_PERSISTED'};
+    }
+    if(wake.kind==='ENROLL') {
+      const outcome=await enroll(deps);
+      if(!outcome.ok) return retry(message,outcome.error_code);
+      message.ack();return {disposition:'ACK',reason:'ENROLLMENT_WAKE_PERSISTED'};
+    }
+    if(wake.kind==='EXPIRY') {
       if(typeof deps.preparationExpiryRpc!=='function') return retry(message,'BPAY_NEXT_BACKGROUND_DEPENDENCY_UNAVAILABLE');
-      const outcome=await receiveBpayNextPreparationExpiry({run_id:body.run_id},{preparationExpiryRpc:deps.preparationExpiryRpc});
+      const outcome=await receiveBpayNextPreparationExpiry({run_id:wake.id},{preparationExpiryRpc:deps.preparationExpiryRpc});
       if(!outcome.ok) {
-        // Exact definite refusal: Office confirmed/cancelled this header first.
-        // Other state failures, including a damaged deadline, are NOT safe ACK.
         if(outcome.error_code==='BPAY_NEXT_EXPIRY_NOT_ELIGIBLE'&&!outcome.outcome_unknown) {
           message.ack();return {disposition:'ACK',reason:'OFFICE_ALREADY_FINISHED'};
         }

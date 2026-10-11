@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import './bpay-next-shared-calculator.test.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
+import { assertTypedFinancialProjection,assertNextExactNumericTypes,assertRoutineHistoryPoints,assertNoProcessingAdmission,assertSqlWriteBoundaries,assertSpecialConstructs,assertRpcReload,assertFrozenAuthority,assertExecutableSourceBoundaries,assertNextQueueShapes,verifyBpayNextSourceGates,specialConstructViolations } from '../scripts/bpay-next-source-gates.mjs';
 
 test('F23 exact frozen, writer, containment and controlling RPC source boundaries',()=>{
   assert.equal(verifyBpayNextSourceGates().frozenFiles,7);
@@ -223,4 +223,13 @@ test('PS08 direct executed SQL is distinct from diagnostic literal metadata',()=
     "execute pg_catalog.format('delete from private.bpay_next_run_line where id=%L',v_id);",
     "execute format('update \"private\".\"bpay_next_run_work\" set id=null');"])
     assert.throws(()=>assertSqlWriteBoundaries('do $body$begin '+body+' end$body$;','source.sql'),/FROZEN_CAPTURE_MUTATION_FORBIDDEN/);
+});
+
+test('DR04 all actual NEXT producers send only native id/kind wakes',()=>{
+  const read=file=>fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+  const b=read('broker/src/bpay-next-background.js'),f=read('broker/src/bpay-next-financial-queue.js'),i=read('broker/src/index.js');
+  assert.doesNotThrow(()=>assertNextQueueShapes(b,f,i));
+  assert.throws(()=>assertNextQueueShapes(b,f,i.replace("{ id: '1', kind: 'ENROLL' }","{ id: '1', kind: 'ENROLL', version: 1 }")),/QUEUE_IDENTITY_SHAPE/);
+  assert.throws(()=>assertNextQueueShapes(b,f.replace('sendContinuation(wake)','sendContinuation(call)'),i),/QUEUE_IDENTITY_SHAPE/);
+  assert.throws(()=>assertNextQueueShapes(b.replace('messages.some(body=>!bpayNextQueueIdentity(body))','false'),f,i),/QUEUE_IDENTITY_SHAPE/);
 });

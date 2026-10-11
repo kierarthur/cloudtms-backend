@@ -1,28 +1,11 @@
 /**
- * INTERNAL single-message financial continuation consumer. No enrollment,
- * discovery, Office route, binding/configuration, batch drain or provider call.
- * The trusted queue producer supplies {version:1,...exact financial job input}.
- * SQL remains the authority for kind, Candidate order, nonce, epoch and cursor;
- * Policy X: no live Timesheet/finance/history fallback or fabricated money.
- *
- * sendContinuation must resolve ONLY after durable queue publication. It must
- * preserve this exact JSON envelope and must not log lease authority. Awaiting
- * it before ack preserves the new CLAIM token and each next-page checkpoint.
- * Publication can succeed and its receipt be lost: duplicate continuations are
- * expected; the existing owner replay rules, not queue IDs, prevent duplication.
- *
- * onFailure receives a closed, token-free summary. For definite permanent
- * failures it may return ACK_RECORDED only AFTER durable, idempotent failure
- * recording/recovery handoff (keyed by message_id/job_id/action). That ACK is a
- * failed queue delivery disposition, NOT database job completion. Anything
- * else, including a missing/failed callback, retries the original message.
- *
- * Retry delays are polling backoff, never evidence a server lease has expired.
- * A lost CLAIM/send retries CLAIM without adopting its possibly live nonce.
- * A lost STEP/send retries the SAME original lease/epoch/cursor/limit. No
- * re-claim, automatic second owner call, client-clock lease test or drain loop.
- * Integration must configure durable DLQ/recovery for exhausted retries; this
- * module does not promise eventual completion or silently drop failed work.
+ * Native identity wakes only: the database owns every lease, phase and cursor.
+ * Each delivery takes a fresh metadata CLAIM and executes one bounded STEP.
+ * No active lease is adopted. An unknown reply retries this identity; native
+ * expiry and fresh CLAIM recover the committed cursor without repricing.
+ * Await continuation publication before ACK. Failure recording remains the
+ * original closed, durable callback; no financial or provider drain here.
+ * Policy X: accepted inputs and original money owners remain authoritative.
  */
 
 import { stepBpayNextFinancialJob, BPAY_NEXT_JOB_LIMITS } from './bpay-next-job-step.js';
@@ -35,7 +18,7 @@ export const BPAY_NEXT_FINANCIAL_QUEUE_LIMITS = Object.freeze({
 });
 
 /** @typedef {import('./bpay-next-job-step.js').FinancialJobClaim|import('./bpay-next-job-step.js').FinancialJobSingleStep|import('./bpay-next-job-step.js').FinancialJobPageStep|import('./bpay-next-job-step.js').FinancialJobPositionStep|import('./bpay-next-job-step.js').FinancialJobPinStep|import('./bpay-next-job-step.js').FinancialJobPreparePageStep|import('./bpay-next-job-step.js').FinancialJobPrepareCompleteStep|import('./bpay-next-job-step.js').FinancialJobCaseNetPageStep} FinancialCall */
-/** @typedef {FinancialCall & {version:1}} FinancialQueueEnvelope */
+/** @typedef {{id:string,kind:string}} FinancialQueueEnvelope */
 /** @typedef {{id:string,attempts:number,body:unknown,ack:()=>void,retry:(options:{delaySeconds:number})=>void}} FinancialQueueMessage */
 /** @typedef {{message_id:string|null,attempts:number|null,action:'CLAIM'|'STEP'|null,job_id:string|null,job_kind:string|null,error_code:string,retryable:boolean,outcome_unknown:boolean,recovery:string}} FinancialQueueFailure */
 /** @typedef {import('./bpay-next-job-step.js').FinancialJobDependencies & {sendContinuation?:(envelope:Readonly<FinancialQueueEnvelope>)=>Promise<unknown>,onFailure?:(failure:Readonly<FinancialQueueFailure>)=>Promise<'ACK_RECORDED'|'RETRY'>}} FinancialQueueDependencies */
@@ -43,29 +26,22 @@ export const BPAY_NEXT_FINANCIAL_QUEUE_LIMITS = Object.freeze({
 const KINDS = ['PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE', 'SIMPLE_CANCEL', 'POSITION_APPLY', 'PREPARE', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT', 'PREPARATION_EXPIRY', 'CASE_CREATE', 'CASE_WRITE_OFF'];
 const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY'];
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const KEYS = ['version', 'action', 'job_id', 'job_kind', 'lease_seconds', 'lease_nonce', 'owner_epoch', 'expected_cursor', 'limit',
-  'expected_phase', 'expected_work_cursor', 'expected_component_cursor'];
 const ENCODER = new TextEncoder();
 const errorResult = (error_code, retryable = false, outcome_unknown = false, recovery = 'NONE') =>
   ({ ok: false, error_code, retryable, outcome_unknown, recovery });
 
-function envelopeInput(body) {
+/** Closed two-field native wake; no tokens or nested input encoded in IDs. */
+export function bpayNextQueueIdentity(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)
-    || ![Object.prototype, null].includes(Object.getPrototypeOf(body))
-    || !Object.hasOwn(body, 'version')) return null;
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(body))) return null;
   const keys = Reflect.ownKeys(body);
-  if (keys.length > 10 || keys.some((key) => typeof key !== 'string' || !KEYS.includes(key)
-    || !Object.getOwnPropertyDescriptor(body, key)?.enumerable
-    || !Object.hasOwn(Object.getOwnPropertyDescriptor(body, key), 'value'))) return null;
-  if (body.version !== 1) return null;
-  if (keys.some((key) => body[key] !== null && !['string', 'number'].includes(typeof body[key])
-    || (typeof body[key] === 'string' && body[key].length >
-      ((body.job_kind === 'POSITION_APPLY' && key === 'expected_cursor')
-        || (body.job_kind === 'PREPARE' && key === 'expected_component_cursor') ? 512 : 128)))) return null;
-  if (ENCODER.encode(JSON.stringify(body)).byteLength > BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.envelopeBytes) return null;
-  // The existing adapter validates the exact CLAIM/kind-specific STEP schema
-  // before any RPC. Do not create an alternate financial input validator here.
-  return Object.freeze(Object.fromEntries(keys.filter((key) => key !== 'version').map((key) => [key, body[key]])));
+  if (keys.length !== 2 || keys.some(key => typeof key !== 'string' || !['id','kind'].includes(key)
+    || !Object.getOwnPropertyDescriptor(body,key)?.enumerable
+    || !Object.hasOwn(Object.getOwnPropertyDescriptor(body,key),'value'))) return null;
+  if (![...KINDS,'ENROLL','EXPIRY','WORKBENCH'].includes(body.kind)
+    || typeof body.id !== 'string' || (body.kind === 'ENROLL' ? body.id !== '1' : !UUID.test(body.id))
+    || ENCODER.encode(JSON.stringify(body)).byteLength > BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.envelopeBytes) return null;
+  return Object.freeze({id:body.id,kind:body.kind});
 }
 
 function failureSummary(message, call, result) {
@@ -111,7 +87,7 @@ function continuation(call, result) {
     || call.expected_phase === 'FINANCE_ALLOCATE')) {
     if (result.phase !== 'FINANCE_ALLOCATE' || (call.action === 'STEP' && (result.cursor === null
       || (call.expected_cursor !== null && BigInt(result.cursor) <= BigInt(call.expected_cursor))))) return null;
-    return Object.freeze({ version: 1, action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
+    return Object.freeze({ action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
       lease_nonce: call.action === 'CLAIM' ? result.lease_nonce : call.lease_nonce,
       owner_epoch: call.action === 'CLAIM' ? result.owner_epoch : call.owner_epoch,
       expected_phase: 'FINANCE_ALLOCATE', expected_cursor: result.cursor,
@@ -125,20 +101,20 @@ function continuation(call, result) {
       && (['NEW', 'PINNING'].includes(result.phase) ? call.expected_cursor === result.cursor
         : ['RESERVE', 'ALLOCATE'].includes(result.phase) ? call.expected_work_cursor === result.work_cursor
           && call.expected_component_cursor === result.component_cursor
-          : result.phase === 'FINANCE_ALLOCATE' ? result.cursor === null
+          : ['FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE'].includes(result.phase) ? result.cursor === null
             || (call.expected_cursor !== null && BigInt(result.cursor) <= BigInt(call.expected_cursor)) : true)) return null;
     return next;
   }
   if (call.job_kind === 'POSITION_APPLY') {
     if (call.action === 'STEP' && call.expected_phase === result.phase && call.expected_cursor === result.cursor) return null;
-    return Object.freeze({ version: 1, action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
+    return Object.freeze({ action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
       lease_nonce: call.action === 'CLAIM' ? result.lease_nonce : call.lease_nonce,
       owner_epoch: call.action === 'CLAIM' ? result.owner_epoch : call.owner_epoch,
       expected_phase: result.phase, expected_cursor: result.cursor,
       limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows });
   }
   if (call.action === 'CLAIM') {
-    return Object.freeze({ version: 1, action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
+    return Object.freeze({ action: 'STEP', job_id: call.job_id, job_kind: call.job_kind,
       lease_nonce: result.lease_nonce, owner_epoch: result.owner_epoch,
       ...(PAGED.includes(call.job_kind) ? { expected_cursor: result.cursor,
         limit: BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows } : {}) });
@@ -148,15 +124,15 @@ function continuation(call, result) {
   // an infinite same-cursor continuation from a semantically bad receipt.
   if (!PAGED.includes(call.job_kind) || result.cursor === null
     || (call.expected_cursor !== null && BigInt(result.cursor) <= BigInt(call.expected_cursor))) return null;
-  return Object.freeze({ version: 1, ...call, expected_cursor: result.cursor });
+  return Object.freeze({ ...call, expected_cursor: result.cursor });
 }
 
 function prepareContinuation(call, result) {
-  return Object.freeze({ version: 1, action: 'STEP', job_id: call.job_id, job_kind: 'PREPARE',
+  return Object.freeze({ action: 'STEP', job_id: call.job_id, job_kind: 'PREPARE',
     lease_nonce: call.action === 'CLAIM' ? result.lease_nonce : call.lease_nonce,
     owner_epoch: call.action === 'CLAIM' ? result.owner_epoch : call.owner_epoch,
     expected_phase: result.phase,
-    ...(['NEW', 'PINNING'].includes(result.phase) ? { expected_cursor: result.cursor }
+    ...(['NEW', 'PINNING', 'WORKBENCH_WORK', 'WORKBENCH_CASE'].includes(result.phase) ? { expected_cursor: result.cursor, ...(['WORKBENCH_WORK','WORKBENCH_CASE'].includes(result.phase) ? {limit:BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows} : {}) }
       : ['RESERVE', 'ALLOCATE'].includes(result.phase) ? { expected_work_cursor: result.work_cursor,
         expected_component_cursor: result.component_cursor,
         limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows }
@@ -164,51 +140,38 @@ function prepareContinuation(call, result) {
           limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows } : {}) });
 }
 
-/**
- * The eventual Worker queue handler must await this once for each Message.
- * This function makes at most one owner-adapter call and publishes at most one
- * continuation. It invokes ack/retry as message methods, preserving their this.
- * @param {FinancialQueueMessage} message
- * @param {FinancialQueueDependencies} dependencies
- * @returns {Promise<Object>} Token-free queue disposition, not a job receipt.
- */
+/** Fresh metadata CLAIM, then at most one bounded financial STEP. */
 export async function handleBpayNextFinancialQueueMessage(message, dependencies = {}) {
   if (!message || typeof message.ack !== 'function' || typeof message.retry !== 'function') {
-    // Never return successfully to a Worker with an un-disposable Message:
-    // successful queue-handler return would implicitly acknowledge its batch.
     throw new TypeError('BPAY_NEXT_QUEUE_MESSAGE_INTERFACE_INVALID');
   }
-  let call;
-  try { call = envelopeInput(message.body); } catch { call = null; }
-  if (!call) return failure(message, null, errorResult('BPAY_NEXT_QUEUE_ENVELOPE_INVALID'), dependencies);
+  let wake;
+  try { wake = bpayNextQueueIdentity(message.body); } catch { wake = null; }
+  if (!wake || !KINDS.includes(wake.kind)) return failure(message, null, errorResult('BPAY_NEXT_QUEUE_ENVELOPE_INVALID'), dependencies);
   if (typeof dependencies.financialJobRpc !== 'function'
     || typeof dependencies.sendContinuation !== 'function'
     || typeof dependencies.onFailure !== 'function') {
     return retry(message, errorResult('BPAY_NEXT_QUEUE_DEPENDENCY_UNAVAILABLE', true, false, 'RETRY_CALL'));
   }
-  const outcome = await stepBpayNextFinancialJob(call, {
-    financialJobRpc: dependencies.financialJobRpc,
-    onStepMeasurement: dependencies.onStepMeasurement
-  });
-  if (!outcome.ok) {
-    if (call.action === 'CLAIM' && outcome.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
-      message.ack();
-      return { disposition: 'ACK', reason: 'TERMINAL' };
+  const claim = Object.freeze({action:'CLAIM',job_id:wake.id,job_kind:wake.kind,lease_seconds:120});
+  const adapter = {financialJobRpc:dependencies.financialJobRpc,onStepMeasurement:dependencies.onStepMeasurement};
+  const claimed = await stepBpayNextFinancialJob(claim, adapter);
+  if (!claimed.ok) {
+    if (claimed.error_code === 'BPAY_NEXT_JOB_TERMINAL') {
+      message.ack(); return {disposition:'ACK',reason:'TERMINAL'};
     }
-    return failure(message, call, outcome, dependencies);
+    return failure(message, claim, claimed, dependencies);
   }
-  if (call.action === 'STEP' && outcome.result.done) {
-    message.ack();
-    return { disposition: 'ACK', reason: 'DONE' };
+  const call = continuation(claim, claimed.result);
+  if (!call) return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
+  const outcome = await stepBpayNextFinancialJob(call,adapter);
+  if (!outcome.ok) return failure(message,call,outcome,dependencies);
+  if (outcome.result.done) {message.ack();return {disposition:'ACK',reason:'DONE'};}
+  if (!continuation(call,outcome.result)) {
+    return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID',true,true,'WAIT_FOR_LEASE_EXPIRY'));
   }
-  const next = continuation(call, outcome.result);
-  if (!next) return retry(message, errorResult('BPAY_NEXT_QUEUE_CONTINUATION_INVALID', true, true, 'RETRY_SAME_STEP'));
-  try {
-    await dependencies.sendContinuation(next);
-  } catch {
-    return retry(message, errorResult('BPAY_NEXT_QUEUE_CONTINUATION_SEND_UNKNOWN', true, true,
-      call.action === 'CLAIM' ? 'WAIT_FOR_LEASE_EXPIRY' : 'RETRY_SAME_STEP'));
+  try {await dependencies.sendContinuation(wake);} catch {
+    return retry(message,errorResult('BPAY_NEXT_QUEUE_CONTINUATION_SEND_UNKNOWN',true,true,'WAIT_FOR_LEASE_EXPIRY'));
   }
-  message.ack();
-  return { disposition: 'ACK', reason: 'CONTINUATION_PERSISTED' };
+  message.ack(); return {disposition:'ACK',reason:'CONTINUATION_PERSISTED'};
 }

@@ -221,8 +221,12 @@ function parseUniqueJson(text) {
   return JSON.parse(text);
 }
 function enrollmentResult(value) {
-  if (!exact(value, ['progressed', 'last_enrolled_sequence', 'job_id', 'job_kind', 'job_status'])
+  if (!exact(value, ['progressed', 'last_enrolled_sequence', 'job_id', 'job_kind', 'job_status','blocked_command_id','enrollment_error_code'])
       || typeof value.progressed !== 'boolean' || !integer(value.last_enrolled_sequence)) throw new Error();
+  if ((value.blocked_command_id === null) !== (value.enrollment_error_code === null)
+    || (value.blocked_command_id !== null && (!uuid(value.blocked_command_id)
+      || typeof value.enrollment_error_code !== 'string' || !/^[0-9A-Z]{5}$/.test(value.enrollment_error_code)
+      || value.progressed || value.job_id !== null))) throw new Error();
   if (value.job_id === null) {
     if (value.job_kind !== null || value.job_status !== null
         || (value.progressed && value.last_enrolled_sequence === '0')) throw new Error();

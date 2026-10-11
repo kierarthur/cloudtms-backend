@@ -1,3 +1,4 @@
+import { bpayNextQueueIdentity } from './bpay-next-financial-queue.js';
 /** F-13: exact old transport schemas and verified receipt-before-ACK support.
  * Existing completed native owners are evidence; no legacy writer is invoked.
  * Unknown/nonterminal/missing/overflow scopes remain retained for reconciliation.
@@ -43,6 +44,7 @@ export function classifyBpayNextContinuation(body,sourcePolicy){
       ||Object.getOwnPropertyDescriptor(body,k)?.enumerable!==true
       ||!Object.hasOwn(Object.getOwnPropertyDescriptor(body,k),'value'))
       ||ENCODER.encode(JSON.stringify(body)).byteLength>2048)return 'UNKNOWN';
+    if(bpayNextQueueIdentity(body))return 'NEXT_CANDIDATE';
     if(Object.hasOwn(body,'runtime_action')||Object.hasOwn(body,'action'))return 'NEXT_CANDIDATE';
     if(exact(body,OP_KEYS)){
       const policy=typeof sourcePolicy==='function'?sourcePolicy(body.source):null;

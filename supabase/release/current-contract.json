@@ -11080,6 +11080,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_begin_prepare_projection_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_rows_visited integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "00e8dcc3a4d2f7dcfc885a8e55b890723f9b8cb01ec930ba56faca5f6401768c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -11334,7 +11353,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d657f81aa00f365b684ce7e7a151029d2f004c22574e9c2e32c797d01ce6cbbc"
+      "definition_sha256": "70898aca4a0ef5bc499c6f5568933b1829d39243557b651cc6a4006a59160811"
     },
     {
       "acl": [
@@ -11828,7 +11847,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "544fc95898673cf67eca33e368affb9a5ee292c96231fbdcd859d5821de77eb2"
+      "definition_sha256": "d0605730334fc2d80ef2afc004fba87639207a0f0e5c3a36f654131fb37ee496"
     },
     {
       "acl": [
@@ -11999,7 +12018,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "075e5da49b9bed066b25d3678094c7ad5a282893de7381b2d6796a9306c820ae"
+      "definition_sha256": "7393f2ea042ab450f690ab27890a0a323d6640d585edc6f9b4e04b4e2aba9644"
     },
     {
       "acl": [
@@ -12588,7 +12607,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "197a88ba7c64bc81ab072f7dabf6f376a438be1862a8fdbad6729d61fc263aa3"
+      "definition_sha256": "5d25d73cfbcc686894fc9ba6c61d681e6eba1bb60ed07c7a64776380c080c296"
     },
     {
       "acl": [
@@ -12997,7 +13016,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "387e9ebe9b15ca3bffcc949f1b5364275a8c057f1c63969375f6aee5aa148307"
+      "definition_sha256": "8f6ec9f6e42927e9f2a9395fd66170b1255658bda620d719c40dd0984e552000"
     },
     {
       "acl": [
@@ -13168,7 +13187,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "406b5aa5f05d70f8d986ce1a66eff909c876304cbc0cd0f62377fb5e607978b2"
+      "definition_sha256": "b8c0c1c63e74494f02417b87d6587d34224427b6868ad730e5839e21da4d007f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_projection_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_phase text, p_expected_cursor bigint, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e050877fcc35936c7eee9e8b7994ddef838e95604d10389830157e25ce85266f"
     },
     {
       "acl": [
@@ -31483,7 +31521,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "67dd5ea9642964accecceddb44d84be58ef920d3bb280eae2fdf77af82dbe3f7"
+      "definition_sha256": "f2a9e3291c7c133e347a01ac1f5e1f67b90b86bf7215a041a53e36ddfbd8ba3e"
     },
     {
       "acl": [
@@ -31555,7 +31593,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cf29d9a996c0fd69ac4743b64fc3b24f58ebc6b1b0fb6bc7fb1df15f5ad6aa7f"
+      "definition_sha256": "25156cafe36b4e569170dcdee1954a7cabe08d90041d3eb6708744ba9a4d0fc8"
     },
     {
       "acl": [
@@ -84511,6 +84549,22 @@
           "generated": ""
         },
         {
+          "name": "enrollment_error_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "enrollment_error_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "expected_member_count",
           "type": "bigint",
           "default": null,
@@ -84613,6 +84667,14 @@
           "definition": "CHECK (enrolled_member_count >= 0)"
         },
         {
+          "name": "bpay_next_command_enrollment_error_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (enrollment_error_code ~ '^[0-9A-Z]{5}$'::text)"
+        },
+        {
           "name": "bpay_next_command_expected_member_count_check",
           "type": "c",
           "deferred": false,
@@ -84659,6 +84721,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (status = ANY (ARRAY['RECEIVED'::text, 'ENROLLING'::text, 'SEALED'::text, 'COMPLETE'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "bpay_next_enrollment_error_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((enrollment_error_code IS NULL) = (enrollment_error_at_utc IS NULL))"
         },
         {
           "name": "bpay_next_internal_command_members_ck",
@@ -91231,6 +91301,30 @@
           "generated": ""
         },
         {
+          "name": "preparing_candidate_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "ready_candidate_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "review_candidate_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "review_revision",
           "type": "bigint",
           "default": "0",
@@ -91423,6 +91517,30 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_pay_run_preparing_candidate_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preparing_candidate_count >= 0)"
+        },
+        {
+          "name": "bpay_next_pay_run_ready_candidate_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (ready_candidate_count >= 0)"
+        },
+        {
+          "name": "bpay_next_pay_run_review_candidate_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (review_candidate_count >= 0)"
         },
         {
           "name": "bpay_next_pay_run_review_revision_check",
