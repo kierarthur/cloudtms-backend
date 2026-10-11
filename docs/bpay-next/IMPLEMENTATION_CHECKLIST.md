@@ -2237,7 +2237,7 @@ WB38 ITEM [x] Built [x] Reviewed; exact D06 and card-required bounded native MAN
 
 ## WB-40 — Timesheet pay hold honoured by NEXT
 
-Seq 76; Snooze/Hold · WB-H; reviewer R2; current requested-feature status PARTLY_DONE.
+Seq 76; Snooze/Hold · WB-H; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only WB-40's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -2245,9 +2245,9 @@ Dependencies: WB-08, WB-36, DR-01, F-05, F-16; successor positions: `1600` accep
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-40-D08 | REPEATABLE: private.bpay_next_pay_hold_control_trigger_v1 | MISSING | Genuine INSERT/UPDATE/current rotation, booking canonical row, exact ordered control; accepted boundary vs later change, no Draft reservation table misuse. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-40-D09 | SCREEN: NEXT hold projection/admission join for existing Timesheet pay-hold controls | MISSING | Existing controls/route unchanged; new booking/current INSERT/rotation/control projection and Create-boundary intake join. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-40-D10 | WORKER ROUTE: PATCH /api/timesheets/:id/pay-hold | PARTLY_DONE | Preserve working retained upstream source/LEGACY semantics; verify exact final runtime route/fence winner and NEXT publication/control join. No full Worker→consumer→minute stored projection test run; source is not fresh runtime installation proof. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-40-D08 | REPEATABLE: private.bpay_next_pay_hold_control_trigger_v1 | BUILT_REVIEWED | Genuine INSERT/UPDATE/current rotation, booking canonical row, exact ordered control; accepted boundary vs later change, no Draft reservation table misuse. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-40-D09 | SCREEN: NEXT hold projection/admission join for existing Timesheet pay-hold controls | BUILT_REVIEWED | Existing controls/route unchanged; new booking/current INSERT/rotation/control projection and Create-boundary intake join. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-40-D10 | WORKER ROUTE: PATCH /api/timesheets/:id/pay-hold | PARTLY_DONE | Preserve working retained upstream source/LEGACY semantics; verify exact final runtime route/fence winner and NEXT publication/control join. No full Worker→consumer→minute stored projection test run; source is not fresh runtime installation proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2270,6 +2270,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - Hold accepted after Create, including during preparation, leaves first Draft financial/control selection unchanged and appears for next Workbench/Draft with the later-change message.
   - Removing the hold returns it to Ready. The Timesheet stage shows "Pay on hold" while held (LUI-069). No old Banking preservation is required; unrelated Timesheet controls remain supported.
   - A Timesheet that was amended into a newer Timesheet record of the same booking, then put on hold from the newer record, shows Blocked "Pay on hold" for that work (booking lookup).
+
+WB40 ITEM [x] Built [x] Reviewed; exact D08/D09/D10 native current hold seam complete. Implementation BE e3b380e196e7d614be072d8cbee61da54483d795.336/882 db:check, sole PG17 schema compile,9/9 source gates,seal/coupling and fresh catalogue verifier PASS. Independent DB/Worker reviews recorded. Joined app authored/NOT_RUN; installation unchecked. Whole60/288 BUILT60/288 REVIEWED.
 
 ## CM-01 — Lifecycle amendment design note for Contract moves (the builder writes it; the owner approves it)
 
