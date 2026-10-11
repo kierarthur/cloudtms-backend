@@ -1,0 +1,169 @@
+{
+  "sample": {
+    "scope": "Minimal fixed local screen responses only; no database rows or joined evidence",
+    "actor": "11111111-1111-4111-8111-111111111111",
+    "worker": "33333333-3333-4333-8333-333333333333",
+    "origin": {
+      "classification": "CLASSIFIED",
+      "revision_id": "00000001-1111-4111-8111-111111111111",
+      "origin_kind": "DAILY",
+      "sheet_scope": "DAILY",
+      "contract_id": null,
+      "client_id": "00000002-1111-4111-8111-111111111111",
+      "work_date": "2026-10-10",
+      "physical_timesheet_id": "00000003-1111-4111-8111-111111111111",
+      "physical_timesheet_version": 1,
+      "candidate_display_name": "Carol Price",
+      "candidate_reference": "TMS 10421",
+      "client_display_name": "Riverside Care Home",
+      "job_title": "Care Assistant",
+      "band_label": "Band 3",
+      "timesheet_reference": "Daily · 10/10/2026",
+      "pay_channel": "PAYE",
+      "authorised_at_utc": "2026-10-10T16:00:00Z"
+    },
+    "lines": [
+      {
+        "run_line_id": "00000004-1111-4111-8111-111111111111",
+        "line_no": "1",
+        "original_timesheet_id": "00000003-1111-4111-8111-111111111111",
+        "captured_revision_id": "00000001-1111-4111-8111-111111111111",
+        "component_key": "WORK:DAY:2026-10-10",
+        "component_kind": "WORK",
+        "work_date": "2026-10-10",
+        "source_pay_channel": "PAYE",
+        "target_pay_channel": "PAYE",
+        "source_consumed_ex_vat": "151.20",
+        "frozen_ex_vat": "151.20",
+        "frozen_vat": "0.00",
+        "frozen_inc_vat": "151.20"
+      }
+    ],
+    "shifts": [
+      {
+        "shift_detail_id": "00000005-1111-4111-8111-111111111111",
+        "detail_no": 1,
+        "work_date": "2026-10-10",
+        "shift_start_at": "2026-10-10T06:30:00Z",
+        "shift_end_at": "2026-10-10T14:30:00Z",
+        "shift_start_local": "07:30",
+        "shift_end_local": "15:30",
+        "shift_overnight": false,
+        "submitted_minutes": 480,
+        "approved_minutes": 450,
+        "approved_hours": "7.500000",
+        "detail_label": null,
+        "segment_pay_ex_vat": null,
+        "pay_excluded": null,
+        "hours_day": null,
+        "hours_night": null,
+        "hours_sat": null,
+        "hours_sun": null,
+        "hours_bh": null
+      }
+    ],
+    "breaks": [
+      {
+        "break_detail_id": "00000006-1111-4111-8111-111111111111",
+        "break_no": 1,
+        "break_start_at": "2026-10-10T10:00:00Z",
+        "break_end_at": "2026-10-10T10:30:00Z",
+        "break_start_local": "11:00",
+        "break_end_local": "11:30",
+        "break_minutes": 30
+      }
+    ],
+    "used": [
+      {
+        "rate_detail_id": "00000007-1111-4111-8111-111111111111",
+        "bucket": "SAT",
+        "approved_hours": "7.500000",
+        "source_pay_rate": "20.123456"
+      }
+    ],
+    "schedule": [
+      {
+        "rate_schedule_id": "00000014-1111-4111-8111-111111111111",
+        "rate_family": "STANDARD",
+        "rate_code": "BH",
+        "unit_label": "HOUR",
+        "paye_rate": null,
+        "umbrella_rate": null,
+        "charge_rate": null
+      },
+      {
+        "rate_schedule_id": "00000015-1111-4111-8111-111111111111",
+        "rate_family": "STANDARD",
+        "rate_code": "DAY",
+        "unit_label": "HOUR",
+        "paye_rate": null,
+        "umbrella_rate": null,
+        "charge_rate": null
+      },
+      {
+        "rate_schedule_id": "00000016-1111-4111-8111-111111111111",
+        "rate_family": "STANDARD",
+        "rate_code": "NIGHT",
+        "unit_label": "HOUR",
+        "paye_rate": null,
+        "umbrella_rate": null,
+        "charge_rate": null
+      },
+      {
+        "rate_schedule_id": "00000017-1111-4111-8111-111111111111",
+        "rate_family": "STANDARD",
+        "rate_code": "SAT",
+        "unit_label": "HOUR",
+        "paye_rate": "20.160000",
+        "umbrella_rate": "25.950000",
+        "charge_rate": "1234.123456"
+      },
+      {
+        "rate_schedule_id": "00000018-1111-4111-8111-111111111111",
+        "rate_family": "STANDARD",
+        "rate_code": "SUN",
+        "unit_label": "HOUR",
+        "paye_rate": null,
+        "umbrella_rate": null,
+        "charge_rate": null
+      }
+    ],
+    "comparison": [
+      {
+        "run_work_id": "00000008-1111-4111-8111-111111111111",
+        "work_id": "00000009-1111-4111-8111-111111111111",
+        "original_timesheet_id": "00000003-1111-4111-8111-111111111111",
+        "captured_revision_id": "00000001-1111-4111-8111-111111111111",
+        "current_revision_id": "00000001-1111-4111-8111-111111111111",
+        "newer_approval_available": false
+      }
+    ]
+  },
+  "requests": [
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "LINES",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/frozen-detail",
+      "kind": null,
+      "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+    },
+    {
+      "path": "/api/banking/pay/next/frozen-detail",
+      "kind": null,
+      "body": "{\"kind\":\"RATE_DETAILS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_bucket\":null,\"limit\":100}"
+    },
+    {
+      "path": "/api/banking/pay/next/preparation-page",
+      "kind": "REVISION_COMPARISON",
+      "body": null
+    },
+    {
+      "path": "/api/banking/pay/next/frozen-detail",
+      "kind": null,
+      "body": "{\"kind\":\"RATE_SCHEDULE\",\"run_work_id\":\"00000008-1111-4111-8111-111111111111\",\"after_rate_family\":null,\"after_rate_code\":null,\"limit\":100}"
+    }
+  ]
+}

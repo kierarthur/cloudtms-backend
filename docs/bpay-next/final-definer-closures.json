@@ -4259,9 +4259,18 @@
     },
     {
       "signature": "private.bpay_next_publish_ordinary_from_financial_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
@@ -4269,17 +4278,10 @@
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
         "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1530_banking_pay_next_ordinary_approval_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_1009_banking_pay_next_ordinary_approval_rate_freeze_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
       ],
-      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
+      "owner": "DY05 genuine Daily captured approval/settings/labels; exact current0939 successor",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4537,19 +4539,21 @@
     },
     {
       "signature": "private.bpay_next_revision_guard_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql",
         "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+        "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql"
       ],
-      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
+      "owner": "DY05 genuine Daily captured approval/settings/labels; exact current0939 successor",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7494,16 +7498,19 @@
     },
     {
       "signature": "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)",
-      "finalRoot": "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql",
-      "finalPhysical": "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql",
+        "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql"
+        "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql"
       ],
-      "owner": "F-04 baseline census; exact feature successor follows master editor chain",
+      "owner": "DY05 one bounded immutable revision context on existing frozen transport",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -15122,6 +15129,20 @@
       ],
       "owner": "DR37 early D18 prerequisite; DR11seq86/owedDR08 admission",
       "baselineSource": null
+    },
+    {
+      "signature": "private.bpay_next_payment_client_origin_v1(uuid)",
+      "finalRoot": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql"
+      ],
+      "owner": "DY05 named frozen Client origin reader",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

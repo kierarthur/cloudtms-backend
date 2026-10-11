@@ -297,3 +297,5 @@ Route1450 ->0939 ->DY01; Publisher1530 current1236 ->DY04/0939 ->DY06 ->DY10 ->D
 ## DY-01 sequence91 — native unresolved admission / BD101
 
 Approval route1450 ->DY04/0939 ->DY01/0952. Exactly one processedTF/capturedsettingsClient point check in the contractless Daily branch; other0939 branches retained. Publisher/trigger0939, pointer0928, helper0925 and canonical Daily settings/receipts remain their prior owners. Later route changes merge0952, never re-promote raw1450.
+
+DY05seq92: publisher1530/current0939 ->1001 ->DY06 ->DY10 ->DR38; immutable revision guard1342 ->1001, pointer0928/insert0939/helper0925/route0952 retained. Named payment_client_origin1005 and frozen service wrapper0250 ->1005 ->PS05; Source1548 retained. Later owners merge onto actual final-definer registry. No producer/query protocol or parked resolver.

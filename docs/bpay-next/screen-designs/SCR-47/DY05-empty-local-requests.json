@@ -1,0 +1,17 @@
+[
+  {
+    "path": "/api/banking/pay/next/preparation-page",
+    "kind": "LINES",
+    "body": null
+  },
+  {
+    "path": "/api/banking/pay/next/frozen-detail",
+    "kind": null,
+    "body": "{\"kind\":\"SHIFTS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"after_detail_no\":null,\"limit\":100}"
+  },
+  {
+    "path": "/api/banking/pay/next/frozen-detail",
+    "kind": null,
+    "body": "{\"kind\":\"BREAKS\",\"run_line_id\":\"00000004-1111-4111-8111-111111111111\",\"shift_detail_id\":\"00000005-1111-4111-8111-111111111111\",\"after_break_no\":null,\"limit\":100}"
+  }
+]

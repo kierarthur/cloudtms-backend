@@ -1,0 +1,57 @@
+{
+  "item": "DY-05",
+  "sequence": 92,
+  "status": "PENDING_FINAL_REVIEW",
+  "decision": "BD102",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql",
+      "sha256": "b5f2f9ec742a11a88ede05ae0eb433725b410907827bf10300b3540824a92a72"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
+      "sha256": "ccb57080d3119372be6408c1ced497c95783eb06521d2727d4be3fce4436ea53"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "sha256": "34a5db0acb56068e9509e42fda3428658b3e0b77f16297a62bdca53877e644ba"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "03a520a156621d59ee33cec80a9a9f6c25e2e712f8924d8453878f79fce1fc7c"
+    }
+  ],
+  "frontend": [
+    {
+      "path": "js/bpay-next-office.js",
+      "sha256": "9a27f277929aec2fb5f7a20d8b05f4bcf2d3c37d046154d6f687168bf060b501"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "99c4461101c08c5295ead71d2926ebc57f154d0844795c09685f1713f31a9171"
+    }
+  ],
+  "parents": [
+    "publisher0939",
+    "guard1342",
+    "wrapper0250"
+  ],
+  "retained": [
+    "pointer0928",
+    "insertGuard0939",
+    "helper0925",
+    "route0952",
+    "Source1548",
+    "F08/F16 native two-channel enrolment/replay"
+  ],
+  "contractHash": "d8266cacab32b24e0f18376bad4c0c1a6019b5070b88ee0c273e790a1b723e2f",
+  "publicMembershipDelta": 0,
+  "joinedApp": "AUTHORED_NOT_RUN",
+  "frontendCommit": "f0723f0279af533b5fbbd3cd94d77cf5328bf451",
+  "reviews": [
+    "reviews/DY-05-sql-source-review.md",
+    "reviews/DY-05-transport-source-review.md",
+    "reviews/DY-05-screen-source-review.md",
+    "screen-designs/SCR-47/review.md"
+  ]
+}

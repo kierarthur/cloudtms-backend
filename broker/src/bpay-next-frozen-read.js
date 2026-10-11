@@ -69,6 +69,7 @@ const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1
 const BUCKETS = ['BH', 'DAY', 'NIGHT', 'SAT', 'SUN'];
 const FAMILIES = ['ADDITIONAL', 'MILEAGE', 'STANDARD'];
 const ENCODER = new TextEncoder();
+const ORIGIN_SCHEMA=Object.freeze({"classification":"classification","revision_id":"uuid","origin_kind":"originKind","sheet_scope":"dailyScope?","contract_id":"uuid?","client_id":"uuid?","work_date":"date?","physical_timesheet_id":"uuid","physical_timesheet_version":"positiveInt","candidate_display_name":"label","candidate_reference":"label?","client_display_name":"label","job_title":"label?","band_label":"label?","timesheet_reference":"label?","pay_channel":"channel","authorised_at_utc":"timestamp?"});
 const SCHEMAS = Object.freeze({
   SHIFTS: {
     shift_detail_id: 'uuid', detail_no: 'positiveInt', work_date: 'date',
@@ -137,6 +138,10 @@ function date(value) {
 function field(value, type) {
   if (type.endsWith('?')) return value === null || field(value, type.slice(0, -1));
   switch (type) {
+    case 'classification': return ['CLASSIFIED','UNCLASSIFIED_MISMATCH','UNKNOWN'].includes(value);
+    case 'originKind': return ['CONTRACT','DAILY'].includes(value);
+    case 'dailyScope': return value === 'DAILY';
+    case 'channel': return ['PAYE','UMBRELLA'].includes(value);
     case 'uuid': return typeof value === 'string' && UUID.test(value);
     case 'int': return integer(value);
     case 'positiveInt': return integer(value, 1);
@@ -298,11 +303,21 @@ function pageRows(value, call) {
       // Text tuple order belongs to PostgreSQL's collation, not JS localeCompare.
       if (row.rate_family === call.args.p_after_rate_family
         && row.rate_code === call.args.p_after_rate_code) invalid();
-      if ([row.paye_rate, row.umbrella_rate, row.charge_rate].every((rate) => rate === null)
+      if (row.rate_family !== 'STANDARD' && [row.paye_rate, row.umbrella_rate, row.charge_rate].every((rate) => rate === null)
         || (row.rate_family === 'STANDARD' && !BUCKETS.includes(row.rate_code))
         || (row.rate_family === 'MILEAGE' && row.rate_code !== 'MILE')) invalid();
     }
   }
+  return value;
+}
+
+function capturedOrigin(value) {
+  const keys=Object.keys(ORIGIN_SCHEMA);
+  if(!record(value)||Object.keys(value).length!==keys.length
+    ||keys.some(key=>!Object.hasOwn(value,key)||!field(value[key],ORIGIN_SCHEMA[key]))
+    ||(value.origin_kind==='DAILY'&&(value.sheet_scope!=='DAILY'||value.contract_id!==null||value.work_date===null))
+    ||(value.origin_kind==='CONTRACT'&&value.contract_id===null)
+    ||((value.classification==='CLASSIFIED')!==(value.client_id!==null)))throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
   return value;
 }
 
@@ -355,15 +370,15 @@ export async function handleBpayNextFrozenRead(request, dependencies = {}) {
       if (!(response instanceof Response)) throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const payload = await limitedJson(response, BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes, false, controller.signal);
       if (!response.ok) throw dependencyError({ status: response.status, json: payload });
-      if (!record(payload) || Object.keys(payload).length !== 2
-        || !Object.hasOwn(payload, 'rows') || typeof payload.complete !== 'boolean') {
+      if (!record(payload) || Object.keys(payload).length !== 3
+        || !Object.hasOwn(payload, 'rows') || !Object.hasOwn(payload,'origin') || typeof payload.complete !== 'boolean') {
         throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       }
       const rows = pageRows(payload.rows, call);
       const complete = payload.complete;
       if (!complete && rows.length === 0) throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const result = {
-        ok: true, kind: call.kind, rows, complete,
+        ok: true, kind: call.kind, rows, complete, origin: capturedOrigin(payload.origin),
         next_cursor: complete ? null : nextCursor(call.kind, rows.at(-1))
       };
       if (ENCODER.encode(JSON.stringify(result)).byteLength > BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes) {

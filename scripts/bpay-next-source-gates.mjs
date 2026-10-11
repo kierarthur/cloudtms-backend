@@ -26,6 +26,14 @@ const DAILY_GUARD_ADDITIONS=Object.freeze({
     "blockEnd": "  return new;"
   }
 });
+// DY05 exact complete frozen parent plus genuine Daily captured-context guard only.
+const DAILY_FROZEN_GUARD='supabase/repeatable/11102026_1001_banking_pay_next_daily_frozen_approval_context_v1.sql';
+const DAILY_FROZEN_ADDITION=Object.freeze({
+  "declaration": "  v_daily_work private.bpay_next_work%rowtype;\n  v_daily_timesheet public.timesheets%rowtype;\n  v_daily_financial public.timesheets_financials%rowtype;\n",
+  "declAnchor": "  v_total_source_ex numeric;\n",
+  "block": "  select w.* into strict v_daily_work from private.bpay_next_work w where w.id=new.work_id;\n  if v_daily_work.origin_kind='DAILY' or new.daily_approval_evidence_json is not null then\n    select t.* into strict v_daily_timesheet from public.timesheets t where t.timesheet_id=new.physical_timesheet_id;\n    if v_daily_timesheet.sheet_scope is distinct from 'DAILY'::public.timesheet_scope_enum then\n      raise exception using errcode='23514',message='BPAY_NEXT_CONTRACT_REVISION_DAILY_EVIDENCE_FORBIDDEN';\n    end if;\n    if new.source_kind is distinct from 'ORDINARY' or new.financial_snapshot_id is null\n       or v_daily_timesheet.sheet_scope is distinct from 'DAILY'::public.timesheet_scope_enum\n       or v_daily_timesheet.line_type::text is distinct from 'HOURS'\n       or v_daily_timesheet.booking_id is distinct from v_daily_work.booking_id\n       or v_daily_timesheet.contract_id is distinct from v_daily_work.contract_id\n       or v_daily_timesheet.version is distinct from new.physical_timesheet_version\n       or jsonb_typeof(new.daily_approval_evidence_json) is distinct from 'object'\n       or new.daily_approval_evidence_json->>'contract_version' is distinct from 'BPAY_NEXT_DAILY_APPROVAL_EVIDENCE_V1'\n       or new.daily_approval_evidence_json->>'sheet_scope' is distinct from 'DAILY'\n       or new.daily_approval_evidence_json->>'timesheet_id' is distinct from new.physical_timesheet_id::text\n       or new.daily_approval_evidence_json->>'timesheet_version' is distinct from new.physical_timesheet_version::text\n       or new.daily_approval_evidence_json->>'financial_id' is distinct from new.financial_snapshot_id::text\n       or new.daily_approval_evidence_json->>'candidate_id' is distinct from v_daily_work.candidate_id::text\n       or new.daily_approval_evidence_json->>'booking_id' is distinct from v_daily_work.booking_id\n       or new.daily_approval_evidence_json->'contract_id' is distinct from coalesce(to_jsonb(v_daily_work.contract_id),'null'::jsonb)\n       or new.daily_approval_evidence_json->>'work_date' is distinct from ((v_daily_timesheet.worked_start_iso at time zone 'Europe/London')::date)::text\n       or (v_daily_work.origin_kind='DAILY' and new.daily_approval_evidence_json->>'work_date' is distinct from v_daily_work.origin_work_date::text)\n       or new.daily_approval_evidence_json->'settings_authority_json' is distinct from v_daily_timesheet.settings_authority_json\n       or new.daily_approval_evidence_json->'timesheet_authorised_at_utc' is distinct from to_jsonb(v_daily_timesheet.authorised_at_server) then\n      raise exception using errcode='23514',message='BPAY_NEXT_DAILY_REVISION_EVIDENCE_REQUIRED';\n    end if;\n    select tf.* into strict v_daily_financial from public.timesheets_financials tf where tf.id=new.financial_snapshot_id;\n    if v_daily_financial.is_current is distinct from true or v_daily_financial.is_stale is distinct from false\n       or v_daily_financial.basis::text is distinct from 'SELF_REPORTED'\n       or v_daily_financial.authorised_at_utc is null or v_daily_timesheet.authorised_at_server is null\n       or v_daily_financial.candidate_id is distinct from v_daily_work.candidate_id\n       or new.daily_approval_evidence_json->>'client_id' is distinct from v_daily_financial.client_id::text\n       or new.daily_approval_evidence_json->'financial_authorised_at_utc' is distinct from to_jsonb(v_daily_financial.authorised_at_utc)\n       or new.daily_approval_evidence_json->>'role' is distinct from v_daily_financial.role\n       or new.daily_approval_evidence_json->>'band' is distinct from v_daily_financial.band\n       or new.job_title is distinct from v_daily_financial.role or new.band_label is distinct from v_daily_financial.band then\n      raise exception using errcode='23514',message='BPAY_NEXT_DAILY_REVISION_EVIDENCE_REQUIRED';\n    end if;\n  end if;\n",
+  "blockEnd": "  if new.detail_kind='SHIFT' then"
+});
 export const FROZEN_FILES=Object.freeze([
   'supabase/migrations/03102026_1324_banking_pay_next_core.sql',
   'supabase/repeatable/03102026_1342_banking_pay_next_guards_v1.sql',
@@ -623,7 +631,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id','issue_code',v_result->>'issue_code')"
   ],
   "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)": [
-    "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
+    "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit),'origin',v_origin)"
   ],
   "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)": [
     "jsonb_build_object( 'instruction_id',v_instruction.id,'transfer_id',v_transfer.id,'projection_id',v_projection.id, 'projection_no',v_projection.projection_no::text,'input_kind',v_projection.input_kind, 'run_id',v_run.id,'run_worker_id',v_worker.id,'candidate_id',v_worker.candidate_id, 'pay_date',v_run.pay_date,'target_pay_channel',v_worker.target_pay_channel, 'beneficiary_name_snapshot',v_transfer.beneficiary_name_snapshot, 'payment_reference',v_instruction.payment_reference,'issued_at_utc',v_instruction.issued_at_utc, 'member_count',v_transfer.member_count::text, 'gross_ex_vat',v_projection.gross_ex_vat::text,'gross_vat',v_projection.gross_vat::text, 'gross_inc_vat',v_projection.gross_inc_vat::text,'entered_paye_net',v_projection.entered_paye_net::text, 'accepted_gross_additions',v_projection.accepted_gross_additions::text, 'accepted_gross_deductions',v_projection.accepted_gross_deductions::text, 'accepted_net_additions',v_projection.accepted_net_additions::text, 'accepted_recoveries',v_projection.accepted_recoveries::text,'cash_amount',v_instruction.cash_amount::text, 'projection_cash_amount',v_projection.cash_amount::text,'destination_kind',v_destination_kind)",
@@ -1912,6 +1920,9 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     if(file===DAILY_PUBLICATION_GUARDS&&(
       /^revoke\s+all\s+on\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
       ||/^alter\s+function\s+private\.bpay_next_(?:revision|work_insert)_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
+    if(file===DAILY_FROZEN_GUARD&&(
+      /^revoke\s+all\s+on\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role\s*;\s*$/.test(original)
+      ||/^alter\s+function\s+private\.bpay_next_revision_guard_v1\s*\(\s*\)\s+owner\s+to\s+postgres\s*;\s*$/.test(original)))competing=false;
     if(competing&&!baseline.includes(statement))throw Error(`BPAY_NEXT_FROZEN_COMPETING_AUTHORITY: ${file}`);
   }
 }
@@ -1983,6 +1994,16 @@ export function verifyBpayNextSourceGates(){
         if(expected.split(addition.declAnchor).length!==2||expected.split(addition.blockEnd).length!==2)throw Error('BPAY_NEXT_DAILY_PUBLICATION_PARENT_SHAPE');
         expected=expected.replace(addition.declAnchor,()=>addition.declAnchor+addition.declaration).replace(addition.blockEnd,()=>addition.block+addition.blockEnd);
         if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_PUBLICATION_GUARD_CHANGED');
+        continue;
+      }
+      if(definition.physical===DAILY_FROZEN_GUARD&&signature==='private.bpay_next_revision_guard_v1()'){
+        const parent=frozenSources.get(file).replaceAll('\r\n','\n'),addition=DAILY_FROZEN_ADDITION;
+        const rows=scanManagedSql(parent).statements.filter(row=>routineDefinitions(parent.slice(row.start,row.end),file).includes(signature));
+        if(rows.length!==1||exact.length!==1)throw Error('BPAY_NEXT_DAILY_FROZEN_GUARD_SHAPE');
+        let expected=parent.slice(rows[0].start,rows[0].end);
+        if(expected.split(addition.declAnchor).length!==2||expected.split(addition.blockEnd).length!==2)throw Error('BPAY_NEXT_DAILY_FROZEN_PARENT_SHAPE');
+        expected=expected.replace(addition.declAnchor,()=>addition.declAnchor+addition.declaration).replace(addition.blockEnd,()=>addition.block+addition.blockEnd);
+        if(exact[0]!==expected)throw Error('BPAY_NEXT_DAILY_FROZEN_GUARD_CHANGED');
         continue;
       }
       if(previous.status!==0||exact.some(text=>!previous.stdout.replaceAll('\r\n','\n').includes(text)))throw Error(`BPAY_NEXT_FROZEN_COMPETING_DEFINER: ${signature}`);
