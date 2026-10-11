@@ -2,7 +2,7 @@
   "item": "FC-04",
   "sequence": 104,
   "decision": "BD116",
-  "status": "SOURCE_BUILT_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "deliverables": [
     "FC-04-D06"
   ],
@@ -72,5 +72,8 @@
   "screenshots": "42 actual native local variants;13 states in dark/device-light/phone plus3 upper-phone captures",
   "ownersRetained": "FC03 native creator/preview/intake, original ledger/funding/queue; no SQL or public definer membership change",
   "correctionOwner": "FC-03 finite existing SOURCE_CHANNEL_UNBOUND decoder; see FC03 corrections",
-  "futureHost": "FC02 generated sequence117 supplies full Cases page; exact accepted Case callback ready"
+  "futureHost": "FC02 generated sequence117 supplies full Cases page; exact accepted Case callback ready",
+  "implementationCommit": "f51a40c33674716799c50f4f6c72429831faa7ec",
+  "frontendCommit": "df95a98209f11e75b57ae4f6e2b52dce45ca9299",
+  "screen": "A4 PASS:42 actual captures; full42policy no unexplained difference or essential failure"
 }

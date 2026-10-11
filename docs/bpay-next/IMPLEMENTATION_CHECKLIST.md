@@ -3084,7 +3084,7 @@ Dependencies: FC-03, WB-08, F-16; successor positions: none. Design note: requir
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| FC-04-D06 | SCREEN: FC-04 — "New Payment Advance" window in Payment Advances / Snoozes (and from the Candidate record if legacy offers it) mirroring LUI-079: Candidate picker (pre-filled when opened from a Candidate), principal, method radio, derived figure from CASE_PREVIEW (RQ-083), Monday picker defaulting to next Monday (RQ-084), affordability section open (RQ-085), note; Preview then Apply; afterwards refresh only that case row. | MISSING | Reuse installed ADVANCE/PAYMENT_ADVANCE creator and schedule validation. Add legacy-equivalent window/preview; Monday/weekly/weeks/floor precision derive in shared DB validation. Approved unfunded principal is distinct from effective funded debt. Later bank details entered on Candidate and verified only for exact details not already verified; changed account does not block Create. Build the exact named user surface/controls in F-16's NEXT Office host; existing thin Sheet controls do not prove this full feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| FC-04-D06 | SCREEN: FC-04 — "New Payment Advance" window in Payment Advances / Snoozes (and from the Candidate record if legacy offers it) mirroring LUI-079: Candidate picker (pre-filled when opened from a Candidate), principal, method radio, derived figure from CASE_PREVIEW (RQ-083), Monday picker defaulting to next Monday (RQ-084), affordability section open (RQ-085), note; Preview then Apply; afterwards refresh only that case row. | BUILT_REVIEWED | Reuse installed ADVANCE/PAYMENT_ADVANCE creator and schedule validation. Add legacy-equivalent window/preview; Monday/weekly/weeks/floor precision derive in shared DB validation. Approved unfunded principal is distinct from effective funded debt. Later bank details entered on Candidate and verified only for exact details not already verified; changed account does not block Create. Build the exact named user surface/controls in F-16's NEXT Office host; existing thin Sheet controls do not prove this full feature. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3100,6 +3100,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows FC
 **Later in-app acceptance — not run:**
 
 Create GBP 300 by 6 weeks starting next Monday: case appears "Payment Advance · Not taxable · Open · due GBP 50.00 · outstanding GBP 0.00 until funded" (RQ-083, LUI-079, LSV-047 replaced); choosing a Wednesday is refused with "Start week must be a Monday" (RQ-084); a GBP 200 threshold entered on the form is saved on the case (RQ-085).
+
+FC04 ITEM/D06 BUILT/REVIEWED. BE f51a40c33674716799c50f4f6c72429831faa7ec; FE df95a98209f11e75b57ae4f6e2b52dce45ca9299; design/FC-04-completion.md; design/FC-04-successor-provenance.json; design/FC-04-implementation-boundary.md; reviews/FC-04-source-review.md; design/FC-04-design-review.md; screen-designs/SCR-117/review.md. Existing context retained.42 actual native local variants, full42policy/sourcePASS;351/913/source12/syntax/unchanged localPG17/seal-couplingac7310efPASS. Joined checks AUTHORED_NOT_RUN. Whole85/288 BUILT85/288 REVIEWED; nextFC05seq105.
 
 ## FC-05 — Create a Manual Credit
 

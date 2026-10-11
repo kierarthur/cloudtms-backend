@@ -86,7 +86,8 @@
         "coupling": "PASS",
         "contractHash": "ac7310eff30094b09bb6bfc2786c07eb54d523b4f770df36477f78b029df2cef",
         "futureJoined": "AUTHORED_NOT_RUN"
-      }
+      },
+      "implementationCommit": "f51a40c33674716799c50f4f6c72429831faa7ec"
     }
   ]
 }
