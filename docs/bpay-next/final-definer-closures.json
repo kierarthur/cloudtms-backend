@@ -7538,8 +7538,8 @@
     },
     {
       "signature": "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
@@ -7549,7 +7549,8 @@
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
         "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
@@ -7559,20 +7560,31 @@
         "supabase/repeatable/10102026_1621_banking_pay_next_preparation_pay_date_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "DR-02 seq79; complete latest predecessor retained, manifest/receipt/HEADER only; DR-05 retained-input execution/release",
+      "finalClosures": [
+        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "owner": "DR-02 seq79; complete latest predecessor retained, manifest/receipt/HEADER only; DR-05 retained-input execution/release; DR06 stored progress/WAKE",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7580,17 +7592,11 @@
         "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
         "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql"
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
       ],
-      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained",
+      "owner": "WB-26 original Case cut/native upload; live balances and original money kernel retained; DR06 stored progress/WAKE",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14817,6 +14823,34 @@
       ],
       "owner": "DR-05 finite private retained-input execution/release",
       "baselineSource": null
+    },
+    {
+      "signature": "private.bpay_next_preparation_progress_v1(uuid)",
+      "finalRoot": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "owner": "DR06 seq82 stored progress/WAKE",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
+    },
+    {
+      "signature": "private.bpay_next_preparation_wake_v1(uuid)",
+      "finalRoot": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql"
+      ],
+      "owner": "DR06 seq82 stored progress/WAKE",
+      "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     }
   ],
   "editorChains": [

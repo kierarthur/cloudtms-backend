@@ -13259,6 +13259,44 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_preparation_progress_v1(p_run_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "d749c6d6dfc7959b74561c9bbaefae28cea5579f04575f5a5cdfc8cd687b1e04"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_preparation_wake_v1(p_run_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "eef7e8f486f0010a056b4a6c9d0ae022a037f9cca61b4fb48c9d44a1241a6694"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_prepare_case_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_cursor bigint, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
@@ -32115,7 +32153,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "43857ed425ab3bc2f5bb26063e99c2437382762a62535cdb029dc2e1c008ee86"
+      "definition_sha256": "7ef816008fddc621dc3ca3ab41d644fd09991c0481384dd2bbabdb2339786b30"
     },
     {
       "acl": [
@@ -32139,7 +32177,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4c48d88d9c0cfa100be5fee4e999556ce9d53941516fde4a55f12105540850be"
+      "definition_sha256": "c6809e3b5a0d111dd4272cca42b6475b4b1bf15f170ac0992154fe17f430b16e"
     },
     {
       "acl": [
@@ -91707,6 +91745,14 @@
           "generated": ""
         },
         {
+          "name": "preparation_wake_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "preparing_candidate_count",
           "type": "bigint",
           "default": "0",
@@ -91923,6 +91969,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "bpay_next_pay_run_preparation_wake_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (preparation_wake_at_utc IS NULL OR isfinite(preparation_wake_at_utc))"
         },
         {
           "name": "bpay_next_pay_run_preparing_candidate_count_check",

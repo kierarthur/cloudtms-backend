@@ -20,6 +20,8 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  "private.bpay_next_preparation_progress_v1(uuid)",
+  "private.bpay_next_preparation_wake_v1(uuid)",
   // DR05 finite native retained-input execution/release support.
   "private.bpay_next_prepare_job_run_v1(uuid)",
   "private.bpay_next_prepare_job_active_v1(uuid)",
@@ -433,6 +435,8 @@ export function assertNextExactNumericTypes(source,file){
 }
 
 export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_preparation_progress_v1(uuid)",
+  "private.bpay_next_preparation_wake_v1(uuid)",
   "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
   "private.bpay_next_workbench_header_page_v1(jsonb,jsonb,integer)",
   "private.bpay_next_workbench_candidates_page_v1(jsonb,jsonb,integer)",
@@ -502,6 +506,9 @@ const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,
 const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
 // Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
 const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
+  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true)"],
+  "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',false,'throttled',true)", "pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',true,'throttled',false)"],
+
   "private.bpay_next_advice_work_v1(uuid)": [
     "pg_catalog.jsonb_build_object( 'run_work_id',rw.id,'work_id',rw.work_id,'captured_revision_id',rw.captured_revision_id, 'physical_timesheet_id',r.physical_timesheet_id,'physical_timesheet_version',r.physical_timesheet_version, 'source_kind',r.source_kind,'detail_kind',r.detail_kind,'week_ending_date',r.week_ending_date, 'candidate_display_name',r.candidate_display_name,'candidate_reference',r.candidate_reference, 'client_display_name',r.client_display_name,'job_title',r.job_title,'band_label',r.band_label, 'timesheet_reference',r.timesheet_reference,'expected_rate_schedule_count',r.expected_rate_schedule_count)"
   ],
@@ -589,6 +596,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(v_progress),'complete',true)",
     "pg_catalog.jsonb_build_object( 'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind, 'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text, 'unit_label',l.unit_label,'approved_quantity',l.approved_quantity::text, 'approved_unit_rate',l.approved_unit_rate::text, 'job_title',r.job_title,'band_label',r.band_label, 'original_work_ref',parent.reference_number,'original_timesheet_id',parent.timesheet_id, 'is_adjustment',ts.is_adjustment,'correction_kind',ts.correction_kind, 'associated_rate_schedule_id',rs.id,'associated_rate_family',rs.rate_family,'associated_rate_code',rs.rate_code, 'available_paye_rate',rs.paye_rate::text,'available_umbrella_rate',rs.umbrella_rate::text, 'available_charge_rate',rs.charge_rate::text,'approved_charge_rate',rs.approved_charge_rate::text, 'standard_rate_schedule',case when l.component_kind in ('WORK','PROTECTED_WORK') then (select coalesce(jsonb_agg(snapshot.value order by snapshot.bucket_order),'[]'::jsonb) from ( select jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text) value, case sr.rate_code when 'DAY' then 1 when 'NIGHT' then 2 when 'SAT' then 3 when 'SUN' then 4 when 'BH' then 5 end bucket_order from private.bpay_next_rate_schedule sr where sr.revision_id=v_revision and sr.rate_family='STANDARD' and sr.rate_code in ('DAY','NIGHT','SAT','SUN','BH') order by bucket_order limit 5 ) snapshot) else '[]'::jsonb end, 'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text, 'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text, 'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false))",
     "jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text)",
     "pg_catalog.jsonb_build_object('work_id',c.work_id,'expected_revision_id',c.expected_revision_id, 'selection_mode',c.selection_mode,'selection_state',c.selection_state,'page_count',c.page_count::text,'component_count',c.component_count::text)",
@@ -682,6 +690,9 @@ export function assertTypedFinancialProjection(source,file,signature){
 
 // DR05 exact reviewed call edges; no dynamic closure admission.
 const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.btrim","pg_catalog.left","pg_catalog.jsonb_build_object"],
+  "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.clock_timestamp","pg_catalog.jsonb_build_object"],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": ["private.bpay_next_preparation_progress_v1","pg_catalog.jsonb_build_array"],
   "private.bpay_next_prepare_job_run_v1(uuid)": [
     "lateral"
   ],
@@ -976,6 +987,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.weekly_source_pay_query_admit_v2"
   ],
   "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
+    "private.bpay_next_preparation_wake_v1",
     "array",
     "current_setting",
     "pg_catalog.array_append",
