@@ -2168,7 +2168,7 @@ WB27 ITEM [x] Built [x] Reviewed; exact D03/D04/D07/D08/D09 complete. Implementa
 
 ## WB-37 — Snooze due wake-up and week-rollover jobs
 
-Seq 74; Snooze/Hold · WB-H; reviewer R2; current requested-feature status MISSING.
+Seq 74; Snooze/Hold · WB-H; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Inclusive London due wake/indexed fair bounded lanes; next-run contribution only, no frozen changes.
 
@@ -2176,8 +2176,8 @@ Dependencies: WB-36, WB-08, F-11; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-37-D06 | REPEATABLE: public.bpay_next_snooze_due_page_v1(jsonb) | MISSING | Bounded indexed inclusive London calendar due lane, fair resume/idempotency and exact next-run contribution refresh. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-37-D07 | REPEATABLE: public.bpay_next_workbench_week_rollover_page_v1(jsonb) | MISSING | Bounded indexed eligible-date current-work promotion and real minute recovery; no open-time recalculation. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-37-D06 | REPEATABLE: public.bpay_next_snooze_due_page_v1(jsonb) | BUILT_REVIEWED | Bounded indexed inclusive London calendar due lane, fair resume/idempotency and exact next-run contribution refresh. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-37-D07 | REPEATABLE: public.bpay_next_workbench_week_rollover_page_v1(jsonb) | BUILT_REVIEWED | Bounded indexed eligible-date current-work promotion and real minute recovery; no open-time recalculation. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2196,6 +2196,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 - A segment (shift) snoozed until yesterday appears in Ready within a few minutes after the UK date changes, without any user action, ticked by default; its amount is unchanged. A segment snoozed until today stays Waiting all day (the until-date is inclusive), and the wake follows the calendar date, not the pay date (RQ-061, RQ-077, RQ-028, LSV-143).
   - A Timesheet for next week, shown Waiting "Not payable until DD/MM/YYYY", appears in Ready within a few minutes after its week becomes current, with no user action (RQ-113, LSV-144).
   - No other Candidate's rows change (RQ-232); a lost cron tick is caught up by the next (RQ-301).
+
+WB37 ITEM [x] Built [x] Reviewed; exact D06/D07 plus card-named bounded minute lanes complete. Implementation BE 39ad18e828a91a04cbd374e5647eb444efca1d77.334/875 db:check, sole PG17 schema compile,9/9 source gates,seal/coupling and fresh catalogue verifier PASS. Independent DB/Worker reviews recorded. Joined app authored/NOT_RUN; installation unchecked. Whole58/288 BUILT58/288 REVIEWED.
 
 ## WB-38 — Snooze window and snooze controls (row, expand, Timesheet window, all expenses)
 

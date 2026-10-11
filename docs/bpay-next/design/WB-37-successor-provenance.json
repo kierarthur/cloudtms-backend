@@ -79,5 +79,6 @@
   ],
   "joinedAppAcceptance": "AUTHORED / NOT_RUN: inclusive dated snooze, unchanged amount/default tick, current-week promotion, unrelated Candidate conservation/missed-tick catch-up",
   "deployment": "NOT_INSTALLED",
-  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)"
+  "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
+  "backendCommit": "39ad18e828a91a04cbd374e5647eb444efca1d77"
 }
