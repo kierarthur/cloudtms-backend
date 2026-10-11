@@ -10881,7 +10881,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "99852203e108ac86cdc313e4f2e4d79068d386ec9e922ccb43ebf9ba631f79dd"
+      "definition_sha256": "af21f840abc8f19821b84515a7133ed882c1efe8d0a1bd63ff6118f007577486"
     },
     {
       "acl": [
@@ -10938,7 +10938,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a5bb0853f83ab58db782657198f7fbf5f766fe5f5f99e25baf114d85af52a298"
+      "definition_sha256": "b9e8377877193139bd16b8658e50bf54eb2f8ee94639ca699949a3b41858436d"
     },
     {
       "acl": [
@@ -11622,7 +11622,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f8c494ccfcb40c1a75fa40b6bb71b5b7ba033185f5efe05c721369dce336078d"
+      "definition_sha256": "286e63c812985ef834622eee6608a389fc4163214df51ae89a29a98b3f77109e"
     },
     {
       "acl": [
@@ -11641,7 +11641,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "0feb71cb44f29b93ba7f72223830801734b477d50ca063c7f1e2323e3c3359e6"
+      "definition_sha256": "31311de5ad5f2a4c67673533d37f8ea4fc44eb0e0a9ce46c2f70a338944bc5d6"
     },
     {
       "acl": [
@@ -12876,7 +12876,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b90dd82fe18f06bcf90f6bddee53f22b519bce7ebd73ba2066dec78f184c3c87"
+      "definition_sha256": "089f8142cf519c6bc235dda50a7f9ee8c16512c7efad5a75e35f231a67ad1dc8"
     },
     {
       "acl": [
@@ -15394,7 +15394,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8b1e45601a3582f23d88a92010e317aa56575a40a92f3101ba2d329cb48628d1"
+      "definition_sha256": "626bf6181ce372b0ad7a83c9298a6cbc0701847fd4d3db99593f286f1430ba44"
     },
     {
       "acl": [
@@ -15508,7 +15508,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "60cf2e6eab5376dc9471db0081ec6a642205c58bdd84b59ac90e19da0e303cc4"
+      "definition_sha256": "b2d2278db16cec0d45ba90022ba26d364c7b5d5d1ec3e660b67010d25e110c61"
     },
     {
       "acl": [
@@ -16949,6 +16949,25 @@
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
+      "identity": "bpay_next_source_query_segment_exclusions_v1(p_revision_id uuid, p_gate jsonb)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "61ce1dfcec7e1677e8354b2457131c808478789503de5b6296b6210d5ebc9f94"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
       "identity": "bpay_next_source_receipt_publish_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -17876,7 +17895,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "3d8c31c724c4db31a4337c54113ba1c3d649420205dd1b6c656569f718a4480a"
+      "definition_sha256": "5a5ab36675e7099e6abd80b16dadc453ad04c819db2a60c3f31da99831c7f772"
     },
     {
       "acl": [
@@ -24054,7 +24073,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5457ff4af4f85aad92bad730936a242936af850007696f0a64868730b3288bb6"
+      "definition_sha256": "577156bcb2eec0fd7cccf442c7dcefc442597bb4cafd1e2142bde6c2a420d268"
     },
     {
       "acl": [
@@ -48353,7 +48372,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "785746fa7a11ca7e12742142b144ad5684b56dcf40231497a45080db58dd7d84"
+      "definition_sha256": "08eacfead86a4ee04fd39602846a5cf92cdb5f2c31e09fe8ff6b24520aa8eae6"
     },
     {
       "acl": [
@@ -108429,6 +108448,14 @@
           "generated": ""
         },
         {
+          "name": "segment_query_exclusions",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "work_id",
           "type": "uuid",
           "default": null,
@@ -108446,6 +108473,14 @@
       "options": [],
       "force_rls": false,
       "constraints": [
+        {
+          "name": "bpay_next_query_segment_exclusions_array",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (segment_query_exclusions IS NULL OR jsonb_typeof(segment_query_exclusions) = 'array'::text)"
+        },
         {
           "name": "bpay_next_run_work_query_snap_work_id_expected_revision_id_fkey",
           "type": "f",
@@ -110089,6 +110124,14 @@
           "generated": ""
         },
         {
+          "name": "query_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "run_id",
           "type": "uuid",
           "default": null,
@@ -110201,6 +110244,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (run_id, work_id, segment_key)"
+        },
+        {
+          "name": "bpay_next_selected_segment_query_reason",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (query_hold_reason IS NULL OR (query_hold_reason = ANY (ARRAY['HEALTHROSTER_NOT_FINALISED'::text, 'SOURCE_MISSING_OR_NOT_AUTHORISED'::text, 'SOURCE_HOURS_DIFFER'::text])))"
         },
         {
           "name": "bpay_next_selected_segment_run_id_work_id_expected_revisio_fkey",

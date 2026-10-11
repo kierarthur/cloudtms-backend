@@ -227,7 +227,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)": ["private.bpay_next_workbench_kind_page_v1"],
   'private.bpay_next_workbench_snooze_due_trigger_v1()': ['private.bpay_next_workbench_queue_origin_v1','private.bpay_next_workbench_refresh_case_v1'],
   "private.bpay_next_workbench_refresh_group_display_v1(text)": ["lateral","private.bpay_next_workbench_require_next_v1","pg_catalog.jsonb_build_array","bool_or","min","array_agg","filter","sum","cardinality"],
-  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
+  "private.bpay_next_workbench_refresh_work_core_v1(uuid)": ["private.bpay_next_source_query_segment_exclusions_v1","private.bpay_next_workbench_refresh_group_display_v1","private.weekly_source_pay_query_gate_v1","to_jsonb","char_length","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_group_contribution_v1","private.bpay_next_workbench_work_members_v1","private.bpay_next_workbench_accepted_work_v1","private.bpay_next_snooze_at_cut_v1","private.bpay_next_workbench_apply_delta_v1","array_agg","transaction_timestamp","gen_random_uuid","filter","sum"],
   "private.bpay_next_workbench_schedule_task_v1(text,uuid,uuid,uuid,boolean,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_ensure_metadata_v1","clock_timestamp","transaction_timestamp","by"],
   "private.bpay_next_workbench_metadata_changed_v1(uuid,boolean,boolean)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_workbench_ensure_metadata_v1","private.bpay_next_workbench_schedule_task_v1","concat_ws","transaction_timestamp"],
   "private.bpay_next_workbench_umbrella_metadata_trigger_v1()": ["private.bpay_next_workbench_schedule_task_v1"],
@@ -290,7 +290,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.jsonb_typeof",
     "pg_catalog.to_jsonb"
   ],
-  "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["private.bpay_next_begin_prepare_projection_v1",
+  "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["jsonb_typeof","jsonb_array_length","private.bpay_next_begin_prepare_projection_v1",
     "private.bpay_next_selected_position_keys_v1",
     "private.bpay_next_capture_segment_page_v1",
     "private.bpay_next_snooze_at_cut_v1",
@@ -845,7 +845,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_source_command_id_v1",
     "private.weekly_source_pay_query_admit_v2"
   ],
-  "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": [
+  "private.bpay_next_capture_position_page_v1(uuid,uuid,bigint,uuid,text,integer)": ["jsonb_typeof","jsonb_array_length",
     "pg_catalog.array_agg",
     "pg_catalog.cardinality",
     "pg_catalog.clock_timestamp",

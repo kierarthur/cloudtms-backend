@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "3b549c18e8fc7f39f34b21d7b5910f00b6ecb37f",
-  "compiledAtUtc": "2026-10-11T21:09:52.921Z",
+  "sourceCommit": "d10db6aee008817b6ea66d3f58ad4dc8f7de93b4",
+  "compiledAtUtc": "2026-10-11T21:36:12.038Z",
   "inventory": {
     "migrations": [
       {
@@ -1428,6 +1428,10 @@
       {
         "path": "supabase/migrations/11102026_2129_banking_pay_next_case_hold_audit.sql",
         "sha256": "41b429dd1447d1dbc4e63f72a91bddbde3d8916772a0dcc73feca177518ba91e"
+      },
+      {
+        "path": "supabase/migrations/11102026_2223_banking_pay_next_shift_query_exclusion.sql",
+        "sha256": "939cfaf247eabcbcdb54495f18f08d86beaaaeed607147a25a8e202ff4db89aa"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8262,6 +8266,13 @@
         "sha256": "e4723b0084d64038596c1e17bdc4d445c38ef12ba5a6e04abf0042fbd5cc1582"
       },
       {
+        "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
+        ],
+        "sha256": "051d550d953ee4ca96297aeadc647fae9097df807abbfc56b827dae23363b82d"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8295,11 +8306,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql",
+        "path": "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_2129_banking_pay_next_case_audit_v1.sql"
+          "supabase/repeatable/11102026_2223_banking_pay_next_shift_query_exclusion_v1.sql"
         ],
-        "sha256": "e4723b0084d64038596c1e17bdc4d445c38ef12ba5a6e04abf0042fbd5cc1582"
+        "sha256": "051d550d953ee4ca96297aeadc647fae9097df807abbfc56b827dae23363b82d"
       }
     ]
   },

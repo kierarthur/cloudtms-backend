@@ -30,7 +30,7 @@ S14-01–05, P14-01–09 and capture D14-01 closed on final saved source/batch78
 
 All36 current images independently inspected beside supplied designs; final six empty replacements reopened, other30 final hashes identical to inspected pixels. Family complete42 policy:37PASS/0FAIL/5N/A. Final receipts and per-image/source hashes saved in screen-designs/SCR-126/review.md, SCR-111/review.md and SCR-111b/review.md. Every visible difference/control purpose is recorded there. First failed header name/reference unavailable is an explicit ownerA2/BD121 limitation, never scored as present; no fabricated field or additional reader. Report changed-sort and parent keyboard/focus interactions remain source-only where not actually performed. Joined/native parent/business history/scale acceptance NOT_RUN; reviewer ran no test/render/DB/hosted action.
 
-+| Current saved FE source | SHA-256 |
+| Current saved FE source | SHA-256 |
 | --- | --- |
 | js/bpay-next-case-audit.js | 15d133f75e6e2d2c14eb6253cf0c4436e0821db98f6bfe28f7f42cf278c4adf5 |
 | js/bpay-next-case-audit-contract.js | 145ce37b807cc31cf6d2e3f2b6e5672a4110a61c59615562d8966484943a8eff |
