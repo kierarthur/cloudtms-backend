@@ -117,3 +117,32 @@ Then take the same bounded related-Case expansion/lock ordering from0746 before 
 ### Observed bounded due correction
 
 Current0814 SHA-256 `B3A33D3DB32FD2E0289CE73015580A5871826BCEFA1E8C6C13B2AC50F9497B02`: due3294–3308 now takes the original native deadline/id LIMIT slice before the discard point check, records the last visited tuple even when that row is skipped, and returns that internal tuple. The paired dispatcher3433–3485 reads the visited tuple3470–3472, advances the durable cursor from it3478–3480, and retains the last eligible returned tuple only for the existing Worker reply3483–3485. An all-skipped page therefore advances the next minute without prematurely restarting; an empty native slice or a visited deadline beyond the fixed sweep cut ends the cycle. This closes finding4 without a run flag, new index, route, client cursor or protocol. The original partial index is actually `bpay_next_preparation_due_idx` in migration `04102026_0501_banking_pay_next_preparation_expiry.sql`:23–24. This is a source-only PASS for the paired bounded selector correction; unfinished per-Candidate support and item/runtime acceptance are not claimed.
+
+## Final current-source amendment — 11 October 2026
+
+**SOURCE PASS for the reviewed dispatcher, enrollment, retirement and closed Worker seams.** No essential defect remains in this review's scope. The earlier hashes, proposals and unfinished per-Candidate statements above are historical; this amendment records the final reviewed bytes. The companion independent SQL receipt is [DR-09-sql-review.md](DR-09-sql-review.md), including its whole-definition comparison of the alias-only0847 successor.
+
+Findings1–4 are closed. The original enroller and dedicated discard/worker-action enrollers acquire the Run SHARE lock with NOWAIT (`0814:166,1740,2022`), avoiding the identified command/run blocking cycle. A retained discard binding, including terminal PARTIAL, excludes Confirm (`2930`) and expiry acceptance (`3353`, `BPAY_NEXT_EXPIRY_DISCARD_ALREADY_BOUND`); the due reader skips that binding within the original bounded native slice. This is the first committed header action's exclusion, with blocked survivors retained. Expiry does not consume discard releases or relabel their receipts EXPIRED. The paired native due selector/dispatcher keeps last-visited durable traversal independently of the externally returned last-eligible cursor (`3294–3308`, `3470–3485`), so an all-skipped page advances on the next minute without an unbounded skipped prefix.
+
+The requested existing-worker PREPARING Remove path is now present (`0814:3586–3714`). It admits only the exact native Worker/original PREPARE member and current job/revision under the existing locks, preserves same-command replay and the normal REPREPARE/SYSTEM restrictions, retires only that original job to DONE/DISCARDED (`3673–3676`), and retains its committed cursors/checkpoints. A PREPARING Worker adds0 to the preparing count (`3701`); cleanup debits it once (`3853`). This does not manufacture a Worker UUID for an unenrolled Candidate. The separately qualified previous-job receipt (`615–643`) and public financial dispatch preserve original unknown-request identity while returning terminal retained facts; economic Case identity remains distinct from execution revision.
+
+Release/projection uses bounded genuine Work identities before Case locks, financial revision invalidation before refresh, original selection traversal and exact native ORIGIN completion before final completion (`0814:3727–3944`). The CASE page's distinct Case array is collected once from the <=50 native hold slice before lock budgeting and is not appended again inside the release loop (`3814–3834`). The original release formulas, protected realised/NET/transfer checks and native capacity ownership remain intact. These final implementations close the source gaps described in the historical proposals above.
+
+All six current Worker files were reread. Queue wake bodies remain exactly `{id,kind}`; the finite PREPARATION_DISCARD kind uses fresh native CLAIM→one bounded STEP, and continuation is sent before ACK (`bpay-next-financial-queue.js:34–45,156–176`). No lease token is encoded in a wake or adopted from an unrelated active lease. Lost/unknown outcomes retain native replay/expiry recovery. Fixed RPC and phase maps, the separate nullable retained DISCARDED PREPARE schema, discard member-count conservation, qualified ENROLL wake and paired advancing internal DUE cursor remain closed (`bpay-next-job-step.js:81–95,214–280`; `bpay-next-preparation.js:313–325,551,585`; `bpay-next-preparation-expiry-rpc.js:171–181`). Ordinary PREPARE and expiry schemas retain their own narrower invariants.
+
+The installed0814 source is immutable. The final0847 file changes ten definitions only by `SELECT *`→`SELECT dr09_row.*` and its matching native table alias, plus whitespace; the companion review's exact reversal comparison found every resulting definition equal to its0814 parent. The other22 definitions retain0814 ownership. No new formula, generic protocol, financial producer or provider connection is introduced.
+
+Fresh SHA-256 of the saved sources:
+
+| Saved source | SHA-256 |
+|---|---|
+| `supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql` | `29F3099EBFB8A7E11D8C23A8996C5351EB9330316D8BDB6FD6D3A5136D3F379C` |
+| `supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql` | `86343D45963A9335DE8F3AF0A3465CBBCDD5C4C2FD3EEEF69C628060C8DF1C47` |
+| `broker/src/bpay-next-financial-queue.js` | `933990513DAD238624473628EF20A774EB1AE2D766399E4049B1A37AF79CFCB3` |
+| `broker/src/bpay-next-job-rpc.js` | `28A8EF749A277A7FBCD10A6E5A9CAABD50A6B94AB795DF411C7BFDF36FDA676F` |
+| `broker/src/bpay-next-job-step.js` | `70A989B65DDF08DF2B6F5F5133AC0521300708021382870730A9F58051907651` |
+| `broker/src/bpay-next-runtime-rpc.js` | `62E0EA2E586FCEE1C097984A8793E0084C6FF3869E55815DF12E404624EAE73C` |
+| `broker/src/bpay-next-preparation.js` | `572DEE1FBA45C21C01AE01CD60F5F3675E0B42363450625363BB7473F71EED20` |
+| `broker/src/bpay-next-preparation-expiry-rpc.js` | `F173C7E0A9B1F037F32C324B711581115B72DC64162FCFD1582571C680D8FEC4` |
+
+This amendment is read-only source review. Compilation, source-gate execution, SQL/database/business actions, fixtures, hosted calls, native UI/A4 and application acceptance were **NOT_RUN** by this reviewer. Root's separate installation/check reports are not independent runtime proof; no item/runtime PASS is asserted here.
