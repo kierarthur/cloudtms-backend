@@ -2299,7 +2299,7 @@ CM01 ITEM [x] Built [x] Reviewed; D01 complete, D02 AUTHORED/NOT_RUN. Implementa
 
 ## CM-04 — One shared calculator for every channel conversion and destination repricing
 
-Seq 78; Contract move · D5-CM; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 78; Contract move · D5-CM; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Reuse existing five arithmetic helpers; selected_quote is pure arithmetic and automatic valuer explicitly calls SUGGESTED_EQUIVALENT_BASIS. Static gate must target duplicated financial expressions, not legitimate caller classification/rounding.
 
@@ -2307,9 +2307,9 @@ Dependencies: F-04, F-05, F-06; successor positions: `06102026_1157` shared sele
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| CM-04-D01 | REPEATABLE: private.pay_finance_selected_quote_v1(enum,numeric,text,text,numeric,numeric,numeric,numeric,numeric,boolean); private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date) | LOCAL_ONLY | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Reuse existing five arithmetic helpers; selected_quote is pure arithmetic and automatic valuer explicitly calls SUGGESTED_EQUIVALENT_BASIS. Static gate must target duplicated financial expressions, not legitimate caller classification/rounding. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| CM-04-D02 | CHECK: tests/ proposed final-definer shared-calculator source check | MISSING | Implement the exact check target after its existing dependencies. Reuse existing five arithmetic helpers; selected_quote is pure arithmetic and automatic valuer explicitly calls SUGGESTED_EQUIVALENT_BASIS. Static gate must target duplicated financial expressions, not legitimate caller classification/rounding. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| CM-04-D03 | CHECK: CM-04 future joined in-app TEST checklist | MISSING | PAYE→Umbrella, Umbrella→PAYE, both same-channel and explicit manual accepted selection agree with the existing helper once, with no Worker money calculation. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| CM-04-D01 | REPEATABLE: private.pay_finance_selected_quote_v1(enum,numeric,text,text,numeric,numeric,numeric,numeric,numeric,boolean); private.bpay_next_value_source_for_target_v1(numeric,text,text,boolean,uuid,date) | BUILT_REVIEWED | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Reuse existing five arithmetic helpers; selected_quote is pure arithmetic and automatic valuer explicitly calls SUGGESTED_EQUIVALENT_BASIS. Static gate must target duplicated financial expressions, not legitimate caller classification/rounding. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| CM-04-D02 | CHECK: tests/ proposed final-definer shared-calculator source check | BUILT_REVIEWED | Implement the exact check target after its existing dependencies. Reuse existing five arithmetic helpers; selected_quote is pure arithmetic and automatic valuer explicitly calls SUGGESTED_EQUIVALENT_BASIS. Static gate must target duplicated financial expressions, not legitimate caller classification/rounding. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| CM-04-D03 | CHECK: CM-04 future joined in-app TEST checklist | AUTHORED_NOT_RUN | PAYE→Umbrella, Umbrella→PAYE, both same-channel and explicit manual accepted selection agree with the existing helper once, with no Worker money calculation. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows CM-04-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2320,6 +2320,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows CM
   - The gate fails a commit that inlines a VAT formula in an F-04 final-definer file (RQ-248).
   - The completion note lists the helper calls in NX-028/SCX-066 and NX-030 with file:line.
   - Joined future check: PAYE→Umbrella, Umbrella→PAYE, both same-channel and explicit manual accepted selection agree with the existing helper once, with no Worker money calculation. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+CM04 ITEM [x] Built [x] Reviewed; D01/D02 complete, D03 AUTHORED/NOT_RUN. Implementation BE 3538810096cc65f960fdb839038ddc3d16db8c40. Independent source review PASS;11/11 source gates,336/882 db:check,sole PG17 zero-change load,syntax/seal/coupling PASS. Existing1157/helpers retained unchanged. Whole62/288 BUILT62/288 REVIEWED; joined app/install unchecked.
 
 ## DR-02 — Create drafts: the server side of the Workbench selection hand-off
 
