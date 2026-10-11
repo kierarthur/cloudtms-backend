@@ -112,7 +112,7 @@ const ROWS={
   CASE_COMPONENTS:{case_component_id:'uuid',case_id:'uuid',candidate_id:'uuid',component_ordinal:'positive',component_revision:'positive',
     case_kind:'caseKind',case_subtype:'caseSubtype',tax_treatment:'taxTreatment',instruction_kind:'instructionKind',direction:'direction',
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
-    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null'}
+    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?'}
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
@@ -169,6 +169,7 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='caseReference')return typeof v==='string'&&v.trim().length>0&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=2048;
   if(t==='guardDecision')return ['UMBRELLA_ONLY','VERIFY_BOTH','VERIFY_PAYE'].includes(v);
   if(t==='guardChannel')return ['ALL','PAYE','UMBRELLA'].includes(v);
   if(t==='guardReason')return typeof v==='string'&&v.trim().length>0&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=500;
@@ -309,7 +310,7 @@ const CASE_LIST_COUNTS=['payment_advances_active_count','overpayments_active_cou
   'manual_debt_adjustments_active_count','manual_credit_adjustments_count','mixed_finance_cases_count',
   'unresolved_finance_cases_count','stale_finance_cases_count','finance_cases_with_active_snooze_count'];
 const CASE_LIST_ROW={case_id:'uuid',candidate_id:'uuid',candidate_name:'label',candidate_reference:'label?',
-  client_id:'uuid?',client_name:'label?',client_association:'caseListClient',case_kind:'issue',case_subtype:'issue?',case_type_label:'label',
+  client_id:'uuid?',client_name:'label?',client_association:'caseListClient',case_kind:'issue',case_subtype:'issue?',case_type_label:'label',original_liability_reference:'caseReference?',
   tax_treatment:'issue',tax_label:'label',status:'caseListStatus',created_at_utc:'timestamp?',case_revision:'positive',
   principal_approved:'money',principal_funded:'money',principal_recovered:'money',principal_written_off:'money',
   outstanding:'money',pending_payout:'money?',amount_due:'money?',recoverable_this_run:'null',active_hold_amount:'money',
@@ -426,6 +427,7 @@ function caseListResult(payload,call,bad){
     let previous=caseListDecodedLast(call.args.after);
     for(const row of payload.rows){
       if(!caseListExact(row,CASE_LIST_ROW)||ENCODER.encode(JSON.stringify(row)).byteLength>90000
+        ||row.original_liability_reference!==null&&(row.case_kind!=='MANUAL_DEBT'||row.case_subtype!=='MANUAL_DEBT')
         ||row.sort_key.case_id!==row.case_id||row.sort_key.created_at_utc!==row.created_at_utc
         ||sort.startsWith('CREATED_')&&row.sort_key.sort_value!==null
         ||sort.startsWith('TYPE_')&&row.sort_key.sort_value!==row.case_type_label
@@ -710,6 +712,7 @@ function result(payload,call,mutation){
     if(storedCreditPage&&row.legacy_case_id>payload.scan_cursor)bad();
     if(call.kind==='CASE_COMPONENTS'&&row.case_id!==call.args.case_id)bad();
     if(call.kind==='CASE_COMPONENTS'){
+      if(row.original_liability_reference!==null&&(row.case_kind!=='MANUAL_DEBT'||row.case_subtype!=='MANUAL_DEBT'))bad();
       if(caseIds.has(row.case_component_id))bad();caseIds.add(row.case_component_id);
     }
     if(call.kind==='SELECTED_COMPONENTS'&&call.args.expected_revision_id&&row.expected_revision_id!==call.args.expected_revision_id)bad();

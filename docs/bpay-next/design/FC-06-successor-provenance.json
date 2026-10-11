@@ -1,0 +1,85 @@
+{
+  "item": "FC-06",
+  "sequence": 106,
+  "decision": "BD118",
+  "status": "SOURCE_A4_BUILT_PENDING_COMMIT_RECEIPT",
+  "deliverables": [
+    "FC-06-D03",
+    "FC-06-D04"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+      "sha256": "644995fb19e4a58d0854de8191980dc7e543015358d81d229785165377e2845c"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "d98553f186257186e0680bac2617b644871e222eb59705d66df1d9029f82ace8"
+    },
+    {
+      "repository": "BE",
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "4ab6c6139770601665c0f117efff941ced5ae0e52b7d80b25efa27948cdf0394"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "674bef14fc610cc56d448f1588cfd456245b9f2379f047c7bad8410fb20f0b89"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/design/FC-06-case-create-contract.json",
+      "sha256": "a4ccdb6d21cf43a4738ff4994e0ae6168429f121af3eeebb59dfc3e41e4c5742"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-manual-debt.js",
+      "sha256": "228df8476030356857f3fc3cfd9d6b8272cb9aa9500448a1b3874efab92b651d"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "1cc98547542c99652c6b0e6c5139e64c9ac8a4dbb2e24c782ec0eda29b9b5b77"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "74d30eb024f6ae5b0bde73d590a3af5ef2b93a37fb1d09bab1eb3560f889a07c"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "b58a7eee24f26721fc9967ec46f0d2a30d256b7f327a2d4be82f4582f4de33cb"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "0215f79b7f5829c3146104863cbe5b910ba531289919a59987d9720c0f61359d"
+    }
+  ],
+  "checks": {
+    "integrity": "351 migrations/914 repeatables PASS",
+    "sourceGates": "12/12 PASS; exact new component projection added alongside historical projections",
+    "syntax": "Affected Worker/Office/main PASS",
+    "localPG": "Sole managed localPG17 changed schema compile PASS;10 current/retained body matches; immutable metadata/owner ACL verified",
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf",
+    "publicSecurityDefinerMembershipDelta": 0,
+    "isolation": "General/Candidate DO PASS",
+    "contractHash": "0a96f9c1de30080867e3f68f55428304266d43165cee405b2803749c6139145c",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "futureJoined": "AUTHORED_NOT_RUN"
+  },
+  "parentProvenance": "design/FC-06-parent-provenance.json",
+  "reviews": [
+    "design/FC-06-design-review.md",
+    "reviews/FC-06-sql-review.md",
+    "reviews/FC-06-source-review.md",
+    "screen-designs/SCR-119/review.md"
+  ],
+  "screenshots": "57 actual native local variants:18 states dark/device-light/phone plus3upperphone",
+  "retained": "Current terms/context/apply/14argwrapper/publicintake/page/money/queue untouched; no new table/index/publicdefiner/producer/trigger/command/reader/framework",
+  "futureHost": "FC02seq117 Case page consumes saved original reference; targeted native onCaseCreated receipt ready"
+}

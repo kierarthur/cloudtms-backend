@@ -1,0 +1,27 @@
+{
+  "item": "FC-06",
+  "decision": "BD118",
+  "successor": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+  "parents": [
+    {
+      "path": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "sha256": "853ddce45455defed9f715a2593267794f3b224e469a9eaccde2aeca6e44a470"
+    },
+    {
+      "path": "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+      "sha256": "278bd4d3dccc1e7453a69d1d2e0e4bdcde7075e5fe5181c5fe090c4a9dfc7e8a"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "sha256": "ab912386daf210e25a2d5b6f37038b00aac8081ca0ba27e059deffdb17f47231"
+    }
+  ],
+  "signatures": [
+    "private.bpay_next_case_create_preview_v1(uuid,jsonb)",
+    "private.bpay_next_accept_case_create_v1(uuid,uuid,uuid,text,text,text,numeric,date,date,numeric,bigint,numeric,numeric,text,text,text,jsonb)",
+    "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
+    "private.bpay_next_case_list_row_v1(uuid,jsonb)"
+  ],
+  "retained": "Original terms/context/apply/14arg wrapper/public intake/page/money/queue all unchanged",
+  "historicalReplay": "Mandatory reference after exact prior receipt return; original nullable token/input retained"
+}

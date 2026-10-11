@@ -1,0 +1,71 @@
+{
+  "item": "FC-06",
+  "sequence": 106,
+  "decision": "BD118",
+  "deliverables": [
+    "FC-06-D03",
+    "FC-06-D04"
+  ],
+  "dependencies": [
+    "FC-03",
+    "WB-08",
+    "F-16"
+  ],
+  "serverChange": "One dated successor1910 for exactly existing private Preview/17-argument acceptance/Case-components/Case-list-row bodies; final registry merged from1536/2026/1738.",
+  "workerChange": "Only closed required-nullable saved reference in existing CASE_COMPONENTS/CASE_LIST;2048 UTF-8 bytes/no NUL/nonblank/nonnull ManualDebt family only.",
+  "currentOwners": {
+    "termsContextApplyIntake": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+    "previewAcceptanceReferenceReaders": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+    "preparationPage": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+    "authority": "docs/bpay-next/final-definer-closures.json"
+  },
+  "preview": {
+    "method": "GET",
+    "existingKind": "CASE_PREVIEW",
+    "fields": "Existing closed fourteen-field CASE_INPUT_SCHEMA in FE js/bpay-next-case-preview.js and BE bpay-next-case-contract.js",
+    "presentation": "Existing server-owned weekly repayment, weeks, first/last due, original total and effective floor; no browser financial schedule/amount derivation."
+  },
+  "create": {
+    "method": "POST",
+    "existingAction": "CASE_CREATE",
+    "family": "MANUAL_DEBT",
+    "subtype": "MANUAL_DEBT",
+    "tax": "Exactly one staff choice TAXABLE or NON_TAXABLE. Neither is preselected.",
+    "principal": "Entered positive decimal text, at most two decimal places (whole pence), original 1024-byte bound; no floating-point normalization.",
+    "reason": "Required Comment, nonblank <=2048 UTF-8 bytes and no NUL.",
+    "note": "Optional Note, null when blank, otherwise <=2048 UTF-8 bytes and no NUL.",
+    "nullOperands": [
+      "due_date"
+    ],
+    "authority": "Existing original command id plus identical native input/context Preview token; original accept/apply owns all money/ledger/queue behavior.",
+    "taxStages": "Existing creator keeps taxable PAYE GROSS_DEDUCT and non-taxable NET_DEDUCT; principal is a new Manual Debt, never negative Timesheet/imported-underpayment reinterpretation. Umbrella allocation is later CM-13a.",
+    "receipt": "Existing ACCEPTED_PENDING_CASE with original Case/command/sequence/replay; never funding or payout proof.",
+    "original_liability_reference": "Required fresh original reference, nonblank <=2048 UTF-8 bytes/no NUL. Stored once in original immutable request; nullable old accepted history remains replayable.",
+    "schedule": "Staff chooses positive bigint weeks or positive exact-pence weekly amount; unused operand null. DD/MM/YYYY actual Monday start; server computes other operand and final partial instalment.",
+    "affordability": "Blank minimum_earnings_threshold/take_home_floor_override stays null; entered zero stays zero. Server validates and uses captured floor and allocation policy."
+  },
+  "recovery": {
+    "journal": "Original Candidate-scoped .case-create.<candidate_id>; no parallel family journal.",
+    "unknown": "Staff Try again sends exact original bytes and command only. No automatic mutation retry/new identity.",
+    "sameFamily": "Restore ManualDebt original principal/tax/Comment/reference/schedule/affordability/Note from exact pending bytes. Historical null reference displayed blank but never rewritten; Try again uses original bytes/token/UUID through existing controller.",
+    "otherFamily": "Preserve original bytes; hide fresh form and empty footer, retain actual Candidate and existing instruction/header Close. No reinterpretation or new command.",
+    "accepted": "Hide unavailable fresh terms; retain actual Candidate and original accepted identity. Existing Refresh reads only accepted Case/Candidate."
+  },
+  "readback": {
+    "method": "GET",
+    "existingKind": "CASE_COMPONENTS",
+    "scope": "Original accepted candidate_id and case_id, existing cursor reader.",
+    "empty": "This Case is being added.",
+    "return": "Only validated matching Case/page triggers onCaseCreated and bpay_next result. Original controller completes the journal after callback; main suppresses legacy whole-Workbench refresh. FC02 later consumes targeted Case row.",
+    "savedReference": "Exact original immutable request bound to Case/Candidate/ManualDebt family via native unique case_id point lookup. Required member with nullable value in existing readers; current Case-page owner FC02 consumes saved field later."
+  },
+  "excludedLaterOwners": [
+    "FC-07 one-off bank details",
+    "FC-08 funding",
+    "FC-09 pre-activity edit and read-only restrictions",
+    "CM-13a Umbrella allocation",
+    "FC-02 full Cases page"
+  ],
+  "futureJoinedAcceptance": "AUTHORED_NOT_RUN: GBP120 taxable/4 weeks/INV-2291 -> GBP30 gross-stage PAYE Draft and reference on Case; original replay/queue/NET-stage/Umbrella allocation and parent update.",
+  "timing": "Timing check moved to TEST after installation (owner 10/10/2026)."
+}
