@@ -10860,7 +10860,8 @@ async function officeAdapter(deps, env, actorId, action, payload = {}, observedA
     p_environment: environmentName(env),
     p_payload: isObject(payload) ? payload : {},
     p_now_utc: observedAtUtc || new Date().toISOString()
-  });
+  }, ['FINALISE_EXECUTE', 'FINALISE_REPLAY_LOOKUP'].includes(upper(action))
+    ? { timeoutMs: MANAGER_FINALISATION_RPC_TIMEOUT_MS } : undefined);
 }
 
 async function officeExpenseCategoryProjection(deps, env, timesheetId) {

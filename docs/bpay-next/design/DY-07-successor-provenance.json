@@ -1,0 +1,46 @@
+{
+  "item": "DY-07",
+  "sequence": 94,
+  "decision": "BD105",
+  "status": "CHECKED_REVIEWED_PENDING_COMMIT",
+  "sources": [
+    {
+      "path": "supabase/repeatable/11102026_1119_banking_pay_next_daily_single_flight_adapter_v1.sql",
+      "sha256": "138323f2d728a40c1391681f301f97021d0e277f2a93f980aa4cffcafc97f9ee"
+    },
+    {
+      "path": "broker/src/index.js",
+      "sha256": "fcf488bc88ee955bfe560d49cc5d61a1055c5c87eab4087487e843cac731bb65"
+    },
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "sha256": "d805cade15bbab1786b97ca4ffb7c346f24c07c93c0a0efdb02a92524a742c94"
+    }
+  ],
+  "parent": "supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql",
+  "reusedSingleFlight": "supabase/repeatable/10102026_0931_weekly_source_pay_query_outer_entry_admission_v1.sql",
+  "boundaryCheck": "design/DY-07-boundary-check.json",
+  "checks": {
+    "integrity": "345 migrations / 902 repeatables",
+    "sourceGates": "12/12 before local SQL load",
+    "syntax": "PASS",
+    "localPG": "17.11 sole-local schema compilation",
+    "contractHash": "c6c216b1f6878a5c5620edc211d9612a18d671548048f921c7b9206fa624ebc6",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "publicSecurityDefiners": 835,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "publicHash": "d5226315e5b17afc9e5a588a432b73ca",
+    "publicMembershipDelta": 0,
+    "candidateInventory": 167,
+    "candidateServiceMissing": 9,
+    "candidateBrowserExecutable": 0,
+    "currentCandidateVerifier": "27082026_1947 v3 DO PASS",
+    "generalVerifier": "22082026_1302 DO PASS",
+    "candidateIsolationVerifier": "22082026_0952 DO PASS",
+    "protectedFiles": "five exact hashes PASS before edits"
+  },
+  "futureJoined": "AUTHORED_NOT_RUN",
+  "review": "reviews/DY-07-source-review.md"
+}

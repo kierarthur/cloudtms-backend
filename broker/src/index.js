@@ -28181,8 +28181,8 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
         payload: {}
       },
       p_now_utc: nowUtc
-    })
-    : await sbRpcRecordingGuardRefusal(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
+    }, { timeoutMs: 20000 })
+    : await sbRpcRecordingGuardRefusal(env, 'candidate_workflow_transition_atomic_v1', beginPayload, { timeoutMs: 20000 });
   if (begin?.receipt_mode === 'DAILY_FACTUAL') {
     const receiptTimesheetId = String(begin.timesheet_id || '').trim();
     const inputHash = String(begin.canonical_save_input_sha256_hex || '');
@@ -28320,8 +28320,8 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
         daily_materialisation_json: dailyMaterialisation
       },
       p_now_utc: nowUtc
-    })
-    : sbRpcRecordingGuardRefusal(env, 'candidate_submission_finalize_atomic_v1', finalisationPayload);
+    }, { timeoutMs: 20000 })
+    : sbRpcRecordingGuardRefusal(env, 'candidate_submission_finalize_single_flight_v1', finalisationPayload, { timeoutMs: 20000 });
 }
 
 async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {
