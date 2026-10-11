@@ -29,3 +29,5 @@ Process correction: the initial local compile was inadvertently launched while a
 | Notes and original manual-debt reference remain immutable and replay-compared, with boundaries enforced. | AUTHORED_NOT_RUN |
 | Original native queue creation refreshes WB08 Case facts in the same transaction; Office rereads only the exact Case without reopening Banking. | AUTHORED_NOT_RUN |
 | Closing/reopening pending or accepted-before-created form recovers the same identity; unrelated pending commands/Candidates cannot retry here. | AUTHORED_NOT_RUN |
+
+Product commits BE 48effbb31f1530488c2c7327d4bf8e399ae805c7; FE 8ba9b7c49f7a3ec03d4f5c53c4836e81251b2286. ITEM and11owning deliverables BUILT/REVIEWED; context preserved. Source/A4 approval only; TEST/app checks remain authoredNOT_RUN.

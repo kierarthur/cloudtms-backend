@@ -2,7 +2,7 @@
   "item": "FC-03",
   "sequence": 101,
   "decision": "BD113",
-  "status": "BUILT_REVIEWED_PENDING_LOCAL_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/migrations/11102026_1536_banking_pay_next_case_notes.sql",
@@ -56,5 +56,6 @@
   },
   "screen": "A4 PASS:21 actual native variants;42 policy rows32PASS/0FAIL/10N/A; every visible difference/control purpose recorded",
   "futureJoined": "AUTHORED_NOT_RUN",
-  "frontendCommit": "8ba9b7c49f7a3ec03d4f5c53c4836e81251b2286"
+  "frontendCommit": "8ba9b7c49f7a3ec03d4f5c53c4836e81251b2286",
+  "implementationCommit": "48effbb31f1530488c2c7327d4bf8e399ae805c7"
 }
