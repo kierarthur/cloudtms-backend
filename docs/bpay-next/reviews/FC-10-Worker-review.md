@@ -56,4 +56,3 @@ Fresh saved bytes independently reread on11 October2026. Both findings are close
 | FE js/bpay-next-office.js, unchanged | ebf5237c32438a7ff3b1e94944d0c07221bc7391b027621ecd473a8fc8e433eb |
 
 The remaining six Worker snapshot hashes above were freshly checked and remain unchanged.
-

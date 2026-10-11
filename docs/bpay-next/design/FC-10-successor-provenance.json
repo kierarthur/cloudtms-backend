@@ -2,7 +2,7 @@
   "item": "FC-10",
   "sequence": 108,
   "decision": "BD120",
-  "status": "SOURCE_BUILT_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "deliverables": [
     "FC-10-D02",
     "FC-10-D03",
@@ -91,7 +91,7 @@
     {
       "repository": "FE",
       "path": "js/bpay-next-case-pause.js",
-      "sha256": "13fe962671b3cd1aa2af07e258b380e43f18b3aece0c4e1a5094d85226a198a8"
+      "sha256": "194471fc32e43fdb63cf97c0cbe7bced7643fe8b0573e1767f2a748af24e1be0"
     },
     {
       "repository": "FE",
@@ -131,8 +131,10 @@
     "local": "Changed-only managed solePG17 load,10exactinstalledbody/config/ACLmatches,2immutabletables/4guards/3pointindices, existingGeneral/CandidateDO PASS",
     "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; membershipdelta0",
     "contract": "047dbf643a0ad905204d166eea243dcd0671f6b8b5ebb6c7caf1ad811b4ed150 export/seal/coupling PASS",
-    "a4": "33finalactualPNG, fixedlocalGETsamples, reviewerfinalpending",
+    "a4": "IndependentA4APPROVED36actualPNG; fullpolicy/designadjacentcomparison/controlpurpose ineachscreenreview. Allfindingsfixed.",
     "joined": "AUTHORED_NOT_RUN"
   },
-  "retained": "1939allocation/prepare acceptedstatus/rule/period facts andPAUSEDskip,1509FC16assertion,0904earlyfence,0559Caseprojection, original1536/1910creator and0410funding."
+  "retained": "1939allocation/prepare acceptedstatus/rule/period facts andPAUSEDskip,1509FC16assertion,0904earlyfence,0559Caseprojection, original1536/1910creator and0410funding.",
+  "implementationCommit": "2e773a570d0620366001044eb4940ee95b4894f9",
+  "frontendCommit": "1f58e2d96fc13c86d23050e7c75d23034e4db5f2"
 }

@@ -120,4 +120,3 @@ This folder's final actual PNGs and minimal replies/requests:
 | FC10-unknown-protection-phone-dark.png | 1547ae824c8e0330aae2d7108b0ab81b3e82c89b85da95a1bd45d94358d1fba1 |
 
 All12 dark/device-light PNG pairs are byte-identical. Item16 was manual; item25 and readerAdditions within26 are N/A by owner. Other N/A rows are absent list/table/tick/Create Draft capabilities. Roles/focus/journal guards are source observations, not an unperformed joined interaction pass.
-

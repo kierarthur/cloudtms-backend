@@ -123,4 +123,3 @@ This folder's final actual PNGs and minimal replies/requests:
 | FC10-unfunded-phone-dark.png | 2120b8b8d8f02bc46ca294be375ee198d9e94dd5930649c121d692e0b284c316 |
 
 All12 dark/device-light PNG pairs are byte-identical. Item16 was manual; item25 and readerAdditions within26 are N/A by owner. Other N/A rows are absent list/table/tick/Create Draft capabilities. Roles/focus/journal guards are source observations, not an unperformed joined interaction pass.
-
