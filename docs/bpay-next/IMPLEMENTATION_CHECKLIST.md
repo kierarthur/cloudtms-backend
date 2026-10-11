@@ -3409,7 +3409,7 @@ SP20 ITEM/D01–D03 BUILT/REVIEWED with exact implementation 71c3baf05725be5a9ed
 
 ## WB-39 — Payment Advances / Snoozes: Timesheet snooze reader, indefinite management, finance-case snooze actions
 
-Seq 116; Snooze/Hold · WB-H; reviewer R2; current requested-feature status MISSING.
+Seq 116; Snooze/Hold · WB-H; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Supported case pairing and explicit credit owner gap; FC02 sole renderer dependency.
 
@@ -3417,7 +3417,7 @@ Dependencies: WB-36, WB-38, FC-01, F-16; successor positions: none. Design note:
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-39-D05 | SCREEN: bpay-next-snooze-actions handler module consumed by FC-02 | MISSING | Actual allowed kind/action/version pairing, sole FC02 renderer; Q-CREDIT-SNOOZE is only scope approval for the unsupported RQ074 Credit feature promise; supported legacy kinds remain implemented normally. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-39-D05 | SCREEN: bpay-next-snooze-actions handler module consumed by FC-02 | BUILT_REVIEWED | Actual allowed kind/action/version pairing, sole FC02 renderer; Q-CREDIT-SNOOZE is only scope approval for the unsupported RQ074 Credit feature promise; supported legacy kinds remain implemented normally. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3432,6 +3432,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
 **Later in-app acceptance — not run:**
 
 An indefinite snooze on Jane Doe's Tuesday segment (shift) at Client X, week ending 11/10/2026, appears in FC-02's table as "Jane Doe · Client X · w/e 11/10/2026 · Tue 06/10/2026" with Manage and Unsnooze (RQ-072, RQ-075). Unsnoozing asks for confirmation and the segment returns to Ready (RQ-069). A Payment Advance case row offers Snooze with a date or indefinitely; an overpayment row offers no separate snooze button and its deferral is the FC-10 pause (RQ-074).
+
+WB39 ITEM/D05 BUILT/REVIEWED; BE906740cf5387af56a924fe60195832b443c4a75b; FEe8c0fe8afdb46788f2ca9325a5fad9d3243f7472; design/WB-39-completion.md; design/WB-39-successor-provenance.json; design/WB-39-current-owner-catalogue.json; screen-designs/SCR-34/review.md; reviews/WB-39-reader-review.md; reviews/WB-39-transport-review.md; design/WB-39-sort-design-review.md; screen-designs/SCR-34/review.md. Whole 98/288 BUILT/REVIEWED. NextFC02seq117. All normalchecks/source reviews/actualA4 PASS; joined/businessacceptance AUTHORED_NOT_RUN.
 
 ## FC-02 — Payment Advances / Snoozes screen under NEXT
 

@@ -25,5 +25,7 @@
     "design": "design/WB-39-sort-design-review.md",
     "screen": "screen-designs/SCR-34/review.md"
   },
-  "acceptance": "AUTHORED_NOT_RUN"
+  "acceptance": "AUTHORED_NOT_RUN",
+  "implementationCommit": "906740cf5387af56a924fe60195832b443c4a75b",
+  "status": "BUILT_REVIEWED"
 }
