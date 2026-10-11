@@ -1,0 +1,55 @@
+{
+  "item": "WB-40",
+  "sequence": 76,
+  "status": "BUILT_REVIEWED",
+  "exactDeliverables": [
+    "WB-40-D08",
+    "WB-40-D09",
+    "WB-40-D10"
+  ],
+  "builderDecisions": [
+    "BD085"
+  ],
+  "sourceFiles": {
+    "supabase/migrations/11102026_0426_banking_pay_next_pay_hold_control_fields.sql": "3bbe10c7fc86b1aaf5da291f75aa3bd4ab340140a81bdce34d4d7581458f3fb0",
+    "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql": "aeedd544d3e1a89d4cc5802e8304e0826b4d0044d1ea43bcfb52b5b3b6ae2de9",
+    "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql": "055b9c2fe70b085e7122dde2ef205da89cc0c2e96ffe6f2a48044b410f84f663",
+    "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql": "aec4c904cee22e748ea1ab3006e8cfdbf50bcdb9dd567b1fb1b2bc9da7391b92"
+  },
+  "retainedCallers": {
+    "broker/src/index.js": "16fb561bbc41aeb1f317d3fa8b52936440337214d86a52d0f8a730fa5c791af6",
+    "broker/src/bpay-next-legacy-fence.js": "6a2e19e3ed429b653c081a3210afaa05b56f68263681ad9c647c50868e485b74",
+    "../bpay-next-build-frontend-20261009/js/main.js": "a65011bef9bb78bb83e4b8e2ab7481690dd724c83ef6b3716b79ff6c11292915",
+    "../bpay-next-build-frontend-20261009/js/bpay-next-workbench.js": "56bf0028a50ae47e2a1a301167d76b01eeb093e46fd89f0c7482d20ae3e20abb"
+  },
+  "predecessors": {
+    "classifier": "10102026_1946",
+    "choiceGuard": "10102026_1236",
+    "create": "11102026_0005",
+    "appendSkip": "10102026_1832",
+    "refreshWrapper": "10102026_1438"
+  },
+  "checks": {
+    "dbCheck": {
+      "migrations": 336,
+      "repeatables": 882,
+      "status": "PASS_BEFORE_LOAD"
+    },
+    "localPG17": "ONE_MIGRATION_SIX_REPEATABLE_CLOSURES_COMPILED",
+    "syntax": "PASS",
+    "sourceGates": "PASS",
+    "seal": "129cb378690580aed31d2c95758492b18bbccb8bc38fb9947b4b6cae284e3265",
+    "coupling": "PASS",
+    "publicDefiners": 835,
+    "serviceMissing": 76,
+    "browserExecutable": 0,
+    "catalogueHash": "d5226315e5b17afc9e5a588a432b73ca"
+  },
+  "reviews": [
+    "reviews/WB-40-database-review.md",
+    "reviews/WB-40-retained-caller-review.md"
+  ],
+  "application": "AUTHORED_NOT_RUN",
+  "installation": "NOT_RUN",
+  "backendCommit": null
+}

@@ -1335,6 +1335,10 @@
       "sha256": "85fe90cab93c899cd54115be8cbb008e3b342ade77ef743bc357bf9ab91e0224"
     },
     {
+      "path": "supabase/migrations/11102026_0426_banking_pay_next_pay_hold_control_fields.sql",
+      "sha256": "3bbe10c7fc86b1aaf5da291f75aa3bd4ab340140a81bdce34d4d7581458f3fb0"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

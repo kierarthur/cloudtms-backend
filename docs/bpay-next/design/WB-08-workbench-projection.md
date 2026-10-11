@@ -202,3 +202,5 @@ classification line; a present current line's NULL tax/date stays NULL.
 Final apply-position hook remains at WB-06's explicit1430 master-chain turn.
 WB-02 adds the actual origin-WAIT transition refresh after this item. WB-44 owns
 real seed/metadata continuation; D12/whole ITEM remain open until that join.
+
+WB-40 sequence76 classifier successor0426 retains final1946 core and1438 wrapper. The actual booking/current Timesheet/current TSFIN join supplies pay_hold and pay_hold_reason. Priority40 PAY_ON_HOLD applies only to new AVAILABLE/ZERO offers, below missing data/approval/Processing and before query/snooze. Missing canonical current row during rotation blocks that new offer at priority15 DATA_UNAVAILABLE. Both branches act after the original v_base capture: accepted Draft, H/R/reserved portions and Case collection behavior retain their native facts and classification. No later live hold enters PIN/capture. Named private trigger serializes Candidate control then Work, advances financial_view_revision and delegates to the original wrapper/ORIGIN Processing barrier. BD085 records this narrow precedence and control boundary.

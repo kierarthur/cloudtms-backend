@@ -10783,7 +10783,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e799e1e6701c26209481b942109fa688c74e3dd7f6cc8f03f47055cd90f072af"
+      "definition_sha256": "a5bb0853f83ab58db782657198f7fbf5f766fe5f5f99e25baf114d85af52a298"
     },
     {
       "acl": [
@@ -12075,7 +12075,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "767e491dba9f439c6da15f2cca9caa25e29c219a46d03f196a779790c0de43e0"
+      "definition_sha256": "ff4a016134020d71453be045a4fa600e25fba2080ea36b72721be221c61a9d3f"
     },
     {
       "acl": [
@@ -12960,6 +12960,25 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "2365dab3cfb9802c84040d13c0f1630d7e3ac694dbcd7a0b001cdf982281bac3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_pay_hold_control_trigger_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "39638c7358b3a9b3019032dd00b19a37fe05af3a4377d57dce882e4e999d6325"
     },
     {
       "acl": [
@@ -15772,7 +15791,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "633e8755202b67f5b556b701ea16da30d66ff2e6b00c05c371556e89e13aaea2"
+      "definition_sha256": "fa8325c69263f6aef0c6f6783315c718897fefcd03356b4375873009c223f012"
     },
     {
       "acl": [
@@ -16486,7 +16505,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "9bd0278a4e29467c30d54828ad9cc626f2111fe8024cfe6ce3839ec37bc3c7b0"
+      "definition_sha256": "3d8c31c724c4db31a4337c54113ba1c3d649420205dd1b6c656569f718a4480a"
     },
     {
       "acl": [
@@ -56753,6 +56772,13 @@
       "definition": "CREATE TRIGGER bpay_expense_classification_ts_before_v1 BEFORE INSERT OR UPDATE OF booking_id, contract_id, week_ending_date, sheet_scope, line_type, is_adjustment, settings_authority_json, settings_authority_version, settings_authority_resolved_at ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_expense_classification_ts_v1()"
     },
     {
+      "name": "bpay_next_pay_hold_timesheet_control_v1",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_pay_hold_timesheet_control_v1 AFTER INSERT OR UPDATE OF is_current, booking_id, timesheet_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private.bpay_next_pay_hold_control_trigger_v1()"
+    },
+    {
       "name": "bpay_source_timesheet_family_gate_v1",
       "table": "timesheets",
       "schema": "public",
@@ -56912,6 +56938,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_ordinary_authorisation_v1 AFTER INSERT OR UPDATE OF authorised_at_utc ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_next_ordinary_authorisation_trigger_v1()"
+    },
+    {
+      "name": "bpay_next_pay_hold_financial_control_v1",
+      "table": "timesheets_financials",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_pay_hold_financial_control_v1 AFTER INSERT OR UPDATE OF is_current, timesheet_id, pay_on_hold, pay_on_hold_reason ON timesheets_financials FOR EACH ROW EXECUTE FUNCTION private.bpay_next_pay_hold_control_trigger_v1()"
     },
     {
       "name": "candidate_expense_financial_component_sync",
@@ -112768,6 +112801,54 @@
           "generated": ""
         },
         {
+          "name": "pay_hold",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_changed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_control_version",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_financial_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "updated_at_utc",
           "type": "timestamp with time zone",
           "default": "transaction_timestamp()",
@@ -112938,6 +113019,14 @@
           "definition": "UNIQUE (original_timesheet_id)"
         },
         {
+          "name": "bpay_next_work_pay_hold_control_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pay_hold_control_version >= 0)"
+        },
+        {
           "name": "bpay_next_work_pkey",
           "type": "p",
           "deferred": false,
@@ -113027,6 +113116,54 @@
           "default": "0",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_changed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_control_version",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_financial_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "pay_hold_reason",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -113138,6 +113275,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (page_count >= 0)"
+        },
+        {
+          "name": "bpay_next_work_choice_pay_hold_control_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (pay_hold_control_version >= 0)"
         },
         {
           "name": "bpay_next_work_choice_pkey",

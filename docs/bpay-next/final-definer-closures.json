@@ -5155,21 +5155,23 @@
     },
     {
       "signature": "private.bpay_next_work_choice_guard_v1()",
-      "finalRoot": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
+        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
+        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
         "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql",
         "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0570_banking_pay_next_component_selection_v1.sql",
-        "supabase/repeatable/10102026_1100_banking_pay_next_segment_authority_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1236_banking_pay_next_segment_authority_final_v1.sql"
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
       ],
-      "owner": "WB-36 R2 \u00c2\u00a71 exact segment snooze attribution; retain native parent money owners and rule-B snapshots; subsequent master editor merges this1100 winner; 1236 atomic successor preserves exact 1100 definitions and supplies final schema reload",
+      "owner": "WB-40 current native pay-hold control and original accepted choice",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -13672,19 +13674,21 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_work_core_v1(uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
+        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql",
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1438_banking_pay_next_workbench_origin_projection_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_classification_v1.sql"
       ],
-      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged"
+      "owner": "WB-40 current native pay-hold control and original accepted choice"
     },
     {
       "signature": "private.bpay_next_workbench_snooze_due_trigger_v1()",
@@ -13948,34 +13952,39 @@
     },
     {
       "signature": "private.bpay_next_append_work_skip_v1(uuid,uuid,uuid)",
-      "finalRoot": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql"
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
       ],
-      "owner": "WB-21 bounded choice-input support; no monetary or producer authority"
+      "owner": "WB-40 current native pay-hold control and original accepted choice"
     },
     {
       "signature": "private.bpay_next_create_preparation_v1(uuid,uuid,date,jsonb,uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
+        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql",
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql",
         "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-        "supabase/repeatable/10102026_2306_banking_pay_next_actor_selection_memory_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0005_banking_pay_next_component_choice_validation_v1.sql"
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_accepted_choice_v1.sql"
       ],
-      "owner": "WB-25 native component-only selection support; original Create/count owners"
+      "owner": "WB-40 current native pay-hold control and original accepted choice"
     },
     {
       "signature": "private.bpay_next_materialise_choice_segments_v1(uuid,uuid)",
@@ -14363,6 +14372,19 @@
         "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_v1.sql"
       ],
       "owner": "WB-38 shared snooze controls and bounded native expense receipts"
+    },
+    {
+      "signature": "private.bpay_next_pay_hold_control_trigger_v1()",
+      "finalRoot": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql",
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql"
+      ],
+      "predecessors": [],
+      "finalClosures": [
+        "supabase/repeatable/11102026_0426_banking_pay_next_pay_hold_controls_v1.sql"
+      ],
+      "owner": "WB-40 current native pay-hold control and original accepted choice"
     }
   ],
   "editorChains": [
