@@ -262,3 +262,7 @@ Public preparation_page0113 ->0708; preparation_intake0559 ->0708. Two private s
 ## DR-08 sequence83 — original-membership expiry projection
 
 Expiry0510 -> DR05/0559 -> DR08/0746 -> FC15 -> CM13a -> CM15. Expiry page/guard are0746; due0520/accept0559/enroll0559/claim0510 remain unchanged. Private progress0708 ->0746; public PAGE0708 reused unchanged. Confirm0559 ->0746 preserves the actual72h/run-lock fence and gives the exact expiry refusal. Shared Case-release0559 ->0746 is a DR05 correction found by DR08: missing RECORD id only. Later merges retain this corrected current parent; no producer or parkedF25 object.
+
+## DR09 sequence85 — separately typed discard / running Candidate release
+
+Current0559/0708/0746 ->0814; ten explicit native row-projection corrections ->0847. See DR-09-successor-provenance.json and final-definer registry for each exact signature. Later DR/FC/CM merges retain the current physical parent per signature. Shared Case release0746 ->0814, unchanged money kernel; expiry page0746 retained, headerguard0746 ->0814 ->0847, due0520/dispatch0560 ->0814 bounded skip only. No producer or parkedF25 object.

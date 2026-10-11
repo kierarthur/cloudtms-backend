@@ -168,8 +168,16 @@ function dueResult(value, call) {
     return Object.freeze({ run_id: item.run_id, expected_deadline: item.expected_deadline });
   });
   const last = items.at(-1);
-  if (last ? value.cursor_deadline !== last.expected_deadline || value.cursor_run_id !== last.run_id
-    : value.cursor_deadline !== null || value.cursor_run_id !== null) throw new Error();
+  if ((value.cursor_deadline === null) !== (value.cursor_run_id === null)) throw new Error();
+  // SQL visits a finite native due slice before skipping discarded runs. Its
+  // cursor includes those skipped rows, so an empty eligible page can advance.
+  if (value.cursor_run_id === null) { if (last) throw new Error(); }
+  else {
+    if (!uuid(value.cursor_run_id) || !timestampKey(value.cursor_deadline)) throw new Error();
+    const visited = { expected_deadline: value.cursor_deadline, run_id: value.cursor_run_id };
+    if ((last && tupleCompare(last, visited) > 0)
+      || (call.after_run_id !== null && tupleCompare({ expected_deadline: call.after_deadline, run_id: call.after_run_id }, visited) >= 0)) throw new Error();
+  }
   return Object.freeze({ items: Object.freeze(items), cursor_deadline: value.cursor_deadline, cursor_run_id: value.cursor_run_id });
 }
 function receiveResult(value, call) {

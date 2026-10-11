@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 // F-23 source-only release checks. No database, fixture or runtime execution.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +21,30 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  // DR09 finite discard and native release continuation owners.
+  "private.bpay_next_preparation_discard_fenced_v1(uuid,uuid)",
+  "private.bpay_next_finish_discard_member_v1(uuid)",
+  "private.bpay_next_accept_preparation_discard_v1(uuid,uuid,uuid,bigint,text)",
+  "private.bpay_next_enroll_preparation_discard_one_v1(uuid)",
+  "private.bpay_next_claim_preparation_discard_job_v1(uuid,integer)",
+  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+  "private.bpay_next_discarded_work_collection_scope_v1(uuid,uuid,uuid)",
+  "private.bpay_next_reconcile_discarded_work_collection_v1(uuid,uuid)",
+  "private.bpay_next_discarded_prepare_receipt_v1(uuid)",
+  "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)",
+  "private.bpay_next_work_collection_guard_v1()",
+  "private.bpay_next_preparation_expiry_guard_v1()",
+  "private.bpay_next_preparation_discard_guard_v1()",
+  "private.bpay_next_enroll_one_v1()",
+  "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)",
+  "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
+  "private.bpay_next_confirm_simple_run_v1(uuid,bigint)",
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
+  "public.bpay_next_preparation_expiry_due_v1(timestamp with time zone,uuid,integer)",
+  "private.bpay_next_accept_preparation_expiry_v1(uuid,uuid,uuid,timestamp with time zone,timestamp with time zone)",
+  "public.bpay_next_expiry_dispatch_page_v1(integer)",
+  "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)",
+  "private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)",
   "private.bpay_next_preparation_progress_v1(uuid)",
   "private.bpay_next_preparation_wake_v1(uuid)",
   // DR05 finite native retained-input execution/release support.
@@ -435,6 +460,10 @@ export function assertNextExactNumericTypes(source,file){
 }
 
 export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
+  "private.bpay_next_accept_preparation_discard_v1(uuid,uuid,uuid,bigint,text)",
+  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)",
+  "private.bpay_next_discarded_prepare_receipt_v1(uuid)",
+  "private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)",
   "private.bpay_next_preparation_progress_v1(uuid)",
   "private.bpay_next_preparation_wake_v1(uuid)",
   "private.bpay_next_workbench_kind_page_v1(text,jsonb,jsonb,integer)",
@@ -506,7 +535,7 @@ const TYPED_BREAK_RETURN="returns table ( break_detail_id uuid,break_no integer,
 const TYPED_BREAK_QUERY="select b.id,b.break_no,b.break_start_at,b.break_end_at, b.break_start_local,b.break_end_local,b.break_minutes from";
 // Exact named JSON constructors: per-routine clauses, never a whole-file allowance.
 const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
-  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"],
+  "private.bpay_next_preparation_progress_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',v_run.id,'status',v_run.status, 'actor_display_name',v_actor,'started_at_utc',v_run.created_at_utc,'expires_at_utc',v_run.preparation_expires_at_utc, 'selected_candidates',v_run.selected_candidate_count::text,'ready',v_ready::text,'review',v_review::text, 'pending',v_pending::text,'preparing',v_preparing::text,'removed',v_removed::text, 'enrolled_candidates',v_enrolled::text,'enrolment_complete',v_enrolment_complete, 'enrolment_failed',v_enrolment_failed,'safe_to_close',true, 'review_revision',v_run.review_revision::text,'discard_phase',v_discard.status, 'discard_actor_display_name',v_discard_actor,'discarded_at_utc',v_discard.finished_at_utc, 'discard_removed_candidates',coalesce(v_discard.removed_candidate_count,0)::text, 'discard_already_removed_candidates',coalesce(v_discard.already_removed_candidate_count,0)::text, 'discard_blocked_candidates',coalesce(v_discard.blocked_candidate_count,0)::text, 'expired_at_utc',case when v_run.status='CANCELLED' and v_run.confirmed_at_utc is null and v_expiry.status='EXPIRED' and v_expiry.completed_candidate_count=v_expiry.expected_candidate_count and v_expiry.enrolled_candidate_count=v_expiry.expected_candidate_count then v_expiry.finished_at_utc else null end)"],
   "private.bpay_next_preparation_wake_v1(uuid)": ["pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',false,'throttled',true)", "pg_catalog.jsonb_build_object('run_id',p_run_id,'accepted',true,'throttled',false)"],
 
   "private.bpay_next_advice_work_v1(uuid)": [
@@ -560,7 +589,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object( 'job_id',p_job_id,'job_kind',p_job_kind,'owner_epoch',v_job.owner_epoch::text, 'lease_until_utc',v_lease_until,'done',v_job.status='DONE')",
     "pg_catalog.jsonb_build_object('replay',v_result->'replay')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited')",
-    "pg_catalog.jsonb_build_object('phase','EXPIRED', 'cursor',v_result->>'cursor','work_cursor',v_result->>'work_cursor', 'component_cursor',v_result->>'component_cursor', 'run_worker_id',v_result->>'run_worker_id','worker_status',v_result->>'worker_status', 'issue_code',v_result->>'issue_code','issue_work_id',v_result->>'issue_work_id', 'rows_visited',v_result->>'rows_visited')",
+    "pg_catalog.jsonb_build_object('phase',case when v_discarded_prepare then 'DISCARDED' else 'EXPIRED' end, 'cursor',v_result->>'cursor','work_cursor',v_result->>'work_cursor', 'component_cursor',v_result->>'component_cursor', 'run_worker_id',v_result->>'run_worker_id','worker_status',v_result->>'worker_status', 'issue_code',v_result->>'issue_code','issue_work_id',v_result->>'issue_work_id', 'rows_visited',v_result->>'rows_visited')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',case when v_job.phase in ('NEW','PINNING','FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE','WORKER_RELEASE_WORK','WORKER_RELEASE_CASE','WORKER_RELEASE_FINAL') then v_job.cursor_key else null end, 'work_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_work_cursor else null end, 'component_cursor',case when v_job.phase in ('RESERVE','ALLOCATE') then v_job.position_component_cursor else null end, 'run_worker_id',v_worker.id,'worker_status',v_worker.status, 'issue_code',v_worker.review_issue_code,'issue_work_id',v_worker.review_issue_work_id, 'rows_visited',v_result->>'rows_visited')",
     "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','projection_id',v_result->>'projection_id')",
     "pg_catalog.jsonb_build_object( 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'run_worker_id',v_result->>'run_worker_id','issue_code',v_result->>'issue_code')",
@@ -574,7 +603,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'work_released',v_result->>'work_released','case_holds_released',v_result->>'case_holds_released', 'run_worker_id',v_result->>'run_worker_id')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id','issue_code',v_result->>'issue_code')"
-],
+  ],
   "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)": [
     "jsonb_build_object('rows',v_rows,'complete',not(v_more or v_count=p_limit))"
   ],
@@ -601,7 +630,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text)",
     "pg_catalog.jsonb_build_object('work_id',c.work_id,'expected_revision_id',c.expected_revision_id, 'selection_mode',c.selection_mode,'selection_state',c.selection_state,'page_count',c.page_count::text,'component_count',c.component_count::text)",
     "pg_catalog.jsonb_build_object('selection_no',c.selection_no::text, 'approved_line_id',c.approved_line_id,'expected_revision_id',c.expected_revision_id,'component_key',c.component_key)",
-    "pg_catalog.jsonb_build_object('run_worker_id',w.run_worker_id,'candidate_id',w.candidate_id, 'worker_status',w.worker_status,'frozen_ex_vat',w.frozen_ex_vat::text,'frozen_vat',w.frozen_vat::text, 'frozen_inc_vat',w.frozen_inc_vat::text,'review_issue_code',w.review_issue_code)",
+    "pg_catalog.jsonb_build_object('run_worker_id',w.run_worker_id,'candidate_id',w.candidate_id, 'worker_status',w.worker_status,'frozen_ex_vat',w.frozen_ex_vat::text,'frozen_vat',w.frozen_vat::text, 'frozen_inc_vat',w.frozen_inc_vat::text,'review_issue_code',w.review_issue_code, 'discard_outcome',x.outcome,'discard_blocked_code',x.blocked_code)",
     "pg_catalog.jsonb_build_object('run_work_id',w.run_work_id,'work_id',w.work_id,'original_timesheet_id',w.original_timesheet_id, 'captured_revision_id',w.captured_revision_id,'current_revision_id',w.current_revision_id,'newer_approval_available',w.newer_approval_available)",
     "pg_catalog.jsonb_build_object('run_line_id',l.run_line_id,'line_no',l.line_no::text, 'original_timesheet_id',l.original_timesheet_id,'captured_revision_id',l.captured_revision_id,'component_key',l.component_key, 'component_kind',l.component_kind,'work_date',l.work_date,'source_pay_channel',l.source_pay_channel,'target_pay_channel',l.target_pay_channel, 'source_consumed_ex_vat',l.source_consumed_ex_vat::text,'frozen_ex_vat',l.frozen_ex_vat::text,'frozen_vat',l.frozen_vat::text,'frozen_inc_vat',l.frozen_inc_vat::text)",
     "pg_catalog.jsonb_build_object('shift_detail_id',s.id,'detail_no',s.detail_no::text,'work_date',s.work_date, 'shift_start_at',s.shift_start_at,'shift_end_at',s.shift_end_at,'shift_start_local',s.shift_start_local,'shift_end_local',s.shift_end_local, 'shift_overnight',s.shift_overnight,'submitted_minutes',s.submitted_minutes::text,'approved_minutes',s.approved_minutes::text, 'approved_hours',s.approved_hours::text,'detail_label',s.detail_label,'segment_pay_ex_vat',s.segment_pay_ex_vat::text,'pay_excluded',s.pay_excluded, 'hours_day',s.hours_day::text,'hours_night',s.hours_night::text,'hours_sat',s.hours_sat::text,'hours_sun',s.hours_sun::text,'hours_bh',s.hours_bh::text, 'segment_key',s.segment_key,'approved_segment_id',sg.id,'job_title',wr.job_title,'band_label',wr.band_label)",
@@ -1108,6 +1137,169 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
   "private.bpay_next_worker_execution_guard_v1()": []
 });
 
+// DR09 exact reviewed native call edges; no dynamic closure admission.
+const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_accept_preparation_discard_v1(uuid,uuid,uuid,bigint,text)": [
+    "pg_catalog.btrim",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.hashtextextended",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.octet_length",
+    "pg_catalog.pg_advisory_xact_lock",
+    "private.bpay_next_receive_command_v1"
+  ],
+  "private.bpay_next_enroll_preparation_discard_one_v1(uuid)": [
+    "pg_catalog.clock_timestamp",
+    "private.bpay_next_preparation_discard_fenced_v1",
+    "private.bpay_next_worker_release_complete_v1"
+  ],
+  "private.bpay_next_claim_preparation_discard_job_v1(uuid,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.gen_random_uuid",
+    "pg_catalog.make_interval"
+  ],
+  "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": [
+    "array_agg",
+    "cardinality",
+    "max",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "private.bpay_next_exclude_preparation_week_v1",
+    "private.bpay_next_finish_discard_member_v1",
+    "private.bpay_next_release_prepare_case_hold_v1",
+    "private.bpay_next_release_prepare_work_hold_v1",
+    "private.bpay_next_work_wait_state_v1",
+    "private.bpay_next_workbench_queue_origin_v1",
+    "private.bpay_next_workbench_refresh_many_v1",
+    "private.bpay_next_worker_release_complete_v1",
+    "unnest"
+  ],
+  "private.bpay_next_discarded_work_collection_scope_v1(uuid,uuid,uuid)": [
+    "pg_catalog.clock_timestamp",
+    "private.bpay_next_prepare_job_run_v1"
+  ],
+  "private.bpay_next_reconcile_discarded_work_collection_v1(uuid,uuid)": [
+    "private.bpay_next_discarded_work_collection_scope_v1",
+    "private.bpay_next_reconcile_work_collection_v1"
+  ],
+  "private.bpay_next_discarded_prepare_receipt_v1(uuid)": [
+    "pg_catalog.jsonb_build_object",
+    "private.bpay_next_preparation_discard_fenced_v1",
+    "private.bpay_next_prepare_job_run_v1"
+  ],
+  "private.bpay_next_release_prepare_case_hold_v1(uuid,uuid,timestamp with time zone)": [
+    "private.bpay_next_reconcile_discarded_work_collection_v1"
+  ],
+  "private.bpay_next_reconcile_work_collection_v1(uuid,uuid,text,uuid)": [
+    "private.bpay_next_discarded_work_collection_scope_v1"
+  ],
+  "private.bpay_next_work_collection_guard_v1()": [
+    "private.bpay_next_discarded_work_collection_scope_v1"
+  ],
+  "private.bpay_next_preparation_expiry_guard_v1()": [
+    "unnest"
+  ],
+  "private.bpay_next_preparation_discard_guard_v1()": [
+    "pg_catalog.to_jsonb",
+    "private.bpay_next_preparation_discard_fenced_v1",
+    "private.bpay_next_worker_release_complete_v1",
+    "unnest"
+  ],
+  "private.bpay_next_enroll_one_v1()": [
+    "private.bpay_next_enroll_preparation_discard_one_v1",
+    "private.bpay_next_preparation_discard_fenced_v1"
+  ],
+  "private.bpay_next_enroll_worker_action_v1(uuid)": [
+    "private.bpay_next_preparation_discard_fenced_v1"
+  ],
+  "private.bpay_next_worker_action_receipt_v1(uuid,uuid,bigint,boolean)": [
+    "private.bpay_next_preparation_discard_fenced_v1"
+  ],
+  "public.bpay_next_preparation_intake_v1(uuid,text,jsonb)": [
+    "cardinality",
+    "pg_catalog.jsonb_object_keys",
+    "private.bpay_next_accept_preparation_discard_v1"
+  ],
+  "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)": [
+    "private.bpay_next_claim_preparation_discard_job_v1",
+    "private.bpay_next_discard_preparation_worker_page_v1",
+    "private.bpay_next_discarded_prepare_receipt_v1",
+    "private.bpay_next_preparation_discard_fenced_v1"
+  ],
+  "private.bpay_next_preparation_progress_v1(uuid)": [
+    "left"
+  ],
+  "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "array",
+    "array_remove",
+    "jsonb_agg",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.octet_length",
+    "private.bpay_next_channel_drafts_page_v1",
+    "private.bpay_next_channel_status_page_v1",
+    "private.bpay_next_channel_worker_page_v1",
+    "private.bpay_next_choice_inputs_page_v1",
+    "private.bpay_next_current_case_component_page_v1",
+    "private.bpay_next_current_case_page_v1",
+    "private.bpay_next_current_stored_credit_page_v1",
+    "private.bpay_next_current_work_page_v1",
+    "private.bpay_next_preparation_args_v1",
+    "private.bpay_next_preparation_authority_v1",
+    "private.bpay_next_return_cash_page_v1",
+    "private.bpay_next_selection_page_authority_v1",
+    "private.bpay_next_simple_review_line_page_v1",
+    "private.bpay_next_simple_review_worker_page_v1",
+    "private.bpay_next_simple_revision_comparison_page_v1",
+    "private.bpay_next_worker_status_page_v1",
+    "substring"
+  ],
+  "public.bpay_next_preparation_expiry_due_v1(timestamp with time zone,uuid,integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.current_setting",
+    "pg_catalog.isfinite",
+    "pg_catalog.jsonb_build_array",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.to_char"
+  ],
+  "public.bpay_next_expiry_dispatch_page_v1(integer)": [
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.current_setting",
+    "pg_catalog.jsonb_array_elements",
+    "pg_catalog.jsonb_build_array",
+    "pg_catalog.jsonb_build_object",
+    "pg_catalog.to_char",
+    "public.bpay_next_preparation_expiry_due_v1"
+  ],
+  "private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)": [
+    "array_agg",
+    "max",
+    "pg_catalog.clock_timestamp",
+    "pg_catalog.jsonb_build_object",
+    "private.bpay_next_prepare_job_active_v1",
+    "private.bpay_next_review_simple_run_v1",
+    "private.bpay_next_work_wait_state_v1",
+    "private.bpay_next_workbench_queue_origin_v1",
+    "private.bpay_next_workbench_refresh_many_v1",
+    "unnest"
+  ],
+  "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": [
+    "private.bpay_next_prepare_job_active_v1"
+  ],
+  "private.bpay_next_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)": [
+    "array_agg",
+    "cardinality",
+    "private.bpay_next_work_wait_state_v1",
+    "private.bpay_next_workbench_queue_origin_v1",
+    "unnest"
+  ],
+  "private.bpay_next_worker_action_guard_v1()": [
+    "unnest"
+  ],
+  "private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)": [
+    "private.bpay_next_project_worker_release_page_v1"
+  ]
+});
+
 export function assertRoutineHistoryPoints(source,file,signature){
   const parts=executableParts(source,file).filter(part=>part.signature===signature);
   if(parts.length!==1||parts[0].unclassified)throw Error(`BPAY_NEXT_ROUTINE_WORK_BODY_MISSING: ${signature}`);
@@ -1115,7 +1307,7 @@ export function assertRoutineHistoryPoints(source,file,signature){
   const tokens=scanManagedSql(body).statements.flatMap(row=>row.tokens).join(' ').toLowerCase();
   if(/\b(?:bpay_next_payment_history_page_v1|audit_events_list|pay_finance_case_audit_actor_index)\s*\(/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_READER: ${signature}`);
   if(/\bexecute\b/.test(tokens))throw Error(`BPAY_NEXT_ROUTINE_HISTORY_DYNAMIC: ${signature}`);
-  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[])]);
+  const approved=new Set([...(ROUTINE_WORK_CALLEES[signature]??[]),...(DR05_ROUTINE_WORK_CALLEES[signature]??[]),...(DR09_ROUTINE_WORK_CALLEES[signature]??[])]);
   const native=new Set(['and','any','as','bool_and','btrim','coalesce','conflict','convert_to','count','decode',
     'else','elsif','encode','exists','extract','from','greatest','if','in','jsonb_array_elements',
     'jsonb_array_length','jsonb_build_array','jsonb_build_object','jsonb_typeof','least','materialized',
@@ -1137,6 +1329,10 @@ export function assertRoutineHistoryPoints(source,file,signature){
     "select 1 from private.bpay_next_case_event e where e.id=v_rule.original_funding_event_id and e.case_id=v_case.id and e.event_kind='funded' and e.occurred_at_utc=v_rule.original_funded_at_utc)");
   if(signature.startsWith('private.bpay_next_source_book_seed_proof_v1('))exact.push(
     'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_seed_effect_id;');
+  if(signature==='private.bpay_next_work_collection_guard_v1()')exact.push(
+    'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=new.original_effect_id;',
+    "exists(select 1 from private.bpay_next_financial_effect e join private.bpay_next_outcome_request r on r.command_id=j.command_id where e.id=new.last_effect_id and e.operation_id=j.command_id and e.effect_kind='payroll_settled' and e.work_id=new.work_id and e.component_key=new.component_key and e.candidate_id=new.candidate_id and e.original_transfer_id=r.transfer_id and e.source_disposition_ex_vat>0)",
+    "exists(select 1 from private.bpay_next_financial_effect e join private.bpay_next_case_event ce on ce.id=e.operation_item_id and ce.operation_id=j.command_id join private.bpay_next_run_case_instruction i on i.id=ce.instruction_id and i.work_collection_id=new.id join private.bpay_next_case_hold h on h.id=ce.operation_item_id and h.status='realised' join private.bpay_next_case_capacity_use u on u.case_hold_id=h.id and u.status='realised' and u.realisation_event_id=ce.id join private.bpay_next_outcome_request r on r.command_id=j.command_id and r.transfer_id=ce.original_transfer_id where e.id=new.last_effect_id and e.operation_id=j.command_id and e.effect_kind='work_collection_recovered' and ce.event_kind='recovered' and ce.case_id=new.case_id and ce.case_component_id=new.case_component_id and e.work_id=new.work_id and e.component_key=new.component_key and e.candidate_id=new.candidate_id and e.original_transfer_id=ce.original_transfer_id and (e.source_disposition_ex_vat,e.target_amount_ex_vat,e.target_amount_vat,e.target_amount_inc_vat) is not distinct from (-ce.source_amount_ex_vat,-ce.target_amount_ex_vat,-ce.target_amount_vat,-ce.target_amount_inc_vat))");
   if(signature.startsWith('private.bpay_next_reconcile_work_collection_v1('))exact.push(
     'select e.* into strict v_effect from private.bpay_next_financial_effect e where e.id=p_effect_id;',
     `select 1 from private.bpay_next_work_collection b
@@ -1765,6 +1961,11 @@ export function verifyBpayNextSourceGates(){
   }
 
   for(const file of productFiles)if(/\.sql$/i.test(file)&&/^supabase\/(?:seed|seeds|verification)\//.test(file))sources.add(file);
+  // DR09 installed predecessor row projections: exact bytes and finite statements only.
+  const discardRowFile="supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",discardRowSource=read(discardRowFile);
+  if(createHash('sha256').update(discardRowSource).digest('hex')!=="29f3099ebfb8a7e11d8c23a8996c5351eb9330316d8bdb6fd6d3a5136d3f379c")throw Error('BPAY_NEXT_DISCARD_RETAINED_PROJECTION_CHANGED');
+  const discardRowHazards=new Map(baselineHazards);
+  for(const key of ["[\"private.bpay_next_enroll_preparation_discard_one_v1(uuid)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=v_run_id for share nowait;\"]","[\"private.bpay_next_enroll_preparation_discard_one_v1(uuid)\",\"ROWTYPE_SELECT:V_REQUEST:PRIVATE . BPAY_NEXT_PREPARATION_DISCARD_REQUEST\",\"select * into strict v_request from private.bpay_next_preparation_discard_request where command_id=p_command_id for update;\"]","[\"private.bpay_next_enroll_preparation_discard_one_v1(uuid)\",\"ROWTYPE_SELECT:V_COMMAND:PRIVATE . BPAY_NEXT_COMMAND\",\"select * into strict v_command from private.bpay_next_command where id=p_command_id for update;\"]","[\"private.bpay_next_enroll_preparation_discard_one_v1(uuid)\",\"ROWTYPE_SELECT:V_WORKER:PRIVATE . BPAY_NEXT_RUN_WORKER\",\"select * into v_worker from private.bpay_next_run_worker where run_id=v_run_id and candidate_id=v_candidate;\"]","[\"private.bpay_next_claim_preparation_discard_job_v1(uuid,integer)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=v_run_id for update;\"]","[\"private.bpay_next_claim_preparation_discard_job_v1(uuid,integer)\",\"ROWTYPE_SELECT:V_JOB:PRIVATE . BPAY_NEXT_JOB\",\"select * into strict v_job from private.bpay_next_job where id=p_job_id for update;\"]","[\"private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=v_run_id for update;\"]","[\"private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)\",\"ROWTYPE_SELECT:V_CONTROL:PRIVATE . BPAY_NEXT_WORKER_CONTROL\",\"select * into strict v_control from private.bpay_next_worker_control where candidate_id=v_candidate for update;\"]","[\"private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)\",\"ROWTYPE_SELECT:V_JOB:PRIVATE . BPAY_NEXT_JOB\",\"select * into strict v_job from private.bpay_next_job where id=p_job_id for update;\"]","[\"private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)\",\"ROWTYPE_SELECT:V_BINDING:PRIVATE . BPAY_NEXT_PREPARATION_DISCARD_WORKER\",\"select * into strict v_binding from private.bpay_next_preparation_discard_worker where job_id=p_job_id for update;\"]","[\"private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)\",\"ROWTYPE_SELECT:V_WORKER:PRIVATE . BPAY_NEXT_RUN_WORKER\",\"select * into strict v_worker from private.bpay_next_run_worker where id=v_binding.run_worker_id for update;\"]","[\"private.bpay_next_discarded_prepare_receipt_v1(uuid)\",\"ROWTYPE_SELECT:V_JOB:PRIVATE . BPAY_NEXT_JOB\",\"select * into strict v_job from private.bpay_next_job where id=p_job_id and job_kind='PREPARE';\"]","[\"private.bpay_next_discarded_prepare_receipt_v1(uuid)\",\"ROWTYPE_SELECT:V_WORKER:PRIVATE . BPAY_NEXT_RUN_WORKER\",\"select 1 from private.bpay_next_worker_reprepare_request x\\n      join private.bpay_next_command c on c.id=x.command_id and c.command_kind='PREPARE' and c.module_epoch=x.module_epoch\\n      join private.bpay_next_run_worker w on w.id=x.run_worker_id and w.run_id=x.run_id and w.candidate_id=x.candidate_id\\n        and w.preparation_revision>=x.target_preparation_revision and w.captured_preparation_revision=x.captured_preparation_revision\\n      join private.bpay_next_job input_job on input_job.id=x.input_prepare_job_id and input_job.command_id=x.original_prepare_command_id\\n        and input_job.candidate_id=x.candidate_id and input_job.module_epoch=x.module_epoch\\n      join private.bpay_next_module_control m on m.id=1 and m.active_owner='NEXT' and m.owner_epoch=x.module_epoch\\n      where x.previous_job_id=p_job_id and x.run_id=v_run.id and x.candidate_id=v_job.candidate_id\\n        and x.module_epoch=v_job.module_epoch and x.initiator_kind='OFFICE' and x.action='RELEASE'\\n        and x.original_prepare_command_id=(select command_id from private.bpay_next_run_command where run_id=v_run.id)) then\\n    select * into strict v_worker from private.bpay_next_run_worker where run_id=v_run.id and candidate_id=v_job.candidate_id;\"]","[\"private.bpay_next_discarded_prepare_receipt_v1(uuid)\",\"ROWTYPE_SELECT:V_WORKER:PRIVATE . BPAY_NEXT_RUN_WORKER\",\"select * into v_worker from private.bpay_next_run_worker where run_id=v_run.id and candidate_id=v_job.candidate_id;\"]","[\"private.bpay_next_discarded_prepare_receipt_v1(uuid)\",\"ROWTYPE_SELECT:V_BINDING:PRIVATE . BPAY_NEXT_PREPARATION_DISCARD_WORKER\",\"select * into v_binding from private.bpay_next_preparation_discard_worker where command_id=v_request.command_id and candidate_id=v_job.candidate_id;\"]","[\"private.bpay_next_preparation_expiry_guard_v1()\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=new.run_id;\"]","[\"private.bpay_next_preparation_expiry_guard_v1()\",\"ROWTYPE_SELECT:V_REQUEST:PRIVATE . BPAY_NEXT_PREPARATION_EXPIRY_REQUEST\",\"select * into strict v_request from private.bpay_next_preparation_expiry_request where command_id=new.command_id;\"]","[\"private.bpay_next_preparation_expiry_guard_v1()\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=new.run_id;\"]","[\"private.bpay_next_preparation_discard_guard_v1()\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=new.run_id;\"]","[\"private.bpay_next_preparation_discard_guard_v1()\",\"ROWTYPE_SELECT:V_REQUEST:PRIVATE . BPAY_NEXT_PREPARATION_DISCARD_REQUEST\",\"select * into strict v_request from private.bpay_next_preparation_discard_request where command_id=new.command_id;\"]","[\"private.bpay_next_preparation_discard_guard_v1()\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=new.run_id;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_COMMAND:PRIVATE . BPAY_NEXT_COMMAND\",\"select * into v_command from private.bpay_next_command\\n    where agency_sequence=v_last+1 for update;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run\\n      where id=v_run_id for share nowait;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n      where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_enroll_one_v1()\",\"ROWTYPE_SELECT:V_MEMBER:PRIVATE . BPAY_NEXT_COMMAND_MEMBER\",\"select * into strict v_member from private.bpay_next_command_member\\n    where command_id=v_command.id and member_no=1;\"]","[\"private.bpay_next_confirm_simple_run_v1(uuid,bigint)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run\\n    where id=p_run_id for update;\"]","[\"private.bpay_next_accept_preparation_expiry_v1(uuid,uuid,uuid,timestamp with time zone,timestamp with time zone)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=p_run_id for update;\"]","[\"private.bpay_next_accept_preparation_expiry_v1(uuid,uuid,uuid,timestamp with time zone,timestamp with time zone)\",\"ROWTYPE_SELECT:V_REQUEST:PRIVATE . BPAY_NEXT_PREPARATION_EXPIRY_REQUEST\",\"select * into v_request from private.bpay_next_preparation_expiry_request where command_id=p_command_id;\"]","[\"private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)\",\"ROWTYPE_SELECT:V_RUN:PRIVATE . BPAY_NEXT_PAY_RUN\",\"select * into strict v_run from private.bpay_next_pay_run where id=v_run_id for update;\"]","[\"private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)\",\"ROWTYPE_SELECT:V_JOB:PRIVATE . BPAY_NEXT_JOB\",\"select * into strict v_job from private.bpay_next_job where id=p_job_id for update;\"]","[\"private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)\",\"ROWTYPE_SELECT:V_BINDING:PRIVATE . BPAY_NEXT_WORKER_REPREPARE_REQUEST\",\"select * into strict v_binding from private.bpay_next_worker_reprepare_request where job_id=p_job_id and action='RELEASE' and status='RUNNING' and stage='PROJECT' for update;\"]","[\"private.bpay_next_project_worker_release_page_v1(uuid,uuid,bigint,text,bigint,integer)\",\"ROWTYPE_SELECT:V_WORKER:PRIVATE . BPAY_NEXT_RUN_WORKER\",\"select * into strict v_worker from private.bpay_next_run_worker where id=v_binding.run_worker_id for update;\"]"])discardRowHazards.set(key,(discardRowHazards.get(key)??0)+1);
   // Installed historical F05 definitions stay immutable. These four exact
   // committed row reads are retained only after their final successor passes.
   const projectionFile='supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql';
@@ -1786,7 +1987,7 @@ export function verifyBpayNextSourceGates(){
   // A third aggregate or a different selected expression gets no allowance.
   const projectionPageFile=routines.get('private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)')?.at(-1)?.physical;
   if(!projectionPageFile)throw Error('BPAY_NEXT_PROJECTION_FINAL_DEFINER_MISSING');
-  const projectionPageFiles=new Set(['supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql',projectionPageFile]);
+  const projectionPageFiles=new Set(['supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql','supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql',discardRowFile,projectionPageFile]);
   for(const file of projectionPageFiles){
     const projectionPageSource=read(file);
     if((sqlWithoutComments(projectionPageSource).match(/\b(?:pg_catalog\s*\.\s*)?(?:min|max)\s*\(\s*p\s*\.\s*selection_no\s*\)/gi)??[]).length!==2
@@ -1805,7 +2006,7 @@ export function verifyBpayNextSourceGates(){
         for(const statement of scanManagedSql(normalized).statements) {
           const text=normalized.slice(statement.start,statement.end);
           const isProjection=routineDefinitions(text,file).includes('private.bpay_next_prepare_projection_page_v1(uuid,uuid,bigint,text,bigint,integer)');
-          assertSpecialConstructs(text,file,baselineHazards,isProjection?projectionMembershipColumns:new Map());
+          assertSpecialConstructs(text,file,file===discardRowFile?discardRowHazards:baselineHazards,isProjection?projectionMembershipColumns:new Map());
         }
       } else assertSpecialConstructs(source,file,file===projectionFile?projectionHazards:baselineHazards);assertFrozenAuthority(source,file,authorityPolicy,baseSources.get(file)??'');}
       catch(error){sourceFailures.push(error.message);}

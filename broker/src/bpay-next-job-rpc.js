@@ -1,7 +1,7 @@
 // Fixed service-only transport. No Office endpoint, discovery, retry or body
 // buffering. The job adapter bounds bytes/deadline and reports uncertainty.
 const KINDS=new Set(['PAYE_NET_ENTRY','TRANSFER_BUILD','CSV_SETTLEMENT',
-  'CSV_RETURN','CASH_REISSUE','SIMPLE_CANCEL','POSITION_APPLY','PREPARE','REISSUE_CANCEL','INTERNAL_SETTLEMENT','PREPARATION_EXPIRY','CASE_CREATE','CASE_WRITE_OFF']);
+  'CSV_RETURN','CASH_REISSUE','SIMPLE_CANCEL','POSITION_APPLY','PREPARE','REISSUE_CANCEL','INTERNAL_SETTLEMENT','PREPARATION_EXPIRY','PREPARATION_DISCARD','CASE_CREATE','CASE_WRITE_OFF']);
 export function createBpayNextFinancialJobRpc({baseUrl,headers,fetchImpl=fetch}) {
   const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_financial_job_v1`);
   if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password) {

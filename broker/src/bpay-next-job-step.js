@@ -26,10 +26,10 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
   requestBytes: 2048, responseBytes: 128 * 1024, timeoutMs: 8000, pageRows: 100
 });
 
-/** @typedef {'PAYE_NET_ENTRY'|'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'CSV_RETURN'|'CASH_REISSUE'|'SIMPLE_CANCEL'|'POSITION_APPLY'|'PREPARE'|'REISSUE_CANCEL'|'INTERNAL_SETTLEMENT'|'PREPARATION_EXPIRY'|'CASE_CREATE'|'CASE_WRITE_OFF'} FinancialJobKind */
+/** @typedef {'PAYE_NET_ENTRY'|'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'CSV_RETURN'|'CASH_REISSUE'|'SIMPLE_CANCEL'|'POSITION_APPLY'|'PREPARE'|'REISSUE_CANCEL'|'INTERNAL_SETTLEMENT'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD'|'CASE_CREATE'|'CASE_WRITE_OFF'} FinancialJobKind */
 /** @typedef {{action:'CLAIM',job_id:string,job_kind:FinancialJobKind,lease_seconds:number}} FinancialJobClaim */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY'|'CSV_RETURN'|'CASH_REISSUE'|'REISSUE_CANCEL'|'CASE_CREATE'|'CASE_WRITE_OFF',lease_nonce:string,owner_epoch:string}} FinancialJobSingleStep */
-/** @typedef {{action:'STEP',job_id:string,job_kind:'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'INTERNAL_SETTLEMENT'|'SIMPLE_CANCEL'|'PREPARATION_EXPIRY',lease_nonce:string,owner_epoch:string,expected_cursor:string|null,limit:number}} FinancialJobPageStep */
+/** @typedef {{action:'STEP',job_id:string,job_kind:'TRANSFER_BUILD'|'CSV_SETTLEMENT'|'INTERNAL_SETTLEMENT'|'SIMPLE_CANCEL'|'PREPARATION_EXPIRY'|'PREPARATION_DISCARD',lease_nonce:string,owner_epoch:string,expected_cursor:string|null,limit:number}} FinancialJobPageStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'PINNING',expected_cursor:string|null}} FinancialJobPinStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'RESERVE'|'ALLOCATE',expected_work_cursor:string|null,expected_component_cursor:string|null,limit:number}} FinancialJobPreparePageStep */
@@ -45,7 +45,7 @@ const WRITE_OFF_ISSUES = ['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY','BPAY_NEXT_WR
   'BPAY_NEXT_WRITE_OFF_COMPONENT_CHANGED','BPAY_NEXT_WRITE_OFF_ORIGIN_UNBOUND','BPAY_NEXT_WRITE_OFF_NO_BALANCE'];
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?Z$/;
 const ENCODER = new TextEncoder();
-const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY'];
+const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY', 'PREPARATION_DISCARD'];
 const PREPARE_RELEASE_PHASES = ['WORKER_RELEASE_WORK', 'WORKER_RELEASE_CASE', 'WORKER_RELEASE_FINAL'];
 const PREPARE_PHASES = ['NEW', 'PINNING', 'RESERVE', 'ALLOCATE', 'FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE', ...PREPARE_RELEASE_PHASES];
 const CASE_PREPARE_ISSUES = ['CASE_SELECTION_REQUIRED', 'CASE_TARGET_UNSUPPORTED', 'CASE_INPUT_UNBOUND',
@@ -60,7 +60,7 @@ const PREPARE_ISSUES = ['SELECTED_WORK_NOT_APPROVED', 'SELECTED_WORK_POSITION_PE
 const CLAIM_PHASES = Object.freeze({
   PAYE_NET_ENTRY: ['NEW', 'FINANCE_ALLOCATE'], TRANSFER_BUILD: ['WORK'], CSV_SETTLEMENT: ['MEMBERS'], INTERNAL_SETTLEMENT: ['MEMBERS'],
   CSV_RETURN: ['MEMBERS'], CASH_REISSUE: ['MEMBERS'], SIMPLE_CANCEL: ['NEW', 'RELEASE'],
-  POSITION_APPLY: ['NEW', 'REMOVED'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_WRITE_OFF: ['NEW']
+  POSITION_APPLY: ['NEW', 'REMOVED'], PREPARE: PREPARE_PHASES, REISSUE_CANCEL: ['NEW'], PREPARATION_EXPIRY: ['NEW', 'RELEASE'], PREPARATION_DISCARD: ['NEW', 'RELEASE'], CASE_CREATE: ['NEW'], CASE_WRITE_OFF: ['NEW']
 });
 const COMMON = { job_id: 'uuid', job_kind: 'kind', owner_epoch: 'positive', lease_until_utc: 'timestamp?', done: 'boolean', replay: 'boolean' };
 const { replay: unusedPositionReplay, ...POSITION_COMMON } = COMMON;
@@ -78,6 +78,8 @@ const OUTPUTS = Object.freeze({
   SIMPLE_CANCEL: { ...COMMON, phase: 'cancelPhase', run_worker_id: 'uuid', cursor: 'positive?', released_line_count: 'integer', rows_visited: 'pageCount', holds_released: 'pageCount', blocked_code: 'code?' },
   PREPARATION_EXPIRY: { ...COMMON, phase: 'expiryPhase', cursor: 'positive?', rows_visited: 'pageCount',
     work_released: 'pageCount', case_holds_released: 'pageCount', run_worker_id: 'uuid?' },
+  PREPARATION_DISCARD: { ...COMMON, phase: 'discardStepPhase', cursor: 'positive?', rows_visited: 'pageCount',
+    work_released: 'pageCount', case_holds_released: 'pageCount', run_worker_id: 'uuid?' },
   // The position TABLE owner does not expose a replay boolean. Do not infer
   // one from zero rows: a genuine empty phase-completion page can visit zero.
   POSITION_APPLY: { ...POSITION_COMMON, phase: 'positionPhase', cursor: 'component?', rows_visited: 'pageCount' },
@@ -87,6 +89,8 @@ const OUTPUTS = Object.freeze({
 // Expiry can retire a PREPARE that was never claimed and has no worker.
 // This separate schema must not weaken any ordinary PREPARE receipt.
 const EXPIRED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'expiredPhase',
+  run_worker_id: 'uuid?', worker_status: 'workerStatus?' };
+const DISCARDED_PREPARE_OUTPUT = { ...OUTPUTS.PREPARE, phase: 'discardedPhase',
   run_worker_id: 'uuid?', worker_status: 'workerStatus?' };
 const CASE_NET_OUTPUT = { ...COMMON, phase: 'caseNetPhase', projection_id: 'uuid?',
   cursor: 'positive?', rows_visited: 'pageCount', run_worker_id: 'uuid', issue_code: 'caseNetIssue?' };
@@ -131,6 +135,8 @@ function field(value, type) {
     case 'positionPhase': return ['NEW', 'REMOVED', 'DONE'].includes(value);
     case 'preparePhase': return [...PREPARE_PHASES, 'READY', 'REVIEW', 'CANCELLED'].includes(value);
     case 'expiryPhase': return ['RELEASE', 'EXPIRED'].includes(value);
+    case 'discardStepPhase': return ['RELEASE','DISCARDED','BLOCKED'].includes(value);
+    case 'discardedPhase': return value === 'DISCARDED';
     case 'expiredPhase': return value === 'EXPIRED';
     case 'prepareIssue': return PREPARE_ISSUES.includes(value);
     case 'workerStatus': return ['PREPARING', 'READY', 'REVIEW', 'DRAFT', 'ISSUED', 'COMPLETE', 'CANCELLING', 'CANCELLED'].includes(value);
@@ -205,8 +211,9 @@ function resultInput(payload, call, unknown) {
     : call.jobKind === 'PREPARE' ? PREPARE_CLAIM_OUTPUT : CLAIM_OUTPUT;
   const caseNet = call.jobKind === 'PAYE_NET_ENTRY' && call.args.expected_phase === 'FINANCE_ALLOCATE';
   const expiredPrepare = call.action === 'STEP' && call.jobKind === 'PREPARE' && payload?.phase === 'EXPIRED';
+  const discardedPrepare = call.action === 'STEP' && call.jobKind === 'PREPARE' && payload?.phase === 'DISCARDED';
   if (!exact(payload, call.action === 'CLAIM' ? claimSchema : caseNet ? CASE_NET_OUTPUT
-    : expiredPrepare ? EXPIRED_PREPARE_OUTPUT : OUTPUTS[call.jobKind])
+    : expiredPrepare ? EXPIRED_PREPARE_OUTPUT : discardedPrepare ? DISCARDED_PREPARE_OUTPUT : OUTPUTS[call.jobKind])
     || payload.job_id.toLowerCase() !== call.jobId.toLowerCase() || payload.job_kind !== call.jobKind) invalid();
   if (call.action === 'CLAIM') {
     if (!CLAIM_PHASES[call.jobKind].includes(payload.phase)
@@ -253,7 +260,22 @@ function resultInput(payload, call, unknown) {
     || BigInt(payload.work_released) + BigInt(payload.case_holds_released) > BigInt(payload.rows_visited)
     || (payload.run_worker_id === null && (payload.work_released !== '0' || payload.case_holds_released !== '0'))
     || (payload.replay && (payload.work_released !== '0' || payload.case_holds_released !== '0')))) invalid();
+  if (call.jobKind === 'PREPARATION_DISCARD' && (payload.done !== ['DISCARDED','BLOCKED'].includes(payload.phase)
+    || (!payload.done && payload.cursor === null)
+    || BigInt(payload.work_released) + BigInt(payload.case_holds_released) > BigInt(payload.rows_visited)
+    || (payload.run_worker_id === null && (payload.work_released !== '0' || payload.case_holds_released !== '0'))
+    || (payload.phase === 'BLOCKED' && (payload.work_released !== '0' || payload.case_holds_released !== '0'))
+    || (payload.replay && (payload.work_released !== '0' || payload.case_holds_released !== '0')))) invalid();
   if (call.jobKind === 'PREPARE') {
+    if (discardedPrepare) {
+      if (!payload.done || !payload.replay || payload.rows_visited !== '0'
+        || (payload.work_cursor === null) !== (payload.component_cursor === null)
+        || (payload.cursor !== null && payload.work_cursor !== null)
+        || (payload.run_worker_id === null) !== (payload.worker_status === null)
+        || (payload.issue_code === null && payload.issue_work_id !== null)
+        || (payload.run_worker_id === null && (payload.issue_code !== null || payload.issue_work_id !== null))) invalid();
+      return payload;
+    }
     if (expiredPrepare) {
       if (!payload.done || !payload.replay || payload.rows_visited !== '0'
         || (payload.work_cursor === null) !== (payload.component_cursor === null)
