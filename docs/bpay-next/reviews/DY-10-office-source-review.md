@@ -1,5 +1,9 @@
 # DY-10 D03 independent Office source review
 
+**FINAL CURRENT SOURCE PASS — reviewed saved DY10 bytes committed by root as FE `9ff07fd9d4d793c632ce5f1cfd48207b2d099e50`. All essential source findings closed; final native adapters and exact hashes are below. A4 separately closes54 actual PNGs in SCR-156/review.md. No joined/runtime business acceptance.**
+
+## Historical initial source checkpoint
+
 11 October 2026. **SOURCE CHANGES REQUIRED at the hashes below.** Read-only review of the saved Daily state mapper, native Timesheet Overview integration, targeted recompute and full-details refresh path against the full DY10 sequence97 card/D01–D05, BD109 and the independent screen/design review. D02 Worker closure is separate. No product, database, test, fixture, hosted call, render, capture, checklist edit or commit was performed. No A4 or joined acceptance is claimed.
 
 ## Essential findings

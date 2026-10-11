@@ -122,7 +122,7 @@ PASS means current scoped screenshot/source evidence, not an unperformed joined/
 
 ### Source and supplied design provenance
 
-FE saved DY10 delta over parent `b28dd501b5acc896f658eb79226cdb4e6bf576c7`; root subsequently committed the unchanged reviewed source as `9ff07fd9` (full identity recorded in source receipt). Raw hashes below identify exact capture bytes. Final frozen loop42475; this reviewer performed read-only source/image comparison, not capture or execution. Full source closure: [DY-10-office-source-review.md](../../reviews/DY-10-office-source-review.md).
+FE saved DY10 delta over parent `b28dd501b5acc896f658eb79226cdb4e6bf576c7`; root subsequently committed the unchanged reviewed source as `9ff07fd9d4d793c632ce5f1cfd48207b2d099e50`. Raw hashes below identify exact capture bytes. Final frozen loop42475; this reviewer performed read-only source/image comparison, not capture or execution. Full source closure: [DY-10-office-source-review.md](../../reviews/DY-10-office-source-review.md).
 
 | Source | Raw SHA-256 |
 | --- | --- |
