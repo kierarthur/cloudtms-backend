@@ -189,3 +189,16 @@ Source-only approval is separately saved in reviews/FC-04-source-review.md. The 
 | Pack B9 SCR-116 PNG | 866940964ca608c09feebdc57138ae51c015781e17c78ab9c1ac76bfe47d297f |
 | Pack B9 SCR-117 spec | 93bb975ff00c1a623b80098072d1c4c12f90646b16fd22ec0187a5377b13c446 |
 | Pack B9 SCR-116 spec | 59bed32905ab710856e0df68b04c7875451425287fadfa5d12efaa3bf1622182 |
+
+## FC-05 shared style correction — 11 October 2026
+
+The next shared creation-style touch also corrects the non-mounted-footer phone branch of FC-04. Independently reopened only the two replacement actual `FC04-unselected-phone-dark.png` and `FC04-unselected-phone-dark-top.png`: **PASS; policy30 and SDP-81 touch targets now 44px** for header Close and footer Preview/Apply. The original Candidate-before-Preview reason, genuine unknown channel, inputs, native scroll and body layout remain correct. The current selector applies only to the original creation-window class at phone width; shared Credit-only Preview options do not alter Advance presentation. This additive correction supersedes the two earlier image hashes below without reopening or replacing the prior FC-04 evidence/receipt. Joined business acceptance remains NOT_RUN.
+
+| Corrected evidence | Current SHA-256 |
+|---|---|
+| FC04-unselected-phone-dark.png | 31875b2009874f9de412870516596fe23804a8b72dc0a7e31eb999ccb2c1942e |
+| FC04-unselected-phone-dark-top.png | eafb1c4713a603cf07305a2412e0a1ecae233403e29c464397b40b2001e713d4 |
+| FC04-local-requests.json | 73ff6c459c3132601712260e1c5e314a8ef43455787c90fbcf3f9ce31e28a0e2 |
+| FE css/bpay-next-office.css | dc976dd81d95e7fac3555a1a9c2470782c4ab84c61c16e22aa4b6cb619d6feb4 |
+| FE js/bpay-next-payment-advance.js | cccc07b702b6de26af6e9a13d2423c910dbfbde5e9fb74dc0eacb19f93a5d46b |
+| FE js/bpay-next-case-preview.js | 16914287a7f09824a4a9d9e8f99533209918970ae7a311660f9c17828a792cb2 |

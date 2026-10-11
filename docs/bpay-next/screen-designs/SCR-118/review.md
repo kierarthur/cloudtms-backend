@@ -1,13 +1,13 @@
 # FC-05 / SCR-118 — independent A4 review
 
-11 October 2026. **PASS for the FC-05 D04 native New Manual Credit screen: 33 Pass / 0 Fail / 9 scoped N/A across all42 policy rows.** Individually inspected45 actual local PNGs: fourteen states in dark, device-light and390px phone, plus three phone upper views. Final capture65140 supersedes the earlier checkpoints. No remaining essential finding.
+11 October 2026. **PASS for the FC-05 D04 native New Manual Credit screen: 33 Pass / 0 Fail / 9 scoped N/A across all 42 policy rows.** Individually inspected 45 actual local PNGs: fourteen states in dark, device-light and 390px phone, plus three phone upper views. Final capture 65140 supersedes the earlier checkpoints. No remaining essential finding.
 
 This reviews the real Office frame, creator adapter and original shared Preview/recovery presentation. It does not claim joined creation, same-request replay, queue processing, due-once NET_ADD/GROSS_ADD, Umbrella CM-13a allocation, funding, payout or the accepted parent-row update. Those business paths remain AUTHORED_NOT_RUN. The reviewer performed no product edit, render, test, database or hosted action.
 
 ## Findings closed
 
-- **P118-01:** foreign pending originally removed the Candidate and left a blank footer. Final dark/device-light/phone show factual Chloe Davies · TMS10233, the existing finish-previous-change instruction and header Close, with no empty footer or inferred foreign terms/action.
-- **P118-02:** unselected and foreign pending phone branches lacked the shared footer class and had approximately36px Close/buttons. Final phone replacements and the narrow creation-window CSS provide44px targets; the form/radio labels and other footer states retain their existing44px targets.
+- **P118-01:** foreign pending originally removed the Candidate and left a blank footer. Final dark/device-light/phone show factual Chloe Davies · TMS 10233, the existing finish-previous-change instruction and header Close, with no empty footer or inferred foreign terms/action.
+- **P118-02:** unselected and foreign pending phone branches lacked the shared footer class and had approximately 36px Close/buttons. Final phone replacements and the narrow creation-window CSS provide 44px targets; the form/radio labels and other footer states retain their existing 44px targets.
 
 ## Supplied design comparison and control purpose
 
@@ -15,12 +15,12 @@ Read-only references are B9 `SCR-118_new_manual_credit_dark.png` / its supplied 
 
 | Visible difference from supplied artwork | Required reason |
 |---|---|
-| Actual native600px frame moves vertically with body length, has native blurred Office background and no design annotation or future Cases list/counts behind it. | FC-05 owns this small creation window; ownerA2 forbids inventing the future FC-02 page. |
+| Actual native600px frame moves vertically with body length, has native blurred Office background and no design annotation or future Cases list/counts behind it. | FC-05 owns this small creation window; owner A2 forbids inventing the future FC-02 page. |
 | Candidate is an original picker button; unselected uses Choose Candidate and channel—. | Real recipient selection is required; artwork's fixed Chloe example is not a default. Accepted/foreign recovery retains the real name/ref outside the hidden form. |
-| Amount uses a separate decorative£ prefix and exact raw decimal input; fields are44px and tax labels have44px hit areas. Native focus rings are visible. | Preserve original intent without the general money formatter rewriting input; phone accessibility. The empty£0.00 is an input placeholder, never a failed-read result. |
+| Amount uses a separate decorative£ prefix and exact raw decimal input; fields are 44px and tax labels have 44px hit areas. Native focus rings are visible. | Preserve original intent without the general money formatter rewriting input; phone accessibility. The empty£0.00 is an input placeholder, never a failed-read result. |
 | Tax hint text is normal-weight small copy rather than bold compact artwork; genuine Umbrella/unknown channel hides the PAYE-only hints. | The two hints describe PAYE stages only. Both radios start unselected; no inferred channel or tax choice. |
 | Touched initial form shows the tax error inline and Preview first separately; missing Comment/channel errors sit beside their fields. | Policy17 requires a plain cause/next step; the footer explains disabled actions without repeating the field error. Required Comment and optional Note match SCR-118. |
-| Credit Preview uses SCR-116's shared card/footer but says £40.00 credit, Total£40.00 and the actual chosen Tax. It has no repayment dates/weeks, affordability/floor or invented other-credit warning. | FC-05 is a once-due credit, not the Advance shown in SCR-116. Total comes from CASE_PREVIEW; selected tax comes from the validated same input. No cash/funding assertion. |
+| Credit Preview uses SCR-116's shared card/footer but says £40.00 credit, Total £40.00 and the actual chosen Tax. It has no repayment dates/weeks, affordability/floor or invented other-credit warning. | FC-05 is a once-due credit, not the Advance shown in SCR-116. Total comes from CASE_PREVIEW; selected tax comes from the validated same input. No cash/funding assertion. |
 | Changed, checking, failed Preview, unknown request, foreign pending, accepted-awaiting-read and refresh failure are additional states. | Required original Preview/current-intent/recovery semantics. Changed removes the obsolete Preview; busy/unknown lock terms; accepted hides unavailable terms and shows only factual Candidate and Refresh. |
 | Phone vertically scrolls the native body with header/footer retained; upper views separately show Candidate and unselected tax. | Keep all fields and the next action reachable without horizontal scrolling. Device-light retains the same dark palette/layout; tiny focus/caret timing differences are not a second theme. |
 
@@ -34,19 +34,19 @@ Each named state below was inspected in all three modes; the three additional up
 |---|---|
 | unselected | Choose Candidate; unknown channel—; neither Tax selected; Preview/Apply disabled with reason. |
 | first | Factual PAYE Candidate/£40.00/Comment, neither Tax selected; inline tax instruction. |
-| non-taxable / taxable | Explicit corresponding choice; original£40.00 total and Tax Preview; Apply available. |
+| non-taxable / taxable | Explicit corresponding choice; original £40.00 total and Tax Preview; Apply available. |
 | umbrella | Factual Umbrella channel, no PAYE stage hint; no allocation/funding claim. |
 | missing-comment / missing-channel | Required Comment or factual channel cause inline; no Preview or Apply acceptance. |
 | changed | £41.00 input retained, obsolete result removed, preview-again instruction. |
 | preview-error | Entered facts retained, failed result absent, Preview available. |
 | checking | Terms disabled with Checking…; no editable current-intent race. |
-| pending | Original£40.00/tax/Comment locked; uncertain result and sole Try again. |
+| pending | Original £40.00/tax/Comment locked; uncertain result and sole Try again. |
 | foreign-pending | Factual Candidate and finish-previous-change instruction; no foreign terms or completion button. |
 | accepted / refresh-error | Factual Candidate, no reconstructed terms or zero money; sole Refresh and truthful current outcome. |
 
 ## Full policy checklist
 
-Pass for source-supported access/guards means authored presentation evidence, not unperformed joined runtime acceptance. Manual wording review used `tools/policy.json` neverShow/chatter/formatRules/approvedVocabulary/rewrites,20-word limit and owner's one-sentence errors; no pack wording or generator tool was run.
+Pass for source-supported access/guards means authored presentation evidence, not unperformed joined runtime acceptance. Manual wording review used `tools/policy.json` neverShow/chatter/formatRules/approvedVocabulary/rewrites, 20-word limit and owner's one-sentence errors; no pack wording or generator tool was run.
 
 | # | Result | One-line evidence |
 |---|---|---|
@@ -62,24 +62,24 @@ Pass for source-supported access/guards means authored presentation evidence, no
 | 10 | PASS | One Apply/recovery primary; quiet Preview; no redundant footer Close. |
 | 11 | PASS | Native classes/tokens and narrow scoped adapters; no new !important/framework. |
 | 12 | N/A | No paged list. |
-| 13 | N/A | Small dialog; SDP34 sorting exemption. |
+| 13 | N/A | Small dialog; SDP-34 sorting exemption. |
 | 14 | N/A | No inclusion tick/selection list. |
 | 15 | PASS | Preview total is the original CASE_PREVIEW value, not a browser sum. |
 | 16 | PASS | Manual complete wording-list/format review; no codes, UUIDs or chatter. |
 | 17 | PASS | Single-sentence field/read errors identify the next step without lost facts. |
 | 18 | N/A | This is original Preview/Apply Case creation, not funding/payment confirmation. |
-| 19 | PASS | Defined empty/checking/failed/unknown states; no false result£0.00. |
+| 19 | PASS | Defined empty/checking/failed/unknown states; no false result £0.00. |
 | 20 | PASS | Manual Credit/pay channel terminology; human TMS ref, no internal identifier. |
-| 21 | PASS | Factual£40.00/£41.00, missing channel—; no date fields. |
+| 21 | PASS | Factual £40.00/£41.00, missing channel—; no date fields. |
 | 22 | PASS | Native button/radio/input keyboard semantics, labels, visible focus and live error/status roles. |
-| 23 | PASS | Actual390px body scrolls vertically, all fields/actions reachable, no sideways overflow. |
+| 23 | PASS | Actual 390px body scrolls vertically, all fields/actions reachable, no sideways overflow. |
 | 24 | PASS | Every device-light state retains dark styling and matching layout. |
 | 25 | N/A | Owner mandates supplied pack read-only and actual native captures, no spec/render generation. |
 | 26 | PASS | Values map to actual picker/input, CASE_PREVIEW total/context, retained journal and exact accepted read; readerAdditions alternative N/A. |
 | 27 | PASS | No premature pay date. |
 | 28 | PASS | Recipient, credit amount, Tax and reason use ordinary payroll words. |
 | 29 | PASS | Inputs and errors beside their subject; actions in native footer. |
-| 30 | PASS | Preview then Apply/recovery is obvious; final phone controls44px. |
+| 30 | PASS | Preview then Apply/recovery is obvious; final phone controls 44px. |
 | 31 | PASS | Actual Candidate/amount/tax or truthful blocker; recovery never invents missing terms. |
 | 32 | N/A | No Waiting/Blocked/Action required list rows. |
 | 33 | PASS | Changed/checking/failed/unknown/accepted outcome visible in the current window. |
@@ -88,14 +88,14 @@ Pass for source-supported access/guards means authored presentation evidence, no
 | 36 | PASS | Neither Tax defaults; Apply requires unchanged accepted Preview; locks preserve original request. |
 | 37 | PASS | Header Close available throughout; original pending journal is not cleared by backing out. |
 | 38 | PASS | Existing picker and one Preview/Apply flow; no funding/page detour. |
-| 39 | PASS | Shown£40.00 credit equals original Preview Total£40.00; changed input has no old result. |
+| 39 | PASS | Shown £40.00 credit equals original Preview Total £40.00; changed input has no old result. |
 | 40 | N/A | Not the before-Create-Draft screen. |
 | 41 | PASS | All captured empty/busy/failure/recovery/phone states coherent; access source inspected. |
 | 42 | PASS | Real Candidate and current state/next step remain visible after return/recovery. |
 
 ## Evidence
 
-Final45 PNGs are the normal local capture evidence,42 main request-log entries plus three phone upper views. The saved request log has zero browser errors and zero horizontal-overflow entries. Only fixed local replies are used; these observations do not prove business execution. SHA-256 below records the exact inspected bytes.
+Final 45 PNGs are the normal local capture evidence, 42 main request-log entries plus three phone upper views. The saved request log has zero browser errors and zero horizontal-overflow entries. Only fixed local replies are used; these observations do not prove business execution. SHA-256 below records the exact inspected bytes.
 
 ### Product/source SHA-256
 
