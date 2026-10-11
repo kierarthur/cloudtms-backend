@@ -11042,7 +11042,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "47fb4ec8062819700865d780661e0ceaee52408b4182683ccf4923c0f5eccf1a"
+      "definition_sha256": "390cf1d6dc0d1709f85832195f9a2d7ea43cbf371ae092d45dab7ce8dad3ac8f"
     },
     {
       "acl": [

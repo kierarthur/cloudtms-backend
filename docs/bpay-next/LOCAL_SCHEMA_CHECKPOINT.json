@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "1b9b99f494915d5c15751dd57a0ca2f29a4e7033",
-  "compiledAtUtc": "2026-10-11T08:47:12.594Z",
+  "sourceCommit": "6581a6d386af5ef193ddef3a35780f615566adeb",
+  "compiledAtUtc": "2026-10-11T08:53:35.237Z",
   "inventory": {
     "migrations": [
       {
@@ -8074,6 +8074,13 @@
         "sha256": "17cc10799d4137a420fcf4aff2f6cffc96a8acb12e2c8659d0f58ab295f93f53"
       },
       {
+        "path": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql"
+        ],
+        "sha256": "9cb9596221301d7001a28822891149ebe69cf3a92a2bc8504c699b9d46642ee8"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8107,18 +8114,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "path": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+          "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql"
         ],
-        "sha256": "2aa8c583d4139002f8b01ee1198d7e8b8f67ffa36e93ce99b189d3035ad64f69"
-      },
-      {
-        "path": "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_0939_banking_pay_next_daily_authorise_rate_refusal_v1.sql"
-        ],
-        "sha256": "17cc10799d4137a420fcf4aff2f6cffc96a8acb12e2c8659d0f58ab295f93f53"
+        "sha256": "9cb9596221301d7001a28822891149ebe69cf3a92a2bc8504c699b9d46642ee8"
       }
     ]
   },

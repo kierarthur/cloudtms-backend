@@ -293,3 +293,7 @@ Schema0928 adds only justified originKind/date and revisionDaily evidence, exact
 ## DY-04 sequence90 — complete Daily joint authority / BD100
 
 Route1450 ->0939 ->DY01; Publisher1530 current1236 ->DY04/0939 ->DY06 ->DY10 ->DR38; DY05/DY09/DR18 consume or change only their explicitly named owners. Trigger1332 ->0939 retains withdrawal refresh. Revision/insert guards1342 ->0939 retain all frozen branches; pointer0928 and helper0925 remain current, with helper later DY08. Generic Authorise0931 ->0939 is one readonly missing-bucket qualification only, complete predecessor otherwise exact. No Source/query producer definition changes or parked F25 owner. All later merges use actual per-signature final registry.
+
+## DY-01 sequence91 — native unresolved admission / BD101
+
+Approval route1450 ->DY04/0939 ->DY01/0952. Exactly one processedTF/capturedsettingsClient point check in the contractless Daily branch; other0939 branches retained. Publisher/trigger0939, pointer0928, helper0925 and canonical Daily settings/receipts remain their prior owners. Later route changes merge0952, never re-promote raw1450.

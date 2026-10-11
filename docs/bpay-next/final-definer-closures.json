@@ -2644,19 +2644,21 @@
     },
     {
       "signature": "private.bpay_next_approval_route_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql",
+        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql",
+        "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql",
         "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1450_banking_pay_next_producer_route_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0939_banking_pay_next_contractless_daily_publication_v1.sql"
+        "supabase/repeatable/11102026_0952_banking_pay_next_daily_resolution_admission_v1.sql"
       ],
-      "owner": "DY04 complete Contractless Daily joint merge; existing later editor chain retained",
+      "owner": "DY01 native processed Daily resolution admission; current0939 route retained",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
