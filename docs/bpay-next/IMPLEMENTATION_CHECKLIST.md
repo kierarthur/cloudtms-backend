@@ -2067,7 +2067,7 @@ WB25 ITEM [x] Built [x] Reviewed; exact D12 built and independently reviewed; co
 
 ## WB-26 — Repayment, recovery and stand-alone line ticks
 
-Seq 71; Workbench · WB-S; reviewer R2; current requested-feature status PARTLY_DONE.
+Seq 71; Workbench · WB-S; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete eligible case-component defaults/exclusions and exact controls/versions at Create.
 
@@ -2075,9 +2075,9 @@ Dependencies: WB-15, WB-21, F-16; successor positions: none. Design note: not re
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-26-D08 | REPEATABLE: private.bpay_next_prepare_case_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_cursor bigint, p_limit integer) | INSTALLED_ON_TEST | Preserve installed writable case owner and immutable row kernel; reconcile named local 0549 successor, exact frozen floors/cases/channel and single allocation plan extraction. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-26-D10 | DOC: private.bpay_next_prepare_case_page_v1 local 0549 successor | LOCAL_ONLY | Reconcile exact local successor with installed writable owner; live min_take_home_wtd at127 must consume preserved accepted boundary. Extract read-only plan once after CM02a; no second row kernel. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| WB-26-D15 | SCREEN: Complete eligible case-component selection controls in js/bpay-next-workbench.js | MISSING | Preserve existing candidate-scoped journal, default and exclusions across all pages; exact case/control version at boundary. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-26-D08 | REPEATABLE: private.bpay_next_prepare_case_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_cursor bigint, p_limit integer) | BUILT_REVIEWED | Preserve installed writable case owner and immutable row kernel; reconcile named local 0549 successor, exact frozen floors/cases/channel and single allocation plan extraction. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-26-D10 | DOC: private.bpay_next_prepare_case_page_v1 local 0549 successor | BUILT_REVIEWED | Reconcile exact local successor with installed writable owner; live min_take_home_wtd at127 must consume preserved accepted boundary. Extract read-only plan once after CM02a; no second row kernel. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| WB-26-D15 | SCREEN: Complete eligible case-component selection controls in js/bpay-next-workbench.js | BUILT_REVIEWED | Preserve existing candidate-scoped journal, default and exclusions across all pages; exact case/control version at boundary. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2104,6 +2104,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - A newly raised recovery appears ticked; a manual credit with no Timesheet can be unticked and is then left out (RQ-036, RQ-037, J2d).
   - A repayment's recoverable amount is shown after Show estimate (WB-27), not before; its full balance stays outstanding until the Draft recovers it (critic 10).
   - A paused case shows greyed and is not collected (J2c); the old "Current Case facts" section is not in the Workbench (J2e).
+
+WB26 ITEM [x] Built [x] Reviewed; exact D08/D10/D15 complete, context owners retained. Implementation BE 950a15a9083c2d3dd46493953473644b6a8e0a33, FE 49ebb10c2452519b34f1d41ddcf9b1d546d03a2a. Source9/9, sole PG17 compile/contract/coupling PASS. Actual33 SCR11 screenshots39PASS/0FAIL/3NA. Joined in-app journeys authored/NOT_RUN; installation unchecked. Whole55/288 BUILT55/288 REVIEWED.
 
 ## WB-24 — Candidate and group ticks with three-state boxes
 

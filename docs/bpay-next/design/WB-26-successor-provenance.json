@@ -101,5 +101,6 @@
   "joinedAppAcceptance": "NOT_RUN; named card journeys authored",
   "deployment": "NOT_INSTALLED",
   "timingCheck": "Timing check moved to TEST after installation (owner 10/10/2026)",
-  "frontendCommit": "49ebb10c2452519b34f1d41ddcf9b1d546d03a2a"
+  "frontendCommit": "49ebb10c2452519b34f1d41ddcf9b1d546d03a2a",
+  "backendCommit": "950a15a9083c2d3dd46493953473644b6a8e0a33"
 }
