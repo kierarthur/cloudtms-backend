@@ -14,7 +14,7 @@ export const BPAY_NEXT_PREPARATION_INPUTS=Object.freeze({
   EXCLUSION_PAGE:{run_id:'uuid',page_no:'positive',excluded_work_ids:'emptyIds',excluded_candidate_ids:'emptyIds'},
   MATCHING_PAGE:{run_id:'uuid',page_no:'positive',after_member_no:'positive?'},
 
-  CREATE:{run_id:'uuid',pay_date:'date'},
+  CREATE:{run_id:'uuid',command_id:'uuid',descriptor:'descriptor'},
   WORK_PAGE:{run_id:'uuid',page_no:'positive',choices:'choices'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',approved_line_ids:'ids'},
   COMPONENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',expected_pages:'positive',expected_count:'positive'},
@@ -57,7 +57,7 @@ const OUTPUTS={
   EXCLUSION_PAGE:{run_id:'uuid',page_no:'positive',item_count:'integer',complete:'boolean',replay:'boolean'},
   MATCHING_PAGE:{run_id:'uuid',page_no:'positive',item_count:'integer',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean',skipped:'skipped',complete:'boolean',next_after_member_no:'positive?'},
 
-  CREATE:{run_id:'uuid',status:'runStatus',selection_state:'selectionState',selection_count:'integer',selected_candidate_count:'integer',official_pay_date:'date'},
+  CREATE:{run_id:'uuid',status:'runStatus',selection_state:'selectionState',selection_count:'integer',selected_candidate_count:'integer',official_pay_date:'date',command_id:'uuid',agency_sequence:'positive?',choice_work_count:'integer',choice_case_count:'integer',empty:'boolean',replay:'boolean'},
   WORK_PAGE:{run_id:'uuid',page_no:'positive',item_count:'positive',selection_count:'integer',selected_candidate_count:'integer',replay:'boolean',skipped:'skipped'},
   COMPONENT_PAGE:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',page_no:'positive',item_count:'positive',component_count:'positive',replay:'boolean'},
   COMPONENT_SEAL:{run_id:'uuid',work_id:'uuid',expected_revision_id:'uuid',sealed:'true',component_count:'positive',replay:'boolean'},
@@ -273,7 +273,7 @@ function validChoiceDescriptor(v){
 function commandCall(body){
   if(!record(body)||!Object.hasOwn(BPAY_NEXT_PREPARATION_INPUTS,body.action))throw fault('REQUEST_INVALID',400);
   const {action,...args}=body;
-  const schema=action==='CREATE'&&Object.hasOwn(args,'descriptor')?{run_id:'uuid',command_id:'uuid',descriptor:'descriptor'}:action==='CREATE'&&!Object.hasOwn(args,'pay_date')?{run_id:'uuid'}:BPAY_NEXT_PREPARATION_INPUTS[action];
+  const schema=BPAY_NEXT_PREPARATION_INPUTS[action];
   const checkedSchema=action==='PREPARATION_DISCARD'&&Object.hasOwn(args,'reason')?{...schema,reason:'discardReason'}:schema;
   if(!exact(args,checkedSchema)||(action==='EXCLUSION_PAGE'&&args.excluded_work_ids.length+args.excluded_candidate_ids.length>100)||(action==='CASE_PAGE'&&args.component_ids.length!==args.selected.length))throw fault('REQUEST_INVALID',400);
   return {action,args:action==='SEGMENT_PAGE'?Object.freeze({...normalized(args),segment_keys:Object.freeze([...args.segment_keys])}):normalized(args)};
@@ -310,7 +310,7 @@ async function limitedJson(input,maximum,request,signal,mutation){
 function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
   if(mutation){
-    const schema=call.action==='CREATE'&&Object.hasOwn(call.args,'descriptor')?{...OUTPUTS.CREATE,command_id:'uuid',agency_sequence:'positive?',choice_work_count:'integer',choice_case_count:'integer',empty:'boolean',replay:'boolean'}:OUTPUTS[call.action];
+    const schema=OUTPUTS[call.action];
     if(!exact(payload,schema))bad();
     for(const key of ['run_id','work_id','expected_revision_id','candidate_id','command_id','page_no','selection_revision','run_worker_id','expected_preparation_revision'])
       if(Object.hasOwn(call.args,key)&&Object.hasOwn(payload,key)&&payload[key]!==call.args[key])bad();
@@ -332,8 +332,7 @@ function result(payload,call,mutation){
     if(call.action==='MATCHING_PAGE'&&(BigInt(payload.item_count)>100n||payload.skipped.length>Number(payload.item_count)
       ||(payload.complete!==(payload.next_after_member_no===null))||(!payload.complete&&(payload.item_count==='0'
       ||BigInt(payload.next_after_member_no)!==BigInt(call.args.after_member_no??'0')+BigInt(payload.item_count)))))bad();
-    if(call.action==='CREATE'&&Object.hasOwn(call.args,'pay_date')&&payload.official_pay_date!==call.args.pay_date)bad();
-    if(call.action==='CREATE'&&Object.hasOwn(call.args,'descriptor')&&(payload.empty!==(payload.selected_candidate_count==='0')||payload.empty!==(payload.agency_sequence===null)||BigInt(payload.selection_count)>BigInt(payload.choice_work_count)||payload.official_pay_date!==call.args.descriptor.namespace.official_pay_date))bad();
+    if(call.action==='CREATE'&&(payload.empty!==(payload.selected_candidate_count==='0')||payload.empty!==(payload.agency_sequence===null)||BigInt(payload.selection_count)>BigInt(payload.choice_work_count)||payload.official_pay_date!==call.args.descriptor.namespace.official_pay_date))bad();
     if(call.action==='WORK_PAGE'){
       const ids=call.args.choices.map(x=>x.work_id),positions=payload.skipped.map(x=>ids.indexOf(x.work_id));
       if(positions.some((n,i)=>n<0||(i>0&&n<=positions[i-1])))bad();
