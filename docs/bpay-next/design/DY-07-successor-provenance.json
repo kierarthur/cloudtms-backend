@@ -2,7 +2,7 @@
   "item": "DY-07",
   "sequence": 94,
   "decision": "BD105",
-  "status": "CHECKED_REVIEWED_PENDING_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/repeatable/11102026_1119_banking_pay_next_daily_single_flight_adapter_v1.sql",
@@ -42,5 +42,6 @@
     "protectedFiles": "five exact hashes PASS before edits"
   },
   "futureJoined": "AUTHORED_NOT_RUN",
-  "review": "reviews/DY-07-source-review.md"
+  "review": "reviews/DY-07-source-review.md",
+  "implementationCommit": "1b9fb35202c8c1b9f1e50998130bf02cf17fc8c5"
 }
