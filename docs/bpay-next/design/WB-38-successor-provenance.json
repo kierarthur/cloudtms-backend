@@ -1,7 +1,7 @@
 {
   "item": "WB-38",
   "sequence": 75,
-  "status": "IMPLEMENTED_REVIEW_PENDING",
+  "status": "BUILT_REVIEWED",
   "exactDeliverables": [
     "WB-38-D06"
   ],
@@ -32,6 +32,7 @@
     "docs/bpay-next/screen-designs/SCR-10/WB38-expanded-expense-controls-phone-dark.png": "e35604cc620392002e725ae8767eadba22f7b7d49dbba41e63fa6cb9c6155ebc",
     "docs/bpay-next/screen-designs/SCR-10/WB38-expanded-shift-controls-phone-dark.png": "b839fd53e24816778dac293c1eb222eb2d9b2654c112ca1e1aac9dd4c726ab08",
     "docs/bpay-next/screen-designs/SCR-10/WB38-fixed-responses.json": "6adb85b89cc195319b9b2057d328dc6e2d3883963c054ac9f273bd63f2284cbc",
+    "docs/bpay-next/screen-designs/SCR-10/WB38-review.md": "db4afc05d47f154f2cede924a4c983bccdef4d30735901c4bb1d19481ffc7d07",
     "docs/bpay-next/screen-designs/SCR-31/WB38-fixed-responses.json": "c88a1f2a5ef8f520b09cf4cae422768cba4b802179ff50581aa2c4ad05a06d5c",
     "docs/bpay-next/screen-designs/SCR-31/WB38-indefinite-result-dark.png": "4775a8689cb63fc576ba83a13f57e01fd031839545c5514f64711acc30f16a8b",
     "docs/bpay-next/screen-designs/SCR-31/WB38-indefinite-result-device-light.png": "4775a8689cb63fc576ba83a13f57e01fd031839545c5514f64711acc30f16a8b",
@@ -116,7 +117,8 @@
     "reviews/WB-38-database-review.md",
     "reviews/WB-38-worker-review.md",
     "reviews/WB-38-window-source-review.md",
-    "reviews/WB-38-screen-source-review.md"
+    "reviews/WB-38-screen-source-review.md",
+    "reviews/WB-38-screen-policy-review.md"
   ],
   "checks": {
     "dbCheck": {
@@ -133,11 +135,18 @@
     "serviceMissing": 76,
     "browserExecutable": 0,
     "catalogueHash": "d5226315e5b17afc9e5a588a432b73ca",
-    "catalogueVerifier": "PASS_UNCHANGED_COUNT"
+    "catalogueVerifier": "PASS_UNCHANGED_COUNT",
+    "screenReview": {
+      "actualPngs": 69,
+      "pass": 40,
+      "fail": 0,
+      "notApplicable": 2,
+      "nativeParent": "AUTHORED_NOT_RUN"
+    }
   },
   "application": "AUTHORED_NOT_RUN",
   "installation": "NOT_RUN",
   "timing": "Moved to TEST after installation (owner 10/10/2026)",
-  "backendCommit": null,
-  "frontendCommit": null
+  "backendCommit": "09cbed4692e88a041b8ca475fadae7d120962e10",
+  "frontendCommit": "296e87d38f50821e442d03758893688889a0f301"
 }

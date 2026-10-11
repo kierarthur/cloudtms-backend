@@ -68,3 +68,32 @@ Further concrete findings were sent immediately to the builder:
 | P38-09 | The all-expense consequence always says until the date below even if the user selects indefinite. Branch that sentence on the existing explicit indefinite choice. |
 
 These are pending corrective source and pixel review, not approval. The current source and PNGs may change during the builder's final recapture. The final receipt will identify only the final reviewed hashes.
+
+## Final source and A4 closure — 11 October 2026
+
+**Final source review PASS; A4 PASS for 69 actual local Candidate/shared-dialog PNGs.** The [final consolidated policy receipt](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/reviews/WB-38-screen-policy-review.md>) and seven per-screen receipts contain all 42 checklist rows, paired readonly designs, visible differences, every control's payroll need, and exact source/image hashes. Joint checklist: 40 PASS, 0 FAIL, 2 N/A (25 supplied-pack generation; 40 Create Draft outside WB-38). Existing readerAdditions is separately N/A.
+
+| Finding | Final closure and limit |
+|---|---|
+| S38-01 | Native business-date validity and inline aria-invalid field feedback disable invalid Apply; authoritative conflict refusal disables Apply and precedes facts; date/Note are preserved. Final SCR-32 create/past-date/warning/conflict images confirm the visible states. |
+| S38-02 | All-expense callers omit misleading group/member amount. Native complete eligible count and sealed scope remain; pre-submit full list/total is explicitly omitted under A2 rather than invented. SCR-35 dated/indefinite/clear images confirm that boundary. |
+| S38-03 | Source gates controls by current eligible native state; future/reserved actions are absent. RQ-073's individual indefinite EXPENSE_LINE rule remains distinct from wider design scope. Actual SCR-31 dated and indefinite parent states and menu captures show useful actions. |
+| S38-04 | Cancel/discard use native destructive red, safe choice first; Amend's red Cancel snooze is footer-left; consequences name Banking Pay for the next Draft. Existing modal dirty-close guard is unchanged. SCR-33/34 actual images close the styling findings. |
+| S38-05 | One shared accepted event refreshes affected Candidate/header/issue context with existing parent callback and preserves native Timesheet Overview refresh. Candidate parent outcome is visible before facts in actual SCR-31/36 phone and desktop images. Native Timesheet result p now uses host.prepend plus data-next-live-copy, confirmed only by main.js source. |
+| S38-06 | Native MANY counts, failed-only Retry and amber partial outcome are retained in panel and parent copy. Unknown pending retry retains Try again and original-command readback rather than claiming completion. Actual SCR-35 partial, scrolled Retry and unconfirmed-retry images confirm the visible recovery. |
+
+P38-01 through P38-09 are closed on the final actual bytes, including unclipped open More, supplied heading scope, Snooze expense title, warning/refusal order and indefinite consequence. Final additional actual observations also close phone parent outcome placement, combined bulk counts/date, row Amend vocabulary and exact SHIFT work_date/time subject. All 112 source/design/fixed-response/image inputs were rehashed after final review with no changed byte.
+
+**Native Timesheet parent interaction remains joined-app AUTHORED/NOT_RUN.** No installed native parent data or screenshot was supplied; its existing parent screen is preserved and it reuses the captured shared dialog. Its prepend/live-copy change is source-only evidence, not native parent pixel PASS. No keyboard journey, hundreds-of-rows runtime, database/hosted/business acceptance or application test was performed by this reviewer. Earlier checkpoints above are historical evidence, superseded only by this final scoped verdict.
+
+### Final exact saved source hashes
+
+| File | SHA-256 |
+|---|---|
+| [bpay-next-snooze-window.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-snooze-window.js>) | `14402ea6aae91fc0d2dad4ab07685be47eef668ba52af163acf7fbbd62b67b0e` |
+| [bpay-next-workbench.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-workbench.js>) | `56bf0028a50ae47e2a1a301167d76b01eeb093e46fd89f0c7482d20ae3e20abb` |
+| [main.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/main.js>) | `a65011bef9bb78bb83e4b8e2ab7481690dd724c83ef6b3716b79ff6c11292915` |
+| [bpay-next-ui.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-ui.js>) | `e72d3c6280cd44dfb34346613724f05e0e44f2c4bcf33cdc174862834295ecc5` |
+| [bpay-next-office.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-office.js>) | `4b56e7c3dc82fa0601f3efa9745d7f20e5e36171b0cba79a8fb5f8b8748391d2` |
+| [bpay-next-office.css](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/css/bpay-next-office.css>) | `6336fcbe8e7e559bc6dc907509eb0a5c64447346e47c499d5db796708d7f032d` |
+| [index.html](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/index.html>) | `603549abac46dff55ab8c90e86ac6da335dddab5221e1961fdb987f2df086609` |

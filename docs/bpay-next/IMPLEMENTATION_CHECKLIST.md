@@ -2201,7 +2201,7 @@ WB37 ITEM [x] Built [x] Reviewed; exact D06/D07 plus card-named bounded minute l
 
 ## WB-38 — Snooze window and snooze controls (row, expand, Timesheet window, all expenses)
 
-Seq 75; Snooze/Hold · WB-H; reviewer R2; current requested-feature status MISSING.
+Seq 75; Snooze/Hold · WB-H; reviewer R2; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only WB-38's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -2209,7 +2209,7 @@ Dependencies: WB-36, WB-16, F-15, F-16; successor positions: none. Design note: 
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| WB-38-D06 | SCREEN: Shared snooze dialog/row/Timesheet/all-expenses controls | MISSING | Supported segment/expense/mileage/case identity, single confirmation/paged scope and failure-only retry; one owner all entry points. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| WB-38-D06 | SCREEN: Shared snooze dialog/row/Timesheet/all-expenses controls | BUILT_REVIEWED | Supported segment/expense/mileage/case identity, single confirmation/paged scope and failure-only retry; one owner all entry points. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -2232,6 +2232,8 @@ Exact source/evidence, signature and per-row checks: review/R2.json, CSV rows WB
   - After saving, the toast states the eligible-again date and only that Candidate's rows re-read (RQ-071).
   - A single mileage line can be snoozed and unsnoozed; an indefinitely snoozed line shows no inline controls but is reachable in Payment Advances / Snoozes (RQ-073).
   - From the Timesheet window under NEXT, Snooze payment works with no 410 (LSV-040, LSV-041); no old Banking engine parity is required.
+
+WB38 ITEM [x] Built [x] Reviewed; exact D06 and card-required bounded native MANY receipts complete. Implementation BE 09cbed4692e88a041b8ca475fadae7d120962e10, FE 296e87d38f50821e442d03758893688889a0f301.335/879 db:check, sole PG17 compile, source/syntax/seal/coupling/catalogue PASS.69 actual local screens40PASS/0FAIL/2NA, independent source and A4 reviews. Native Timesheet parent/app/queue authored NOT_RUN; installation unchecked. Whole59/288 BUILT59/288 REVIEWED.
 
 ## WB-40 — Timesheet pay hold honoured by NEXT
 
