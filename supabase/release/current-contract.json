@@ -11035,7 +11035,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "981bd1f09cd8b3fdada2afb8465abe6b205ce374b9860e7958d65dc02ff736f9"
+      "definition_sha256": "0f10ff53fd9f1a5459985d25920b1776e1f1a5ea15444421af54b456fb08b13d"
     },
     {
       "acl": [
@@ -11582,6 +11582,25 @@
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
+      "identity": "bpay_next_case_change_assert_v1(p_case_id uuid, p_expected_case_revision bigint, p_mode text, p_amount numeric, p_capacity_purpose text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "b07d8a1cbd282e1d995d18aeea5e74954be055125d73052b5e59e54e06bea7a4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
       "identity": "bpay_next_case_event_insert_guard_v1()",
       "parallel": "u",
       "volatility": "v",
@@ -11625,6 +11644,44 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "e509b9d281eb6b0b52a68b0ab32a66954dbe85874aa2fcb40ffd9c0c9cdb0fb8"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_protected_bindings_v1(p_case_id uuid, p_after jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "d9485105c04972a3cf560508111dc2256aed3ca3bbd5489e1f74287e97f2a448"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_case_reserved_slices_v1(p_case_id uuid, p_cursor jsonb, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "61210302212e7e798774b58d3b2a7b2a3edddcc438fce186ef259c76f07e23c7"
     },
     {
       "acl": [
@@ -102511,6 +102568,10 @@
       ],
       "indexes": [
         {
+          "name": "bpay_next_run_choice_case_protection_idx",
+          "definition": "CREATE INDEX bpay_next_run_choice_case_protection_idx ON private.bpay_next_run_choice_member USING btree (case_component_id, run_id, candidate_id) WHERE ((member_kind = 'CASE_COMPONENT'::text) AND selected)"
+        },
+        {
           "name": "bpay_next_run_choice_member_candidate_idx",
           "definition": "CREATE INDEX bpay_next_run_choice_member_candidate_idx ON private.bpay_next_run_choice_member USING btree (run_id, candidate_id, member_kind, member_id)"
         },
@@ -124954,7 +125015,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (issue_code = ANY (ARRAY['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY'::text, 'BPAY_NEXT_WRITE_OFF_AMOUNT_EXCEEDS_BALANCE'::text, 'BPAY_NEXT_WRITE_OFF_COMPONENT_CHANGED'::text, 'BPAY_NEXT_WRITE_OFF_ORIGIN_UNBOUND'::text, 'BPAY_NEXT_WRITE_OFF_NO_BALANCE'::text]))"
+          "definition": "CHECK (issue_code = ANY (ARRAY['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY'::text, 'BPAY_NEXT_WRITE_OFF_AMOUNT_EXCEEDS_BALANCE'::text, 'BPAY_NEXT_WRITE_OFF_COMPONENT_CHANGED'::text, 'BPAY_NEXT_WRITE_OFF_ORIGIN_UNBOUND'::text, 'BPAY_NEXT_WRITE_OFF_NO_BALANCE'::text, 'BPAY_NEXT_WRITE_OFF_INPUT_PENDING'::text]))"
         },
         {
           "name": "bpay_next_write_off_request_pkey",

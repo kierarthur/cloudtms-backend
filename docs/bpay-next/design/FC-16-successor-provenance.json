@@ -1,0 +1,43 @@
+{
+  "item": "FC-16",
+  "sequence": 100,
+  "decision": "BD112",
+  "status": "SOURCE_REVIEWED_PENDING_LOCAL_COMMIT",
+  "sources": [
+    {
+      "path": "supabase/migrations/11102026_1509_banking_pay_next_case_protection_lookup_indexes.sql",
+      "sha256": "f9fe0d603447db42aff4f3837e5896fa6e1f5ab24e67d67c3f1ceb262dfca027"
+    },
+    {
+      "path": "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql",
+      "sha256": "087c3c5d3ae9cfaa94b66ea58b338358d0236f2b4953be5ee6adf7e3dfc60fd4"
+    },
+    {
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "792d94f0ef97fb12e8daffaa9afa6ab92cf467664f22d4c02fda4e188f830923"
+    },
+    {
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "93f8eb2b99ab9f09fe1ef4a727d1a1d3a643fa94207affc4cea71bc02306f179"
+    }
+  ],
+  "currentOwners": "design/FC-16-current-owner-catalogue.json",
+  "reviews": [
+    "design/FC-16-design-review.md",
+    "design/FC-16-binding-review.md"
+  ],
+  "checks": {
+    "integrity": "348 migrations /910 repeatables",
+    "sourceGates": "12/12 PASS before final changed load",
+    "localPG": "one locked migration /four repeatable closures; four bodies/signatures/configuration/volatile/ACLs matched",
+    "contractHash": "6be648756ce3ee26331c9d4d5bfd2d98b3fa26bcd48dda99aa11e04e42bd8915",
+    "seal": "PASS",
+    "coupling": "PASS",
+    "general": "837/76/0/d695f2f10d6576d8a3b69f1fe263b297",
+    "verifiers": "General/Candidate/current-v3 DO PASS",
+    "publicMembershipDelta": 0,
+    "nodeSyntax": "both changed Worker files PASS"
+  },
+  "screen": "NOT_APPLICABLE — no direct FC16 screen",
+  "futureJoined": "AUTHORED_NOT_RUN"
+}

@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "aca2b7bae08a19a4136a03ffbe0a870566b1db46",
-  "compiledAtUtc": "2026-10-11T13:43:30.244Z",
+  "sourceCommit": "b6435beeb983f8704c89ac3ba743d5fde9637e02",
+  "compiledAtUtc": "2026-10-11T14:24:20.566Z",
   "inventory": {
     "migrations": [
       {
@@ -1396,6 +1396,10 @@
       {
         "path": "supabase/migrations/11102026_1358_banking_pay_next_paye_same_week_guard.sql",
         "sha256": "b74faed7a411d96b5df3685181efa692f5cb64b33fb014639d1182a9b2cbe247"
+      },
+      {
+        "path": "supabase/migrations/11102026_1509_banking_pay_next_case_protection_lookup_indexes.sql",
+        "sha256": "f9fe0d603447db42aff4f3837e5896fa6e1f5ab24e67d67c3f1ceb262dfca027"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8174,6 +8178,13 @@
         "sha256": "b8ad7c2a083a0438dea233d9d887e23db4af25daedae2c966f83949e4cb52764"
       },
       {
+        "path": "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql"
+        ],
+        "sha256": "bd792950600abd22651adca1d77ad99e224ce3945f4783391a7c5123726f3c51"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8183,12 +8194,7 @@
     ]
   },
   "selected": {
-    "migrations": [
-      {
-        "path": "supabase/migrations/11102026_1358_banking_pay_next_paye_same_week_guard.sql",
-        "sha256": "b74faed7a411d96b5df3685181efa692f5cb64b33fb014639d1182a9b2cbe247"
-      }
-    ],
+    "migrations": [],
     "repeatables": [
       {
         "path": "supabase/repeatable/24082026_0322_miget_postrestore_rpc_browser_isolation.sql",
@@ -8212,32 +8218,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql",
+        "path": "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_1358_banking_pay_next_guarded_create_v1.sql"
+          "supabase/repeatable/11102026_1509_banking_pay_next_case_change_guard_v1.sql"
         ],
-        "sha256": "24b7fa8d3065c69a85f117f0d3c2f7d7fd7820cdaf3db9bab1757e7c898485f3"
-      },
-      {
-        "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql"
-        ],
-        "sha256": "18e1f807fae7e03164f76f9d19deef3aa9f6ea88d0a3990d6f4e7897c64a17d0"
-      },
-      {
-        "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_override_reauth_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_1358_banking_pay_next_paye_override_reauth_v1.sql"
-        ],
-        "sha256": "d0370b51c944af40bca12dc33a9058ff7b2517957bcb17fddbcc5c1f60bd8918"
-      },
-      {
-        "path": "supabase/repeatable/11102026_1358_banking_pay_next_paye_same_week_guard_v1.sql",
-        "paths": [
-          "supabase/repeatable/11102026_1358_banking_pay_next_paye_same_week_guard_v1.sql"
-        ],
-        "sha256": "b8ad7c2a083a0438dea233d9d887e23db4af25daedae2c966f83949e4cb52764"
+        "sha256": "bd792950600abd22651adca1d77ad99e224ce3945f4783391a7c5123726f3c51"
       }
     ]
   },

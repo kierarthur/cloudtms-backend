@@ -43,7 +43,7 @@ const protectedAction = (action) => BPAY_NEXT_PROTECTED_ACTIONS.includes(action)
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const MONEY = /^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
 const CASE_MONEY = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/;
-const WRITE_OFF_ISSUES = ['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY','BPAY_NEXT_WRITE_OFF_AMOUNT_EXCEEDS_BALANCE',
+const WRITE_OFF_ISSUES = ['BPAY_NEXT_WRITE_OFF_INPUT_PENDING','BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY','BPAY_NEXT_WRITE_OFF_AMOUNT_EXCEEDS_BALANCE',
   'BPAY_NEXT_WRITE_OFF_COMPONENT_CHANGED','BPAY_NEXT_WRITE_OFF_ORIGIN_UNBOUND','BPAY_NEXT_WRITE_OFF_NO_BALANCE'];
 const BIGINT = /^(?:0|[1-9]\d{0,18})$/;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
