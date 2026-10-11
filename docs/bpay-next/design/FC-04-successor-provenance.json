@@ -75,5 +75,19 @@
   "futureHost": "FC02 generated sequence117 supplies full Cases page; exact accepted Case callback ready",
   "implementationCommit": "f51a40c33674716799c50f4f6c72429831faa7ec",
   "frontendCommit": "df95a98209f11e75b57ae4f6e2b52dce45ca9299",
-  "screen": "A4 PASS:42 actual captures; full42policy no unexplained difference or essential failure"
+  "screen": "A4 PASS:42 actual captures; full42policy no unexplained difference or essential failure",
+  "corrections": [
+    {
+      "id": "FC05-phone-hit-area",
+      "owner": "FC-04 shared native creation style",
+      "foundBy": "FC-05 A4 P11802",
+      "change": "Scope existing44px phone rule by native creation body instead of requiring mounted shared actions. Closes unselected/header/footer hit-area gap on next shared-style touch; no financial/control change.",
+      "source": {
+        "repository": "FE",
+        "path": "css/bpay-next-office.css",
+        "sha256": "dc976dd81d95e7fac3555a1a9c2470782c4ab84c61c16e22aa4b6cb619d6feb4"
+      },
+      "evidence": "SCR117 unselected phone main+top recaptured only; original remaining pixels retained; original A4 manifest remains historical except2 new PNGs"
+    }
+  ]
 }
