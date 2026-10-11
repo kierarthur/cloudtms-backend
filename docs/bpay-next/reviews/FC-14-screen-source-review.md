@@ -1,6 +1,6 @@
 # FC-14 independent screen source observations
 
-Status: SOURCE OBSERVATIONS SAVED; A4 PENDING actual captures. Reviewed 11/10/2026 against full FC-14 card, ITEM/D01–D07, BD121, supplied B9 SCR-126 and B8 SCR-111/111b specs, full SCREEN_DESIGN_POLICY and manual tools/policy.json wording lists. Product root-only; lifecycle/cache correctness has a separate independent reviewer.
+Status: PRESENTATION SOURCE PASS; scoped A4 APPROVED after final36 actual captures. Reviewed 11/10/2026 against full FC-14 card, ITEM/D01–D07, BD121, supplied B9 SCR-126 and B8 SCR-111/111b specs, full SCREEN_DESIGN_POLICY and manual tools/policy.json wording lists. Product root-only; lifecycle/cache correctness has a separate independent reviewer. Earlier observations below are preserved as chronology, not unresolved final defects.
 
 The saved native module reuses the standard read window, native header Close, bounded GET-only CASE_AUDIT/CANDIDATE_CASE_REPORT reads, exact DTO validator and continuous cursor scrolling. Audit starts When oldest first; report starts Next date soonest first, Active only on, with fixed business sections. Each data heading requests server sorting; phone has Sort by and labelled facts. Whole-list count and report summaries are native reader values. Funded/recovered/written-off/reserved facts are card-required additions, not new financial calculations. Audit/phone Open navigate actual Case/Timesheet identities. No new financial action, journal, Export or Refresh control is added.
 
@@ -23,6 +23,23 @@ Follow-up P14-08 (factual label): native report source2129:249 emits TIMESHEET_S
 Capture-only D14-01: initial fixed CREATE_REQUEST/Created and CASE_EVENT/SYSTEM tuples differ from the actual current2129 label/actor branches. Creation requested is accepted request truth; Created belongs to CASE_EVENT/APPROVED. CASE_EVENT actors are HUMAN or UNKNOWN in this current source. Align local GET-only samples with native row semantics; do not claim absent automatic actor evidence. No new SQL/business data is requested by this capture finding.
 
 Final-pass follow-up P14-09 (reported immediately): genuine empty audit/report phone states still show a thin outlined empty table region, while desktop keeps redundant header-only tables. Hide the completed empty region; preserve the one empty-state line, true zero count/summary, and report Active only filter. SDP-59/checklist7/34 and the owner's every-visible-element review do not give the empty phone strip a payroll purpose. Remaining inspected final states have no newly identified essential visual failure; closure awaits this small corrected capture.
+
+## Final source and A4 closure
+
+S14-01–05, P14-01–09 and capture D14-01 closed on final saved source/batch78657. Source verified exact formatted-money spans/summary/balance facts, retained live subtitle/loading sentinel, native five-tone badge classes, native universal table/11px headings/13px radius, scoped modal CSS without new !important, existing data-ws-sort exemption, header subject grid and phone44 controls. Arrow/Home/End and Enter handlers are present; genuine completed empty region is hidden without hiding report Active only or true zero facts. Audit Details formatting changes literal ungrouped pounds through the same exact string formatter; already grouped values are preserved and no arithmetic is introduced.
+
+All36 current images independently inspected beside supplied designs; final six empty replacements reopened, other30 final hashes identical to inspected pixels. Family complete42 policy:37PASS/0FAIL/5N/A. Final receipts and per-image/source hashes saved in screen-designs/SCR-126/review.md, SCR-111/review.md and SCR-111b/review.md. Every visible difference/control purpose is recorded there. First failed header name/reference unavailable is an explicit ownerA2/BD121 limitation, never scored as present; no fabricated field or additional reader. Report changed-sort and parent keyboard/focus interactions remain source-only where not actually performed. Joined/native parent/business history/scale acceptance NOT_RUN; reviewer ran no test/render/DB/hosted action.
+
++| Current saved FE source | SHA-256 |
+| --- | --- |
+| js/bpay-next-case-audit.js | 15d133f75e6e2d2c14eb6253cf0c4436e0821db98f6bfe28f7f42cf278c4adf5 |
+| js/bpay-next-case-audit-contract.js | 145ce37b807cc31cf6d2e3f2b6e5672a4110a61c59615562d8966484943a8eff |
+| js/bpay-next-office.js | 2a53ec2adb75c94e9aea95321b8f372882142db0b948bee2f0f535a48f650314 |
+| js/main.js | 358b817d22ca9b0affaeb210486d655600595e60628afdbf967ccf0cedc072e8 |
+| css/bpay-next-office.css | ce94fea2bed38497172819488f0346c59adeba2e03ddc303b6122bbfab858d1d |
+| js/bpay-next-ui.js | f535e7e75579428ca7b97b57d406ccaeadaebbf0fe15e5935574f435b772248d |
+| js/modal-modernisation.js | 0cdb7f981c039afd8b86c14124d728cd1ad824cefd18cb294a313393112f642b |
+| index.html | 8f4561ad8b84ae49be7793662bbe8e2e4480bc0aaa49bba64dc74eaefa68913f |
 
 Initial source SHA-256 snapshot (superseded by final review, never used as final capture provenance):
 

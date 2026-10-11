@@ -1,0 +1,146 @@
+[
+  {
+    "id": "SCR-111b",
+    "file": "FC14-failed-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n—\nOVERPAYMENTS OUTSTANDING\n—\nSNOOZED ITEMS\n—\n!\n\nCould not load the report; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Retry",
+          "width": 60.375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111b",
+    "file": "FC14-failed-device-light.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n—\nOVERPAYMENTS OUTSTANDING\n—\nSNOOZED ITEMS\n—\n!\n\nCould not load the report; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 978,
+      "scrollWidth": 978,
+      "bodyWidth": 967,
+      "bodyScrollWidth": 967,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 60.515625,
+          "height": 38
+        },
+        {
+          "text": "Retry",
+          "width": 60.375,
+          "height": 38
+        }
+      ]
+    }
+  },
+  {
+    "id": "SCR-111b",
+    "file": "FC14-failed-phone-dark.png",
+    "errors": [],
+    "copy": "Candidate Finance Report\n\nClose\nPAYMENT ADVANCES OUTSTANDING\n—\nOVERPAYMENTS OUTSTANDING\n—\nSNOOZED ITEMS\n—\n!\n\nCould not load the report; try again.\n\nRetry",
+    "requests": [
+      {
+        "kind": "CANDIDATE_CASE_REPORT",
+        "args": {
+          "candidate_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "active_only": true,
+          "sort": "NEXT_DATE",
+          "direction": "ASC",
+          "limit": 100,
+          "after": null,
+          "include_count": true
+        },
+        "method": "GET"
+      }
+    ],
+    "failure": null,
+    "geometry": {
+      "focus": "<body class=\"ctms-summary-proposal\" data-summary-proposal-section=\"candidates\">\n  <div class=\"topbar\">\n    <div class=\"brand\" role=\"img\" aria-label=\"CloudTMS\" title=\"CloudTMS\">\n      <img src=\"./assets/branding/cloudtms-office-logo-black.png\" alt=\"\" ",
+      "list": "<div class=\"bpay-next-case-finance-scroll ctms-universal-table-host\" role=\"region\" aria-label=\"Candidate finance\" tabindex=\"0\" aria-busy=\"false\" hidden=\"\"><table class=\"bpay-next-case-finance-table ctms-universal-table ctms-universal-card-table\"><thead><tr><th scope=\"col\" class=\"\" aria-sort=\"none\"><",
+      "listStyle": {
+        "border": "1px solid rgb(38, 57, 79)",
+        "outline": "rgb(248, 250, 252) none 3px",
+        "shadow": "none"
+      },
+      "width": 376,
+      "scrollWidth": 376,
+      "bodyWidth": 376,
+      "bodyScrollWidth": 376,
+      "primaryCount": 1,
+      "controls": [
+        {
+          "text": "Close",
+          "width": 54.515625,
+          "height": 44
+        },
+        {
+          "text": "Retry",
+          "width": 54.375,
+          "height": 44
+        }
+      ]
+    }
+  }
+]

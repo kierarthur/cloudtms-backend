@@ -39,7 +39,7 @@
       "inverseMatches": true
     }
   ],
-  "status": "SOURCE_BUILT_A4_PENDING",
+  "status": "BUILT_REVIEWED",
   "sequence": 109,
   "decision": "BD121",
   "signatures": [
@@ -96,7 +96,7 @@
     {
       "repository": "FE",
       "path": "js/bpay-next-case-audit.js",
-      "sha256": "ecc2f2c7c6512cb4696fc4a7f9d46af9f2467f2596d3ea7b1f742cd664af9bf5"
+      "sha256": "15d133f75e6e2d2c14eb6253cf0c4436e0821db98f6bfe28f7f42cf278c4adf5"
     },
     {
       "repository": "FE",
@@ -128,8 +128,10 @@
     "integrity": "355 migrations/917 repeatables PASS",
     "source": "Existing12gates PASS; final syntax PASS",
     "local": "Sole PG17 changed-only compile;13 body/owner/ACL/config matches; one immutable table/2guards/7indices; General/CandidateDO PASS; publicSECDEF membershipdelta0",
-    "contract": "1ae82216e2d1e6dfa12b9c9f71706ba9c024e8572dfefe9a532c028a4ef9cb00 export; final seal/coupling pending",
-    "a4": "36 actual GET-only local fixed-response captures; independent final pending",
+    "contract": "1ae82216e2d1e6dfa12b9c9f71706ba9c024e8572dfefe9a532c028a4ef9cb00 export/seal/couplingPASS",
+    "a4": "IndependentA4APPROVED36actualGET-onlylocalcaptures; fullpolicy/adjacentdesign/controlpurpose allfindingsclosed",
     "joined": "AUTHORED_NOT_RUN"
-  }
+  },
+  "implementationCommit": "b7cb1f2a3a033c6cd4d45bd525a3b65d0d6b576a",
+  "frontendCommit": "1f752c3efa49bacd9a184ac9d76538d226c03708"
 }
