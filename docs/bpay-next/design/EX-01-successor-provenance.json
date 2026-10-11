@@ -2,7 +2,7 @@
   "item": "EX-01",
   "sequence": 98,
   "decision": "BD110",
-  "status": "REVIEWED_PENDING_LOCAL_RECEIPT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/migrations/11102026_1302_banking_pay_next_reauth_proof_v1.sql",
@@ -81,5 +81,6 @@
   "screenReview": "screen-designs/SCR-66/review.md",
   "futureJoined": "AUTHORED_NOT_RUN",
   "frontendCommit": "594313136491a70c61580288917f001514a58210",
-  "screenPolicy": "Desktop32 PASS /0 FAIL /10 N/A; phone30 PASS /0 FAIL /12 N/A;45 actual final captures"
+  "screenPolicy": "Desktop32 PASS /0 FAIL /10 N/A; phone30 PASS /0 FAIL /12 N/A;45 actual final captures",
+  "implementationCommit": "f1027a960c94ad346d1941166c1674a1acd16722"
 }
