@@ -3252,7 +3252,7 @@ FC14 ITEM/D01/D02/D03/D05/D06 BUILT/REVIEWED; contextD04/D07retained. BE b7cb1f2
 
 ## SP-14 — Pay Query pin at NEXT capture and the REVIEW outcome (seam S7)
 
-Seq 110; Pay Query, Frozen-Draft · SP-E; reviewer R5; current requested-feature status PARTLY_DONE.
+Seq 110; Pay Query, Frozen-Draft · SP-E; reviewer R5; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Use F-25's captured query state and accepted command cut for Source admission. A query accepted before Create Draft blocks that selected Timesheet; one opened afterwards does not alter/block the frozen Draft. Retire conflicting SRQ-080 late-query interpretation explicitly, with provenance retained. Query-only actions cannot create entitlement differences, recoveries or invoice movements. Existing accepted retries use the retained input. addendum/R2_EXACT_CONNECTIONS.md §4.
 
@@ -3260,11 +3260,11 @@ Dependencies: SP-06, SP-12, F-25, F-16; successor positions: `03102026_1610` pos
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-14-D01 | REPEATABLE: W/supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql | PARTLY_DONE | Preserve existing earlier-command/pin/replay/sealed-choice logic. Joint Draft/R3/Source owners trace every click cutoff and complete only live-dependency gaps; late current/gate reads cannot invalidate accepted Draft. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-14-D02 | REPEATABLE: W/supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql | PARTLY_DONE | Record early admission/replay/pin/capture lines and reconcile OR44 retained evidence with Draft owner; preserve positive Source predicate/missing-companion refusal, no Additional exemption. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-14-D03 | REPEATABLE: 04102026_0280 direct preparation/key caller enforcement | PARTLY_DONE | Verify exact current caller admission-key placement/positive pin predicate and same request before any fresh admission; preserve frozen artifact owner. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-14-D04 | QUEUE-CRON: W/broker/src/bpay-next-job-step.js known rollback fault mapping | LOCAL_ONLY | Reconcile existing saved55P03 transaction retry mapping, preserve40001/40P01/57014 known rollback semantics; arbitrary55000/unknown never made safe retry. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-14-D05 | QUEUE-CRON: W/broker/src/bpay-next-background.js and bpay-next-job-rpc.js original STEP retry | LOCAL_ONLY | Verify queue retains original STEP nonce/epoch/cursor with RETRY_CALL, no fresh CLAIM/dispatch; full Worker path NOT_RUN. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-14-D01 | REPEATABLE: W/supabase/repeatable/03102026_1600_banking_pay_next_prepare_pin_v1.sql | BUILT_REVIEWED | Preserve existing earlier-command/pin/replay/sealed-choice logic. Joint Draft/R3/Source owners trace every click cutoff and complete only live-dependency gaps; late current/gate reads cannot invalidate accepted Draft. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-14-D02 | REPEATABLE: W/supabase/repeatable/03102026_1610_banking_pay_next_position_capture_v1.sql | BUILT_REVIEWED | Record early admission/replay/pin/capture lines and reconcile OR44 retained evidence with Draft owner; preserve positive Source predicate/missing-companion refusal, no Additional exemption. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-14-D03 | REPEATABLE: 04102026_0280 direct preparation/key caller enforcement | BUILT_REVIEWED | Verify exact current caller admission-key placement/positive pin predicate and same request before any fresh admission; preserve frozen artifact owner. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-14-D04 | QUEUE-CRON: W/broker/src/bpay-next-job-step.js known rollback fault mapping | BUILT_REVIEWED | Reconcile existing saved55P03 transaction retry mapping, preserve40001/40P01/57014 known rollback semantics; arbitrary55000/unknown never made safe retry. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-14-D05 | QUEUE-CRON: W/broker/src/bpay-next-background.js and bpay-next-job-rpc.js original STEP retry | BUILT_REVIEWED | Verify queue retains original STEP nonce/epoch/cursor with RETRY_CALL, no fresh CLAIM/dispatch; full Worker path NOT_RUN. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 **Shared-owner evidence only — not additional tasks:**
 
@@ -3275,6 +3275,8 @@ Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, preparing Candidates A (Source WORK with an open query at the accepted Create Draft cutoff) and B (clean) gives a Draft for B only and "Review required: Pay Query open" for A with no hold; after resolving A's query, a new preparation includes A; a query opened on B after Create Draft acceptance, including before asynchronous preparation/confirmation finishes, leaves B's Draft at its click-frozen £100 and affects only the next Draft. Observed by: RQ-335 → a Source Timesheet whose Additional item is unmapped is not admitted through the pin (it stays refused), and replaying the same preparation request returns the original result with no new admission; SRQ-074, SRQ-319 and SCX-049 → a busy admission during preparation shows a retry, never an error, and the step resumes on the same page; SRQ-081, SRQ-316 → in the same preparation an ordinary or expense-only Candidate C is never held by A's query, and a Candidate whose Source line is zero or negative is not blocked by it; SRQ-075, SRQ-080 (SUPERSEDED by OR-44; replacement sentence owned here), SRQ-315 and NX-060, NX-061 → a BUILD_LOG line exists for each (internal placements). Covers observed: SRQ-082, SRQ-083, SRQ-087, SCX-082, RQ-264, RQ-265 → the A/B preparation check and B's frozen £100.
+
+SP14 ITEM/D01–D05 BUILT/REVIEWED underBD122, D06contextunchanged. Commit 0436e69fc6a479116c71a53d6047780b9c92f28e; design/SP-14-owner-amendment.md; design/SP-14-completion.md; design/SP-14-successor-provenance.json; design/SP-14-current-owner-catalogue.json; reviews/SP-14-scope-review.md; reviews/SP-14-shift-source-review.md; reviews/SP-14-authorise-source-review.md; reviews/SP-14-worker-retry-review.md. Normal compile/source/catalogue/contract checks PASS; joinedAUTHORED_NOT_RUN. Whole 91/288 BUILT/REVIEWED; nextPF07seq111.
 
 ## PF-07 — Durable job rows, ID-only messages and one ordered intake
 

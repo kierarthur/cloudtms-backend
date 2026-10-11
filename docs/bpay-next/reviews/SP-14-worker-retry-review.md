@@ -41,4 +41,3 @@ The four Worker files have no saved working-tree delta from current HEAD (`git d
 | `design/SP-14-owner-amendment.md` | `5D25272F359B2DFB433BB2F83707B40B9B2A92CEF1DBFD750C99FA982F775065` |
 
 No remaining essential source defect was found in this exact slice. This receipt does not pass the item, its SQL shift classification or any installed/joined financial behavior. Compile/catalogue, actual busy/rollback delivery, unknown-outcome replay, durable queued recovery, both-order contention and timing/no-starvation remain **NOT_RUN by this reviewer**.
-

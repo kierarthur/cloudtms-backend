@@ -107,6 +107,3 @@ The actual installed classifier is STABLE SECURITY DEFINER and lock-free, final 
 For the narrow captured query extension, derive the raw five-key gate and exact query-held identities/reasons from the **same Source facts read** under original Create admission. Do not separately reinterpret a raw digest using later facts; do not require a browser assertion. This is direct retained native input, not a new digest/witness protocol. Any honest native size/identity failure must remain explicit and fail closed; no truncation or date-based partial matching. Current query-pin/money owners and genuine nonpositive/held/recovery exceptions remain.
 
 This qualification supersedes any reading of the earlier frontdoor paragraph that would allow group absence alone to bypass admission.
-
-
-

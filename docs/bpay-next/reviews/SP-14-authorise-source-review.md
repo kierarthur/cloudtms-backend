@@ -66,4 +66,3 @@ The migration remains two nullable columns on existing private relations with ar
 | final-definer-closures.json | `a482c107d56b32b2bac71027ad933327463e9838d42f2d04228821bd9b70527e` |
 
 No essential source finding remains within this review. Root performs normal compile/catalogue/contract checks separately. Business outcomes, real both-order Source contention, timing/no-starvation, queued application and joined Office acceptance remain AUTHORED_NOT_RUN; this reviewer performed none.
-
