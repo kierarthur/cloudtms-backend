@@ -2,7 +2,7 @@
   "item": "FC-01",
   "sequence": 103,
   "decision": "BD115",
-  "status": "BACKEND_BUILT_REVIEWED_PENDING_PRODUCT_COMMIT",
+  "status": "BACKEND_BUILT_REVIEWED_PENDING_FC02_SCREEN",
   "builtDeliverables": [
     "FC-01-D01",
     "FC-01-D02",
@@ -58,5 +58,6 @@
     "compileCorrection": "42601 CASE operand in IF: parentheses-only repeatable correction; locked additive migration unchanged"
   },
   "futureJoined": "AUTHORED_NOT_RUN",
-  "timing": "Moved to TEST after installation (owner10/10/2026)"
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "2b802c1f3386610b2adbac89b4757fd833e76894"
 }
