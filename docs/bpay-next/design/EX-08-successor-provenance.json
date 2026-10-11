@@ -2,7 +2,7 @@
   "item": "EX-08",
   "sequence": 102,
   "decision": "BD114",
-  "status": "CHECKED_REVIEWED_PENDING_LOCAL_COMMIT",
+  "status": "BUILT_REVIEWED",
   "sources": [
     {
       "path": "supabase/migrations/11102026_1624_banking_pay_next_pay_method_change_receipt.sql",
@@ -95,5 +95,6 @@
     "screen-designs/SCR-74/review.md"
   ],
   "futureJoined": "AUTHORED_NOT_RUN",
-  "frontendCommit": "9bedcbf2d04c161a3b91080156a6c2b8509ef5ec"
+  "frontendCommit": "9bedcbf2d04c161a3b91080156a6c2b8509ef5ec",
+  "implementationCommit": "fda643b70f6f5d90e5962688306cd2b05806f91e"
 }

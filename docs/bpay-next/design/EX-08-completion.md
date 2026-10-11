@@ -9,3 +9,5 @@ Process correction: first local load refused42501 on new quoted owner/policy. Lo
 Nine state groups/27 native local captures, minimal five fixed response rows only. Every visible design difference/control purpose is documented alongside SCR74. No hosted/TEST app/DB rows/business RPC/queue/payment/provider/bank/email/drain/timing actions. Timing check moved to TEST after installation (owner10/10/2026). Future joined card checks AUTHORED_NOT_RUN.
 
 Final A4 fixes: plain protected-row wording, accepted reopened state/header Close only, truthful failed-state prompt, hidden retained picker, alert/status roles, scoped native selectors, phone44px controls/uncropped header/right-aligned money, sticky13px header corners/16px outer cards and string-only negative pound format. Every final image compared beside supplied PNG, no unexplained difference. FE product 9bedcbf2d04c161a3b91080156a6c2b8509ef5ec.
+
+Product commits BE fda643b70f6f5d90e5962688306cd2b05806f91e; FE 9bedcbf2d04c161a3b91080156a6c2b8509ef5ec. ITEM and9owning deliverables BUILT/REVIEWED; context preserved. Source/A4 approval only; TEST/app checks remain authoredNOT_RUN.
