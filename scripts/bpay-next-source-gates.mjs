@@ -46,6 +46,7 @@ export const FROZEN_FILES=Object.freeze([
 // PF04: current operational roots and their finite reviewed helper closure.
 // Resolve actual final definitions below; no unchanged-file/history waiver.
 export const ROUTINE_WORK_SIGNATURES=Object.freeze([
+  "private.bpay_next_source_query_refresh_v1(uuid,uuid)",
   "private.bpay_next_prepare_attention_page_v1(uuid,uuid,integer)",
   "private.bpay_next_retry_prepare_job_v1(uuid,jsonb)",
   "private.bpay_next_prepare_failure_v1(uuid,jsonb)",
@@ -204,6 +205,7 @@ export const ROUTINE_WORK_SIGNATURES=Object.freeze([
   "private.bpay_next_workbench_export_rows_page_v1(jsonb,jsonb,integer)",
 ]);
 const ROUTINE_WORK_CALLEES=Object.freeze({
+  "private.bpay_next_source_query_refresh_v1(uuid,uuid)": ["array_agg","cardinality","private.bpay_next_workbench_refresh_work_v1"],
   "private.bpay_next_accept_worker_action_v1(uuid,uuid,text,uuid,bigint,uuid)": ["private.bpay_next_retry_execution_v1","private.bpay_next_prepare_attention_v1"],
   "private.bpay_next_discard_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1"],
   "private.bpay_next_expire_preparation_worker_page_v1(uuid,uuid,bigint,bigint,integer)": ["private.bpay_next_retry_execution_v1"],
