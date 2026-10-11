@@ -1,0 +1,37 @@
+# DR-05 capture/dispatch early source review
+
+11 October 2026. Independent read-only review of the0559 batch: financial dispatch/review/Confirm, segment owner/query pin and collection capture/mutation guards, retained segment-parent completion and segment capture. The producer is root alone. Expiry, Worker/UI and final packaging are still being authored; this is **not item PASS**. No product/checklist edits, SQL execution, database/hosted calls, tests, fixtures, browser or Git mutations.
+
+Source: `supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql`, current reviewed snapshot SHA256 `497e236087088dfc2c8853a7c513c11285ac8afd963c7d8ac3ede0b99acb79b9`. Root is appending concurrently; function names are the stable anchors where later appends shift the numeric lines.
+
+## Actionable findings reported immediately
+
+1. **P1 — PINNING lookup uses an undefined SQL alias and obsolete input map.** `bpay_next_pin_selected_work_v1` at749–750 selects `bpay_next_prepare_job_run_v1(j.id)` from only `bpay_next_run_command rc`; this SELECT has no `j` alias. It also still requires `rc.command_id=v_job.command_id`, which a manual retry command intentionally lacks. Resolve the scalar helper from `p_job_id`/`v_job.id`, then reject a missing mapping. This is necessary for both SQL execution and manual PINNING retries.
+2. **P1 — manual Case retry is filtered out before native admission.** `bpay_next_prepare_case_page_v1` at1882–1884 selects the new helper mapping but retains `INNER JOIN run_command rc ON rc.command_id=j.command_id`. The manual retry command has no run_command row, so `SELECT INTO STRICT` fails before its captured economic state and active execution checks. Remove only this obsolete join; keep the job identity predicate and exact mapping/owner checks.
+3. **P2 — segment page null limit, corrected during this review.** Its initial guard was `p_limit not between 1 and100`; NULL passed and made the new retained-parent LIMIT and remaining native member limit unbounded. Root added `p_limit is null or` before any load. Fresh source confirms that exact correction. No further bound fix requested for this function.
+
+The earlier SYSTEM null-issue finding is also closed in current migration/request admission: the table requires `original_issue_code is not null` for SYSTEM and the helper explicitly rejects `v_issue is null`. It should no longer be treated as an open request-review defect.
+
+## Capture and retained-parent assessment
+
+The spent-parent helper has no segment or parent INSERT and changes only the original completion/classification fields plus the differential worker financial-resolution/managed counters. It compares native retained approved/realised/held source totals and original target-effect/ACTIVE-origin totals to the captured parent, then uses the same native collection-origin binder and classification as original1236:2922–2963. Its already-complete return prevents repeating the differential counter update. Failure returns false with the original issue; it does not forge successful attribution or price a newer approval.
+
+Segment capture first visits only incomplete parents whose captured member count equals their original expected count, ordered by native Work/component and limited by the page budget. Successful retained completions disappear from the next bounded visit. Their visits consume the same budget as new segment members; the original seek is passed only the remainder. Retained completions do not alter processed_count or the original segment cursor. A newly spent final parent failure persists its original processed count and seek before returning REVIEW, so the next retry rechecks that parent instead of replaying INSERT/count effects. Original parent inserts and financial amounts remain the native1236 formula. Completion still requires processed=expected and every captured parent attributed.
+
+Ordinary position capture now consolidates early refusals into the original page exit, persists the exact already-written counters/cursor before handing off, and reports the real written/segment visit sum. It does not advance past the failed unwritten member. Its bounded native Work→position locks and frozen approved revision/query pin remain. These properties address prefix duplication; the two mapping findings above still prevent a complete manual retry path until fixed.
+
+## Scope and execution fences
+
+`bpay_next_segment_prepare_owner_v1`, query-pin INSERT admission and collection capture owner use the existing module/Candidate epoch, current leased phase and exact active job helper. They admit the narrow original or typed retry map; they do not accept an arbitrary PREPARE job for the Candidate. Original immutable query-source pin provenance remains; no live Source query reader is added. The capture collection guard keeps its original conserved segment/classification checks and managed ALLOCATE transition.
+
+The general collection reconciler/collection mutation guard add a PREPARE arm only through `bpay_next_worker_released_collection_scope_v1`. That scope requires the current RUNNING RELEASE/CASE request, active execution revision, exact captured DRAFT state/selection/instruction/result, OVERPAYMENT TAXABLE PAYE GROSS_RECOVERY identity, newly RELEASED exact hold/capacity use and original amount tuple. It retains the accepted-time/cursor/count envelope. Ordinary PINNING/RESERVE/ALLOCATE PREPARE cannot use this arm. Settlement, posting, cancel and strict expiry money branches remain their original owners/formulas.
+
+The terminal helper invokes six-code E2 release before original preparing→ready/review counter movement. The prior SYSTEM bucket integration condition is therefore closed at this call site. Projection completion makes the exact request COMPLETE only with native job DONE in the same transaction. Pending retry/release requests block Review/Confirm; only completed exact release receipts resolve CANCELLED workers. Original selected/enrolled membership and permanent confirmed-DRAFT replay remain. Confirm reads the real72h clock after the run header lock.
+
+Public financial dispatch adds only the closed existing PREPARE release phases and uses original integer/pair cursor shapes. STEP invokes one owner, validates its native result, and only then yields its own nonce/epoch to READY. CLAIM returns a newly acquired lease; no active stored lease is adopted. Financial and projection pages still have<=100 input bounds and120KiB response limit. Final Worker phase/receipt compatibility and expiry integration are pending their implementation review.
+
+**Current result: findings pending the two mapping fixes; no broadened collection scope or duplicate spent-parent capture found in this batch.** Final source/runtime acceptance remains separate. Joined money, stale-child, expiry and queue races are **AUTHORED_NOT_RUN**.
+
+## Mapping closure
+
+Fresh source reread after root corrections, repeatable SHA256 `09066d99d64262378c0b88c08e809daddd998cb098c925f56b89a97038e2cf5c`: PIN now resolves the scalar helper from its actual job ID, with no undefined alias/original command-map SELECT; Case preparation1898–1900 reads only the exact native job and helper mapping, with the obsolete inner run_command join removed. Both P1 lookup findings are closed. The reviewed capture/dispatch component has no remaining finding; whole item, unfinished owners and runtime acceptance remain pending.

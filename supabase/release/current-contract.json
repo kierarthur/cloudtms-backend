@@ -10270,7 +10270,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "cc880971622beef15d8b1982cb8310756d294d12378543e16308ebe20fdfd17c"
+      "definition_sha256": "eb81ce35390164cf53df6e8a3aaac02d71e12c2564e46a28635e90202d8a9cef"
     },
     {
       "acl": [
@@ -10308,7 +10308,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8a43a897837bb248d5ae5c2f4e2de2c109f41b73790d10cfda72af44160a1ef1"
+      "definition_sha256": "9597f781f04e5af02c476f02ee5e60d53047d4f26910eb0fba384bd578a6ddd4"
     },
     {
       "acl": [
@@ -10365,7 +10365,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5016d19ed58abcd98726e4d8fe801a0d24b937af4a58bcec91568df401b98fd9"
+      "definition_sha256": "287f0e6b5ddddc50432e7b2350f9330eea1e035fa7aedcafe74dd2c2b71cdb41"
     },
     {
       "acl": [
@@ -10423,6 +10423,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "4eace5598f1dc6a5a9c060ed759da5f946818d414dce8e4a62b5829d440b4887"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private, public"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_accept_worker_action_v1(p_command_id uuid, p_run_worker_id uuid, p_action text, p_actor_user_id uuid, p_expected_revision bigint, p_system_job_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "8aa5a1cc8f4113f93b637159c9b11b36a79cc2bb3ab3e1563fbe6e139e518605"
     },
     {
       "acl": [
@@ -10802,7 +10821,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "6df52bf7679b75fdb74403deeb86a2832887d71f48711e0049ceb39e9952f095"
+      "definition_sha256": "a59b36d2d735b7c356386b3098f33194e34940a8a9c1ba4fc2661f150c0d593f"
     },
     {
       "acl": [
@@ -10840,7 +10859,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "0290dca5f7ff4f3ad3689be90b60fc7ed1b39c95bdfe84f01effcf8899a7a81a"
+      "definition_sha256": "8dc18bedce64382cef0a0f6c2157905b93a5018cc2598dd4fa7d90d54f7a75ee"
     },
     {
       "acl": [
@@ -10859,7 +10878,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e773f6638f423965403d83694393e8a2ab8bf1ef5ec654e4835ba4940c7297c3"
+      "definition_sha256": "d182870199587b94ee523e4d4302d94e82142c33fab32e963cfc19efb7aeb8fd"
     },
     {
       "acl": [
@@ -11068,7 +11087,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a9a5a359740596bd35fd3855bdc36dd6580d60ee5928ae5d98ac4d6fc2ac73d5"
+      "definition_sha256": "5b0a29c1b1faae2015489d2aa7f7891e38c836364016db624d43fc20447d7212"
     },
     {
       "acl": [
@@ -11087,7 +11106,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "00e8dcc3a4d2f7dcfc885a8e55b890723f9b8cb01ec930ba56faca5f6401768c"
+      "definition_sha256": "93de8ceb891bb84952a4d4f6d31763bcf2efd54e419f6dc4167c33b308b7a609"
     },
     {
       "acl": [
@@ -11182,7 +11201,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "a6f5274d483d04d303e52fe0c402a1fb2e3cc1a08eaaf829009b9160ebf551f9"
+      "definition_sha256": "7ddcc13278af664cebdbd8ef93dc4e1ad172f2df738ff447b55dc0f77d4bd9aa"
     },
     {
       "acl": [
@@ -11201,7 +11220,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "5050e18fb7adad991e0e3dafce42b7e801f643118ff3272e4abbb25570e61de8"
+      "definition_sha256": "02fd98952db2d5983f32ed90442e6ef2f756d2e637acc9aa8f752a7adca00f10"
     },
     {
       "acl": [
@@ -11258,7 +11277,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8f97d8135cf33790677b50b06bb5777d0e496ab222052b9c2ca73fe2d1deaf21"
+      "definition_sha256": "054bd17adb865df1ea2a8d5cf787b4bcae9ef34ac6e69a23bfb44f7bf753c758"
     },
     {
       "acl": [
@@ -11353,7 +11372,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "70898aca4a0ef5bc499c6f5568933b1829d39243557b651cc6a4006a59160811"
+      "definition_sha256": "f8c494ccfcb40c1a75fa40b6bb71b5b7ba033185f5efe05c721369dce336078d"
     },
     {
       "acl": [
@@ -11372,7 +11391,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "9b7245cae9b2b68b1dd297c0aff6734132a4b8d46d25f87fc091c60f442e4844"
+      "definition_sha256": "0feb71cb44f29b93ba7f72223830801734b477d50ca063c7f1e2323e3c3359e6"
     },
     {
       "acl": [
@@ -11467,7 +11486,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "22e814f9250fbaeacb6b58a7f3dcb2379432a330eea72f3258115557a55737b4"
+      "definition_sha256": "9e49e3cba52097aedf6ed10fc022005c2919e7059266ff25458ed7d74e5ea807"
     },
     {
       "acl": [
@@ -11543,7 +11562,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "d00a6ef26f68583f7e0a211891fdbcd24dbaa2541b252c0b4f4faee77800a133"
+      "definition_sha256": "e509b9d281eb6b0b52a68b0ab32a66954dbe85874aa2fcb40ffd9c0c9cdb0fb8"
     },
     {
       "acl": [
@@ -11847,7 +11866,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "d0605730334fc2d80ef2afc004fba87639207a0f0e5c3a36f654131fb37ee496"
+      "definition_sha256": "cbb1263760eca78e3df6779a977dcca4baa0a2b294927342494e76de52cc0bf6"
     },
     {
       "acl": [
@@ -12018,7 +12037,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "7393f2ea042ab450f690ab27890a0a323d6640d585edc6f9b4e04b4e2aba9644"
+      "definition_sha256": "9421f2c501ba27abf46b864091d58b560983bf61c51e7d404eb88e35e6b7d4aa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_complete_retained_segment_parent_v1(p_run_worker_id uuid, p_run_work_id uuid, p_component_key text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4fe71b352906b5b6e22d875e03e93011219349349db9f970e0fe79f6737382b1"
     },
     {
       "acl": [
@@ -12037,7 +12075,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "cb45c686389e56e03ce39846463467fa81e142a7af131f5f84dbd303a18eb56f"
+      "definition_sha256": "f3be92fc31038c3f0976638e4493405c2cbef965c1742eb84ad06135c2c4dd08"
     },
     {
       "acl": [
@@ -12436,7 +12474,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "ab33d11d6434a7f8e7eabe008cfc27d539bb203d9d3ff51fafe2e3eb166c6f33"
+      "definition_sha256": "77ab166ff6c0cfe45569bbd98d036ee5fed0bffa5ba36a30bf8da0104bdc1a70"
     },
     {
       "acl": [
@@ -12455,7 +12493,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "05f4f97108dd90e238a7f1622650f2449a37a06250181ca6aee6c58866d5b0c1"
+      "definition_sha256": "704d6e72303361eb0930d6e58e712777731392b6f21dfa5a4c22493693ef2069"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_enroll_worker_action_v1(p_command_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "fd94d4fbe5684d7276474109493a6b67d4e8fa7af627d0c2ac56ce8d906dbabe"
     },
     {
       "acl": [
@@ -12475,6 +12532,25 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "431be5a2ea33379e44ab5faa4666ca50ce8025c3353ce1acc111155b94607a3e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_exclude_preparation_week_v1(p_job_id uuid, p_run_worker_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c8a99720a4d1e4f26dc4b1cd0cd2d13631f0dad79726e1585458cef3320bada1"
     },
     {
       "acl": [
@@ -12512,7 +12588,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "6799e915afc0e9882eeb426b8c48a482a6f21aeb618696733bede7acbcb7ef32"
+      "definition_sha256": "2fca310fb9ec5a3a186884a487ae23d34d77e7750e6cc8a760a97e3e0066d4d9"
     },
     {
       "acl": [
@@ -12531,7 +12607,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "9eca94116dae43ad29dbe738ecddfd1617f896bf92cef3ddd9e88f39d96b55bf"
+      "definition_sha256": "2f172d6661a247ba8a642eae34d87b43344c19ec5fe0837237883121e31f2077"
     },
     {
       "acl": [
@@ -12550,7 +12626,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8648e1a4ebfc79df731150f219fb0fb5e4ba0a3d0f994f926b09c4cad6edd67b"
+      "definition_sha256": "b277d4eab2148be81e8df2017a058dfc440d1bce79e2bc9f217f570b9874b916"
     },
     {
       "acl": [
@@ -12607,7 +12683,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5d25d73cfbcc686894fc9ba6c61d681e6eba1bb60ed07c7a64776380c080c296"
+      "definition_sha256": "1a54fb83ea40ea5e5c576c6fcbfeac6d388be5bd9bc1cbea026e5cfaf4207e6a"
     },
     {
       "acl": [
@@ -13016,7 +13092,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8f6ec9f6e42927e9f2a9395fd66170b1255658bda620d719c40dd0984e552000"
+      "definition_sha256": "9b32038332bdf574aac41296c35d9f2bb9b3239986d822d09958e86039190681"
     },
     {
       "acl": [
@@ -13168,7 +13244,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "8df2377763aae21e1eb991194748f4af9d411e9c24cbf9096cc80a114a103c35"
+      "definition_sha256": "a6239ef74603a1b9cbe439925493f039008d9e1effe7523bdb5d04db18897d82"
     },
     {
       "acl": [
@@ -13187,7 +13263,45 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b8c0c1c63e74494f02417b87d6587d34224427b6868ad730e5839e21da4d007f"
+      "definition_sha256": "bc664c587a0e228d1d0a1f6aeee1b948906d0564b52d29660198bd3d7b433ecf"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_job_active_v1(p_job_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "934182b7b176c6c36884f585210b9a03369174f5effc96d5e82c6b442fe0394e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_job_run_v1(p_job_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "c4264d87a94104fcdc8ec642b5e3f1e42f9c3d331a22aed31fad665ab6fbe500"
     },
     {
       "acl": [
@@ -13206,7 +13320,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e050877fcc35936c7eee9e8b7994ddef838e95604d10389830157e25ce85266f"
+      "definition_sha256": "27b4a2a6188b47e43dd626582216eb9e5d6af841535828f730a85e6201bc8aba"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_prepare_release_scope_v1(p_job_id uuid, p_run_worker_id uuid, p_stage text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "668f65cb65974509c739b752c2144d029e768a7f2f295c8d66fbf9b106c2efbe"
     },
     {
       "acl": [
@@ -13719,7 +13852,26 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "414024cf7f62c381a2fcab1ea59f83923d77c40d8b6fc7564663a0cfddb4aa8a"
+      "definition_sha256": "f00d3a84b604f578251839951c0dd74b8a868cfc047b7e9cf8da85725a4a87d9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_reconcile_worker_released_collection_v1(p_job_id uuid, p_case_hold_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "59d9f5f86837b8789000f50bb71273b56e47d8f463eb2781d7015d92474caf98"
     },
     {
       "acl": [
@@ -13826,6 +13978,44 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_release_prepare_case_hold_v1(p_job_id uuid, p_case_hold_id uuid, p_now timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "d1693df8a25c29c95bdcdd26d15d4beff1d2291abed91584cd4d4507f95173de"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_release_prepare_work_hold_v1(p_job_id uuid, p_run_line_id uuid, p_now timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c07e15bd4fe3c16e861a6b5516c555604fd9bfdfa5c9f564cecb68cf86495ea2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private, public"
       ],
       "schema": "private",
@@ -13871,7 +14061,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "b7ffd9008f3798409df4a9573198f71e55a0ff158c58257ae2d53ccaf70dfb65"
+      "definition_sha256": "5c329388ca0d97badedb3aef6cbee2b9ece2f70709e807ce88b4193e4becc833"
     },
     {
       "acl": [
@@ -13947,7 +14137,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8553f8edeeec30273db4b48877be9b1f7851240676d4a3583184e50af6a26433"
+      "definition_sha256": "9940ef6e21d0fbb177c807d144379932526ea5f2c8b1c84499602d7ca2a306e5"
     },
     {
       "acl": [
@@ -14289,7 +14479,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "cdeb2335ac90032e0c3f1692760bf8ae3289451f80d58e74f02336430c14d40f"
+      "definition_sha256": "1f412be99935d91a83c5031f98e227c6bc839a4723d717ef76d4ea609136cf04"
     },
     {
       "acl": [
@@ -15848,7 +16038,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "b6cd62fd3fe8e1d0907d07cfd7c1ef89bb0774d7ba3d8953465b9da78365221d"
+      "definition_sha256": "61d855e25a337cb3d544c6d072ee0daa6f7f496ae65a450bcd5b6c6d062e9bc4"
     },
     {
       "acl": [
@@ -15886,7 +16076,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "e7e7be6b0de1b716ebf611ef0ad23a856af0466b3e2fe232e7151a591caead58"
+      "definition_sha256": "94e295bc1b1031ce6af6ac90ae575c1d801d0a4e52c2010da2e901934f2b5448"
     },
     {
       "acl": [
@@ -16486,7 +16676,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5dda3c308cce4a002e488ec011da45010ea9ef86b2bd386dd4f55fb9ec8a7b21"
+      "definition_sha256": "b6efbf9b4018cf5c467a8d522fc42b1699c0861db3d954f86ae6b1e4bfc6cf32"
     },
     {
       "acl": [
@@ -16715,6 +16905,120 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "fe1f91bd4a254cb32aec0e4789937ea0e79e447aeb2979d428ef2a2b36378d6d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_action_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "28dc148f916cfd8ca83fc4af7e39b5901f942b5392d26cc943332cf38d06c161"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_action_receipt_v1(p_command_id uuid, p_run_worker_id uuid, p_expected_revision bigint, p_replay boolean)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "84690c78285afb143e2f7f166525161dc85a115407e14d00234ece0aeec101fa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_execution_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "1277ec9ac5782569338ac2d4b8d9bfc7483e7688371011db65a82a8387f3c980"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_release_complete_v1(p_run_worker_id uuid, p_cutoff timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "c1f0394bb19e8e2b618e150c3b0da69613ec3e4e282d85277ede875d12bd6a04"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_release_page_v1(p_job_id uuid, p_lease_nonce uuid, p_owner_epoch bigint, p_expected_phase text, p_expected_checkpoint bigint, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "575ca04333dd45bf092948e4dd2c2470d8f76b205dbc5ecd1a5e277e7a2709cb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_worker_released_collection_scope_v1(p_job_id uuid, p_collection_id uuid, p_case_hold_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "9328699734c510b4e74356cc1802a4caa538e83f2b38f7498a04d906a65f6503"
     },
     {
       "acl": [
@@ -31593,7 +31897,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "25156cafe36b4e569170dcdee1954a7cabe08d90041d3eb6708744ba9a4d0fc8"
+      "definition_sha256": "ec57daa6b69063d3f9a3c030f327cea63e519a5326115c4273698de7c431bc23"
     },
     {
       "acl": [
@@ -31811,7 +32115,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a7ff028d125050bb6ea678bf4a056bbd7aec479858cf441d4d9ac958b8c64793"
+      "definition_sha256": "43857ed425ab3bc2f5bb26063e99c2437382762a62535cdb029dc2e1c008ee86"
     },
     {
       "acl": [
@@ -53772,6 +54076,13 @@
       "definition": "CREATE TRIGGER bpay_next_segment_fact_truncate_guard BEFORE TRUNCATE ON private.bpay_next_run_work_segment_parent FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_segment_fact_guard_v1()"
     },
     {
+      "name": "bpay_next_worker_execution_guard_v1",
+      "table": "bpay_next_run_worker",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_worker_execution_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_run_worker FOR EACH ROW EXECUTE FUNCTION private.bpay_next_worker_execution_guard_v1()"
+    },
+    {
       "name": "bpay_next_segment_fact_guard",
       "table": "bpay_next_segment_selection_page",
       "schema": "private",
@@ -54295,6 +54606,13 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_workbench_receipt_no_truncate BEFORE TRUNCATE ON private.bpay_next_workbench_command_receipt FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_workbench_receipt_immutable_v1()"
+    },
+    {
+      "name": "bpay_next_worker_action_guard_v1",
+      "table": "bpay_next_worker_reprepare_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_worker_action_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_worker_reprepare_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_worker_action_guard_v1()"
     },
     {
       "name": "bpay_next_week_projection_guard_v1",
@@ -79165,6 +79483,22 @@
           "generated": ""
         },
         {
+          "name": "retained_prepare_stage",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retained_weekly_binding_state",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "run_id",
           "type": "uuid",
           "default": null,
@@ -79245,6 +79579,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (captured_default_floor_revision > 0)"
+        },
+        {
+          "name": "bpay_next_case_allocation_st_retained_weekly_binding_stat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retained_weekly_binding_state = ANY (ARRAY['UNBOUND'::text, 'BOUND'::text, 'NOT_AFFECTED'::text]))"
         },
         {
           "name": "bpay_next_case_allocation_sta_id_run_worker_id_candidate_i_key1",
@@ -79575,6 +79917,14 @@
           "definition": "CHECK (recovered_target_total::numeric >= 0::numeric)"
         },
         {
+          "name": "bpay_next_case_allocation_state_retained_prepare_stage_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retained_prepare_stage = ANY (ARRAY['WEEK_CAPTURE'::text, 'INSTRUCTION_CAPTURE'::text, 'ALLOCATE'::text]))"
+        },
+        {
           "name": "bpay_next_case_allocation_state_selection_revision_check",
           "type": "c",
           "deferred": false,
@@ -79661,6 +80011,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (net_stage = 'NOT_CASE_NET'::text OR pass_kind = 'NET'::text AND pay_week_start IS NOT NULL AND captured_week_revision IS NOT NULL)"
+        },
+        {
+          "name": "bpay_next_retained_case_stage_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((retained_prepare_stage IS NULL) = (retained_weekly_binding_state IS NULL))"
         }
       ],
       "view_definition_sha256": null
@@ -89537,6 +89895,38 @@
           "generated": ""
         },
         {
+          "name": "retained_prepare_component_cursor",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retained_prepare_cursor",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retained_prepare_phase",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "retained_prepare_work_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "started_at_utc",
           "type": "timestamp with time zone",
           "default": null,
@@ -89731,12 +90121,28 @@
           "definition": "CHECK (isfinite(queue_wake_after_utc))"
         },
         {
+          "name": "bpay_next_job_retained_prepare_phase_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (retained_prepare_phase = ANY (ARRAY['NEW'::text, 'PINNING'::text, 'RESERVE'::text, 'ALLOCATE'::text, 'FINANCE_ALLOCATE'::text]))"
+        },
+        {
           "name": "bpay_next_job_status_check",
           "type": "c",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (status = ANY (ARRAY['READY'::text, 'LEASED'::text, 'BLOCKED'::text, 'DONE'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "bpay_next_retained_prepare_cursor_pair",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((retained_prepare_work_cursor IS NULL) = (retained_prepare_component_cursor IS NULL))"
         }
       ],
       "view_definition_sha256": null
@@ -92987,6 +93393,14 @@
       "schema": "private",
       "columns": [
         {
+          "name": "already_worker_released",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -93040,6 +93454,14 @@
           "default": null,
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_execution_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -93257,12 +93679,28 @@
       "force_rls": false,
       "constraints": [
         {
+          "name": "bpay_next_expiry_worker_shape_v2_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (run_worker_id IS NULL AND original_worker_status IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND draft_state_id IS NULL AND expected_work_count = 0 AND expected_case_hold_count = 0 AND original_review_issue_code IS NULL AND original_review_issue_work_id IS NULL AND expected_execution_revision IS NULL AND NOT already_worker_released OR run_worker_id IS NOT NULL AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL AND expected_execution_revision >= preparation_revision AND (NOT already_worker_released AND (original_worker_status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text, 'READY'::text])) OR already_worker_released AND original_worker_status = 'CANCELLED'::text AND expected_work_count = 0 AND expected_case_hold_count = 0))"
+        },
+        {
           "name": "bpay_next_preparation_expiry__draft_state_id_run_worker_id_fkey",
           "type": "f",
           "deferred": false,
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (draft_state_id, run_worker_id, candidate_id, preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_preparation_expiry__expected_execution_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_execution_revision > 0)"
         },
         {
           "name": "bpay_next_preparation_expiry__original_applied_line_count_check",
@@ -93343,14 +93781,6 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (original_job_id IS NULL AND original_job_status IS NULL AND original_job_phase IS NULL AND original_job_cursor IS NULL AND original_position_work_cursor IS NULL AND original_position_component_cursor IS NULL AND original_applied_line_count IS NULL OR original_job_id IS NOT NULL AND original_job_status IS NOT NULL AND original_job_phase IS NOT NULL AND original_applied_line_count IS NOT NULL)"
-        },
-        {
-          "name": "bpay_next_preparation_expiry_worker_check2",
-          "type": "c",
-          "deferred": false,
-          "validated": true,
-          "deferrable": false,
-          "definition": "CHECK (run_worker_id IS NULL AND original_worker_status IS NULL AND preparation_revision IS NULL AND selection_revision IS NULL AND draft_state_id IS NULL AND expected_work_count = 0 AND expected_case_hold_count = 0 AND original_review_issue_code IS NULL AND original_review_issue_work_id IS NULL OR run_worker_id IS NOT NULL AND (original_worker_status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text, 'READY'::text])) AND preparation_revision IS NOT NULL AND selection_revision IS NOT NULL)"
         },
         {
           "name": "bpay_next_preparation_expiry_worker_check3",
@@ -102755,6 +103185,14 @@
           "generated": ""
         },
         {
+          "name": "active_prepare_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "candidate_id",
           "type": "uuid",
           "default": null,
@@ -102782,6 +103220,14 @@
           "name": "captured_position_count",
           "type": "bigint",
           "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_preparation_revision",
+          "type": "bigint",
+          "default": "1",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -102888,6 +103334,14 @@
           "default": "gen_random_uuid()",
           "identity": "",
           "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_prepare_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
           "generated": ""
         },
         {
@@ -103025,6 +103479,14 @@
           "definition": "CHECK (active_case_hold_count >= 0)"
         },
         {
+          "name": "bpay_next_run_worker_active_prepare_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (active_prepare_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
           "name": "bpay_next_run_worker_candidate_id_fkey",
           "type": "f",
           "deferred": false,
@@ -103113,6 +103575,14 @@
           "definition": "CHECK (gross_inc_vat = (gross_ex_vat + gross_vat))"
         },
         {
+          "name": "bpay_next_run_worker_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_preparation_revision > 0 AND captured_preparation_revision <= preparation_revision)"
+        },
+        {
           "name": "bpay_next_run_worker_expected_managed_position_count_check",
           "type": "c",
           "deferred": false,
@@ -103143,6 +103613,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "UNIQUE (id, candidate_id)"
+        },
+        {
+          "name": "bpay_next_run_worker_input_prepare_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (input_prepare_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
         },
         {
           "name": "bpay_next_run_worker_net_projection_revision_check",
@@ -120313,6 +120791,692 @@
           "validated": true,
           "deferrable": false,
           "definition": "PRIMARY KEY (candidate_id)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_worker_reprepare_request",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "accepted_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "accepted_review_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "captured_preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "case_hold_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "checkpoint",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "draft_state_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "expected_case_hold_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "expected_work_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "finished_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "initiator_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "input_prepare_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_issue_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_issue_work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "original_prepare_command_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "original_worker_status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "previous_job_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "released_case_hold_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "released_work_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "resume_component_cursor",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "resume_cursor",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "resume_phase",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "resume_work_cursor",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "run_worker_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "selection_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "stage",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "target_preparation_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "work_cursor",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_worker_action_original_idx",
+          "definition": "CREATE INDEX bpay_next_worker_action_original_idx ON private.bpay_next_worker_reprepare_request USING btree (original_prepare_command_id, run_worker_id)"
+        },
+        {
+          "name": "bpay_next_worker_action_pending_run_idx",
+          "definition": "CREATE INDEX bpay_next_worker_action_pending_run_idx ON private.bpay_next_worker_reprepare_request USING btree (run_id, action) WHERE (status <> 'COMPLETE'::text)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_job_id_target_preparation_rev_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_worker_reprepare_re_job_id_target_preparation_rev_key ON private.bpay_next_worker_reprepare_request USING btree (job_id, target_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_run_worker_id_target_preparat_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_worker_reprepare_re_run_worker_id_target_preparat_key ON private.bpay_next_worker_reprepare_request USING btree (run_worker_id, target_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_worker_reprepare_request_pkey ON private.bpay_next_worker_reprepare_request USING btree (command_id, run_worker_id, target_preparation_revision)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_worker_reprepare_r_expected_preparation_revisio_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_preparation_revision > 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_draft_state_id_run_worker_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (draft_state_id, run_worker_id, candidate_id, captured_preparation_revision, selection_revision) REFERENCES private.bpay_next_case_allocation_state(id, run_worker_id, candidate_id, preparation_revision, selection_revision) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_job_id_target_preparation_rev_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (job_id, target_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_run_worker_id_run_id_candida_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_worker_id, run_id, candidate_id) REFERENCES private.bpay_next_run_worker(id, run_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_re_run_worker_id_target_preparat_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (run_worker_id, target_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_req_original_prepare_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_prepare_command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_reque_accepted_review_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (accepted_review_revision > 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_reque_expected_case_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_case_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_reque_released_case_hold_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_case_hold_count >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_accepted_at_utc_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (isfinite(accepted_at_utc))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['REPREPARE'::text, 'RELEASE'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_actor_user_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_user_id) REFERENCES tms_users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (target_preparation_revision = (expected_preparation_revision + 1))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check1",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (captured_preparation_revision > 0 AND captured_preparation_revision <= expected_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check2",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((initiator_kind = 'OFFICE'::text) = (actor_user_id IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check3",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (initiator_kind <> 'SYSTEM'::text OR action = 'RELEASE'::text AND original_issue_code IS NOT NULL AND (original_issue_code = ANY (ARRAY['SELECTED_WORK_NOT_APPROVED'::text, 'SELECTED_WORK_REVISION_CHANGED'::text, 'SELECTED_WORK_POSITION_PENDING'::text, 'SOURCE_PAY_QUERY_OPEN'::text, 'SOURCE_PAY_QUERY_EVIDENCE_UNAVAILABLE'::text, 'CASE_NO_PAYABLE_AMOUNT'::text])))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check4",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((resume_work_cursor IS NULL) = (resume_component_cursor IS NULL))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check5",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((action = 'REPREPARE'::text) = (resume_phase IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check6",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_work_count <= expected_work_count AND released_case_hold_count <= expected_case_hold_count)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check7",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((status = 'COMPLETE'::text) = (stage = 'COMPLETE'::text AND finished_at_utc IS NOT NULL))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_check8",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (finished_at_utc IS NULL OR isfinite(finished_at_utc) AND finished_at_utc >= accepted_at_utc)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_checkpoint_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (checkpoint >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_command_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (command_id) REFERENCES private.bpay_next_command(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_expected_work_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_work_count >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_initiator_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (initiator_kind = ANY (ARRAY['OFFICE'::text, 'SYSTEM'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_input_prepare_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (input_prepare_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_original_issue_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(original_issue_code) >= 1 AND octet_length(original_issue_code) <= 256)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_original_issue_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (original_issue_work_id) REFERENCES private.bpay_next_work(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_original_worker_status_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (original_worker_status = ANY (ARRAY['PREPARING'::text, 'REVIEW'::text, 'READY'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (command_id, run_worker_id, target_preparation_revision)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_previous_job_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (previous_job_id) REFERENCES private.bpay_next_job(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_released_work_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (released_work_count >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_resume_phase_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (resume_phase = ANY (ARRAY['NEW'::text, 'PINNING'::text, 'RESERVE'::text, 'ALLOCATE'::text, 'FINANCE_ALLOCATE'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_run_id_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (run_id, candidate_id) REFERENCES private.bpay_next_selection_candidate(run_id, candidate_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_selection_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (selection_revision >= 0)"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_stage_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (stage = ANY (ARRAY['NEW'::text, 'WORK'::text, 'CASE'::text, 'FINAL'::text, 'PROJECT'::text, 'COMPLETE'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_status_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (status = ANY (ARRAY['ACCEPTED'::text, 'RUNNING'::text, 'COMPLETE'::text]))"
+        },
+        {
+          "name": "bpay_next_worker_reprepare_request_work_cursor_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (work_cursor > 0)"
         }
       ],
       "view_definition_sha256": null

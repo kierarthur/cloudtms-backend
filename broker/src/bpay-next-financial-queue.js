@@ -101,7 +101,7 @@ function continuation(call, result) {
       && (['NEW', 'PINNING'].includes(result.phase) ? call.expected_cursor === result.cursor
         : ['RESERVE', 'ALLOCATE'].includes(result.phase) ? call.expected_work_cursor === result.work_cursor
           && call.expected_component_cursor === result.component_cursor
-          : ['FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE'].includes(result.phase) ? result.cursor === null
+          : ['FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE', 'WORKER_RELEASE_WORK', 'WORKER_RELEASE_CASE', 'WORKER_RELEASE_FINAL'].includes(result.phase) ? result.cursor === null
             || (call.expected_cursor !== null && BigInt(result.cursor) <= BigInt(call.expected_cursor)) : true)) return null;
     return next;
   }
@@ -136,7 +136,7 @@ function prepareContinuation(call, result) {
       : ['RESERVE', 'ALLOCATE'].includes(result.phase) ? { expected_work_cursor: result.work_cursor,
         expected_component_cursor: result.component_cursor,
         limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows }
-        : result.phase === 'FINANCE_ALLOCATE' ? { expected_cursor: result.cursor,
+        : ['FINANCE_ALLOCATE', 'WORKER_RELEASE_WORK', 'WORKER_RELEASE_CASE', 'WORKER_RELEASE_FINAL'].includes(result.phase) ? { expected_cursor: result.cursor,
           limit: call.limit ?? BPAY_NEXT_FINANCIAL_QUEUE_LIMITS.pageRows } : {}) });
 }
 

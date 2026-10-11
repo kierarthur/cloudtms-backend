@@ -207,7 +207,8 @@ function sqlFailure(value) {
     '55P03': ['TRANSACTION_RETRY', true], '57014': ['TRANSACTION_RETRY', true]
   };
   let result = Object.hasOwn(faults, value.code) ? faults[value.code] : null;
-  if (value.code === '55000') result = [value.message === 'BPAY_NEXT_MODULE_NOT_ACTIVE' ? 'MODULE_NOT_ACTIVE'
+  if (value.code === '55000' && value.message === 'BPAY_NEXT_EXPIRY_WORKER_RELEASE_PENDING') result = ['TRANSACTION_RETRY', true];
+  else if (value.code === '55000') result = [value.message === 'BPAY_NEXT_MODULE_NOT_ACTIVE' ? 'MODULE_NOT_ACTIVE'
     : value.message === 'BPAY_NEXT_EXPIRY_NOT_DUE' ? 'NOT_DUE'
       : value.message === 'BPAY_NEXT_EXPIRY_NOT_UNCONFIRMED' ? 'NOT_ELIGIBLE' : 'STATE_INVALID', false];
   return result ? new ExpiryError(`BPAY_NEXT_EXPIRY_${result[0]}`, result[1], true) : null;

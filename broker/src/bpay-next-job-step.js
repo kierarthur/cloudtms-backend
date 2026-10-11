@@ -33,7 +33,7 @@ export const BPAY_NEXT_JOB_LIMITS = Object.freeze({
 /** @typedef {{action:'STEP',job_id:string,job_kind:'POSITION_APPLY',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'REMOVED',expected_cursor:string|null,limit:number}} FinancialJobPositionStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'NEW'|'PINNING',expected_cursor:string|null}} FinancialJobPinStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'RESERVE'|'ALLOCATE',expected_work_cursor:string|null,expected_component_cursor:string|null,limit:number}} FinancialJobPreparePageStep */
-/** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE'|'WORKBENCH_WORK'|'WORKBENCH_CASE',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
+/** @typedef {{action:'STEP',job_id:string,job_kind:'PREPARE',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE'|'WORKBENCH_WORK'|'WORKBENCH_CASE'|'WORKER_RELEASE_WORK'|'WORKER_RELEASE_CASE'|'WORKER_RELEASE_FINAL',expected_cursor:string|null,limit:number}} FinancialJobPrepareCompleteStep */
 /** @typedef {{action:'STEP',job_id:string,job_kind:'PAYE_NET_ENTRY',lease_nonce:string,owner_epoch:string,expected_phase:'FINANCE_ALLOCATE',expected_cursor:string|null,limit:number}} FinancialJobCaseNetPageStep */
 /** @typedef {{signal:AbortSignal,timeoutMs:number,maxResponseBytes:number,routeClass:'OPERATION_NUDGE'}} FinancialJobRpcOptions */
 /** @typedef {{financialJobRpc?:(action:'CLAIM'|'STEP',jobId:string,jobKind:FinancialJobKind,args:Readonly<Record<string,string|number|null>>,options:FinancialJobRpcOptions)=>Promise<Response>,onStepMeasurement?:(measurement:Readonly<{job_id:string,kind:FinancialJobKind,step:string,rows:string|null,bytes:number|null,ms:number}>,payQueryBusy:boolean)=>void}} FinancialJobDependencies */
@@ -46,7 +46,8 @@ const WRITE_OFF_ISSUES = ['BPAY_NEXT_WRITE_OFF_PROTECTED_CAPACITY','BPAY_NEXT_WR
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?Z$/;
 const ENCODER = new TextEncoder();
 const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY'];
-const PREPARE_PHASES = ['NEW', 'PINNING', 'RESERVE', 'ALLOCATE', 'FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE'];
+const PREPARE_RELEASE_PHASES = ['WORKER_RELEASE_WORK', 'WORKER_RELEASE_CASE', 'WORKER_RELEASE_FINAL'];
+const PREPARE_PHASES = ['NEW', 'PINNING', 'RESERVE', 'ALLOCATE', 'FINANCE_ALLOCATE', 'WORKBENCH_WORK', 'WORKBENCH_CASE', ...PREPARE_RELEASE_PHASES];
 const CASE_PREPARE_ISSUES = ['CASE_SELECTION_REQUIRED', 'CASE_TARGET_UNSUPPORTED', 'CASE_INPUT_UNBOUND',
   'CASE_WEEK_BASIS_UNBOUND', 'CASE_RETURN_FLOOR_UNBOUND', 'CASE_NO_PAYABLE_AMOUNT'];
 const PREPARE_ISSUES = ['SELECTED_WORK_NOT_APPROVED', 'SELECTED_WORK_POSITION_PENDING',
@@ -128,7 +129,7 @@ function field(value, type) {
     case 'positionClaimPhase': return ['NEW', 'REMOVED'].includes(value);
     case 'prepareClaimPhase': return PREPARE_PHASES.includes(value);
     case 'positionPhase': return ['NEW', 'REMOVED', 'DONE'].includes(value);
-    case 'preparePhase': return [...PREPARE_PHASES, 'READY', 'REVIEW'].includes(value);
+    case 'preparePhase': return [...PREPARE_PHASES, 'READY', 'REVIEW', 'CANCELLED'].includes(value);
     case 'expiryPhase': return ['RELEASE', 'EXPIRED'].includes(value);
     case 'expiredPhase': return value === 'EXPIRED';
     case 'prepareIssue': return PREPARE_ISSUES.includes(value);
@@ -163,7 +164,7 @@ function callInput(input) {
       : input.job_kind === 'PREPARE' ? ['lease_nonce', 'owner_epoch', 'expected_phase',
         ...(['NEW', 'PINNING'].includes(input.expected_phase) ? ['expected_cursor']
           : ['RESERVE', 'ALLOCATE'].includes(input.expected_phase) ? ['expected_work_cursor', 'expected_component_cursor', 'limit']
-            : ['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(input.expected_phase) ? ['expected_cursor', 'limit'] : [])]
+            : ['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE', ...PREPARE_RELEASE_PHASES].includes(input.expected_phase) ? ['expected_cursor', 'limit'] : [])]
         : input.job_kind === 'PAYE_NET_ENTRY' && Object.hasOwn(input, 'expected_phase')
           ? ['lease_nonce', 'owner_epoch', 'expected_phase', 'expected_cursor', 'limit']
         : PAGED.includes(input.job_kind) ? ['lease_nonce', 'owner_epoch', 'expected_cursor', 'limit']
@@ -190,7 +191,7 @@ function callInput(input) {
         || !field(input.expected_component_cursor, 'component?')
         || (input.expected_work_cursor === null) !== (input.expected_component_cursor === null)
         || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) invalid();
-      if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(input.expected_phase) && (!field(input.expected_cursor, 'positive?')
+      if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE', ...PREPARE_RELEASE_PHASES].includes(input.expected_phase) && (!field(input.expected_cursor, 'positive?')
         || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) invalid();
     }
   }
@@ -264,15 +265,18 @@ function resultInput(payload, call, unknown) {
       return payload;
     }
     const projecting = ['WORKBENCH_WORK','WORKBENCH_CASE'].includes(payload.phase);
+    const releasing = PREPARE_RELEASE_PHASES.includes(payload.phase);
     const reviewing = payload.phase === 'REVIEW' || (projecting && payload.worker_status === 'REVIEW');
-    if (!prepareCheckpoint(payload) || payload.done !== ['READY', 'REVIEW'].includes(payload.phase)
+    if (!prepareCheckpoint(payload) || payload.done !== ['READY', 'REVIEW', 'CANCELLED'].includes(payload.phase)
       || reviewing !== (payload.issue_code !== null)
       || (reviewing && (CASE_PREPARE_ISSUES.includes(payload.issue_code)
         ? payload.issue_work_id !== null : payload.issue_work_id === null))
       || (!reviewing && payload.issue_work_id !== null)
       || (payload.phase === 'REVIEW' && payload.worker_status !== 'REVIEW')
-      || (projecting && !['READY','REVIEW'].includes(payload.worker_status))
-      || (!payload.done && !projecting && payload.worker_status !== 'PREPARING')
+      || (projecting && !['READY','REVIEW','CANCELLED'].includes(payload.worker_status))
+      || (releasing && payload.worker_status !== 'CANCELLING')
+      || (payload.phase === 'CANCELLED' && payload.worker_status !== 'CANCELLED')
+      || (!payload.done && !projecting && !releasing && payload.worker_status !== 'PREPARING')
       || (payload.phase === 'READY' && !['READY', 'DRAFT', 'ISSUED', 'COMPLETE', 'CANCELLING', 'CANCELLED'].includes(payload.worker_status))
       || (payload.rows_visited !== null && BigInt(payload.rows_visited) > BigInt(call.args.limit ?? 1))
       || (payload.replay && payload.rows_visited !== null && payload.rows_visited !== '0')) invalid();
@@ -288,7 +292,7 @@ function pennies(value) {
 
 function prepareCheckpoint(payload) {
   if (['NEW', 'PINNING'].includes(payload.phase)) return payload.work_cursor === null && payload.component_cursor === null;
-  if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE'].includes(payload.phase)) return payload.work_cursor === null && payload.component_cursor === null;
+  if (['FINANCE_ALLOCATE','WORKBENCH_WORK','WORKBENCH_CASE', ...PREPARE_RELEASE_PHASES].includes(payload.phase)) return payload.work_cursor === null && payload.component_cursor === null;
   if (['RESERVE', 'ALLOCATE'].includes(payload.phase)) return payload.cursor === null
     && (payload.work_cursor === null) === (payload.component_cursor === null);
   return payload.cursor === null && payload.work_cursor === null && payload.component_cursor === null;
