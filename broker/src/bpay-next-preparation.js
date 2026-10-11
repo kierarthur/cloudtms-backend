@@ -722,6 +722,9 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(e instanceof PreparationError)return e;
   if(['BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(e?.code))return new PreparationError(e.code,403,false,false);
   const db=e?.json??e;
+  // FC-03 correction discovered by FC-04: preserve the named creation refusal.
+  if(['CASE_PREVIEW','CASE_CREATE'].includes(action)&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')
+    return new PreparationError(db.message,409,false,false);
   if(db?.code==='55000'&&['BPAY_NEXT_CASE_LIST_CONTEXT_CHANGED','BPAY_NEXT_CASE_LIST_DATE_UNAVAILABLE','BPAY_NEXT_WORKBENCH_PROJECTION_NOT_CURRENT'].includes(db.message))
     return new PreparationError(db.message,409,false,false);
   if(['BPAY_NEXT_CHOICE_CONTEXT_CHANGED','BPAY_NEXT_PAYE_GUARD_CHANGED','BPAY_NEXT_PAYE_SAME_WEEK_GUARD_UNRESOLVED','BPAY_NEXT_PAYE_SAME_WEEK_GUARD_UNEXECUTED','BPAY_NEXT_PAYE_GUARD_FACTS_UNAVAILABLE','BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(db?.message))
@@ -803,7 +806,7 @@ async function handle(request,dependencies,mutation){
         timeoutMs,maxResponseBytes,routeClass:mutation?'OPERATION_NUDGE':'READ'});
       if(!(response instanceof Response))throw fault('RESPONSE_INVALID',503,true,mutation);
       const payload=await limitedJson(response,maxResponseBytes,false,controller.signal,mutation);
-      if(!response.ok)throw safeError({status:response.status,json:payload},true,mutation,call.action,call.args);
+      if(!response.ok)throw safeError({status:response.status,json:payload},true,mutation,call.action??call.kind,call.args);
       const body=mutation?{ok:true,action:call.action,result:result(payload,call,true)}:{ok:true,kind:call.kind,...result(payload,{...call,actorUserId:user.id.toLowerCase()},false)};
       if(ENCODER.encode(JSON.stringify(body)).byteLength>maxResponseBytes)throw fault('RESPONSE_TOO_LARGE',503,true,mutation);
       return json(200,body,mutation&&(['SEAL_ENQUEUE','WORKER_REPREPARE','WORKER_RELEASE'].includes(call.action)||(call.action==='PREPARATION_DISCARD'&&body.result.sequence!==null)||(call.action==='WAKE'&&body.result.accepted===true)));

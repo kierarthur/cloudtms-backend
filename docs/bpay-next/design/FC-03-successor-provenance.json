@@ -57,5 +57,36 @@
   "screen": "A4 PASS:21 actual native variants;42 policy rows32PASS/0FAIL/10N/A; every visible difference/control purpose recorded",
   "futureJoined": "AUTHORED_NOT_RUN",
   "frontendCommit": "8ba9b7c49f7a3ec03d4f5c53c4836e81251b2286",
-  "implementationCommit": "48effbb31f1530488c2c7327d4bf8e399ae805c7"
+  "implementationCommit": "48effbb31f1530488c2c7327d4bf8e399ae805c7",
+  "corrections": [
+    {
+      "id": "FC04-source-channel-refusal",
+      "owner": "FC-03",
+      "foundBy": "FC-04 actual source/A4 integration",
+      "decision": "BD116",
+      "change": "Preserve existing CASE_CREATE SOURCE_CHANNEL_UNBOUND as known nonretryable 409 in both existing Worker command/preparation decoders. CASE_PREVIEW only maps the exact same raw code if emitted; its generic CONTEXT_UNAVAILABLE remains generic. No SQL/route/schema change.",
+      "sources": [
+        {
+          "repository": "BE",
+          "path": "broker/src/bpay-next-command.js",
+          "sha256": "91bdfd79d1da7cf62214ee743284aafd471f527308fa995cd0b86c5ce4ebdb94"
+        },
+        {
+          "repository": "BE",
+          "path": "broker/src/bpay-next-preparation.js",
+          "sha256": "40c02030afe7fbf15366d2ea9cfbfd19745a9a8e5c399b85b6bc04156025c646"
+        }
+      ],
+      "checks": {
+        "integrity": "351 migrations/913 repeatables PASS",
+        "sourceGates": "12/12 PASS",
+        "nodeSyntax": "affected Worker and Office modules PASS",
+        "sqlDelta": "NONE; local PG17 remains FC01 current catalogue",
+        "seal": "PASS",
+        "coupling": "PASS",
+        "contractHash": "ac7310eff30094b09bb6bfc2786c07eb54d523b4f770df36477f78b029df2cef",
+        "futureJoined": "AUTHORED_NOT_RUN"
+      }
+    }
+  ]
 }

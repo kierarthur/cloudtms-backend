@@ -350,9 +350,10 @@ function pennies(value) {
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
 }
 
-function dependencyError(error, attempted = false) {
+function dependencyError(error, attempted = false, action = null) {
   if (error instanceof CommandError) return error;
   const db = error?.json ?? error;
+  if(action==='CASE_CREATE'&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')return fault(db.message,409);
   if (db?.message === 'BPAY_NEXT_REAUTH_REQUIRED' || db?.code === 'BPAY_NEXT_REAUTH_REQUIRED') return fault('BPAY_NEXT_REAUTH_REQUIRED',403);
   if (db?.message === 'BPAY_NEXT_REAUTH_STALE' || db?.code === 'BPAY_NEXT_REAUTH_STALE') return fault('BPAY_NEXT_REAUTH_STALE',403);
   if(db?.message==='BPAY_NEXT_CASE_PREVIEW_CHANGED')return fault('BPAY_NEXT_CASE_PREVIEW_CHANGED',409);
@@ -437,7 +438,7 @@ export async function handleBpayNextCommand(request, dependencies = {}) {
       });
       if (!(response instanceof Response)) throw fault('BPAY_NEXT_COMMAND_RESPONSE_INVALID', 503, true, true);
       const payload = await limitedJson(response, BPAY_NEXT_COMMAND_LIMITS.responseBytes, false, controller.signal);
-      if (!response.ok) throw dependencyError({ status: response.status, json: payload }, true);
+      if (!response.ok) throw dependencyError({ status: response.status, json: payload }, true, call.action);
       const result = { ok: true, action: call.action, result: commandResult(payload, call) };
       if (ENCODER.encode(JSON.stringify(result)).byteLength > BPAY_NEXT_COMMAND_LIMITS.responseBytes) {
         throw fault('BPAY_NEXT_COMMAND_RESPONSE_TOO_LARGE', 503, true, true);
