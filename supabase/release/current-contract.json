@@ -12417,7 +12417,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "7943c1fe21032e12e2ad767a1054c82c2fad78d193ff963af11e4d0eddc5084d"
+      "definition_sha256": "ab33d11d6434a7f8e7eabe008cfc27d539bb203d9d3ff51fafe2e3eb166c6f33"
     },
     {
       "acl": [
@@ -14764,7 +14764,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "2b87e4aa02cebe43cdedf1c975c40be3c5dba813421b177fb44ce275ecc8bbdb"
+      "definition_sha256": "52c74a37309cc7a87076cfec942170590f965adc5bfff3eb53cb7fbb25cdc30c"
     },
     {
       "acl": [
@@ -14784,6 +14784,45 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "e137ee8d8422edb652379e757b31d918e8c0e9480fce2d69dc2f119ce9589447"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_many_guard_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "4e961ff9b53a34c5958c628d6c595466ab6a096ef14bffab863a1a008d07335f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private",
+        "statement_timeout=5s"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_many_v1(p_actor uuid, p_action text, p_args jsonb, p_readback boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "5ed7e5ece740a4f51767318f9d7d64e11ff2bccf1404a9a378f0390a5e19e128"
     },
     {
       "acl": [
@@ -14822,6 +14861,25 @@
       "volatility": "v",
       "security_definer": false,
       "definition_sha256": "49bdc930d4034bfd122d02dc91ffcde36ee76b72e91e808cad6f4ac1c17e1cc3"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, private"
+      ],
+      "schema": "private",
+      "identity": "bpay_next_snooze_scope_at_cut_v1(p_work_id uuid, p_scope text, p_identity text, p_cut bigint)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": false,
+      "definition_sha256": "31dba13a1b8bd87580a534bb3bc17c0798d00efa0561e9266529c6a124d04d83"
     },
     {
       "acl": [
@@ -31865,7 +31923,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a7f5eb7a04be4976dce96e58635d7dd9c68a031dea681f1df27715b837bc50e3"
+      "definition_sha256": "ec40a25a0fd22d5e46e9abbbebd2500647807543d580d9d09c1e4005015045b5"
     },
     {
       "acl": [
@@ -31890,7 +31948,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "8597b239266799940444c5f79f2f33fe9283ecb4af67638b51d7e61616d4bb84"
+      "definition_sha256": "9b19a7cf30fc4189cafccdd81091aab1be6dac316eb5e31371eb494ffc4f23c0"
     },
     {
       "acl": [
@@ -53795,6 +53853,48 @@
       "schema": "private",
       "enabled": "O",
       "definition": "CREATE TRIGGER bpay_next_snooze_event_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_event FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_metadata_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_line_guard",
+      "table": "bpay_next_snooze_many_line",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_line_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_many_line FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_line_truncate_guard",
+      "table": "bpay_next_snooze_many_line",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_line_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_many_line FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_page_guard",
+      "table": "bpay_next_snooze_many_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_page_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_many_page FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_page_truncate_guard",
+      "table": "bpay_next_snooze_many_page",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_page_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_many_page FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_request_guard",
+      "table": "bpay_next_snooze_many_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_request_guard BEFORE INSERT OR DELETE OR UPDATE ON private.bpay_next_snooze_many_request FOR EACH ROW EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
+    },
+    {
+      "name": "bpay_next_snooze_many_request_truncate_guard",
+      "table": "bpay_next_snooze_many_request",
+      "schema": "private",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER bpay_next_snooze_many_request_truncate_guard BEFORE TRUNCATE ON private.bpay_next_snooze_many_request FOR EACH STATEMENT EXECUTE FUNCTION private.bpay_next_snooze_many_guard_v1()"
     },
     {
       "name": "bpay_next_snooze_request_guard",
@@ -105904,6 +106004,10 @@
           "definition": "CREATE INDEX bpay_next_snooze_event_request_idx ON private.bpay_next_snooze_event USING btree (request_id, id)"
         },
         {
+          "name": "bpay_next_snooze_event_scope_cut_idx",
+          "definition": "CREATE INDEX bpay_next_snooze_event_scope_cut_idx ON private.bpay_next_snooze_event USING btree (((after_state ->> 'work_id'::text)), ((after_state ->> 'scope_kind'::text)), ((after_state ->> 'scope_identity'::text)), control_sequence DESC, id DESC)"
+        },
+        {
           "name": "bpay_next_snooze_event_snooze_id_version_key",
           "definition": "CREATE UNIQUE INDEX bpay_next_snooze_event_snooze_id_version_key ON private.bpay_next_snooze_event USING btree (snooze_id, version)"
         }
@@ -105990,6 +106094,804 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (version > 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_many_line",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "ack_request_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "amount",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "approved_line_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "component_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "initial_control",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_result",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "line_no",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "mutation_request_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "successful",
+          "type": "boolean",
+          "default": "false",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_pay_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_many_line_ack_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_line_ack_request_id_key ON private.bpay_next_snooze_many_line USING btree (ack_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_mutation_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_line_mutation_request_id_key ON private.bpay_next_snooze_many_line USING btree (mutation_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_line_pkey ON private.bpay_next_snooze_many_line USING btree (request_id, line_no)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_request_id_approved_line_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_line_request_id_approved_line_id_key ON private.bpay_next_snooze_many_line USING btree (request_id, approved_line_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_many_line_ack_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (ack_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_approved_line_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approved_line_id) REFERENCES private.bpay_next_approved_line(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_line_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (line_no > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_mutation_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (mutation_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id, line_no)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_request_id_approved_line_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (request_id, approved_line_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (request_id) REFERENCES private.bpay_next_snooze_many_request(request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_line_worker_pay_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(worker_pay_basis) = 32)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_many_page",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "page_no",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "result_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_many_page_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_page_pkey ON private.bpay_next_snooze_many_page USING btree (request_id, page_no)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_many_page_page_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (page_no > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_page_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id, page_no)"
+        },
+        {
+          "name": "bpay_next_snooze_many_page_request_body_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text)"
+        },
+        {
+          "name": "bpay_next_snooze_many_page_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (request_id) REFERENCES private.bpay_next_snooze_many_request(request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_page_result_body_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (COALESCE(jsonb_typeof(result_body) = 'object'::text AND (result_body -> 'received'::text) = 'true'::jsonb AND jsonb_typeof(result_body #> '{result,rows}'::text[]) = 'array'::text AND jsonb_array_length(result_body #> '{result,rows}'::text[]) <= 100, false))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "bpay_next_snooze_many_request",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "action",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "aggregate_ack_request_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "aggregate_control",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "aggregate_mutation_request_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "aggregate_result",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "control_cut",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "failed_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "module_epoch",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "next_after_line_no",
+          "type": "integer",
+          "default": "0",
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "next_page_no",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "physical_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_body",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "revision_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "successful_count",
+          "type": "bigint",
+          "default": "0",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "total_count",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "warning_context",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "whole_control",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "work_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "worker_pay_basis",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bpay_next_snooze_many_request_aggregate_ack_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_request_aggregate_ack_request_id_key ON private.bpay_next_snooze_many_request USING btree (aggregate_ack_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_aggregate_mutation_request_id_key",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_request_aggregate_mutation_request_id_key ON private.bpay_next_snooze_many_request USING btree (aggregate_mutation_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_pkey",
+          "definition": "CREATE UNIQUE INDEX bpay_next_snooze_many_request_pkey ON private.bpay_next_snooze_many_request USING btree (request_id)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "bpay_next_snooze_many_request_action_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (action = ANY (ARRAY['SNOOZE_SET_MANY'::text, 'SNOOZE_CLEAR_MANY'::text]))"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_actor_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (actor_id) REFERENCES tms_users(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_aggregate_ack_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (aggregate_ack_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_aggregate_mutation_request_id_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (aggregate_mutation_request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK ((successful_count + failed_count) <= total_count)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_control_cut_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (control_cut >= 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_failed_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (failed_count >= 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_module_epoch_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (module_epoch > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_next_after_line_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (next_after_line_no >= 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_next_page_no_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (next_page_no > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_physical_timesheet_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (physical_timesheet_id) REFERENCES timesheets(timesheet_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (request_id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_request_body_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(request_body) = 'object'::text)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (request_id) REFERENCES private.bpay_next_command(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_revision_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (revision_id) REFERENCES private.bpay_next_work_revision(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_successful_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (successful_count >= 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_total_count_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (total_count > 0)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_warning_context_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(warning_context) = 'object'::text)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_work_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (work_id) REFERENCES private.bpay_next_work(id)"
+        },
+        {
+          "name": "bpay_next_snooze_many_request_worker_pay_basis_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(worker_pay_basis) = 32)"
         }
       ],
       "view_definition_sha256": null
@@ -113188,6 +114090,10 @@
         {
           "name": "bpay_next_work_revision_pkey",
           "definition": "CREATE UNIQUE INDEX bpay_next_work_revision_pkey ON private.bpay_next_work_revision USING btree (id)"
+        },
+        {
+          "name": "bpay_next_work_revision_snooze_physical_idx",
+          "definition": "CREATE INDEX bpay_next_work_revision_snooze_physical_idx ON private.bpay_next_work_revision USING btree (physical_timesheet_id, physical_timesheet_version, work_id, id) WHERE (sealed_at_utc IS NOT NULL)"
         },
         {
           "name": "bpay_next_work_revision_source_event_id_key",

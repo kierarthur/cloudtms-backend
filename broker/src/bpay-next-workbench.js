@@ -1,5 +1,6 @@
 /** WB09 pure Office reads. Closed kinds, trusted admin actor, fixed RPC only.
  * No reconstruction, financial calculation, command or automatic page retry. */
+import {normaliseBpayNextSnoozeAction,normaliseBpayNextSnoozeMany,validateBpayNextSnoozeContext,validateBpayNextSnoozeReceipt,validateBpayNextSnoozeManyReceipt,BPAY_NEXT_SNOOZE_REFUSALS} from './bpay-next-snooze.js';
 export const BPAY_NEXT_WORKBENCH_LIMITS=Object.freeze({requestBytes:32768,responseBytes:131072,timeoutMs:4000});
 const ENCODER=new TextEncoder(),UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const KINDS=['HEADER','CANDIDATES','ACTION_REQUIRED','BLOCKED','ISSUE_DETAIL','CANDIDATE_GROUPS','GROUP_LINES','CANDIDATE_ESTIMATE','PICK_CANDIDATES','PICK_CLIENTS','EXPORT_ROWS'];
@@ -634,8 +635,8 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
 export function createBpayNextWorkbenchRpc({baseUrl,headers,fetchImpl=fetch}){
   const endpoint=new URL(`${String(baseUrl||'').replace(/\/+$/,'')}/rest/v1/rpc/bpay_next_workbench_page_v1`);
   if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
-  return async(kind,args,options)=>{if(!KINDS.includes(kind)||!field(options?.actorUserId,'uuid')||!options.signal)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
-    const body=JSON.stringify({p_request:{actor_user_id:options.actorUserId,kind,...normalizeWorkbenchInput(kind,args)}});if(ENCODER.encode(body).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+  return async(kind,args,options)=>{if((!KINDS.includes(kind)&&kind!=='SNOOZE_CHECK')||!field(options?.actorUserId,'uuid')||!options.signal)throw new TypeError('BPAY_NEXT_WORKBENCH_TRANSPORT_INVALID');
+    const body=JSON.stringify({p_request:{actor_user_id:options.actorUserId,kind,...(kind==='SNOOZE_CHECK'?{snooze:normaliseBpayNextSnoozeAction('SNOOZE_CHECK',args.snooze)}:normalizeWorkbenchInput(kind,args))}});if(ENCODER.encode(body).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
     const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');h.set('X-CloudTMS-Banking-Pay-Route-Class','READ');
     return fetchImpl(endpoint.href,{method:'POST',headers:h,body,redirect:'error',signal:options.signal});};
 }
@@ -651,6 +652,17 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
     if(request.method!=='GET')throw fail('BPAY_NEXT_WORKBENCH_METHOD_NOT_ALLOWED',405);
     const user=await dependencies.requireOfficeUser?.(request,['admin']);if(!user||typeof user.id!=='string'||!UUID.test(user.id.toLowerCase()))throw fail('BPAY_NEXT_WORKBENCH_UNAUTHORIZED',401);if(user.role!=='admin')throw fail('BPAY_NEXT_WORKBENCH_FORBIDDEN',403);
     const actor=user.id.toLowerCase(),url=new URL(request.url);if(ENCODER.encode(url.search).byteLength>32768)throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);
+    if(url.searchParams.get('kind')==='SNOOZE_CHECK'){
+      if([...url.searchParams.keys()].length!==2||url.searchParams.getAll('snooze').length!==1)throw fail('BPAY_NEXT_SNOOZE_REQUEST_INVALID',400);
+      let args;try{args=normaliseBpayNextSnoozeAction('SNOOZE_CHECK',parseUniqueJson(url.searchParams.get('snooze')));}catch{throw fail('BPAY_NEXT_SNOOZE_REQUEST_INVALID',400);}
+      if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+      controller=new AbortController();const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},4000);});
+      return await Promise.race([(async()=>{const response=await dependencies.workbenchRpc('SNOOZE_CHECK',{snooze:args},{actorUserId:actor,signal:controller.signal});
+        if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');const value=await readWorkbenchJson(response,controller.signal,16384);
+        if(!response.ok){if(record(value)&&BPAY_NEXT_SNOOZE_REFUSALS.includes(value.message)&&['22023','23514','55000','42501'].includes(value.code))throw fail(value.message,value.code==='42501'?403:value.code==='22023'?400:409);throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+        if(!exact(value,['ok','kind','context'])||value.ok!==true||value.kind!=='SNOOZE_CHECK')throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+        validateBpayNextSnoozeContext(value.context,args);return json(200,value,'SNOOZE_CHECK');})(),timeout]);
+    }
     const input={},kind=url.searchParams.get('kind');for(const [key,value] of url.searchParams){if(url.searchParams.getAll(key).length!==1||key!=='kind'&&!Object.hasOwn(COMMON,key))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);if(key==='kind')continue;if(key==='after'||key==='count_selection'||key==='progress_after'||key==='selection_memory'||key==='estimate'){try{input[key]=parseUniqueJson(value);}catch{throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);}}else if(key==='limit'){if(!/^[1-9]\d{0,2}$/.test(value))throw fail('BPAY_NEXT_WORKBENCH_REQUEST_INVALID',400);input.limit=Number(value);}else input[key]=value;}
     const args=normalizeWorkbenchInput(kind,input);readKind=kind;if(args.after!==null&&args.after.context.actor_user_id!==actor)throw fail('BPAY_NEXT_WORKBENCH_CURSOR_STALE',409,false,true);
     if(typeof dependencies.workbenchRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
@@ -659,8 +671,8 @@ export async function handleBpayNextWorkbenchPage(request,dependencies={}){
       if(!response.ok)throw fail(response.status===401||response.status===403?'BPAY_NEXT_WORKBENCH_FORBIDDEN':'BPAY_NEXT_WORKBENCH_UNAVAILABLE',response.status===401||response.status===403?403:503,true);
       const body=validateWorkbenchResponse(payload,kind,args,actor);if(ENCODER.encode(JSON.stringify(body)).byteLength>131072)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_TOO_LARGE');return json(body.ok?200:refusalStatus(body.error_code),body,kind);};
     return await Promise.race([send(),timeout]);
-  }catch(e){const safe=typeof e?.code==='string'&&/^BPAY_NEXT_[A-Z_]+$/.test(e.code)?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null},readKind);}
-  finally{if(timer!==undefined)clearTimeout(timer);}
+  }catch(e){const safe=typeof e?.code==='string'&&(/^BPAY_NEXT_[A-Z_]+$/.test(e.code)||BPAY_NEXT_SNOOZE_REFUSALS.includes(e.code))?e:fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);return json(safe.status??503,{ok:false,error_code:safe.code,retryable:safe.retryable===true,reload_required:safe.reload===true,workbench_revision:null,complete:false,projection_state:null,dirty_candidate_count:null,dirty_group_count:null,pending_task_count:null},readKind);}
+  finally{if(timer!==undefined)clearTimeout(timer);controller?.abort();}
 }
 
 // WB18 output-only walk. The complete local intent stays immutable here and is
@@ -804,7 +816,7 @@ export function createBpayNextWorkbenchCommandRpc({baseUrl,headers,fetchImpl=fet
  return (args,readback,options)=>{if(!field(options?.actorUserId,'uuid')||!options.signal||typeof readback!=='boolean')throw new TypeError('BPAY_NEXT_COMMAND_TRANSPORT_INVALID');
   const h=new Headers(headers);h.set('content-type','application/json');h.set('accept','application/json');h.set('X-CloudTMS-Banking-Pay-Route-Class',readback?'READ':'OPERATION_NUDGE');
   return fetchImpl(endpoint.href,{method:'POST',headers:h,signal:options.signal,redirect:'error',
-   body:JSON.stringify({p_request:{actor_user_id:options.actorUserId,action:'RETRY_WORK_JOB',args,readback}})});};
+   body:JSON.stringify({p_request:{actor_user_id:options.actorUserId,action:options.action??'RETRY_WORK_JOB',args,readback}})});};
 }
 export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
  let timer,controller,attempted=false;const abort=()=>controller?.abort();
@@ -816,7 +828,18 @@ export async function handleBpayNextWorkbenchCommand(request,dependencies={}){
   controller=new AbortController();request.signal?.addEventListener('abort',abort,{once:true});if(request.signal?.aborted)abort();
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{abort();reject(fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true));},8000);});
   const send=async()=>{
-   const body=await readWorkbenchJson(request,controller.signal,2048);
+   const body=await readWorkbenchJson(request,controller.signal,32768);
+   if(['SNOOZE_WARNING_ACK_ISSUE','SNOOZE_SET','SNOOZE_CLEAR','SNOOZE_SET_MANY','SNOOZE_CLEAR_MANY'].includes(body?.action)){
+    if(!exact(body,['action','readback','args'])||typeof body.readback!=='boolean')throw fail('BPAY_NEXT_SNOOZE_REQUEST_INVALID',400);
+    const many=body.action.endsWith('_MANY'),args=many?normaliseBpayNextSnoozeMany(body.action,body.args):normaliseBpayNextSnoozeAction(body.action,body.args);
+    if(typeof dependencies.workbenchCommandRpc!=='function')throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);
+    attempted=!body.readback;const response=await dependencies.workbenchCommandRpc(args,body.readback,{actorUserId:user.id.toLowerCase(),signal:controller.signal,action:body.action});
+    if(!(response instanceof Response))throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');const value=await readWorkbenchJson(response,controller.signal,many?131072:16384);
+    if(!response.ok){if(record(value)&&BPAY_NEXT_SNOOZE_REFUSALS.includes(value.message)&&['22023','23514','55000','42501'].includes(value.code)){
+      attempted=false;throw fail(value.message,value.code==='42501'?403:value.code==='22023'?400:409);}throw fail('BPAY_NEXT_WORKBENCH_UNAVAILABLE',503,true);}
+    const receipt=many?validateBpayNextSnoozeManyReceipt(value,args):validateBpayNextSnoozeReceipt(value,body.action,args);if(!body.readback&&!receipt.received)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');
+    return json(200,{ok:true,action:body.action,receipt});
+   }
    if(!exact(body,['action','readback',...Object.keys(WORK_RETRY_ARGS)])||body.action!=='RETRY_WORK_JOB'
     ||typeof body.readback!=='boolean'||Object.entries(WORK_RETRY_ARGS).some(([k,t])=>!retryField(body[k],t)))throw fail('BPAY_NEXT_WORKBENCH_COMMAND_INPUT_INVALID',400);
    const args=Object.freeze(Object.fromEntries(Object.keys(WORK_RETRY_ARGS).map(k=>[k,body[k]])));

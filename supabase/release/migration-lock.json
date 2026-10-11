@@ -1331,6 +1331,10 @@
       "sha256": "77a34e965cef7d9fd59b9a19a25efedf09efe33ba086883ae18b1e10a57a9632"
     },
     {
+      "path": "supabase/migrations/11102026_0316_banking_pay_next_snooze_many_receipts.sql",
+      "sha256": "85fe90cab93c899cd54115be8cbb008e3b342ade77ef743bc357bf9ab91e0224"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

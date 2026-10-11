@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "0a00d3a5704c2a01338d208b94d6fbb49fd9c9c8",
-  "compiledAtUtc": "2026-10-11T02:03:59.122Z",
+  "sourceCommit": "553c96a42096ead97d5bde5509db9ac0dc220bd1",
+  "compiledAtUtc": "2026-10-11T02:45:20.127Z",
   "inventory": {
     "migrations": [
       {
@@ -1344,6 +1344,10 @@
       {
         "path": "supabase/migrations/11102026_0255_banking_pay_next_due_recovery_metadata.sql",
         "sha256": "77a34e965cef7d9fd59b9a19a25efedf09efe33ba086883ae18b1e10a57a9632"
+      },
+      {
+        "path": "supabase/migrations/11102026_0316_banking_pay_next_snooze_many_receipts.sql",
+        "sha256": "85fe90cab93c899cd54115be8cbb008e3b342ade77ef743bc357bf9ab91e0224"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -7884,6 +7888,34 @@
         "sha256": "221d55266718326ee58dd67af161a0f3aeff8858cd11bbed60370cfa64c33435"
       },
       {
+        "path": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql"
+        ],
+        "sha256": "9106269481203717e331789a6694c91b54accc7c40a996a17c234cde2052f68a"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql"
+        ],
+        "sha256": "f726491a2ed107de151a6bd073ee1fd834894bf0e868a49be0b9ba0ffb51ddd9"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql"
+        ],
+        "sha256": "4d7aec02ce889c392fdab1f496641f3b0e4a80bb9e08a5a4e2d57193a3522efb"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_v1.sql"
+        ],
+        "sha256": "3898975b2ae839fb19d276ce1d0168b64dec3dd30970f7d125c0cfdd086ef4b7"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -7895,8 +7927,8 @@
   "selected": {
     "migrations": [
       {
-        "path": "supabase/migrations/11102026_0255_banking_pay_next_due_recovery_metadata.sql",
-        "sha256": "77a34e965cef7d9fd59b9a19a25efedf09efe33ba086883ae18b1e10a57a9632"
+        "path": "supabase/migrations/11102026_0316_banking_pay_next_snooze_many_receipts.sql",
+        "sha256": "85fe90cab93c899cd54115be8cbb008e3b342ade77ef743bc357bf9ab91e0224"
       }
     ],
     "repeatables": [
@@ -7922,25 +7954,32 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
+        "path": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql"
+          "supabase/repeatable/11102026_0312_banking_pay_next_snooze_context_controls_v1.sql"
         ],
-        "sha256": "b7e567940faffc277172533d5cd44232c3ed4fad056d845b85eeb78f61614541"
+        "sha256": "9106269481203717e331789a6694c91b54accc7c40a996a17c234cde2052f68a"
       },
       {
-        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql",
+        "path": "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0255_banking_pay_next_due_recovery_pages_v1.sql"
+          "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql"
         ],
-        "sha256": "15af6fd1c4bee8f505a0fc6f5b56f641787db6af0869d2bac2ce9d9a01e66750"
+        "sha256": "f726491a2ed107de151a6bd073ee1fd834894bf0e868a49be0b9ba0ffb51ddd9"
       },
       {
-        "path": "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql",
+        "path": "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
         "paths": [
-          "supabase/repeatable/11102026_0255_banking_pay_next_due_snooze_guards_v1.sql"
+          "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql"
         ],
-        "sha256": "221d55266718326ee58dd67af161a0f3aeff8858cd11bbed60370cfa64c33435"
+        "sha256": "4d7aec02ce889c392fdab1f496641f3b0e4a80bb9e08a5a4e2d57193a3522efb"
+      },
+      {
+        "path": "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_v1.sql",
+        "paths": [
+          "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_v1.sql"
+        ],
+        "sha256": "3898975b2ae839fb19d276ce1d0168b64dec3dd30970f7d125c0cfdd086ef4b7"
       }
     ]
   },
