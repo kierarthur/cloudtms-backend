@@ -1,7 +1,7 @@
 {
   "item": "DR-12",
   "sequence": 87,
-  "status": "SOURCE_REVIEW_PENDING",
+  "status": "BUILT_REVIEWED",
   "builderDecision": "BD097",
   "delivery": "Required source confirmation/shared chain only; no proved SQL delta",
   "reusedSources": [
@@ -33,5 +33,6 @@
   "currentRegistry": "Case0904/plan0204/kernel0290",
   "contractHash": "95ead45af83d7ace7f3cb4731b676df70d53bfe89dbedc0e6f33ea1710e89e73",
   "normalEvidence": "Immediately preceding DR11 unchanged sources; docs-only no changedSQL",
-  "joinedRuntime": "AUTHORED_NOT_RUN"
+  "joinedRuntime": "AUTHORED_NOT_RUN",
+  "implementationCommit": "9ffc74e4ca3eb8fd2b08644928259f0f6de81c6e"
 }

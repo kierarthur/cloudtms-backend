@@ -2588,7 +2588,7 @@ Completion: c683f8c4a35e3b5fc1d85ea8d0a06a2218b0f9f9. design/DR-11-completion.md
 
 ## DR-12 — Same-Candidate cross-Timesheet offset
 
-Seq 87; Draft · D2-B; reviewer R3; current requested-feature status PARTLY_DONE.
+Seq 87; Draft · D2-B; reviewer R3; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Same Candidate, same channel partition offset is frozen at Create. Record the remaining unreserved/recoverable balance at Draft preparation after this offset, not only after settlement. Keep original principal, active reserved amount, actual recovery and shortfall distinct; do not post recovery early or overwrite gross principal with a residual. No duplicate negative WORK plus case liability; no floor on overpayment.
 
@@ -2610,6 +2610,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows DR
 **Later in-app acceptance — not run:**
 
 PAYE Candidate with Timesheet A GBP 100 pay and Timesheet B GBP -30 overpayment: the Draft shows A GBP 100, recovery GBP 30, gross to payroll GBP 70 (cash unknown until the PAYE net is entered); with B GBP -130: gross to payroll GBP 0 and GBP 30 still outstanding after payment, nothing taken from another Candidate (RQ-272). The GBP 30 appears once, as the case recovery, with no extra negative line (RQ-099). After the payment completes, the case shows the residual only (GBP 0 in the first example, GBP 30 in the second). (The GBP 20 Umbrella-origin overpayment for a Candidate now paid PAYE is checked in CM-13a's Done means; the Contract-move case in CM-13's.)
+
+Completion: 9ffc74e4ca3eb8fd2b08644928259f0f6de81c6e. design/DR-12-completion.md; design/DR-12-investigation.md; design/DR-12-successor-provenance.json; design/case-allocation-chain.md; reviews/DR-12-source-review.md. Allfive sharedownerCONTEXT rows preserved; requiredsameCandidatePAYE sourcecensus andlegacyselection check independentlyPASS. CorrectexistingSQL reused; no changedSQL/Worker/screen. LatestDR11normal342/893/PG17/source12/12/seal/coupling95ead45a retained. Financialexamples/firstuse/app/install AUTHORED_NOT_RUN.
 
 ## DY-02 — Contractless Daily rates from the Candidate override or Client default
 
