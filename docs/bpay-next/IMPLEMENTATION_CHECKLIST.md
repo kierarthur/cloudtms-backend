@@ -2800,7 +2800,7 @@ Implementation 1b9fb35202c8c1b9f1e50998130bf02cf17fc8c5; design/DY-07-completion
 
 ## DY-08 — Daily Timesheets carry no Additional pay, expenses or mileage (owner-confirmed; guard only)
 
-Seq 95; Daily · D5-DY; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 95; Daily · D5-DY; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature.
 
@@ -2808,10 +2808,10 @@ Dependencies: DY-04; successor positions: `07102026_0018` Daily evidence: 2 of 2
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| DY-08-D01 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) hours-only predicate/refusal successor | LOCAL_ONLY | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-08-D02 | WORKER ROUTE: broker/src/index.js :: typed Daily hours-only refusal preservation | MISSING | Implement the exact worker target after its existing dependencies. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-08-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: Daily hours-only damaged-data blocker | MISSING | Implement the exact screen target after its existing dependencies. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-08-D04 | CHECK: DY-08 future joined in-app TEST checklist | MISSING | Real Daily hours succeed; injected nonzero Additional/expense/mileage/travel/accommodation/other within authorised future TEST fixture refuses dedicated23514; ordinary separate expense/weekly Additional unaffected. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-08-D01 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) hours-only predicate/refusal successor | BUILT_REVIEWED | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-08-D02 | WORKER ROUTE: broker/src/index.js :: typed Daily hours-only refusal preservation | BUILT_REVIEWED | Implement the exact worker target after its existing dependencies. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-08-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: Daily hours-only damaged-data blocker | BUILT_REVIEWED | Implement the exact screen target after its existing dependencies. Hours-only Daily is binding. Use BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION (23514) for ancillary data, preserve all other exact provenance refusals and build no Daily ancillary-payment feature. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-08-D04 | CHECK: DY-08 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Real Daily hours succeed; injected nonzero Additional/expense/mileage/travel/accommodation/other within authorised future TEST fixture refuses dedicated23514; ordinary separate expense/weekly Additional unaffected. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY-08-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2819,6 +2819,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY
 
 A normal Daily shift pays its hours only. There is no Additional, expense or mileage line or option anywhere on a Daily. A damaged Daily financial row carrying a mileage amount is refused with `BPAY_NEXT_DAILY_HOURS_ONLY_VIOLATION`, and a Daily with a broken clock or break record still gets `BPAY_NEXT_DAILY_APPROVAL_PROVENANCE_REQUIRED`.
   - Joined future check: Real Daily hours succeed; injected nonzero Additional/expense/mileage/travel/accommodation/other within authorised future TEST fixture refuses dedicated23514; ordinary separate expense/weekly Additional unaffected. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+Implementation BE88c09f038f5a4f159ef02d37f27a2d051648a923; FE38b8ed2d820008670265d27a221f879a80dd0330; design/DY-08-completion.md; design/DY-08-successor-provenance.json; reviews/DY-08-source-review.md. ITEM/D01-D03 BUILT/REVIEWED; D04 AUTHORED_NOT_RUN unticked. Whole77/288 BUILT77/288 REVIEWED; WB44ownerA2open; A5atboundarythenDY09seq96.
 
 ## DY-09 — Umbrella cash and settlement for Daily
 

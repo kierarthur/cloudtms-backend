@@ -2,7 +2,7 @@
   "item": "DY-08",
   "sequence": 95,
   "decision": "BD106",
-  "status": "CHECKED_REVIEWED_PENDING_COMMIT",
+  "status": "BUILT_REVIEWED",
   "parent": "supabase/repeatable/11102026_0925_banking_pay_next_daily_five_standard_rate_rows_v1.sql",
   "sources": [
     {
@@ -40,5 +40,6 @@
   },
   "futureJoined": "AUTHORED_NOT_RUN",
   "frontendCommit": "38b8ed2d820008670265d27a221f879a80dd0330",
-  "review": "reviews/DY-08-source-review.md"
+  "review": "reviews/DY-08-source-review.md",
+  "implementationCommit": "88c09f038f5a4f159ef02d37f27a2d051648a923"
 }
