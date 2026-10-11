@@ -203,7 +203,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'public.bpay_next_snooze_due_page_v1(jsonb)':['by','private.bpay_next_workbench_require_next_v1','private.bpay_next_receive_command_v1','private.bpay_next_snooze_due_receipt_valid_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','gen_random_uuid','to_jsonb'],
   'public.bpay_next_workbench_week_rollover_page_v1(jsonb)':['lateral','by','private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_refresh_work_v1','private.bpay_next_workbench_refresh_case_v1','distinct','clock_timestamp','octet_length','jsonb_insert','array_append','array_remove','substring'],
   'private.bpay_next_snooze_due_receipt_valid_v1(uuid)':['jsonb_set','to_jsonb'],
-  'private.bpay_next_case_allocation_plan_v1(jsonb)':['isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
+  'private.bpay_next_case_allocation_plan_v1(jsonb)':['private.bpay_next_case_edit_origin_v1','isfinite','trunc','max','jsonb_populate_recordset','private.bpay_next_case_allocation_row_v1','private.bpay_next_value_source_for_target_v1','private.bpay_next_segment_collection_basis_v1','private.bpay_next_work_wait_state_v1','to_jsonb','jsonb_populate_record','cardinality','octet_length','jsonb_object_keys','date','sum','filter','distinct'],
   "private.bpay_next_retry_work_job_v1(uuid,jsonb,boolean)": ["private.bpay_next_workbench_require_next_v1","pg_catalog.octet_length","jsonb_object_keys","unnest","to_char","clock_timestamp","pg_catalog.clock_timestamp"],
   "public.bpay_next_workbench_command_v1(jsonb)": ["private.bpay_next_retry_work_job_v1","private.bpay_next_snooze_many_v1","private.bpay_next_snooze_action_v1","private.bpay_next_workbench_require_next_v1","public.bpay_next_financial_intake_v1","current_setting","octet_length","jsonb_object_keys","to_jsonb","jsonb_set"],
   "public.bpay_next_work_job_failure_service_v1(uuid,uuid,bigint,text,text,text)": ["current_setting","octet_length","clock_timestamp"],
@@ -526,6 +526,7 @@ export const TYPED_TRANSPORT_SIGNATURES=Object.freeze([
 ]);
 const TYPED_PAGE_PROJECTIONS=Object.freeze({
   "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)": [
+    "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_component_id,c.case_id,c.candidate_id,c.component_ordinal::text, c.component_revision::text,c.case_kind,c.case_subtype,c.tax_treatment, c.instruction_kind,c.direction,c.payroll_stage,c.source_pay_channel,c.resolution_state, c.approved_source_ex_vat::text,c.funded_source_ex_vat::text,c.recovered_source_ex_vat::text, c.written_off_source_ex_vat::text,c.active_payout_source_ex_vat::text,c.active_recovery_source_ex_vat::text, c.rule_id,fc.current_rule_id,r.rule_revision::text, fc.principal_approved::text as case_principal_approved, r.weekly_due_source_ex_vat::text,r.minimum_earnings_threshold::text,r.take_home_floor_override::text, r.schedule_start_monday,r.next_due_monday,r.schedule_week_count::text, (case when c.direction='DEDUCTION' then case when c.case_kind in ('LOAN','ADVANCE') then c.funded_source_ex_vat else c.approved_source_ex_vat end -c.recovered_source_ex_vat-c.written_off_source_ex_vat else c.approved_source_ex_vat-c.funded_source_ex_vat-c.paid_credit_source_ex_vat-c.written_off_source_ex_vat end)::text as outstanding_source_ex_vat, (p.opening_due_source_ex_vat-p.realised_recovery_source_ex_vat-p.active_unrealised_recovery_source_ex_vat)::text as amount_due, null::text as recoverable_this_run, private.bpay_next_case_edit_state_v1(c.case_id,c.candidate_id) as edit_state,null::jsonb as edit_receipt, (select coalesce(amended.input->>'original_liability_reference',cr.original_liability_reference) from private.bpay_next_case_create_request cr left join private.bpay_next_case_edit_request amended on amended.new_rule_id=fc.current_rule_id where cr.case_id=c.case_id and cr.candidate_id=c.candidate_id and cr.case_kind='MANUAL_DEBT' and cr.case_subtype='MANUAL_DEBT' and c.case_kind='MANUAL_DEBT' and c.case_subtype='MANUAL_DEBT') as original_liability_reference from",
     "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_component_id,c.case_id,c.candidate_id,c.component_ordinal::text, c.component_revision::text,c.case_kind,c.case_subtype,c.tax_treatment, c.instruction_kind,c.direction,c.payroll_stage,c.source_pay_channel,c.resolution_state, c.approved_source_ex_vat::text,c.funded_source_ex_vat::text,c.recovered_source_ex_vat::text, c.written_off_source_ex_vat::text,c.active_payout_source_ex_vat::text,c.active_recovery_source_ex_vat::text from",
     "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_component_id,c.case_id,c.candidate_id,c.component_ordinal::text, c.component_revision::text,c.case_kind,c.case_subtype,c.tax_treatment, c.instruction_kind,c.direction,c.payroll_stage,c.source_pay_channel,c.resolution_state, c.approved_source_ex_vat::text,c.funded_source_ex_vat::text,c.recovered_source_ex_vat::text, c.written_off_source_ex_vat::text,c.active_payout_source_ex_vat::text,c.active_recovery_source_ex_vat::text, c.rule_id,fc.current_rule_id,r.rule_revision::text, fc.principal_approved::text as case_principal_approved, r.weekly_due_source_ex_vat::text,r.minimum_earnings_threshold::text,r.take_home_floor_override::text, r.schedule_start_monday,r.next_due_monday,r.schedule_week_count::text, (case when c.direction='DEDUCTION' then case when c.case_kind in ('LOAN','ADVANCE') then c.funded_source_ex_vat else c.approved_source_ex_vat end -c.recovered_source_ex_vat-c.written_off_source_ex_vat else c.approved_source_ex_vat-c.funded_source_ex_vat-c.paid_credit_source_ex_vat-c.written_off_source_ex_vat end)::text as outstanding_source_ex_vat, (p.opening_due_source_ex_vat-p.realised_recovery_source_ex_vat-p.active_unrealised_recovery_source_ex_vat)::text as amount_due, null::text as recoverable_this_run from",
     "pg_catalog.to_jsonb(page) as row_value from ( select c.id as case_component_id,c.case_id,c.candidate_id,c.component_ordinal::text, c.component_revision::text,c.case_kind,c.case_subtype,c.tax_treatment, c.instruction_kind,c.direction,c.payroll_stage,c.source_pay_channel,c.resolution_state, c.approved_source_ex_vat::text,c.funded_source_ex_vat::text,c.recovered_source_ex_vat::text, c.written_off_source_ex_vat::text,c.active_payout_source_ex_vat::text,c.active_recovery_source_ex_vat::text, c.rule_id,fc.current_rule_id,r.rule_revision::text, fc.principal_approved::text as case_principal_approved, r.weekly_due_source_ex_vat::text,r.minimum_earnings_threshold::text,r.take_home_floor_override::text, r.schedule_start_monday,r.next_due_monday,r.schedule_week_count::text, (case when c.direction='DEDUCTION' then case when c.case_kind in ('LOAN','ADVANCE') then c.funded_source_ex_vat else c.approved_source_ex_vat end -c.recovered_source_ex_vat-c.written_off_source_ex_vat else c.approved_source_ex_vat-c.funded_source_ex_vat-c.paid_credit_source_ex_vat-c.written_off_source_ex_vat end)::text as outstanding_source_ex_vat, (p.opening_due_source_ex_vat-p.realised_recovery_source_ex_vat-p.active_unrealised_recovery_source_ex_vat)::text as amount_due, null::text as recoverable_this_run, (select cr.original_liability_reference from private.bpay_next_case_create_request cr where cr.case_id=c.case_id and cr.candidate_id=c.candidate_id and cr.case_kind='MANUAL_DEBT' and cr.case_subtype='MANUAL_DEBT' and c.case_kind='MANUAL_DEBT' and c.case_subtype='MANUAL_DEBT') as original_liability_reference from"
@@ -630,6 +631,7 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object( 'phase',v_result->>'phase','run_worker_id',v_result->>'run_worker_id', 'cursor',v_job.cursor_key,'released_line_count',v_result->>'released_line_count', 'rows_visited',coalesce(v_result->>'rows_visited','0'), 'holds_released',coalesce(v_result->>'holds_released','0'), 'blocked_code',v_result->>'blocked_code')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'cursor',v_result->>'cursor','rows_visited',v_result->>'rows_visited', 'work_released',v_result->>'work_released','case_holds_released',v_result->>'case_holds_released', 'run_worker_id',v_result->>'run_worker_id')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id')",
+    "jsonb_build_object('phase',v_result->>'phase','case_id',v_result->>'case_id', 'case_revision',v_result->>'case_revision','rule_id',v_result->>'rule_id','issue_code',v_result->>'issue_code')",
     "pg_catalog.jsonb_build_object('phase',v_result->>'phase', 'case_id',v_result->>'case_id','case_component_id',v_result->>'case_component_id', 'applied_amount',v_result->>'applied_amount','remaining_amount',v_result->>'remaining_amount', 'protected_amount',v_result->>'protected_amount','event_id',v_result->>'event_id','issue_code',v_result->>'issue_code')"
   ],
   "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)": [
@@ -653,9 +655,11 @@ const TYPED_OBJECT_CONSTRUCTORS=Object.freeze({
     "pg_catalog.jsonb_build_object('run_id',v_run,'phase',v_result->>'phase', 'review_revision',v_result->>'review_revision','replay',v_result->'replay','drafts',v_result->'drafts')"
   ],
   "public.bpay_next_preparation_page_v1(uuid,text,jsonb)": [
+    "jsonb_build_object('rows',jsonb_build_array(private.bpay_next_case_edit_preview_v1(p_actor_user_id, (p_args->>'case_id')::uuid,(p_args->>'expected_case_revision')::bigint,p_args->'input')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_case_create_preview_v1(p_actor_user_id,p_args->'input')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(private.bpay_next_paye_guard_page_v1(p_actor_user_id,(p_args->>'run_id')::uuid,p_args->'descriptor')),'complete',true)",
     "pg_catalog.jsonb_build_object('rows',pg_catalog.jsonb_build_array(v_progress),'complete',true)",
+    "jsonb_build_object('edit_receipt',v_row)",
     "pg_catalog.jsonb_build_object( 'approved_line_id',l.id,'line_no',l.line_no::text,'component_key',l.component_key,'component_kind',l.component_kind, 'work_date',l.work_date,'source_pay_channel',r.source_pay_channel,'approved_source_ex_vat',l.source_pay_ex_vat::text, 'unit_label',l.unit_label,'approved_quantity',l.approved_quantity::text, 'approved_unit_rate',l.approved_unit_rate::text, 'job_title',r.job_title,'band_label',r.band_label, 'original_work_ref',parent.reference_number,'original_timesheet_id',parent.timesheet_id, 'is_adjustment',ts.is_adjustment,'correction_kind',ts.correction_kind, 'associated_rate_schedule_id',rs.id,'associated_rate_family',rs.rate_family,'associated_rate_code',rs.rate_code, 'available_paye_rate',rs.paye_rate::text,'available_umbrella_rate',rs.umbrella_rate::text, 'available_charge_rate',rs.charge_rate::text,'approved_charge_rate',rs.approved_charge_rate::text, 'standard_rate_schedule',case when l.component_kind in ('WORK','PROTECTED_WORK') then (select coalesce(jsonb_agg(snapshot.value order by snapshot.bucket_order),'[]'::jsonb) from ( select jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text) value, case sr.rate_code when 'DAY' then 1 when 'NIGHT' then 2 when 'SAT' then 3 when 'SUN' then 4 when 'BH' then 5 end bucket_order from private.bpay_next_rate_schedule sr where sr.revision_id=v_revision and sr.rate_family='STANDARD' and sr.rate_code in ('DAY','NIGHT','SAT','SUN','BH') order by bucket_order limit 5 ) snapshot) else '[]'::jsonb end, 'realised_source_ex_vat',p.realised_source_ex_vat::text,'held_source_ex_vat',p.held_source_ex_vat::text, 'residual_source_ex_vat',(l.source_pay_ex_vat-p.realised_source_ex_vat-p.held_source_ex_vat)::text, 'position_ready',coalesce(p.applied_revision_id=v_revision and p.approved_source_ex_vat=l.source_pay_ex_vat,false))",
     "jsonb_build_object('rate_schedule_id',sr.id,'bucket',sr.rate_code, 'available_paye_rate',sr.paye_rate::text,'available_umbrella_rate',sr.umbrella_rate::text, 'available_charge_rate',sr.charge_rate::text,'approved_charge_rate',sr.approved_charge_rate::text)",
     "pg_catalog.jsonb_build_object('work_id',c.work_id,'expected_revision_id',c.expected_revision_id, 'selection_mode',c.selection_mode,'selection_state',c.selection_state,'page_count',c.page_count::text,'component_count',c.component_count::text)",
@@ -877,6 +881,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
   ],
   "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)": [
     "jsonb_agg",
+    "private.bpay_next_apply_case_period_amendment_v1",
     "jsonb_populate_record",
     "jsonb_set",
     "pg_catalog.clock_timestamp",
@@ -1014,6 +1019,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.octet_length",
     "pg_catalog.to_char",
     "private.bpay_next_apply_case_create_v1",
+    "private.bpay_next_apply_case_edit_v1",
     "private.bpay_next_apply_case_paye_net_page_v1",
     "private.bpay_next_apply_position_page_v1",
     "private.bpay_next_apply_reissue_cancel_v1",
@@ -1024,6 +1030,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "private.bpay_next_cancel_simple_worker_page_v1",
     "private.bpay_next_capture_position_page_v1",
     "private.bpay_next_claim_case_create_job_v1",
+    "private.bpay_next_claim_case_edit_job_v1",
     "private.bpay_next_claim_position_job_v1",
     "private.bpay_next_claim_preparation_expiry_job_v1",
     "private.bpay_next_claim_prepare_job_v1",
@@ -1264,6 +1271,10 @@ const DR09_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.current_setting",
     "private.bpay_next_case_list_page_v1",
     "private.bpay_next_case_create_preview_v1",
+    "private.bpay_next_case_edit_preview_v1",
+    "private.bpay_next_case_edit_receipt_v1",
+    "jsonb_set",
+    "jsonb_build_array",
     "pg_catalog.jsonb_typeof",
     "private.bpay_next_paye_guard_page_v1",
     "array",
@@ -1913,6 +1924,10 @@ export function assertFrozenAuthority(source,file,policy,baseline=''){
     // Rule-B snapshot's exact two additive guards reuse the unchanged callback.
     if(/^create trigger bpay_next_run_work_query_snapshot_immutable before update or delete on private\.bpay_next_run_work_query_snapshot for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
       ||/^create trigger bpay_next_run_work_query_snapshot_no_truncate before truncate on private\.bpay_next_run_work_query_snapshot for each statement execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
+    // FC09 adds two immutable Case receipts using the unchanged callback.
+    // Exact new table/name pairs only; no original guard is replaced.
+    if(/^create trigger bpay_next_case_edit_immutable_v1 before update or delete on private\.bpay_next_case_edit_request for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat)
+      ||/^create trigger bpay_next_case_period_amendment_immutable_v1 before update or delete on private\.bpay_next_case_period_amendment for each row execute function private\.bpay_next_effect_immutable_v1\s*\(\s*\)\s*;?\s*$/.test(flat))competing=false;
     if(/^alter\s+table\b/.test(code)){
       const relation=flat.match(/^alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?((?:private|public)\.\w+)/)?.[1];
       const hasTriggers=[...policy.triggers.keys()].some(key=>key.startsWith(`${relation}:`));

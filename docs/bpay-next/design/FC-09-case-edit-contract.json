@@ -1,0 +1,85 @@
+{
+  "item": "FC-09",
+  "sequence": 107,
+  "decision": "BD119",
+  "deliverables": [
+    "FC-09-D02",
+    "FC-09-D03",
+    "FC-09-D05",
+    "FC-09-D06",
+    "FC-09-D08",
+    "FC-09-D10"
+  ],
+  "dependencies": [
+    "FC-03",
+    "FC-16",
+    "WB-08",
+    "F-16"
+  ],
+  "authority": "Original immutable creation receipt retained; no economic activity and FC16 accepted/preparing Draft protection both rechecked at admission and ordered apply.",
+  "command": {
+    "method": "POST",
+    "action": "CASE_EDIT",
+    "required": "command_id, case_id, expected_case_revision, fourteen original CASE_INPUT_SCHEMA fields and exact edit Preview token",
+    "locked": "Candidate, kind/subtype, source channel/currency, creator identity/date, valuation policy and component identities.",
+    "changed": "Principal, explicit tax where applicable, original schedule/threshold/floor/due date, reason/Comment/Note and Manual Debt original reference.",
+    "limitBytes": 49152,
+    "receipt": "Original command/Case/sequence/new Case revision/new Rule/replay, phase ACCEPTED_PENDING_EDIT. This is admission, never completion or payout proof."
+  },
+  "preview": {
+    "method": "GET",
+    "kind": "CASE_PREVIEW",
+    "args": [
+      "case_id",
+      "expected_case_revision",
+      "input"
+    ],
+    "token": "Exact fourteen-field input plus six original creation context fields and Case/Rule ID/revision; server-owned schedule/amounts only."
+  },
+  "readback": {
+    "method": "GET",
+    "kind": "CASE_COMPONENTS",
+    "args": "Original Candidate/Case and optional exact edit_command_id, original complete cursor reader.",
+    "metadata": "edit_state is authoritative native current prefill/lifecycle/revision/protection; edit_receipt is null without edit_command_id, otherwise exact request/job receipt.",
+    "phases": [
+      "PENDING",
+      "BLOCKED",
+      "CASE_EDITED"
+    ],
+    "success": "Exact immutable command/new Rule/new Case revision receipt, complete Case/Candidate rows; current equal-revision Rule/command must match. Positively newer current metadata may coexist with original successful receipt. Older state refuses.",
+    "blocked": "Acknowledgement clears only exact original journal before native readonly remount; no changed input automatically resubmitted."
+  },
+  "journal": {
+    "key": ".case-edit.<candidate_id>.<case_id>",
+    "version": 6,
+    "unknown": "Retain exact command/input/token bytes; user Try again replays original request only.",
+    "accepted": "Retain full original accepted edit receipt; Refresh only exact Case/Candidate/edit_command_id.",
+    "freshState": "Stale Preview offers explicit Refresh; no automatic mutation retry."
+  },
+  "periods": "Immutable old/new component-week-revision opening receipt. Only at-most-two original unused creation anchors amended at apply; original zero recovery anchor retained for unchanged0410 funding. Other unused native points amended lazily through exact shared DERIVE operation; consumed/ACTIVE/protected history and age retained.",
+  "funding": "Existing funded Rule -> typed FUNDED event -> immutable payout instruction.rule_id -> unique approved edit request. No0410 rewrite/new proof fields.",
+  "screens": {
+    "ids": [
+      "SCR-122",
+      "SCR-122b"
+    ],
+    "parent": "Existing three creation forms in edit mode, locked Candidate, current server prefill/component/status/Batch blocked, one footer primary.",
+    "committed": "Read-only amount/tax/Comment/Note; no unsupported Note-only Save.",
+    "protectedLink": "Genuine existing run-qualified progress/review or exact reader-qualified PaymentBatch Draft/worker. No fabricated human reference/date or identifier display; no second viewer.",
+    "dates": "Start/repayment week is shown where required; no execution pay date before execution."
+  },
+  "scope": "No new public function, route/page kind, Source/pay-query/public-table trigger/producer protocol/transfer/funding/settlement owner. Required supporting edit helpers/immutable tables/indexes/closed original job/page/native host adapter only.",
+  "acceptance": {
+    "status": "AUTHORED_NOT_RUN",
+    "cases": [
+      "Successive pre-activity Advance6->4week edits; Credit/Debt explicit terms/reference edit",
+      "Changed start Monday preserves original recovery funding anchor and actual new due",
+      "Protected accepted PREPARING slice refuses before financial hold; readonly committed Credit",
+      "Unused old period gets exact immutable amendment; consumed/held/captured history remains",
+      "Original funding lineage and shared allocation equations/locks remain",
+      "Queue order, original command replay/unknown/accepted/BLOCKED receipts/native OpenDraft",
+      "Correct actor/owner/Case/window containment and targeted WB08 refresh"
+    ],
+    "boundary": "Source, local compile/catalogue and A4 fixed-response captures only; no business rows/RPC, auth/queue/financial rehearsal or hosted action."
+  }
+}

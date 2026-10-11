@@ -3442,23 +3442,25 @@
     },
     {
       "signature": "private.bpay_next_current_case_component_page_v1(uuid,uuid,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
         "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
         "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0585_banking_pay_next_current_case_pages_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "FC-06 sequence106 existing private reference admission/read owner; original replay/money retained",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -3657,9 +3659,19 @@
     },
     {
       "signature": "private.bpay_next_enroll_one_v1()",
-      "finalRoot": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
+        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
+        "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
         "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
         "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
@@ -3668,18 +3680,10 @@
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
         "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/03102026_1430_banking_pay_next_position_writer_v1.sql",
-        "supabase/repeatable/10102026_1832_banking_pay_next_accepted_choice_intake_v1.sql",
-        "supabase/repeatable/11102026_0255_banking_pay_next_due_enrollment_v1.sql",
-        "supabase/repeatable/11102026_0316_banking_pay_next_snooze_many_enrollment_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0847_banking_pay_next_discard_row_projection_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -4102,9 +4106,21 @@
     },
     {
       "signature": "private.bpay_next_prepare_case_page_v1(uuid,uuid,bigint,bigint,integer)",
-      "finalRoot": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
+        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
+        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
+        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
+        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
         "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
         "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
@@ -4115,20 +4131,10 @@
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0360_banking_pay_next_case_preparation_v1.sql",
-        "supabase/repeatable/09102026_1958_banking_pay_next_ordinary_case_week_applicability_v1.sql",
-        "supabase/repeatable/10102026_0151_banking_pay_next_rule_b_selection_consumers_v1.sql",
-        "supabase/repeatable/11102026_0102_banking_pay_next_case_choice_boundary_v1.sql",
-        "supabase/repeatable/11102026_0205_banking_pay_next_prepare_shared_case_plan_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0542_banking_pay_next_prepare_case_visit_count_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0904_banking_pay_next_early_candidate_financial_fence_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "DR11seq86; early DR37D18 and owedDR08 assertion",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077",
       "chosenReferenceBase": {
         "item": "CM-02a",
@@ -7471,46 +7477,50 @@
     },
     {
       "signature": "public.bpay_next_financial_intake_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
+        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
         "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql",
         "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0270_banking_pay_next_financial_intake_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2150_banking_pay_next_workbench_retry_v1.sql",
-        "supabase/repeatable/11102026_1306_banking_pay_next_reauth_intake_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "FC-03 sequence101 exact creation/intake/page successor; retain complete current parents and Rule B",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
       "signature": "public.bpay_next_financial_job_v1(text,uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
+        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
         "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
         "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0280_banking_pay_next_financial_job_service_v1.sql",
-        "supabase/repeatable/11102026_0533_banking_pay_next_prepare_rule_corrections_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "DR09 seq85 separately typed preparation discard/release",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -7645,9 +7655,23 @@
     },
     {
       "signature": "public.bpay_next_preparation_page_v1(uuid,text,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
+        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
+        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
+        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
+        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
+        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
+        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
+        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
+        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
         "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
         "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
@@ -7660,22 +7684,10 @@
         "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql",
         "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/04102026_0575_banking_pay_next_preparation_service_v1.sql",
-        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql",
-        "supabase/repeatable/10102026_2019_banking_pay_next_current_payment_details_v1.sql",
-        "supabase/repeatable/10102026_2026_banking_pay_next_current_group_details_v1.sql",
-        "supabase/repeatable/10102026_2232_banking_pay_next_selection_pages_v1.sql",
-        "supabase/repeatable/11102026_0113_banking_pay_next_case_choice_readers_v1.sql",
-        "supabase/repeatable/11102026_0708_banking_pay_next_preparation_progress_v1.sql",
-        "supabase/repeatable/11102026_0814_banking_pay_next_preparation_discard_v1.sql",
-        "supabase/repeatable/11102026_1358_banking_pay_next_paye_guard_intake_v1.sql",
-        "supabase/repeatable/11102026_1536_banking_pay_next_case_create_intake_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "a6f7423eb71e6e7cd173e705c2290e5408a1d077"
     },
     {
@@ -14562,16 +14574,19 @@
     },
     {
       "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
       ],
-      "predecessors": [],
       "finalClosures": [
-        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "WB-27 shared pure Case plan and explicit Candidate estimate"
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
     },
     {
       "signature": "private.bpay_next_snooze_due_receipt_valid_v1(uuid)",
@@ -15551,19 +15566,21 @@
     },
     {
       "signature": "private.bpay_next_case_list_row_v1(uuid,jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
+        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql",
         "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_1738_banking_pay_next_case_list_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1910_banking_pay_next_manual_debt_reference_v1.sql"
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "owner": "FC-06 sequence106 existing private reference admission/read owner; original replay/money retained",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119",
       "baselineSource": "LOCAL_FC01_ADDITIVE"
     },
     {
@@ -15579,6 +15596,123 @@
       ],
       "owner": "FC-01 sequence103 native bounded Case list; complete1536 parent retained",
       "baselineSource": "LOCAL_FC01_ADDITIVE"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_origin_v1(uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_state_v1(uuid,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_assert_v1(uuid,uuid,bigint)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_preview_v1(uuid,uuid,bigint,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_accept_case_edit_v1(uuid,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_apply_case_period_amendment_v1(uuid,jsonb,jsonb)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_apply_case_edit_v1(uuid,uuid,bigint)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_claim_case_edit_job_v1(uuid,integer)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+    },
+    {
+      "signature": "private.bpay_next_case_edit_receipt_v1(uuid,uuid,uuid)",
+      "predecessors": [],
+      "allowedPhysical": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalClosures": [
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+      ],
+      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
     }
   ],
   "editorChains": [

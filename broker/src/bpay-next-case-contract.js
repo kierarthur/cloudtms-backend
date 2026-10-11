@@ -24,9 +24,38 @@
     &&(v.case_kind==='CREDIT'?['start_monday','weekly_due','week_count','minimum_earnings_threshold','take_home_floor_override'].every(k=>v[k]===null)
       :v.start_monday!==null&&new Date(v.start_monday+'T00:00:00Z').getUTCDay()===1&&(v.weekly_due!==null||v.week_count!==null));}
   const CONTEXT_SCHEMA={actor_user_id:'uuid',owner_epoch:'positive',financial_view_revision:'integer',pay_channel:'channel',candidate_default_floor:'money?',valuation_policy_id:'uuid'};
+  const EDIT_CONTEXT_SCHEMA={...CONTEXT_SCHEMA,case_id:'uuid',case_revision:'positive',rule_id:'uuid',rule_revision:'positive'};
+  const EDIT_ISSUES=Object.freeze(['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID']);
+  function caseEditToken(v,edit){return object(v)&&Object.keys(v).sort().join()==='context,input'&&caseInput(v.input)
+    &&shape(v.context,EDIT_CONTEXT_SCHEMA)&&enc.encode(JSON.stringify(v)).byteLength<=32768
+    &&(!edit||(typeof edit.case_id==='string'&&v.context.case_id.toLowerCase()===edit.case_id.toLowerCase()
+      &&v.context.case_revision===edit.expected_case_revision));}
+  function caseEditState(v){
+    const schema={case_id:'uuid',candidate_id:'uuid',case_revision:'positive',rule_id:'uuid',rule_revision:'positive',applied_edit_command_id:'uuid?'};
+    if(!object(v)||Object.keys(v).sort().join()!==[...Object.keys(schema),'status','editable','issue_code','input','protection'].sort().join()
+      ||!shape(Object.fromEntries(Object.keys(schema).map(k=>[k,v[k]])),schema)
+      ||!['OPEN','PAUSED','CLOSED','WRITTEN_OFF'].includes(v.status)||typeof v.editable!=='boolean'
+      ||!(v.issue_code===null||EDIT_ISSUES.includes(v.issue_code))||v.editable!==(v.issue_code===null)
+      ||!(v.input===null||caseInput(v.input)&&v.input.candidate_id.toLowerCase()===v.candidate_id.toLowerCase()))return false;
+    if(v.protection!==null){const p=v.protection,ps={run_id:'uuid',run_worker_id:'uuid?',channel:'channel?',protected_amount:'money?'};
+      if(!object(p)||Object.keys(p).sort().join()!==[...Object.keys(ps),'run_status','worker_status','next_action'].sort().join()
+        ||!shape(Object.fromEntries(Object.keys(ps).map(k=>[k,p[k]])),ps)
+        ||!['PREPARING','REVIEW','DRAFT','CANCELLING','CANCELLED','EXECUTING','COMPLETE','EXPIRED','DISCARDED'].includes(p.run_status)
+        ||!(p.worker_status===null||['PREPARING','REVIEW','READY','DRAFT','CANCELLING','CANCELLED','ISSUED','COMPLETE'].includes(p.worker_status))
+        ||!['CANCEL_CANDIDATE_PAYMENT','REMOVE_CANDIDATE_OR_DISCARD','DISCARD_PREPARATION'].includes(p.next_action)
+        ||v.issue_code!=='BPAY_NEXT_CASE_HELD_BY_DRAFT')return false;}
+    return !v.editable||v.input!==null;
+  }
+  function caseEditReceipt(v){return object(v)&&Object.keys(v).sort().join()===['command_id','case_id','candidate_id','case_revision','rule_id','phase','issue_code'].sort().join()
+    &&shape(Object.fromEntries(['command_id','case_id','candidate_id','case_revision','rule_id'].map(k=>[k,v[k]])),
+      {command_id:'uuid',case_id:'uuid',candidate_id:'uuid',case_revision:'positive',rule_id:'uuid'})
+    &&['PENDING','CASE_EDITED','BLOCKED'].includes(v.phase)
+    &&(v.phase==='BLOCKED'?EDIT_ISSUES.includes(v.issue_code):v.issue_code===null)
+    &&v.command_id.toLowerCase()===v.rule_id.toLowerCase();}
+
   function caseToken(v){return object(v)&&Object.keys(v).sort().join() === 'context,input'&&caseInput(v.input)&&shape(v.context,CONTEXT_SCHEMA)&&enc.encode(JSON.stringify(v)).byteLength<=24576;}
-  function casePreview(v,input){const s={candidate_id:'uuid',weekly_due:'positiveMoney?',week_count:'positive?',first_due_monday:'date?',last_due_monday:'date?',total:'positiveMoney',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',effective_take_home_floor:'money?'};
-    if(!object(v)||Object.keys(v).length!==11||!shape(Object.fromEntries(Object.keys(s).map(k=>[k,v[k]])),s)||!caseToken(v.preview_token)
+  function casePreview(v,input,edit=null){const s={candidate_id:'uuid',weekly_due:'positiveMoney?',week_count:'positive?',first_due_monday:'date?',last_due_monday:'date?',total:'positiveMoney',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',effective_take_home_floor:'money?'};
+    if(!object(v)||Object.keys(v).length!==11||!shape(Object.fromEntries(Object.keys(s).map(k=>[k,v[k]])),s)||!(edit?caseEditToken(v.preview_token,edit):caseToken(v.preview_token))
       ||!equal(v.preview_token.input,input)||v.candidate_id.toLowerCase()!==input.candidate_id.toLowerCase()
       ||!Array.isArray(v.warnings)||v.warnings.length>1||v.warnings.some(x=>x!=='EXISTING_REPAYMENTS'))return false;
     const pennies=v=>v===null?null:BigInt(v.split('.')[0])*100n+BigInt((v.split('.')[1]??'').padEnd(2,'0'));
@@ -41,4 +70,4 @@
       &&new Date(v.last_due_monday+'T00:00:00Z').getUTCDay()===1
       &&BigInt((Date.parse(v.last_due_monday+'T00:00:00Z')-Date.parse(v.first_due_monday+'T00:00:00Z'))/604800000)===BigInt(v.week_count)-1n;}
 
-export {CASE_INPUT_SCHEMA,caseInput,caseToken,casePreview,equal};
+export {CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,caseEditState,caseEditReceipt,casePreview,equal};

@@ -1,4 +1,4 @@
-import {caseInput,casePreview} from './bpay-next-case-contract.js';
+import {caseInput,casePreview,caseEditState,caseEditReceipt} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
  * injected; SQL rechecks service JWT/active admin. No economics, legacy session,
@@ -112,7 +112,7 @@ const ROWS={
   CASE_COMPONENTS:{case_component_id:'uuid',case_id:'uuid',candidate_id:'uuid',component_ordinal:'positive',component_revision:'positive',
     case_kind:'caseKind',case_subtype:'caseSubtype',tax_treatment:'taxTreatment',instruction_kind:'instructionKind',direction:'direction',
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
-    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?'}
+    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?',edit_state:'caseEditState',edit_receipt:'caseEditReceipt?'}
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
@@ -169,6 +169,8 @@ function validReservation(h,row=null){
 }
 
 function field(v,t){
+  if(t==='caseEditState')return caseEditState(v);
+  if(t==='caseEditReceipt')return caseEditReceipt(v);
   if(t==='caseReference')return typeof v==='string'&&v.trim().length>0&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=2048;
   if(t==='guardDecision')return ['UMBRELLA_ONLY','VERIFY_BOTH','VERIFY_PAYE'].includes(v);
   if(t==='guardChannel')return ['ALL','PAYE','UMBRELLA'].includes(v);
@@ -463,7 +465,7 @@ function caseListResult(payload,call,bad){
 function pageCall(request){
   const url=new URL(request.url);
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
-  const kind=url.searchParams.get('kind'),schema=kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const kind=url.searchParams.get('kind'),schema=kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'&&url.searchParams.has('edit_command_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,edit_command_id:'uuid'}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
@@ -536,7 +538,7 @@ function result(payload,call,mutation){
   }
   if(call.kind==='CASE_PREVIEW'){
     if(!record(payload)||Object.keys(payload).sort().join()!=='complete,rows'||payload.complete!==true
-      ||!Array.isArray(payload.rows)||payload.rows.length!==1||!casePreview(payload.rows[0],call.args.input))bad();
+      ||!Array.isArray(payload.rows)||payload.rows.length!==1||!casePreview(payload.rows[0],call.args.input,call.args.case_id?call.args:null))bad();
     return {rows:payload.rows,complete:true,next_cursor:null};
   }
   if(call.kind==='GUARD'){
@@ -712,6 +714,9 @@ function result(payload,call,mutation){
     if(storedCreditPage&&row.legacy_case_id>payload.scan_cursor)bad();
     if(call.kind==='CASE_COMPONENTS'&&row.case_id!==call.args.case_id)bad();
     if(call.kind==='CASE_COMPONENTS'){
+      if(row.edit_state.case_id!==row.case_id||row.edit_state.candidate_id!==row.candidate_id
+        ||(row.edit_receipt!==null&&(row.edit_receipt.case_id!==row.case_id||row.edit_receipt.candidate_id!==row.candidate_id||row.edit_receipt.command_id!==call.args.edit_command_id))
+        ||(Object.hasOwn(call.args,'edit_command_id')?(row.edit_receipt===null):row.edit_receipt!==null))bad();
       if(row.original_liability_reference!==null&&(row.case_kind!=='MANUAL_DEBT'||row.case_subtype!=='MANUAL_DEBT'))bad();
       if(caseIds.has(row.case_component_id))bad();caseIds.add(row.case_component_id);
     }
@@ -726,6 +731,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(['BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(e?.code))return new PreparationError(e.code,403,false,false);
   const db=e?.json??e;
   // FC-03 correction discovered by FC-04: preserve the named creation refusal.
+  if(action==='CASE_PREVIEW'&&['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'].includes(db?.message))return fault(db.message,409);
   if(['CASE_PREVIEW','CASE_CREATE'].includes(action)&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')
     return new PreparationError(db.message,409,false,false);
   if(db?.code==='55000'&&['BPAY_NEXT_CASE_LIST_CONTEXT_CHANGED','BPAY_NEXT_CASE_LIST_DATE_UNAVAILABLE','BPAY_NEXT_WORKBENCH_PROJECTION_NOT_CURRENT'].includes(db.message))

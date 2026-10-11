@@ -1,0 +1,149 @@
+{
+  "item": "FC-09",
+  "sequence": 107,
+  "decision": "BD119",
+  "status": "SOURCE_BUILT_A4_PENDING",
+  "deliverables": [
+    "FC-09-D02",
+    "FC-09-D03",
+    "FC-09-D05",
+    "FC-09-D06",
+    "FC-09-D08",
+    "FC-09-D10"
+  ],
+  "sources": [
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/11102026_1939_banking_pay_next_case_edit_request.sql",
+      "sha256": "cf08a156ca9c01f24477deb2303287efe0556571c5aec249315d196f47ceb713"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/migrations/11102026_1952_banking_pay_next_case_edit_activity_indexes.sql",
+      "sha256": "3aebbacd42df0d409460a329cc9e3a143d8963c66524789043607bf4cb40a27c"
+    },
+    {
+      "repository": "BE",
+      "path": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "sha256": "7b723a61096ac50853dbc609acbba6437b403f11aa796a6f77e39a78b8308f66"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-case-contract.js",
+      "sha256": "4652c0dfdfcedf4b38e895729173b555e7ebb3379d9816ed96319e7be6a76a6e"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command-rpc.js",
+      "sha256": "75ed9501ef5173c19bcccbee7249b6c747a4d9eb6a544c69e2103219760c7fce"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-command.js",
+      "sha256": "48bf0258b8d20e58138a463041ebb857bbc827699e5a2f234769781e6cd75b53"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-financial-queue.js",
+      "sha256": "19e30182452b671a8237d5f6b30c09210c07635dc8bf994c9c154388e4eb1d79"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-rpc.js",
+      "sha256": "2f54d867de172c1ff99e5c9ba8a0ee7931b8ae5ebf2588c04c429f02a32ed8a1"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-job-step.js",
+      "sha256": "2b56864e8f1b9899826af41a85feeff9f527b016bbd37eab784da0980b663894"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-preparation.js",
+      "sha256": "dce1444b7ea1cca30443a3949db4b80d61a3c63e2cc723c5f7316f3937cf1540"
+    },
+    {
+      "repository": "BE",
+      "path": "broker/src/bpay-next-runtime-rpc.js",
+      "sha256": "ab1f2927876eac6455fe94ac875a5963cbef8674ffcd386e745333fa1f5c3a3f"
+    },
+    {
+      "repository": "BE",
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "44811f2b9a21e771a9dda68641f8752c7d241a88c99fe5672cad8f98a6b507a6"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/final-definer-closures.json",
+      "sha256": "42d574d1dad002f82c37a20dcb630d1269129eedbfa29c4f34324262f94194b5"
+    },
+    {
+      "repository": "BE",
+      "path": "docs/bpay-next/design/FC-09-case-edit-contract.json",
+      "sha256": "12cc4e92ffa1f66d100c998468727f672489e00bffffb3e816b3eac4d610faeb"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-case-preview.js",
+      "sha256": "36fb31a3403e99b726f9330aa34ef2e572b88eb88ba8c731e10ff7af8770738e"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-office.js",
+      "sha256": "67fbf22d2d90d56d3bb82b3a18c8fbec886e8e10e84da64f81781efc24cdc7b6"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-payment-advance.js",
+      "sha256": "6074e95557b2197fade86958393eee6d4368e0465e4b05918d906168c8647c28"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-manual-credit.js",
+      "sha256": "23505cb844f4691a66595172d478a991232a38ad7b6ab8c1a04036064c6a2c74"
+    },
+    {
+      "repository": "FE",
+      "path": "js/bpay-next-manual-debt.js",
+      "sha256": "25f68670229d13cedf69f7cbf05b3ab2c2e45d1483e80a69f290d7129015a28a"
+    },
+    {
+      "repository": "FE",
+      "path": "js/main.js",
+      "sha256": "e59fd9163b59f95236e398041513b65fd484ec00a46651e412c98a4e927b48fa"
+    },
+    {
+      "repository": "FE",
+      "path": "css/bpay-next-office.css",
+      "sha256": "edd1b7958c59a4612c8e7c705d64ce8846b33ada85fd4c06c452759b112de7ae"
+    },
+    {
+      "repository": "FE",
+      "path": "index.html",
+      "sha256": "946d7c49baa4f662b6c53e5b9e53cf5e702c8ca87af7dc863bed6cf79c6e4c43"
+    }
+  ],
+  "parents": "FC-09-parent-provenance.json",
+  "checks": {
+    "integrity": "353 migrations/915repeatables PASS",
+    "sourceGates": "Existing12/12PASS on final functional source; later scoped CSS touch target only",
+    "syntax": "All affected Worker/Office/main finalsyntax PASS",
+    "local": "Managed PG17 load;17exact function-body matches;2immutable tables/4native activity indexes;logical owner/configuration/grants checked",
+    "general": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; public membership delta0; currentGeneral/Candidate isolationDO PASS",
+    "contract": "51247ba8a12eec470379b4c87a6911195384b63767258f8ff31f704d37a13ad2; export/seal/coupling PASS",
+    "a4": "Final reviewer pending;36state/mode captures plus phone-bottom views, fixed local GET responses only",
+    "joined": "AUTHORED_NOT_RUN",
+    "screenCounts": {
+      "SCR-122": {
+        "statesAndModes": 33,
+        "png": 38
+      },
+      "SCR-122b": {
+        "statesAndModes": 3,
+        "png": 3
+      }
+    }
+  },
+  "requiredSupport": "9private edit helpers +8existing successor definitions;2immutable native tables,4activity point indexes plus theirnative FK lookup indexes, closed existing financial job/page/readback maps and same-host reader-qualified Draft navigation.",
+  "unchanged": "OriginalCASE_CREATE/0410funding/ledger/money equations/Source/payquery/transfer/settlement owners; F25parkedfiles untouched."
+}
