@@ -14,5 +14,7 @@
     "contract": "30b4121d3e8ce535ca074943eb686fb00aec217b151986811c65fdb536e3a04d sealed/coupledPASS",
     "catalogue": "9exactcurrentmatches",
     "joined": "AUTHORED_NOT_RUN"
-  }
+  },
+  "implementationCommit": "36ada9a5cbd0b2e20e5b0b6e32927edfa993a520",
+  "status": "BUILT_REVIEWED"
 }

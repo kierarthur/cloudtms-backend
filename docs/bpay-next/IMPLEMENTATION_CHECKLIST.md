@@ -3360,7 +3360,7 @@ SP15 ITEM/D01–D05 BUILT/REVIEWED, D06 superseded context. BE e0772c5282d0b7e11
 
 ## SP-16 — Certified absence and protection removal
 
-Seq 114; Source-absent/Withdrawal · SP-F; reviewer R5; current requested-feature status INSTALLED_ON_TEST.
+Seq 114; Source-absent/Withdrawal · SP-F; reviewer R5; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Complete only SP-16's current exact Rules/Build/Done and named successors; OR-45 removes old Banking engine compatibility work. Reuse observed installed/local artefacts where their current contract is satisfied. No historical acceptance or raw lane clause overrides the corrected plan.
 
@@ -3368,14 +3368,16 @@ Dependencies: F-03, F-05, F-06, SP-13; successor positions: none. Design note: n
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-16-D01 | REPEATABLE: S/supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql | INSTALLED_ON_TEST | Retain positive certified absence and NULL for ambiguous current roster; confirm final-definer closure/currentness before builder completion, no new SQL expected. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-16-D02 | REPEATABLE: 0512 category /0650 removal evidence /C1 publication selected-witness callers | PARTLY_DONE | Record each NULL→UNAVAILABLE branch; fix only a proved caller reading unknown as absence, NEXT-gated. No absence pay hold or duration-only proof. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-16-D01 | REPEATABLE: S/supabase/repeatable/05102026_0645_weekly_source_selected_source_witness_v1.sql | BUILT_REVIEWED | Retain positive certified absence and NULL for ambiguous current roster; confirm final-definer closure/currentness before builder completion, no new SQL expected. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-16-D02 | REPEATABLE: 0512 category /0650 removal evidence /C1 publication selected-witness callers | BUILT_REVIEWED | Record each NULL→UNAVAILABLE branch; fix only a proved caller reading unknown as absence, NEXT-gated. No absence pay hold or duration-only proof. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP-16-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 Removing protection from a 4 h protected shift where the Source shows 3 h gives 3 h approved; on a date with two current roster Finals the removal is refused as evidence unavailable and the shift does not become zero. Observed by: SRQ-091 → Source 10 h plus an absent protected 3 h → only the 3 h becomes zero; SRQ-104 → the removal resolves the open review in the same action and a replay returns the same result; SRQ-110 and RQ-224 → a genuine zero-hours Source result shows the certified zero and the paid facts are unchanged; SCX-056 → recording not worked stays separate from removal. Covers observed: SRQ-090, SRQ-106 → the 4 h → 3 h removal and the two-Finals refusal.
+
+SP16 ITEM/D01–D02 BUILT/REVIEWED with exact verify-only implementation 36ada9a5cbd0b2e20e5b0b6e32927edfa993a520; design/SP-16-completion.md; design/SP-16-successor-provenance.json; design/SP-16-current-owner-catalogue.json; reviews/SP-16-source-review.md. Whole 95/288 BUILT/REVIEWED; nextSP20seq115. All joined acceptance AUTHORED_NOT_RUN.
 
 ## SP-20 — Source component tax classification for NEXT capture
 
