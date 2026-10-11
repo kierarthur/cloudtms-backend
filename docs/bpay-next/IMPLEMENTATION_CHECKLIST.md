@@ -2615,7 +2615,7 @@ Completion: 9ffc74e4ca3eb8fd2b08644928259f0f6de81c6e. design/DR-12-completion.md
 
 ## DY-02 — Contractless Daily rates from the Candidate override or Client default
 
-Seq 88; Daily · D5-DY; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 88; Daily · D5-DY; reviewer R6; current requested-feature status OPEN_DEPENDENCY_DY04.
 
 Remaining: Proposed Daily helper compares actual10 selected TF rates to dated resolver and captures15 available cells; not installed in complete private catalogue. Freeze opposite channel only when real dated resolver returns it, otherwise NULL; no generic conversion or live post-Draft lookup.
 
@@ -2623,9 +2623,9 @@ Dependencies: F-05, F-06; successor positions: `07102026_0018` Daily evidence: 1
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| DY-02-D01 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) | LOCAL_ONLY | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Proposed Daily helper compares actual10 selected TF rates to dated resolver and captures15 available cells; not installed in complete private catalogue. Freeze opposite channel only when real dated resolver returns it, otherwise NULL; no generic conversion or live post-Draft lookup. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-02-D01 | REPEATABLE: private.bpay_next_daily_approval_evidence_v1(uuid) | BUILT_REVIEWED | Preserve the named local source, complete the precise target integration and obtain owner-authorised release/readback; source alone is not connected acceptance. Proposed Daily helper compares actual10 selected TF rates to dated resolver and captures15 available cells; not installed in complete private catalogue. Freeze opposite channel only when real dated resolver returns it, otherwise NULL; no generic conversion or live post-Draft lookup. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 | DY-02-D02 | REPEATABLE: 1530/1548 Daily rate capture and detail writers | PACK_ONLY | Compose/promote only this card's assigned final pack owner, retaining existing successor edits. Proposed Daily helper compares actual10 selected TF rates to dated resolver and captures15 available cells; not installed in complete private catalogue. Freeze opposite channel only when real dated resolver returns it, otherwise NULL; no generic conversion or live post-Draft lookup. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-02-D03 | CHECK: DY-02 future joined in-app TEST checklist | MISSING | Two dates/roles/bands, Candidate override vs Client default, both channels and unavailable opposite; genuine selected TF schedule matches resolver, unused genuine buckets retained; later rate edits leave clicked Draft/history unchanged. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-02-D03 | CHECK: DY-02 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Two dates/roles/bands, Candidate override vs Client default, both channels and unavailable opposite; genuine selected TF schedule matches resolver, unused genuine buckets retained; later rate edits leave clicked Draft/history unchanged. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY-02-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
@@ -2636,6 +2636,8 @@ Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY
   - Authorising a Daily with neither an override nor a Client default shows the missing-rate refusal naming the bucket; nothing is published as zero (RQ-225, NX-003, SCX-062, SCX-063).
   - A contracted Daily whose Contract `rates_json` is empty freezes 5 pay + 5 charge Standard rows from the Client default (DAILY_AVAILABLE_RATE_CAPTURE_V1).
   - Joined future check: Two dates/roles/bands, Candidate override vs Client default, both channels and unavailable opposite; genuine selected TF schedule matches resolver, unused genuine buckets retained; later rate edits leave clicked Draft/history unchanged. No new local fixture/hash proof programme; reuse one joined receipt where it covers several explicit clauses.
+
+D01 implementation 7148471fdb409eca8073a1e484b2c6e9fa569f10; design/DY-02-completion.md; design/DY-02-successor-provenance.json; reviews/DY-02-source-review.md. D02/ITEM remain OPEN_DEPENDENCY_DY04 for exact named missing-rate authoriser/transport and contractless fullclosure. D03 authored only /NOT_RUN, boxes unticked. Normal342/894/source12/12/localPG17/syntax/seal/coupling3db35884/catalogue/verifier PASS; no business/app execution. Whole70/288 unchanged; continueDY03seq89.
 
 ## DY-03 — Daily WORK identity: `origin_kind`, `origin_work_date` and the NULL-Contract rule
 

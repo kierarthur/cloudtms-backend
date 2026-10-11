@@ -23,5 +23,7 @@
   ],
   "contractHash": "3db35884949d094bb5417be89f74f5fabbb8c382eafabd486d71bb66b81922c6",
   "joinedApp": "AUTHORED_NOT_RUN",
-  "openClause": "Named missing used-rate bucket through existing Authorise path and full contractless publication; DY04 assigned closure"
+  "openClause": "Named missing used-rate bucket through existing Authorise path and full contractless publication; DY04 assigned closure",
+  "implementationCommit": "7148471fdb409eca8073a1e484b2c6e9fa569f10",
+  "review": "D01 sourcePASS; D02/ITEM scheduledDY04open"
 }
