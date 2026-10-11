@@ -1,7 +1,7 @@
 {
   "item": "DY-05",
   "sequence": 92,
-  "status": "PENDING_FINAL_REVIEW",
+  "status": "BUILT_REVIEWED",
   "decision": "BD102",
   "sources": [
     {
@@ -53,5 +53,6 @@
     "reviews/DY-05-transport-source-review.md",
     "reviews/DY-05-screen-source-review.md",
     "screen-designs/SCR-47/review.md"
-  ]
+  ],
+  "implementationCommit": "d702837b0453f61b43c86b063d1aff2b52453e8c"
 }

@@ -2721,7 +2721,7 @@ Implementation ad310e64fb74124e27ca48de57fe43ee4e165337; retained D02 frontend 5
 
 ## DY-05 — Freezing Daily approved money, labels and Client identity; frozen detail
 
-Seq 92; Daily · D5-DY; reviewer R6; current requested-feature status PARTLY_DONE.
+Seq 92; Daily · D5-DY; reviewer R6; current requested-feature status BUILT_REVIEWED.
 
 Remaining: Capture Contractless Daily worked window, authorisation, role and exact rate references; freeze Client identity without deriving a Contract. Preserve daily time/break/used and available rate detail in list and modal (SRQ-118). A combined Daily preparation seals both PAYE and Umbrella child Drafts 2/2 (SRQ-120), never loses one on retry.
 
@@ -2730,15 +2730,17 @@ Dependencies: DY-04, F-06, F-08, F-16; successor positions: none. Design note: n
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
 | DY-05-D01 | REPEATABLE: 1530/1548 Daily captured revision/detail/rate metadata successor | PACK_ONLY | Capture actual Client, worked day/window, role and rate provenance without Contract; hours-only frozen detail; preserve two applicable channel child Draft receipts. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-05-D02 | REPEATABLE: private.bpay_next_payment_client_origin_v1(revision_id) reader (proposed) | MISSING | Implement the exact database target after its existing dependencies. Freeze genuine approved TF money, all available buckets/labels and original Client/physical date identity; no new fictitious Contract. Paid physical deletion/rotation is not authorised by report test; attempt blocked with immutable history, or use permitted unpaid rotation then later valid correction. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-05-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: No Contract (Daily) frozen detail label | MISSING | Capture actual Client, worked day/window, role and rate provenance without Contract; hours-only frozen detail; preserve two applicable channel child Draft receipts. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| DY-05-D04 | CHECK: DY-05 future joined in-app TEST checklist | MISSING | Rename Client after paid Daily; forbidden paid rotation blocked and original detail unchanged. Separately permitted unpaid rotation retains old immutable approval identity; hours/date/clocks/breaks/buckets/certified zero and 2-channel grouping true. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-05-D02 | REPEATABLE: private.bpay_next_payment_client_origin_v1(revision_id) reader (proposed) | BUILT_REVIEWED | Implement the exact database target after its existing dependencies. Freeze genuine approved TF money, all available buckets/labels and original Client/physical date identity; no new fictitious Contract. Paid physical deletion/rotation is not authorised by report test; attempt blocked with immutable history, or use permitted unpaid rotation then later valid correction. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-05-D03 | SCREEN: banking-pay-reset-office-20261004/js/bpay-next-office.js :: No Contract (Daily) frozen detail label | BUILT_REVIEWED | Capture actual Client, worked day/window, role and rate provenance without Contract; hours-only frozen detail; preserve two applicable channel child Draft receipts. See addendum/R2_EXACT_CONNECTIONS.md and the owning card for its exact signature/guards. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| DY-05-D04 | CHECK: DY-05 future joined in-app TEST checklist | AUTHORED_NOT_RUN | Rename Client after paid Daily; forbidden paid rotation blocked and original detail unchanged. Separately permitted unpaid rotation retains old immutable approval identity; hours/date/clocks/breaks/buckets/certified zero and 2-channel grouping true. All full Worker/queue/minute-tick paths remain NOT_RUN; stored Workbench positions/items/summary checks require no completed UI. Reuse a joined receipt across explicit clauses instead of duplicating tests. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R6.json, CSV rows DY-05-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 - Pay a genuine contractless Daily and rename the current Client: original frozen detail remains unchanged. A forbidden paid physical rotation/deletion is blocked; separately exercise a permitted unpaid rotation and later valid correction. No fake Contract/Client/HEAD, with genuine used and available buckets retained. A combined Daily preparation seals both PAYE and Umbrella child Drafts 2/2; retry resumes the same preparation and retains both child Drafts without omission or duplication (SRQ-120).
+
+Implementation d702837b0453f61b43c86b063d1aff2b52453e8c; frontend f0723f0279af533b5fbbd3cd94d77cf5328bf451; design/DY-05-completion.md; design/DY-05-successor-provenance.json; reviews/DY-05-sql-source-review.md; reviews/DY-05-transport-source-review.md; screen-designs/SCR-47/review.md. ITEM/D01-D03 BUILT/REVIEWED. D04 authored/NOT_RUN, unticked. Whole75/288 BUILT75/288 REVIEWED; A1/A7 boundary thenDY06seq93.
 
 ## DY-06 — Daily withdrawal and rotation
 

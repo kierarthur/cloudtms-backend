@@ -57,4 +57,3 @@ Actual A4 review must compare saved product PNGs beside these references and acc
 | SCR156 spec / PNG | 11dc3c13a2f7846e5140d8fc835362e92e49b389a0e1f71a4d6822bdd7e94b24 / 3825989b38740730b127c610e9b0d2498d98575037f765977298610203a2b48f |
 
 Joined genuine payment/rename/rotation, immutable history, two-channel2/2 enrollment and retry remain AUTHORED_NOT_RUN. No screen delivery is marked built or approved here.
-

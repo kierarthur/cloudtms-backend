@@ -65,4 +65,3 @@ Current `private.bpay_next_channel_drafts_page_v1(uuid)`, `06102026_0236_banking
 Remaining narrow work is the all-Daily existing JSON capture/positive seal guard, named private Client reader, bounded frozen metadata service/consumer for No Contract (Daily), and valid Standard NULL-row validation. Keep non-Daily authority UNKNOWN if no frozen proof is available within this card; preserve all captured labels and amounts. No publisher money formula, Source producer, new storage, post-Draft live settings/rates, Payment Summary API or two-channel preparation redesign is justified.
 
 Rename-after-paid Daily, forbidden paid rotation/deletion, separately permitted unpaid rotation/correction, exact window/authorisation/date/buckets/certified zero, both-channel 2/2 seals and same preparation retry remain **AUTHORED_NOT_RUN**. No checklist box was changed.
-
