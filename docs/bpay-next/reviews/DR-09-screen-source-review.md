@@ -1,6 +1,6 @@
 # DR-09 — independent Office screen-source review
 
-11 October 2026. **CHANGES REQUIRED; source-only checkpoint. A4 pixels NOT_RUN.** Root alone edits product. Read current uncommitted Office source, full DR09 card249–272, current build scope/design investigation, current native frame/button rules, WB21 retained store and supplied B4 SCR42/SCR42b/SCR43 specs/PNGs (read only). No product/pack/tool/checklist writes, renders, tests, DB/hosted requests, fixtures, business actions or commits by this reviewer.
+Initial checkpoint, 11 October 2026. **CHANGES REQUIRED; source-only historical checkpoint. A4 pixels NOT_RUN at this checkpoint; final current receipt below.** Root alone edits product. Read current uncommitted Office source, full DR09 card249–272, current build scope/design investigation, current native frame/button rules, WB21 retained store and supplied B4 SCR42/SCR42b/SCR43 specs/PNGs (read only). No product/pack/tool/checklist writes, renders, tests, DB/hosted requests, fixtures, business actions or commits by this reviewer.
 
 Inspected source: `C:\Users\KierArthur\OneDrive - Arthur Rai\Documents\GitHub\.codex-worktrees\bpay-next-build-frontend-20261009\\js\\bpay-next-office.js`, SHA256 `be6ad370f596edae22532972c7469bb80a6d8e2d02210003f706477cf272a424`, before root corrections. Current controller carries exact PREPARATION_DISCARD input/result and existing pending bytes; PROGRESS24 fields / WORKERS two discard fields are additive own-card facts. SQL correctness/installation is a separate review, not approval here.
 
@@ -55,3 +55,22 @@ The source checkpoint covers control/recovery integration only. Human Candidate 
 ## O08 corrected source — 11 October 2026
 
 **PDR09-O08 CLOSED in source and first dark pixels.** Re-read Office SHA256 `45b3ec36234349d2f950d5d6d0187f4ff5d16d2c3b4532b45a438e0d3ae7046b` and CSS SHA256 `0efedaab60da9575075cf07544af468fd9e854ab82ab2f1a7c53ded3cfa3195d`. Office1202 moves the existing options into one bpay-next-progress-more-options container; scoped CSS472/484 positions the flex-column container once. First DR09-more-dark actual PNG shows both controls separately. All O01–O08 source findings are closed at this boundary, with no mutation/recovery runtime assertion. New actual pixel findings P01–P04 and return/counter coverage limits are recorded immediately in DR-09-screen-review.md; final A4 approval remains pending corrected captures. This does not retroactively replace the historical hashes or approve later source edits.
+
+## Final DR09 current-source receipt — 11 October 2026
+
+**PASS for inspected Office/control/recovery source integration; O01–O08 and singular wording closed.** Current actual A4 scope separately approved in DR-09-screen-review.md and four folder DR09-review.md receipts: all39 final PNGs viewed, P01–P06 closed. Full DR15 human identity/wrong-person/composite review remains DEFERRED; joined/race/ordered request execution remains NOT_RUN. This final current receipt supersedes pending historical checkpoint statuses, preserving their exact original hashes/findings.
+
+Re-read exact saved Office confirmation/review/progress rendering and scope guards, original exact request recovery, native parent callback and scoped CSS473–489. PREPARATION_DISCARD retains current run/review_revision; unknown recovery branches on original pending action and refreshes native PROGRESS, retaining same journal bytes/UUID. Native CANCELLING/PARTIAL uses request actor; only completed DISCARDED gets completed actor/time. One state notice, no accepted-discard Confirm/extra Discard, no empty Actions column/footer. Progress Discard is prepended secondary red left; two More actions share one stacked container. Phone review Back and main Filters/Refresh/tabs have narrow44px rules; no shared framework or new financial reader/action/job kind.
+
+Full native WORKERS is still an ordered outcome list with factual frozen_ex_vat/missing em dash, not DR15's person/detail reader. Current PARTIAL reader intentionally projects ready0/review=blocked; initial requested alternate sample is withdrawn. Whole known-success return retains original WB21 choice store and uses actual existing callback; actual local parent pixels show green result and checked native Candidate. These observations do not prove durable joined retention or money/race acceptance. Genuine EMPTY is source-only in this batch.
+
+Frontend saved DR09 boundary: base HEAD `6ce81d34941e09e05b4045ce550c16cc0f96123c`, Office/CSS uncommitted at review; no later DR11 SQL source reviewed or attributed here.
+
+| Source | SHA256 |
+| --- | --- |
+| js/bpay-next-office.js | `8b9e437170c1cb015d13391447d3fb20aa39b37718de9040dc0e5051097abdf3` |
+| js/bpay-next-workbench.js | `f01b5540b281e9ee30b45098811f6ec7c8067ddad93f9247faa4bea760990e3e` |
+| css/bpay-next-office.css | `2ead8368e6f134ee4ef5c63d65092a1add29b2a96890494d4528409dc7d682ac` |
+| index.html | `603549abac46dff55ab8c90e86ac6da335dddab5221e1961fdb987f2df086609` |
+
+No product/pack/checklist edits, renders, tests, DB/hosted calls, fixtures, business actions, deployments or commits by this reviewer. Current exact PNG/fixed-reply and read-only supplied-design hashes are in the four DR09-review.md receipts.

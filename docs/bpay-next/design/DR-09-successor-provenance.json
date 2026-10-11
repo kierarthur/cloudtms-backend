@@ -178,5 +178,9 @@
     "receipts": "DR09-review.md",
     "fullCandidateIdentity": "DR15_DEFERRED",
     "joinedRuntime": "AUTHORED_NOT_RUN"
+  },
+  "implementationCommits": {
+    "backend": "dedbddc1fb0d9a7418abc1619419978d184b9608",
+    "frontend": "5e319b2b1de66473cf4875cf0192de920b23f028"
   }
 }
