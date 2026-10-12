@@ -1,0 +1,101 @@
+{
+  "copy": "Weekly source queries\nLogout\nACTIONS & FILTERS\nLoading…\nColumns\nCandidate Banking\n\nAmelia Hughes · TMS 10421\n\nClose\n\nEstimate only. The Draft sets the final amounts.\nReady to pay\n£100.00\nPayment addition £35.00\nRefresh\nReady\nWaiting\nAction required\nBlocked\nSort by\nPayment ▲\nPayment ▼\nClient ▲\nClient ▼\nWhat needs attention ▲\nWhat needs attention ▼\nAmount ex VAT ▲\nAmount ex VAT ▼\n▾\nOverpayment recovery\n—\nWaiting for re-authorisation — recovery paused\n£0.00\nThis Draft · Recovery paused, waiting for re-authorisation\nOutstanding £60.00\nOpen\nOriginal\n£60.00\nOutstanding\n£60.00\n\nSorted by Payment, descending\n\nEstimated earnings ex VAT\n£100.00\nGross deductions\n£0.00\nPayment additions\n£35.00\nPayment deductions\n£40.00\nExport CSV\nShow estimate",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "documentWidth": 390,
+  "controls": [
+    {
+      "text": "Weekly source queries",
+      "aria": null,
+      "classes": "ws-office-notifications__toggle",
+      "width": 66.5625,
+      "height": 34
+    },
+    {
+      "text": "Logout",
+      "aria": null,
+      "classes": "",
+      "width": 63.265625,
+      "height": 38
+    },
+    {
+      "text": "Columns",
+      "aria": null,
+      "classes": "",
+      "width": 73.03125,
+      "height": 36
+    },
+    {
+      "text": "Close",
+      "aria": "Close",
+      "classes": "",
+      "width": 54.515625,
+      "height": 44
+    },
+    {
+      "text": "Refresh",
+      "aria": null,
+      "classes": "btn",
+      "width": 67.875,
+      "height": 44
+    },
+    {
+      "text": "Ready",
+      "aria": null,
+      "classes": "btn",
+      "width": 59.1875,
+      "height": 44
+    },
+    {
+      "text": "Waiting",
+      "aria": null,
+      "classes": "btn",
+      "width": 69.921875,
+      "height": 44
+    },
+    {
+      "text": "Action required",
+      "aria": null,
+      "classes": "btn is-active",
+      "width": 117.609375,
+      "height": 44
+    },
+    {
+      "text": "Blocked",
+      "aria": null,
+      "classes": "btn",
+      "width": 70.578125,
+      "height": 44
+    },
+    {
+      "text": "▾",
+      "aria": "Collapse Overpayment recovery",
+      "classes": "btn bpay-next-payment-caret",
+      "width": 44,
+      "height": 44
+    },
+    {
+      "text": "Open",
+      "aria": null,
+      "classes": "btn bpay-next-candidate-phone-open",
+      "width": 50.296875,
+      "height": 44
+    },
+    {
+      "text": "Export CSV",
+      "aria": null,
+      "classes": "btn",
+      "width": 90,
+      "height": 44
+    },
+    {
+      "text": "Show estimate",
+      "aria": null,
+      "classes": "btn primary",
+      "width": 111.515625,
+      "height": 44
+    }
+  ]
+}

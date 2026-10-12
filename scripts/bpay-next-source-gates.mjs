@@ -298,6 +298,7 @@ const ROUTINE_WORK_CALLEES=Object.freeze({
   'private.bpay_next_work_wait_state_v1(uuid)': ['private.bpay_next_workbench_require_next_v1','sum'],
   "private.bpay_next_workbench_refresh_work_v1(uuid)": ["private.bpay_next_workbench_require_next_v1","private.bpay_next_work_wait_state_v1","private.bpay_next_workbench_queue_origin_v1","private.bpay_next_workbench_refresh_work_core_v1","private.bpay_next_workbench_refresh_case_v1","array_agg","cardinality","unnest"],
   'private.bpay_next_workbench_refresh_case_v1(uuid)': [
+    'private.bpay_next_work_wait_state_v1',
     'private.bpay_next_workbench_refresh_group_display_v1',
     'private.bpay_next_workbench_require_next_v1','private.bpay_next_workbench_ensure_metadata_v1',
     'private.bpay_next_workbench_group_contribution_v1','private.bpay_next_workbench_apply_delta_v1',
@@ -1027,6 +1028,7 @@ const DR05_ROUTINE_WORK_CALLEES=Object.freeze({
     "pg_catalog.clock_timestamp"
   ],
   "private.bpay_next_workbench_refresh_case_v1(uuid)": [
+    "private.bpay_next_work_wait_state_v1",
     "array_agg",
     "gen_random_uuid",
     "max",

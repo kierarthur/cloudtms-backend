@@ -13865,22 +13865,23 @@
     },
     {
       "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
-      "finalRoot": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
-        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
+        "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1252_banking_pay_next_workbench_summary_v1.sql",
-        "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql"
-      ],
-      "finalClosures": [
         "supabase/repeatable/10102026_1946_banking_pay_next_candidate_group_reader_v1.sql",
         "supabase/repeatable/11102026_0559_banking_pay_next_worker_reprepare_v1.sql"
       ],
-      "owner": "WB-15 indexed native display presentation; exact minimal current projection tails and bounded own reader, original money/Source/RuleB/ACL unchanged; DR-05 retained-input execution/release"
+      "finalClosures": [
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
+      ],
+      "owner": "WB-41 seq118 BD131; next master successor merges full current body"
     },
     {
       "signature": "private.bpay_next_workbench_refresh_many_v1(uuid[],uuid[])",
@@ -14307,8 +14308,8 @@
     },
     {
       "signature": "public.bpay_next_workbench_page_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
-      "finalPhysical": "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
       "allowedPhysical": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
         "supabase/repeatable/10102026_1634_banking_pay_next_workbench_read_limits_v1.sql",
@@ -14325,7 +14326,11 @@
         "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
         "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
         "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
-        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0230_banking_pay_next_origin_wait_navigation_v1.sql",
+        "supabase/repeatable/12102026_0234_banking_pay_next_origin_wait_parent_navigation_v1.sql",
+        "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql"
       ],
       "predecessors": [
         "supabase/repeatable/10102026_1520_banking_pay_next_workbench_reader_v1.sql",
@@ -14342,14 +14347,16 @@
         "supabase/repeatable/11102026_0207_banking_pay_next_candidate_estimate_reader_v1.sql",
         "supabase/repeatable/11102026_0312_banking_pay_next_snooze_workbench_controls_v1.sql",
         "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
-        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql"
+        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
+        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+        "supabase/repeatable/12102026_0230_banking_pay_next_origin_wait_navigation_v1.sql",
+        "supabase/repeatable/12102026_0234_banking_pay_next_origin_wait_parent_navigation_v1.sql"
       ],
       "finalClosures": [
-        "supabase/repeatable/11102026_0454_banking_pay_next_selection_manifest_guards_v1.sql",
-        "supabase/repeatable/12102026_0034_banking_pay_next_snooze_management_v1.sql",
-        "supabase/repeatable/12102026_0041_banking_pay_next_snooze_management_seek_v1.sql"
+        "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql"
       ],
-      "owner": "DR-02 seq79; complete latest predecessor retained, manifest/receipt/HEADER only; WB39 BD129"
+      "owner": "WB-41 sequence118 exact native-item and CASE-parent origin navigation onto0234"
     },
     {
       "signature": "private.bpay_next_accepted_choice_guard_v1()",
@@ -14715,19 +14722,21 @@
     },
     {
       "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
-      "finalRoot": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
-      "finalPhysical": "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+      "finalRoot": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "finalPhysical": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
       "allowedPhysical": [
+        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
+        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql",
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
+      ],
+      "predecessors": [
         "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql",
         "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
       ],
-      "predecessors": [
-        "supabase/repeatable/11102026_0204_banking_pay_next_case_allocation_plan_v1.sql"
-      ],
       "finalClosures": [
-        "supabase/repeatable/11102026_1939_banking_pay_next_case_edit_v1.sql"
+        "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql"
       ],
-      "owner": "FC-09 sequence107 exact approved amendment and bounded period successor; BD119"
+      "owner": "WB-41 seq118 BD131; next master successor merges full current body"
     },
     {
       "signature": "private.bpay_next_snooze_due_receipt_valid_v1(uuid)",

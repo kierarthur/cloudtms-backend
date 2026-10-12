@@ -618,7 +618,8 @@ export function validateWorkbenchResponse(payload,kind,args,actorId=null){
     }
     if(['CANDIDATE_GROUPS','ISSUE_DETAIL'].includes(kind)){
       const ids=['physical_revision_id','physical_timesheet_id','physical_timesheet_version'];
-      if(ids.some(k=>row[k]===null)&&ids.some(k=>row[k]!==null)||row.work_id===null&&[...ids,'source_kind','source_head_id','source_root_timesheet_id','source_root_timesheet_version','source_week_ending_date'].some(k=>row[k]!==null)
+      const originWaitNavigation=row.work_id===null&&row.case_id!==null&&(row.case_component_id!==null||kind==='CANDIDATE_GROUPS'&&row.group_kind==='CASE'&&row.accepted_run_id===null)&&row.reason_code==='ORIGIN_UNAUTHORISED_WAIT'&&row.section==='ACTION'&&(kind==='ISSUE_DETAIL'||row.selectable===false)&&ids.every(k=>row[k]!==null);
+      if(ids.some(k=>row[k]===null)&&ids.some(k=>row[k]!==null)||row.work_id===null&&!originWaitNavigation&&[...ids,'source_kind','source_head_id','source_root_timesheet_id','source_root_timesheet_version','source_week_ending_date'].some(k=>row[k]!==null)
         ||(row.source_root_timesheet_id===null)!==(row.source_root_timesheet_version===null)
         ||!['SOURCE','PROTECTED'].includes(row.source_kind)&&['source_head_id','source_root_timesheet_id','source_root_timesheet_version','source_week_ending_date'].some(k=>row[k]!==null)
         ||['SOURCE','PROTECTED'].includes(row.source_kind)&&row.source_week_ending_date===null)throw fail('BPAY_NEXT_WORKBENCH_RESPONSE_INVALID');

@@ -1,0 +1,97 @@
+{
+  "item": "WB-41",
+  "sequence": 118,
+  "decision": "BD131",
+  "status": "SOURCE_LOCAL_PASS_A4_PENDING",
+  "exactDeliverables": [
+    "WB-41-D09"
+  ],
+  "retainedContext": [
+    "WB-41-D01",
+    "WB-41-D02",
+    "WB-41-D03",
+    "WB-41-D04",
+    "WB-41-D05",
+    "WB-41-D06",
+    "WB-41-D07",
+    "WB-41-D08",
+    "WB-41-D10"
+  ],
+  "sources": [
+    {
+      "path": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "sha256": "15518a516d7e4e1264e44b949ee432b694418daafd9df9fdaf6fed22abca9f27"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0230_banking_pay_next_origin_wait_navigation_v1.sql",
+      "sha256": "135428875aa2fb40e137e975455bdf86686a75781b40af2401657044ec47ac31"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0234_banking_pay_next_origin_wait_parent_navigation_v1.sql",
+      "sha256": "c32669d7657a60d799ae9cd90718c5d851abf8710c7bdfd29af8522011580b5a"
+    },
+    {
+      "path": "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+      "sha256": "b37228bf39a62c1423ca446c93736495cb3a49a4f7bd7dbd158aaa21b157be4c"
+    },
+    {
+      "path": "broker/src/bpay-next-workbench.js",
+      "sha256": "6ce738957d590069f6a778791a01fa319b720b6b8e1c8faa06426ceabc57a137"
+    },
+    {
+      "path": "scripts/bpay-next-source-gates.mjs",
+      "sha256": "45339db93cbb17091d4a21da21e24ec7bfdde23e72cc42b82e8c347e8534e5ff"
+    }
+  ],
+  "finalOwners": [
+    {
+      "signature": "private.bpay_next_case_allocation_plan_v1(jsonb)",
+      "path": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "sourceMd5": "96dc1bf6aba4f4a14c2a1af57cd62c7a"
+    },
+    {
+      "signature": "private.bpay_next_workbench_refresh_case_v1(uuid)",
+      "path": "supabase/repeatable/12102026_0207_banking_pay_next_origin_wait_recovery_v1.sql",
+      "sourceMd5": "78a7de9871ce3261e3cd56d80e2a5d5b"
+    },
+    {
+      "signature": "public.bpay_next_workbench_page_v1(jsonb)",
+      "path": "supabase/repeatable/12102026_0235_banking_pay_next_origin_wait_issue_navigation_v1.sql",
+      "sourceMd5": "1c36d31f77284ae9b0aab81754e95d33"
+    }
+  ],
+  "checks": {
+    "dbCheck": "362 migrations/932 repeatables PASS",
+    "sourceGates": "12/12 PASS current final sources",
+    "syntax": "changed Worker/Office JavaScript PASS",
+    "localPg17": "sole local PG17 compile only; three final bodies/config/owner/ACL match",
+    "isolation": "General839/76/0/338226c4e9b878c5aa92fc8e319dd7bf; both General/Candidate DO PASS",
+    "contract": "dfcb5f2b2eb90a63bff7048dde9cad5ea5b573c4c7b92feb063aaaa5cd32b97c export/seal/coupling PASS",
+    "joinedApp": "AUTHORED_NOT_RUN",
+    "timing": "Moved to TEST after installation (owner10/10/2026)"
+  },
+  "sourceReviews": [
+    "design/WB-41-design-review.md",
+    "reviews/WB-41-source-review.md",
+    "design/WB-41-origin-reader-integration.md"
+  ],
+  "scope": "Only exact unaccepted origin automatic recovery WAIT; original balance/kernel/live money/accepted cut retained; exact original physical navigation only, no reference/week/seek-key rewrite. Installed intermediate repeatables retained immutable; final public0235. No migration/new public definer/command/table/producer/trigger/protocol.",
+  "futureBoundaries": [
+    "Source paid-withdrawal/comparison journey BLOCKED_ON_CM02/SP04_NOT_RUN; original guards retained",
+    "DR13/DR15 exact Draft presentation belongs generated next cards"
+  ],
+  "frontendSources": [
+    {
+      "path": "js/bpay-next-workbench.js",
+      "sha256": "f7b26a6df3bb3623ff985689ff398a71a86f965d2e4277dba7faa57108fb5f95"
+    },
+    {
+      "path": "css/bpay-next-office.css",
+      "sha256": "b5714e1789020bd37cbd84dee0d5af32650cab913273dec7c9c3ce4802545cde"
+    },
+    {
+      "path": "index.html",
+      "sha256": "a2e54ac047c7e494791099cbdef5c12afbb964b80d071ba583fdae61ca7d9f4a"
+    }
+  ]
+}
