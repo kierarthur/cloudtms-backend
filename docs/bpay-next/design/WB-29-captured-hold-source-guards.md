@@ -41,4 +41,3 @@ Historical/no-treatment revisions resolve to their own sealed original IDs and p
 | 1236 segment authority / recorder | `f74ea457bf77f0d85ce7f3f21089bdecf9d9d9121d4005850de430d50aa7379d` |
 | 2146 Source origin state | `08c7ec51a1fcaeac01057f82337682a49b71b19d62cb311a37627337b44f7930` |
 | final-definer registry | `22f4a83143b05d0e5bdcc23701ad08d7cc979be7c2da55f72d7fdcc65e4abe8d` |
-

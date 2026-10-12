@@ -348,6 +348,78 @@ function dependencyError(error) {
  * @param {Partial<FrozenReadDependencies>} dependencies
  * @returns {Promise<Response>}
  */
+// Closed frozen facts only. BigInt checks conservation; it never quotes/reprices.
+function frozenSelectedTreatment(value, runLineId) {
+  if (value === null) return true;
+  const exactKeys = (v, keys) => record(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v,k));
+  const decimal = v => typeof v === 'string' && /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/.test(v);
+  const quoteRate = v => typeof v === 'string' && v.length<=120000 && /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(v);
+  const zero = v => typeof v==='string' && /^0(?:\.0+)?$/.test(v);
+  const money = v => typeof v === 'string' && /^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/.test(v);
+  const cents = v => { const [w,f=''] = v.split('.'); return BigInt(w)*100n+BigInt(f.padEnd(2,'0')); };
+  const quote = (v, rate) => exactKeys(v,rate?['ex','vat','inc','rate']:['ex','vat','inc'])
+    && ['ex','vat','inc'].every(k=>money(v[k])) && cents(v.ex)+cents(v.vat)===cents(v.inc)
+    && (!rate || v.rate===null || quoteRate(v.rate));
+  const keys=['run_line_id','run_work_id','run_worker_id','candidate_id','captured_revision_id','approved_line_id','component_key',
+    'source_pay_channel','target_pay_channel','target_umbrella_id','target_umbrella_vat_chargeable','valuation_policy_id','valuation_window_id',
+    'valuation_date','source_consumed_ex_vat','component_quote','buckets'];
+  if (!exactKeys(value,keys) || !keys.slice(0,6).every(k=>field(value[k],'uuid'))
+    || typeof runLineId!=='string' || value.run_line_id.toLowerCase()!==runLineId.toLowerCase()
+    || typeof value.component_key!=='string' || value.component_key.includes('\0') || [...value.component_key].length<1 || [...value.component_key].length>256
+    || !['PAYE','UMBRELLA'].includes(value.source_pay_channel) || !['PAYE','UMBRELLA'].includes(value.target_pay_channel)
+    || !field(value.valuation_policy_id,'uuid') || !field(value.valuation_window_id,'uuid') || !field(value.valuation_date,'date')
+    || !money(value.source_consumed_ex_vat) || !quote(value.component_quote,false)
+    || !Array.isArray(value.buckets) || value.buckets.length<1 || value.buckets.length>5) return false;
+  if (value.target_pay_channel==='PAYE'
+    ? value.target_umbrella_id!==null || value.target_umbrella_vat_chargeable!==null
+    : !field(value.target_umbrella_id,'uuid') || typeof value.target_umbrella_vat_chargeable!=='boolean') return false;
+  const bucketKeys=['rate_family','rate_code','decision_id','decision_version','treatment','resolution_mode','approved_units','included_units','source_rate',
+    'source_ex_vat','manual_replacement_rate','manual_amount_ex_vat','quote','valuation_policy_id','valuation_window_id'];
+  const seen=new Set(); let ex=0n, vat=0n, inc=0n;
+  for (const b of value.buckets) {
+    if (!exactKeys(b,bucketKeys) || !['STANDARD','ADDITIONAL','ADJUSTMENT'].includes(b.rate_family)
+      || typeof b.rate_code!=='string' || b.rate_code.includes('\0') || [...b.rate_code].length<1 || [...b.rate_code].length>(b.rate_family==='ADDITIONAL'?245:256)
+      || (b.rate_family==='STANDARD' && !['BH','DAY','NIGHT','SAT','SUN'].includes(b.rate_code))
+      || !['PINNED','NATIVE_DEFAULT'].includes(b.treatment)
+      || !['SUGGESTED_EQUIVALENT_BASIS','MANUAL_REPLACEMENT_RATE','MANUAL_AMOUNT'].includes(b.resolution_mode)
+      || !['approved_units','included_units','source_rate','manual_replacement_rate'].every(k=>b[k]===null||decimal(b[k]))
+      || !['source_ex_vat','manual_amount_ex_vat'].every(k=>b[k]===null||money(b[k])) || !quote(b.quote,true)
+      || !field(b.valuation_policy_id,'uuid') || !field(b.valuation_window_id,'uuid')
+      || b.valuation_policy_id.toLowerCase()!==value.valuation_policy_id.toLowerCase()
+      || b.valuation_window_id.toLowerCase()!==value.valuation_window_id.toLowerCase()) return false;
+    if (b.treatment==='PINNED'
+      ? !field(b.decision_id,'uuid') || typeof b.decision_version!=='string' || !/^[1-9]\d{0,18}$/.test(b.decision_version) || BigInt(b.decision_version)>9223372036854775807n
+      : b.decision_id!==null || b.decision_version!==null || b.rate_family!=='STANDARD' || b.resolution_mode!=='SUGGESTED_EQUIVALENT_BASIS') return false;
+    if (b.resolution_mode==='SUGGESTED_EQUIVALENT_BASIS'
+      ? b.manual_replacement_rate!==null || b.manual_amount_ex_vat!==null
+      : b.resolution_mode==='MANUAL_REPLACEMENT_RATE'
+        ? b.manual_replacement_rate===null || b.manual_amount_ex_vat!==null
+        : b.manual_amount_ex_vat===null || b.manual_replacement_rate!==null || b.quote.rate!==null) return false;
+    const key=JSON.stringify([b.rate_family,b.rate_code]); if(seen.has(key))return false;seen.add(key);
+    ex+=cents(b.quote.ex);vat+=cents(b.quote.vat);inc+=cents(b.quote.inc);
+  }
+  if(zero(value.source_consumed_ex_vat) && (ex!==0n || vat!==0n || inc!==0n || value.buckets.some(b=>!zero(b.included_units)||!zero(b.source_ex_vat)||b.quote.rate!==null)))return false;
+  return ex===cents(value.component_quote.ex) && vat===cents(value.component_quote.vat) && inc===cents(value.component_quote.inc)
+    && (value.target_pay_channel==='UMBRELLA' && value.target_umbrella_vat_chargeable || vat===0n);
+}
+
+// Original advice owns instruction admission; reuse only native detail rows/cursors.
+export function originalAdviceDetailCall(body) {
+  return pageCall(body);
+}
+export function validateOriginalAdviceDetailPage(payload, body) {
+  const call=pageCall(body), keys=call.kind==='RATE_DETAILS'?['rows','complete','selected_treatment']:['rows','complete'];
+  if(!record(payload)||Object.keys(payload).length!==keys.length||keys.some(k=>!Object.hasOwn(payload,k))
+    ||typeof payload.complete!=='boolean'||(call.kind==='RATE_DETAILS'&&!frozenSelectedTreatment(payload.selected_treatment,call.args.p_run_line_id)))
+    throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
+  const rows=pageRows(payload.rows,call);
+  if(!payload.complete&&rows.length===0)throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
+  const result={ok:true,kind:call.kind,rows,complete:payload.complete,next_cursor:payload.complete?null:nextCursor(call.kind,rows.at(-1))};
+  if(call.kind==='RATE_DETAILS')result.selected_treatment=payload.selected_treatment;
+  if(ENCODER.encode(JSON.stringify(result)).byteLength>BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes)throw fault('BPAY_NEXT_FROZEN_PAGE_TOO_LARGE');
+  return result;
+}
+
 export async function handleBpayNextFrozenRead(request, dependencies = {}) {
   if (request.method !== 'POST') return json(405, { ok: false, error_code: 'BPAY_NEXT_FROZEN_METHOD_NOT_ALLOWED', retryable: false });
   let controller, timer;
@@ -375,10 +447,11 @@ export async function handleBpayNextFrozenRead(request, dependencies = {}) {
       if (!(response instanceof Response)) throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const payload = await limitedJson(response, BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes, false, controller.signal);
       if (!response.ok) throw dependencyError({ status: response.status, json: payload });
-      if (!record(payload) || Object.keys(payload).length !== 4
+      if (!record(payload) || Object.keys(payload).length !== (call.kind==='RATE_DETAILS'?5:4)
         || !Object.hasOwn(payload, 'rows') || !Object.hasOwn(payload,'origin') || !Object.hasOwn(payload,'used_line') || typeof payload.complete !== 'boolean') {
         throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       }
+      if(call.kind==='RATE_DETAILS'&&(!Object.hasOwn(payload,'selected_treatment')||!frozenSelectedTreatment(payload.selected_treatment,call.args.p_run_line_id)))throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
       const used=payload.used_line,usedKeys=Object.keys(USED_LINE_SCHEMA);
       if(call.kind==='RATE_DETAILS' ? !record(used)||Object.keys(used).length!==usedKeys.length
         ||usedKeys.some(key=>!Object.hasOwn(used,key)||!field(used[key],USED_LINE_SCHEMA[key])) : used!==null)throw fault('BPAY_NEXT_FROZEN_RESPONSE_INVALID');
@@ -389,6 +462,7 @@ export async function handleBpayNextFrozenRead(request, dependencies = {}) {
         ok: true, kind: call.kind, rows, complete, origin: capturedOrigin(payload.origin), used_line:used,
         next_cursor: complete ? null : nextCursor(call.kind, rows.at(-1))
       };
+      if(call.kind==='RATE_DETAILS')result.selected_treatment=payload.selected_treatment;
       if (ENCODER.encode(JSON.stringify(result)).byteLength > BPAY_NEXT_FROZEN_READ_LIMITS.responseBytes) {
         throw fault('BPAY_NEXT_FROZEN_PAGE_TOO_LARGE');
       }

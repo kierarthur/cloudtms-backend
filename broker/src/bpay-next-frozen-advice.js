@@ -12,7 +12,7 @@
  * Decimal TEXT is printed unchanged. Only row COUNTS use BigInt, never money.
  * One page at each nested level is retained, and HTML chunks obey backpressure.
  */
-import { handleBpayNextFrozenRead } from './bpay-next-frozen-read.js';
+import { originalAdviceDetailCall, validateOriginalAdviceDetailPage } from './bpay-next-frozen-read.js';
 
 export const BPAY_NEXT_FROZEN_ADVICE_LIMITS = Object.freeze({
   pageRows: 100, pageBytes: 128 * 1024, timeoutMs: 8000, chunkBytes: 16 * 1024
@@ -25,7 +25,7 @@ const SCHEMAS = Object.freeze({
   HEADER: {
     instruction_id: 'uuid', transfer_id: 'uuid', projection_id: 'uuid', projection_no: 'positive',
     input_kind: 'input', run_id: 'uuid', run_worker_id: 'uuid', candidate_id: 'uuid',
-    pay_date: 'date', target_pay_channel: 'paye', beneficiary_name_snapshot: 'name',
+    pay_date: 'date', target_pay_channel: 'channel', beneficiary_name_snapshot: 'name',
     payment_reference: 'name', issued_at_utc: 'timestamp', member_count: 'positive',
     gross_ex_vat: 'money', gross_vat: 'money', gross_inc_vat: 'money', entered_paye_net: 'money?',
     accepted_gross_additions: 'money', accepted_gross_deductions: 'money', accepted_net_additions: 'money',
@@ -87,9 +87,9 @@ function field(value, type) {
     case 'timestamp': return typeof value === 'string'
       && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
       && field(value.slice(0, 10), 'date') && Number.isFinite(Date.parse(value));
-    case 'paye': return value === 'PAYE';
+    case 'channel': return ['PAYE','UMBRELLA'].includes(value);
     case 'destination': return ['OWN', 'ONEOFF'].includes(value);
-    case 'input': return ['PAYE_MANUAL', 'PAYE_IMPORT', 'CASE_PAYOUT'].includes(value);
+    case 'input': return ['PAYE_MANUAL', 'PAYE_IMPORT', 'CASE_PAYOUT','UMBRELLA'].includes(value);
     case 'source': return ['ORDINARY', 'SOURCE', 'PROTECTED', 'EXPENSE', 'ADJUSTMENT'].includes(value);
     case 'detail': return ['SHIFT', 'AGGREGATE', 'FIXED'].includes(value);
     case 'component': return ['WORK', 'PROTECTED_WORK', 'EXPENSE', 'MILEAGE', 'ADDITIONAL', 'ADJUSTMENT'].includes(value);
@@ -181,7 +181,7 @@ async function page(kind, args, context) {
       // If transport ignores AbortSignal and returns late, close its raw body.
       if (controller.signal.aborted) { await response?.body?.cancel().catch(() => {}); throw new AdviceError('BPAY_NEXT_ADVICE_PAGE_UNAVAILABLE'); }
       const body = await readJson(response, controller.signal);
-      if (!exact(body, ['rows', 'complete']) || !Array.isArray(body.rows)
+      if (!exact(body, kind==='RATE_DETAILS'?['rows','complete','selected_treatment']:['rows', 'complete']) || !Array.isArray(body.rows)
         || body.rows.length > context.limit || typeof body.complete !== 'boolean'
         || (!body.complete && body.rows.length === 0)) invalid();
       return body;
@@ -192,20 +192,22 @@ async function page(kind, args, context) {
     return await Promise.race([task, deadline, aborted]);
   } finally { clearTimeout(timer); context.signal.removeEventListener('abort', abort); }
 }
-// Reuse the SAVED frozen-detail validator, including all endpoint pairs, signed
-// decimal/bucket semantics and exact next-cursors. Only transport gains an
-// instruction scope through new0255; no second divergent detail schema here.
+// The original instruction-scoped RPC retains its historical admission.
 async function detail(body, context) {
-  const response = await handleBpayNextFrozenRead(new Request('https://bpay-next.invalid/internal-frozen-detail', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...body, limit: context.limit }), signal: context.signal
-  }), {
-    requireOfficeUser: async () => context.actor,
-    frozenPageRpc: (kind, args, options) => context.rpc(kind, { ...args, p_instruction_id: context.instructionId }, options)
-  });
-  const parsed = await readJson(response, context.signal);
-  if (!exact(parsed, ['ok', 'kind', 'rows', 'complete', 'next_cursor']) || parsed.ok !== true || parsed.kind !== body.kind) invalid();
-  return parsed;
+  const request={...body,limit:context.limit};
+  let call;
+  try{call=originalAdviceDetailCall(request);}catch{invalid();}
+  const payload=await page(call.kind,call.args,context);
+  try{return validateOriginalAdviceDetailPage(payload,request);}catch{invalid();}
+}
+async function* detailPages(body, context) {
+  let cursor={};
+  while(true){
+    const result=await detail({...body,...cursor},context);yield result;
+    if(result.complete)return;
+    if(result.next_cursor===null||JSON.stringify(cursor)===JSON.stringify(result.next_cursor))invalid();
+    cursor=result.next_cursor;
+  }
 }
 async function* detailRows(body, context) {
   let cursor = {};
@@ -344,21 +346,35 @@ async function* html(header, context) {
           throw new AdviceError('BPAY_NEXT_ADVICE_FROZEN_DETAIL_MISSING');
         }
         if (shifts === 0) yield `<p>${escape(work.detail_kind)} component: no recorded shift timestamps; no aggregate hours inferred.</p>`;
-        yield tableStart(['Captured used-rate bucket', 'Approved hours (not paid hours)', 'Recorded source pay rate']);
-        let rates = 0;
-        for await (const rate of detailRows({ kind: 'RATE_DETAILS', run_line_id: line.run_line_id }, context)) {
-          rates += 1;
-          if (rates > line.expected_rate_detail_count) invalid();
-          yield tableRow([rate.bucket, rate.approved_hours, rate.source_pay_rate]);
+        let rates=0, treatmentKey, treatment=null, ratesStarted=false;
+        for await (const ratePage of detailPages({kind:'RATE_DETAILS',run_line_id:line.run_line_id},context)) {
+          const key=JSON.stringify(ratePage.selected_treatment);
+          if(treatmentKey!==undefined&&key!==treatmentKey)invalid();
+          if(treatmentKey===undefined){
+            treatmentKey=key;treatment=ratePage.selected_treatment;
+            if(treatment!==null){
+              if(treatment.run_work_id!==line.run_work_id||treatment.run_worker_id!==header.run_worker_id||treatment.candidate_id!==header.candidate_id
+                ||treatment.captured_revision_id!==line.captured_revision_id||treatment.component_key!==line.component_key
+                ||treatment.target_pay_channel!==header.target_pay_channel||treatment.valuation_date!==header.pay_date
+                ||treatment.source_consumed_ex_vat!==line.source_consumed_ex_vat
+                ||treatment.component_quote.ex!==line.frozen_ex_vat||treatment.component_quote.vat!==line.frozen_vat||treatment.component_quote.inc!==line.frozen_inc_vat)invalid();
+              yield '<h4>Rates selected for this payment</h4>';
+              yield tableStart(['Rate','Choice','Approved quantity','Included quantity','Selected pay rate','Pay ex VAT','VAT','Pay inc VAT']);
+              for(const bucket of treatment.buckets)yield tableRow([bucket.rate_code,({'SUGGESTED_EQUIVALENT_BASIS':'Suggested rate','MANUAL_REPLACEMENT_RATE':'Chosen rate','MANUAL_AMOUNT':'Chosen amount'})[bucket.resolution_mode],bucket.approved_units,bucket.included_units,bucket.quote.rate,bucket.quote.ex,bucket.quote.vat,bucket.quote.inc]);
+              yield '</tbody></table>';
+            }
+            yield tableStart(['Captured used-rate bucket', 'Approved hours (not paid hours)', 'Recorded source pay rate']);ratesStarted=true;
+          }
+          for(const rate of ratePage.rows){rates+=1;if(rates>line.expected_rate_detail_count)invalid();yield tableRow([rate.bucket,rate.approved_hours,rate.source_pay_rate]);}
         }
-        if (rates !== line.expected_rate_detail_count) throw new AdviceError('BPAY_NEXT_ADVICE_FROZEN_DETAIL_MISSING');
+        if(!ratesStarted||rates!==line.expected_rate_detail_count)throw new AdviceError('BPAY_NEXT_ADVICE_FROZEN_DETAIL_MISSING');
         yield '</tbody></table>';
       }
     }
     if (result.complete) break;
   }
   if (!(await works.next()).done) throw new AdviceError('BPAY_NEXT_ADVICE_INSTRUCTION_MEMBERS_MISSING');
-  if (count !== BigInt(header.member_count) || adjustments !== (header.destination_kind === 'OWN' ? 1 : 0)) {
+  if (count !== BigInt(header.member_count) || adjustments !== (header.target_pay_channel==='PAYE' && header.destination_kind === 'OWN' ? 1 : 0)) {
     throw new AdviceError('BPAY_NEXT_ADVICE_INSTRUCTION_MEMBERS_MISSING');
   }
   yield '</section><p data-advice-state="complete">COMPLETE: all original instruction constituents and recorded frozen detail rendered.</p></body></html>';
@@ -412,7 +428,10 @@ export async function renderBpayNextFrozenAdvice(request, input, dependencies = 
       || !['gross_ex_vat', 'gross_vat', 'gross_inc_vat', 'accepted_gross_additions', 'accepted_gross_deductions',
         'accepted_net_additions', 'accepted_recoveries'].every(key => nonnegative(header[key]))
       || (header.entered_paye_net !== null && !nonnegative(header.entered_paye_net))
-      || (header.input_kind === 'CASE_PAYOUT') !== (header.entered_paye_net === null)) invalid();
+      || (header.target_pay_channel==='PAYE'
+        ? header.input_kind==='UMBRELLA' || (header.input_kind === 'CASE_PAYOUT') !== (header.entered_paye_net === null)
+        : header.input_kind!=='UMBRELLA' || header.entered_paye_net!==null || header.destination_kind!=='OWN'
+          || !decimalEqual(header.projection_cash_amount,header.gross_inc_vat))) invalid();
     const iterator = chunks(html(header, context), controller.signal)[Symbol.asyncIterator]();
     const body = new ReadableStream({
       async pull(stream) {

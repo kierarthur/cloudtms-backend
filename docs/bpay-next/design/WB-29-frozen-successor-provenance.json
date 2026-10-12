@@ -1,0 +1,83 @@
+{
+  "item": "WB-29",
+  "sequence": 140,
+  "implementationCommit": "PENDING_LOCAL_COMMIT",
+  "frontendImplementationCommit": "3857ed4b0fd00d974e726711ca141f20aa8f6c2f",
+  "builderDecisions": [
+    "BD166"
+  ],
+  "files": [
+    {
+      "path": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+      "sha256": "bb2bf3e049eb042036cb414e4801dbd163ac382b85123f50b2561df07d0746c7"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-read.js",
+      "sha256": "ab352c72df54319c2c2d46dc9f3dfcd36959a1b45f5dd9ca382e110bb5de7b5c"
+    },
+    {
+      "path": "broker/src/bpay-next-frozen-advice.js",
+      "sha256": "00bda626dc69226264e814cfc3fb5ab41cc159bc35ca58ac681ae93d1e25f021"
+    }
+  ],
+  "frontend": {
+    "path": "js/bpay-next-office.js",
+    "sha256": "1dbe0073a2e226d11fd7778f43a347b5264da57bfe9eeae0525b966ba0401b29"
+  },
+  "successors": [
+    {
+      "signature": "public.bpay_next_frozen_detail_page_v1(uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,integer)",
+      "currentPhysical": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0250_banking_pay_next_frozen_detail_service_v1.sql",
+        "supabase/repeatable/11102026_1005_banking_pay_next_frozen_client_origin_v1.sql",
+        "supabase/repeatable/12102026_0620_banking_pay_next_frozen_used_line_detail_v1.sql"
+      ]
+    },
+    {
+      "signature": "public.bpay_next_original_csv_advice_page_v1(uuid,uuid,text,uuid,uuid,uuid,uuid,bigint,integer,integer,text,text,text,integer)",
+      "currentPhysical": "supabase/repeatable/13102026_0028_banking_pay_next_frozen_selected_treatment_v1.sql",
+      "predecessors": [
+        "supabase/repeatable/04102026_0255_banking_pay_next_original_csv_advice_page_v1.sql",
+        "supabase/repeatable/09102026_2018_banking_pay_next_foundation_pending_successors_v1.sql"
+      ]
+    }
+  ],
+  "designs": [
+    "WB-29-frozen-rate-projection-join.md",
+    "WB-29-frozen-rate-transport-map.md"
+  ],
+  "reviews": [
+    {
+      "path": "WB-29-frozen-rate-projection-design-review.md",
+      "sha256": "f112f86b93054918996e4b8efe3f7d9876ad9386a207755e42aff5ee31f461fe"
+    },
+    {
+      "path": "WB-29-frozen-rate-transport-design-review.md",
+      "sha256": "911f5637af74df97958e444b90bfe8eff151d93ad82eb5e4007da10971642650"
+    },
+    {
+      "path": "WB-29-frozen-projection-source-review.md",
+      "sha256": "8c8506f99eb75205e937ac59ce4712c20e5a97cee7531ff3168739566c6ccc0b"
+    },
+    {
+      "path": "WB-29-frozen-rate-transport-source-review.md",
+      "sha256": "25e588f1a69501f4728d40e26be581137bf0af69b94c0bd4e0ddb6f3d6291f52"
+    },
+    {
+      "path": "WB-29-frozen-rate-gate-registry-review.md",
+      "sha256": "046cfdc9ac4769d4fa9a0dc605be1a94f9efc9e1209535f2a247f63e2d7be6ee"
+    }
+  ],
+  "checks": {
+    "dbCheck": "383 migrations/991 repeatables PASS",
+    "sourceGates": "1550 SQL/30 RPC roots/168 routine-work signatures/37 typed transports PASS",
+    "localPG17": "0 migrations/4 closures; schema compilation only PASS",
+    "catalogue": "2 exact current routine bodies/config/owner/ACL/volatility PASS",
+    "browserIsolation": "839|76|0||338226c4e9b878c5aa92fc8e319dd7bf; both DO PASS; public membership delta0",
+    "nodeCheck": "two changed Worker modules, Office module and source gate PASS",
+    "contractSealAndCoupling": "047596af3d18d010b6b7b1b2e49e7582e607ab59bab7c4c5807b21a6a6e1c70c PASS"
+  },
+  "joinedAcceptance": "AUTHORED_NOT_RUN",
+  "wholeItem": "PARTLY_DONE; estimate and Ready chosen amount/sorting remain"
+}
