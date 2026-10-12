@@ -13,8 +13,8 @@
   },
   "database": "banking_modal_v2_test",
   "owner": "cloudtms_bpay_local_owner",
-  "sourceCommit": "cbff1fdba491e4df78b88aaebbd55d1a3004b37f",
-  "compiledAtUtc": "2026-10-12T14:02:38.785Z",
+  "sourceCommit": "a7ade6a8ed0392eaff9020e1aae5c5e1e5beb4ae",
+  "compiledAtUtc": "2026-10-12T15:12:35.406Z",
   "inventory": {
     "migrations": [
       {
@@ -1500,6 +1500,10 @@
       {
         "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
         "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
+      },
+      {
+        "path": "supabase/migrations/12102026_1536_banking_pay_next_case_restructure_request.sql",
+        "sha256": "a10848d1beb6a910f397ce2e223fe95677da33099b1d06558a2f1cb0b0880d8a"
       },
       {
         "path": "supabase/migrations/remittance_config_table.sql",
@@ -8586,6 +8590,13 @@
         "sha256": "ef689b68f2d35ac94bbde34194cd03f075ed3df48d854bb4cf695807cec92a56"
       },
       {
+        "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
+        "paths": [
+          "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
+        ],
+        "sha256": "ff95842f1ed952ef0d988672fcbc3d43dd8876e4623cac9985a22e664134e55a"
+      },
+      {
         "path": "supabase/repeatable/rpc_smoke_test.sql",
         "paths": [
           "supabase/repeatable/rpc_smoke_test.sql"
@@ -8597,8 +8608,8 @@
   "selected": {
     "migrations": [
       {
-        "path": "supabase/migrations/12102026_1444_banking_pay_next_case_write_off_any_debt.sql",
-        "sha256": "cf1c19e9972d9e66d595066dafecddc80e61a231e7c1f0f3e595224311f96438"
+        "path": "supabase/migrations/12102026_1536_banking_pay_next_case_restructure_request.sql",
+        "sha256": "a10848d1beb6a910f397ce2e223fe95677da33099b1d06558a2f1cb0b0880d8a"
       }
     ],
     "repeatables": [
@@ -8624,11 +8635,11 @@
         "sha256": "bbe40deb0a12cf928e814feac1c8931920ed12606a46447b41600ab8cc08d42e"
       },
       {
-        "path": "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql",
+        "path": "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql",
         "paths": [
-          "supabase/repeatable/12102026_1444_banking_pay_next_case_write_off_v2.sql"
+          "supabase/repeatable/12102026_1536_banking_pay_next_case_restructure_v1.sql"
         ],
-        "sha256": "ef689b68f2d35ac94bbde34194cd03f075ed3df48d854bb4cf695807cec92a56"
+        "sha256": "ff95842f1ed952ef0d988672fcbc3d43dd8876e4623cac9985a22e664134e55a"
       }
     ]
   },

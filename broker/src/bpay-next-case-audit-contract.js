@@ -3,7 +3,7 @@ const CF_UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const CF_INT=/^(?:0|[1-9]\d{0,18})$/;
 const CF_MONEY=/^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/;
 const CF_SORTS=Object.freeze({CASE_AUDIT:['WHEN','EVENT','WHO','SOURCE','AMOUNT','REASON','DETAILS'],CANDIDATE_CASE_REPORT:['ITEM','CLIENT','ORIGINAL','OUTSTANDING','WEEKLY_AMOUNT','NEXT_DATE','SNOOZED_UNTIL','STATUS','NOTES']});
-const CF_SOURCES=['CREATE_REQUEST','EDIT_REQUEST','PAUSE_REQUEST','PAUSE_OUTCOME','WRITE_OFF_REQUEST','CASE_EVENT','NET_REQUEST','HOLD_TRANSITION','FINANCIAL_EFFECT','SNOOZE_EVENT'];
+const CF_SOURCES=['CREATE_REQUEST','EDIT_REQUEST','RESTRUCTURE_REQUEST','RESTRUCTURE_OUTCOME','PAUSE_REQUEST','PAUSE_OUTCOME','WRITE_OFF_REQUEST','CASE_EVENT','NET_REQUEST','HOLD_TRANSITION','FINANCIAL_EFFECT','SNOOZE_EVENT'];
 const cfRecord=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const cfExact=(v,keys)=>cfRecord(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const cfBytes=v=>new TextEncoder().encode(typeof v==='string'?v:JSON.stringify(v)).byteLength;

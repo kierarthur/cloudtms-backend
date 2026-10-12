@@ -1,5 +1,5 @@
 import {caseFinanceQuery,caseFinanceResult} from './bpay-next-case-audit-contract.js';
-import {caseInput,casePreview,caseEditState,caseEditReceipt,casePauseState,casePauseReceipt} from './bpay-next-case-contract.js';
+import {caseRestructureInput,caseRestructurePreview,caseRestructureReceipt,RESTRUCTURE_ISSUES,caseInput,casePreview,caseEditState,caseEditReceipt,casePauseState,casePauseReceipt} from './bpay-next-case-contract.js';
 import {readBpayNextReauthJson} from './bpay-next-command.js';
 /** Closed Office preparation caller. Existing active/session Office guard is
  * injected; SQL rechecks service JWT/active admin. No economics, legacy session,
@@ -323,6 +323,7 @@ export const BPAY_NEXT_PREPARATION_PAGE_INPUTS=Object.freeze({
   CURRENT_WORK:{candidate_id:'uuid',after_week:'date?',after_work_id:'uuid?',limit:'limit'},
   CURRENT_CASES:{candidate_id:'uuid',after_case_id:'uuid?',limit:'limit'},
   CURRENT_STORED_CREDITS:{candidate_id:'uuid',after_legacy_case_id:'uuid?',limit:'limit'},
+  CASE_RESTRUCTURE_PREVIEW:{case_id:'uuid',expected_case_revision:'positive',input:'restructureInput?'},
   CASE_COMPONENTS:{candidate_id:'uuid',case_id:'uuid',after_component_ordinal:'integer?',limit:'limit'},
   STATUS:{run_id:'uuid',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'},
   RETURN_CASH:{run_id:'uuid',run_worker_id:'uuid',after_transfer_no:'transferNo?',limit:'limit'}
@@ -381,7 +382,7 @@ const ROWS={
   CASE_COMPONENTS:{case_component_id:'uuid',case_id:'uuid',candidate_id:'uuid',component_ordinal:'positive',component_revision:'positive',
     case_kind:'caseKind',case_subtype:'caseSubtype',tax_treatment:'taxTreatment',instruction_kind:'instructionKind',direction:'direction',
     payroll_stage:'payrollStage',source_pay_channel:'channel',resolution_state:'resolution',approved_source_ex_vat:'money',funded_source_ex_vat:'money',
-    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?',edit_state:'caseEditState',edit_receipt:'caseEditReceipt?',pause_state:'casePauseState',pause_receipt:'casePauseReceipt?'}
+    recovered_source_ex_vat:'money',written_off_source_ex_vat:'money',active_payout_source_ex_vat:'money',active_recovery_source_ex_vat:'money',case_principal_approved:'money',rule_id:'uuid',current_rule_id:'uuid?',rule_revision:'positive?',weekly_due_source_ex_vat:'money?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',schedule_start_monday:'date?',next_due_monday:'date?',schedule_week_count:'positive?',outstanding_source_ex_vat:'money',amount_due:'money?',recoverable_this_run:'null',original_liability_reference:'caseReference?',edit_state:'caseEditState',edit_receipt:'caseEditReceipt?',pause_state:'casePauseState',pause_receipt:'casePauseReceipt?',restructure_receipt:'restructureReceipt?'}
 };
 const ACCEPTED_HEADER={run_id:'uuid',prepare_command_id:'uuid',accepted_sequence:'positive',accepted_module_epoch:'positive',run_status:'runStatus',command_status:'prepareCommandStatus',expected_candidate_count:'positive',enrolled_candidate_count:'integer'};
 const STATUS_HEADER={run_id:'uuid',run_status:'runStatus',selection_state:'selectionState',review_revision:'integer',run_worker_id:'uuid',candidate_id:'uuid',worker_status:'workerStatus',
@@ -462,6 +463,8 @@ function field(v,t){
   if(t.startsWith('prepareIssue')&&!t.endsWith('?'))return prepareIssueField(v,t,field,exact);
   if(t==='casePauseState')return casePauseState(v);
   if(t==='casePauseReceipt')return casePauseReceipt(v);
+  if(t==='restructureInput')return caseRestructureInput(v);
+  if(t==='restructureReceipt')return caseRestructureReceipt(v);
   if(t==='caseEditState')return caseEditState(v);
   if(t==='caseEditReceipt')return caseEditReceipt(v);
   if(t==='caseReference')return typeof v==='string'&&v.trim().length>0&&!v.includes('\0')&&ENCODER.encode(v).byteLength<=2048;
@@ -769,18 +772,18 @@ function pageCall(request){
   if(ENCODER.encode(url.search).byteLength>(url.searchParams.get('kind')==='GUARD'?128*1024:BPAY_NEXT_PREPARATION_LIMITS.requestBytes))throw fault('REQUEST_TOO_LARGE',413);
   const kind=url.searchParams.get('kind');
   if(['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(kind)){try{return caseFinanceQuery(kind,url.searchParams);}catch{throw fault('REQUEST_INVALID',400);}}
-  const schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
+  const schema=kind==='LINES'&&url.searchParams.has('worksheet_run_id')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.LINES,worksheet_run_id:'uuid'}:kind==='WORKERS'&&url.searchParams.has('attention_only')?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.WORKERS,attention_only:'true'}:kind==='CASE_PREVIEW'&&(url.searchParams.has('case_id')||url.searchParams.has('expected_case_revision'))?{input:'caseInput',case_id:'uuid',expected_case_revision:'positive'}:kind==='CASE_COMPONENTS'?{...BPAY_NEXT_PREPARATION_PAGE_INPUTS.CASE_COMPONENTS,...(url.searchParams.has('edit_command_id')?{edit_command_id:'uuid'}:{}),...(url.searchParams.has('pause_command_id')?{pause_command_id:'uuid'}:{}),...(url.searchParams.has('restructure_command_id')?{restructure_command_id:'uuid'}:{})}:kind==='GUARD'&&url.searchParams.has('descriptor')?{run_id:'uuid',descriptor:'descriptor'}:kind==='WORK_CHOICES'&&url.searchParams.has('accepted_inputs')?{run_id:'uuid',accepted_inputs:'true',after_member_no:'positive?',limit:'limit',...(url.searchParams.has('member_kind')?{member_kind:'choiceMember'}:{})}:BPAY_NEXT_PREPARATION_PAGE_INPUTS[kind];
   if(!schema||[...url.searchParams.keys()].some(k=>(k!=='kind'&&!Object.hasOwn(schema,k))||url.searchParams.getAll(k).length!==1))throw fault('REQUEST_INVALID',400);
   if(kind==='CASE_LIST'||kind==='CASE_SUMMARY')return caseListCall(kind,url.searchParams);
   const args={};
   for(const [key,type]of Object.entries(schema)){
-    let v=url.searchParams.get(key);if(key==='descriptor'||key==='input'||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS','PAYE_WORKSHEET','CHANNEL_DRAFT_LIST','CHANNEL_DRAFT_COUNT'].includes(kind)&&['after','context'].includes(key)&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
+    let v=url.searchParams.get(key);if(key==='descriptor'||(key==='input'&&!(kind==='CASE_RESTRUCTURE_PREVIEW'&&v===null))||['PREPARE_ISSUES','REVIEW_CASES','ACTIVE_PREPARATIONS','PAYE_WORKSHEET','CHANNEL_DRAFT_LIST','CHANNEL_DRAFT_COUNT'].includes(kind)&&['after','context'].includes(key)&&v!==null){if(v===null||ENCODER.encode(v).byteLength>32768)throw fault('REQUEST_INVALID',400);try{v=JSON.parse(v);}catch{throw fault('REQUEST_INVALID',400);}}if(key==='waiting_only'){if(!['true','false'].includes(v))throw fault('REQUEST_INVALID',400);v=v==='true';}if(key==='accepted_inputs'||key==='attention_only'){if(v!=='true')throw fault('REQUEST_INVALID',400);v=true;}
     if(key==='limit'){if(v!==null&&!/^[1-9]\d{0,2}$/.test(v))throw fault('REQUEST_INVALID',400);v=v===null?50:Number(v);}
     if(!(type==='caseInput'?caseInput(v):field(v,type)))throw fault('REQUEST_INVALID',400);args[key]=v;
   }
   if(kind==='CURRENT_WORK'&&(args.after_week===null)!==(args.after_work_id===null))throw fault('REQUEST_INVALID',400);
   if(kind==='PAYE_WORKSHEET')return {kind,args:Object.freeze({...args,run_id:args.run_id.toLowerCase(),candidate_id:args.candidate_id?.toLowerCase()??null,after:args.after===null?null:{context:{...args.after.context,run_id:args.after.context.run_id.toLowerCase(),actor_user_id:args.after.context.actor_user_id.toLowerCase(),candidate_id:args.after.context.candidate_id?.toLowerCase()??null},candidate_id:args.after.candidate_id.toLowerCase(),run_worker_id:args.after.run_worker_id.toLowerCase()}})};
-  return {kind,args:kind==='CASE_PREVIEW'?Object.freeze(args):normalized(args)};
+  return {kind,args:['CASE_PREVIEW','CASE_RESTRUCTURE_PREVIEW'].includes(kind)?Object.freeze(args):normalized(args)};
 }
 async function limitedJson(input,maximum,request,signal,mutation){
   const bad=()=>fault(request?'REQUEST_INVALID':'RESPONSE_INVALID',request?400:503,!request,!request&&mutation);
@@ -799,6 +802,7 @@ async function limitedJson(input,maximum,request,signal,mutation){
 }
 function result(payload,call,mutation){
   const bad=()=>{throw fault('RESPONSE_INVALID',503,true,mutation);};
+  if(!mutation&&call.kind==='CASE_RESTRUCTURE_PREVIEW'){if(!caseRestructurePreview(payload,call.args,call.actorUserId))bad();return payload;}
   if(!mutation&&['CASE_AUDIT','CANDIDATE_CASE_REPORT'].includes(call.kind)){try{return caseFinanceResult(payload,call.kind,call.args,call.actorUserId);}catch{bad();}}
   if(!mutation&&['REVIEW_TOTALS','REVIEW_CASES'].includes(call.kind))return reviewResult(payload,call.kind,call.args,call.actorUserId,field,exact,bad);
   if(!mutation&&call.kind==='LINES'&&Object.hasOwn(call.args,'worksheet_run_id'))return worksheetLinesResult(payload,call.args,exact,bad);
@@ -1027,6 +1031,7 @@ function result(payload,call,mutation){
     if(storedCreditPage&&row.legacy_case_id>payload.scan_cursor)bad();
     if(call.kind==='CASE_COMPONENTS'&&row.case_id!==call.args.case_id)bad();
     if(call.kind==='CASE_COMPONENTS'){
+      if(call.args.restructure_command_id?(!row.restructure_receipt||row.restructure_receipt.command_id!==call.args.restructure_command_id||row.restructure_receipt.case_id!==row.case_id||row.restructure_receipt.candidate_id!==row.candidate_id):row.restructure_receipt!==null)bad();
       if(row.pause_state.case_id!==row.case_id||row.pause_state.candidate_id!==row.candidate_id
         ||(row.pause_receipt!==null&&(row.pause_receipt.case_id!==row.case_id||row.pause_receipt.candidate_id!==row.candidate_id||row.pause_receipt.command_id!==call.args.pause_command_id))
         ||(Object.hasOwn(call.args,'pause_command_id')?(row.pause_receipt===null):row.pause_receipt!==null))bad();
@@ -1047,6 +1052,7 @@ function safeError(e,attempted,mutation,action=null,args=null){
   if(['BPAY_NEXT_REAUTH_REQUIRED','BPAY_NEXT_REAUTH_STALE'].includes(e?.code))return new PreparationError(e.code,403,false,false);
   const db=e?.json??e;
   // FC-03 correction discovered by FC-04: preserve the named creation refusal.
+  if(action==='CASE_RESTRUCTURE_PREVIEW'&&RESTRUCTURE_ISSUES.includes(db?.message))return fault(db.message,409);
   if(action==='CASE_PREVIEW'&&['BPAY_NEXT_CASE_HAS_ACTIVITY','BPAY_NEXT_CASE_HELD_BY_DRAFT','BPAY_NEXT_CASE_EDIT_UNSUPPORTED','BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'].includes(db?.message))return fault(db.message,409);
   if(['CASE_PREVIEW','CASE_CREATE'].includes(action)&&db?.code==='55000'&&db.message==='BPAY_NEXT_CASE_CREATE_SOURCE_CHANNEL_UNBOUND')
     return new PreparationError(db.message,409,false,false);

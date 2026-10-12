@@ -26,7 +26,7 @@ const PREPARATION_TURN_PHASES=Object.freeze(['NEW','PINNING','RESERVE','ALLOCATE
 /** @typedef {{message_id:string|null,attempts:number|null,action:'CLAIM'|'STEP'|null,job_id:string|null,job_kind:string|null,error_code:string,retryable:boolean,outcome_unknown:boolean,recovery:string}} FinancialQueueFailure */
 /** @typedef {import('./bpay-next-job-step.js').FinancialJobDependencies & {sendContinuation?:(envelope:Readonly<FinancialQueueEnvelope>)=>Promise<unknown>,onFailure?:(failure:Readonly<FinancialQueueFailure>)=>Promise<'ACK_RECORDED'|'RETRY'>}} FinancialQueueDependencies */
 
-const KINDS = ['PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE', 'SIMPLE_CANCEL', 'POSITION_APPLY', 'PREPARE', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT', 'PREPARATION_EXPIRY','PREPARATION_DISCARD', 'CASE_CREATE','CASE_EDIT','CASE_PAUSE','CASE_RESUME', 'CASE_WRITE_OFF'];
+const KINDS = ['PAYE_NET_ENTRY', 'TRANSFER_BUILD', 'CSV_SETTLEMENT', 'CSV_RETURN', 'CASH_REISSUE', 'SIMPLE_CANCEL', 'POSITION_APPLY', 'PREPARE', 'REISSUE_CANCEL', 'INTERNAL_SETTLEMENT', 'PREPARATION_EXPIRY','PREPARATION_DISCARD', 'CASE_CREATE','CASE_EDIT','CASE_RESTRUCTURE','CASE_PAUSE','CASE_RESUME', 'CASE_WRITE_OFF'];
 const PAGED = ['TRANSFER_BUILD', 'CSV_SETTLEMENT', 'INTERNAL_SETTLEMENT', 'SIMPLE_CANCEL', 'PREPARATION_EXPIRY','PREPARATION_DISCARD'];
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ENCODER = new TextEncoder();

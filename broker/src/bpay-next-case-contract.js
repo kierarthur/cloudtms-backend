@@ -112,4 +112,33 @@
       &&new Date(v.last_due_monday+'T00:00:00Z').getUTCDay()===1
       &&BigInt((Date.parse(v.last_due_monday+'T00:00:00Z')-Date.parse(v.first_due_monday+'T00:00:00Z'))/604800000)===BigInt(v.week_count)-1n;}
 
-export {CASE_INPUT_SCHEMA,caseInput,caseToken,caseEditToken,caseEditState,caseEditReceipt,PAUSE_ISSUES,PAUSE_RECEIPT_SCHEMA,pauseReason,pauseSummary,pauseProtection,pauseValue,casePauseState,casePauseReceipt,casePreview,equal};
+// FC12 finite arrangement contract: validation only, SQL owns all derivation.
+const RESTRUCTURE_INPUT={total_remaining:'positiveMoney',start_monday:'date',weekly_due:'positiveMoney?',week_count:'positive?',minimum_earnings_threshold:'money?',take_home_floor_override:'money?',reason:'reason'};
+const RESTRUCTURE_CONTEXT={actor_user_id:'uuid',candidate_id:'uuid',owner_epoch:'positive',financial_view_revision:'integer',case_id:'uuid',case_revision:'positive',rule_id:'uuid',rule_revision:'positive',approved_principal:'positiveMoney',original_command_id:'uuid',basis:'positiveMoney',outstanding:'money',status:'restructureStatus'};
+const RESTRUCTURE_ISSUES=['BPAY_NEXT_CASE_PROTECTION_CHANGED','BPAY_NEXT_CASE_RESTRUCTURE_UNSUPPORTED','BPAY_NEXT_CASE_RESTRUCTURE_NO_BALANCE','BPAY_NEXT_CASE_RESTRUCTURE_TOTAL_CHANGED','BPAY_NEXT_CASE_PROTECTION_BALANCE_INVALID'];
+const restructureMoney=v=>v===null?null:BigInt(v.split('.')[0])*100n+BigInt((v.split('.')[1]??'').padEnd(2,'0'));
+function restructureShape(v,s){return object(v)&&Object.keys(v).length===Object.keys(s).length&&Object.entries(s).every(([k,t])=>Object.hasOwn(v,k)&&(t==='restructureStatus'?['OPEN','PAUSED'].includes(v[k]):value(v[k],t)));}
+function caseRestructureInput(v,defaults=false){return restructureShape(v,defaults?{...RESTRUCTURE_INPUT,reason:'note'}:RESTRUCTURE_INPUT)&&new Date(v.start_monday+'T00:00:00Z').getUTCDay()===1&&(v.weekly_due===null)!==(v.week_count===null)&&enc.encode(JSON.stringify(v)).byteLength<=8192;}
+function restructureTerms(v){return shape(v,{weekly_due:'positiveMoney',week_count:'positive',first_due_monday:'date',last_due_monday:'date',total:'positiveMoney',minimum_earnings_threshold:'money?',take_home_floor_override:'money?'})
+ &&new Date(v.first_due_monday+'T00:00:00Z').getUTCDay()===1&&new Date(v.last_due_monday+'T00:00:00Z').getUTCDay()===1
+ &&BigInt((Date.parse(v.last_due_monday+'T00:00:00Z')-Date.parse(v.first_due_monday+'T00:00:00Z'))/604800000)===BigInt(v.week_count)-1n;}
+function caseRestructureToken(v,args){return object(v)&&Object.keys(v).sort().join()==='context,input,terms'&&caseRestructureInput(v.input)&&restructureShape(v.context,RESTRUCTURE_CONTEXT)&&restructureTerms(v.terms)
+ &&v.context.case_revision!=='9223372036854775807'&&enc.encode(JSON.stringify(v)).byteLength<=16384
+ &&(!args||v.context.case_id.toLowerCase()===args.case_id.toLowerCase()&&v.context.case_revision===args.expected_case_revision&&equal(v.input,args.input))
+ &&restructureMoney(v.terms.total)===restructureMoney(v.input.total_remaining)&&restructureMoney(v.terms.total)<=restructureMoney(v.context.basis)
+ &&v.terms.first_due_monday===v.input.start_monday&&restructureMoney(v.terms.minimum_earnings_threshold)===restructureMoney(v.input.minimum_earnings_threshold)
+ &&restructureMoney(v.terms.take_home_floor_override)===restructureMoney(v.input.take_home_floor_override)
+ &&(v.input.week_count===null||v.terms.week_count===v.input.week_count)&&(v.input.weekly_due===null||restructureMoney(v.terms.weekly_due)===restructureMoney(v.input.weekly_due));}
+function caseRestructurePreview(v,args,actor){return object(v)&&Object.keys(v).sort().join()==='after,before,context,defaults,preview_token,protection'&&restructureShape(v.context,RESTRUCTURE_CONTEXT)&&caseRestructureInput(v.defaults,true)
+ &&restructureTerms(v.before)&&pauseSummary(v.protection)&&v.context.case_id.toLowerCase()===args.case_id.toLowerCase()&&v.context.case_revision===args.expected_case_revision
+ &&(!actor||v.context.actor_user_id.toLowerCase()===actor.toLowerCase())&&restructureMoney(v.before.total)===restructureMoney(v.context.basis)
+ &&restructureMoney(v.defaults.total_remaining)===restructureMoney(v.context.basis)
+ &&(args.input===null?v.after===null&&v.preview_token===null:caseRestructureToken(v.preview_token,args)&&equal(v.preview_token.context,v.context)&&equal(v.preview_token.terms,v.after));}
+function caseRestructureReceipt(v){const s={command_id:'uuid',case_id:'uuid',candidate_id:'uuid',sequence:'positive',expected_case_revision:'positive',rule_id:'uuid',applied_case_revision:'positive?'};
+ if(!object(v)||Object.keys(v).sort().join()!==[...Object.keys(s),'phase','issue_code','completed_at_utc'].sort().join()||!shape(Object.fromEntries(Object.keys(s).map(k=>[k,v[k]])),s)
+  ||v.rule_id.toLowerCase()!==v.command_id.toLowerCase()||!['PENDING','CASE_RESTRUCTURED','BLOCKED'].includes(v.phase))return false;
+ if(v.phase==='PENDING')return v.applied_case_revision===null&&v.issue_code===null&&v.completed_at_utc===null;
+ if(typeof v.completed_at_utc!=='string'||!/^\d{4}-\d{2}-\d{2}T/.test(v.completed_at_utc)||!Number.isFinite(Date.parse(v.completed_at_utc)))return false;
+ return v.phase==='BLOCKED'?RESTRUCTURE_ISSUES.includes(v.issue_code)&&v.applied_case_revision===null:v.issue_code===null&&BigInt(v.applied_case_revision??0)===BigInt(v.expected_case_revision)+1n;}
+
+export {CASE_INPUT_SCHEMA,caseRestructureInput,caseRestructureToken,caseRestructurePreview,caseRestructureReceipt,RESTRUCTURE_ISSUES,caseInput,caseToken,caseEditToken,caseEditState,caseEditReceipt,PAUSE_ISSUES,PAUSE_RECEIPT_SCHEMA,pauseReason,pauseSummary,pauseProtection,pauseValue,casePauseState,casePauseReceipt,casePreview,equal};
