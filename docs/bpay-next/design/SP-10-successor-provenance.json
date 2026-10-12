@@ -82,5 +82,7 @@
     "FC15 separate immutable D06 CHECK discovery and genuine moved/two-book/unbound representation authority remain open."
   ],
   "joinedAcceptance": "AUTHORED_NOT_RUN",
-  "timing": "Moved to TEST after installation (owner10/10/2026)"
+  "timing": "Moved to TEST after installation (owner10/10/2026)",
+  "implementationCommit": "9bbcbfa53c4f53813f83ba36e32ebf7fed1f0345",
+  "frontendCommit": "fc38de32657d7d4a208fc1f809fcce9b39538254"
 }
