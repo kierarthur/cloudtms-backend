@@ -71,5 +71,6 @@
   ],
   "joinedAcceptance": "AUTHORED_NOT_RUN",
   "timing": "Moved to TEST after installation (owner10October2026)",
-  "sp10DocCorrection": "SP10 investigation S2 same-transaction order: locks61,publishes62–63,binds68–83; classified as documentation correction only."
+  "sp10DocCorrection": "SP10 investigation S2 same-transaction order: locks61,publishes62–63,binds68–83; classified as documentation correction only.",
+  "implementationCommit": "ccb8de330e035029f492fa2e8eaf30d11bd5129f"
 }

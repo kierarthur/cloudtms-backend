@@ -4067,16 +4067,18 @@ Dependencies: F-05, F-06, SP-10, SP-16; successor positions: `05102026_0512` cla
 
 | Stable row | Type / exact object | Current status | Exact remaining change | Four separate boxes |
 | --- | --- | --- | --- | --- |
-| SP-17-D01 | REPEATABLE: private.weekly_source_timesheet_category_v2(uuid) final0512 | INSTALLED_ON_TEST | Preserve actual installed schema/name/reasons; verify I3 APPLIED current authorised protected-zero derived Withdrawn, archive precedence and no newkey. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-17-D02 | REPEATABLE: private.bpay_next_source_origin_state_v1 I3 17-key application reply | PARTLY_DONE | Verify exact current publication/expected/applied command/member/job/epoch authority and PENDING mapping; no financial-count proxy or contract extension. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-17-D03 | REPEATABLE: 05102026_0559_weekly_source_office_category_batch_v1.sql summary batch | INSTALLED_ON_TEST | Reuse set-based≤100 root batch; never per-root HTTP fan-out/category-as-Banking-filter. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
-| SP-17-D04 | DOC: docs/bpay-next/design/SP-17-i3.md | MISSING | Record exact I3 reply shape/file/commit and strict derived-Withdrawn conditions; no extension. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-17-D01 | REPEATABLE: private.weekly_source_timesheet_category_v2(uuid) final0512 | BUILT_REVIEWED | Preserve actual installed schema/name/reasons; verify I3 APPLIED current authorised protected-zero derived Withdrawn, archive precedence and no newkey. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-17-D02 | REPEATABLE: private.bpay_next_source_origin_state_v1 I3 17-key application reply | BUILT_REVIEWED | Verify exact current publication/expected/applied command/member/job/epoch authority and PENDING mapping; no financial-count proxy or contract extension. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
+| SP-17-D03 | REPEATABLE: 05102026_0559_weekly_source_office_category_batch_v1.sql summary batch | PARTLY_DONE | Reuse set-based≤100 root batch; never per-root HTTP fan-out/category-as-Banking-filter. | [ ] Built · [ ] Reviewed · [ ] Installed · [ ] App tested |
+| SP-17-D04 | DOC: docs/bpay-next/design/SP-17-i3.md | BUILT_REVIEWED | Record exact I3 reply shape/file/commit and strict derived-Withdrawn conditions; no extension. | [x] Built · [x] Reviewed · [ ] Installed · [ ] App tested |
 
 Exact source/evidence, signature and per-row checks: review/R5.json, CSV rows SP-17-D01 onward. The owning card's Rules/Build and all acceptance clauses remain mandatory.
 
 **Later in-app acceptance — not run:**
 
 On the NEXT agency, removing the only protected shift (certified absent) from a paid £100 Timesheet: while Banking applies the empty revision, the row stays in its Stage with approved hours 0 pending; once APPLIED it shows Withdrawn, still listing the £100 recovery as live in Banking Pay NEXT. Observed by: SRQ-092 → a never-authorised empty root stays an unauthorised Timesheet in its Stage; SRQ-072, SRQ-103 → an empty root with an open query or an owning Additional duty stays operational; SRQ-102 → adding protection back to a Withdrawn family moves it back, with no Restore button; SRQ-156, RQ-231 and SCX-058 → Banking Pay NEXT still lists its actions; SRQ-154, SRQ-310 and NX-014 → while the empty revision is still queued in Banking the row never shows Withdrawn; SRQ-097 → a root whose Magnit charge or invoice task is still open stays operational; SRQ-096, SRQ-098, SRQ-155 → a BUILD_LOG line exists for each (classifier precedence and batch bound). Covers observed: SRQ-094, SRQ-111, SRQ-232, SCX-045 → the pending-then-Withdrawn check.
+
+D01/D02/D04 BUILT/REVIEWED. D03/ITEM partial, S17-01 actual ordinary I3 root bound BLOCKED. design/SP-17-i3.md; design/SP-17-completion.md; design/SP-17-successor-provenance.json; design/SP-17-current-owner-catalogue.json; reviews/SP-17-design-review.md; reviews/SP-17-source-review.md. BE ccb8de330e035029f492fa2e8eaf30d11bd5129f. Whole107/288 unchanged; next SP04seq138. Joined acceptance AUTHORED_NOT_RUN.
 
 ## SP-04 — Route ordinary and bulk Unauthorise of Source-managed weeks to the Source withdrawal (seam S6)
 
