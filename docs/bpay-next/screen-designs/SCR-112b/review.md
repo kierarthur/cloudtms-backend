@@ -76,11 +76,11 @@ Each file below is the current local artifact. Normal/failed desktop dark and de
 
 | File | SHA-256 |
 |---|---|
-| [FC02-fixed-responses.json](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-fixed-responses.json) | 559D2A85C5C2635B98AE308F3FD7F3F6C43ECC630A52C8DFC538D5BBD3FDA06A |
-| [FC02-local-screen-evidence.json](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-local-screen-evidence.json) | 5106ED2A6E5FA9681C2541AEA98D5BD052944C7AEDC4C543787E807454B86D2B |
-| [FC02-normal-dark.png](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-dark.png) | EA42FD437698618545DF4D78C2B9968BA26E6E66796450BDF5A157D32188BC3E |
-| [FC02-normal-device-light.png](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-device-light.png) | EA42FD437698618545DF4D78C2B9968BA26E6E66796450BDF5A157D32188BC3E |
-| [FC02-normal-phone-dark.png](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-phone-dark.png) | F3D5EE83573802016538A95CD30FADFCA9B58A01C9200CC2126B19087D6AC274 |
+| [FC02-fixed-responses.json](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-fixed-responses.json>) | 559D2A85C5C2635B98AE308F3FD7F3F6C43ECC630A52C8DFC538D5BBD3FDA06A |
+| [FC02-local-screen-evidence.json](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-local-screen-evidence.json>) | 5106ED2A6E5FA9681C2541AEA98D5BD052944C7AEDC4C543787E807454B86D2B |
+| [FC02-normal-dark.png](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-dark.png>) | EA42FD437698618545DF4D78C2B9968BA26E6E66796450BDF5A157D32188BC3E |
+| [FC02-normal-device-light.png](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-device-light.png>) | EA42FD437698618545DF4D78C2B9968BA26E6E66796450BDF5A157D32188BC3E |
+| [FC02-normal-phone-dark.png](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-backend-20261009/docs/bpay-next/screen-designs/SCR-112b/FC02-normal-phone-dark.png>) | F3D5EE83573802016538A95CD30FADFCA9B58A01C9200CC2126B19087D6AC274 |
 
 ## Read-only design/policy identity
 
@@ -88,6 +88,6 @@ Reference pack: C:\Users\KierArthur\OneDrive - Arthur Rai\Documents\GitHub\cloud
 
 | Reference | SHA-256 |
 |---|---|
-| [SCREEN_DESIGN_POLICY.md](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/SCREEN_DESIGN_POLICY.md) | 8BC212B174469236F2B46DBF70EADC3664A946636458321CD3C77B7146323DE5 |
-| [tools/policy.json](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/tools/policy.json) | 45036D841D4568AA2D4D7ADF4F063D6D17B70288E289EE0B285068797A87369D |
-| [batches/B9/png/SCR-112b_payment_advances_filters_dark.png](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/batches/B9/png/SCR-112b_payment_advances_filters_dark.png) | 374A751560A65B8D385059A77811ECFF3C44401F1EEE51266384FA1A22D9C320 |
+| [SCREEN_DESIGN_POLICY.md](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/SCREEN_DESIGN_POLICY.md>) | 8BC212B174469236F2B46DBF70EADC3664A946636458321CD3C77B7146323DE5 |
+| [tools/policy.json](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/tools/policy.json>) | 45036D841D4568AA2D4D7ADF4F063D6D17B70288E289EE0B285068797A87369D |
+| [batches/B9/png/SCR-112b_payment_advances_filters_dark.png](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/cloudtms-backend/codex_outputs/claude-stage2-continuation-20260925/SCREEN_DESIGN_POLICY_20261010/batches/B9/png/SCR-112b_payment_advances_filters_dark.png>) | 374A751560A65B8D385059A77811ECFF3C44401F1EEE51266384FA1A22D9C320 |

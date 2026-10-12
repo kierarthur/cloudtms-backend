@@ -64,13 +64,13 @@ Scope remains the native FC-02 list/filters/Candidate hierarchy/current shared a
 
 | Source | SHA-256 |
 |---|---|
-| [js/bpay-next-case-list.js](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-case-list.js) | 81762F7BFB98263ACB56B0D1AD191E925DFD703493EABABC1E521AA4CA0A0647 |
-| [js/bpay-next-office.js](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-office.js) | F876B7961AAF8D0CBCE0FCBCF981CE8F641BA74A122882C1B4B9836B87578929 |
-| [css/bpay-next-office.css](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/css/bpay-next-office.css) | A2DBEE744D9A8A00A285435A5B574DCEFA2116379729DCD38610D7B67149616C |
-| [js/bpay-next-snooze-actions.js](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-snooze-actions.js) | 2E66B0D1D959EBE4018EAB02283509ECB7E7E4B0C0F087522F7C0CB89F195AA4 |
-| [js/bpay-next-snooze-window.js](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-snooze-window.js) | C4E09EA7455B0CAED49E6F1CE6B43EEDAAC50448647EF9B3E80E96D7EE057F57 |
-| [js/main.js](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/main.js) | 9FCE38D1C9BD25DA3417DFEE210A965B5480B5A5D42760A8FB1490A42E56B85E |
-| [index.html](C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/index.html) | 73722DFA478FC7EC338DE1013AB4F1C57AD2A7ACC4F6569764913D5215750CF1 |
+| [js/bpay-next-case-list.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-case-list.js>) | 81762F7BFB98263ACB56B0D1AD191E925DFD703493EABABC1E521AA4CA0A0647 |
+| [js/bpay-next-office.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-office.js>) | F876B7961AAF8D0CBCE0FCBCF981CE8F641BA74A122882C1B4B9836B87578929 |
+| [css/bpay-next-office.css](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/css/bpay-next-office.css>) | A2DBEE744D9A8A00A285435A5B574DCEFA2116379729DCD38610D7B67149616C |
+| [js/bpay-next-snooze-actions.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-snooze-actions.js>) | 2E66B0D1D959EBE4018EAB02283509ECB7E7E4B0C0F087522F7C0CB89F195AA4 |
+| [js/bpay-next-snooze-window.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/bpay-next-snooze-window.js>) | C4E09EA7455B0CAED49E6F1CE6B43EEDAAC50448647EF9B3E80E96D7EE057F57 |
+| [js/main.js](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/js/main.js>) | 9FCE38D1C9BD25DA3417DFEE210A965B5480B5A5D42760A8FB1490A42E56B85E |
+| [index.html](<C:/Users/KierArthur/OneDrive - Arthur Rai/Documents/GitHub/.codex-worktrees/bpay-next-build-frontend-20261009/index.html>) | 73722DFA478FC7EC338DE1013AB4F1C57AD2A7ACC4F6569764913D5215750CF1 |
 | broker/src/bpay-next-preparation.js | E930CCECE59E729C734725E9B050C8C9C9990A5A97DE40773F9EBB134437F475 |
 | broker/src/bpay-next-snooze-reader.js | F90B01FA46C30B235931ABC538094F2B8084A5BDA14A15520617BEE670A1A07B |
 
