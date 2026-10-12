@@ -1,10 +1,10 @@
 {
   "card": "DR-13",
   "sequence": 122,
-  "status": "PARTLY_BUILT_SOURCE_LOCAL_A4_PENDING_BLOCKED_ON_ORIGINAL_WAIT_MEMBERSHIP",
+  "status": "PARTLY_BUILT_REVIEWED_SOURCE_LOCAL_A4_PASS_BLOCKED_ON_ORIGINAL_WAIT_MEMBERSHIP",
   "decision": "BD135",
-  "implementationCommit": null,
-  "frontendImplementationCommit": null,
+  "implementationCommit": "8abafce2be68dedc2a1a6bfb3df7b268b48a6a5b",
+  "frontendImplementationCommit": "8a6a26b0a2ce1409461642a5fbb61e109b67cfee",
   "exactDeliverables": [
     "D02 frozen REVIEW_CASES balance contract",
     "D04 reused E2 system release / DR15 no-pay explanation",
@@ -44,7 +44,7 @@
     "local": "Sole PG17 compile,3 exact body/config/owner/ACL matches, General839|76|0||338226c4e9b878c5aa92fc8e319dd7bf and Candidate DO PASS",
     "seal": "3b0d0e7a3ddfff14ff4ffd739d030dac68d20bbb0e07948e85a52878adac4495",
     "coupling": "PASS",
-    "screen": "Actual smallest fixed-response local capture, independent A4 pending",
+    "screen": "26 actual native Office local fixed-response PNGs; independent full42-row A4:38 PASS,0 FAIL,4 scoped N/A, implemented slice only",
     "business": "AUTHORED_NOT_RUN; no DB data or business RPC",
     "timing": "Moved to TEST after installation(owner10/10/2026)"
   },
