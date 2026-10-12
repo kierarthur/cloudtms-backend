@@ -3786,6 +3786,8 @@ Exact source/evidence, signature and per-row checks: review/R3.json, CSV rows DR
 
 After 30 confirmed runs (some mixed), the list returns 45 channel Drafts newest first across pages of 10, the count says 45, and filtering "Paid" returns exactly the paid ones (RQ-133, RQ-136, LSV-032 replaced, NX-098/NX-099 extended). Two Drafts confirmed in the same second appear in the same order at page sizes 1, 17 and 100 (RQ-406). Each row shows full type, pay date and amount, not a short ID (RQ-132); reading the list starts no operation (RQ-135).
 
+DR27 implemented slice: D02/D03/D04/D05/D07 [x] BUILT [x] REVIEWED; D08 genuine DR28 screen and later native writer joins/ITEM stay open. BE 654094dd9cb2a10bb8131fa20220fa4f41eb2954; FE 432b72d2c9d237b4b4fe4ffbf948a7c5cf5e2194. Source12/db371950/JSsyntax/solePG17 six exact owners/isolation/seal ae49b3788004ad12211f4e3e2c7a5d0f7473f9406a3f937fff1c0c47ed6ad603/coupling PASS. Business checks AUTHORED_NOT_RUN. Whole104/288 unchanged; next DR19seq129.
+
 ## DR-19 — "New information" pill on a frozen Draft
 
 Seq 129; Draft · D2-C; reviewer R3; current requested-feature status PARTLY_DONE.
