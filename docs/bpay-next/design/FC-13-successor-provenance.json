@@ -80,5 +80,7 @@
     "business": "AUTHORED_NOT_RUN",
     "screens": "A4 PENDING"
   },
-  "a4": "73 actual local native PNG; full42 policy:36 PASS/0 FAIL/6 N/A; all differences/control purposes independently reviewed. Business acceptance AUTHORED_NOT_RUN."
+  "a4": "73 actual local native PNG; full42 policy:36 PASS/0 FAIL/6 N/A; all differences/control purposes independently reviewed. Business acceptance AUTHORED_NOT_RUN.",
+  "implementationCommit": "5a13c6958ada71acf26b2a498131e44e555f0aa5",
+  "frontendCommit": "46ab46ac4bcf6fe313b177754c6da41a8f800737"
 }
